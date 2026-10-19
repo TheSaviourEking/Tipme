@@ -1,0 +1,33 @@
+node_modules
+.next
+dist
+.turbo
+pnpm-lock.yaml
+coverage
+playwright-report
+test-results
+# Preserve the supplied governance kit.
+AGENTS.md
+CLAUDE.md
+**/AGENTS.md
+.cursor
+.github/copilot-instructions.md
+.github/PULL_REQUEST_TEMPLATE.md
+.github/workflows/ci.template.yml
+prompts
+docs/00-DECISIONS.md
+docs/01-LOCAL-SETUP.md
+docs/02-ARCHITECTURE.md
+docs/03-DOMAIN-AND-PAYMENTS.md
+docs/04-DESIGN-AND-FRONTEND.md
+docs/05-SECURITY.md
+docs/06-QUALITY-GATES.md
+docs/07-OBSERVABILITY-AND-SEO.md
+docs/08-DELIVERY-PLAN.md
+docs/09-AGENT-PROMPT-PLAYBOOK.md
+docs/third-party-component-register.md
+docs/adr/ADR-TEMPLATE.md
+README.md
+
+# Rewritten by Next typegen/build.
+apps/web/next-env.d.ts

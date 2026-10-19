@@ -1,0 +1,1 @@
+This repository follows root `AGENTS.md`, scoped `AGENTS.md` and `docs/00-DECISIONS.md`. In code suggestions, preserve financial correctness, guest accessibility, #7A32F9/white/black brand, strict TS, traceability, and mock-payment-only gating until approved.

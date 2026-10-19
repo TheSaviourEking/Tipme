@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tipme_local
+      POSTGRES_USER: tipme_local
+      POSTGRES_PASSWORD: tipme_local_password
+    ports: ['127.0.0.1:5432:5432']
+    volumes: ['tipme_pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tipme_local -d tipme_local']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  redis:
+    image: redis:7-alpine
+    ports: ['127.0.0.1:6379:6379']
+    volumes: ['tipme_redisdata:/data']
+    command: ['redis-server', '--appendonly', 'yes']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  # Local trace viewer (UI http://127.0.0.1:16686, OTLP/HTTP 4318). In-memory storage: traces vanish on restart.
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    ports: ['127.0.0.1:16686:16686', '127.0.0.1:4318:4318']
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q -O /dev/null http://127.0.0.1:13133/status || exit 1',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  tipme_pgdata:
+  tipme_redisdata:

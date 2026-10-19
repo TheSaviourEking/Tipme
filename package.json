@@ -1,0 +1,39 @@
+{
+  "name": "tipme",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": "24.22.0",
+    "pnpm": "10.33.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "bash scripts/check-governance.sh && eslint scripts tests playwright.config.ts packages/config && turbo run lint",
+    "typecheck": "tsc -p tsconfig.tools.json && turbo run typecheck",
+    "test": "node --test scripts/*.test.mjs && turbo run test",
+    "perf:lab": "playwright test -c tests/e2e-perf/playwright.config.ts",
+    "test:e2e": "NEXT_PUBLIC_API_ORIGIN=http://127.0.0.1:4100 NEXT_PUBLIC_PRETEND_DELIVERY=on pnpm build && playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @tipme/database build && pnpm --filter @tipme/database migrate",
+    "db:seed": "pnpm --filter @tipme/database build && pnpm --filter @tipme/database seed",
+    "ops:grant-owner": "pnpm --filter @tipme/database build && node --env-file-if-exists=.env packages/database/dist/scripts/grant-owner.js",
+    "test:integration": "turbo run build && node --import ./packages/observability/dist/register.js --test --test-concurrency=1 \"packages/database/test/integration/*.test.mjs\" \"packages/payments/test/integration/*.test.mjs\" \"tests/integration/*.test.mjs\"",
+    "trace:demo": "node scripts/trace-demo.mjs",
+    "mock:pay": "pnpm --filter @tipme/database --filter @tipme/payments build && node --env-file-if-exists=.env scripts/mock-pay.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.19.2",
+    "eslint": "9.39.5",
+    "prettier": "3.9.10",
+    "turbo": "2.11.9",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2",
+    "@axe-core/playwright": "4.14.0"
+  }
+}
