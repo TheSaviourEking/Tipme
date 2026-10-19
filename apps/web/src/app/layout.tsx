@@ -1,10 +1,19 @@
 import type { Metadata } from 'next';
+import { Nunito } from 'next/font/google';
 import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
 import '@tipme/ui/tokens.css';
 import '@tipme/ui/components.css';
 import './globals.css';
+
+// Self-hosted at build time via next/font — no runtime external request.
+const nunito = Nunito({
+  weight: ['900'],
+  subsets: ['latin'],
+  variable: '--font-brand',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   metadataBase: siteOrigin,
@@ -21,7 +30,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
+      <body className={nunito.variable}>
         <a className="skip-link" href="#main">
           Skip to content
         </a>

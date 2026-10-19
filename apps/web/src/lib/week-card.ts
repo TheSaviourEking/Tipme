@@ -19,7 +19,7 @@ export function drawWeekCard(
   ctx.textAlign = 'left';
   const x = size * 0.08;
   ctx.font = `600 ${Math.round(size * 0.04)}px Arial, sans-serif`;
-  ctx.fillText(`My week on TipMe · ${week.week}`, x, size * 0.14);
+  ctx.fillText(`tipme ♥ · ${week.week}`, x, size * 0.14);
   ctx.font = `700 ${Math.round(size * 0.11)}px Arial, sans-serif`;
   ctx.fillText(week.total, x, size * 0.34);
   ctx.font = `400 ${Math.round(size * 0.045)}px Arial, sans-serif`;

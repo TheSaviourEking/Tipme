@@ -1,14 +1,16 @@
 import Link from 'next/link';
+
+/** Primary brand wordmark: "tip" (black) + "me" (purple) + "♥" (superscript). */
 export function Brand() {
   return (
     <Link className="brand" href="/" aria-label="TipMe home">
-      tipme
-      <span className="brand-flower" aria-hidden="true">
-        ✳
-      </span>
+      <span className="brand-tip">tip</span>
+      <span className="brand-me">me</span>
+      <span className="brand-heart" aria-hidden="true">♥</span>
     </Link>
   );
 }
+
 export function Arrow({ diagonal = false }: { diagonal?: boolean }) {
   return (
     <svg

@@ -18,14 +18,14 @@ export default function Home() {
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-copy">
             <Badge>
-              <span className="badge-dot" /> A more human kind of thank you
+              <span className="badge-dot" /> Don&apos;t just say thank you,
             </Badge>
             <h1 id="hero-title">
-              Good work.
+              Surprise the
               <br />
-              Great people.
+              people around you,
               <br />
-              <em>A little thanks.</em>
+              <em>by tipping them.</em>
             </h1>
             <p className="hero-description">
               For the ones who make your day, your work,
