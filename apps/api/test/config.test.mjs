@@ -68,3 +68,12 @@ test('diagnostics fail closed when NODE_ENV is not set', () => {
   // Unset NODE_ENV means production, where the mock provider is refused too: startup fails closed.
   assert.throws(() => loadApiConfig(valid), /PAYMENT_PROVIDER/);
 });
+
+test('explicit hosted preview permits mocks but requires a strong gate and HTTPS', () => {
+  const preview = { ...valid, NODE_ENV: 'production', DEPLOYMENT_MODE: 'preview', PREVIEW_PASSWORD: 'p'.repeat(32), WEB_ORIGIN: 'https://tipme-demo.onrender.com' };
+  assert.equal(loadApiConfig(preview).DEPLOYMENT_MODE, 'preview');
+  for (const override of [{ PREVIEW_PASSWORD: '' }, { WEB_ORIGIN: 'http://example.com' }, { PAYMENTS_LIVE_ENABLED: 'true' }, { DIAGNOSTICS_ENABLED: 'true' }]) {
+    assert.throws(() => loadApiConfig({ ...preview, ...override }));
+  }
+  assert.throws(() => loadApiConfig({ ...preview, DEPLOYMENT_MODE: 'production' }), /PAYMENT_PROVIDER/);
+});

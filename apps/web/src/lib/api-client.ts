@@ -19,7 +19,7 @@ async function call<T>(path: string, init: RequestInit): Promise<ApiResult<T>> {
       ...init,
       // Statuses and prices are always fresh; nothing here may be cached.
       cache: 'no-store',
-      credentials: 'omit',
+      credentials: API_ORIGIN === '' ? 'same-origin' : 'omit',
     });
   } catch {
     return { ok: false, status: 0, code: 'NETWORK' };

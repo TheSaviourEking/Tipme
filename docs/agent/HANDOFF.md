@@ -228,3 +228,8 @@ Push destination is pending user input. Six logical import commits completed; st
 ## Update — GitHub push (19 October 2026)
 
 User authorized pushing to their authenticated account. Created private `TheSaviourEking/Tipme` at https://github.com/TheSaviourEking/Tipme and successfully pushed all six import commits. `main` tracks `origin/main`. This documentation follow-up records completion; application source unchanged. Next step: agree hosting budget, domain and preview scope before deployment work.
+
+
+## Update — free private demo scope (19 October 2026)
+
+User chose a private pretend-payment demo and free hosting only. Assessed Render free compute/Key Value and Neon free Postgres from official documentation. Proposed a single guarded web/API/worker service; not implemented or provisioned. Free-tier sleep, queue loss and database compute limits mean this is an intermittent demo. Need a memory-fit test, explicit hosted-preview mode, protected ingress and controlled migration path. Docker available, existing local services healthy. Asked user about Render/Neon accounts and acceptance of shared-password/sleeping demo behavior. Next: resolve those inputs and implement the deployment slice; no real-money enablement.
