@@ -1,3 +1,15 @@
+# Current task — free private demo deployment
+
+19 October 2026: user chose a private demo with pretend payments and free hosting only. Wants the app online. No hosted resources provisioned yet.
+
+- Proposed: one Render free web service containing web/API/worker behind a shared-password gateway, Neon free Postgres, Render free Key Value. Pending feasibility test and user response on accounts and demo limitations.
+- Free Render sleeps after 15 minutes idle; background jobs pause. Free Key Value loses state on restart. Neon compute allowance must be monitored; worker polling can keep the database awake.
+- Must validate combined service memory against the free instance, protect every public entry point, keep real payments disabled, and add an explicit hosted-preview mode rather than exposing development mode.
+- Docker is available locally; Postgres, Redis and Jaeger healthy. No deployment configuration or application code changed yet.
+- Next exact step: confirm Render/Neon account availability, settle proposed preview design, then implement and test the deployment slice. Account secrets must not be pasted into chat.
+
+## Previous task record
+
 # Current task — Git import and hosting assessment
 
 19 October 2026: user authorized repository inspection, Git setup, logical commits and push. No hosting deployment is authorized or performed in this task.

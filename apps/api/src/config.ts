@@ -8,6 +8,9 @@ const flag = z
 
 export const apiConfigSchema = z
   .object({
+    // Hosted preview is isolated by the password gateway; production still rejects mocks.
+    DEPLOYMENT_MODE: z.enum(['production', 'preview']).default('production'),
+    PREVIEW_PASSWORD: z.string().min(32).optional(),
     // Unset means production, so a forgotten NODE_ENV can never enable development-only features.
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
@@ -78,6 +81,13 @@ export const apiConfigSchema = z
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   })
   .superRefine((config, context) => {
+    if (config.DEPLOYMENT_MODE === 'preview' && !config.PREVIEW_PASSWORD) {
+      context.addIssue({ code: 'custom', path: ['PREVIEW_PASSWORD'], message: 'required for preview' });
+    }
+    if (config.DEPLOYMENT_MODE === 'preview' && new URL(config.WEB_ORIGIN).protocol !== 'https:') {
+      context.addIssue({ code: 'custom', path: ['WEB_ORIGIN'], message: 'preview requires HTTPS' });
+    }
+
     if (config.NODE_ENV === 'production' && config.DIAGNOSTICS_ENABLED) {
       context.addIssue({
         code: 'custom',
@@ -87,7 +97,8 @@ export const apiConfigSchema = z
     }
     if (
       config.PAYMENT_PROVIDER === 'mock' &&
-      config.NODE_ENV === 'production'
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
     ) {
       context.addIssue({
         code: 'custom',
@@ -97,7 +108,8 @@ export const apiConfigSchema = z
     }
     if (
       config.MESSAGING_PROVIDER === 'mock' &&
-      config.NODE_ENV === 'production'
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
     ) {
       context.addIssue({
         code: 'custom',

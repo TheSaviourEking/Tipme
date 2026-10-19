@@ -50,7 +50,7 @@ export function track(
     if (!shouldTrack(nav)) return;
     void fetch(`${API_ORIGIN}/v1/events`, {
       method: 'POST',
-      credentials: 'omit',
+      credentials: API_ORIGIN === '' ? 'same-origin' : 'omit',
       keepalive: true,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, flowId: flowId(), ...props }),

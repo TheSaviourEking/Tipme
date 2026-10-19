@@ -3,6 +3,9 @@ import { z } from 'zod';
 
 export const workerConfigSchema = z
   .object({
+    // Hosted preview is isolated by the password gateway; production still rejects mocks.
+    DEPLOYMENT_MODE: z.enum(['production', 'preview']).default('production'),
+    PREVIEW_PASSWORD: z.string().min(32).optional(),
     // Unset means production (as in the API): development-only features fail closed.
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
@@ -50,6 +53,10 @@ export const workerConfigSchema = z
       .optional(),
   })
   .superRefine((config, context) => {
+    if (config.DEPLOYMENT_MODE === 'preview' && !config.PREVIEW_PASSWORD) {
+      context.addIssue({ code: 'custom', path: ['PREVIEW_PASSWORD'], message: 'required for preview' });
+    }
+
     if (
       config.TRACE_PROBE_TEST_DELAY_MS !== undefined &&
       config.NODE_ENV !== 'test'
@@ -62,7 +69,8 @@ export const workerConfigSchema = z
     }
     if (
       config.PAYMENT_PROVIDER === 'mock' &&
-      config.NODE_ENV === 'production'
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
     ) {
       context.addIssue({
         code: 'custom',

@@ -63,3 +63,11 @@ test('an unset NODE_ENV counts as production, so the mock is refused', () => {
     /PAYMENT_PROVIDER/,
   );
 });
+
+test('hosted preview is explicit and never enables live payments', () => {
+  const preview = { NODE_ENV: 'production', DEPLOYMENT_MODE: 'preview', PREVIEW_PASSWORD: 'p'.repeat(32), REDIS_URL: 'redis://127.0.0.1:6379', DATABASE_URL: 'postgres://u:p@localhost/db' };
+  assert.equal(loadWorkerConfig(preview).DEPLOYMENT_MODE, 'preview');
+  assert.throws(() => loadWorkerConfig({ ...preview, PREVIEW_PASSWORD: '' }));
+  assert.throws(() => loadWorkerConfig({ ...preview, PAYMENTS_LIVE_ENABLED: 'true' }));
+  assert.throws(() => loadWorkerConfig({ ...preview, DEPLOYMENT_MODE: 'production' }), /PAYMENT_PROVIDER/);
+});
