@@ -23,7 +23,7 @@ export default function Home() {
             <h1 id="hero-title">
               Surprise the
               <br />
-              people around you,
+              people around,
               <br />
               <em>by tipping them.</em>
             </h1>
