@@ -6,14 +6,13 @@ export const alt = shareCard.alt;
 export const size = { width: shareCard.width, height: shareCard.height };
 export const contentType = 'image/png';
 
-function Flower({ size: px }: { size: number }) {
+/** Inline heart SVG — avoids font dependency for the mark in next/og context. */
+function Heart({ size: px }: { size: number }) {
   return (
     <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden="true">
       <path
-        d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9 4.9 19.1"
-        stroke="#7A32F9"
-        strokeWidth="2.4"
-        strokeLinecap="round"
+        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+        fill="#7A32F9"
       />
     </svg>
   );
@@ -33,6 +32,7 @@ export default function OpengraphImage() {
         color: '#000000',
       }}
     >
+      {/* Logo wordmark row */}
       <div
         style={{
           display: 'flex',
@@ -40,18 +40,31 @@ export default function OpengraphImage() {
           justifyContent: 'space-between',
         }}
       >
+        {/* "tipme♥" wordmark */}
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            fontSize: 44,
-            letterSpacing: -1.5,
+            alignItems: 'flex-end',
+            fontSize: 56,
+            fontWeight: 900,
+            letterSpacing: '-2px',
+            lineHeight: 1,
           }}
         >
-          tipme
-          <Flower size={34} />
+          <span style={{ color: '#000000' }}>tip</span>
+          <span style={{ color: '#7A32F9' }}>me</span>
+          <span
+            style={{
+              color: '#7A32F9',
+              fontSize: 32,
+              marginBottom: 14,
+              marginLeft: 3,
+            }}
+          >
+            ♥
+          </span>
         </div>
+        {/* Preview pill */}
         <div
           style={{
             display: 'flex',
@@ -65,6 +78,8 @@ export default function OpengraphImage() {
           Development preview · No payments
         </div>
       </div>
+
+      {/* Headline */}
       <div
         style={{
           display: 'flex',
@@ -77,6 +92,8 @@ export default function OpengraphImage() {
         <span>A little thanks</span>
         <span style={{ color: '#7A32F9' }}>goes a long way.</span>
       </div>
+
+      {/* Tagline */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <div
           style={{
