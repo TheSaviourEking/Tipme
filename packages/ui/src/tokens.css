@@ -18,8 +18,8 @@
   --text-lg: 1.125rem;
   --text-xl: clamp(1.25rem, 2vw, 1.5rem);
   --text-heading: clamp(2rem, 4.2vw, 3.75rem);
-  /* --text-display: clamp(3.5rem, 7.2vw, 7rem); */
   --text-display: clamp(3.5rem, 7.2vw, 7rem);
+  /* --text-display: clamp(3.5rem, 5.5vw, 7rem); */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
