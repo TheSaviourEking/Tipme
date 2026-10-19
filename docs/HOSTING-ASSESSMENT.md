@@ -57,4 +57,4 @@ These are logical groups of the current snapshot, not invented historical implem
 
 ## Next step
 
-Push once the user supplies the remote destination. Then agree preview versus production scope, domain, hosting budget and provider; implement a narrow deployment-readiness change with targeted tests and an ADR where required.
+The user authorized their account; the six import commits were pushed to the private repository https://github.com/TheSaviourEking/Tipme. Agree preview versus production scope, domain, hosting budget and provider; implement a narrow deployment-readiness change with targeted tests and an ADR where required.

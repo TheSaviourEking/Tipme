@@ -5,8 +5,8 @@
 - Initialized main; no prior Git history existed. Six logical import commits are complete; final worktree verification was clean.
 - Existing PR-009 source is present; the prior active-task status below is stale. Preserve it; do not restart or claim PR-009 complete.
 - See docs/HOSTING-ASSESSMENT.md for hosting blockers and current verification.
-- Push awaits the user-supplied destination repository. GitHub authentication verified outside the sandbox.
-- Next exact step: obtain the destination, configure origin and push main; then scope deployment readiness.
+- User authorized pushing to their account. Created private https://github.com/TheSaviourEking/Tipme and pushed the six import commits; main tracks origin/main.
+- Next exact step: agree hosting budget, domain and preview scope, then scope deployment readiness. No hosting deployment performed.
 
 ## Prior task record (historical)
 
