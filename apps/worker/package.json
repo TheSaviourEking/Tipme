@@ -1,0 +1,29 @@
+{
+  "name": "@tipme/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc && (tsc --watch --preserveWatchOutput & node --env-file-if-exists=../../.env --import ./dist/instrument.js --watch dist/main.js)",
+    "start": "node --env-file-if-exists=../../.env --import ./dist/instrument.js dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@tipme/config": "workspace:*",
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@tipme/contracts": "workspace:*",
+    "@tipme/observability": "workspace:*",
+    "bullmq": "6.3.11",
+    "ioredis": "5.11.1",
+    "zod": "4.6.7",
+    "@tipme/database": "workspace:*",
+    "@tipme/payments": "workspace:*"
+  }
+}

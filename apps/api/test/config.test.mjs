@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { ConfigError } from '@tipme/observability';
+import { loadApiConfig } from '../dist/config.js';
+
+const valid = {
+  DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/db',
+  REDIS_URL: 'redis://127.0.0.1:6379',
+  MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+  STATUS_TOKEN_SECRET: 's'.repeat(32),
+  AUTH_CODE_SECRET: 'a'.repeat(32),
+  WEB_REVALIDATE_SECRET: 'r'.repeat(32),
+  OPS_TOTP_KEY: Buffer.alloc(32, 1).toString('base64'),
+};
+
+test('missing connection settings are named', () => {
+  assert.throws(
+    () => loadApiConfig({}),
+    (error) => {
+      assert.ok(error instanceof ConfigError);
+      assert.equal(
+        error.message,
+        'Invalid configuration: AUTH_CODE_SECRET, DATABASE_URL, OPS_TOTP_KEY, REDIS_URL, STATUS_TOKEN_SECRET, WEB_REVALIDATE_SECRET',
+      );
+      return true;
+    },
+  );
+});
+
+test('diagnostics can never be enabled in production', () => {
+  assert.throws(
+    () =>
+      loadApiConfig({
+        ...valid,
+        NODE_ENV: 'production',
+        DIAGNOSTICS_ENABLED: 'true',
+      }),
+    /DIAGNOSTICS_ENABLED/,
+  );
+});
+
+test('valid settings are parsed with safe defaults', () => {
+  const config = loadApiConfig({
+    ...valid,
+    NODE_ENV: 'development',
+    PORT: '4100',
+    OTEL_EXPORTER_OTLP_ENDPOINT: '',
+  });
+  assert.equal(config.PORT, 4100);
+  assert.equal(config.HOST, '127.0.0.1');
+  assert.equal(config.DIAGNOSTICS_ENABLED, false);
+  assert.equal(config.OTEL_EXPORTER_OTLP_ENDPOINT, undefined);
+  assert.equal(
+    loadApiConfig({
+      ...valid,
+      NODE_ENV: 'development',
+      DIAGNOSTICS_ENABLED: 'false',
+    }).DIAGNOSTICS_ENABLED,
+    false,
+  );
+});
+
+test('diagnostics fail closed when NODE_ENV is not set', () => {
+  assert.throws(
+    () => loadApiConfig({ ...valid, DIAGNOSTICS_ENABLED: 'true' }),
+    /DIAGNOSTICS_ENABLED/,
+  );
+  // Unset NODE_ENV means production, where the mock provider is refused too: startup fails closed.
+  assert.throws(() => loadApiConfig(valid), /PAYMENT_PROVIDER/);
+});
