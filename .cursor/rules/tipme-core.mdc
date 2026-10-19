@@ -1,0 +1,5 @@
+---
+description: TipMe core engineering policy
+alwaysApply: true
+---
+Read repository `AGENTS.md` and the nearest scoped `AGENTS.md`, plus `docs/00-DECISIONS.md`. Do not infer live-payment approval. Keep #7A32F9, white, black. Report real tests and blockers. Financial invariants are mandatory.

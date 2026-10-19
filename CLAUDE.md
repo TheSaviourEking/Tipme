@@ -1,0 +1,1 @@
+Read `AGENTS.md` before any action. Read nearest scoped `AGENTS.md` for files modified. Use `docs/09-AGENT-PROMPT-PLAYBOOK.md` for collaboration and `docs/00-DECISIONS.md` to avoid assuming regulatory approval. Always report command evidence.

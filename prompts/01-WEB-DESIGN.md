@@ -1,0 +1,3 @@
+# Agent prompt: first web experience
+
+Read root + web + UI AGENTS, PRD, design and quality docs. Implement a responsive first-party design system with exact locked brand colors and accessible type/controls. Build a polished marketing skeleton and public recipient profile with fake fixture data; server render metadata and safe OG preview; include empty/loading/error/disabled states; keyboard/touch/reduced-motion. Do not install visual libraries without reviewing register/license/bundle cost. Supply mobile and desktop screenshots, Lighthouse measurements, axe and Playwright results, and list any unmet goals. No money flow yet.
