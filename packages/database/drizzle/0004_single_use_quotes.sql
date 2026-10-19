@@ -1,0 +1,1 @@
+ALTER TABLE "payment_intents" ADD CONSTRAINT "payment_intents_quote_id_unique" UNIQUE("quote_id");

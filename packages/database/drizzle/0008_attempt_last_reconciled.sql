@@ -1,0 +1,1 @@
+ALTER TABLE "payment_attempts" ADD COLUMN "last_reconciled_at" timestamp with time zone;

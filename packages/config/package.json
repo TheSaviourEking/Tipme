@@ -1,0 +1,13 @@
+{
+  "name": "@tipme/config",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./eslint": "./eslint.mjs"
+  },
+  "dependencies": {
+    "typescript-eslint": "8.71.2"
+  }
+}

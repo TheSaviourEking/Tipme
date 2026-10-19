@@ -1,0 +1,42 @@
+{
+  "name": "@tipme/database",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./test-support": {
+      "types": "./dist/test-support.d.ts",
+      "import": "./dist/test-support.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "node --test test/*.test.mjs",
+    "generate": "drizzle-kit generate",
+    "migrate": "node --env-file-if-exists=../../.env dist/scripts/migrate.js",
+    "seed": "node --env-file-if-exists=../../.env dist/scripts/seed.js"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@tipme/contracts": "workspace:*",
+    "@tipme/domain": "workspace:*",
+    "@tipme/observability": "workspace:*",
+    "drizzle-orm": "0.45.3",
+    "libphonenumber-js": "1.13.14",
+    "pg": "8.23.1",
+    "pg-connection-string": "2.14.1",
+    "uuid": "14.0.2"
+  },
+  "devDependencies": {
+    "@tipme/config": "workspace:*",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11"
+  }
+}

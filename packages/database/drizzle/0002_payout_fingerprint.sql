@@ -1,0 +1,1 @@
+ALTER TABLE "payouts" ADD COLUMN "request_fingerprint" text NOT NULL;
