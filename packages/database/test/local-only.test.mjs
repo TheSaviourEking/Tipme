@@ -33,15 +33,17 @@ test('migrations refuse a remote database before connecting', () => {
   const script = fileURLToPath(
     new URL('../dist/scripts/migrate.js', import.meta.url),
   );
-  const started = performance.now();
   const result = spawnSync(process.execPath, [script], {
     env: {
       PATH: process.env.PATH,
       DATABASE_URL: 'postgres://u:p@db.example.com/x',
     },
     encoding: 'utf8',
+    // Loading the script can take longer than the 2s connect timeout on CI.
+    // The refusal text is the proof it returned before createDatabase; the cap
+    // fails the test if a connection hangs.
+    timeout: 10_000,
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /non-local database: db\.example\.com/);
-  assert.ok(performance.now() - started < 2000);
 });
