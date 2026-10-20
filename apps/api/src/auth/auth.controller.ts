@@ -69,6 +69,7 @@ export class AuthController {
     await requestSignInCode(this.database.db, {
       phone: body.phone,
       secret: this.config.AUTH_CODE_SECRET,
+      codesPerHour: this.config.RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR,
     });
     return { data: { sent: true } };
   }

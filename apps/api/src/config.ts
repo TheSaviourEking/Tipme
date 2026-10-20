@@ -15,7 +15,24 @@ export const apiConfigSchema = z
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('production'),
-    HOST: z.enum(['127.0.0.1', 'localhost', '::1']).default('127.0.0.1'),
+    // 0.0.0.0 only inside a container, where Caddy is the only published entry (PR-010).
+    HOST: z
+      .enum(['127.0.0.1', 'localhost', '::1', '0.0.0.0'])
+      .default('127.0.0.1'),
+    // What this copy is: `test` allows the full release check; unset means `live` (fail-safe).
+    RELEASE_KIND: z.enum(['test', 'live']).default('live'),
+    // The deployed commit, shown by /health/release.
+    GIT_SHA: z
+      .string()
+      .regex(/^[0-9a-f]{7,40}$/)
+      .optional(),
+    // Bearer token for the release check's rehearsal runs (test copies only). Never logged.
+    RELEASE_CHECK_TOKEN: z.string().min(32).optional(),
+    // Preview cookie scope shared by the web and API hosts, e.g. staging.example.com.
+    PREVIEW_COOKIE_DOMAIN: z
+      .string()
+      .regex(/^[a-z0-9.-]+$/)
+      .optional(),
     PORT: z.coerce.number().int().min(1024).max(65535).default(4000),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
@@ -57,6 +74,13 @@ export const apiConfigSchema = z
       ),
     // Sign-in code requests per client per hour (each number is also limited to 3 an hour).
     RATE_LIMIT_AUTH_PER_HOUR: z.coerce.number().int().min(1).default(10),
+    // Sign-in codes per phone number per hour. Keep 3 on any copy people use; local drills raise it.
+    RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .default(3),
     // Keys sign-in codes (HMAC); never logged.
     AUTH_CODE_SECRET: z.string().min(32),
     // Only the pretend messenger exists until a messaging provider is approved (D-08).
@@ -82,10 +106,21 @@ export const apiConfigSchema = z
   })
   .superRefine((config, context) => {
     if (config.DEPLOYMENT_MODE === 'preview' && !config.PREVIEW_PASSWORD) {
-      context.addIssue({ code: 'custom', path: ['PREVIEW_PASSWORD'], message: 'required for preview' });
+      context.addIssue({
+        code: 'custom',
+        path: ['PREVIEW_PASSWORD'],
+        message: 'required for preview',
+      });
     }
-    if (config.DEPLOYMENT_MODE === 'preview' && new URL(config.WEB_ORIGIN).protocol !== 'https:') {
-      context.addIssue({ code: 'custom', path: ['WEB_ORIGIN'], message: 'preview requires HTTPS' });
+    if (
+      config.DEPLOYMENT_MODE === 'preview' &&
+      new URL(config.WEB_ORIGIN).protocol !== 'https:'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['WEB_ORIGIN'],
+        message: 'preview requires HTTPS',
+      });
     }
 
     if (config.NODE_ENV === 'production' && config.DIAGNOSTICS_ENABLED) {

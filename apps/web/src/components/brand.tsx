@@ -6,7 +6,9 @@ export function Brand() {
     <Link className="brand" href="/" aria-label="TipMe home">
       <span className="brand-tip">tip</span>
       <span className="brand-me">me</span>
-      <span className="brand-heart" aria-hidden="true">♥</span>
+      <span className="brand-heart" aria-hidden="true">
+        ♥
+      </span>
     </Link>
   );
 }

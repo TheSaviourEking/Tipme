@@ -12,20 +12,21 @@
     "test": "node --import @tipme/observability/register --test test/*.test.mjs"
   },
   "dependencies": {
-    "@tipme/contracts": "workspace:*",
     "@nestjs/common": "12.1.3",
     "@nestjs/core": "12.1.3",
     "@nestjs/platform-express": "12.1.3",
-    "reflect-metadata": "0.2.2",
-    "rxjs": "7.8.2",
-    "zod": "4.6.7",
-    "@tipme/observability": "workspace:*",
     "@opentelemetry/api": "1.9.1",
+    "@tipme/contracts": "workspace:*",
+    "@tipme/database": "workspace:*",
+    "@tipme/domain": "workspace:*",
+    "@tipme/observability": "workspace:*",
+    "@tipme/payments": "workspace:*",
     "bullmq": "6.3.11",
     "ioredis": "5.11.1",
     "pg": "8.23.1",
-    "@tipme/database": "workspace:*",
-    "@tipme/payments": "workspace:*"
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tipme/config": "workspace:*",

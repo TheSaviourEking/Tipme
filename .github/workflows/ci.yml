@@ -1,5 +1,9 @@
 name: Workspace checks
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  # The deploy-staging workflow runs these checks before shipping a version by hand.
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -31,5 +35,11 @@ jobs:
           DATABASE_URL: postgresql://tipme_local:tipme_local_password@localhost:5432/tipme_local
       - run: pnpm test:integration
       - run: docker compose config --quiet
+      - name: Staging compose file is valid (placeholders only)
+        run: docker compose -f deploy/compose.staging.yml --env-file deploy/staging.env.example config --quiet
+        env:
+          TIPME_VERSION: 0000000
+          TIPME_ENV_FILE: ./staging.env.example
+          POSTGRES_PASSWORD: ci-placeholder
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e

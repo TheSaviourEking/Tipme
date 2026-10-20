@@ -226,7 +226,12 @@ export default function IssuePage() {
               field={
                 page.status === 'suspended'
                   ? 'Why restore it?'
-                  : 'Why pause it?'
+                  : 'Message to the recipient'
+              }
+              hint={
+                page.status === 'suspended'
+                  ? undefined
+                  : 'The recipient sees this message exactly as written on their dashboard. Don’t include supporters’ names, numbers or who reported the page. Also recorded in the audit log.'
               }
               submit={
                 page.status === 'suspended' ? 'Restore page' : 'Pause page'

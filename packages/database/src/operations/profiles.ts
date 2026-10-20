@@ -20,6 +20,7 @@ import {
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
+import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
@@ -74,7 +75,13 @@ async function isTaken(
 /** Claims a handle for the user's one page. The page starts not live, named after the handle. */
 export function claimHandle(
   db: Database,
-  input: { userId: string; handle: string; now?: Date },
+  input: {
+    userId: string;
+    handle: string;
+    now?: Date;
+    /** Release check only (PR-010): honoured only for an open run. */
+    rehearsalRunId?: string;
+  },
 ): Promise<{ profileId: string; handle: string }> {
   const now = input.now ?? new Date();
   const handle = normaliseHandle(input.handle);
@@ -85,10 +92,14 @@ export function claimHandle(
     if (isReservedHandle(handle) || (await isTaken(db, handle, now)))
       throw new OperationError('HANDLE_TAKEN');
     const profileId = newId();
+    const rehearsalRunId = (await isOpenReleaseRun(db, input.rehearsalRunId))
+      ? input.rehearsalRunId
+      : null;
     const inserted = await db
       .insert(profiles)
       .values({
         id: profileId,
+        rehearsalRunId,
         userId: input.userId,
         handle,
         handleLower: handle,

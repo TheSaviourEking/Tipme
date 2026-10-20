@@ -50,7 +50,13 @@ export function track(
     if (!shouldTrack(nav)) return;
     void fetch(`${API_ORIGIN}/v1/events`, {
       method: 'POST',
-      credentials: API_ORIGIN === '' ? 'same-origin' : 'omit',
+      // Staging/preview: every call carries the preview cookie (PR-010).
+      credentials:
+        process.env.NEXT_PUBLIC_PREVIEW_GATE === 'on'
+          ? 'include'
+          : API_ORIGIN === ''
+            ? 'same-origin'
+            : 'omit',
       keepalive: true,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, flowId: flowId(), ...props }),

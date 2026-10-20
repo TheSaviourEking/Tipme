@@ -53,8 +53,13 @@ export class OpsIssuesController {
     @Query(new ZodValidationPipe(opsIssueListQuerySchema))
     query: OpsIssueListQuery,
   ): Promise<ApiDataResponse<OpsIssue[]>> {
+    const { includeRehearsal, ...filters } = query;
     return {
-      data: await listIssues(this.database.db, { ...query, limit: 50 }),
+      data: await listIssues(this.database.db, {
+        ...filters,
+        includeRehearsal: includeRehearsal === '1',
+        limit: 50,
+      }),
     };
   }
 

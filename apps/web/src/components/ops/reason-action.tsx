@@ -12,12 +12,15 @@ export function ReasonAction({
   submit,
   onSubmit,
   variant = 'secondary',
+  hint = 'Recorded in the audit log with your name and the time.',
 }: {
   open: string;
   field: string;
   submit: string;
   onSubmit: (reason: string) => Promise<string | null>;
   variant?: 'primary' | 'secondary' | 'quiet';
+  /** Who reads the text; say so plainly when it is not only staff. */
+  hint?: string;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -51,7 +54,7 @@ export function ReasonAction({
         id={`${id}-reason`}
         name="reason"
         label={field}
-        hint="Recorded in the audit log with your name and the time."
+        hint={hint}
         minLength={10}
         maxLength={500}
         required

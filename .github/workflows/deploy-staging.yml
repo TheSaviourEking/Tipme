@@ -1,0 +1,100 @@
+# Builds the API/worker image once, ships it to the staging VPS over SSH and deploys it, then
+# runs the full release check against staging (PR-010, ADR-0011). The server never builds.
+#
+# Run it by hand (Actions → Deploy staging → Run workflow), or automatically after the checks pass
+# on main when the repository variable STAGING_AUTO_DEPLOY is "true".
+#
+# Repository settings → Environments → "staging":
+#   secrets:   STAGING_SSH_KEY (private key of the server's deploy user), STAGING_SSH_KNOWN_HOSTS
+#              (`ssh-keyscan <server>` output, checked by hand), RELEASE_PREVIEW_PASSWORD,
+#              RELEASE_CHECK_TOKEN, RELEASE_OPS_PHONE, RELEASE_OPS_TOTP_SECRET
+#   variables: STAGING_SSH (deploy@<server>), STAGING_WEB_URL, STAGING_API_URL
+name: Deploy staging
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Workspace checks]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  # A manual run re-runs every check on the commit first; an automatic run follows a green check.
+  checks:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: checks
+    if: >-
+      always() &&
+      (needs.checks.result == 'success' ||
+       (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        vars.STAGING_AUTO_DEPLOY == 'true'))
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Version
+        run: echo "VERSION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build the image (once, here)
+        run: docker build -f deploy/Dockerfile -t "tipme-app:$VERSION" .
+
+      - name: SSH to the server
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/staging
+          chmod 600 ~/.ssh/staging
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Ship and deploy
+        env:
+          STAGING_SSH: ${{ vars.STAGING_SSH }}
+          STAGING_SSH_KEY_FILE: /home/runner/.ssh/staging
+        run: scripts/ship-staging.sh "$VERSION"
+
+      # The release check runs from here, against the deployed copy.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Full once the release-check staff account exists (runbook step 6); read-only before that.
+      - name: Release check
+        env:
+          RELEASE_PREVIEW_PASSWORD: ${{ secrets.RELEASE_PREVIEW_PASSWORD }}
+          RELEASE_CHECK_TOKEN: ${{ secrets.RELEASE_CHECK_TOKEN }}
+          RELEASE_OPS_PHONE: ${{ secrets.RELEASE_OPS_PHONE }}
+          RELEASE_OPS_TOTP_SECRET: ${{ secrets.RELEASE_OPS_TOTP_SECRET }}
+          WEB: ${{ vars.STAGING_WEB_URL }}
+          API: ${{ vars.STAGING_API_URL }}
+        run: |
+          mode=()
+          if [[ -n "$RELEASE_OPS_TOTP_SECRET" && -n "$RELEASE_CHECK_TOKEN" ]]; then mode=(--full);
+          else echo "::warning::Release-check staff not set up yet: running the read-only check only."; fi
+          pnpm release:check --web "$WEB" --api "$API" --expect-version "$VERSION" "${mode[@]}"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-check
+          path: test-results/
+          retention-days: 7
+
+      - name: Forget the key
+        if: always()
+        run: rm -f ~/.ssh/staging

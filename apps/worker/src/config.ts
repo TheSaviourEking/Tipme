@@ -54,7 +54,11 @@ export const workerConfigSchema = z
   })
   .superRefine((config, context) => {
     if (config.DEPLOYMENT_MODE === 'preview' && !config.PREVIEW_PASSWORD) {
-      context.addIssue({ code: 'custom', path: ['PREVIEW_PASSWORD'], message: 'required for preview' });
+      context.addIssue({
+        code: 'custom',
+        path: ['PREVIEW_PASSWORD'],
+        message: 'required for preview',
+      });
     }
 
     if (

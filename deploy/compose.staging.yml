@@ -1,0 +1,156 @@
+# TipMe staging (PR-010): API, worker, Postgres, Redis and Caddy on one server.
+# The web app runs on Vercel. Only Caddy is published (80/443); everything else is internal.
+#
+#   TIPME_VERSION=<git sha> docker compose -f deploy/compose.staging.yml --env-file /srv/tipme/staging.env up -d
+name: tipme-staging
+
+x-app: &app
+  image: tipme-app:${TIPME_VERSION:?set TIPME_VERSION to the git sha}
+  env_file: ${TIPME_ENV_FILE:-/srv/tipme/staging.env}
+  environment:
+    GIT_SHA: ${TIPME_VERSION}
+    DATABASE_URL: postgres://tipme:${POSTGRES_PASSWORD:?}@postgres:5432/tipme
+    REDIS_URL: redis://redis:6379
+  restart: unless-stopped
+  read_only: true
+  tmpfs: ['/tmp']
+  security_opt: ['no-new-privileges:true']
+  networks: [internal]
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports: ['80:80', '443:443', '443:443/udp']
+    environment:
+      API_HOST: ${API_HOST:?set API_HOST, e.g. api.staging.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for certificate notices}
+    volumes:
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge, internal]
+    depends_on: [api]
+    mem_limit: 128m
+
+  api:
+    <<: *app
+    command:
+      [
+        'node',
+        '--import',
+        './apps/api/dist/instrument.js',
+        'apps/api/dist/main.js',
+      ]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 768m
+    # Needs the internet only to tell the web app (Vercel) that a public page changed.
+    networks: [edge, internal]
+
+  worker:
+    <<: *app
+    command:
+      [
+        'node',
+        '--import',
+        './apps/worker/dist/instrument.js',
+        'apps/worker/dist/main.js',
+      ]
+    mem_limit: 512m
+
+  # Run by deploy.sh before switching versions: guarded, after a fresh backup.
+  migrate:
+    <<: *app
+    restart: 'no'
+    profiles: [tools]
+    command: ['node', 'packages/database/dist/scripts/release-migrate.js']
+    environment:
+      GIT_SHA: ${TIPME_VERSION}
+      DATABASE_URL: postgres://tipme:${POSTGRES_PASSWORD:?}@postgres:5432/tipme
+      MIGRATE_CONFIRM_DATABASE: ${MIGRATE_CONFIRM_DATABASE:-}
+      MIGRATE_BACKUP_DONE: ${MIGRATE_BACKUP_DONE:-}
+
+  # Nightly encrypted backups (and on demand: `run --rm backup once`).
+  backup:
+    <<: *app
+    command: ['sh', 'deploy/backup-loop.sh']
+    volumes: ['${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups']
+    read_only: false
+    mem_limit: 384m
+
+  # Optional off-server copy of the encrypted backups (any S3-compatible bucket), hourly.
+  # Configure the rclone remote with RCLONE_CONFIG_<NAME>_* settings in the env file, then
+  # start with `--profile offsite`.
+  offsite:
+    image: rclone/rclone:1.71.1
+    profiles: [offsite]
+    restart: unless-stopped
+    env_file: ${TIPME_ENV_FILE:-/srv/tipme/staging.env}
+    entrypoint: ['sh', '-c']
+    command:
+      - 'while true; do rclone copy --immutable /backups "$$BACKUP_RCLONE_REMOTE" && echo "offsite copy done"; sleep 3600; done'
+    volumes: ['${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups:ro']
+    networks: [edge]
+    mem_limit: 128m
+
+  postgres:
+    image: postgres:16.13-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tipme
+      POSTGRES_USER: tipme
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tipme -d tipme']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [internal]
+    mem_limit: 1g
+
+  redis:
+    image: redis:7.4.5-alpine
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '192mb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    volumes: ['redisdata:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [internal]
+    mem_limit: 256m
+
+networks:
+  edge: {}
+  # No internet route at all: Postgres, Redis and the worker are reachable only from here.
+  internal: { internal: true }
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

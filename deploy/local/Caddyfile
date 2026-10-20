@@ -1,0 +1,18 @@
+# Local staging proof (PR-010): the same layout as the server, with Caddy's own local CA.
+# https://staging.localhost:8443 → the web app (next start on the host, standing in for Vercel)
+# https://api.staging.localhost:8443 → the API container
+{
+	local_certs
+	skip_install_trust
+	https_port 8443
+	http_port 8080
+}
+
+api.staging.localhost {
+	encode zstd gzip
+	reverse_proxy api:4000
+}
+
+staging.localhost {
+	reverse_proxy host.docker.internal:3200
+}

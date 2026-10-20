@@ -70,10 +70,59 @@ test('diagnostics fail closed when NODE_ENV is not set', () => {
 });
 
 test('explicit hosted preview permits mocks but requires a strong gate and HTTPS', () => {
-  const preview = { ...valid, NODE_ENV: 'production', DEPLOYMENT_MODE: 'preview', PREVIEW_PASSWORD: 'p'.repeat(32), WEB_ORIGIN: 'https://tipme-demo.onrender.com' };
+  const preview = {
+    ...valid,
+    NODE_ENV: 'production',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    WEB_ORIGIN: 'https://tipme-demo.onrender.com',
+  };
   assert.equal(loadApiConfig(preview).DEPLOYMENT_MODE, 'preview');
-  for (const override of [{ PREVIEW_PASSWORD: '' }, { WEB_ORIGIN: 'http://example.com' }, { PAYMENTS_LIVE_ENABLED: 'true' }, { DIAGNOSTICS_ENABLED: 'true' }]) {
+  for (const override of [
+    { PREVIEW_PASSWORD: '' },
+    { WEB_ORIGIN: 'http://example.com' },
+    { PAYMENTS_LIVE_ENABLED: 'true' },
+    { DIAGNOSTICS_ENABLED: 'true' },
+  ]) {
     assert.throws(() => loadApiConfig({ ...preview, ...override }));
   }
-  assert.throws(() => loadApiConfig({ ...preview, DEPLOYMENT_MODE: 'production' }), /PAYMENT_PROVIDER/);
+  assert.throws(
+    () => loadApiConfig({ ...preview, DEPLOYMENT_MODE: 'production' }),
+    /PAYMENT_PROVIDER/,
+  );
+});
+
+test('a container may bind every interface; a copy is live unless it says test (PR-010)', () => {
+  const config = loadApiConfig({ ...valid, NODE_ENV: 'test', HOST: '0.0.0.0' });
+  assert.equal(config.HOST, '0.0.0.0');
+  assert.equal(config.RELEASE_KIND, 'live');
+  assert.equal(
+    loadApiConfig({ ...valid, NODE_ENV: 'test', RELEASE_KIND: 'test' })
+      .RELEASE_KIND,
+    'test',
+  );
+  assert.throws(() =>
+    loadApiConfig({ ...valid, NODE_ENV: 'test', HOST: '10.0.0.5' }),
+  );
+  assert.throws(() =>
+    loadApiConfig({ ...valid, NODE_ENV: 'test', RELEASE_KIND: 'staging' }),
+  );
+  assert.throws(() =>
+    loadApiConfig({ ...valid, NODE_ENV: 'test', RELEASE_CHECK_TOKEN: 'short' }),
+  );
+});
+
+test('sign-in codes stay at 3 per number per hour unless a copy raises it (PR-010)', () => {
+  assert.equal(
+    loadApiConfig({ ...valid, NODE_ENV: 'test' })
+      .RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR,
+    3,
+  );
+  assert.throws(() =>
+    loadApiConfig({
+      ...valid,
+      NODE_ENV: 'test',
+      RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: '1000',
+    }),
+  );
 });

@@ -261,6 +261,29 @@ test('staff access', async (t) => {
     );
   });
 
+  await t.test(
+    'fix: wrong codes sent in parallel still lock after five (final review)',
+    async () => {
+      await database.fresh();
+      const { userId, sessionId, totp } = await enrolledOwner(database.db);
+      const now = at(2 * MIN);
+      const wrong = codeAt(totp, now) === '000000' ? '111111' : '000000';
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          openOpsGrant(database.db, {
+            userId,
+            sessionId,
+            code: wrong,
+            key,
+            now,
+          }).then((r) => r.status),
+        ),
+      );
+      assert.equal(results.filter((r) => r === 'invalid').length, 4);
+      assert.equal(results.filter((r) => r === 'locked').length, 6);
+    },
+  );
+
   await t.test('a non-staff user gets not_staff', async () => {
     await database.fresh();
     const { userId, sessionId } = await signInUser(

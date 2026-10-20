@@ -1,0 +1,16 @@
+# The only public entry on the staging server: HTTPS for the API host, certificates automatic.
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	reverse_proxy api:4000 {
+		health_uri /health/live
+	}
+}

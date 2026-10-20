@@ -89,7 +89,11 @@ test('a paused page: the owner pauses it from an issue, and the recipient sees w
   await page.goto(`/ops/issues/${issueId}`);
   const reason = `Reported for impersonation ${randomUUID().slice(0, 6)}`;
   await page.getByRole('button', { name: 'Pause this page…' }).click();
-  await page.getByLabel('Why pause it?').fill(reason);
+  // Fix (final review): the form says plainly that the recipient reads this text.
+  await expect(
+    page.getByText(/The recipient sees this message exactly as written/),
+  ).toBeVisible();
+  await page.getByLabel('Message to the recipient').fill(reason);
   await page.getByRole('button', { name: 'Pause page' }).click();
   await expect(page.getByText('Paused by TipMe')).toBeVisible();
 

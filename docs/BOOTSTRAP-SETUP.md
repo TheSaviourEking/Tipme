@@ -104,3 +104,11 @@ It prints the tip's status, the provider evidence and a trace link. `no-reply` i
   - Audit log;
   - Staff & roles.
 - **What admin can't do:** admin never moves money, and every action needs a reason and is audited. See ADR-0010 and the [issues inbox runbook](runbooks/issues-inbox.md).
+
+## Staging and release (PR-010)
+
+- **Local copy of staging:** `pnpm staging:local:up` runs the same staging setup on this machine at `https://staging.localhost:8443` (web) and `https://api.staging.localhost:8443` (API), with a local certificate. It needs Docker. Secrets are generated into `deploy/local/staging.local.env` (git-ignored, never printed).
+- **Release-check staff:** `node scripts/staging-local.mjs release-staff` grants and enrols it.
+- **The check:** `node scripts/staging-local.mjs check` (read-only) or `check full`.
+- **Drills:** `node scripts/rollback-drill.mjs <tag>` runs the rollback drill. `pnpm staging:local:down` stops everything.
+- **The real staging server and Vercel:** [staging setup](runbooks/staging-setup.md), [deploy and rollback](runbooks/deploy-and-rollback.md), [backup and restore](runbooks/backup-and-restore.md), [release day](runbooks/release-day.md). See also ADR-0011.

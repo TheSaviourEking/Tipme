@@ -48,6 +48,7 @@ export function healthMetrics(
         SELECT ${week(sql.raw('t.completed_at'))} AS wk, t.profile_id, t.gross_minor, t.created_at, t.completed_at,
                q.platform_fee_minor, q.waived_platform_fee_minor
           FROM tips t JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id
+          JOIN profiles rp ON rp.id = t.profile_id AND rp.rehearsal_run_id IS NULL
          WHERE t.status = 'SUCCEEDED')
       SELECT count(*) FILTER (WHERE wk = 'this')::int AS count_this,
              count(*) FILTER (WHERE wk = 'last')::int AS count_last,
@@ -70,10 +71,12 @@ export function healthMetrics(
     const cash = await one(sql`
       SELECT coalesce(sum(cash_minor) FILTER (WHERE ${week(sql.raw('created_at'))} = 'this'), 0) AS this,
              coalesce(sum(cash_minor) FILTER (WHERE ${week(sql.raw('created_at'))} = 'last'), 0) AS last
-        FROM reward_grants`);
+        FROM reward_grants g
+       WHERE EXISTS (SELECT 1 FROM profiles rp WHERE rp.id = g.profile_id AND rp.rehearsal_run_id IS NULL)`);
     const started = await one(sql`
-      WITH t AS (SELECT ${week(sql.raw('created_at'))} AS wk, status FROM tips
-                  WHERE status IN ('SUCCEEDED', 'FAILED'))
+      WITH t AS (SELECT ${week(sql.raw('tips.created_at'))} AS wk, tips.status FROM tips
+                   JOIN profiles rp ON rp.id = tips.profile_id AND rp.rehearsal_run_id IS NULL
+                  WHERE tips.status IN ('SUCCEEDED', 'FAILED'))
       SELECT count(*) FILTER (WHERE wk = 'this' AND status = 'FAILED') AS failed_this,
              count(*) FILTER (WHERE wk = 'this') AS total_this,
              count(*) FILTER (WHERE wk = 'last' AND status = 'FAILED') AS failed_last,
@@ -81,6 +84,7 @@ export function healthMetrics(
         FROM t`);
     const stuck = await one(sql`
       SELECT count(*)::int AS n FROM tips t
+        JOIN profiles rp ON rp.id = t.profile_id AND rp.rehearsal_run_id IS NULL
        WHERE t.created_at < ${new Date(now.getTime() - 30 * 60_000)}
          AND (t.status = 'PENDING_VERIFICATION'
               OR (t.status = 'AWAITING_PAYMENT' AND EXISTS (
@@ -89,15 +93,19 @@ export function healthMetrics(
       SELECT count(*) FILTER (WHERE severity = 'money')::int AS money,
              count(*) FILTER (WHERE severity = 'account')::int AS account,
              count(*) FILTER (WHERE severity = 'info')::int AS info
-        FROM issues WHERE status = 'open'`);
+        FROM issues WHERE status = 'open' AND NOT rehearsal`);
     const people = await one(sql`
-      SELECT (SELECT count(*) FROM users WHERE ${week(sql.raw('created_at'))} = 'this')::int AS signups_this,
-             (SELECT count(*) FROM users WHERE ${week(sql.raw('created_at'))} = 'last')::int AS signups_last,
-             (SELECT count(*) FROM profiles WHERE user_id IS NOT NULL AND ${week(sql.raw('created_at'))} = 'this')::int AS pages_this,
-             (SELECT count(*) FROM profiles WHERE user_id IS NOT NULL AND ${week(sql.raw('created_at'))} = 'last')::int AS pages_last,
-             (SELECT count(*) FROM profiles WHERE page_state = 'live' AND status = 'active')::int AS live`);
+      WITH u AS (SELECT * FROM users WHERE NOT EXISTS (
+                   SELECT 1 FROM profiles rp WHERE rp.user_id = users.id AND rp.rehearsal_run_id IS NOT NULL)),
+           p AS (SELECT * FROM profiles WHERE rehearsal_run_id IS NULL)
+      SELECT (SELECT count(*) FROM u WHERE ${week(sql.raw('created_at'))} = 'this')::int AS signups_this,
+             (SELECT count(*) FROM u WHERE ${week(sql.raw('created_at'))} = 'last')::int AS signups_last,
+             (SELECT count(*) FROM p WHERE user_id IS NOT NULL AND ${week(sql.raw('created_at'))} = 'this')::int AS pages_this,
+             (SELECT count(*) FROM p WHERE user_id IS NOT NULL AND ${week(sql.raw('created_at'))} = 'last')::int AS pages_last,
+             (SELECT count(*) FROM p WHERE page_state = 'live' AND status = 'active')::int AS live`);
     const funnel = await one(sql`
-      WITH e AS (SELECT * FROM analytics_events WHERE at_minute >= ${thisStart} AND at_minute <= ${now})
+      WITH e AS (SELECT * FROM analytics_events
+                  WHERE at_minute >= ${thisStart} AND at_minute <= ${now} AND NOT rehearsal)
       SELECT (SELECT count(*) FROM (SELECT DISTINCT flow_id, handle FROM e
                 WHERE name = 'profile_viewed' AND flow_id IS NOT NULL) v)::int AS visits,
              (SELECT count(DISTINCT flow_id) FROM e WHERE name = 'amount_selected')::int AS amount,
@@ -192,7 +200,8 @@ export function visibilityMetrics(
     const visitsCte = sql`
       WITH e AS (
         SELECT *, (at_minute AT TIME ZONE ${ZONE})::date AS day FROM analytics_events
-         WHERE (at_minute AT TIME ZONE ${ZONE})::date BETWEEN ${range.from}::date AND ${range.to}::date),
+         WHERE (at_minute AT TIME ZONE ${ZONE})::date BETWEEN ${range.from}::date AND ${range.to}::date
+           AND NOT rehearsal),
       v AS (
         SELECT DISTINCT ON (flow_id, coalesce(handle, ''))
                flow_id, handle, day, coalesce(channel, 'other') AS channel, coalesce("returning", false) AS is_returning
@@ -226,8 +235,9 @@ export function visibilityMetrics(
        GROUP BY name`);
     const celebrations = await db.execute<{ n: number }>(sql`
       SELECT count(*)::int AS n FROM tips
-       WHERE status = 'SUCCEEDED' AND celebration_moment_id IS NOT NULL
-         AND (completed_at AT TIME ZONE ${ZONE})::date BETWEEN ${range.from}::date AND ${range.to}::date`);
+        JOIN profiles rp ON rp.id = tips.profile_id AND rp.rehearsal_run_id IS NULL
+       WHERE tips.status = 'SUCCEEDED' AND tips.celebration_moment_id IS NOT NULL
+         AND (tips.completed_at AT TIME ZONE ${ZONE})::date BETWEEN ${range.from}::date AND ${range.to}::date`);
 
     const visitsPerDay = perDay.rows.map((row) => ({
       date: row.date,
