@@ -75,6 +75,24 @@ One fresh, read-only reviewer found no Critical issues, five Important ones and 
 
 Eleven minors are deferred (ledger lines starting `Final: minor (deferred)`).
 
+## Follow-up: build in GitHub Actions, never on the server (20 October)
+
+At the user's request ("can we build the app on github actions so the server never builds these things?", option 1), the image is now built once in GitHub Actions and shipped to the VPS over SSH. There is no registry.
+
+- **`.github/workflows/deploy-staging.yml`**, run by hand or after green checks on `main` when `STAGING_AUTO_DEPLOY=true`:
+  1. runs the checks (`ci.yml` is now reusable);
+  2. builds the image;
+  3. runs `scripts/ship-staging.sh`: streams the image with `docker save | gzip | ssh docker load` and copies that version's deploy files to `/srv/tipme/releases/<version>/`;
+  4. deploys on the server;
+  5. runs the release check: full once the release-check staff secrets exist, read-only before.
+- **Server scripts:** `deploy.sh` and `rollback.sh` no longer use git or build. They refuse a version that was not shipped, keep the last 5 versions, and point `/srv/tipme/live` at the running version. `compose.sh` runs Compose for it.
+- **The server needs only Docker.** With no builds, 2 GB of memory becomes workable (4 GB still recommended for headroom).
+- **Tests:**
+  - `scripts/deploy-scripts.test.mjs` 7/7: the real scripts, with stand-in docker, git and curl;
+  - `scripts/ship-staging.test.mjs` 2/2;
+  - both workflows parse.
+- **Not proven:** the workflow itself has not run yet. It needs the VPS and the GitHub `staging` environment (runbook steps 5–6).
+
 ## Wiring in later (the user's step)
 
 1. Buy the VPS (suggested: 2 vCPU, 4 GB, London or Frankfurt).

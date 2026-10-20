@@ -24,16 +24,17 @@ Secrets are typed on the server or into Vercel, never into chat or the repositor
 2. **SSH:** in `/etc/ssh/sshd_config` set `PasswordAuthentication no` and `PermitRootLogin no`, then `systemctl restart ssh`. Log in again as `deploy` in a second window before closing the first.
 3. **Firewall:** `ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp && ufw enable`.
 4. **Updates:** `apt install unattended-upgrades fail2ban` and enable security updates.
-5. **Docker:** install Docker Engine and the Compose plugin from Docker's apt repository, then `usermod -aG docker deploy`.
+5. **Docker:** install Docker Engine and the Compose plugin from Docker's apt repository, then `usermod -aG docker deploy`. Nothing else is needed: no git, no Node, no build tools.
 
    Note: Docker publishes ports past ufw. Only Caddy publishes any (80/443), by design.
 
 ## 3. Lay out the files (as `deploy`)
 
+The server never builds or holds the source code: GitHub Actions builds each version and ships it (step 5). The server needs only Docker, a settings file and a folder for backups.
+
 ```sh
-sudo mkdir -p /srv/tipme && sudo chown deploy: /srv/tipme
-git clone git@github.com:<you>/Tipme.git /srv/tipme/app   # a read-only deploy key on the repo
-cp /srv/tipme/app/deploy/staging.env.example /srv/tipme/staging.env
+sudo mkdir -p /srv/tipme/backups && sudo chown deploy: /srv/tipme && sudo chown 1000:1000 /srv/tipme/backups
+# From your machine: scp deploy/staging.env.example deploy@<server>:/srv/tipme/staging.env
 chmod 600 /srv/tipme/staging.env
 ```
 
@@ -47,13 +48,7 @@ Fill in `/srv/tipme/staging.env`:
 - **`BACKUP_KEY`:** save a copy off the server, in your password manager. Without it no backup can be read.
 - **`RELEASE_KIND=test`:** this copy runs the full release check.
 
-The image runs as uid 1000 and writes backups into `/srv/tipme/backups`:
-
-```sh
-mkdir -p /srv/tipme/backups && sudo chown 1000:1000 /srv/tipme/backups
-```
-
-`deploy.sh` checks this before it starts.
+The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence the `chown` above; `deploy.sh` checks it).
 
 ## 4. Vercel (web app)
 
@@ -68,24 +63,48 @@ mkdir -p /srv/tipme/backups && sudo chown 1000:1000 /srv/tipme/backups
 3. **Domains** → add `staging.<domain>` and set the CNAME from step 1.
 4. **Node.js version:** 24.x.
 
-## 5. First deploy
+## 5. GitHub: let Actions deploy
 
-```sh
-cd /srv/tipme/app && deploy/scripts/deploy.sh $(git rev-parse HEAD)
-```
+1. **Make a key just for Actions** (on your machine):
+
+   ```sh
+   ssh-keygen -t ed25519 -f tipme-actions -N '' -C tipme-actions
+   ```
+
+   Append `tipme-actions.pub` to `/home/deploy/.ssh/authorized_keys` on the server.
+
+2. **Pin the server's identity:** run `ssh-keyscan <server address>`, check the fingerprint against the server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`), and keep the output.
+3. **Create the environment:** in the repository, **Settings → Environments → New environment** `staging` (optionally require your approval).
+   - **Secrets:**
+     - `STAGING_SSH_KEY`: the private key file `tipme-actions`;
+     - `STAGING_SSH_KNOWN_HOSTS`: the `ssh-keyscan` output;
+     - `RELEASE_PREVIEW_PASSWORD` and `RELEASE_CHECK_TOKEN`: the same values as the server.
+   - **Variables:**
+     - `STAGING_SSH` = `deploy@<server address>`;
+     - `STAGING_WEB_URL` = `https://staging.<domain>`;
+     - `STAGING_API_URL` = `https://api.staging.<domain>`.
+4. **Delete the private key file** from your machine once it is stored in GitHub.
+
+## 6. First deploy
+
+**Actions → Deploy staging → Run workflow.** It:
+
+1. runs every check;
+2. builds `tipme-app:<version>`;
+3. sends it and that version's deploy files to the server;
+4. deploys (backup → guarded migrate → switch → health);
+5. runs the release check (read-only until step 7 is done).
 
 **First-run checks:**
 
-- Caddy obtains a certificate (`docker compose ... logs caddy`).
-- `https://api.staging.<domain>/health/release` shows your commit.
-- `docker stats` stays well under 4 GB. Locally the stack idles at about 310 MB.
+- Caddy obtains a certificate: `/srv/tipme/live/scripts/compose.sh logs caddy`.
+- `https://api.staging.<domain>/health/release` shows the version.
+- `docker stats` stays well under the server's memory. Locally the stack idles at about 310 MB. With no builds on the server, 2 GB of memory is workable; 4 GB leaves headroom.
 
-## 6. The release check's staff account (once)
+## 7. The release check's staff account (once)
 
 ```sh
-cd /srv/tipme/app
-TIPME_VERSION=$(cat /srv/tipme/releases/current) docker compose -f deploy/compose.staging.yml \
-  --env-file /srv/tipme/staging.env run --rm -e TIPME_CONFIRM_DATABASE=tipme migrate \
+/srv/tipme/live/scripts/compose.sh run --rm -e TIPME_CONFIRM_DATABASE=tipme migrate \
   node packages/database/dist/scripts/grant-owner.js --phone <a number you keep for this> --role release_check
 ```
 
@@ -96,9 +115,9 @@ RELEASE_PREVIEW_PASSWORD=... node scripts/release-enrol.mjs --web https://stagin
   --api https://api.staging.<domain> --phone <same number> --code <the enrolment code>
 ```
 
-Keep the printed secret as `RELEASE_OPS_TOTP_SECRET` (with `RELEASE_OPS_PHONE`, `RELEASE_CHECK_TOKEN` and `RELEASE_PREVIEW_PASSWORD`) in your password manager or CI secrets. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
+Add the printed secret as `RELEASE_OPS_TOTP_SECRET`, and the number as `RELEASE_OPS_PHONE`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
 
-## 7. Prove it
+## 8. Prove it
 
 ```sh
 pnpm release:check --web https://staging.<domain> --api https://api.staging.<domain> --full

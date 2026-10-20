@@ -11,11 +11,10 @@ source "$(dirname "$0")/lib.sh"
 current=$(current_version)
 target=${1:-$(version_before "$current")}
 [[ -n "$target" && "$target" != "$current" ]] || { echo "No earlier version to roll back to." >&2; exit 2; }
-docker image inspect "tipme-app:$target" >/dev/null || { echo "Image tipme-app:$target is gone; deploy it instead." >&2; exit 2; }
+shipped "$target" || { echo "tipme-app:$target is no longer on this server; ship and deploy it instead." >&2; exit 2; }
 
 echo "==> Rolling back $current → $target"
-git -C "$APP_DIR" checkout --quiet --detach "$target"
 compose_for "$target" up -d --remove-orphans api worker caddy backup
 wait_healthy "$target" || { echo "!! $target did not become healthy." >&2; exit 1; }
-echo "$target" >"$CURRENT"
+set_current "$target"
 echo "==> Rolled back to $target. Run the release check (read-only, then --full)."

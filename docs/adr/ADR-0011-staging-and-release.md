@@ -62,9 +62,28 @@ The user's release-day bar: "everything must be proven to work … from the tips
 
 ### Deploys, migrations and rollback
 
-- **Deploy:** `deploy/scripts/deploy.sh <sha>` builds `tipme-app:<sha>`, takes a backup, migrates (guarded: `MIGRATE_CONFIRM_DATABASE` plus a backup first), switches, waits for health and the right version, and records the version. If the new version is unhealthy, it puts the previous one back.
+- **Build once, in GitHub Actions; the server never builds.** The `deploy-staging` workflow:
+  1. runs the checks;
+  2. builds `tipme-app:<version>`;
+  3. streams it to the VPS over SSH (`docker save | gzip | ssh docker load`; no registry account or storage limits);
+  4. copies that version's deploy files to `/srv/tipme/releases/<version>/`;
+  5. runs the deploy there;
+  6. runs the release check against staging.
+
+  The VPS needs only Docker: no git, source code or build tools.
+
+- **Deploy:** `deploy.sh <version>`:
+  1. takes a backup;
+  2. migrates (guarded: `MIGRATE_CONFIRM_DATABASE` plus a backup first);
+  3. switches;
+  4. waits for health and the right version;
+  5. records the version (`/srv/tipme/live` points at its files);
+  6. keeps the last 5 versions.
+
+  If the new version is unhealthy, it puts the previous one back.
+
 - **Migrations are forward-only and must stay compatible with the previous release** (expand, then contract in a later release). Rollback therefore never runs a down-migration.
-  - `deploy/scripts/rollback.sh` switches back to the previous image.
+  - `rollback.sh` switches back to the version deployed before the current one, never forward, using an image already on the server.
   - The web app rolls back in Vercel (Instant Rollback).
 - **Proven by a drill:** A → B (with a migration) → back to A → full check green.
 
@@ -80,7 +99,7 @@ The user's release-day bar: "everything must be proven to work … from the tips
 
 ## Rationale
 
-- **Images built on the server from a commit:** no registry account is needed, the rollback image is already there, and the version is the commit.
+- **Images built in Actions and shipped over SSH:** the tested image is the one that runs, the server stays small (no builds), no registry account or quota is needed, and rollback images are already on the server.
 - **One check for every copy:** release-day proof does not depend on where the copy runs. The copy's own declaration, not the operator, decides what may run.
 - **Filters instead of deletion:** they keep the user's two wishes together. Nothing visible remains, and nothing trustworthy is erased.
 

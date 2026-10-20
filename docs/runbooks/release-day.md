@@ -11,7 +11,7 @@
 
 ## Release to staging
 
-- [ ] **API and worker:** `deploy/scripts/deploy.sh <sha>` succeeds and reports the version.
+- [ ] **API and worker:** the **Deploy staging** workflow succeeds (checks, build, ship, deploy, full release check).
 - [ ] **Web app:** Vercel shows the same commit for the web app.
 - [ ] **Read-only check:** `pnpm release:check --web … --api … --expect-version <sha>` passes.
 - [ ] **Full check:** `pnpm release:check … --full` passes. That proves the whole story:
@@ -24,7 +24,7 @@
 
 ## Practise going back (at least once per release cycle)
 
-- [ ] `deploy/scripts/rollback.sh` → the read-only check passes on the previous version.
+- [ ] `/srv/tipme/live/scripts/rollback.sh` → the read-only check passes on the previous version.
 - [ ] Vercel Instant Rollback → the web app serves the previous deployment.
 - [ ] Redeploy the new version → the full check passes again.
 

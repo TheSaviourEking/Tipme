@@ -12,15 +12,13 @@
 ## Take a backup now
 
 ```sh
-TIPME_VERSION=$(cat /srv/tipme/releases/current) docker compose -f deploy/compose.staging.yml \
-  --env-file /srv/tipme/staging.env run --rm backup sh deploy/backup-loop.sh once
+/srv/tipme/live/scripts/compose.sh run --rm backup sh deploy/backup-loop.sh once
 ```
 
 ## The restore drill (monthly, and before release day)
 
 ```sh
-TIPME_VERSION=$(cat /srv/tipme/releases/current) docker compose -f deploy/compose.staging.yml \
-  --env-file /srv/tipme/staging.env run --rm backup node packages/database/dist/scripts/restore-drill.js
+/srv/tipme/live/scripts/compose.sh run --rm backup node packages/database/dist/scripts/restore-drill.js
 ```
 
 **What it does:**
@@ -40,13 +38,12 @@ It prints `Restore drill PASSED` or the list of problems, then drops the scratch
 
 This replaces the live database. Do it only during an incident, after the drill passes on the chosen backup.
 
-1. **Stop everything that writes:** `... stop api worker backup`.
+1. **Stop everything that writes:** `/srv/tipme/live/scripts/compose.sh stop api worker backup`.
 2. **Choose the backup** (`ls /srv/tipme/backups`), usually the one taken just before the bad deploy. Run the drill on it: `BACKUP_FILE=/backups/<file>` with the drill command above. Only restore a backup that passes.
 3. **Restore it:**
 
    ```sh
-   TIPME_VERSION=<the version that backup came from> docker compose -f deploy/compose.staging.yml \
-     --env-file /srv/tipme/staging.env run --rm -e BACKUP_FILE=/backups/<file> \
+   /srv/tipme/live/scripts/compose.sh run --rm -e BACKUP_FILE=/backups/<file> \
      -e RESTORE_CONFIRM_DATABASE=tipme backup node packages/database/dist/scripts/restore.js
    ```
 
@@ -58,6 +55,6 @@ This replaces the live database. Do it only during an incident, after the drill 
 
    It prints `Restore DONE and proved` or the list of problems.
 
-4. **Put back a matching version:** deploy or roll back the API and worker to the version that backup came from (its name is in the file name), since a newer version may expect a newer schema. Then start `api worker backup`.
+4. **Put back a matching version:** roll back the API and worker (`/srv/tipme/live/scripts/rollback.sh <version>`) to the version that backup came from (its name is in the file name), since a newer version may expect a newer schema. If that version is no longer on the server, ship it again with the workflow. Then start `api worker backup`.
 5. **Check:** run the release check (read-only, then `--full`).
 6. **Money records:** the restored ledger is the source of truth up to the backup's time. Record the incident window: tips and payouts after it must be reconciled with the provider before anyone is paid.
