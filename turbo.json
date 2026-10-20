@@ -4,7 +4,13 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
-      "env": ["NEXT_PUBLIC_API_ORIGIN", "NEXT_PUBLIC_PRETEND_DELIVERY", "SITE_URL", "API_INTERNAL_ORIGIN", "NEXT_PUBLIC_PREVIEW_GATE"]
+      "env": [
+        "NEXT_PUBLIC_API_ORIGIN",
+        "NEXT_PUBLIC_PRETEND_DELIVERY",
+        "SITE_URL",
+        "API_INTERNAL_ORIGIN",
+        "NEXT_PUBLIC_PREVIEW_GATE"
+      ]
     },
     "lint": {
       "dependsOn": ["^build"]
