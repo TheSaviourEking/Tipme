@@ -77,7 +77,11 @@ const idOf = (value: unknown) =>
 async function completeSubject(
   tx: Database | Tx,
   subject: IssueSubject,
-): Promise<{ subject: IssueSubject; handle: string | null }> {
+): Promise<{
+  subject: IssueSubject;
+  handle: string | null;
+  rehearsal: boolean;
+}> {
   const filled: IssueSubject = { ...subject };
   if (filled.attemptId && !filled.tipId) {
     const [row] = await tx
@@ -109,15 +113,21 @@ async function completeSubject(
     if (row) filled.profileId = row.id;
   }
   let handle: string | null = null;
+  let rehearsal = false;
   if (filled.profileId) {
     const [row] = await tx
-      .select({ handle: profiles.handle, userId: profiles.userId })
+      .select({
+        handle: profiles.handle,
+        userId: profiles.userId,
+        rehearsalRunId: profiles.rehearsalRunId,
+      })
       .from(profiles)
       .where(eq(profiles.id, filled.profileId));
     handle = row?.handle ?? null;
+    rehearsal = Boolean(row?.rehearsalRunId);
     if (row?.userId && !filled.userId) filled.userId = row.userId;
   }
-  return { subject: filled, handle };
+  return { subject: filled, handle, rehearsal };
 }
 
 async function openIssue(
@@ -129,7 +139,10 @@ async function openIssue(
     now: Date;
   },
 ): Promise<boolean> {
-  const { subject, handle } = await completeSubject(tx, input.subject);
+  const { subject, handle, rehearsal } = await completeSubject(
+    tx,
+    input.subject,
+  );
   const inserted = await tx
     .insert(issues)
     .values({
@@ -140,6 +153,7 @@ async function openIssue(
       subject,
       summary: summaryOf(input.kind, handle),
       openedAt: input.now,
+      rehearsal,
     })
     .onConflictDoNothing({ target: issues.dedupeKey })
     .returning({ id: issues.id });
@@ -342,6 +356,8 @@ export function listIssues(
     severity?: IssueSeverity;
     cursor?: string;
     limit: number;
+    /** Release-check issues are hidden unless asked for (PR-010). */
+    includeRehearsal?: boolean;
   },
 ): Promise<IssueView[]> {
   return guarded(async () => {
@@ -350,6 +366,7 @@ export function listIssues(
       .from(issues)
       .where(
         and(
+          input.includeRehearsal ? undefined : eq(issues.rehearsal, false),
           input.status ? eq(issues.status, input.status) : undefined,
           input.kind ? eq(issues.kind, input.kind) : undefined,
           input.severity ? eq(issues.severity, input.severity) : undefined,

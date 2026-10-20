@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   Inject,
   Patch,
@@ -57,10 +58,15 @@ export class MeProfileController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(claimHandleSchema))
     body: z.infer<typeof claimHandleSchema>,
+    @Headers('x-tipme-rehearsal') rehearsal: string | undefined,
   ): Promise<ApiDataResponse<MyProfile>> {
     await claimHandle(this.database.db, {
       userId: auth.userId,
       handle: body.handle,
+      // The release check's page (PR-010): only on test copies, only for an open run.
+      ...(this.config.RELEASE_KIND === 'test' && rehearsal
+        ? { rehearsalRunId: rehearsal }
+        : {}),
     });
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }

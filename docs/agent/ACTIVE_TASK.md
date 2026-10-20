@@ -1,3 +1,18 @@
+# PR-010 status (release rehearsal and staging) — 20 October 2026
+
+PR-010 is built, proven on a local copy of the staging stack, reviewed and fixed. Evidence: `docs/PR-010-VERIFICATION.md`, ADR-0011; ledger `.superpowers/sdd/2026-10-19-pr010/progress.md`.
+- **Committed, not pushed:** branch `feat/pr-009-010-admin-release` (from the hosting session's `feat/free-private-demo`): one commit with the PR-009 review fixes, one with PR-010.
+- **Waiting on the user:** the VPS (then `docs/runbooks/staging-setup.md`), DNS and the Vercel project. The free Render/Neon demo was "just a test", not staging.
+- **Failures owned by the concurrent hosting session:** hero-copy e2e, preview-gateway unit test, unformatted files.
+- **Next exact step:** the user decides whether to push; then provides the VPS for wiring in. Stop before any new PR.
+
+# PR-009 status (admin, issues, analytics) — 19 October 2026
+
+PR-009 implementation, final review and review fixes are done; evidence in `docs/PR-009-VERIFICATION.md`, ledger `.superpowers/sdd/2026-10-19-pr009/progress.md`.
+- The two review fixes (ops lockout under parallel codes; pause-reason warning) are committed on `feat/pr-009-010-admin-release`. The whitespace-only reformat of the hosting session's `globals.css` and `brand.tsx` was reverted.
+- The PR-009 gate is green except failures from the concurrent hosting session's files (format, preview-gateway unit test, hero heading e2e).
+- PR-009 deferred minors await the user's decision.
+
 # Current task — free private demo deployment
 
 19 October 2026: user chose a private demo with pretend payments and free hosting only. Wants the app online. No hosted resources provisioned yet.

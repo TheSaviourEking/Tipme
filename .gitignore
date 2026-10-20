@@ -16,3 +16,7 @@ test-results/
 
 *.tsbuildinfo
 .superpowers/
+
+# Local staging proof (PR-010): generated secrets and backups
+deploy/local/*.env
+deploy/local/data/

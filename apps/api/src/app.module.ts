@@ -13,6 +13,10 @@ import { PretendInboxModule } from './dev/pretend-inbox.controller.js';
 import { MockCheckoutModule } from './checkout/mock-checkout.module.js';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module.js';
 import { HealthController } from './health/health.controller.js';
+import {
+  ReleaseInfoController,
+  ReleaseRunsController,
+} from './release/release.controller.js';
 import { ReadinessService } from './health/readiness.service.js';
 import { InfraModule } from './infra/infra.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
@@ -43,7 +47,11 @@ export class AppModule {
           ? [WebhooksModule, MockCheckoutModule]
           : []),
       ],
-      controllers: [HealthController],
+      controllers: [
+        HealthController,
+        ReleaseInfoController,
+        ReleaseRunsController,
+      ],
       providers: [
         ReadinessService,
         { provide: API_CONFIG, useValue: config },

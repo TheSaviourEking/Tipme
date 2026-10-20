@@ -85,6 +85,8 @@ export const opsIssueListQuerySchema = z
     severity: z.enum(['money', 'account', 'info']).optional(),
     kind: z.enum(ISSUE_KINDS).optional(),
     cursor: z.uuid().optional(),
+    // Release-check issues are hidden unless asked for (PR-010).
+    includeRehearsal: z.literal('1').optional(),
   })
   .strict();
 export type OpsIssueListQuery = z.infer<typeof opsIssueListQuerySchema>;

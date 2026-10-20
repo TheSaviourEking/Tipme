@@ -157,6 +157,8 @@ export const profiles = pgTable(
     status: profileStatus('status').notNull().default('active'),
     // Why TipMe suspended the page (shown to the recipient); null unless suspended.
     suspendedReason: text('suspended_reason'),
+    // A page created by the release check (PR-010): kept out of every total, list and dashboard.
+    rehearsalRunId: uuid('rehearsal_run_id'),
     pageState: text('page_state').notNull().default('not_live'),
     role: text('role'),
     craft: text('craft'),
@@ -807,6 +809,8 @@ export const issues = pgTable(
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     // 'system' or the staff user's id.
     resolvedBy: text('resolved_by'),
+    // About a release-check page (PR-010): hidden from the default inbox.
+    rehearsal: boolean('rehearsal').notNull().default(false),
   },
   (table) => [
     check(
@@ -860,6 +864,8 @@ export const analyticsEvents = pgTable(
     returning: boolean('returning'),
     device: text('device'),
     dedupeKey: text('dedupe_key').unique(),
+    // About a release-check page (PR-010): excluded from rollups and dashboards.
+    rehearsal: boolean('rehearsal').notNull().default(false),
   },
   (table) => [
     check(
@@ -920,3 +926,13 @@ export const marketEntries = pgTable(
     ),
   ],
 );
+
+// ---- Release rehearsal (PR-010) ----
+
+/** One full run of the release check. Its pages are tagged; nothing it booked is ever deleted. */
+export const releaseRuns = pgTable('release_runs', {
+  id: uuid('id').primaryKey(),
+  createdAt: createdAt(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  issuesClosed: integer('issues_closed'),
+});

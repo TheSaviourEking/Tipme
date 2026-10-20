@@ -6,6 +6,7 @@ import { createLogger, type DestinationStream } from '@tipme/observability';
 import { AppModule } from './app.module.js';
 import { ApiExceptionFilter } from './http/api-exception.filter.js';
 import { requestContext } from './http/request-context.middleware.js';
+import { previewGate } from './http/preview-gate.middleware.js';
 import { SERVICE_NAME, type ApiConfig } from './config.js';
 
 const CROSS_ORIGIN_PATHS = [
@@ -48,6 +49,10 @@ export async function createApp(
     },
   );
   app.use(requestContext(logger));
+  // Staging/preview: nothing but health, release and signed webhooks without the password.
+  const preview =
+    config.DEPLOYMENT_MODE === 'preview' ? config.PREVIEW_PASSWORD : undefined;
+  if (preview) app.use(previewGate(preview));
   // Only with known proxies: otherwise any client could choose its own rate-limit identity.
   if (config.TRUST_PROXY_HOPS > 0)
     app.set('trust proxy', config.TRUST_PROXY_HOPS);
@@ -56,9 +61,10 @@ export async function createApp(
   const webOrigin = new URL(config.WEB_ORIGIN).origin;
   app.enableCors((request, callback) => {
     const url = (request as { url?: string }).url ?? '';
-    const credentialed = CREDENTIALED_PATHS.some((path) =>
-      url.startsWith(path),
-    );
+    // In preview every browser call carries the preview cookie, so every path is credentialed.
+    const credentialed =
+      Boolean(preview) ||
+      CREDENTIALED_PATHS.some((path) => url.startsWith(path));
     callback(null, {
       origin:
         credentialed || CROSS_ORIGIN_PATHS.some((path) => url.startsWith(path))
@@ -67,9 +73,12 @@ export async function createApp(
       methods: credentialed
         ? ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
         : ['GET', 'POST', 'OPTIONS'],
-      allowedHeaders: credentialed
-        ? ['content-type', 'x-tipme-csrf', 'idempotency-key']
-        : ['content-type', 'authorization', 'idempotency-key'],
+      allowedHeaders: preview
+        ? // Preview: every call is credentialed, so allow both kinds' headers.
+          ['content-type', 'x-tipme-csrf', 'idempotency-key', 'authorization']
+        : credentialed
+          ? ['content-type', 'x-tipme-csrf', 'idempotency-key']
+          : ['content-type', 'authorization', 'idempotency-key'],
       credentials: credentialed,
     });
   });

@@ -233,3 +233,24 @@ User authorized pushing to their authenticated account. Created private `TheSavi
 ## Update — free private demo scope (19 October 2026)
 
 User chose a private pretend-payment demo and free hosting only. Assessed Render free compute/Key Value and Neon free Postgres from official documentation. Proposed a single guarded web/API/worker service; not implemented or provisioned. Free-tier sleep, queue loss and database compute limits mean this is an intermittent demo. Need a memory-fit test, explicit hosted-preview mode, protected ingress and controlled migration path. Docker available, existing local services healthy. Asked user about Render/Neon accounts and acceptance of shared-password/sleeping demo behavior. Next: resolve those inputs and implement the deployment slice; no real-money enablement.
+
+
+## Update — PR-009 (19 October 2026)
+
+PR-009 implemented by the PR-009 session (inline plan execution):
+- **Admin area:** staff-only `/ops` with Owner role, authenticator second step, session-bound grants and an append-only audit log.
+- **Issues inbox:** evidence, private reveal with a reason, and money-free actions.
+- **Analytics:** anonymous, collection off in production until D-07.
+- **Dashboards:** health and visibility, plus the manual Market page.
+
+Migrations 0017–0021. Integration 276/276 after the review fixes; e2e 121 + 1 skipped before the concurrent hosting changes. See `docs/PR-009-VERIFICATION.md` and ADR-0010. Review fixes are committed on `feat/pr-009-010-admin-release` (see ACTIVE_TASK). Failures now seen in format/unit/hero e2e come from the concurrent hosting session's files.
+
+
+## Update — PR-010 (20 October 2026)
+
+PR-010 (release rehearsal and staging) implemented by the PR-009/010 session:
+- **Release check:** `pnpm release:check`, read-only or full. The full mode runs as a tagged rehearsal, hidden from views and never deleting money or audit rows.
+- **Staging setup:** `deploy/` holds the Docker Compose for the VPS (Caddy, API, worker, Postgres, Redis, backups) and `apps/web/vercel.json`. One preview password covers both hosts.
+- **Operations:** deploy and rollback scripts, encrypted snapshot backups with a restore drill and a real-restore tool, runbooks, ADR-0011.
+
+All of it is proven on a local copy of staging (`pnpm staging:local:up`). Integration 294/294; e2e green except the hosting session's hero test. Committed on branch `feat/pr-009-010-admin-release` (not pushed). Next: the user provides the VPS; wire in with `docs/runbooks/staging-setup.md`.

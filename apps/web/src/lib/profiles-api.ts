@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import type { PublicProfile } from '@tipme/contracts';
+import { previewServerKey } from '@tipme/domain';
 
 /** The API as reached from the web server (may differ from the browser's address). */
 const API_ORIGIN =
@@ -22,8 +23,13 @@ export async function getPublicProfile(
   cacheLife({ stale: 30, revalidate: 30, expire: 300 });
   cacheTag(profileTag(handle));
   if (!/^[A-Za-z0-9_]{3,30}$/.test(handle)) return null;
+  const password = process.env.PREVIEW_PASSWORD;
   const response = await fetch(
     `${API_ORIGIN}/v1/profiles/${encodeURIComponent(handle)}`,
+    // Staging/preview: the web server proves itself to the API's gate with the server key.
+    password
+      ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
+      : undefined,
   );
   if (response.status === 404) return null;
   if (!response.ok)

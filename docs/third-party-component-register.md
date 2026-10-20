@@ -27,3 +27,20 @@ Tailwind CSS 4.3.3 and its matching Turbopack loader come from the official Next
 `jsqr` 1.4.0 (Apache-2.0, https://github.com/cozmo/jsQR), a **devDependency** of `@tipme/web`, used only by `apps/web/test/qr-styles.test.mjs`. It decodes every QR style, so a style that does not scan cannot ship. It ships no code to users. Decision: ADOPTED (pinned exact, tests only).
 
 `@types/qrcode` 1.5.6 (MIT, DefinitelyTyped): type definitions only, development dependency.
+
+## Staging and release (PR-010)
+
+Server images and tools for the staging server. None of them ships code to browsers.
+
+- **Container images** (pinned tags in `deploy/Dockerfile` and `deploy/compose.staging.yml`):
+  - `node:24.22.0-alpine` (MIT/Docker Official Image): base for the API, worker and tools image.
+  - `caddy:2.10.2-alpine` (Apache-2.0, https://caddyserver.com): the only public entry; automatic HTTPS via Let's Encrypt.
+  - `postgres:16.13-alpine` (PostgreSQL licence): the staging database, matching the local server's 16.13.
+  - `redis:7.4.5-alpine` (BSD-3-Clause for 7.4): the job queue, append-only file on, `noeviction`.
+  - `rclone/rclone:1.71.1` (MIT, https://rclone.org): optional hourly copy of the encrypted backups to an S3-compatible bucket (`--profile offsite`).
+- **Alpine packages in the image:**
+  - `postgresql16-client` (PostgreSQL licence): `pg_dump`/`pg_restore` for backups and the restore drill;
+  - `tini` (MIT): an init process, so signals reach Node and stopped containers exit cleanly.
+- **Build-time only:** `turbo@2.11.9` via `pnpm dlx` to prune the workspace for the image (already the pinned dev tool).
+
+Decision: ADOPTED (pinned exact). Upgrades are deliberate and go through the release check and the restore drill.

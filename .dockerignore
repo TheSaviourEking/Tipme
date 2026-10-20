@@ -1,0 +1,14 @@
+# Build context for deploy/Dockerfile: sources only, never local secrets or outputs.
+.git
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+test-results
+playwright-report
+.superpowers
+deploy/local/data

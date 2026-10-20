@@ -56,6 +56,8 @@ const messages: Record<ApiErrorCode, string> = {
   PAGE_SUSPENDED:
     'TipMe has paused your page, so it cannot go live. See the note on your dashboard.',
   ISSUE_RESOLVED: 'This issue is already resolved.',
+  PREVIEW_REQUIRED:
+    'This is a private preview. Please sign in with the preview password.',
   RATE_LIMITED: 'Too many requests. Please wait and retry.',
   DEPENDENCY_UNAVAILABLE:
     'A required service is temporarily unavailable. Please retry.',

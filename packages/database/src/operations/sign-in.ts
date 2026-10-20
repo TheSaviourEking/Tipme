@@ -54,6 +54,8 @@ export function requestSignInCode(
     purpose?: CodePurpose;
     now?: Date;
     simulateWhatsappFailure?: boolean;
+    /** Codes per number per hour (default 3). Raised only on local proof stacks (PR-010). */
+    codesPerHour?: number;
   },
 ): Promise<{ status: 'sent' | 'rate_limited' | 'locked' }> {
   const now = input.now ?? new Date();
@@ -73,7 +75,7 @@ export function requestSignInCode(
             gte(signInCodes.createdAt, new Date(now.getTime() - 3_600_000)),
           ),
         );
-      if ((recent?.n ?? 0) >= CODES_PER_HOUR)
+      if ((recent?.n ?? 0) >= (input.codesPerHour ?? CODES_PER_HOUR))
         return { status: 'rate_limited' as const };
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
       await tx.insert(signInCodes).values({

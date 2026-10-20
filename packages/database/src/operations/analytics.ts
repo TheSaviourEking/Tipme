@@ -9,18 +9,21 @@ const ZONE = 'Africa/Lagos';
 const minuteOf = (now: Date) =>
   new Date(Math.floor(now.getTime() / 60_000) * 60_000);
 
-/** The handle, lower-cased, only if such a page exists: anything else is dropped. */
+/** The handle, lower-cased, only if such a page exists (anything else is dropped), and whether
+ *  that page belongs to the release check. */
 async function knownHandle(
   db: Database,
   handle: string | undefined,
-): Promise<string | null> {
-  if (!handle) return null;
+): Promise<{ handle: string | null; rehearsal: boolean }> {
+  if (!handle) return { handle: null, rehearsal: false };
   const lower = handle.toLowerCase();
   const [row] = await db
-    .select({ handle: profiles.handleLower })
+    .select({ handle: profiles.handleLower, run: profiles.rehearsalRunId })
     .from(profiles)
     .where(eq(profiles.handleLower, lower));
-  return row ? lower : null;
+  return row
+    ? { handle: lower, rehearsal: Boolean(row.run) }
+    : { handle: null, rehearsal: false };
 }
 
 /** Stores one validated browser event (already checked against the contract's allow-list). */
@@ -30,6 +33,7 @@ export function recordClientEvent(
 ): Promise<void> {
   return guarded(async () => {
     const { event } = input;
+    const page = await knownHandle(db, event.handle);
     await db.insert(analyticsEvents).values({
       id: newId(),
       atMinute: minuteOf(input.now ?? new Date()),
@@ -37,7 +41,8 @@ export function recordClientEvent(
       flowId: event.flowId,
       surface: event.surface ?? null,
       channel: event.channel ?? null,
-      handle: await knownHandle(db, event.handle),
+      handle: page.handle,
+      rehearsal: page.rehearsal,
       returning: event.returning ?? null,
       device: input.device,
     });
@@ -56,12 +61,14 @@ export function recordServerEvent(
 ): Promise<'recorded' | 'duplicate'> {
   return guarded(async () => {
     let handle: string | null = null;
+    let rehearsal = false;
     if (input.profileId) {
       const [row] = await db
-        .select({ handle: profiles.handleLower })
+        .select({ handle: profiles.handleLower, run: profiles.rehearsalRunId })
         .from(profiles)
         .where(eq(profiles.id, input.profileId));
       handle = row?.handle ?? null;
+      rehearsal = Boolean(row?.run);
     }
     const inserted = await db
       .insert(analyticsEvents)
@@ -70,6 +77,7 @@ export function recordServerEvent(
         atMinute: minuteOf(input.at ?? new Date()),
         name: input.name,
         handle,
+        rehearsal,
         dedupeKey: input.dedupeKey,
       })
       .onConflictDoNothing({ target: analyticsEvents.dedupeKey })
@@ -97,6 +105,7 @@ export function rollupAnalytics(
         WITH day AS (
           SELECT * FROM analytics_events
            WHERE (at_minute AT TIME ZONE ${ZONE})::date = ${input.date}::date
+             AND NOT rehearsal
         ),
         visits AS (
           SELECT DISTINCT ON (flow_id, coalesce(handle, ''))
