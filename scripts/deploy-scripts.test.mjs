@@ -41,6 +41,13 @@ if [[ " $* " == *" up "* && " $* " == *" api "* ]]; then echo "$TIPME_VERSION" >
 exit 0`,
   );
   fake('git', 'echo "git $*" >> "$FAKE_LOG"; exit 1');
+  // lib.sh checks that backups are owned by the image user (uid 1000). The temp dir is not.
+  fake(
+    'stat',
+    `if [[ "$1" == "-c" && "$2" == "%u" ]]; then echo "\${FAKE_STAT_UID:-1000}"; exit 0; fi
+echo "unexpected stat $*" >&2
+exit 1`,
+  );
   // curl: healthy unless the running version is the broken one.
   fake(
     'curl',
@@ -136,6 +143,15 @@ test('an unhealthy new version is replaced by the previous one automatically', (
   assert.equal(broken.status, 1);
   assert.equal(read('running').trim(), 'aaaaaaa1');
   assert.equal(read('releases/current').trim(), 'aaaaaaa1');
+});
+
+test('backups owned by anyone but the image user are refused before a deploy changes anything', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  const result = run('deploy.sh', ['aaaaaaa1'], { FAKE_STAT_UID: '1001' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /uid 1000/);
+  assert.equal(read('calls.log'), '', 'nothing was backed up or migrated');
 });
 
 test('a database password that would break the connection address is refused before anything runs', () => {
