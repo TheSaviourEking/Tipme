@@ -27,6 +27,15 @@ const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 
+/** The release check's own account: it may read and resolve issues and read numbers (PR-010). */
+export const RELEASE_CHECK_PERMISSIONS = [
+  'issues.view',
+  'issues.resolve',
+  'analytics.view',
+  'audit.view',
+] as const;
+export type StaffRole = 'owner' | 'release_check';
+
 /** The Owner role holds every permission; safe to run any number of times. */
 export async function ensureOwnerRole(tx: Database | Tx): Promise<void> {
   await tx
@@ -37,6 +46,22 @@ export async function ensureOwnerRole(tx: Database | Tx): Promise<void> {
     .insert(rolePermissions)
     .values(
       OPS_PERMISSIONS.map((permission) => ({ roleId: 'owner', permission })),
+    )
+    .onConflictDoNothing();
+}
+
+async function ensureReleaseCheckRole(tx: Database | Tx): Promise<void> {
+  await tx
+    .insert(roles)
+    .values({ id: 'release_check', name: 'Release check' })
+    .onConflictDoNothing();
+  await tx
+    .insert(rolePermissions)
+    .values(
+      RELEASE_CHECK_PERMISSIONS.map((permission) => ({
+        roleId: 'release_check',
+        permission,
+      })),
     )
     .onConflictDoNothing();
 }
@@ -105,7 +130,7 @@ export async function dropOpsAccess(
  */
 export function grantOwner(
   db: Database,
-  input: { phone: string; now?: Date },
+  input: { phone: string; now?: Date; role?: StaffRole },
 ): Promise<{ userId: string; enrolmentCode: string }> {
   const phone = normalisePhone(input.phone);
   if (!phone) return Promise.reject(new OperationError('INVALID_INPUT'));
@@ -113,6 +138,8 @@ export function grantOwner(
   return guarded(() =>
     db.transaction(async (tx) => {
       await ensureOwnerRole(tx);
+      await ensureReleaseCheckRole(tx);
+      const role = input.role ?? 'owner';
       const [existing] = await tx
         .select({ id: users.id })
         .from(users)
@@ -122,10 +149,10 @@ export function grantOwner(
         await tx.insert(users).values({ id: userId, phoneE164: phone });
       await tx
         .insert(staff)
-        .values({ userId, roleId: 'owner', grantedAt: now })
+        .values({ userId, roleId: role, grantedAt: now })
         .onConflictDoUpdate({
           target: staff.userId,
-          set: { roleId: 'owner', grantedAt: now, revokedAt: null },
+          set: { roleId: role, grantedAt: now, revokedAt: null },
         });
       await dropOpsAccess(tx, userId, now);
       await tx
@@ -148,7 +175,10 @@ export function grantOwner(
       });
       await recordAudit(tx, {
         staffUserId: null,
-        action: 'staff.owner_granted',
+        action:
+          role === 'owner'
+            ? 'staff.owner_granted'
+            : 'staff.release_check_granted',
         subjectType: 'user',
         subjectId: userId,
         now,
@@ -254,7 +284,8 @@ export async function checkStaffCode(
     confirmed: boolean;
   },
 ): Promise<CodeCheck | 'not_enrolled'> {
-  if (await isLocked(tx, input.userId, input.now)) return 'locked';
+  // Lock first, then read the lockout: parallel guesses queue here and each sees the lockout
+  // set by the ones before it (final review fix).
   const [row] = await tx
     .select()
     .from(staffTotp)
@@ -262,6 +293,7 @@ export async function checkStaffCode(
     .for('update');
   if (!row || Boolean(row.confirmedAt) !== input.confirmed)
     return 'not_enrolled';
+  if (await isLocked(tx, input.userId, input.now)) return 'locked';
   const result = verifyTotp(
     openSecret(input.key, row.secretEnc),
     input.code,
