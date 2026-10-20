@@ -5,13 +5,15 @@ import { once } from 'node:events';
 import { createGateway, issueTicket, validTicket } from './preview/gateway.mjs';
 
 const password = 'test-only-preview-password-32-characters';
+// Expiry must be a 13-digit millisecond timestamp; 1000 is too small to be valid.
+const now = 1_800_000_000_000;
 test('preview tickets expire, cannot be forged and change when the password rotates', () => {
-  const ticket = issueTicket(password, 1000);
-  assert.equal(validTicket(ticket, password, 1001), true);
-  assert.equal(validTicket(ticket, password, 1000 + 12 * 3600_000), false);
-  assert.equal(validTicket(ticket, password + 'x', 1001), false);
-  assert.equal(validTicket(ticket + 'x', password, 1001), false);
-  assert.equal(validTicket('', password, 1001), false);
+  const ticket = issueTicket(password, now);
+  assert.equal(validTicket(ticket, password, now + 1), true);
+  assert.equal(validTicket(ticket, password, now + 12 * 3600_000), false);
+  assert.equal(validTicket(ticket, password + 'x', now + 1), false);
+  assert.equal(validTicket(ticket + 'x', password, now + 1), false);
+  assert.equal(validTicket('', password, now + 1), false);
 });
 
 test('gateway protects every route and forwards bearer tokens independently of its cookie', async (t) => {
