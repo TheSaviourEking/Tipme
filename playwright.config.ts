@@ -41,8 +41,10 @@ export default defineConfig({
   webServer: [
     {
       // Built by test:e2e with NEXT_PUBLIC_API_ORIGIN pointing at the API below.
+      // Next prints Ready and then never answers the homepage request Playwright
+      // uses as a health check, so wait until the port accepts a connection.
       command: 'pnpm --filter @tipme/web start --port 3100',
-      url: WEB_ORIGIN,
+      port: 3100,
       stdout: 'pipe',
       timeout: 300_000,
       env: {
