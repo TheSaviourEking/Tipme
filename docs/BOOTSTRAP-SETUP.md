@@ -48,7 +48,7 @@ Compose binds both services to loopback and uses named volumes. `infra:down` ret
 - `pnpm build`: shared packages first, then production app outputs.
 - `pnpm typecheck`: shared dependencies built before consumers; web generates route types itself.
 - `pnpm test`: builds and runs real HTTP API and worker-process tests using Node's test runner.
-- `pnpm test:e2e`: builds the stack (web with `NEXT_PUBLIC_API_ORIGIN=http://127.0.0.1:4100`), resets and seeds `tipme_test`, starts web (3100), API (4100) and worker with test-only secrets (never `.env`), then checks desktop/mobile behaviour, guest checkout and accessibility in Chromium.
+- `pnpm test:e2e`: builds the stack (web with `NEXT_PUBLIC_API_ORIGIN=http://127.0.0.1:4100`), resets and seeds `tipme_test`, starts web (3100), API (4100) and worker with test-only secrets (never `.env`), then checks behaviour and accessibility in Chromium once at desktop width. Tests tagged `@mobile` also run at 360px. Narrow reflow is covered by the tests that set a 320px viewport themselves.
 - `pnpm perf:lab`: after `pnpm test:e2e`, a throttled lab LCP sample (4× CPU, ~1.6 Mbps, 150 ms) for `/@tobi` and `/tip/<id>`. Lab only.
 - `pnpm lint`: governance presence check followed by package linting.
 - `pnpm format:check`: validates new source/config/docs while preserving original governance formatting.

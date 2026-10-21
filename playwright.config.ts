@@ -21,10 +21,17 @@ export default defineConfig({
   reporter: 'list',
   globalSetup: './tests/e2e/global-setup.ts',
   use: { baseURL: WEB_ORIGIN, trace: 'retain-on-failure' },
+  // One pass at desktop width. Tests tagged @mobile also run at 360px.
+  // Reflow at 320px is asserted inside those tests, so the suite is not run twice.
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'desktop',
+      grepInvert: /@mobile/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     {
       name: 'mobile',
+      grep: /@mobile/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 360, height: 800 },

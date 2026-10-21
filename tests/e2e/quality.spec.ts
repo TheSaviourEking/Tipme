@@ -87,27 +87,31 @@ test('reduced motion disables skeleton animation', async ({ page }) => {
   expect(animation).toBe('none');
 });
 
-test('mobile navigation opens, closes with Escape and returns focus', async ({
-  page,
-}, testInfo) => {
-  test.skip(
-    testInfo.project.name !== 'mobile',
-    'Disclosure is only shown on narrow viewports.',
-  );
-  await page.goto('/');
-  const toggle = page.getByRole('button', { name: 'Menu' });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await toggle.click();
-  // The accessible name stays constant; only aria-expanded conveys state.
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  const firstLink = page
-    .getByRole('navigation', { name: 'Main navigation' })
-    .getByRole('link', { name: 'How it works' });
-  await firstLink.focus();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Menu' })).toBeFocused();
-  await expect(firstLink).toBeHidden();
-});
+test(
+  'mobile navigation opens, closes with Escape and returns focus',
+  {
+    tag: '@mobile',
+  },
+  async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'mobile',
+      'Disclosure is only shown on narrow viewports.',
+    );
+    await page.goto('/');
+    const toggle = page.getByRole('button', { name: 'Menu' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+    // The accessible name stays constant; only aria-expanded conveys state.
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const firstLink = page
+      .getByRole('navigation', { name: 'Main navigation' })
+      .getByRole('link', { name: 'How it works' });
+    await firstLink.focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Menu' })).toBeFocused();
+    await expect(firstLink).toBeHidden();
+  },
+);
 
 test('share card is a prerendered PNG advertised on profiles', async ({
   page,
