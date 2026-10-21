@@ -19,7 +19,7 @@
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
-    "db:migrate": "pnpm --filter @tipme/database build && pnpm --filter @tipme/database migrate",
+    "db:migrate": "pnpm exec turbo run build --filter=@tipme/database && pnpm --filter @tipme/database migrate",
     "db:seed": "pnpm --filter @tipme/database build && pnpm --filter @tipme/database seed",
     "ops:grant-owner": "pnpm --filter @tipme/database build && node --env-file-if-exists=.env packages/database/dist/scripts/grant-owner.js",
     "staging:local:up": "node scripts/staging-local.mjs up",

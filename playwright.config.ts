@@ -43,6 +43,8 @@ export default defineConfig({
       // Built by test:e2e with NEXT_PUBLIC_API_ORIGIN pointing at the API below.
       command: 'pnpm --filter @tipme/web start --port 3100',
       url: WEB_ORIGIN,
+      stdout: 'pipe',
+      timeout: 300_000,
       env: {
         PATH: process.env.PATH ?? '',
         API_INTERNAL_ORIGIN: API_ORIGIN,
@@ -55,8 +57,9 @@ export default defineConfig({
       command: 'node --import ./dist/instrument.js dist/main.js',
       cwd: './apps/api',
       url: `${API_ORIGIN}/health/ready`,
+      stdout: 'pipe',
       reuseExistingServer: false,
-      timeout: 180_000,
+      timeout: 300_000,
       env: env({
         HOST: '127.0.0.1',
         PORT: '4100',
@@ -78,8 +81,9 @@ export default defineConfig({
       command: 'node --import ./dist/instrument.js dist/main.js',
       cwd: './apps/worker',
       wait: { stdout: /worker\.started/ },
+      stdout: 'pipe',
       reuseExistingServer: false,
-      timeout: 180_000,
+      timeout: 300_000,
       env: env({
         LOG_LEVEL: 'info',
         RECONCILE_INTERVAL_MS: '500',
