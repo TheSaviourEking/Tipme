@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.tools.json && turbo run typecheck",
     "test": "node --test scripts/*.test.mjs && turbo run test",
     "perf:lab": "playwright test -c tests/e2e-perf/playwright.config.ts",
-    "test:e2e": "NEXT_PUBLIC_API_ORIGIN=http://127.0.0.1:4100 NEXT_PUBLIC_PRETEND_DELIVERY=on pnpm build && playwright test",
+    "test:e2e": "NEXT_PUBLIC_API_ORIGIN=http://127.0.0.1:4100 NEXT_PUBLIC_PRETEND_DELIVERY=on pnpm build && node scripts/prepare-e2e-database.mjs && playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d --wait",
