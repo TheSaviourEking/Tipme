@@ -254,7 +254,6 @@ PR-010 (release rehearsal and staging) implemented by the PR-009/010 session:
 
 All of it is proven on a local copy of staging (`pnpm staging:local:up`). Integration 294/294; e2e green except the hosting session's hero test. Committed on branch `feat/pr-009-010-admin-release` (not pushed). Next: the user provides the VPS; wire in with `docs/runbooks/staging-setup.md`.
 
-
 ## Staging web deployment — 21 October 2026
 
 User confirmed dev is the staging branch. Vercel domain mapping already points to dev. Empty trigger commit 0b074fc was skipped as not affected. Added apps/web/DEPLOYMENT.md to document the branch contract and trigger a real web preview; no runtime behavior changed. Next: push dev and verify deployment plus domain.
