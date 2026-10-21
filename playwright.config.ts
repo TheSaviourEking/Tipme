@@ -51,7 +51,6 @@ export default defineConfig({
         WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
       },
       reuseExistingServer: false,
-      timeout: 180_000,
     },
     {
       command: 'node --import ./dist/instrument.js dist/main.js',
