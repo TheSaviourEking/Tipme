@@ -1,3 +1,7 @@
+# Staging web deployment — 21 October 2026
+
+User confirmed dev → staging.usetipme.xyz; main → www.usetipme.xyz. Latest dev trigger commit 0b074fc is empty and Vercel marks it Skipped — Not affected. Adding an app-scoped deployment note to create an affected preview build; verify Vercel and the custom domain after push. No application behavior or domain mapping changed.
+
 # PR-010 status (release rehearsal and staging) — 20 October 2026
 
 PR-010 is built, proven on a local copy of the staging stack, reviewed and fixed. Evidence: `docs/PR-010-VERIFICATION.md`, ADR-0011; ledger `.superpowers/sdd/2026-10-19-pr010/progress.md`.
