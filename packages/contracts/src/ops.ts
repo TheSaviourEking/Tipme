@@ -389,3 +389,19 @@ export interface MarketEntry {
   note: string | null;
   createdAt: string;
 }
+
+/** A page as staff see it when changing its plan (PR-012). */
+export interface OpsPage {
+  profileId: string;
+  handle: string;
+  displayName: string;
+  plan: 'free' | 'pro';
+  pageState: 'live' | 'not_live' | 'deleted';
+  suspended: boolean;
+}
+
+/** Making a page Pro or Free again: always with a written reason (audited). */
+export const opsPagePlanSchema = opsReasonSchema
+  .extend({ plan: z.enum(['free', 'pro']) })
+  .strict();
+export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;

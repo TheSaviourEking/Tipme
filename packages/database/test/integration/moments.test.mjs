@@ -77,7 +77,10 @@ test('moments and rewards', async (t) => {
     )[0]?.remaining ?? 0;
 
   await t.test(
-    'the 10th tip brings 5 fee-free tips, used up only by tips that succeed',
+    // The 10th tip offers 5 fee-free tips, but no more than the lifetime cap can honour: with
+    // PR-012's fee, 10 ₦2,000 tips earn TipMe NGN 1,700.00, so half of it covers 4 tips at
+    // NGN 200.00 each (TipMe's whole 10%).
+    'the 10th tip brings fee-free tips (4 under the cap), used up only by tips that succeed',
     async () => {
       await database.fresh();
       for (let i = 0; i < 9; i += 1) await tipAndEvaluate();
@@ -87,19 +90,19 @@ test('moments and rewards', async (t) => {
       );
       await tipAndEvaluate();
       const moments = await listMoments(db, TOBI.id);
-      assert.equal(moments[0].title, '10 tips! Your next 5 tips are fee-free.');
-      assert.equal(await credits(), 5);
+      assert.equal(moments[0].title, '10 tips! Your next 4 tips are fee-free.');
+      assert.equal(await credits(), 4);
       const next = await createQuote(db, {
         handle: 'tobi',
         tipMinor: 200000n,
         currency: 'NGN',
       });
       assert.equal(next.breakdown.platformFeeMinor, 0n);
-      assert.equal(next.feePolicyVersion, 'mock-v0-fee-free');
-      assert.equal(await credits(), 5);
+      assert.equal(next.feePolicyVersion, 'proposed-v1.1-fee-free');
+      assert.equal(await credits(), 4);
       const freeTip = await tipAndEvaluate();
       assert.equal(freeTip.quote.breakdown.platformFeeMinor, 0n);
-      assert.equal(await credits(), 4);
+      assert.equal(await credits(), 3);
     },
   );
 
@@ -133,10 +136,16 @@ test('moments and rewards', async (t) => {
           ['recipient_payable', 'credit'],
         ],
       );
+      // Each fee-free tip (as many as the cap allowed) gave the recipient TipMe's 10% too.
+      const [{ n: freeTips }] = await q(
+        `SELECT count(*)::int AS n FROM tips t JOIN payment_intents i ON i.id = t.intent_id
+         JOIN tip_quotes q ON q.id = i.quote_id WHERE t.status = 'SUCCEEDED' AND q.waived_platform_fee_minor > 0`,
+      );
+      assert.ok(freeTips > 0);
       const { availableMinor } = await balanceOf(db, TOBI.id);
       assert.equal(
         availableMinor,
-        50n * 187000n - 0n + BigInt(grant.cash_minor) + 5n * 10000n,
+        50n * 180000n + BigInt(grant.cash_minor) + BigInt(freeTips) * 20000n,
       );
     },
   );
@@ -173,7 +182,7 @@ test('moments and rewards', async (t) => {
         (await q(`SELECT count(*)::int AS n FROM reward_grants`))[0].n,
         1,
       );
-      assert.equal(await credits(), 5);
+      assert.equal(await credits(), 4, 'as many as the lifetime cap allows');
     },
   );
 
@@ -331,7 +340,10 @@ test('review fixes: rewards', async (t) => {
     'fix: an open fee-free quote reserves its credit and its cost',
     async () => {
       await database.fresh();
-      // Two normal tips: room for exactly one waived NGN 100.00 fee (half of NGN 200.00 earned).
+      // Three normal ₦2,000 tips: TipMe kept NGN 170.00 from each (10% minus processing), so the
+      // lifetime cap (half) is NGN 255.00. A fee-free ₦2,000 tip costs TipMe its whole 10%
+      // (NGN 200.00): room for exactly one.
+      await paid();
       await paid();
       await paid();
       await q(
@@ -350,6 +362,30 @@ test('review fixes: rewards', async (t) => {
       });
       assert.equal(first.feeFree, true);
       assert.equal(second.feeFree, false);
+    },
+  );
+
+  await t.test(
+    'fix: a fee-free tip is given only when its whole cost (TipMe’s 10%) fits under the cap',
+    async () => {
+      await database.fresh();
+      // Two tips: cap NGN 170.00, but a fee-free ₦2,000 tip would cost NGN 200.00.
+      await paid();
+      await paid();
+      await q(
+        'INSERT INTO fee_free_credits (profile_id, remaining) VALUES ($1, 5) ON CONFLICT (profile_id) DO UPDATE SET remaining = 5',
+        [TOBI.id],
+      );
+      const quote = await createQuote(db, {
+        handle: 'tobi',
+        tipMinor: 200000n,
+        currency: 'NGN',
+      });
+      assert.equal(quote.feeFree, false);
+      const [cost] = await q(
+        `SELECT COALESCE(SUM(waived_platform_fee_minor), 0)::bigint AS waived FROM tip_quotes`,
+      );
+      assert.equal(cost.waived, '0');
     },
   );
 

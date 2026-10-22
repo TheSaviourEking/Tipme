@@ -62,7 +62,7 @@ test('profile supports keyboard amount selection, validation and a server quote'
   await page.getByRole('button', { name: /^Tip/ }).click();
   await expect(
     page.getByText(
-      'Enter an amount from 1 to 100,000 NGN, like 1500 or 1,500.50.',
+      'Enter an amount from 1,000 to 100,000 NGN, like 1,000 or 2,500.50.',
     ),
   ).toBeVisible();
   await custom.fill('1234.50');

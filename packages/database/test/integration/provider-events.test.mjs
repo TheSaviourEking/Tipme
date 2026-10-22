@@ -69,15 +69,15 @@ test('provider events', async (t) => {
         (await q('SELECT count(*)::int AS n FROM ledger_transactions'))[0].n,
         1,
       );
-      assert.equal(await balanceOf('recipient_payable', ADA), '93500');
-      assert.equal(await balanceOf('platform_fee_revenue'), '5000');
+      assert.equal(await balanceOf('recipient_payable', ADA), '90000');
+      assert.equal(await balanceOf('platform_fee_revenue'), '8500');
       const outbox = await q('SELECT dedupe_key, payload FROM outbox_events');
       assert.deepEqual(
         outbox.map((row) => row.dedupe_key),
         [`tip.succeeded.${tipId}`],
       );
       assert.doesNotThrow(() => JSON.stringify(outbox));
-      assert.equal(outbox[0].payload.recipientNetMinor, '93500');
+      assert.equal(outbox[0].payload.recipientNetMinor, '90000');
     },
   );
 
@@ -228,7 +228,7 @@ test('provider events', async (t) => {
         database.db,
         paidEvent(attemptId, { providerFeeMinor: 2000n }),
       );
-      assert.equal(await balanceOf('recipient_payable', ADA), '93500');
+      assert.equal(await balanceOf('recipient_payable', ADA), '90000');
       const [{ net }] = await q(
         `SELECT sum(CASE side WHEN 'debit' THEN amount_minor ELSE -amount_minor END)::text AS net FROM ledger_entries`,
       );

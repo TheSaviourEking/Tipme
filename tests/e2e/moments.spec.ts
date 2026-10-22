@@ -35,7 +35,8 @@ test('the 10th tip is celebrated with fee-free tips, and a shared moment invites
   await expect(async () => {
     await page.goto('/dashboard');
     await expect(
-      page.getByText('10 tips! Your next 5 tips are fee-free.'),
+      // 10 ₦2,000 tips: the lifetime cap (half of what TipMe kept) covers 4 fee-free tips.
+      page.getByText('10 tips! Your next 4 tips are fee-free.'),
     ).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expectAccessible(page);

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { TipQuote } from '@tipme/contracts';
+import type { TipAmounts, TipQuote } from '@tipme/contracts';
 import {
   Badge,
   Button,
@@ -14,15 +14,11 @@ import {
 import { track } from '@/lib/analytics';
 import { newUuid } from '@/lib/random-id';
 import { createTip, quoteTip, type ApiFailure } from '@/lib/api-client';
-import { formatDemoAmount, parseDemoAmount } from '@/lib/demo-amount';
+import { formatDemoAmount } from '@/lib/demo-amount';
+import { amountOptions } from '@/lib/tip-amounts';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
 import { Arrow } from './brand';
 
-const presets = [
-  { label: '1,000', minor: 100000 },
-  { label: '2,000', minor: 200000 },
-  { label: '5,000', minor: 500000 },
-];
 type QuoteState =
   | { kind: 'idle' }
   | { kind: 'loading'; amount: number }
@@ -31,13 +27,15 @@ type QuoteState =
 
 const newIdempotencyKey = newUuid;
 
-const failureMessage = (failure: ApiFailure): string => {
+const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   if (failure.code === 'NETWORK')
     return 'We couldn’t reach TipMe. Check your connection and try again.';
   if (failure.code === 'RATE_LIMITED')
     return 'That was a lot of tries. Please wait a minute, then try again.';
   if (failure.code === 'VALIDATION_FAILED')
-    return 'That amount can’t be tipped. Try an amount from 1 to 100,000 NGN.';
+    // This page already blocks amounts outside its range, so a refusal usually means the
+    // recipient changed their amounts since it loaded (PR-012): ask for a refresh.
+    return `That amount can’t be tipped here right now (this page allows ${rangeText}). Please refresh the page to see the current amounts.`;
   if (failure.code === 'PROFILE_NOT_FOUND')
     return 'This person can’t receive tips right now.';
   return 'Something went wrong on our side. Please try again.';
@@ -48,14 +46,19 @@ export function AppreciationForm({
   handle,
   compact = false,
   celebration,
+  tipAmounts,
 }: {
   recipient: string;
   handle: string;
+  /** This page's amounts (PR-012): the standard ones, or a Pro page's own. */
+  tipAmounts?: TipAmounts;
   compact?: boolean;
   /** A moment the recipient shared: supporters may add their tip to it. */
   celebration?: { momentId: string; label: string };
 }) {
   const id = useId();
+  const options = amountOptions(tipAmounts);
+  const presets = options.presets;
   const [joining, setJoining] = useState(false);
   const [selection, setSelection] = useState('');
   const [custom, setCustom] = useState('');
@@ -74,7 +77,7 @@ export function AppreciationForm({
 
   const amount =
     selection === 'other'
-      ? parseDemoAmount(custom)
+      ? options.parse(custom)
       : (presets.find((preset) => String(preset.minor) === selection)?.minor ??
         null);
 
@@ -88,7 +91,7 @@ export function AppreciationForm({
       setQuote({
         kind: 'failed',
         amount: minor,
-        message: failureMessage(result),
+        message: failureMessage(result, options.rangeText),
       });
       return null;
     }
@@ -140,7 +143,7 @@ export function AppreciationForm({
     if (!amount) {
       setError(
         selection === 'other'
-          ? 'Enter an amount from 1 to 100,000 NGN, like 1500 or 1,500.50.'
+          ? `Enter an amount from ${options.rangeText}, like ${presets[0]?.label ?? '1,000'} or 2,500.50.`
           : 'Choose an amount or enter your own.',
       );
       if (selection === 'other') customField.current?.focus();
@@ -195,7 +198,7 @@ export function AppreciationForm({
         );
       return;
     }
-    setNotice(failureMessage(result));
+    setNotice(failureMessage(result, options.rangeText));
   };
 
   const ready = shown.kind === 'ready' ? shown.quote : null;
@@ -296,7 +299,7 @@ export function AppreciationForm({
               setError('');
             }}
             error={error || undefined}
-            hint="Sample range: 1–100,000 NGN."
+            hint={`From ${options.rangeText}.`}
           />
         )}
         <div className="tip-quote" aria-live="polite">
@@ -322,12 +325,19 @@ export function AppreciationForm({
                   <dd>{formatDemoAmount(Number(ready.tipMinor))}</dd>
                 </div>
                 <div>
-                  <dt>TipMe fee{ready.feeFree ? ' (fee-free)' : ''}</dt>
-                  <dd>−{formatDemoAmount(Number(ready.platformFeeMinor))}</dd>
-                </div>
-                <div>
-                  <dt>Payment provider fee</dt>
-                  <dd>−{formatDemoAmount(Number(ready.providerFeeMinor))}</dd>
+                  {/* PRD v1.1: one fee, 10% of the tip, with processing paid out of it. */}
+                  <dt>
+                    {ready.feeFree
+                      ? 'TipMe fee (fee-free tip)'
+                      : 'TipMe fee (10%, includes processing)'}
+                  </dt>
+                  <dd>
+                    −
+                    {formatDemoAmount(
+                      Number(ready.platformFeeMinor) +
+                        Number(ready.providerFeeMinor),
+                    )}
+                  </dd>
                 </div>
               </dl>
               <p className="tip-net">

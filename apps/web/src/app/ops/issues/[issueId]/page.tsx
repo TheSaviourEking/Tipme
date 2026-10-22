@@ -361,7 +361,8 @@ export default function IssuePage() {
             rows={[
               ['Status', tipProof.tip.status],
               ['Amount', naira(tipProof.breakdown.grossMinor)],
-              ['TipMe fee', naira(tipProof.breakdown.platformFeeMinor)],
+              // Since PR-012 processing is paid out of TipMe's 10%; this is what TipMe keeps.
+              ['TipMe keeps', naira(tipProof.breakdown.platformFeeMinor)],
               ['Recipient gets', naira(tipProof.breakdown.recipientNetMinor)],
               [
                 'Ledger',

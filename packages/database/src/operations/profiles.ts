@@ -2,11 +2,20 @@ import {
   profilePatchSchema,
   type HandleStatus,
   type MyProfile,
+  type OpsPage,
+  type PagePlan,
   type ProfilePatch,
   type PublicProfile,
   type Socials,
+  type TipAmounts,
 } from '@tipme/contracts';
-import { isReservedHandle, normaliseHandle } from '@tipme/domain';
+import {
+  FEE_POLICY_V1,
+  STANDARD_TIP_PRESETS_MINOR,
+  isReservedHandle,
+  normaliseHandle,
+  tipAmountsProblem,
+} from '@tipme/domain';
 import { and, asc, count, eq, gt, isNull, ne } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -153,6 +162,152 @@ async function myRow(db: Database, userId: string) {
   return row;
 }
 
+/**
+ * The amounts a page offers (PR-012): a Pro page's own when it has set them, otherwise the
+ * standard ones. Kept on the row when a page goes back to Free, used again if it returns to Pro.
+ */
+export function tipAmountsOf(profile: {
+  plan: string;
+  tipPresetsMinor: bigint[] | null;
+  minTipMinor: bigint | null;
+}): TipAmounts {
+  const own =
+    profile.plan === 'pro' && profile.tipPresetsMinor && profile.minTipMinor;
+  const presets = own
+    ? profile.tipPresetsMinor!
+    : [...STANDARD_TIP_PRESETS_MINOR];
+  const min = own ? profile.minTipMinor! : FEE_POLICY_V1.minTipMinor;
+  return {
+    presetsMinor: presets.map(String),
+    minMinor: String(min),
+    maxMinor: String(FEE_POLICY_V1.maxTipMinor),
+  };
+}
+
+/** A Pro page sets its own preset amounts and minimum; refused on Free (PRO_REQUIRED). */
+export function setTipAmounts(
+  db: Database,
+  userId: string,
+  input: { presetsMinor: bigint[]; minTipMinor: bigint },
+): Promise<MyProfile> {
+  return guarded(async () => {
+    const row = await myRow(db, userId);
+    if (row.profile.plan !== 'pro') throw new OperationError('PRO_REQUIRED');
+    const problem = tipAmountsProblem(input.presetsMinor, input.minTipMinor);
+    if (problem === 'minMinor') throw new OperationError('INVALID_TIP_MINIMUM');
+    if (problem === 'presetsMinor')
+      throw new OperationError('INVALID_TIP_PRESETS');
+    // Only while still Pro: staff may have moved the page to Free since it was read.
+    const updated = await db
+      .update(profiles)
+      .set({
+        tipPresetsMinor: [...input.presetsMinor].sort((a, b) =>
+          a < b ? -1 : a > b ? 1 : 0,
+        ),
+        minTipMinor: input.minTipMinor,
+      })
+      .where(and(eq(profiles.id, row.profile.id), eq(profiles.plan, 'pro')))
+      .returning({ id: profiles.id });
+    if (updated.length === 0) throw new OperationError('PRO_REQUIRED');
+    return toMine(db, await myRow(db, userId));
+  });
+}
+
+/**
+ * A page as staff see it, by its handle or one of its old handles (permission `pages.plan`).
+ * Deleted pages are not found.
+ */
+export function opsPageByHandle(
+  db: Database,
+  raw: string,
+): Promise<OpsPage | null> {
+  const handle = normaliseHandle(raw);
+  if (!handle) return Promise.resolve(null);
+  return guarded(async () => {
+    const [current] = await db
+      .select()
+      .from(profiles)
+      .where(
+        and(
+          eq(profiles.handleLower, handle),
+          ne(profiles.pageState, 'deleted'),
+        ),
+      );
+    if (current) return opsPage(current);
+    const [renamed] = await db
+      .select({ profile: profiles })
+      .from(handleAliases)
+      .innerJoin(profiles, eq(profiles.id, handleAliases.profileId))
+      .where(
+        and(
+          eq(handleAliases.handleLower, handle),
+          ne(profiles.pageState, 'deleted'),
+        ),
+      );
+    return renamed ? opsPage(renamed.profile) : null;
+  });
+}
+
+const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
+  profileId: row.id,
+  handle: row.handle,
+  displayName: row.displayName,
+  plan: row.plan as PagePlan,
+  pageState: row.pageState as OpsPage['pageState'],
+  suspended: row.status === 'suspended',
+});
+
+/**
+ * Staff make a page Pro or Free again (permission `pages.plan`), with a reason; audited as
+ * `page.plan_pro` or `page.plan_free`. Asking for the plan it already has changes and records
+ * nothing (a stale admin screen).
+ */
+export function setPagePlan(
+  db: Database,
+  input: {
+    staffUserId: string;
+    profileId: string;
+    plan: PagePlan;
+    reason: string;
+  },
+): Promise<OpsPage & { handleLower: string; changed: boolean }> {
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(profiles)
+        .where(
+          and(
+            eq(profiles.id, input.profileId),
+            ne(profiles.pageState, 'deleted'),
+          ),
+        )
+        .for('update');
+      if (!current) throw new OperationError('NO_PAGE');
+      if (current.plan === input.plan)
+        return {
+          ...opsPage(current),
+          handleLower: current.handleLower,
+          changed: false,
+        };
+      const [row] = await tx
+        .update(profiles)
+        .set({ plan: input.plan })
+        .where(eq(profiles.id, input.profileId))
+        .returning();
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: input.plan === 'pro' ? 'page.plan_pro' : 'page.plan_free',
+        permission: 'pages.plan',
+        subjectType: 'profile',
+        subjectId: input.profileId,
+        reason: input.reason,
+      });
+      return { ...opsPage(row!), handleLower: row!.handleLower, changed: true };
+    }),
+  );
+}
+
 async function previousHandles(db: Database, profileId: string) {
   const rows = await db
     .select({ handle: handleAliases.handleLower })
@@ -184,6 +339,8 @@ const toMine = async (
   suspended: row.profile.status === 'suspended',
   suspendedReason:
     row.profile.status === 'suspended' ? row.profile.suspendedReason : null,
+  plan: row.profile.plan as PagePlan,
+  tipAmounts: tipAmountsOf(row.profile),
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
@@ -389,6 +546,7 @@ export function publicProfile(
         ? { email: row.email }
         : {}),
       ...(celebration ? { celebration } : {}),
+      tipAmounts: tipAmountsOf(profile),
     };
   });
 }

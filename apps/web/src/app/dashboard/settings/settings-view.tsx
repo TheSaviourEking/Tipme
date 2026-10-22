@@ -143,6 +143,155 @@ function HandleChange() {
   );
 }
 
+const nairaText = (minor: string) =>
+  new Intl.NumberFormat('en').format(Number(minor) / 100);
+
+/** Whole naira typed by the recipient, as kobo; null when not a whole amount. */
+const wholeNairaMinor = (value: string): string | null => {
+  const digits = value.trim().replaceAll(',', '');
+  return /^\d{1,6}$/.test(digits) ? String(Number(digits) * 100) : null;
+};
+
+/** Free pages show the standard amounts; Pro pages choose their own (PR-012). */
+function TipAmountsSettings() {
+  const id = useId();
+  const { profile, setProfile } = useRecipient();
+  // An API older than PR-012 sends neither: treat the page as Free with the standard amounts.
+  const amounts = profile.tipAmounts ?? {
+    presetsMinor: ['100000', '200000', '500000'],
+    minMinor: '100000',
+    maxMinor: '10000000',
+  };
+  const pro = profile.plan === 'pro';
+  const [presets, setPresets] = useState(() =>
+    [0, 1, 2, 3].map((i) =>
+      amounts.presetsMinor[i] ? nairaText(amounts.presetsMinor[i]) : '',
+    ),
+  );
+  const [minimum, setMinimum] = useState(nairaText(amounts.minMinor));
+  // Which field the problem is in, so the message sits next to it.
+  const [error, setError] = useState<{
+    field: 'presets' | 'minimum';
+    text: string;
+  } | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!pro)
+    return (
+      <Card className="settings-section">
+        <h2>Tip amounts</h2>
+        <p className="tm-hint">
+          Your page offers NGN {amounts.presetsMinor.map(nairaText).join(', ')},
+          and supporters can tip any amount from NGN{' '}
+          {nairaText(amounts.minMinor)}. Choosing your own amounts and minimum
+          is part of TipMe Pro.
+        </p>
+      </Card>
+    );
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setSaved(false);
+    const filled = presets.filter((value) => value.trim() !== '');
+    const presetsMinor = filled.map(wholeNairaMinor);
+    const minMinor = wholeNairaMinor(minimum);
+    if (presetsMinor.length === 0 || presetsMinor.includes(null)) {
+      setError({
+        field: 'presets',
+        text: 'Use whole naira amounts, like 2000 or 2,000.',
+      });
+      return;
+    }
+    if (!minMinor) {
+      setError({
+        field: 'minimum',
+        text: 'Use a whole naira amount, like 2000 or 2,000.',
+      });
+      return;
+    }
+    setBusy(true);
+    const result = await apiFetch<MyProfile>('/v1/me/tip-amounts', {
+      method: 'PUT',
+      body: { presetsMinor, minMinor },
+    });
+    setBusy(false);
+    if (result.ok) {
+      setProfile(result.data);
+      setSaved(true);
+      return;
+    }
+    if (result.code === 'PRO_REQUIRED')
+      setError({
+        field: 'presets',
+        text: 'Choosing your own amounts is part of TipMe Pro.',
+      });
+    else if (result.fields?.includes('minMinor'))
+      setError({
+        field: 'minimum',
+        text: 'The smallest tip must be at least NGN 1,000 and no more than NGN 100,000.',
+      });
+    else
+      setError({
+        field: 'presets',
+        text: 'Use 1 to 4 different amounts, each at least your smallest tip and no more than NGN 100,000.',
+      });
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Tip amounts (Pro)</h2>
+      <p className="tm-hint">
+        Choose the amounts on your page and the smallest tip you accept.
+        Supporters can still type their own amount, from your minimum up.
+      </p>
+      <form className="settings-form" onSubmit={save} noValidate>
+        <fieldset className="tip-amount-fields">
+          <legend>Amounts on your page (NGN)</legend>
+          {presets.map((value, index) => (
+            <InputField
+              key={index}
+              id={`${id}-preset-${index}`}
+              label={`Amount ${index + 1}${index === 0 ? '' : ' (optional)'}`}
+              inputMode="numeric"
+              autoComplete="off"
+              value={value}
+              {...(index === 0 && error?.field === 'presets'
+                ? { error: error.text }
+                : {})}
+              onChange={(e) => {
+                setPresets((current) =>
+                  current.map((v, i) => (i === index ? e.target.value : v)),
+                );
+                setSaved(false);
+              }}
+            />
+          ))}
+        </fieldset>
+        <InputField
+          id={`${id}-minimum`}
+          label="Smallest tip (NGN)"
+          inputMode="numeric"
+          autoComplete="off"
+          hint="At least NGN 1,000."
+          value={minimum}
+          onChange={(e) => {
+            setMinimum(e.target.value);
+            setSaved(false);
+          }}
+          {...(error?.field === 'minimum' ? { error: error.text } : {})}
+        />
+        {saved && (
+          <p role="status" className="tm-hint">
+            Saved. Your page now shows these amounts.
+          </p>
+        )}
+        <Button type="submit" disabled={busy} aria-busy={busy}>
+          Save tip amounts
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
 const fieldLabels: Record<string, string> = {
   displayName: 'Display name',
   role: 'What you do',
@@ -592,6 +741,7 @@ export function SettingsView() {
       <PendingRecovery />
       <PageState />
       <HandleChange />
+      <TipAmountsSettings />
       <AboutYou />
       <ContactDetails />
       <Devices />

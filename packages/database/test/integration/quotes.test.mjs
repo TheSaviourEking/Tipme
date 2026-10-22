@@ -17,8 +17,8 @@ test('quotes', async (t) => {
         currency: 'NGN',
         now,
       });
-      assert.equal(quote.breakdown.recipientNetMinor, 93500n);
-      assert.equal(quote.feePolicyVersion, 'mock-v0');
+      assert.equal(quote.breakdown.recipientNetMinor, 90000n);
+      assert.equal(quote.feePolicyVersion, 'proposed-v1.1');
       assert.equal(quote.expiresAt.getTime(), now.getTime() + QUOTE_TTL_MS);
       assert.equal(QUOTE_TTL_MS, 15 * 60 * 1000);
     },
