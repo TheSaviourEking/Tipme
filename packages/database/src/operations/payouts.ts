@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  FEE_POLICY_V1,
   buildPayoutPosting,
   canTransition,
   formatMinor,
@@ -352,6 +353,13 @@ export async function requestWithdrawal(
       const { availableMinor } = await balanceIn(tx, input.profileId);
       if (input.amountMinor > availableMinor)
         throw new OperationError('INSUFFICIENT_BALANCE');
+      // ₦1,000 minimum (PR-012), except to take the whole balance: nobody is left with money
+      // they cannot withdraw, or an account they cannot close.
+      if (
+        input.amountMinor < FEE_POLICY_V1.minWithdrawalMinor &&
+        input.amountMinor !== availableMinor
+      )
+        throw new OperationError('WITHDRAWAL_TOO_SMALL');
       const payoutId = newId();
       await tx.insert(payouts).values({
         id: payoutId,

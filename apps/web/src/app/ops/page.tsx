@@ -102,7 +102,11 @@ export default function OpsOverviewPage() {
             previous={`Last week ${money.tipCount.lastWeek} · ${tips.text}`}
           />
           <Tile label="Amount tipped" {...amount(money.grossMinor)} />
-          <Tile label="TipMe fees" {...amount(money.platformFeeMinor)} />
+          <Tile
+            // Since PR-012, what TipMe keeps after paying processing out of its 10%.
+            label="TipMe keeps (after processing)"
+            {...amount(money.platformFeeMinor)}
+          />
           <Tile label="Reward cost" {...amount(money.rewardCostMinor)} />
         </div>
       </section>

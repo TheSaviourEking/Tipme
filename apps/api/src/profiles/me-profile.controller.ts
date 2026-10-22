@@ -18,15 +18,18 @@ import {
   pageStateSchema,
   profilePatchSchema,
   renameHandleSchema,
+  tipAmountsSchema,
   type ApiDataResponse,
   type MyProfile,
   type ProfilePatch,
+  type TipAmountsRequest,
 } from '@tipme/contracts';
 import {
   claimHandle,
   deleteAccount,
   getMyProfile,
   renameHandle,
+  setTipAmounts,
   setPageState,
   updateMyProfile,
 } from '@tipme/database';
@@ -106,6 +109,20 @@ export class MeProfileController {
       this.revalidator.revalidate(handle);
     }
     return { data: await getMyProfile(this.database.db, auth.userId) };
+  }
+
+  /** A Pro page's own preset amounts and minimum (PR-012); refused on Free (PRO_REQUIRED). */
+  @Put('tip-amounts')
+  async tipAmounts(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(tipAmountsSchema)) body: TipAmountsRequest,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const updated = await setTipAmounts(this.database.db, auth.userId, {
+      presetsMinor: body.presetsMinor.map(BigInt),
+      minTipMinor: BigInt(body.minMinor),
+    });
+    this.revalidator.revalidate(updated.handle);
+    return { data: updated };
   }
 
   @Put('page/state')

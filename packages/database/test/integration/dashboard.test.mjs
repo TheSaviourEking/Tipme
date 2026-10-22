@@ -167,7 +167,7 @@ test('dashboard data', async (t) => {
       assert.equal(detail.message, 'Lovely coffee');
       assert.equal(detail.grossMinor, '100000');
       assert.equal(detail.netMinor, earlyToday.net.toString());
-      assert.equal(detail.platformFeeMinor, '5000');
+      assert.equal(detail.platformFeeMinor, '8500');
       assert.equal(detail.providerFeeMinor, '1500');
       assert.equal(detail.proof.verified, true);
       assert.equal(detail.proof.provider, 'mock');

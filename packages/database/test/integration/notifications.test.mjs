@@ -90,7 +90,7 @@ test('notifications, email, phone change and recovery', async (t) => {
       const list = await listNotifications(db, TOBI.userId, {});
       assert.equal(list.length, 1);
       assert.equal(list[0].title, 'You got a tip');
-      assert.equal(list[0].body, 'NGN 1,870.00 from Ada M.');
+      assert.equal(list[0].body, 'NGN 1,800.00 from Ada M.');
       assert.equal(list[0].read, false);
       assert.equal(
         (
@@ -115,7 +115,7 @@ test('notifications, email, phone change and recovery', async (t) => {
       const second = await tip();
       await notifyTipSucceeded(db, { tipId: second, profileId: TOBI.id });
       const email = await latest();
-      assert.equal(email.subject, 'You got a ₦1,870 tip on TipMe');
+      assert.equal(email.subject, 'You got a ₦1,800 tip on TipMe');
       await markRead(
         db,
         TOBI.userId,

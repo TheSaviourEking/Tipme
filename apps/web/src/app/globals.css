@@ -1787,6 +1787,19 @@ legend {
   gap: var(--space-4);
 }
 
+/* Pro tip amounts (PR-012): up to four amounts, two per row, one per row on narrow screens. */
+.tip-amount-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+}
+
+.tip-amount-fields legend {
+  grid-column: 1 / -1;
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
 .settings-saved {
   margin: 0;
   min-height: 1.2em;

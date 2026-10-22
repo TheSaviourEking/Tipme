@@ -3,7 +3,7 @@ import {
   FEE_FREE_VERSION_SUFFIX,
   feeFreeAllowed,
   assertCurrency,
-  MOCK_FEE_POLICY_V0,
+  FEE_POLICY_V1,
   priceTip,
   type FeeBreakdown,
 } from '@tipme/domain';
@@ -13,6 +13,7 @@ import { feeFreeCredits, profiles, tipQuotes } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { rewardStats } from './moments.js';
+import { tipAmountsOf } from './profiles.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -51,6 +52,9 @@ async function quote(
       id: profiles.id,
       handle: profiles.handle,
       displayName: profiles.displayName,
+      plan: profiles.plan,
+      tipPresetsMinor: profiles.tipPresetsMinor,
+      minTipMinor: profiles.minTipMinor,
     })
     .from(profiles)
     .where(
@@ -62,9 +66,11 @@ async function quote(
       ),
     );
   if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
+  const minTipMinor = BigInt(tipAmountsOf(profile).minMinor);
   let breakdown: FeeBreakdown;
   try {
-    breakdown = priceTip(input.tipMinor, MOCK_FEE_POLICY_V0);
+    // A Pro page's own minimum (PR-012), enforced here whatever the page showed.
+    breakdown = priceTip(input.tipMinor, FEE_POLICY_V1, { minTipMinor });
   } catch (error) {
     if (error instanceof AmountOutOfRangeError)
       throw new OperationError('AMOUNT_OUT_OF_RANGE');
@@ -87,7 +93,7 @@ async function quote(
         .for('update');
       let waived = 0n;
       let chosen = priced;
-      let version: string = MOCK_FEE_POLICY_V0.version;
+      let version: string = FEE_POLICY_V1.version;
       if ((credits?.remaining ?? 0) > 0 && priced.platformFeeMinor > 0n) {
         const open = await openFeeFreeQuotes(
           tx,
@@ -98,17 +104,20 @@ async function quote(
         if (
           feeFreeAllowed({
             credits: (credits?.remaining ?? 0) - open.count,
-            waivedFeeMinor: priced.platformFeeMinor,
+            // What a fee-free tip costs TipMe: its whole share, processing included (PR-012).
+            waivedFeeMinor: priced.platformFeeMinor + priced.providerFeeMinor,
             lifetimeFeesMinor: stats.lifetimeFeesMinor,
             lifetimeRewardCostMinor:
               stats.lifetimeRewardCostMinor + open.waivedMinor,
           })
         ) {
-          waived = priced.platformFeeMinor;
-          chosen = priceTip(input.tipMinor, MOCK_FEE_POLICY_V0, {
+          // TipMe gives up its whole share, the processing it would have paid from it included.
+          waived = priced.platformFeeMinor + priced.providerFeeMinor;
+          chosen = priceTip(input.tipMinor, FEE_POLICY_V1, {
             feeFree: true,
+            minTipMinor,
           });
-          version = `${MOCK_FEE_POLICY_V0.version}${FEE_FREE_VERSION_SUFFIX}`;
+          version = `${FEE_POLICY_V1.version}${FEE_FREE_VERSION_SUFFIX}`;
         }
       }
       await tx.insert(tipQuotes).values({

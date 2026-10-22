@@ -174,12 +174,36 @@ export const profiles = pgTable(
     phonePublic: boolean('phone_public').notNull().default(false),
     emailPublic: boolean('email_public').notNull().default(false),
     qrStyle: text('qr_style').notNull().default('purple'),
+    // Free or Pro (PR-012). Staff set it; there is no billing while money is pretend.
+    plan: text('plan').notNull().default('free'),
+    // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
+    tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
+    minTipMinor: minor('min_tip_minor'),
     createdAt: createdAt(),
   },
   () => [
     check(
       'profiles_page_state',
       sql`page_state IN ('live', 'not_live', 'deleted')`,
+    ),
+    check('profiles_plan', sql`plan IN ('free', 'pro')`),
+    // Amounts in whole naira, never below the ₦1,000 floor (no maximum); 1 to 4 presets.
+    check(
+      'profiles_min_tip',
+      sql`min_tip_minor IS NULL OR (min_tip_minor >= 100000 AND min_tip_minor % 100 = 0)`,
+    ),
+    check(
+      'profiles_tip_presets',
+      sql`tip_presets_minor IS NULL OR cardinality(tip_presets_minor) BETWEEN 1 AND 4`,
+    ),
+    // Set together, and every preset at least the page's minimum.
+    check(
+      'profiles_tip_amounts_together',
+      sql`(tip_presets_minor IS NULL) = (min_tip_minor IS NULL)`,
+    ),
+    check(
+      'profiles_tip_presets_range',
+      sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
     ),
   ],
 );
@@ -698,6 +722,7 @@ export const OPS_PERMISSIONS = [
   'audit.view',
   'payments.recheck',
   'private.view',
+  'pages.plan',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 

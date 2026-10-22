@@ -56,7 +56,7 @@ test('the breakdown shows what the recipient receives before paying', async ({
   await page.goto('/@ada');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
   await expect(
-    page.getByText('Ada receives NGN 1,870.00 after fees'),
+    page.getByText('Ada receives NGN 1,800.00 after fees'),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: /^Tip NGN 2,000\.00/ }),

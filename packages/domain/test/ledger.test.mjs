@@ -16,7 +16,7 @@ const next = (max) => {
 
 test('payment postings always balance and never contain zero or negative lines', () => {
   for (let i = 0; i < 500; i++) {
-    const tip = 100n + next(10_000_000n - 100n + 1n);
+    const tip = 100_000n + next(10_000_000n - 100_000n + 1n);
     const quote = priceTip(tip);
     const delta = next(101n) - 50n;
     const actual =
