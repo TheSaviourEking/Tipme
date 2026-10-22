@@ -32,6 +32,7 @@ The web app deploys in Vercel from the same push.
 1. **API and worker:** on the server, `/srv/tipme/live/scripts/rollback.sh` returns to the version deployed before the current one, or `rollback.sh <version>` to an earlier one still on the server (the last 5 are kept). No migration runs, nothing is built or downloaded: the image is already there.
 2. **Web app:** in Vercel, **Deployments → the previous one → Instant Rollback**.
 3. **Prove it:** run the release check (`--expect-version <old sha>`, then `--full`).
+4. **Rolling back past PR-011** (to a version without point-in-time recovery) restarts Postgres with WAL archiving off; `rollback.sh` warns, and the staging watcher reports it within 15 minutes. Daily logical backups continue. Deploy a newer version again to turn it back on.
 
 ## The rule that makes rollback safe
 

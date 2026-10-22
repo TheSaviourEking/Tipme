@@ -62,6 +62,87 @@ function PageState() {
   );
 }
 
+const renameErrors: Record<string, string> = {
+  HANDLE_TAKEN: 'That handle is taken. Please choose another.',
+  HANDLE_RENAME_LIMIT:
+    'Your page already keeps 5 old handles. You can switch back to one of them.',
+  VALIDATION_FAILED:
+    'Use 3 to 30 letters, numbers or underscores, with no spaces.',
+};
+
+function HandleChange() {
+  const id = useId();
+  const { profile, setProfile } = useRecipient();
+  // An API older than PR-011 does not send it (the web app deploys first).
+  const previous = profile.previousHandles ?? [];
+  const [handle, setHandle] = useState(profile.handle);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    setSaved(false);
+    const result = await apiFetch<MyProfile>('/v1/me/handle', {
+      method: 'PUT',
+      body: { handle: handle.trim().replace(/^@/, '') },
+    });
+    setBusy(false);
+    if (result.ok) {
+      setProfile(result.data);
+      setHandle(result.data.handle);
+      setSaved(true);
+      return;
+    }
+    setError(
+      renameErrors[result.code] ?? 'We couldn’t change that. Please try again.',
+    );
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Your handle</h2>
+      <p className="tm-hint">
+        Your old links and printed QR codes keep working: they lead to your new
+        handle, and nobody else can take them.
+      </p>
+      <form className="settings-form" onSubmit={save} noValidate>
+        <InputField
+          id={`${id}-handle`}
+          label="Handle"
+          maxLength={31}
+          autoComplete="off"
+          spellCheck={false}
+          value={handle}
+          onChange={(e) => {
+            setHandle(e.target.value);
+            setSaved(false);
+          }}
+          error={error || undefined}
+        />
+        {previous.length > 0 && (
+          <p className="tm-hint">
+            Old handles that lead here:{' '}
+            {previous.map((old) => `@${old}`).join(', ')}
+          </p>
+        )}
+        {saved && (
+          <p role="status" className="tm-hint">
+            Saved. Your page is now at tipme.app/@{profile.handle}.
+          </p>
+        )}
+        <Button
+          type="submit"
+          disabled={busy || handle.trim().toLowerCase() === profile.handle}
+          aria-busy={busy}
+        >
+          Change handle
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
 const fieldLabels: Record<string, string> = {
   displayName: 'Display name',
   role: 'What you do',
@@ -510,6 +591,7 @@ export function SettingsView() {
       <h1>Settings</h1>
       <PendingRecovery />
       <PageState />
+      <HandleChange />
       <AboutYou />
       <ContactDetails />
       <Devices />

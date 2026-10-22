@@ -43,6 +43,7 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   stuck_tip: 'Tip stuck confirming',
   unmatched_event: 'Unmatched provider event',
   pending_recovery: 'Pending phone recovery',
+  message_reported: 'Reported message',
 };
 export const SEVERITY_LABELS: Record<string, string> = {
   money: 'Money',

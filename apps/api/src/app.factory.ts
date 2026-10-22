@@ -2,7 +2,11 @@ import type { Server } from 'node:http';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { createLogger, type DestinationStream } from '@tipme/observability';
+import {
+  createErrorReporter,
+  createLogger,
+  type DestinationStream,
+} from '@tipme/observability';
 import { AppModule } from './app.module.js';
 import { ApiExceptionFilter } from './http/api-exception.filter.js';
 import { requestContext } from './http/request-context.middleware.js';
@@ -15,6 +19,7 @@ const CROSS_ORIGIN_PATHS = [
   '/v1/tips/',
   '/v1/mock-provider/',
   '/v1/events',
+  '/v1/vitals',
 ];
 // Recipient routes carry the session cookie, so the browser must send credentials.
 const CREDENTIALED_PATHS = [
@@ -83,7 +88,19 @@ export async function createApp(
     });
   });
   app.useBodyParser('json', { limit: '16kb' });
-  app.useGlobalFilters(new ApiExceptionFilter(logger));
+  app.useGlobalFilters(
+    new ApiExceptionFilter(
+      logger,
+      createErrorReporter({
+        dsn: config.SENTRY_DSN,
+        service: 'api',
+        environment:
+          config.SENTRY_ENVIRONMENT ??
+          (config.DEPLOYMENT_MODE === 'preview' ? 'staging' : config.NODE_ENV),
+        release: config.GIT_SHA,
+      }),
+    ),
+  );
   const server = app.getHttpServer() as Server;
   server.requestTimeout = 10_000;
   // Must not exceed requestTimeout to have any effect.

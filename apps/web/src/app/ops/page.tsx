@@ -1,7 +1,11 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import type { OpsHealth, OpsMetricsEnvelope } from '@tipme/contracts';
+import type {
+  OpsHealth,
+  OpsMetricsEnvelope,
+  WebVitalSummary,
+} from '@tipme/contracts';
 import { Notice, Skeleton } from '@tipme/ui';
 import { Funnel, Tile } from '@/components/ops/charts';
 import { change, naira } from '@/lib/money';
@@ -24,6 +28,22 @@ const duration = (seconds: number | null) =>
       ? `${seconds} s`
       : `${Math.round(seconds / 60)} min`;
 
+const vitalNames: Record<WebVitalSummary['metric'], string> = {
+  LCP: 'Largest paint (LCP)',
+  INP: 'Response to taps (INP)',
+  CLS: 'Layout shift (CLS)',
+  FCP: 'First paint (FCP)',
+  TTFB: 'Server response (TTFB)',
+};
+const vitalValue = (metric: WebVitalSummary['metric'], value: number | null) =>
+  value === null
+    ? '—'
+    : metric === 'CLS'
+      ? value.toFixed(3)
+      : value >= 1000
+        ? `${(value / 1000).toFixed(2)} s`
+        : `${value} ms`;
+
 /** Overall health: money, the tipping funnel, reliability and recipients, this week vs last. */
 export default function OpsOverviewPage() {
   const [health, setHealth] = useState<OpsMetricsEnvelope<OpsHealth> | null>(
@@ -43,7 +63,14 @@ export default function OpsOverviewPage() {
       </Notice>
     );
   if (!health) return <Skeleton label="Loading the overview" />;
-  const { money, reliability, recipients, funnel } = health.metrics;
+  // An API older than PR-011 sends no web vitals (the web app deploys first).
+  const {
+    money,
+    reliability,
+    recipients,
+    funnel,
+    webVitals = [],
+  } = health.metrics;
   const tips = change(
     String(money.tipCount.thisWeek),
     String(money.tipCount.lastWeek),
@@ -118,6 +145,37 @@ export default function OpsOverviewPage() {
           <Link href="/ops/issues">Go to the issues inbox</Link>
         </p>
       </section>
+      {webVitals.length > 0 && (
+        <section aria-labelledby="ops-vitals" className="dashboard-section">
+          <h2 id="ops-vitals">Page speed (real visits)</h2>
+          <p className="tm-hint">
+            75th percentile on phones over the last 28 days, against the launch
+            budgets.
+          </p>
+          <div className="ops-tiles">
+            {webVitals.map((vital) => (
+              <Tile
+                key={vital.metric}
+                label={vitalNames[vital.metric]}
+                value={vitalValue(vital.metric, vital.p75)}
+                previous={[
+                  vital.budget === null
+                    ? 'No budget'
+                    : `Budget ${vitalValue(vital.metric, vital.budget)}`,
+                  vital.withinBudget === null
+                    ? null
+                    : vital.withinBudget
+                      ? 'within budget'
+                      : 'over budget',
+                  `${vital.samples} visits`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              />
+            ))}
+          </div>
+        </section>
+      )}
       <section aria-labelledby="ops-recipients" className="dashboard-section">
         <h2 id="ops-recipients">Recipients</h2>
         <div className="ops-tiles">

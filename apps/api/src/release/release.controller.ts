@@ -9,8 +9,17 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import type { ApiDataResponse, ReleaseInfo } from '@tipme/contracts';
-import { finishReleaseRun, openReleaseRun } from '@tipme/database';
+import type {
+  ApiDataResponse,
+  BackupHealth,
+  ReleaseInfo,
+} from '@tipme/contracts';
+import {
+  backupStatus,
+  finishReleaseRun,
+  openReleaseRun,
+  type BackupStatus,
+} from '@tipme/database';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -18,7 +27,10 @@ import { DatabaseProvider } from '../infra/database.js';
 /** What this copy of TipMe is, for the release check (PR-010). Public: it reveals no secrets. */
 @Controller()
 export class ReleaseInfoController {
-  constructor(@Inject(API_CONFIG) private readonly config: ApiConfig) {}
+  constructor(
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
+    @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+  ) {}
 
   @Get('health/release')
   @Header('Cache-Control', 'no-store')
@@ -33,6 +45,46 @@ export class ReleaseInfoController {
         analytics:
           this.config.ANALYTICS_ENABLED ??
           this.config.NODE_ENV !== 'production',
+      },
+    };
+  }
+
+  /**
+   * Backup freshness for alerts (PR-011): ages and counts only, never file names or contents.
+   * Public like the other health routes so the watcher needs no credentials.
+   */
+  // Public (for the watcher), so the database answer is shared for 30 seconds: a flood of
+  // requests costs no queries. Ages are still computed per request from the cached times.
+  private cachedStatus: { at: number; status: Promise<BackupStatus> } | null =
+    null;
+
+  @Get('health/backups')
+  @Header('Cache-Control', 'no-store')
+  async backups(): Promise<ApiDataResponse<BackupHealth>> {
+    const now = Date.now();
+    if (!this.cachedStatus || now - this.cachedStatus.at >= 30_000) {
+      const pending = backupStatus(this.database.db);
+      this.cachedStatus = { at: now, status: pending };
+      // A failed lookup is never cached.
+      pending.catch(() => {
+        if (this.cachedStatus?.status === pending) this.cachedStatus = null;
+      });
+    }
+    const status = await this.cachedStatus.status;
+    const age = (iso: string | null | undefined) =>
+      iso ? Math.round((now - Date.parse(iso)) / 60_000) : null;
+    return {
+      data: {
+        logical: status.logical
+          ? { ageMinutes: age(status.logical.at)! }
+          : null,
+        base: status.base ? { ageMinutes: age(status.base.at)! } : null,
+        wal: {
+          archiving: status.wal.archiving,
+          lastArchivedAgeMinutes: age(status.wal.lastArchivedAt),
+          lastFailedAgeMinutes: age(status.wal.lastFailedAt),
+          failedCount: status.wal.failedCount,
+        },
       },
     };
   }

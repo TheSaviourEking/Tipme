@@ -66,11 +66,11 @@ exit 0`,
     HEALTH_TRIES: '2',
   };
   /** What GitHub Actions does before deploying: load the image and copy that version's files. */
-  const ship = (version) => {
+  const ship = (version, compose = 'services: {}\n') => {
     mkdirSync(join(home, 'releases', version), { recursive: true });
     writeFileSync(
       join(home, 'releases', version, 'compose.staging.yml'),
-      'services: {}\n',
+      compose,
     );
     writeFileSync(env.FAKE_IMAGES, `tipme-app:${version}\n`, { flag: 'a' });
   };
@@ -202,4 +202,16 @@ test('/srv/tipme/live always points at the running version’s files, and compos
     read('calls.log').trim().split('\n').at(-1),
     /releases\/aaaaaaa1\/compose\.staging\.yml.*ps.*version=aaaaaaa1/,
   );
+});
+
+test('rolling back to a version without WAL archiving says so, and how to restore it', () => {
+  const { run, ship } = stage();
+  ship('aaaaaaa1'); // before PR-011: no archive_mode
+  ship('bbbbbbb2', 'services: {}\n# - archive_mode=on\n');
+  assert.equal(run('deploy.sh', ['aaaaaaa1']).status, 0);
+  assert.equal(run('deploy.sh', ['bbbbbbb2']).status, 0);
+  const back = run('rollback.sh');
+  assert.equal(back.status, 0, back.stderr);
+  assert.match(back.stderr, /WAL archiving is OFF/);
+  assert.match(back.stderr, /point-in-time recovery/);
 });

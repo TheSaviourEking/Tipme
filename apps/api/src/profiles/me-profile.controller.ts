@@ -17,6 +17,7 @@ import {
   deleteAccountSchema,
   pageStateSchema,
   profilePatchSchema,
+  renameHandleSchema,
   type ApiDataResponse,
   type MyProfile,
   type ProfilePatch,
@@ -25,6 +26,7 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
+  renameHandle,
   setPageState,
   updateMyProfile,
 } from '@tipme/database';
@@ -86,6 +88,24 @@ export class MeProfileController {
     const updated = await updateMyProfile(this.database.db, auth.userId, body);
     this.revalidator.revalidate(updated.handle);
     return { data: updated };
+  }
+
+  /** Changes the handle; the old one keeps leading here (PR-011). Both cached pages refresh. */
+  @Put('handle')
+  async rename(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(renameHandleSchema))
+    body: z.infer<typeof renameHandleSchema>,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const { previous, handle } = await renameHandle(this.database.db, {
+      userId: auth.userId,
+      handle: body.handle,
+    });
+    if (previous !== handle) {
+      this.revalidator.revalidateGone(previous);
+      this.revalidator.revalidate(handle);
+    }
+    return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 
   @Put('page/state')

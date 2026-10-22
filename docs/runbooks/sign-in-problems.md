@@ -10,7 +10,7 @@
   - `RATE_LIMIT_AUTH_PER_HOUR` code requests per client per hour (default 10), and three times that many verifications;
   - 5 wrong codes lock the number for 15 minutes.
 - **The code request always answers "sent".** It never reveals whether the number has an account.
-- **Delivery** is pretend until a messaging provider is approved (D-08). Codes and links appear in the development inbox (`/dev/inbox`, API `GET /v1/dev/inbox`), which exists only with `MESSAGING_PROVIDER=mock` and is refused in production.
+- **Delivery** is pretend until a messaging provider is approved (D-11). Codes and links appear in the development inbox (`/dev/inbox`, API `GET /v1/dev/inbox`), which exists only with `MESSAGING_PROVIDER=mock` and is refused in production.
 
 ## Steps
 

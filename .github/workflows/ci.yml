@@ -40,6 +40,28 @@ jobs:
           TIPME_ENV_FILE: ./staging.env.example
           POSTGRES_PASSWORD: ci-placeholder
 
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The whole history: a secret removed in a later commit is still leaked.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - name: Dependencies with known high or critical vulnerabilities (production only)
+        run: pnpm audit --prod --audit-level=high
+      - name: Secrets in the repository history (gitleaks, pinned by digest)
+        # --redact: a finding names the rule, file and commit, never the value.
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro"
+          -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*'
+          zricethezav/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
+          git /repo --config /repo/.gitleaks.toml --redact --no-banner --log-opts=--all
+
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -59,6 +81,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://tipme_local:tipme_local_password@localhost:5432/tipme_local
       - run: pnpm test:integration
+      - name: OpenAPI document is current
+        run: pnpm api:openapi --check
+      - name: Load test against PRD §10.1 budgets (k6, pinned; throwaway local API)
+        run: pnpm test:load
 
   e2e:
     runs-on: ubuntu-latest
