@@ -6,7 +6,7 @@ PRD v1.1's proposed commercial rules, and Free and Pro tipping. Pretend money on
 
 - **Free (every page):**
   - **Fee:** TipMe keeps 10% of each tip and pays the processing fee out of it, so the recipient receives 90%. A ₦5,000 tip gives ₦4,500.
-  - **Tips:** minimum ₦1,000, maximum ₦100,000. The standard amounts are ₦1,000, ₦2,000 and ₦5,000, plus any custom amount.
+  - **Tips:** minimum ₦1,000 and no maximum (supporters tip what they want). The standard amounts are ₦1,000, ₦2,000 and ₦5,000, plus any custom amount.
   - **Withdrawals:** minimum ₦1,000, except that a recipient can always withdraw their whole balance.
   - **Fee display:** one line on checkout and the tip detail, "TipMe fee (10%, includes processing)".
 - **Pro (granted by staff):**
@@ -21,7 +21,7 @@ PRD v1.1's proposed commercial rules, and Free and Pro tipping. Pretend money on
 - **Old records:** quotes, tips and ledger entries priced under `mock-v0` keep their recorded amounts.
 - **Deploy order:** the new fields are optional in the contracts, so the web app keeps working while it talks to an older API.
 
-Plan: `docs/superpowers/plans/2026-10-22-pr012-free-pro-tipping.md`. Migrations: `0029_page_plans` and `0030_tip_amount_checks`. Both only add things; 0030 first clears any inconsistent amounts, which the application never writes.
+Plan: `docs/superpowers/plans/2026-10-22-pr012-free-pro-tipping.md`. Migrations: `0029_page_plans`, `0030_tip_amount_checks` and `0031_no_tip_maximum` (drops the ₦100,000 cap). Both only add things; 0030 first clears any inconsistent amounts, which the application never writes.
 
 ## Evidence
 

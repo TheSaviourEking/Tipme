@@ -3,14 +3,14 @@
  * TipMe keeps 10% of the tip and pays the processing fee out of that share, so the recipient
  * always receives 90%. Processing is an estimate here (150 bps, the mock provider's fee); the
  * provider's actual fee is booked when it reports it, and any difference is TipMe's.
- * Applies to every page; a Pro page may raise its own minimum (never lower it).
+ * Applies to every page; a Pro page may raise its own minimum (never lower it). There is no
+ * maximum: supporters tip what they want (the API only bounds the input format, 12 digits).
  */
 export const FEE_POLICY_V1 = {
   version: 'proposed-v1.1',
   tipmeShareBps: 1000n,
   providerFeeBps: 150n,
   minTipMinor: 100_000n,
-  maxTipMinor: 10_000_000n,
   minWithdrawalMinor: 100_000n,
 } as const;
 
@@ -50,7 +50,7 @@ export function priceTip(
     options.minTipMinor > policy.minTipMinor
       ? options.minTipMinor
       : policy.minTipMinor;
-  if (tipMinor < floor || tipMinor > policy.maxTipMinor) {
+  if (tipMinor < floor) {
     throw new AmountOutOfRangeError('tip outside the allowed range');
   }
   if (options.feeFree)
@@ -84,8 +84,8 @@ export const STANDARD_TIP_PRESETS_MINOR = [
 
 /**
  * Which field of a Pro page's own amounts is not allowed, or null when they are: 1 to 4 unique
- * presets in whole naira, each between the page's minimum and the policy maximum, and a minimum
- * in whole naira that is never below the policy's.
+ * presets in whole naira, each at least the page's minimum, and a minimum in whole naira that is
+ * never below the policy's. There is no maximum.
  */
 export function tipAmountsProblem(
   presetsMinor: readonly bigint[],
@@ -93,22 +93,13 @@ export function tipAmountsProblem(
   policy: FeePolicy = FEE_POLICY_V1,
 ): 'presetsMinor' | 'minMinor' | null {
   const wholeNaira = (amount: bigint) => amount % 100n === 0n;
-  if (
-    minTipMinor < policy.minTipMinor ||
-    minTipMinor > policy.maxTipMinor ||
-    !wholeNaira(minTipMinor)
-  )
+  if (minTipMinor < policy.minTipMinor || !wholeNaira(minTipMinor))
     return 'minMinor';
   if (
     presetsMinor.length < 1 ||
     presetsMinor.length > 4 ||
     new Set(presetsMinor).size !== presetsMinor.length ||
-    presetsMinor.some(
-      (amount) =>
-        amount < minTipMinor ||
-        amount > policy.maxTipMinor ||
-        !wholeNaira(amount),
-    )
+    presetsMinor.some((amount) => amount < minTipMinor || !wholeNaira(amount))
   )
     return 'presetsMinor';
   return null;

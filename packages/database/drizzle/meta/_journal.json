@@ -218,6 +218,13 @@
       "when": 1792693770258,
       "tag": "0030_tip_amount_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792694555154,
+      "tag": "0031_no_tip_maximum",
+      "breakpoints": true
     }
   ]
 }

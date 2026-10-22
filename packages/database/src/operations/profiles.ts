@@ -180,7 +180,6 @@ export function tipAmountsOf(profile: {
   return {
     presetsMinor: presets.map(String),
     minMinor: String(min),
-    maxMinor: String(FEE_POLICY_V1.maxTipMinor),
   };
 }
 

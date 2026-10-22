@@ -143,7 +143,7 @@ export function AppreciationForm({
     if (!amount) {
       setError(
         selection === 'other'
-          ? `Enter an amount from ${options.rangeText}, like ${presets[0]?.label ?? '1,000'} or 2,500.50.`
+          ? `Enter an amount of ${options.rangeText}, like ${presets[0]?.label ?? '1,000'} or 2,500.50.`
           : 'Choose an amount or enter your own.',
       );
       if (selection === 'other') customField.current?.focus();
@@ -287,7 +287,7 @@ export function AppreciationForm({
             label="Your amount (NGN)"
             inputMode="decimal"
             autoComplete="off"
-            maxLength={10}
+            maxLength={16}
             placeholder="e.g. 1500.00"
             value={custom}
             disabled={submitting}
@@ -299,7 +299,7 @@ export function AppreciationForm({
               setError('');
             }}
             error={error || undefined}
-            hint={`From ${options.rangeText}.`}
+            hint={`${options.rangeText}.`}
           />
         )}
         <div className="tip-quote" aria-live="polite">

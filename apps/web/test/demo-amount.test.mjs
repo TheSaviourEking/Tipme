@@ -23,9 +23,7 @@ test('typed amounts use exact minor units and reject ambiguous input', () => {
     ',100',
     '1,,000',
     '1000,000',
-    '100,000.01',
     'Infinity',
-    '100000.01',
     '0x10',
   ]) {
     assert.equal(parse(value), null, value);

@@ -76,7 +76,7 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
   await visitor.getByLabel('Your amount (NGN)').fill('1500');
   await visitor.getByRole('button', { name: /^Tip/ }).click();
   await expect(
-    visitor.getByText(/Enter an amount from 2,000 to 100,000 NGN/),
+    visitor.getByText(/Enter an amount of NGN 2,000 or more/),
   ).toBeVisible();
   await expectAccessible(visitor);
 });

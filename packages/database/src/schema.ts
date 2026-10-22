@@ -187,23 +187,23 @@ export const profiles = pgTable(
       sql`page_state IN ('live', 'not_live', 'deleted')`,
     ),
     check('profiles_plan', sql`plan IN ('free', 'pro')`),
-    // Amounts in whole naira, never below the ₦1,000 floor or above ₦100,000; 1 to 4 presets.
+    // Amounts in whole naira, never below the ₦1,000 floor (no maximum); 1 to 4 presets.
     check(
       'profiles_min_tip',
-      sql`min_tip_minor IS NULL OR (min_tip_minor BETWEEN 100000 AND 10000000 AND min_tip_minor % 100 = 0)`,
+      sql`min_tip_minor IS NULL OR (min_tip_minor >= 100000 AND min_tip_minor % 100 = 0)`,
     ),
     check(
       'profiles_tip_presets',
       sql`tip_presets_minor IS NULL OR cardinality(tip_presets_minor) BETWEEN 1 AND 4`,
     ),
-    // Set together, and every preset between the page's minimum and ₦100,000.
+    // Set together, and every preset at least the page's minimum.
     check(
       'profiles_tip_amounts_together',
       sql`(tip_presets_minor IS NULL) = (min_tip_minor IS NULL)`,
     ),
     check(
       'profiles_tip_presets_range',
-      sql`tip_presets_minor IS NULL OR (min_tip_minor <= ALL (tip_presets_minor) AND 10000000 >= ALL (tip_presets_minor))`,
+      sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
     ),
   ],
 );

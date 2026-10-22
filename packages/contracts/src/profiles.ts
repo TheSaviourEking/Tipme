@@ -121,11 +121,10 @@ export const renameHandleSchema = claimHandleSchema;
 // a Pro page chooses its own preset amounts and minimum (never below the ₦1,000 floor).
 export type PagePlan = 'free' | 'pro';
 
-/** Kobo as strings. Supporters may type any amount from `minMinor` to `maxMinor`. */
+/** Kobo as strings. Supporters may type any amount from `minMinor` up; there is no maximum. */
 export interface TipAmounts {
   presetsMinor: string[];
   minMinor: string;
-  maxMinor: string;
 }
 
 const kobo = z.string().regex(/^\d{1,12}$/);

@@ -53,7 +53,7 @@
 > **PR-012 notes (22 Oct 2026), all PROPOSED (pretend money):**
 > - **v1.1 commercial rules applied for testing:**
 >   - TipMe keeps a 10% fee and pays processing out of it, so a ₦5,000 tip gives the recipient ₦4,500.
->   - The minimum tip is ₦1,000 and the maximum ₦100,000; the minimum withdrawal is ₦1,000.
+>   - The minimum tip is ₦1,000 and there is **no maximum**: supporters tip what they want (the user's decision; the API only bounds the input to 12 digits of kobo, and a real provider's own limits will apply). The minimum withdrawal is ₦1,000.
 >   - These are the PRD v1.1 *proposed* rules. They are not approved pricing (D-05) and do not enable real money.
 > - **Free and Pro (the user's decision):**
 >   - Every page starts on **Free**: standard amounts of ₦1,000, ₦2,000 and ₦5,000, plus any custom amount from ₦1,000.

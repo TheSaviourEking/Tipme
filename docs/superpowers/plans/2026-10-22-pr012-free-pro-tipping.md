@@ -20,7 +20,7 @@
 ## Tasks
 
 - **T1 Fee rules (domain).**
-  - `FEE_POLICY_V1` replaces `MOCK_FEE_POLICY_V0` for new quotes: TipMe share 1,000 bps (processing included), estimated processing 150 bps, minimum tip ₦1,000, maximum tip ₦100,000, minimum withdrawal ₦1,000.
+  - `FEE_POLICY_V1` replaces `MOCK_FEE_POLICY_V0` for new quotes: TipMe share 1,000 bps (processing included), estimated processing 150 bps, minimum tip ₦1,000, no maximum tip (changed by the user after review), minimum withdrawal ₦1,000.
   - `priceTip(tip, policy, { feeFree?, minTipMinor? })`:
     - the recipient gets tip − 10%;
     - the breakdown keeps its three parts: `platformFeeMinor` = TipMe's share minus processing, `providerFeeMinor` = processing, `recipientNetMinor` = 90%;
@@ -32,7 +32,7 @@
   - New permission `pages.plan`, granted to owners.
   - Operations:
     - `tipAmountsFor` (Free gives the defaults; Pro gives its own, falling back to the defaults);
-    - `setTipAmounts` (Pro only: 1–4 presets in whole naira, unique, each between the page minimum and the maximum; minimum between ₦1,000 and the maximum);
+    - `setTipAmounts` (Pro only: 1–4 presets in whole naira, unique, each at least the page minimum; minimum at least ₦1,000);
     - `setPagePlan` (audited, with a reason).
   - Quotes enforce the page minimum. Withdrawals below ₦1,000 are refused.
   - Integration tests cover each of these.

@@ -160,7 +160,6 @@ function TipAmountsSettings() {
   const amounts = profile.tipAmounts ?? {
     presetsMinor: ['100000', '200000', '500000'],
     minMinor: '100000',
-    maxMinor: '10000000',
   };
   const pro = profile.plan === 'pro';
   const [presets, setPresets] = useState(() =>
@@ -228,12 +227,12 @@ function TipAmountsSettings() {
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
-        text: 'The smallest tip must be at least NGN 1,000 and no more than NGN 100,000.',
+        text: 'The smallest tip must be at least NGN 1,000, in whole naira.',
       });
     else
       setError({
         field: 'presets',
-        text: 'Use 1 to 4 different amounts, each at least your smallest tip and no more than NGN 100,000.',
+        text: 'Use 1 to 4 different amounts, each at least your smallest tip.',
       });
   };
   return (

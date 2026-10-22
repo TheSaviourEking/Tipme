@@ -27,7 +27,14 @@ test('the PRD example: a ₦5,000 tip gives ₦500 to TipMe (processing included
 });
 
 test('the parts always add up to the tip, rounding half up, and processing never exceeds TipMe’s share', () => {
-  for (const tip of [100000n, 100001n, 123457n, 999999n, 10_000_000n]) {
+  for (const tip of [
+    100000n,
+    100001n,
+    123457n,
+    999999n,
+    10_000_000n,
+    999_999_999_999n,
+  ]) {
     const quote = priceTip(tip);
     assert.equal(parts(quote), tip, String(tip));
     assert.ok(quote.platformFeeMinor >= 0n);
@@ -35,9 +42,11 @@ test('the parts always add up to the tip, rounding half up, and processing never
   }
 });
 
-test('tips below ₦1,000 or above ₦100,000 are refused', () => {
+test('tips below ₦1,000 are refused; there is no maximum: supporters tip what they want', () => {
   assert.throws(() => priceTip(99999n), AmountOutOfRangeError);
-  assert.throws(() => priceTip(10_000_001n), AmountOutOfRangeError);
+  assert.equal(priceTip(10_000_001n).recipientNetMinor, 9_000_001n);
+  assert.equal(priceTip(500_000_000_00n).recipientNetMinor, 450_000_000_00n);
+  assert.equal('maxTipMinor' in FEE_POLICY_V1, false);
   assert.equal(FEE_POLICY_V1.minTipMinor, 100000n);
   assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 100000n);
 });
@@ -58,7 +67,7 @@ test('a Pro page’s own minimum raises the floor and never lowers it', () => {
   );
 });
 
-test('a Pro page’s amounts: 1–4 unique presets in whole naira, each between its minimum and ₦100,000; minimum at least ₦1,000', async () => {
+test('a Pro page’s amounts: 1–4 unique presets in whole naira, each at least its minimum (no maximum); minimum at least ₦1,000', async () => {
   const { tipAmountsProblem } = await import('../dist/index.js');
   const ok = (presets, min) => tipAmountsProblem(presets, min) === null;
   assert.equal(ok([200000n, 500000n, 1000000n], 200000n), true);
@@ -74,5 +83,11 @@ test('a Pro page’s amounts: 1–4 unique presets in whole naira, each between 
   assert.equal(ok([200050n], 200000n), false, 'whole naira only');
   assert.equal(ok([200000n], 200050n), false, 'minimum in whole naira');
   assert.equal(ok([200000n, 200000n], 200000n), false, 'no duplicates');
-  assert.equal(ok([20000000n], 200000n), false, 'above the maximum');
+  assert.equal(ok([20000000n, 500000000n], 200000n), true, 'no maximum');
+  assert.equal(
+    ok([200000n], 50000000n),
+    false,
+    'presets below a large minimum',
+  );
+  assert.equal(ok([50000000n], 50000000n), true, 'a large minimum is fine');
 });

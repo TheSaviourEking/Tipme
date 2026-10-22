@@ -83,7 +83,6 @@ const setPlan = (profileId, plan, reason = 'Pilot recipient') =>
 const STANDARD = {
   presetsMinor: ['100000', '200000', '500000'],
   minMinor: '100000',
-  maxMinor: '10000000',
 };
 
 test('a Free page uses the standard amounts and v1.1 fee: 10% with processing included, ₦1,000 minimum', async () => {
@@ -93,6 +92,9 @@ test('a Free page uses the standard amounts and v1.1 fee: 10% with processing in
 
   const tooSmall = await quote('free_page', '99999');
   assert.equal(tooSmall.status, 400);
+  // No maximum: supporters tip what they want (₦25,000,000 here).
+  const large = await json(await quote('free_page', '2500000000'));
+  assert.equal(large.recipientNetMinor, '2250000000');
   const ok = await json(await quote('free_page', '500000'));
   assert.equal(ok.feePolicyVersion, 'proposed-v1.1');
   assert.equal(
@@ -200,7 +202,6 @@ test('a Pro page sets its own presets and minimum; quotes below it are refused; 
     { presetsMinor: ['200000'], minMinor: '50000' },
     { presetsMinor: ['200050'], minMinor: '200000' },
     { presetsMinor: ['200000', '200000'], minMinor: '200000' },
-    { presetsMinor: ['20000000'], minMinor: '200000' },
   ])
     assert.equal((await set(bad)).status, 400, JSON.stringify(bad));
 
@@ -217,14 +218,13 @@ test('a Pro page sets its own presets and minimum; quotes below it are refused; 
   );
 
   const saved = await set({
-    presetsMinor: ['200000', '500000', '1000000'],
+    presetsMinor: ['200000', '500000', '25000000'],
     minMinor: '200000',
   });
   assert.equal(saved.status, 200);
   const own = {
-    presetsMinor: ['200000', '500000', '1000000'],
+    presetsMinor: ['200000', '500000', '25000000'],
     minMinor: '200000',
-    maxMinor: '10000000',
   };
   assert.deepEqual((await json(saved)).tipAmounts, own);
   assert.deepEqual(
@@ -307,8 +307,11 @@ test('the database itself refuses inconsistent Pro amounts (any future code path
   await refused(`tip_presets_minor = '{200000}', min_tip_minor = NULL`);
   await refused(`tip_presets_minor = NULL, min_tip_minor = 200000`);
   await refused(`tip_presets_minor = '{150000}', min_tip_minor = 200000`);
-  await refused(`tip_presets_minor = '{20000000}', min_tip_minor = 200000`);
-  await update(`tip_presets_minor = '{200000,500000}', min_tip_minor = 200000`);
+  // No maximum: large presets and minimums are fine.
+  await update(
+    `tip_presets_minor = '{200000,500000000}', min_tip_minor = 200000`,
+  );
+  await update(`tip_presets_minor = '{50000000}', min_tip_minor = 50000000`);
 });
 
 test('staff can find a renamed page by one of its old handles', async () => {
