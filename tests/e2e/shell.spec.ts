@@ -38,8 +38,9 @@ test('profile supports keyboard amount selection, validation and a server quote'
   page.on('request', (request) => {
     if (request.method() !== 'POST') return;
     const path = new URL(request.url()).pathname;
-    // Anonymous analytics (PR-009) are checked separately: they never carry the message.
-    if (path === '/v1/events') events.push(request.postData() ?? '');
+    // Anonymous analytics and web vitals are checked separately: they never carry the message.
+    if (path === '/v1/events' || path === '/v1/vitals')
+      events.push(request.postData() ?? '');
     else posts.push(path);
   });
   await page.goto('/@ada');

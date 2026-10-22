@@ -9,10 +9,12 @@ import {
 } from '@nestjs/common';
 import {
   analyticsEventSchema,
+  webVitalSchema,
   type AnalyticsEvent,
   type ApiDataResponse,
+  type WebVital,
 } from '@tipme/contracts';
-import { recordClientEvent } from '@tipme/database';
+import { recordClientEvent, recordWebVital } from '@tipme/database';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { RateLimit, RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -48,6 +50,24 @@ export class EventsController {
     if (this.enabled && gpc !== '1' && dnt !== '1')
       await recordClientEvent(this.database.db, {
         event,
+        device: MOBILE.test(userAgent ?? '') ? 'mobile' : 'desktop',
+      });
+    return { data: { accepted: true } };
+  }
+
+  /** Real-user web vitals (PR-011): the same consent rules, switch and rate limit as events. */
+  @Post('vitals')
+  @HttpCode(202)
+  @RateLimit('analytics')
+  async vital(
+    @Body(new ZodValidationPipe(webVitalSchema)) vital: WebVital,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Headers('sec-gpc') gpc: string | undefined,
+    @Headers('dnt') dnt: string | undefined,
+  ): Promise<ApiDataResponse<{ accepted: true }>> {
+    if (this.enabled && gpc !== '1' && dnt !== '1')
+      await recordWebVital(this.database.db, {
+        vital,
         device: MOBILE.test(userAgent ?? '') ? 'mobile' : 'desktop',
       });
     return { data: { accepted: true } };

@@ -69,6 +69,11 @@ export type HandleStatus = 'available' | 'taken' | 'reserved' | 'invalid';
 
 export interface MyProfile {
   handle: string;
+  /**
+   * Old handles that still lead to this page (PR-011), oldest first. Optional until the release
+   * after PR-011: the web app deploys before the API, so it may talk to an API without it.
+   */
+  previousHandles?: string[];
   displayName: string;
   role: string | null;
   bio: string | null;
@@ -102,3 +107,6 @@ export interface PublicProfile {
   /** A moment the recipient chose to share, for 14 days ("add to the celebration"). */
   celebration?: { momentId: string; label: string };
 }
+
+/** Changing the page's handle (PR-011); the old one keeps pointing at the page. */
+export const renameHandleSchema = claimHandleSchema;

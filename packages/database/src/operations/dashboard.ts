@@ -120,7 +120,8 @@ export function listMyTips(
     }>(sql`
       SELECT t.id AS tip_id, to_char(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
              t.payer_display_label AS label,
-             EXISTS (SELECT 1 FROM tip_messages m WHERE m.tip_id = t.id) AS has_message,
+             EXISTS (SELECT 1 FROM tip_messages m WHERE m.tip_id = t.id
+                      AND NOT EXISTS (SELECT 1 FROM message_flags f WHERE f.tip_id = t.id)) AS has_message,
              t.gross_minor::text AS gross, q.recipient_net_minor::text AS net, ${stateSql} AS state
         FROM tips t
         JOIN payment_intents i ON i.id = t.intent_id
@@ -171,10 +172,13 @@ export function myTipDetail(
       net: string;
       policy: string;
       provider: string | null;
+      hidden: boolean;
+      reported: boolean;
     }>(sql`
       SELECT ${stateSql} AS state,
              to_char(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
              t.payer_display_label AS label, m.body AS message, t.currency,
+             f.hidden_at IS NOT NULL AS hidden, f.reported_at IS NOT NULL AS reported,
              t.gross_minor::text AS gross, q.platform_fee_minor::text AS platform,
              q.provider_fee_minor::text AS provider_fee, q.recipient_net_minor::text AS net,
              q.fee_policy_version AS policy,
@@ -184,6 +188,7 @@ export function myTipDetail(
         JOIN payment_intents i ON i.id = t.intent_id
         JOIN tip_quotes q ON q.id = i.quote_id
         LEFT JOIN tip_messages m ON m.tip_id = t.id
+        LEFT JOIN message_flags f ON f.tip_id = t.id
        WHERE t.id = ${tipId} AND t.profile_id = ${profileId} AND ${visibleTip}`);
     const row = rows.rows[0];
     if (!row) return null;
@@ -195,7 +200,9 @@ export function myTipDetail(
       at: row.at,
       // A supporter's name and words reach the recipient only with a paid tip.
       supporterLabel: row.state === 'paid' ? row.label : null,
-      message: row.state === 'paid' ? row.message : null,
+      message: row.state === 'paid' && !row.hidden ? row.message : null,
+      messageHidden: Boolean(row.hidden),
+      messageReported: Boolean(row.reported),
       currency: row.currency,
       grossMinor: row.gross,
       platformFeeMinor: row.platform,

@@ -1,4 +1,9 @@
-import { referrerChannel, shouldTrack } from './analytics-core';
+import {
+  referrerChannel,
+  shouldTrack,
+  vitalPage,
+  vitalPayload,
+} from './analytics-core';
 import { newUuid } from './random-id';
 import { MY_TIPS_KEY } from './recognition';
 import type {
@@ -34,6 +39,24 @@ export function returningVisitor(): true | undefined {
   return storage('local')?.getItem(MY_TIPS_KEY) ? true : undefined;
 }
 
+function send(path: string, body: unknown): void {
+  const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
+  if (!shouldTrack(nav)) return;
+  void fetch(`${API_ORIGIN}${path}`, {
+    method: 'POST',
+    // Staging/preview: every call carries the preview cookie (PR-010).
+    credentials:
+      process.env.NEXT_PUBLIC_PREVIEW_GATE === 'on'
+        ? 'include'
+        : API_ORIGIN === ''
+          ? 'same-origin'
+          : 'omit',
+    keepalive: true,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => undefined);
+}
+
 /** Fire-and-forget; failures are ignored (analytics never gets in a supporter's way). */
 export function track(
   name: AnalyticsClientEvent,
@@ -46,21 +69,7 @@ export function track(
 ): void {
   if (typeof window === 'undefined') return;
   try {
-    const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
-    if (!shouldTrack(nav)) return;
-    void fetch(`${API_ORIGIN}/v1/events`, {
-      method: 'POST',
-      // Staging/preview: every call carries the preview cookie (PR-010).
-      credentials:
-        process.env.NEXT_PUBLIC_PREVIEW_GATE === 'on'
-          ? 'include'
-          : API_ORIGIN === ''
-            ? 'same-origin'
-            : 'omit',
-      keepalive: true,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, flowId: flowId(), ...props }),
-    }).catch(() => undefined);
+    send('/v1/events', { name, flowId: flowId(), ...props });
   } catch {
     // Analytics must never break a page.
   }
@@ -92,5 +101,17 @@ export function profileViewed(handle: string): void {
     const url = new URL(location.href);
     url.searchParams.delete('src');
     history.replaceState(history.state, '', url);
+  }
+}
+
+/** A real-user web vital (PR-011): the metric, a rounded value and the kind of page only. */
+export function reportVital(metric: { name: string; value: number }): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const page = vitalPage(location.pathname);
+    const payload = page ? vitalPayload(metric, page) : null;
+    if (payload) send('/v1/vitals', payload);
+  } catch {
+    // Analytics must never break a page.
   }
 }

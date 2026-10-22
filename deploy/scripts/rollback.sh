@@ -17,4 +17,10 @@ echo "==> Rolling back $current → $target"
 compose_for "$target" up -d --remove-orphans api worker caddy backup
 wait_healthy "$target" || { echo "!! $target did not become healthy." >&2; exit 1; }
 set_current "$target"
+# A version from before PR-011 runs Postgres without WAL archiving (its Compose file restarts it).
+if grep -q 'archive_mode=on' "$RELEASES/$current/compose.staging.yml" 2>/dev/null &&
+  ! grep -q 'archive_mode=on' "$RELEASES/$target/compose.staging.yml"; then
+  echo "!! WAL archiving is OFF in $target: point-in-time recovery stops until you deploy a newer version again." >&2
+  echo "!! Daily logical backups still run. The staging watcher will also report this." >&2
+fi
 echo "==> Rolled back to $target. Run the release check (read-only, then --full)."

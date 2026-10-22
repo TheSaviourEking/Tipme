@@ -11,6 +11,7 @@ export type OperationErrorCode =
   | 'INVALID_INPUT'
   | 'QUOTE_ALREADY_USED'
   | 'HANDLE_TAKEN'
+  | 'HANDLE_RENAME_LIMIT'
   | 'ALREADY_HAS_PAGE'
   | 'HAS_BALANCE'
   | 'NO_PAGE'
@@ -44,7 +45,7 @@ export class PersistenceError extends Error {
   }
 }
 
-function sqlStateOf(error: unknown): string | undefined {
+export function sqlStateOf(error: unknown): string | undefined {
   for (let current: unknown = error, depth = 0; current && depth < 5; depth++) {
     const code = (current as { code?: unknown }).code;
     if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;

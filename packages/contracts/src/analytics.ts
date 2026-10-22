@@ -69,3 +69,47 @@ export const analyticsEventSchema = z
   })
   .strict();
 export type AnalyticsEvent = z.infer<typeof analyticsEventSchema>;
+
+// Real-user web vitals (PR-011, PRD §10.1): a metric, its value and the kind of page. No URL,
+// handle, flow id or anything else that could tell visits apart.
+export const WEB_VITAL_METRICS = ['LCP', 'INP', 'CLS', 'FCP', 'TTFB'] as const;
+export const WEB_VITAL_PAGES = [
+  'home',
+  'marketing',
+  'profile',
+  'checkout',
+  'status',
+  'dashboard',
+  'account',
+] as const;
+export type WebVitalMetric = (typeof WEB_VITAL_METRICS)[number];
+export type WebVitalPage = (typeof WEB_VITAL_PAGES)[number];
+
+/** PRD §10.1 p75 budgets (milliseconds; CLS is unitless). FCP and TTFB are shown without one. */
+export const WEB_VITAL_BUDGETS: Partial<Record<WebVitalMetric, number>> = {
+  LCP: 2000,
+  INP: 150,
+  CLS: 0.05,
+};
+
+export const webVitalSchema = z
+  .object({
+    metric: z.enum(WEB_VITAL_METRICS),
+    // Milliseconds up to 10 minutes; CLS (unitless) up to 10.
+    value: z.number().finite().min(0).max(600_000),
+    page: z.enum(WEB_VITAL_PAGES),
+  })
+  .strict()
+  .refine((vital) => vital.metric !== 'CLS' || vital.value <= 10, {
+    path: ['value'],
+  });
+export type WebVital = z.infer<typeof webVitalSchema>;
+
+export interface WebVitalSummary {
+  metric: WebVitalMetric;
+  /** p75 over mobile visits in the last 28 days; null without samples. */
+  p75: number | null;
+  samples: number;
+  budget: number | null;
+  withinBudget: boolean | null;
+}

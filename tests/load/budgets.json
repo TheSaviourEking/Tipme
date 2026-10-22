@@ -1,0 +1,7 @@
+{
+  "source": "PRD §10.1 proposed launch budgets (service-side p95, first-party 5xx)",
+  "profileP95Ms": 200,
+  "checkoutP95Ms": 400,
+  "dashboardP95Ms": 300,
+  "serverErrorRate": 0.001
+}

@@ -30,6 +30,10 @@ export interface MyTipDetail {
   at: string;
   supporterLabel: string | null;
   message: string | null;
+  /** The recipient hid this message (PR-011); its text is no longer returned. */
+  messageHidden: boolean;
+  /** The recipient reported it to TipMe. */
+  messageReported: boolean;
   currency: string;
   grossMinor: string;
   platformFeeMinor: string;
@@ -90,3 +94,9 @@ export interface MomentView {
   sharedAt: string | null;
   createdAt: string;
 }
+
+/** A recipient reports a supporter's message (PR-011). */
+export const messageReportSchema = z
+  .object({ reason: z.enum(['abusive', 'spam', 'other']) })
+  .strict();
+export type MessageReportReason = z.infer<typeof messageReportSchema>['reason'];

@@ -83,7 +83,7 @@ export const apiConfigSchema = z
       .default(3),
     // Keys sign-in codes (HMAC); never logged.
     AUTH_CODE_SECRET: z.string().min(32),
-    // Only the pretend messenger exists until a messaging provider is approved (D-08).
+    // Only the pretend messenger exists until a messaging provider is approved (D-11).
     MESSAGING_PROVIDER: z.enum(['mock']).default('mock'),
     // Lets the API ask the web app to refresh a cached public profile.
     WEB_REVALIDATE_SECRET: z.string().min(32),
@@ -100,6 +100,12 @@ export const apiConfigSchema = z
     OPS_TRACE_URL_TEMPLATE: z
       .string()
       .regex(/^https?:\/\/[^\s]+\{traceId\}[^\s]*$/)
+      .optional(),
+    // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
+    SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
+    SENTRY_ENVIRONMENT: z
+      .string()
+      .regex(/^[a-z0-9-]{1,32}$/)
       .optional(),
     // Proxies in front of the API whose X-Forwarded-For is trusted for the client IP (0: none).
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),

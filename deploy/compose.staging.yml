@@ -91,7 +91,8 @@ services:
     read_only: false
     mem_limit: 384m
 
-  # Optional off-server copy of the encrypted backups (any S3-compatible bucket), hourly.
+  # Optional off-server copy of the encrypted backups and the WAL archive (any S3-compatible
+  # bucket), every 15 minutes: <remote>/backups and <remote>/wal.
   # Configure the rclone remote with RCLONE_CONFIG_<NAME>_* settings in the env file, then
   # start with `--profile offsite`.
   offsite:
@@ -99,10 +100,11 @@ services:
     profiles: [offsite]
     restart: unless-stopped
     env_file: ${TIPME_ENV_FILE:-/srv/tipme/staging.env}
-    entrypoint: ['sh', '-c']
-    command:
-      - 'while true; do rclone copy --immutable /backups "$$BACKUP_RCLONE_REMOTE" && echo "offsite copy done"; sleep 3600; done'
-    volumes: ['${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups:ro']
+    entrypoint: ['sh', '/offsite-loop.sh']
+    volumes:
+      - '${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups:ro'
+      - walarchive:/wal:ro
+      - ./scripts/offsite-loop.sh:/offsite-loop.sh:ro
     networks: [edge]
     mem_limit: 128m
 
@@ -113,7 +115,30 @@ services:
       POSTGRES_DB: tipme
       POSTGRES_USER: tipme
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
-    volumes: ['pgdata:/var/lib/postgresql/data']
+    # Point-in-time recovery (PR-011): every finished WAL segment is archived to /wal, at least
+    # every 5 minutes while anything changes, so at most about 5 minutes of data can be lost.
+    entrypoint:
+      - sh
+      - -c
+      - 'mkdir -p /wal && chown postgres:postgres /wal && exec docker-entrypoint.sh "$$@"'
+      - --
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_timeout=300
+      - -c
+      - archive_command=/bin/sh /etc/postgresql/archive-wal.sh %p %f
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - walarchive:/wal
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/archive-wal.sh:/etc/postgresql/archive-wal.sh:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U tipme -d tipme']
       interval: 5s
@@ -151,6 +176,7 @@ networks:
 
 volumes:
   pgdata:
+  walarchive:
   redisdata:
   caddy_data:
   caddy_config:

@@ -27,6 +27,15 @@ export class ProfileRevalidator {
     });
   }
 
+  /**
+   * For a handle that just stopped being a page (PR-011 renames): now, and again two seconds later,
+   * because a render of the old page already in flight could cache it once more after the first.
+   */
+  revalidateGone(handle: string): void {
+    this.revalidate(handle);
+    setTimeout(() => this.revalidate(handle), 2000).unref();
+  }
+
   private send(handle: string): Promise<boolean> {
     return fetch(this.url, {
       method: 'POST',

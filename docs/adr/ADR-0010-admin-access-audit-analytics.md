@@ -132,7 +132,7 @@ There is one admin today, but "we should make provision for roles to be added in
 
 ## Rationale
 
-- **Authenticator over SMS codes:** a second factor that does not depend on the same phone number as sign-in, and no provider is needed (D-08 is open).
+- **Authenticator over SMS codes:** a second factor that does not depend on the same phone number as sign-in, and no provider is needed (D-11 is open).
 - **Grant bound to the session:** a stolen admin cookie is useless alone, and signing out is a complete exit.
 - **404 rather than 401/403 for outsiders:** probing reveals neither the area nor who is staff.
 

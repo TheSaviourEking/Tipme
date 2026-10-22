@@ -10,3 +10,15 @@ export interface ReleaseInfo {
   paymentsLive: boolean;
   analytics: boolean;
 }
+
+/** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */
+export interface BackupHealth {
+  logical: { ageMinutes: number } | null;
+  base: { ageMinutes: number } | null;
+  wal: {
+    archiving: boolean;
+    lastArchivedAgeMinutes: number | null;
+    lastFailedAgeMinutes: number | null;
+    failedCount: number;
+  };
+}
