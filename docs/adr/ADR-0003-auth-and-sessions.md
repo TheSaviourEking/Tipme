@@ -1,7 +1,7 @@
 # ADR-0003 — Recipient authentication and sessions
 
 Date: 2026-10-19
-Status: ACCEPTED for development (PR-008). Delivery is pretend until a messaging provider is approved (D-08).
+Status: ACCEPTED for development (PR-008). Delivery is pretend until a messaging provider is approved (D-11).
 Owners: Engineering
 
 ## Context

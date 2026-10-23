@@ -69,4 +69,4 @@ Deferred minors are listed in the ledger (`.superpowers/sdd/2026-10-19-pr008/pro
   - The local `.env` gained generated secrets, whose values were never printed. `.env.example` is updated.
 - **New dependencies (pinned and registered):** `libphonenumber-js` 1.13.14, `qrcode` 1.5.4, `jsqr` 1.4.0 (dev only), `@types/qrcode` 1.5.6.
 - **Demo accounts:** Ada (`0800 000 0001`) and Tobi (`0800 000 0002`). Codes appear in `/dev/inbox`.
-- **Still pending decisions:** real money and rewards (D-03, D-04, D-05), messaging providers (D-08) and recipient verification (D-06).
+- **Still pending decisions:** real money and rewards (D-03, D-04, D-05), messaging providers (D-11; earlier written as D-08) and recipient verification (D-06).

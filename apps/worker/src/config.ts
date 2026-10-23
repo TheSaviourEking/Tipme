@@ -37,6 +37,16 @@ export const workerConfigSchema = z
       .transform((value) =>
         value === undefined ? undefined : value === 'true',
       ),
+    // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
+    SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
+    SENTRY_ENVIRONMENT: z
+      .string()
+      .regex(/^[a-z0-9-]{1,32}$/)
+      .optional(),
+    GIT_SHA: z
+      .string()
+      .regex(/^[0-9a-f]{7,40}$/)
+      .optional(),
     RECONCILE_INTERVAL_MS: z.coerce.number().int().min(100).default(60_000),
     RECONCILE_MIN_AGE_MS: z.coerce.number().int().min(0).default(120_000),
     // Monthly budget for TipMe's cash rewards, in minor units (pretend money; D-05 pending).

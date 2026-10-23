@@ -1,6 +1,7 @@
 import type { OpsHealth, OpsVisibility } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
+import { webVitalsSummary } from './analytics.js';
 import { guarded } from './errors.js';
 
 const ZONE = 'Africa/Lagos';
@@ -178,6 +179,7 @@ export function healthMetrics(
         paymentStarted: int(funnel['started']),
         tipsCompleted: int(funnel['completed']),
       },
+      webVitals: await webVitalsSummary(db, { now: input.now, days: 28 }),
     };
   });
 }

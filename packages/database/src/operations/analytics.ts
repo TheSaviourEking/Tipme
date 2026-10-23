@@ -1,7 +1,14 @@
-import type { AnalyticsEvent, AnalyticsServerEvent } from '@tipme/contracts';
+import {
+  WEB_VITAL_BUDGETS,
+  WEB_VITAL_METRICS,
+  type AnalyticsEvent,
+  type AnalyticsServerEvent,
+  type WebVital,
+  type WebVitalSummary,
+} from '@tipme/contracts';
 import { eq, lt, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { analyticsEvents, profiles } from '../schema.js';
+import { analyticsEvents, profiles, webVitals } from '../schema.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 
@@ -45,6 +52,68 @@ export function recordClientEvent(
       rehearsal: page.rehearsal,
       returning: event.returning ?? null,
       device: input.device,
+    });
+  });
+}
+
+/** One real-user web vital (already checked against the contract). Rounded: whole milliseconds,
+ *  CLS to 3 decimals, so the value cannot carry anything else. */
+export function recordWebVital(
+  db: Database,
+  input: { vital: WebVital; device: 'mobile' | 'desktop'; now?: Date },
+): Promise<void> {
+  const { vital } = input;
+  const value =
+    vital.metric === 'CLS'
+      ? Math.round(vital.value * 1000) / 1000
+      : Math.round(vital.value);
+  return guarded(async () => {
+    await db.insert(webVitals).values({
+      id: newId(),
+      atMinute: minuteOf(input.now ?? new Date()),
+      metric: vital.metric,
+      value,
+      page: vital.page,
+      device: input.device,
+    });
+  });
+}
+
+/** p75 per metric over mobile visits in the last `days` days, against the PRD budgets. */
+export function webVitalsSummary(
+  db: Database,
+  input: { now: Date; days: number },
+): Promise<WebVitalSummary[]> {
+  return guarded(async () => {
+    const since = new Date(input.now.getTime() - input.days * 86_400_000);
+    const { rows } = await db.execute(sql`
+      SELECT metric, count(*)::int AS samples,
+             percentile_cont(0.75) WITHIN GROUP (ORDER BY value) AS p75
+        FROM web_vitals
+       WHERE device = 'mobile' AND at_minute >= ${since}
+       GROUP BY metric`);
+    const found = new Map(
+      (rows as { metric: string; samples: number; p75: number }[]).map((r) => [
+        r.metric,
+        r,
+      ]),
+    );
+    return WEB_VITAL_METRICS.map((metric) => {
+      const row = found.get(metric);
+      const budget = WEB_VITAL_BUDGETS[metric] ?? null;
+      const p75 =
+        row === undefined
+          ? null
+          : metric === 'CLS'
+            ? Math.round(Number(row.p75) * 1000) / 1000
+            : Math.round(Number(row.p75));
+      return {
+        metric,
+        p75,
+        samples: row?.samples ?? 0,
+        budget,
+        withinBudget: p75 === null || budget === null ? null : p75 <= budget,
+      };
     });
   });
 }
@@ -138,7 +207,11 @@ export function purgeAnalytics(
       .delete(analyticsEvents)
       .where(lt(analyticsEvents.atMinute, input.before))
       .returning({ id: analyticsEvents.id });
-    return deleted.length;
+    const vitals = await db
+      .delete(webVitals)
+      .where(lt(webVitals.atMinute, input.before))
+      .returning({ id: webVitals.id });
+    return deleted.length + vitals.length;
   });
 }
 

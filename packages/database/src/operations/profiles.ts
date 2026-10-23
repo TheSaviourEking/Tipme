@@ -7,10 +7,11 @@ import {
   type Socials,
 } from '@tipme/contracts';
 import { isReservedHandle, normaliseHandle } from '@tipme/domain';
-import { and, eq, gt, isNull, ne } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import { and, asc, count, eq, gt, isNull, ne } from 'drizzle-orm';
+import type { Database, Tx } from '../client.js';
 import {
   emailTokens,
+  handleAliases,
   handleHolds,
   phoneRecoveries,
   profiles,
@@ -22,11 +23,13 @@ import {
 import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
-import { guarded, OperationError } from './errors.js';
+import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { newId } from './ids.js';
 import { publicCelebration } from './moments.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
+/** Old handles a page keeps pointing at itself (PR-011). */
+export const MAX_HANDLE_ALIASES = 5;
 
 /** Whether the user has claimed a page yet. */
 export function hasProfile(db: Database, userId: string): Promise<boolean> {
@@ -54,7 +57,7 @@ export function checkHandle(
 }
 
 async function isTaken(
-  db: Database,
+  db: Database | Tx,
   handle: string,
   now: Date,
 ): Promise<boolean> {
@@ -63,6 +66,11 @@ async function isTaken(
     .from(profiles)
     .where(eq(profiles.handleLower, handle));
   if (profile) return true;
+  const [alias] = await db
+    .select({ id: handleAliases.profileId })
+    .from(handleAliases)
+    .where(eq(handleAliases.handleLower, handle));
+  if (alias) return true;
   const [hold] = await db
     .select({ until: handleHolds.until })
     .from(handleHolds)
@@ -107,7 +115,13 @@ export function claimHandle(
         pageState: 'not_live',
       })
       .onConflictDoNothing()
-      .returning({ id: profiles.id });
+      .returning({ id: profiles.id })
+      .catch((error: unknown) => {
+        // The database refused an old handle of another page (lost a race with a rename).
+        if (sqlStateOf(error) === '23505')
+          throw new OperationError('HANDLE_TAKEN');
+        throw error;
+      });
     // Lost a race for the same handle (or the same user claimed twice at once).
     if (!inserted[0]) {
       if (await hasProfile(db, input.userId))
@@ -139,8 +153,21 @@ async function myRow(db: Database, userId: string) {
   return row;
 }
 
-const toMine = (row: Awaited<ReturnType<typeof myRow>>): MyProfile => ({
+async function previousHandles(db: Database, profileId: string) {
+  const rows = await db
+    .select({ handle: handleAliases.handleLower })
+    .from(handleAliases)
+    .where(eq(handleAliases.profileId, profileId))
+    .orderBy(asc(handleAliases.createdAt));
+  return rows.map((row) => row.handle);
+}
+
+const toMine = async (
+  db: Database,
+  row: Awaited<ReturnType<typeof myRow>>,
+): Promise<MyProfile> => ({
   handle: row.profile.handle,
+  previousHandles: await previousHandles(db, row.profile.id),
   displayName: row.profile.displayName,
   role: row.profile.role,
   bio: row.profile.bio,
@@ -160,7 +187,7 @@ const toMine = (row: Awaited<ReturnType<typeof myRow>>): MyProfile => ({
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
-  return guarded(async () => toMine(await myRow(db, userId)));
+  return guarded(async () => toMine(db, await myRow(db, userId)));
 }
 
 /** The profile id of the user's page (not deleted), for routes that act on it. */
@@ -202,7 +229,7 @@ export function updateMyProfile(
         ...(values.qrStyle !== undefined ? { qrStyle: values.qrStyle } : {}),
       })
       .where(eq(profiles.id, row.profile.id));
-    return toMine(await myRow(db, userId));
+    return toMine(db, await myRow(db, userId));
   });
 }
 
@@ -221,6 +248,100 @@ export function setPageState(
       .set({ pageState: state })
       .where(eq(profiles.id, row.profile.id));
     return { handle: row.profile.handle };
+  });
+}
+
+/**
+ * Changes the page's handle (PR-011). The old one becomes an alias that keeps pointing here, so
+ * printed QR codes still work; a page keeps at most 5. Going back to one of its own old handles
+ * swaps the two, and a change of case alone changes nothing.
+ */
+export function renameHandle(
+  db: Database,
+  input: { userId: string; handle: string; now?: Date },
+): Promise<{ previous: string; handle: string }> {
+  const now = input.now ?? new Date();
+  const wanted = normaliseHandle(input.handle);
+  return guarded(async () => {
+    if (!wanted) throw new OperationError('INVALID_INPUT');
+    try {
+      return await db.transaction(async (tx) => {
+        const [row] = await tx
+          .select({
+            id: profiles.id,
+            handle: profiles.handle,
+            handleLower: profiles.handleLower,
+            pageState: profiles.pageState,
+          })
+          .from(profiles)
+          .where(eq(profiles.userId, input.userId))
+          .for('update');
+        if (!row || row.pageState === 'deleted')
+          throw new OperationError('NO_PAGE');
+        // Handles are stored normalised (as when claimed), so a change of case is no change.
+        if (wanted === row.handleLower)
+          return { previous: row.handleLower, handle: wanted };
+        if (isReservedHandle(wanted)) throw new OperationError('HANDLE_TAKEN');
+        const reclaimed = await tx
+          .delete(handleAliases)
+          .where(
+            and(
+              eq(handleAliases.handleLower, wanted),
+              eq(handleAliases.profileId, row.id),
+            ),
+          )
+          .returning({ handle: handleAliases.handleLower });
+        if (!reclaimed[0]) {
+          if (await isTaken(tx, wanted, now))
+            throw new OperationError('HANDLE_TAKEN');
+          const [kept] = await tx
+            .select({ n: count() })
+            .from(handleAliases)
+            .where(eq(handleAliases.profileId, row.id));
+          if ((kept?.n ?? 0) >= MAX_HANDLE_ALIASES)
+            throw new OperationError('HANDLE_RENAME_LIMIT');
+        }
+        await tx
+          .insert(handleAliases)
+          .values({ handleLower: row.handleLower, profileId: row.id });
+        await tx
+          .update(profiles)
+          .set({ handle: wanted, handleLower: wanted })
+          .where(eq(profiles.id, row.id));
+        return { previous: row.handleLower, handle: wanted };
+      });
+    } catch (error) {
+      // Lost a race with someone claiming the same handle at the same moment.
+      if (sqlStateOf(error) === '23505')
+        throw new OperationError('HANDLE_TAKEN');
+      throw error;
+    }
+  });
+}
+
+/**
+ * Where an old handle points now: the current handle of a live, active page, or null. Not-live,
+ * suspended and deleted pages reveal nothing, exactly like an unknown handle.
+ */
+export function handleAliasTarget(
+  db: Database,
+  raw: string,
+): Promise<string | null> {
+  const handle = normaliseHandle(raw);
+  if (!handle) return Promise.resolve(null);
+  return guarded(async () => {
+    const [row] = await db
+      .select({ handle: profiles.handleLower })
+      .from(handleAliases)
+      .innerJoin(profiles, eq(profiles.id, handleAliases.profileId))
+      .where(
+        and(
+          eq(handleAliases.handleLower, handle),
+          eq(profiles.pageState, 'live'),
+          eq(profiles.status, 'active'),
+        ),
+      );
+    return row?.handle ?? null;
   });
 }
 
@@ -324,6 +445,24 @@ export function deleteAccount(
             target: handleHolds.handleLower,
             set: { until: new Date(now.getTime() + HANDLE_HOLD_MS) },
           });
+        // Old handles stop pointing at the deleted page and are held like the current one.
+        const aliases = await tx
+          .delete(handleAliases)
+          .where(eq(handleAliases.profileId, row.id))
+          .returning({ handleLower: handleAliases.handleLower });
+        if (aliases.length > 0)
+          await tx
+            .insert(handleHolds)
+            .values(
+              aliases.map((alias) => ({
+                handleLower: alias.handleLower,
+                until: new Date(now.getTime() + HANDLE_HOLD_MS),
+              })),
+            )
+            .onConflictDoUpdate({
+              target: handleHolds.handleLower,
+              set: { until: new Date(now.getTime() + HANDLE_HOLD_MS) },
+            });
       }
       // Erase what identifies the person, including codes, lockouts and pending links or recoveries.
       const [person] = await tx

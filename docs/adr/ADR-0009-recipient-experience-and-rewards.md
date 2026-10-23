@@ -87,7 +87,7 @@ They should be able to share a styled QR code, hear about tips in the app and by
 
 ## Consequences
 
-- Real email, push, SMS and WhatsApp need providers (D-08).
+- Real email, push, SMS and WhatsApp need providers (D-11).
 - Real cash rewards need D-05, legal review, and the two-person rule for manual adjustments.
 - Recipient identity verification (D-06) is still open, so pages stay `noindex` and labelled pretend.
 

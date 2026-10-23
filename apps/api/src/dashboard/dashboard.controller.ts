@@ -7,11 +7,13 @@ import {
   Inject,
   NotFoundException,
   Param,
+  HttpCode,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import {
+  messageReportSchema,
   withdrawalRequestSchema,
   type ActivityRow,
   ApiDataResponse,
@@ -26,8 +28,10 @@ import {
   listMyTips,
   listWeeklyReports,
   myProfileId,
+  hideMessage,
   myTipDetail,
   recentActivity,
+  reportMessage,
   requestWithdrawal,
 } from '@tipme/database';
 import type { MockProvider } from '@tipme/payments';
@@ -103,6 +107,37 @@ export class DashboardController {
     );
     if (!detail) throw new NotFoundException();
     return { data: detail };
+  }
+
+  /** Hide a supporter's message from your own views (PR-011). */
+  @Post('tips/:tipId/message/hide')
+  @HttpCode(200)
+  async hideMessage(
+    @CurrentUser() auth: AuthContext,
+    @Param('tipId') tipId: string,
+  ): Promise<ApiDataResponse<{ hidden: true }>> {
+    await hideMessage(this.database.db, {
+      profileId: await this.profile(auth),
+      tipId,
+    });
+    return { data: { hidden: true } };
+  }
+
+  /** Report a supporter's message to TipMe (it is also hidden from you). */
+  @Post('tips/:tipId/message/report')
+  @HttpCode(200)
+  async reportMessage(
+    @CurrentUser() auth: AuthContext,
+    @Param('tipId') tipId: string,
+    @Body(new ZodValidationPipe(messageReportSchema))
+    body: z.infer<typeof messageReportSchema>,
+  ): Promise<ApiDataResponse<{ reported: true }>> {
+    await reportMessage(this.database.db, {
+      profileId: await this.profile(auth),
+      tipId,
+      reason: body.reason,
+    });
+    return { data: { reported: true } };
   }
 
   @Get('activity')

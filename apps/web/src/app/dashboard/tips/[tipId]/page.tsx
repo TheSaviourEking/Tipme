@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { MyTipDetail } from '@tipme/contracts';
 import { Card, Notice, Skeleton } from '@tipme/ui';
+import { MessageControls } from '@/components/dashboard/message-controls';
 import { naira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 
@@ -11,6 +12,7 @@ export default function TipDetailPage() {
   const { tipId } = useParams<{ tipId: string }>();
   const [tip, setTip] = useState<MyTipDetail | null>(null);
   const [missing, setMissing] = useState(false);
+  const [version, setVersion] = useState(0);
   useEffect(() => {
     void apiFetch<MyTipDetail>(`/v1/me/tips/${encodeURIComponent(tipId)}`).then(
       (result) => {
@@ -18,7 +20,7 @@ export default function TipDetailPage() {
         else setMissing(true);
       },
     );
-  }, [tipId]);
+  }, [tipId, version]);
 
   if (missing)
     return (
@@ -39,7 +41,20 @@ export default function TipDetailPage() {
         })}
       </p>
       {tip.message && (
-        <blockquote className="message-preview">{tip.message}</blockquote>
+        <>
+          <blockquote className="message-preview">{tip.message}</blockquote>
+          <MessageControls
+            tipId={tip.tipId}
+            onChanged={() => setVersion((v) => v + 1)}
+          />
+        </>
+      )}
+      {tip.messageHidden && (
+        <p className="tm-hint" role="status">
+          {tip.messageReported
+            ? 'You reported this message. It is hidden, and TipMe is reviewing it.'
+            : 'You hid this message.'}
+        </p>
       )}
       <Card>
         <dl className="tip-breakdown">

@@ -50,3 +50,37 @@ test('device class only, from the user agent', () => {
     false,
   );
 });
+
+test('web vitals name only the kind of page, and staff or developer pages send nothing', async () => {
+  const { vitalPage, vitalPayload } =
+    await import('../src/lib/analytics-core.ts');
+  assert.equal(vitalPage('/'), 'home');
+  assert.equal(vitalPage('/how-it-works'), 'marketing');
+  assert.equal(vitalPage('/legal/terms'), 'marketing');
+  assert.equal(vitalPage('/people/ada'), 'profile');
+  assert.equal(vitalPage('/@ada'), 'profile');
+  assert.equal(vitalPage('/mock-checkout/abc'), 'checkout');
+  assert.equal(vitalPage('/tip/abc'), 'status');
+  assert.equal(vitalPage('/dashboard/tips/123'), 'dashboard');
+  assert.equal(vitalPage('/sign-in'), 'account');
+  for (const path of [
+    '/ops',
+    '/ops/issues',
+    '/dev/inbox',
+    '/design-system',
+    '/preview-login',
+    '/unknown',
+  ])
+    assert.equal(vitalPage(path), null, path);
+  assert.deepEqual(vitalPayload({ name: 'LCP', value: 1834.6 }, 'profile'), {
+    metric: 'LCP',
+    value: 1835,
+    page: 'profile',
+  });
+  assert.deepEqual(vitalPayload({ name: 'CLS', value: 0.01234 }, 'home'), {
+    metric: 'CLS',
+    value: 0.012,
+    page: 'home',
+  });
+  assert.equal(vitalPayload({ name: 'FID', value: 3 }, 'home'), null);
+});

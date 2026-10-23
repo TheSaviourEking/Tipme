@@ -13,10 +13,11 @@ export const profileTag = (handle: string) => `profile:${handle.toLowerCase()}`;
 /**
  * A live page's public details, cached until the API reports a change (`/api/revalidate`).
  * "Not available" is cached like any answer; a failure to reach the API is thrown, never cached.
+ * An old handle (PR-011) comes back as `{ movedTo }`, the page's current handle.
  */
 export async function getPublicProfile(
   handle: string,
-): Promise<PublicProfile | null> {
+): Promise<PublicProfile | { movedTo: string } | null> {
   'use cache';
   // Changes expire the tag at once; this is only the backstop if that signal is ever lost
   // (web briefly down, several web instances): no stale page outlives about half a minute.
@@ -26,12 +27,21 @@ export async function getPublicProfile(
   const password = process.env.PREVIEW_PASSWORD;
   const response = await fetch(
     `${API_ORIGIN}/v1/profiles/${encodeURIComponent(handle)}`,
-    // Staging/preview: the web server proves itself to the API's gate with the server key.
-    password
-      ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
-      : undefined,
+    {
+      redirect: 'manual',
+      // Staging/preview: the web server proves itself to the API's gate with the server key.
+      ...(password
+        ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
+        : {}),
+    },
   );
   if (response.status === 404) return null;
+  if (response.status === 308) {
+    const { data } = (await response.json()) as { data: { movedTo: string } };
+    return /^[a-z0-9_]{3,30}$/.test(data.movedTo)
+      ? { movedTo: data.movedTo }
+      : null;
+  }
   if (!response.ok)
     throw new Error(`profile lookup failed: ${response.status}`);
   return ((await response.json()) as { data: PublicProfile }).data;

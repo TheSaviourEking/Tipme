@@ -44,3 +44,13 @@ Server images and tools for the staging server. None of them ships code to brows
 - **Build-time only:** `turbo@2.11.9` via `pnpm dlx` to prune the workspace for the image (already the pinned dev tool).
 
 Decision: ADOPTED (pinned exact). Upgrades are deliberate and go through the release check and the restore drill.
+
+## PR-011 hardening
+
+- **CI and test tools (Docker images, pinned by digest, never shipped in the app image):**
+  - `zricethezav/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055` (MIT, https://github.com/gitleaks/gitleaks): secret scanning of the whole Git history in CI, findings redacted. Exact-match allowlist in `.gitleaks.toml`.
+  - `grafana/k6:1.0.0@sha256:f21270290d702cbf0a7d6ba5d7ed100b63bcb233b558b885ed787547b3488279` (AGPL-3.0, https://github.com/grafana/k6): load tests against a throwaway local API (`pnpm test:load`). Run as a separate tool; no TipMe code links to it.
+- **No new runtime dependencies.** Error reports use TipMe's own Sentry-envelope sender (no Sentry SDK); web vitals use `next/web-vitals`, already part of Next; the OpenAPI document uses zod's built-in `z.toJSONSchema`.
+- **Postgres features, not packages:** WAL archiving (`archive_command` copying to a volume) and `pg_basebackup` from the existing `postgres:16.13-alpine` and `postgresql16-client`.
+
+Decision: ADOPTED (pinned exact). Upgrades are deliberate: re-pin the digest and rerun the scan and load test.

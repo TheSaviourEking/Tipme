@@ -42,6 +42,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   stuck_tip: 'info',
   unmatched_event: 'info',
   pending_recovery: 'account',
+  message_reported: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -64,6 +65,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A tip to ${page} has been confirming for more than 30 minutes.`;
     case 'unmatched_event':
       return 'The provider sent an event TipMe could not match to any payment or withdrawal.';
+    case 'message_reported':
+      return `${page} reported a supporter’s message. Reveal it (with a reason) to review it.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
@@ -130,7 +133,7 @@ async function completeSubject(
   return { subject: filled, handle, rehearsal };
 }
 
-async function openIssue(
+export async function openIssue(
   tx: Database | Tx,
   input: {
     dedupeKey: string;

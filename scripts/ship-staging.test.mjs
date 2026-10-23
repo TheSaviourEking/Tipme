@@ -68,6 +68,10 @@ test('shipping copies that version’s deploy files and streams its image to the
     'scripts/deploy.sh',
     'scripts/rollback.sh',
     'scripts/lib.sh',
+    'scripts/pitr-drill.sh',
+    'scripts/offsite-loop.sh',
+    'postgres/pg_hba.conf',
+    'postgres/archive-wal.sh',
   ])
     assert.ok(existsSync(join(release, file)), file);
   assert.equal(

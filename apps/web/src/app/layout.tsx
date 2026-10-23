@@ -3,6 +3,7 @@ import { Nunito } from 'next/font/google';
 import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
+import { WebVitalsReporter } from '@/components/web-vitals-reporter';
 import '@tipme/ui/tokens.css';
 import '@tipme/ui/components.css';
 import './globals.css';
@@ -37,6 +38,7 @@ export default function RootLayout({
         <Navigation />
         {children}
         <Footer />
+        <WebVitalsReporter />
       </body>
     </html>
   );
