@@ -1,3 +1,7 @@
+# Slack deployment notifications & fix summaries — 23 October 2026
+
+Added Slack deployment notification integration via incoming webhook. Formats release outcomes and automatically parses Conventional Commits to extract categorised bug fixes (`fix:`), product updates/features (`feat:`), and version details with direct links to the web app, API, and commit/run URLs. Integrated into `.github/workflows/deploy-staging.yml` and documented in `docs/runbooks/staging-setup.md`. Requires repository/environment secret `SLACK_WEBHOOK_URL` (gracefully skips if not configured).
+
 # CI rename redirect assertion — 22 October 2026
 
 - Active branch: `feat/hardening`, based on `5e18764`. The primary `dev` worktree is untouched.

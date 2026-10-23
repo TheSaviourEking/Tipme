@@ -266,3 +266,13 @@ All of it is proven on a local copy of staging (`pnpm staging:local:up`). Integr
 ## Staging web deployment — 21 October 2026
 
 User confirmed dev is the staging branch. Vercel domain mapping already points to dev. Empty trigger commit 0b074fc was skipped as not affected. Added apps/web/DEPLOYMENT.md to document the branch contract and trigger a real web preview; no runtime behavior changed. Next: push dev and verify deployment plus domain.
+
+## Update — Slack deployment notifications & fix summaries (23 October 2026)
+
+Added automated Slack deployment notifications and fix summaries:
+
+- `scripts/notify-slack.mjs`: parses Conventional Commits from git history into categorized Bug Fixes (`fix:`), Product Features (`feat:`), and maintenance changes, formatting a rich Slack Block Kit message. Supports `--dry-run`, custom ranges, and gracefully skips if `SLACK_WEBHOOK_URL` is omitted.
+- `scripts/notify-slack.test.mjs`: unit tests (6/6 passing) verifying commit parsing, Block Kit payload structures, failure handling, and dry-run execution.
+- `.github/workflows/deploy-staging.yml`: added `fetch-depth: 20` and a `Notify Slack` step running on `if: always()` after release checks.
+- `docs/runbooks/staging-setup.md`: documented the optional `SLACK_WEBHOOK_URL` secret.
+  Verification: all 31 script unit tests pass; `pnpm format:check` and governance pass; ESLint passes with 0 errors.
