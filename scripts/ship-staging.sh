@@ -19,7 +19,7 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 release="$home/releases/$version"
 
 echo "==> Copying the deploy files for $version"
-tar -C "$here/deploy" -cz compose.staging.yml Caddyfile scripts |
+tar -C "$here/deploy" -cz compose.staging.yml Caddyfile scripts postgres |
   ssh "${ssh_opts[@]}" "$target" "mkdir -p '$release' && tar -C '$release' -xz"
 
 echo "==> Sending tipme-app:$version (compressed)"

@@ -1,4 +1,9 @@
-import type { AnalyticsChannel } from '@tipme/contracts';
+import type {
+  AnalyticsChannel,
+  WebVital,
+  WebVitalMetric,
+  WebVitalPage,
+} from '@tipme/contracts';
 
 // Pure helpers for anonymous analytics (no browser state), shared by the tracker and its tests.
 
@@ -39,3 +44,34 @@ export function shouldTrack(nav: {
 /** Device class only; the user agent itself never leaves the browser in an event. */
 export const deviceIsMobile = (userAgent: string) =>
   /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent);
+
+const VITAL_PAGES: [RegExp, WebVitalPage][] = [
+  [/^\/$/, 'home'],
+  [/^\/(how-it-works|for-creators|about-preview|legal)(\/|$)/, 'marketing'],
+  [/^\/(people\/|@)[^/]+$/, 'profile'],
+  [/^\/mock-checkout\//, 'checkout'],
+  [/^\/tip\//, 'status'],
+  [/^\/dashboard(\/|$)/, 'dashboard'],
+  [/^\/(sign-in|sign-up|recover|verify-email)(\/|$)/, 'account'],
+];
+
+/** The kind of page for a web vital; null (send nothing) for staff, developer and other pages. */
+export function vitalPage(pathname: string): WebVitalPage | null {
+  return VITAL_PAGES.find(([pattern]) => pattern.test(pathname))?.[1] ?? null;
+}
+
+const VITAL_METRICS = new Set<string>(['LCP', 'INP', 'CLS', 'FCP', 'TTFB']);
+
+/** What leaves the browser: the metric, a rounded value and the page kind. Nothing else. */
+export function vitalPayload(
+  metric: { name: string; value: number },
+  page: WebVitalPage,
+): WebVital | null {
+  if (!VITAL_METRICS.has(metric.name) || !Number.isFinite(metric.value))
+    return null;
+  const value =
+    metric.name === 'CLS'
+      ? Math.round(metric.value * 1000) / 1000
+      : Math.round(metric.value);
+  return { metric: metric.name as WebVitalMetric, value, page };
+}

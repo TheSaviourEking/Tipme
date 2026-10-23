@@ -78,11 +78,13 @@ The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence t
    - **Secrets:**
      - `STAGING_SSH_KEY`: the private key file `tipme-actions`;
      - `STAGING_SSH_KNOWN_HOSTS`: the `ssh-keyscan` output;
-     - `RELEASE_PREVIEW_PASSWORD` and `RELEASE_CHECK_TOKEN`: the same values as the server.
+     - `RELEASE_PREVIEW_PASSWORD` and `RELEASE_CHECK_TOKEN`: the same values as the server;
+     - `SLACK_WEBHOOK_URL` (optional): Slack Incoming Webhook URL to receive deployment alerts and product/fix summaries.
    - **Variables:**
      - `STAGING_SSH` = `deploy@<server address>`;
      - `STAGING_WEB_URL` = `https://staging.<domain>`;
      - `STAGING_API_URL` = `https://api.staging.<domain>`.
+   - **Alerts (PR-011):** add `STAGING_WEB_URL` and `STAGING_API_URL` **also as repository variables** (Settings → Secrets and variables → Actions → Variables → Repository), and optionally the **repository secret** `ALERT_WEBHOOK_URL` (a Slack or Telegram-bridge webhook). The watcher uses repository-level settings so an approval rule on the `staging` environment never holds it up. **Staging watch** then runs every 15 minutes and fails (GitHub emails you) when the API or web app is down, live payments are on, a backup is over 26 hours old, WAL was not archived in the last 15 minutes or archiving failed in the last hour.
 4. **Delete the private key file** from your machine once it is stored in GitHub.
 
 ## 6. First deploy

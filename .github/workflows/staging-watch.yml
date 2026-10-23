@@ -1,0 +1,34 @@
+# Watches staging every 15 minutes (PR-011, PRD §14 Operations "alert routes"): API ready, web up,
+# no live payments, backups fresh and WAL archiving healthy (RPO). A failed run emails the
+# repository owner through GitHub notifications; set the repository secret `ALERT_WEBHOOK_URL`
+# to also post to Slack (or any {"text": ...} webhook).
+# Repository-level settings, not the `staging` environment: the job's `if` cannot see environment
+# variables, and an environment with required reviewers would hold every run for approval.
+name: Staging watch
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: staging-watch
+  cancel-in-progress: true
+jobs:
+  watch:
+    # Only once staging exists (repository variable STAGING_API_URL is set).
+    if: vars.STAGING_API_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/watch-staging.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Check staging
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: node scripts/watch-staging.mjs --web "${{ vars.STAGING_WEB_URL }}" --api "${{ vars.STAGING_API_URL }}"

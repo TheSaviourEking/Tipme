@@ -12,6 +12,7 @@ import {
   char,
   check,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -328,6 +329,22 @@ export const handleHolds = pgTable('handle_holds', {
   handleLower: text('handle_lower').primaryKey(),
   until: timestamp('until', { withTimezone: true }).notNull(),
 });
+
+/**
+ * A page's previous handles (PR-011): they keep pointing at the page so printed QR codes still
+ * work, and nobody else can claim them. At most 5 per page; released as 90-day holds on deletion.
+ */
+export const handleAliases = pgTable(
+  'handle_aliases',
+  {
+    handleLower: text('handle_lower').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    createdAt: createdAt(),
+  },
+  (table) => [index('handle_aliases_profile').on(table.profileId)],
+);
 
 export const tipQuotes = pgTable(
   'tip_quotes',
@@ -880,6 +897,31 @@ export const analyticsEvents = pgTable(
   ],
 );
 
+/** Real-user web vitals (PR-011): metric, value, page kind and device class, nothing else. */
+export const webVitals = pgTable(
+  'web_vitals',
+  {
+    id: uuid('id').primaryKey(),
+    atMinute: timestamp('at_minute', { withTimezone: true }).notNull(),
+    metric: text('metric').notNull(),
+    value: doublePrecision('value').notNull(),
+    page: text('page').notNull(),
+    device: text('device').notNull(),
+  },
+  (table) => [
+    check(
+      'web_vitals_metric',
+      sql`metric IN ('LCP', 'INP', 'CLS', 'FCP', 'TTFB')`,
+    ),
+    check('web_vitals_device', sql`device IN ('mobile', 'desktop')`),
+    check(
+      'web_vitals_minute',
+      sql`at_minute = date_trunc('minute', at_minute)`,
+    ),
+    index('web_vitals_at').on(table.atMinute),
+  ],
+);
+
 /** Daily totals (Lagos days) that outlive the raw events. */
 export const analyticsDaily = pgTable(
   'analytics_daily',
@@ -936,3 +978,49 @@ export const releaseRuns = pgTable('release_runs', {
   finishedAt: timestamp('finished_at', { withTimezone: true }),
   issuesClosed: integer('issues_closed'),
 });
+
+// ---- Backups (PR-011) ----
+
+/** Every finished backup (logical dump or physical base backup), for /health/backups and alerts. */
+export const backupRuns = pgTable(
+  'backup_runs',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    file: text('file').notNull(),
+    version: text('version').notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('backup_runs_kind', sql`kind IN ('logical', 'base')`),
+    index('backup_runs_kind_finished').on(table.kind, table.finishedAt),
+  ],
+);
+
+/** Written by the point-in-time-recovery drill just before it restores: proof nothing was lost. */
+export const recoveryMarkers = pgTable('recovery_markers', {
+  id: uuid('id').primaryKey(),
+  createdAt: createdAt(),
+});
+
+/**
+ * A recipient's choices about a supporter's message (PR-011): hidden from their own views, and
+ * whether it was reported to TipMe. The message itself (tip_messages) is never changed.
+ */
+export const messageFlags = pgTable(
+  'message_flags',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => tips.id),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true }).notNull(),
+    reportedAt: timestamp('reported_at', { withTimezone: true }),
+    reportReason: text('report_reason'),
+  },
+  () => [
+    check(
+      'message_flags_reason',
+      sql`report_reason IS NULL OR report_reason IN ('abusive', 'spam', 'other')`,
+    ),
+  ],
+);

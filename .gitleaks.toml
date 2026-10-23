@@ -1,0 +1,14 @@
+# Secret scanning (PR-011, PRD §12). gitleaks' own rules, plus the few known false positives:
+# keep this list short and exact, and never allow a whole file or directory.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public test vectors and fixture keys"
+regexTarget = "match"
+regexes = [
+  # RFC 6238 appendix B TOTP test key (public), used by the TOTP and staff tests.
+  '''GEZDGNBVGY3TQOJQ''',
+  # Dashboard moment keys such as milestone.10.x.
+  '''key: 'milestone\.\d+\.[a-z]+'''',
+]

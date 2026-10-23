@@ -1,6 +1,7 @@
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { JOB_NAMES, JOB_QUEUE, traceCarrierSchema } from '@tipme/contracts';
 import {
+  createErrorReporter,
   createLogger,
   getMeter,
   withExtractedContext,
@@ -103,6 +104,14 @@ export async function startJobWorker(
     prefix: config.QUEUE_PREFIX,
   });
   const database = createDatabase(config.DATABASE_URL, { max: 4 });
+  const reporter = createErrorReporter({
+    dsn: config.SENTRY_DSN,
+    service: 'worker',
+    environment:
+      config.SENTRY_ENVIRONMENT ??
+      (config.DEPLOYMENT_MODE === 'preview' ? 'staging' : config.NODE_ENV),
+    release: config.GIT_SHA,
+  });
   const analyticsEnabled =
     config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
   // Reconciliation asks the provider (never charges); it shares the fail-fast Redis client.
@@ -297,6 +306,12 @@ export async function startJobWorker(
                 ? error.name
                 : 'unknown';
           logger.warn({ event: 'job.failed', reason, ...fields });
+          // Expected failures (known reasons) are not errors to chase; anything else is reported.
+          if (!(error instanceof Error && knownReasons.has(error.message)))
+            reporter.capture(error, {
+              job: job.name,
+              traceId: span.spanContext().traceId,
+            });
           span.setStatus({ code: SpanStatusCode.ERROR, message: reason });
           processed.add(1, { outcome: 'failed' });
           throw error;

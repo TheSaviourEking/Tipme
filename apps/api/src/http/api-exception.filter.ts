@@ -11,7 +11,7 @@ import {
   PersistenceError,
   type OperationErrorCode,
 } from '@tipme/database';
-import type { Logger } from '@tipme/observability';
+import type { ErrorReporter, Logger } from '@tipme/observability';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
 import { CodedHttpException } from './coded.exception.js';
 import { isRetryablePersistenceError } from '../webhooks/retryable.js';
@@ -41,6 +41,8 @@ const messages: Record<ApiErrorCode, string> = {
     'That code is not right or has expired. Please check it or ask for a new one.',
   SIGN_IN_LOCKED: 'Too many wrong codes. Please wait 15 minutes and try again.',
   HANDLE_TAKEN: 'That handle is not available. Please choose another.',
+  HANDLE_RENAME_LIMIT:
+    'Your page already keeps 5 old handles. Choose one of them, or keep your current handle.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   PHONE_TAKEN: 'That number belongs to another account.',
@@ -91,6 +93,7 @@ const operationErrors: Partial<
   QUOTE_ALREADY_USED: { status: 409, code: 'QUOTE_ALREADY_USED' },
   TIP_NOT_PAYABLE: { status: 409, code: 'TIP_NOT_PAYABLE' },
   HANDLE_TAKEN: { status: 409, code: 'HANDLE_TAKEN' },
+  HANDLE_RENAME_LIMIT: { status: 409, code: 'HANDLE_RENAME_LIMIT' },
   ALREADY_HAS_PAGE: { status: 409, code: 'ALREADY_HAS_PAGE' },
   HAS_BALANCE: { status: 409, code: 'HAS_BALANCE' },
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
@@ -155,7 +158,10 @@ function classify(exception: unknown): {
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
-  constructor(private readonly logger: Logger) {}
+  constructor(
+    private readonly logger: Logger,
+    private readonly reporter?: ErrorReporter,
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
@@ -167,6 +173,14 @@ export class ApiExceptionFilter implements ExceptionFilter {
         event: 'http.error',
         error: exception instanceof Error ? exception.name : typeof exception,
         reference,
+      });
+      // The route pattern, never the URL (it can carry identifiers or query values).
+      const route = host
+        .switchToHttp()
+        .getRequest<{ route?: { path?: string } }>().route?.path;
+      this.reporter?.capture(exception, {
+        ...(route ? { route } : {}),
+        traceId: reference,
       });
     }
     const body: ApiErrorResponse = {

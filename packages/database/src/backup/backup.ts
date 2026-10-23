@@ -6,10 +6,21 @@ import {
   randomBytes,
 } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { sql } from 'drizzle-orm';
 import pg from 'pg';
+import type { Database } from '../client.js';
+import { guarded } from '../operations/errors.js';
 
 // Backups and the restore drill (PR-010). A backup is `pg_dump -Fc` taken from the same
 // snapshot as its manifest (row counts, ledger totals, latest migration), encrypted with
@@ -197,6 +208,11 @@ export async function createBackup(input: {
         mode: 0o600,
       },
     );
+    await recordBackupRun(client, {
+      kind: 'logical',
+      file,
+      version: input.version,
+    });
     await prune(input.dir, input.retain ?? 14);
     return manifest;
   } catch (error) {
@@ -438,4 +454,193 @@ export async function restoreBackup(input: {
   } finally {
     await rm(plain, { force: true });
   }
+}
+
+// ---- Point-in-time recovery (PR-011): base backups, WAL archive status, the backup record ----
+
+/** Remembers a finished backup in the database it came from (read by /health/backups). */
+async function recordBackupRun(
+  client: pg.Client,
+  input: { kind: 'logical' | 'base'; file: string; version: string },
+): Promise<void> {
+  const exists = (
+    await client.query<{ t: string | null }>(
+      `SELECT to_regclass('public.backup_runs') AS t`,
+    )
+  ).rows[0]?.t;
+  // A brand-new database (first deploy) has no table yet; the next backup is recorded.
+  if (!exists) return;
+  await client.query(
+    'INSERT INTO backup_runs (id, kind, file, version, finished_at) VALUES (gen_random_uuid(), $1, $2, $3, now())',
+    [input.kind, input.file, input.version],
+  );
+}
+
+/** Decrypts a TipMe backup file (dump or base backup) to `target` (mode 600). */
+export async function decryptBackupFile(
+  path: string,
+  key: string,
+  target: string,
+): Promise<void> {
+  await decrypt(path, keyOf(key), target);
+}
+
+/**
+ * A physical base backup of the whole server (`pg_basebackup`, tar with the WAL it needs),
+ * encrypted like the dumps. With the archived WAL it restores to any moment after it.
+ */
+export async function createBaseBackup(input: {
+  url: string;
+  key: string;
+  dir: string;
+  version: string;
+  retain?: number;
+  pgExec?: PgExec;
+  now?: Date;
+}): Promise<{ file: string }> {
+  const key = keyOf(input.key);
+  const stamp = (input.now ?? new Date())
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\..+/, 'Z');
+  const file = `tipme-base-${stamp}-${input.version.slice(0, 12)}.tar.enc`;
+  // Written as .partial and renamed only once complete and on disk, so a killed run never
+  // leaves a truncated file that looks like the newest backup (or counts towards those kept).
+  for (const stale of await readdir(input.dir))
+    if (/^tipme-base-.*\.tar\.enc\.partial$/.test(stale))
+      await rm(join(input.dir, stale), { force: true });
+  const path = join(input.dir, `${file}.partial`);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const out = createWriteStream(path, { mode: 0o600 });
+  const written = new Promise<void>((resolve, reject) => {
+    out.once('error', reject);
+    out.once('finish', resolve);
+  });
+  out.write(Buffer.concat([MAGIC, iv]));
+  cipher.pipe(out, { end: false });
+  const encrypted = new Promise<void>((resolve) => cipher.once('end', resolve));
+  try {
+    await run(
+      [
+        ...(input.pgExec ?? []),
+        'pg_basebackup',
+        '-d',
+        input.url,
+        '-D',
+        '-',
+        '-Ft',
+        '-X',
+        'fetch',
+        '--checkpoint=fast',
+        '--no-password',
+      ],
+      { stdout: cipher },
+    );
+    await encrypted;
+    out.end(cipher.getAuthTag());
+    await written;
+    const handle = await open(path, 'r');
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(path, join(input.dir, file));
+  } catch (error) {
+    out.destroy();
+    await rm(path, { force: true });
+    throw error;
+  }
+  const client = new pg.Client({ connectionString: input.url });
+  await client.connect();
+  try {
+    await recordBackupRun(client, {
+      kind: 'base',
+      file,
+      version: input.version,
+    });
+  } finally {
+    await client.end();
+  }
+  await pruneBaseBackups(input.dir, input.retain ?? 7);
+  return { file };
+}
+
+/** Keeps the newest `retain` base backups. */
+export async function pruneBaseBackups(
+  dir: string,
+  retain: number,
+): Promise<void> {
+  const bases = (await readdir(dir))
+    .filter((f) => /^tipme-base-.*\.tar\.enc$/.test(f))
+    .sort();
+  for (const old of bases.slice(0, Math.max(0, bases.length - retain)))
+    await rm(join(dir, old), { force: true });
+}
+
+export interface BackupStatus {
+  logical: { at: string; file: string } | null;
+  base: { at: string; file: string } | null;
+  wal: {
+    archiving: boolean;
+    lastArchivedAt: string | null;
+    lastFailedAt: string | null;
+    failedCount: number;
+  };
+}
+
+/** The newest backups and the WAL archiver's state, timestamps only (no secrets, no data). */
+export async function backupStatus(db: Database): Promise<BackupStatus> {
+  return guarded(async () => {
+    const latest = async (kind: 'logical' | 'base') => {
+      const rows = await db.execute<{ file: string; at: string }>(
+        sql`SELECT file, finished_at AS at FROM backup_runs WHERE kind = ${kind} ORDER BY finished_at DESC LIMIT 1`,
+      );
+      const row = rows.rows[0];
+      return row
+        ? { file: row.file, at: new Date(String(row.at)).toISOString() }
+        : null;
+    };
+    const wal = (
+      await db.execute<{
+        mode: string;
+        last_archived_time: string | null;
+        last_failed_time: string | null;
+        failed_count: number;
+      }>(sql`SELECT current_setting('archive_mode') AS mode, last_archived_time, last_failed_time,
+                    failed_count::int AS failed_count FROM pg_stat_archiver`)
+    ).rows[0];
+    const iso = (value: string | null | undefined) =>
+      value ? new Date(String(value)).toISOString() : null;
+    return {
+      logical: await latest('logical'),
+      base: await latest('base'),
+      wal: {
+        archiving: wal?.mode === 'on' || wal?.mode === 'always',
+        lastArchivedAt: iso(wal?.last_archived_time),
+        lastFailedAt: iso(wal?.last_failed_time),
+        failedCount: Number(wal?.failed_count ?? 0),
+      },
+    };
+  });
+}
+
+/** Whether a backup of this kind is recorded for the current UTC day (false if not recorded). */
+export function backedUpToday(
+  db: Database,
+  kind: 'logical' | 'base',
+): Promise<boolean> {
+  return guarded(async () => {
+    const exists = (
+      await db.execute<{ t: string | null }>(
+        sql`SELECT to_regclass('public.backup_runs') AS t`,
+      )
+    ).rows[0]?.t;
+    if (!exists) return false;
+    const rows = await db.execute<{ n: number }>(sql`
+      SELECT count(*)::int AS n FROM backup_runs
+       WHERE kind = ${kind} AND finished_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`);
+    return Number(rows.rows[0]?.n ?? 0) > 0;
+  });
 }

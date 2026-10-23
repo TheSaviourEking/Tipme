@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { WebVitalSummary } from './analytics.js';
 
 // Staff admin area (PR-009, ADR-0010).
 
@@ -51,6 +52,7 @@ export const ISSUE_KINDS = [
   'stuck_tip',
   'unmatched_event',
   'pending_recovery',
+  'message_reported',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
@@ -290,6 +292,9 @@ export interface OpsHealth {
     paymentStarted: number;
     tipsCompleted: number;
   };
+  /** Real-user web vitals, mobile, last 28 days (PR-011). Optional for the same reason as
+   *  `MyProfile.previousHandles`: an older API does not send it. */
+  webVitals?: WebVitalSummary[];
 }
 
 /** How people find recipients' pages, over the last `days` days (Lagos). */

@@ -1,3 +1,12 @@
+# CI rename redirect assertion — 22 October 2026
+
+- Active branch: `feat/hardening`, based on `5e18764`. The primary `dev` worktree is untouched.
+- Reproduced CI run `39768906443` locally: the rename succeeds, but the test reads the URL synchronously after `goto`, before the streamed redirect finishes. The trace shows successful requests to the renamed URL between repeated visits to the old URL.
+- Changed only `tests/e2e/hardening.spec.ts`: use Playwright's retrying `toHaveURL` before retrying navigation, and assert `?src=qr` is preserved. Existing page-content and old-handle reservation assertions remain.
+- Verification: original assertion failed locally; corrected rename test passed 5/5 repetitions. Targeted Prettier, ESLint and `tsc -p tsconfig.tools.json` passed. Full `pnpm test:e2e` passed: fresh build and 64/64 tests (56.5s), exit 0. `git diff --check` passed.
+- No application, payment, migration, environment or deployment settings changed.
+- Next exact step: push this narrow fix to `feat/hardening` and verify the new GitHub Actions run. Do not merge or change staging routing as part of this fix.
+
 # Agent handoff — PR-003 takeover audit
 
 **Audit date:** 18 October 2026. **Auditor:** takeover agent (previous agent hit its usage limit mid-PR-003).
@@ -253,3 +262,17 @@ PR-010 (release rehearsal and staging) implemented by the PR-009/010 session:
 - **Operations:** deploy and rollback scripts, encrypted snapshot backups with a restore drill and a real-restore tool, runbooks, ADR-0011.
 
 All of it is proven on a local copy of staging (`pnpm staging:local:up`). Integration 294/294; e2e green except the hosting session's hero test. Committed on branch `feat/pr-009-010-admin-release` (not pushed). Next: the user provides the VPS; wire in with `docs/runbooks/staging-setup.md`.
+
+## Staging web deployment — 21 October 2026
+
+User confirmed dev is the staging branch. Vercel domain mapping already points to dev. Empty trigger commit 0b074fc was skipped as not affected. Added apps/web/DEPLOYMENT.md to document the branch contract and trigger a real web preview; no runtime behavior changed. Next: push dev and verify deployment plus domain.
+
+## Update — Slack deployment notifications & fix summaries (23 October 2026)
+
+Added automated Slack deployment notifications and fix summaries:
+
+- `scripts/notify-slack.mjs`: parses Conventional Commits from git history into categorized Bug Fixes (`fix:`), Product Features (`feat:`), and maintenance changes, formatting a rich Slack Block Kit message. Supports `--dry-run`, custom ranges, and gracefully skips if `SLACK_WEBHOOK_URL` is omitted.
+- `scripts/notify-slack.test.mjs`: unit tests (6/6 passing) verifying commit parsing, Block Kit payload structures, failure handling, and dry-run execution.
+- `.github/workflows/deploy-staging.yml`: added `fetch-depth: 20` and a `Notify Slack` step running on `if: always()` after release checks.
+- `docs/runbooks/staging-setup.md`: documented the optional `SLACK_WEBHOOK_URL` secret.
+  Verification: all 31 script unit tests pass; `pnpm format:check` and governance pass; ESLint passes with 0 errors.

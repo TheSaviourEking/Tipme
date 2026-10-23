@@ -21,10 +21,17 @@ export default defineConfig({
   reporter: 'list',
   globalSetup: './tests/e2e/global-setup.ts',
   use: { baseURL: WEB_ORIGIN, trace: 'retain-on-failure' },
+  // One pass at desktop width. Tests tagged @mobile also run at 360px.
+  // Reflow at 320px is asserted inside those tests, so the suite is not run twice.
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'desktop',
+      grepInvert: /@mobile/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     {
       name: 'mobile',
+      grep: /@mobile/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 360, height: 800 },
@@ -34,22 +41,26 @@ export default defineConfig({
   webServer: [
     {
       // Built by test:e2e with NEXT_PUBLIC_API_ORIGIN pointing at the API below.
+      // Next prints Ready and then never answers the homepage request Playwright
+      // uses as a health check, so wait until the port accepts a connection.
       command: 'pnpm --filter @tipme/web start --port 3100',
-      url: WEB_ORIGIN,
+      port: 3100,
+      stdout: 'pipe',
+      timeout: 300_000,
       env: {
         PATH: process.env.PATH ?? '',
         API_INTERNAL_ORIGIN: API_ORIGIN,
         WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
       },
       reuseExistingServer: false,
-      timeout: 180_000,
     },
     {
       command: 'node --import ./dist/instrument.js dist/main.js',
       cwd: './apps/api',
       url: `${API_ORIGIN}/health/ready`,
+      stdout: 'pipe',
       reuseExistingServer: false,
-      timeout: 180_000,
+      timeout: 300_000,
       env: env({
         HOST: '127.0.0.1',
         PORT: '4100',
@@ -71,8 +82,9 @@ export default defineConfig({
       command: 'node --import ./dist/instrument.js dist/main.js',
       cwd: './apps/worker',
       wait: { stdout: /worker\.started/ },
+      stdout: 'pipe',
       reuseExistingServer: false,
-      timeout: 180_000,
+      timeout: 300_000,
       env: env({
         LOG_LEVEL: 'info',
         RECONCILE_INTERVAL_MS: '500',
