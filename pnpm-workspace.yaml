@@ -6,3 +6,12 @@ onlyBuiltDependencies:
   - '@nestjs/core'
   - sharp
   - unrs-resolver
+
+# Security fixes for packages the API pulls in through @nestjs/platform-express, until it
+# depends on fixed versions itself (12.2.0 still pins multer 2.4.0). Remove each line once the
+# normal resolution is already at or above it (`pnpm why <package>`).
+overrides:
+  # GHSA-27r3-jxmh-p828: denial of service via trailing bytes after a compressed body.
+  body-parser: 2.4.0
+  # GHSA-q7qp-rjg7-q26m: denial of service via a pending async fileFilter (the API has no uploads).
+  multer: 2.5.0
