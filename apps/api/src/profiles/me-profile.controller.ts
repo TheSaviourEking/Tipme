@@ -30,6 +30,7 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
+  myProfileId,
   getNotificationPrefs,
   setNotificationPrefs,
   renameHandle,
@@ -49,6 +50,7 @@ import {
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { ServerEvents } from '../analytics/server-events.js';
 import { ProfileRevalidator } from './revalidate.js';
 
 /** The signed-in recipient's own page. Every route acts only on the caller's account. */
@@ -60,6 +62,7 @@ export class MeProfileController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(ServerEvents) private readonly events: ServerEvents,
   ) {}
 
   @Post('page')
@@ -69,7 +72,7 @@ export class MeProfileController {
     body: z.infer<typeof claimHandleSchema>,
     @Headers('x-tipme-rehearsal') rehearsal: string | undefined,
   ): Promise<ApiDataResponse<MyProfile>> {
-    await claimHandle(this.database.db, {
+    const { profileId } = await claimHandle(this.database.db, {
       userId: auth.userId,
       handle: body.handle,
       // The release check's page (PR-010): only on test copies, only for an open run.
@@ -77,6 +80,11 @@ export class MeProfileController {
         ? { rehearsalRunId: rehearsal }
         : {}),
     });
+    await this.events.record(
+      'profile_created',
+      `profile_created.${profileId}`,
+      profileId,
+    );
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 
@@ -159,6 +167,15 @@ export class MeProfileController {
       body.state,
     );
     this.revalidator.revalidate(handle);
+    // Once per page, ever: the first time it goes live (PRD v1.1 §11).
+    if (body.state === 'live') {
+      const profileId = await myProfileId(this.database.db, auth.userId);
+      await this.events.record(
+        'profile_published',
+        `profile_published.${profileId}`,
+        profileId,
+      );
+    }
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 

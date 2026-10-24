@@ -64,6 +64,22 @@ export async function handleDomainEvent(
       });
     return 'logged';
   }
+  if (name === 'payout.paid' && deps.analyticsEnabled) {
+    // A withdrawal the provider confirmed as paid (PRD v1.1 §11 payout_paid_verified).
+    const { payoutId, profileId } = (data ?? {}) as Record<string, unknown>;
+    if (
+      typeof payoutId === 'string' &&
+      UUID.test(payoutId) &&
+      typeof profileId === 'string' &&
+      UUID.test(profileId)
+    )
+      await recordServerEvent(deps.db, {
+        name: 'payout_paid_verified',
+        dedupeKey: `payout_paid_verified.${payoutId}`,
+        profileId,
+      });
+    return 'logged';
+  }
   if (name !== 'tip.succeeded') return 'logged';
   const { tipId, profileId } = (data ?? {}) as {
     tipId?: unknown;

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ServerEvents } from '../analytics/server-events.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
@@ -9,7 +10,13 @@ import { ProfileRevalidator } from './revalidate.js';
 
 @Module({
   controllers: [MeProfileController, PublicProfileController, AvatarController],
-  providers: [ProfileRevalidator, SessionGuard, CsrfGuard, RateLimitGuard],
+  providers: [
+    ProfileRevalidator,
+    SessionGuard,
+    CsrfGuard,
+    RateLimitGuard,
+    ServerEvents,
+  ],
   exports: [ProfileRevalidator],
 })
 export class ProfilesModule {}

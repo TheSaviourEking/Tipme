@@ -44,6 +44,7 @@ import {
 } from '../auth/session.guard.js';
 import { PAYMENT_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
 import { CodedHttpException } from '../http/coded.exception.js';
+import { ServerEvents } from '../analytics/server-events.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 
@@ -56,6 +57,7 @@ export class DashboardController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(PAYMENT_PROVIDER_TOKEN) private readonly provider: MockProvider,
+    @Inject(ServerEvents) private readonly events: ServerEvents,
   ) {}
 
   private profile(auth: AuthContext): Promise<string> {
@@ -174,12 +176,18 @@ export class DashboardController {
       type: 'custom',
       data: 'idempotency-key',
     });
+    const profileId = await this.profile(auth);
     const result = await requestWithdrawal(this.database.db, {
-      profileId: await this.profile(auth),
+      profileId,
       amountMinor: BigInt(body.amountMinor),
       idempotencyKey: key,
       provider: this.provider,
     });
+    await this.events.record(
+      'payout_requested',
+      `payout_requested.${result.payoutId}`,
+      profileId,
+    );
     if (result.providerReference)
       await this.provider.settlePayout(result.providerReference);
     return { data: { payoutId: result.payoutId, status: result.status } };
