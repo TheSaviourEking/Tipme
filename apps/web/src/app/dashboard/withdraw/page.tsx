@@ -48,7 +48,9 @@ export default function WithdrawPage() {
     setError(
       result.code === 'INSUFFICIENT_BALANCE'
         ? 'That is more than your available balance.'
-        : 'We couldn’t request the withdrawal. Please try again.',
+        : result.code === 'WITHDRAWAL_TOO_SMALL'
+          ? 'The smallest withdrawal is NGN 1,000.'
+          : 'We couldn’t request the withdrawal. Please try again.',
     );
   };
 
@@ -81,6 +83,7 @@ export default function WithdrawPage() {
             setError('');
             key.current = null;
           }}
+          hint="The smallest withdrawal is NGN 1,000."
           error={error || undefined}
         />
         <Button

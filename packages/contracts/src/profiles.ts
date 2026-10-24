@@ -90,6 +90,10 @@ export interface MyProfile {
   /** TipMe paused the page (PR-009): it cannot go live; the reason is shown to the recipient. */
   suspended: boolean;
   suspendedReason: string | null;
+  /** Free or Pro (PR-012). Optional until the release after PR-012 (the web deploys first). */
+  plan?: PagePlan;
+  /** The amounts the page shows now (the standard ones on Free). Optional, as `plan`. */
+  tipAmounts?: TipAmounts;
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
@@ -106,7 +110,26 @@ export interface PublicProfile {
   email?: string;
   /** A moment the recipient chose to share, for 14 days ("add to the celebration"). */
   celebration?: { momentId: string; label: string };
+  /** The amounts this page offers (PR-012). Optional until the release after PR-012. */
+  tipAmounts?: TipAmounts;
 }
 
 /** Changing the page's handle (PR-011); the old one keeps pointing at the page. */
 export const renameHandleSchema = claimHandleSchema;
+
+// Free and Pro (PR-012). Free pages show the standard amounts; staff can make a page Pro, and
+// a Pro page chooses its own preset amounts and minimum (never below the ₦1,000 floor).
+export type PagePlan = 'free' | 'pro';
+
+/** Kobo as strings. Supporters may type any amount from `minMinor` up; there is no maximum. */
+export interface TipAmounts {
+  presetsMinor: string[];
+  minMinor: string;
+}
+
+const kobo = z.string().regex(/^\d{1,12}$/);
+/** Shape only; the amounts themselves are checked by the domain rule on the server. */
+export const tipAmountsSchema = z
+  .object({ presetsMinor: z.array(kobo).max(8), minMinor: kobo })
+  .strict();
+export type TipAmountsRequest = z.infer<typeof tipAmountsSchema>;

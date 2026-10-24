@@ -11,7 +11,7 @@ test('the overview shows health this week against last week, and the tipping fun
   for (const label of [
     'Tips paid',
     'Amount tipped',
-    'TipMe fees',
+    'TipMe keeps (after processing)',
     'Reward cost',
   ])
     await expect(page.getByText(label, { exact: true })).toBeVisible();

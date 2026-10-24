@@ -1855,6 +1855,70 @@
         ]
       }
     },
+    "/v1/me/tip-amounts": {
+      "put": {
+        "operationId": "MeProfile.tipAmounts",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "presetsMinor": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^\\d{1,12}$"
+                    }
+                  },
+                  "minMinor": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}$"
+                  }
+                },
+                "required": [
+                  "presetsMinor",
+                  "minMinor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/tips": {
       "get": {
         "operationId": "Dashboard.tips",
@@ -3241,6 +3305,127 @@
         "x-tipme-permission": "analytics.view"
       }
     },
+    "/v1/ops/pages/{handle}": {
+      "get": {
+        "operationId": "OpsPages.page",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.plan"
+      }
+    },
+    "/v1/ops/pages/{profileId}/plan": {
+      "post": {
+        "operationId": "OpsPages.plan",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "plan": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "pro"
+                    ]
+                  }
+                },
+                "required": [
+                  "reason",
+                  "plan"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.plan"
+      }
+    },
     "/v1/ops/pages/{profileId}/suspend": {
       "post": {
         "operationId": "OpsActions.suspend",
@@ -3968,6 +4153,8 @@
                   "ALREADY_HAS_PAGE",
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",
+                  "WITHDRAWAL_TOO_SMALL",
+                  "PRO_REQUIRED",
                   "PHONE_TAKEN",
                   "RECOVERY_PENDING",
                   "FORBIDDEN",
