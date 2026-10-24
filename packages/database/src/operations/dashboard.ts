@@ -7,7 +7,7 @@ import type {
 } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { balanceIn } from './balance.js';
+import { balanceQuery } from './balance.js';
 import { guarded } from './errors.js';
 import { tipProof } from './proof.js';
 
@@ -22,50 +22,76 @@ export function dashboardSummary(
 ): Promise<DashboardSummary> {
   return guarded(async () => {
     const at = now.toISOString();
-    const totals = await db.execute<{
+    const rows = await db.execute<{
       today: string;
       yesterday: string;
       this_week: string;
       last_week: string;
+      payable: string;
+      reserved: string;
+      confirming: string;
+      date: string;
+      net: string;
     }>(sql`
-      WITH local AS (SELECT (${at}::timestamptz AT TIME ZONE ${DASHBOARD_TIME_ZONE})::date AS today),
+      WITH local AS (
+        SELECT (${at}::timestamptz AT TIME ZONE ${DASHBOARD_TIME_ZONE})::date AS today
+      ),
+      period AS (
+        SELECT today, date_trunc('week', today)::date AS week_start
+          FROM local
+      ),
       paid AS (
-        SELECT (t.completed_at AT TIME ZONE ${DASHBOARD_TIME_ZONE})::date AS day, q.recipient_net_minor AS net
-          FROM tips t
+        SELECT (t.completed_at AT TIME ZONE ${DASHBOARD_TIME_ZONE})::date AS day,
+               SUM(q.recipient_net_minor) AS net
+          FROM period p
+          JOIN tips t
+            ON t.profile_id = ${profileId} AND t.status = 'SUCCEEDED'
+           AND t.completed_at >= ((p.week_start - 7)::timestamp AT TIME ZONE ${DASHBOARD_TIME_ZONE})
+           AND t.completed_at < ((p.today + 1)::timestamp AT TIME ZONE ${DASHBOARD_TIME_ZONE})
           JOIN payment_intents i ON i.id = t.intent_id
           JOIN tip_quotes q ON q.id = i.quote_id
-         WHERE t.profile_id = ${profileId} AND t.status = 'SUCCEEDED' AND t.completed_at IS NOT NULL)
-      SELECT
-        COALESCE(SUM(net) FILTER (WHERE day = today), 0)::text AS today,
-        COALESCE(SUM(net) FILTER (WHERE day = today - 1), 0)::text AS yesterday,
-        COALESCE(SUM(net) FILTER (WHERE day >= date_trunc('week', today)::date AND day <= today), 0)::text AS this_week,
-        COALESCE(SUM(net) FILTER (WHERE day >= date_trunc('week', today)::date - 7
-                                    AND day < date_trunc('week', today)::date), 0)::text AS last_week
-        FROM local LEFT JOIN paid ON true
-       GROUP BY today`);
-    const days = await db.execute<{ date: string; net: string }>(sql`
-      WITH local AS (SELECT (${at}::timestamptz AT TIME ZONE ${DASHBOARD_TIME_ZONE})::date AS today)
-      SELECT to_char(d.day, 'YYYY-MM-DD') AS date,
-             COALESCE(SUM(q.recipient_net_minor), 0)::text AS net
-        FROM local,
-             generate_series(local.today - 6, local.today, interval '1 day') AS d(day)
-        LEFT JOIN tips t
-          ON t.profile_id = ${profileId} AND t.status = 'SUCCEEDED'
-         AND (t.completed_at AT TIME ZONE ${DASHBOARD_TIME_ZONE})::date = d.day::date
-        LEFT JOIN payment_intents i ON i.id = t.intent_id
-        LEFT JOIN tip_quotes q ON q.id = i.quote_id
-       GROUP BY d.day ORDER BY d.day`);
-    const balance = await balanceIn(db, profileId);
-    const row = totals.rows[0];
+         WHERE t.completed_at IS NOT NULL
+         GROUP BY 1
+      ),
+      totals AS (
+        SELECT
+          COALESCE(SUM(p.net) FILTER (WHERE p.day = period.today), 0)::text AS today,
+          COALESCE(SUM(p.net) FILTER (WHERE p.day = period.today - 1), 0)::text AS yesterday,
+          COALESCE(SUM(p.net) FILTER (
+            WHERE p.day >= period.week_start AND p.day <= period.today
+          ), 0)::text AS this_week,
+          COALESCE(SUM(p.net) FILTER (
+            WHERE p.day >= period.week_start - 7 AND p.day < period.week_start
+          ), 0)::text AS last_week
+          FROM period LEFT JOIN paid p ON true
+         GROUP BY period.today, period.week_start
+      ),
+      days AS (
+        SELECT d.day::date AS day,
+               to_char(d.day, 'YYYY-MM-DD') AS date,
+               COALESCE(p.net, 0)::text AS net
+          FROM period,
+               generate_series(period.today - 6, period.today, interval '1 day') AS d(day)
+          LEFT JOIN paid p ON p.day = d.day::date
+      ),
+      balance AS (${balanceQuery(profileId)})
+      SELECT totals.today, totals.yesterday, totals.this_week, totals.last_week,
+             balance.payable, balance.reserved, balance.confirming, days.date, days.net
+        FROM totals CROSS JOIN balance CROSS JOIN days
+       ORDER BY days.day
+    `);
+    const row = rows.rows[0];
     return {
       currency: 'NGN',
-      availableMinor: balance.availableMinor.toString(),
-      confirmingMinor: balance.confirmingMinor.toString(),
+      availableMinor: (
+        BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0')
+      ).toString(),
+      confirmingMinor: BigInt(row?.confirming ?? '0').toString(),
       today: row?.today ?? '0',
       yesterday: row?.yesterday ?? '0',
       thisWeek: row?.this_week ?? '0',
       lastWeek: row?.last_week ?? '0',
-      last7Days: days.rows.map((day) => ({
+      last7Days: rows.rows.map((day) => ({
         date: day.date,
         netMinor: day.net,
       })),
