@@ -107,7 +107,7 @@ test('staff access', async (t) => {
       );
       assert.equal(
         (await staffPermissions(database.db, userId)).size,
-        10,
+        11,
         'Owner holds every permission',
       );
       await assert.rejects(

@@ -1,6 +1,7 @@
 # PR-013 Product gaps — implementation plan
 
 **Goal:** close the PRD v1.1 gaps that need no outside decision:
+
 - reporting impersonation;
 - profile photos;
 - tip search;
@@ -11,6 +12,7 @@
 Pretend money only.
 
 **Source:** PRD v1.1:
+
 - FR-01 ("prevent impersonation with reporting and review");
 - FR-05 ("searchable transaction history", "basic notification preferences");
 - FR-09 ("role-controlled search across accounts, payment intents, ledger entries, payout attempts");
