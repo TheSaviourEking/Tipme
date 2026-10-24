@@ -24,7 +24,8 @@ type RateLimitedRoute =
   | 'auth_verify'
   | 'handles'
   | 'analytics'
-  | 'reports';
+  | 'reports'
+  | 'avatars';
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -97,6 +98,11 @@ export class RateLimitGuard implements CanActivate {
       // Reporting a page (PR-013): a few an hour from one address is plenty for a real visitor.
       reports: {
         limit: this.config.RATE_LIMIT_REPORTS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // Photo uploads (PR-013): each one is a full decode and re-encode.
+      avatars: {
+        limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
         windowMs: 3_600_000,
       },
       auth_code: {

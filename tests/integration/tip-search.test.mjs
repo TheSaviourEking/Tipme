@@ -113,6 +113,10 @@ test('search finds tips by amount, written with or without commas, and by the en
   assert.deepEqual(await search('2,500'), ['Chidi O.']);
   const tail = references['Chidi O.'].slice(-6);
   assert.deepEqual(await search(tail), ['Chidi O.']);
+  assert.deepEqual(await search(tail.slice(-4)), ['Chidi O.']);
+  // Only the 6 characters the tip page already shows can match: a longer ending cannot be
+  // used to rebuild the provider's whole reference one guess at a time.
+  assert.deepEqual(await search(references['Chidi O.'].slice(-8)), []);
   // Combined with the status filter.
   assert.deepEqual(await search('bola', '&status=confirming'), []);
 });

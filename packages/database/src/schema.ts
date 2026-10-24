@@ -175,6 +175,11 @@ export const profiles = pgTable(
     phonePublic: boolean('phone_public').notNull().default(false),
     emailPublic: boolean('email_public').notNull().default(false),
     qrStyle: text('qr_style').notNull().default('purple'),
+    // The page's photo version (PR-013): only ever goes up, so a photo URL is never reused, not
+    // even after removing a photo and adding another.
+    avatarVersion: integer('avatar_version').notNull().default(0),
+    // When the page first went live (PR-013): `profile_published` is recorded once, ever.
+    firstPublishedAt: timestamp('first_published_at', { withTimezone: true }),
     // Notification preferences (PR-013): what the recipient chose not to be told about.
     notifyTipEmails: boolean('notify_tip_emails').notNull().default(true),
     notifyWeeklyReports: boolean('notify_weekly_reports')
@@ -188,12 +193,16 @@ export const profiles = pgTable(
     minTipMinor: minor('min_tip_minor'),
     createdAt: createdAt(),
   },
-  () => [
+  (table) => [
     check(
       'profiles_page_state',
       sql`page_state IN ('live', 'not_live', 'deleted')`,
     ),
     check('profiles_plan', sql`plan IN ('free', 'pro')`),
+    // Admin search by handle prefix (PR-013); the unique index cannot serve LIKE 'x%'.
+    index('profiles_handle_prefix').on(
+      table.handleLower.op('text_pattern_ops'),
+    ),
     // Amounts in whole naira, never below the ₦1,000 floor (no maximum); 1 to 4 presets.
     check(
       'profiles_min_tip',
@@ -505,6 +514,11 @@ export const paymentAttempts = pgTable(
       table.provider,
       table.providerReference,
     ),
+    // Admin search (PR-013): a whole reference, or the 6-character ending staff see.
+    index('payment_attempts_reference').on(table.providerReference),
+    index('payment_attempts_reference_end').on(
+      sql`lower(right(${table.providerReference}, 6))`,
+    ),
   ],
 );
 
@@ -534,6 +548,11 @@ export const payouts = pgTable(
     unique('payouts_provider_reference').on(
       table.provider,
       table.providerReference,
+    ),
+    // Admin search (PR-013).
+    index('payouts_reference').on(table.providerReference),
+    index('payouts_reference_end').on(
+      sql`lower(right(${table.providerReference}, 6))`,
     ),
   ],
 );
@@ -644,7 +663,12 @@ export const ledgerTransactions = pgTable(
       .notNull()
       .defaultNow(),
   },
-  () => [currencyCheck('ledger_transactions')],
+  (table) => [
+    currencyCheck('ledger_transactions'),
+    // Admin search (PR-013): a tip's or a payout's ledger entries.
+    index('ledger_transactions_tip').on(table.tipId),
+    index('ledger_transactions_payout').on(table.payoutId),
+  ],
 );
 
 /** Append-only; balanced per transaction at commit (deferred constraint trigger). */

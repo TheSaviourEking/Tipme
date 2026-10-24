@@ -167,4 +167,36 @@ test('a photo is not served once the page is not live, and removing it takes it 
   assert.equal(removed.status, 200);
   assert.equal((await removed.json()).data.avatarPath, null);
   assert.equal((await fetch(`${stack.api}${mine.avatarPath}`)).status, 404);
+
+  // A new photo after removing one gets a URL never used before: a cached copy of the removed
+  // photo can never come back under it.
+  const again = (await (await upload(cookie, await photo())).json()).data;
+  assert.notEqual(again.avatarPath, mine.avatarPath);
+  assert.equal((await fetch(`${stack.api}${mine.avatarPath}`)).status, 404);
+  assert.equal((await fetch(`${stack.api}${again.avatarPath}`)).status, 200);
+});
+
+test('a paused page’s photo is not served, and deleting the account erases the photo itself', async () => {
+  const cookie = await livePage('+2348031280004', 'photo_paused');
+  const mine = (await (await upload(cookie, await photo())).json()).data;
+  const served = await fetch(`${stack.api}${mine.avatarPath}`);
+  assert.match(served.headers.get('cache-control'), /max-age=3600\b/);
+  await database.pool.query(
+    `UPDATE profiles SET status = 'suspended', suspended_reason = 'Under review' WHERE handle_lower = 'photo_paused'`,
+  );
+  assert.equal((await fetch(`${stack.api}${mine.avatarPath}`)).status, 404);
+  await database.pool.query(
+    `UPDATE profiles SET status = 'active', suspended_reason = NULL WHERE handle_lower = 'photo_paused'`,
+  );
+  const deleted = await fetch(`${stack.api}/v1/me/account`, {
+    method: 'DELETE',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ confirm: 'DELETE' }),
+  });
+  assert.equal(deleted.status, 204);
+  const { rows } = await database.pool.query(
+    `SELECT count(*)::int AS n FROM profile_avatars a JOIN profiles p ON p.id = a.profile_id WHERE p.id::text = $1`,
+    [mine.avatarPath.split('/')[3]],
+  );
+  assert.equal(rows[0].n, 0, 'the bytes are gone');
 });

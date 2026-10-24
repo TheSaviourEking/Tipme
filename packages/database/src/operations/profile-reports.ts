@@ -1,6 +1,6 @@
 import type { ProfileReportReason } from '@tipme/contracts';
 import { normaliseHandle } from '@tipme/domain';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { issues, profileReports, profiles } from '../schema.js';
 import { guarded } from './errors.js';
@@ -25,7 +25,6 @@ export function reportProfile(
   if (!handle) return Promise.resolve('ignored');
   return guarded(() =>
     db.transaction(async (tx) => {
-      // Locked, so two reports at once open one issue.
       const [page] = await tx
         .select({ id: profiles.id })
         .from(profiles)
@@ -35,9 +34,13 @@ export function reportProfile(
             eq(profiles.pageState, 'live'),
             eq(profiles.status, 'active'),
           ),
-        )
-        .for('update');
+        );
       if (!page) return 'ignored' as const;
+      // Reports for one page wait for each other (so they open one issue), without locking the
+      // page row that a public endpoint must never hold up.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`tipme.report:${page.id}`}))`,
+      );
       const reportId = newId();
       await tx.insert(profileReports).values({
         id: reportId,
@@ -90,4 +93,25 @@ export async function pageReportCounts(
     .groupBy(profileReports.reason)
     .orderBy(profileReports.reason);
   return rows as { reason: ProfileReportReason; count: number }[];
+}
+
+/** Reports are kept 180 days (PR-013): long enough to review a pattern, not for ever. */
+export const PROFILE_REPORT_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
+
+export function purgeProfileReports(
+  db: Database,
+  input: { now: Date },
+): Promise<number> {
+  return guarded(async () => {
+    const removed = await db
+      .delete(profileReports)
+      .where(
+        lt(
+          profileReports.atMinute,
+          new Date(input.now.getTime() - PROFILE_REPORT_RETENTION_MS),
+        ),
+      )
+      .returning({ id: profileReports.id });
+    return removed.length;
+  });
 }

@@ -1,5 +1,6 @@
 'use client';
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { OpsPage } from '@tipme/contracts';
 import { Badge, Button, Card, InputField, Notice } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
@@ -16,29 +17,20 @@ const STATE_LABELS: Record<OpsPage['pageState'], string> = {
 export default function OpsPagesPage() {
   const id = useId();
   const access = useOpsAccess();
-  const [handle, setHandle] = useState('');
+  const params = useSearchParams();
+  const [handle, setHandle] = useState(params.get('handle') ?? '');
   const [page, setPage] = useState<OpsPage | null>(null);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const [busy, setBusy] = useState(false);
+  const allowed = can(access, 'pages.plan');
 
-  if (!can(access, 'pages.plan'))
-    return (
-      <Notice tone="neutral" title="Not part of your role">
-        Changing a page’s plan needs the “pages.plan” permission.
-      </Notice>
-    );
-
-  const find = async (event: FormEvent) => {
-    event.preventDefault();
-    const wanted = handle.trim().replace(/^@/, '');
-    if (!wanted) return;
-    setBusy(true);
-    setError('');
-    setDone('');
-    const result = await apiFetch<OpsPage>(
-      `/v1/ops/pages/${encodeURIComponent(wanted)}`,
-    );
+  const fetchPage = (wanted: string) =>
+    apiFetch<OpsPage>(`/v1/ops/pages/${encodeURIComponent(wanted)}`);
+  const show = (
+    wanted: string,
+    result: Awaited<ReturnType<typeof fetchPage>>,
+  ) => {
     setBusy(false);
     if (result.ok) setPage(result.data);
     else {
@@ -49,6 +41,35 @@ export default function OpsPagesPage() {
           : 'We couldn’t look that up. Please try again.',
       );
     }
+  };
+  const lookup = async (raw: string) => {
+    const wanted = raw.trim().replace(/^@/, '');
+    if (!wanted) return;
+    setBusy(true);
+    setError('');
+    setDone('');
+    show(wanted, await fetchPage(wanted));
+  };
+
+  // Opened from Search with ?handle=: look it up straight away.
+  const fromSearch = params.get('handle')?.trim().replace(/^@/, '') ?? '';
+  useEffect(() => {
+    if (allowed && fromSearch)
+      void fetchPage(fromSearch).then((result) => show(fromSearch, result));
+    // Only on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!allowed)
+    return (
+      <Notice tone="neutral" title="Not part of your role">
+        Changing a page’s plan needs the “pages.plan” permission.
+      </Notice>
+    );
+
+  const find = async (event: FormEvent) => {
+    event.preventDefault();
+    await lookup(handle);
   };
 
   const changePlan = async (current: OpsPage, reason: string) => {

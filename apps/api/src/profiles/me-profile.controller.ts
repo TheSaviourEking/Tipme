@@ -30,7 +30,6 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
-  myProfileId,
   getNotificationPrefs,
   setNotificationPrefs,
   renameHandle,
@@ -161,21 +160,19 @@ export class MeProfileController {
     @Body(new ZodValidationPipe(pageStateSchema))
     body: z.infer<typeof pageStateSchema>,
   ): Promise<ApiDataResponse<MyProfile>> {
-    const { handle } = await setPageState(
+    const { handle, profileId, firstPublished } = await setPageState(
       this.database.db,
       auth.userId,
       body.state,
     );
     this.revalidator.revalidate(handle);
     // Once per page, ever: the first time it goes live (PRD v1.1 §11).
-    if (body.state === 'live') {
-      const profileId = await myProfileId(this.database.db, auth.userId);
+    if (firstPublished)
       await this.events.record(
         'profile_published',
         `profile_published.${profileId}`,
         profileId,
       );
-    }
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 

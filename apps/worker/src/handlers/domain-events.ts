@@ -73,11 +73,17 @@ export async function handleDomainEvent(
       typeof profileId === 'string' &&
       UUID.test(profileId)
     )
+      // Analytics never fails the work that caused it: logged by name, not retried.
       await recordServerEvent(deps.db, {
         name: 'payout_paid_verified',
         dedupeKey: `payout_paid_verified.${payoutId}`,
         profileId,
-      });
+      }).catch(() =>
+        deps.logger.warn({
+          event: 'analytics.server_event_failed',
+          name: 'payout_paid_verified',
+        }),
+      );
     return 'logged';
   }
   if (name !== 'tip.succeeded') return 'logged';

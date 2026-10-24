@@ -15,6 +15,7 @@ import { avatarFor, removeAvatar, setAvatar } from '@tipme/database';
 import type { Request, Response } from 'express';
 import sharp from 'sharp';
 import { CsrfGuard } from '../auth/csrf.guard.js';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
 import {
   CurrentUser,
   SessionGuard,
@@ -30,8 +31,25 @@ import { ProfileRevalidator } from './revalidate.js';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPTED = new Set(['image/jpeg', 'image/png', 'image/webp']);
-// Refuses "pixel bombs": small files that decode to enormous images.
-const MAX_INPUT_PIXELS = 40_000_000;
+// Refuses "pixel bombs": small files that decode to enormous images. 25 MP covers any phone
+// photo, and the browser shrinks photos before sending them anyway.
+const MAX_INPUT_PIXELS = 25_000_000;
+// At most this many photos are re-encoded at once in one API process: decoding runs on the
+// thread pool every request shares, so a burst of uploads must not slow everything else.
+const MAX_CONCURRENT = 2;
+let running = 0;
+const waiting: (() => void)[] = [];
+async function withSlot<T>(work: () => Promise<T>): Promise<T> {
+  if (running >= MAX_CONCURRENT)
+    await new Promise<void>((resolve) => waiting.push(resolve));
+  running += 1;
+  try {
+    return await work();
+  } finally {
+    running -= 1;
+    waiting.shift()?.();
+  }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 sharp.cache(false);
@@ -55,10 +73,12 @@ async function readUpload(request: Request): Promise<Buffer> {
 /** Decodes and re-encodes; anything that is not a decodable JPEG/PNG/WebP is INVALID_IMAGE. */
 async function reencode(input: Buffer): Promise<Buffer> {
   try {
+    // failOn 'error' (not sharp's stricter 'warning') accepts phone photos with harmless
+    // quirks; it is safe because every upload is re-encoded, never stored as sent.
     const image = sharp(input, {
       limitInputPixels: MAX_INPUT_PIXELS,
       failOn: 'error',
-    });
+    }).timeout({ seconds: 5 });
     const { format } = await image.metadata();
     if (format !== 'jpeg' && format !== 'png' && format !== 'webp')
       throw new Error('unsupported format');
@@ -82,13 +102,15 @@ export class AvatarController {
 
   @Put('me/avatar')
   @UseGuards(SessionGuard, CsrfGuard)
+  @RateLimit('avatars')
   async upload(
     @CurrentUser() auth: AuthContext,
     @Req() request: Request,
   ): Promise<ApiDataResponse<MyProfile>> {
     const type = (request.headers['content-type'] ?? '').split(';')[0]!.trim();
     if (!ACCEPTED.has(type)) throw new CodedHttpException(415, 'INVALID_IMAGE');
-    const webp = await reencode(await readUpload(request));
+    const upload = await readUpload(request);
+    const webp = await withSlot(() => reencode(upload));
     const updated = await setAvatar(this.database.db, auth.userId, webp);
     this.revalidator.revalidate(updated.handle);
     return { data: updated };
@@ -105,8 +127,8 @@ export class AvatarController {
   }
 
   /**
-   * Public, but only for live pages. A version's URL never changes (a new photo is a new
-   * version), so it caches, but for a day only: a hidden page's photo should not linger long.
+   * Public, but only for live pages. A version's URL is never reused (a new photo is a new
+   * version), so it caches, but for an hour only: a hidden page's photo should not linger.
    */
   @Get('avatars/:profileId/:file')
   @Header('X-Content-Type-Options', 'nosniff')
@@ -127,7 +149,7 @@ export class AvatarController {
     response
       .status(200)
       .setHeader('Content-Type', 'image/webp')
-      .setHeader('Cache-Control', 'public, max-age=86400, immutable')
+      .setHeader('Cache-Control', 'public, max-age=3600, immutable')
       .setHeader('Content-Security-Policy', "default-src 'none'")
       .end(bytes);
   }

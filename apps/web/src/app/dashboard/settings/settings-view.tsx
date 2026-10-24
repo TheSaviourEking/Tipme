@@ -12,6 +12,7 @@ import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Avatar, hasAvatar } from '@/components/avatar';
 import { apiFetch } from '@/lib/session-client';
+import { shrinkPhoto } from '@/lib/shrink-photo';
 
 function PageState() {
   const { profile, setProfile } = useRecipient();
@@ -133,11 +134,9 @@ function NotificationSettings() {
             {error}
           </Notice>
         )}
-        {saved && (
-          <p role="status" className="tm-hint">
-            Saved.
-          </p>
-        )}
+        <p role="status" className="tm-hint">
+          {saved ? 'Saved.' : ''}
+        </p>
         <Button type="submit" disabled={busy} aria-busy={busy}>
           Save notifications
         </Button>
@@ -162,9 +161,16 @@ function PhotoSettings() {
     setBusy(true);
     setError('');
     setDone('');
+    // Shrunk here first: a phone photo uploads in seconds instead of timing out.
+    const photoFile = file ? await shrinkPhoto(file) : undefined;
+    if (photoFile && photoFile.size > 5 * 1024 * 1024) {
+      setBusy(false);
+      setError(photoErrors['PAYLOAD_TOO_LARGE']!);
+      return;
+    }
     const result = await apiFetch<MyProfile>('/v1/me/avatar', {
       method,
-      ...(file ? { file } : {}),
+      ...(photoFile ? { file: photoFile } : {}),
     });
     setBusy(false);
     if (result.ok) {
@@ -175,6 +181,8 @@ function PhotoSettings() {
         photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
       );
   };
+  // An API older than PR-013 has no photos: say nothing rather than show a form that fails.
+  if (!('avatarPath' in profile)) return null;
   const photo = profile.avatarPath ?? null;
   return (
     <Card className="settings-section">
@@ -210,11 +218,10 @@ function PhotoSettings() {
           {error}
         </p>
       )}
-      {done && (
-        <p role="status" className="tm-hint">
-          {done}
-        </p>
-      )}
+      {/* Always present, so screen readers announce what is written into it. */}
+      <p role="status" className="tm-hint">
+        {done}
+      </p>
       {photo && (
         <Button
           variant="quiet"

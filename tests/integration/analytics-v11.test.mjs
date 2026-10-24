@@ -57,6 +57,13 @@ test('a page records profile_created once, and profile_published only the first 
   for (const state of ['live', 'not_live', 'live'])
     await call('PUT', '/v1/me/page/state', cookie, { state });
   assert.equal(await named('profile_published', 'events_ada'), 1);
+  // Still once ever after raw events are purged (90 days): the page remembers it went live.
+  await database.pool.query(
+    `DELETE FROM analytics_events WHERE handle = 'events_ada'`,
+  );
+  for (const state of ['not_live', 'live'])
+    await call('PUT', '/v1/me/page/state', cookie, { state });
+  assert.equal(await named('profile_published', 'events_ada'), 0);
 });
 
 test('a withdrawal records payout_requested, and payout_paid_verified once the provider confirms it', async () => {

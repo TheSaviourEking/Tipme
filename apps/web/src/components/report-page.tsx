@@ -1,5 +1,5 @@
 'use client';
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { ProfileReportReason } from '@tipme/contracts';
 import { Button, Notice } from '@tipme/ui';
 import { reportPage } from '@/lib/api-client';
@@ -19,6 +19,11 @@ export function ReportPage({ handle }: { handle: string }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [failed, setFailed] = useState(false);
+  const thanks = useRef<HTMLParagraphElement>(null);
+  // The form disappears once sent: keyboard focus moves to the confirmation, not the page top.
+  useEffect(() => {
+    if (done) thanks.current?.focus();
+  }, [done]);
   const send = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -30,7 +35,12 @@ export function ReportPage({ handle }: { handle: string }) {
   };
   if (done)
     return (
-      <p role="status" className="tm-hint report-page">
+      <p
+        ref={thanks}
+        tabIndex={-1}
+        role="status"
+        className="tm-hint report-page"
+      >
         Thank you. TipMe will review this page.
       </p>
     );

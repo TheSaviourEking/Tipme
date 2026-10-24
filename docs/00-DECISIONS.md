@@ -78,6 +78,18 @@
 > - **Analytics (PRD v1.1 §11):**
 >   - Added: `landing_viewed`, `checkout_opened`, `profile_created`, `profile_published`, `payout_requested`, `payout_paid_verified`.
 >   - The other v1.1 names map to the existing events: `tip_page_viewed` = `profile_viewed`, `tip_started` = `payment_started`, `tip_paid_verified` = `tip_completed`, `tip_failed` = `payment_failed`.
+>   - `profile_published` is recorded once per page, ever: the page itself remembers when it first went live.
+> - **Review follow-ups:**
+>   - **Page reports** are kept 180 days.
+>   - **Photo uploads:**
+>     - Limited to 20 an hour.
+>     - At most two are processed at a time per API process, each given at most 5 seconds and 25 megapixels.
+>     - The browser shrinks a photo to 1,024 px before sending it.
+>     - A photo URL is never reused, and photos are cached for an hour at most.
+>   - **Reference matching:**
+>     - Recipients match a reference only within the 6 characters they are shown.
+>     - Staff match a whole reference or that 6-character ending, so neither can rebuild a full provider reference.
+>     - Admin search is indexed and stops after 3 seconds.
 
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.

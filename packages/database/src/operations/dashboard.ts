@@ -95,14 +95,14 @@ function decodeCursor(
     : null;
 }
 
-/** The recipient's tips, newest first (by confirmation, or creation while unconfirmed). */
 /** `q` as plain text inside LIKE: its own % and _ match only themselves. */
 const likeText = (q: string) => q.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /**
  * The search condition for a recipient's tips (PR-013): the supporter's name (any case), an
  * amount in naira that equals the tip ("2000", "2,000", "2,000.50"), or the end of the payment
- * reference. Empty means no condition.
+ * reference, matched only within the 6 characters the tip page shows (never a longer ending,
+ * which could rebuild the whole reference one guess at a time). Empty means no condition.
  */
 function searchSql(raw: string | undefined) {
   const q = (raw ?? '').trim();
@@ -115,9 +115,10 @@ function searchSql(raw: string | undefined) {
     : null;
   return sql`AND (t.payer_display_label ILIKE ${`%${text}%`} ESCAPE '\\'
     ${amountMinor !== null ? sql`OR t.gross_minor = ${amountMinor}` : sql``}
-    ${q.length >= 4 ? sql`OR EXISTS (SELECT 1 FROM payment_attempts a WHERE a.intent_id = t.intent_id AND a.provider_reference ILIKE ${`%${text}`} ESCAPE '\\')` : sql``})`;
+    ${q.length >= 4 && q.length <= 6 ? sql`OR EXISTS (SELECT 1 FROM payment_attempts a WHERE a.intent_id = t.intent_id AND right(a.provider_reference, 6) ILIKE ${`%${text}`} ESCAPE '\\')` : sql``})`;
 }
 
+/** The recipient's tips, newest first (by confirmation, or creation while unconfirmed). */
 export function listMyTips(
   db: Database,
   profileId: string,

@@ -106,10 +106,19 @@ test('staff find a page by handle or name, a tip by id or reference, and its led
        JOIN ledger_transactions lt ON lt.tip_id = t.id WHERE t.id = $1`,
     [tipId],
   );
-  const byRef = (await (await search(rows[0].ref.slice(-8))).json()).data;
+  // The whole reference (copied from the provider's dashboard), or the 6-character ending
+  // staff see in the evidence; never a longer partial ending.
+  for (const q of [rows[0].ref, rows[0].ref.slice(-6)]) {
+    const byRef = (await (await search(q)).json()).data;
+    assert.deepEqual(
+      byRef.tips.map((t) => t.tipId),
+      [tipId],
+      q,
+    );
+  }
   assert.deepEqual(
-    byRef.tips.map((t) => t.tipId),
-    [tipId],
+    (await (await search(rows[0].ref.slice(-8))).json()).data.tips,
+    [],
   );
   const byTxn = (await (await search(rows[0].txn)).json()).data;
   assert.deepEqual(

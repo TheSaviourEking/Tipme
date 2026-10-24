@@ -253,6 +253,20 @@
       "when": 1792872766325,
       "tag": "0035_search_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792873877062,
+      "tag": "0036_avatar_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792874126407,
+      "tag": "0037_search_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,12 +1,16 @@
 import type { OpsSearchResult } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { Database, Tx } from '../client.js';
 import { guarded } from './errors.js';
 import { opsPageByHandle } from './profiles.js';
 
-// Admin search (PR-013, PRD v1.1 FR-09). Finds pages by handle or name, and tips, payouts and
-// ledger transactions by id or the end of a provider reference. Returns ids and short labels
-// only: never phone numbers, emails, supporter names or messages.
+// Admin search (PR-013, PRD v1.1 FR-09). Finds pages by handle, name or old handle, and tips,
+// payouts and ledger transactions by id, by a whole provider reference, or by the 6-character
+// reference ending staff see in the evidence. Returns ids and short labels only: never phone
+// numbers, emails, supporter names or messages.
+//
+// Every lookup uses an index (ids, references, the reference-ending and handle-prefix indexes
+// of migration 0037) except the name search, and the whole search stops after 3 seconds.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIMIT = 10;
@@ -16,91 +20,156 @@ const likeText = (q: string) => q.replace(/[\\%_]/g, (c) => `\\${c}`);
 type Row = Record<string, unknown>;
 const iso = (value: unknown) => new Date(String(value)).toISOString();
 
+const pageOf = (p: Row): OpsSearchResult['pages'][number] => ({
+  profileId: String(p['id']),
+  handle: String(p['handle']),
+  displayName: String(p['display_name']),
+  plan: p['plan'] as 'free' | 'pro',
+  pageState: p['page_state'] as 'live' | 'not_live' | 'deleted',
+  suspended: p['status'] === 'suspended',
+});
+
 export function opsSearch(db: Database, raw: string): Promise<OpsSearchResult> {
   const q = raw.trim();
   const id = UUID.test(q) ? q.toLowerCase() : null;
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL statement_timeout = '3s'`);
+      return id ? byId(tx, id) : byText(tx, q);
+    }),
+  );
+}
+
+const rowsOf = async (tx: Tx, query: ReturnType<typeof sql>) =>
+  (await tx.execute(query)).rows as Row[];
+
+/** An id: only the id lookups, each on a primary key or a foreign-key column. */
+async function byId(tx: Tx, id: string): Promise<OpsSearchResult> {
+  const pages = await rowsOf(
+    tx,
+    sql`SELECT id, handle, display_name, plan, page_state, status FROM profiles
+         WHERE id = ${id}::uuid AND page_state <> 'deleted'`,
+  );
+  const tips = await rowsOf(
+    tx,
+    sql`SELECT t.id, p.handle, t.status, t.gross_minor::text AS gross, t.currency, t.created_at
+          FROM tips t LEFT JOIN profiles p ON p.id = t.profile_id
+         WHERE t.id = ${id}::uuid
+        UNION
+        SELECT t.id, p.handle, t.status, t.gross_minor::text, t.currency, t.created_at
+          FROM tips t LEFT JOIN profiles p ON p.id = t.profile_id
+         WHERE t.intent_id = ${id}::uuid
+         LIMIT ${LIMIT}`,
+  );
+  const payouts = await rowsOf(
+    tx,
+    sql`SELECT o.id, p.handle, o.status, o.amount_minor::text AS amount, o.currency, o.created_at
+          FROM payouts o LEFT JOIN profiles p ON p.id = o.profile_id
+         WHERE o.id = ${id}::uuid`,
+  );
+  const ledger = await rowsOf(
+    tx,
+    sql`SELECT id, operation_type, tip_id, payout_id, posted_at FROM ledger_transactions
+         WHERE id = ${id}::uuid
+        UNION
+        SELECT id, operation_type, tip_id, payout_id, posted_at FROM ledger_transactions
+         WHERE tip_id = ${id}::uuid
+        UNION
+        SELECT id, operation_type, tip_id, payout_id, posted_at FROM ledger_transactions
+         WHERE payout_id = ${id}::uuid
+         ORDER BY posted_at DESC LIMIT ${LIMIT}`,
+  );
+  return shape(pages.map(pageOf), tips, payouts, ledger);
+}
+
+/**
+ * Text: a handle prefix or a name (pages), and a whole reference or its exact 6-character
+ * ending (tips and payouts). A longer partial ending matches nothing, so the search cannot
+ * rebuild a reference staff are not shown.
+ */
+async function byText(tx: Tx, q: string): Promise<OpsSearchResult> {
   const text = likeText(q);
-  // A reference ending: at least 4 characters, so a short query does not match everything.
-  const ending = q.length >= 4 ? `%${text}` : null;
-  return guarded(async () => {
-    const rows = async (query: ReturnType<typeof sql>) =>
-      (await db.execute(query)).rows as Row[];
+  const pageRows = await rowsOf(
+    tx,
+    sql`SELECT id, handle, display_name, plan, page_state, status FROM profiles
+         WHERE page_state <> 'deleted' AND handle_lower LIKE ${`${text.toLowerCase()}%`} ESCAPE '\\'
+        UNION
+        SELECT id, handle, display_name, plan, page_state, status FROM profiles
+         WHERE page_state <> 'deleted' AND display_name ILIKE ${`%${text}%`} ESCAPE '\\'
+         ORDER BY handle LIMIT ${LIMIT}`,
+  );
+  const pages = pageRows.map(pageOf);
+  // An old handle (PR-011) finds the page it now belongs to.
+  if (pages.length === 0) {
+    const renamed = await opsPageByHandle(tx, q);
+    if (renamed) pages.push(renamed);
+  }
+  const ending = q.length === 6 ? q.toLowerCase() : null;
+  const tips = await rowsOf(
+    tx,
+    sql`SELECT t.id, p.handle, t.status, t.gross_minor::text AS gross, t.currency, t.created_at
+          FROM payment_attempts a JOIN tips t ON t.intent_id = a.intent_id
+          LEFT JOIN profiles p ON p.id = t.profile_id
+         WHERE a.provider_reference = ${q}
+        ${
+          ending
+            ? sql`UNION
+        SELECT t.id, p.handle, t.status, t.gross_minor::text, t.currency, t.created_at
+          FROM payment_attempts a JOIN tips t ON t.intent_id = a.intent_id
+          LEFT JOIN profiles p ON p.id = t.profile_id
+         WHERE lower(right(a.provider_reference, 6)) = ${ending}`
+            : sql``
+        }
+         LIMIT ${LIMIT}`,
+  );
+  const payouts = await rowsOf(
+    tx,
+    sql`SELECT o.id, p.handle, o.status, o.amount_minor::text AS amount, o.currency, o.created_at
+          FROM payouts o LEFT JOIN profiles p ON p.id = o.profile_id
+         WHERE o.provider_reference = ${q}
+        ${
+          ending
+            ? sql`UNION
+        SELECT o.id, p.handle, o.status, o.amount_minor::text, o.currency, o.created_at
+          FROM payouts o LEFT JOIN profiles p ON p.id = o.profile_id
+         WHERE lower(right(o.provider_reference, 6)) = ${ending}`
+            : sql``
+        }
+         LIMIT ${LIMIT}`,
+  );
+  return shape(pages, tips, payouts, []);
+}
 
-    const pageRows = await rows(sql`
-      SELECT p.id, p.handle, p.display_name, p.plan, p.page_state, p.status
-        FROM profiles p
-       WHERE p.page_state <> 'deleted' AND (
-             p.handle_lower LIKE ${`${text.toLowerCase()}%`} ESCAPE '\\'
-          OR p.display_name ILIKE ${`%${text}%`} ESCAPE '\\'
-          ${id ? sql`OR p.id = ${id}::uuid` : sql``})
-       ORDER BY p.handle_lower LIMIT ${LIMIT}`);
-    const pages = pageRows.map((p) => ({
-      profileId: String(p['id']),
-      handle: String(p['handle']),
-      displayName: String(p['display_name']),
-      plan: p['plan'] as 'free' | 'pro',
-      pageState: p['page_state'] as 'live' | 'not_live' | 'deleted',
-      suspended: p['status'] === 'suspended',
-    }));
-    // An old handle (PR-011) finds the page it now belongs to.
-    if (pages.length === 0) {
-      const renamed = await opsPageByHandle(db, q);
-      if (renamed) pages.push(renamed);
-    }
-
-    const tipRows =
-      id || ending
-        ? await rows(sql`
-      SELECT DISTINCT t.id, p.handle, t.status, t.gross_minor::text AS gross, t.currency, t.created_at
-        FROM tips t
-        LEFT JOIN profiles p ON p.id = t.profile_id
-        LEFT JOIN payment_attempts a ON a.intent_id = t.intent_id
-       WHERE ${id ? sql`t.id = ${id}::uuid OR t.intent_id = ${id}::uuid` : sql`false`}
-          ${ending ? sql`OR a.provider_reference ILIKE ${ending} ESCAPE '\\'` : sql``}
-       ORDER BY t.created_at DESC LIMIT ${LIMIT}`)
-        : [];
-    const payoutRows =
-      id || ending
-        ? await rows(sql`
-      SELECT o.id, p.handle, o.status, o.amount_minor::text AS amount, o.currency, o.created_at
-        FROM payouts o LEFT JOIN profiles p ON p.id = o.profile_id
-       WHERE ${id ? sql`o.id = ${id}::uuid` : sql`false`}
-          ${ending ? sql`OR o.provider_reference ILIKE ${ending} ESCAPE '\\'` : sql``}
-       ORDER BY o.created_at DESC LIMIT ${LIMIT}`)
-        : [];
-    const ledgerRows = id
-      ? await rows(sql`
-      SELECT id, operation_type, tip_id, payout_id, posted_at
-        FROM ledger_transactions
-       WHERE id = ${id}::uuid OR tip_id = ${id}::uuid OR payout_id = ${id}::uuid
-       ORDER BY posted_at DESC LIMIT ${LIMIT}`)
-      : [];
-
-    return {
-      pages,
-      tips: tipRows.map((t) => ({
-        tipId: String(t['id']),
-        handle: (t['handle'] as string | null) ?? null,
-        status: String(t['status']),
-        grossMinor: String(t['gross']),
-        currency: String(t['currency']),
-        at: iso(t['created_at']),
-      })),
-      payouts: payoutRows.map((o) => ({
-        payoutId: String(o['id']),
-        handle: (o['handle'] as string | null) ?? null,
-        status: String(o['status']),
-        amountMinor: String(o['amount']),
-        currency: String(o['currency']),
-        at: iso(o['created_at']),
-      })),
-      ledgerTransactions: ledgerRows.map((l) => ({
-        transactionId: String(l['id']),
-        operationType: String(l['operation_type']),
-        tipId: (l['tip_id'] as string | null) ?? null,
-        payoutId: (l['payout_id'] as string | null) ?? null,
-        at: iso(l['posted_at']),
-      })),
-    };
-  });
+function shape(
+  pages: OpsSearchResult['pages'],
+  tips: Row[],
+  payouts: Row[],
+  ledger: Row[],
+): OpsSearchResult {
+  return {
+    pages,
+    tips: tips.map((t) => ({
+      tipId: String(t['id']),
+      handle: (t['handle'] as string | null) ?? null,
+      status: String(t['status']),
+      grossMinor: String(t['gross']),
+      currency: String(t['currency']),
+      at: iso(t['created_at']),
+    })),
+    payouts: payouts.map((o) => ({
+      payoutId: String(o['id']),
+      handle: (o['handle'] as string | null) ?? null,
+      status: String(o['status']),
+      amountMinor: String(o['amount']),
+      currency: String(o['currency']),
+      at: iso(o['created_at']),
+    })),
+    ledgerTransactions: ledger.map((l) => ({
+      transactionId: String(l['id']),
+      operationType: String(l['operation_type']),
+      tipId: (l['tip_id'] as string | null) ?? null,
+      payoutId: (l['payout_id'] as string | null) ?? null,
+      at: iso(l['posted_at']),
+    })),
+  };
 }

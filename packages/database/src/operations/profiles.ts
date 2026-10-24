@@ -219,7 +219,7 @@ export function setTipAmounts(
  * Deleted pages are not found.
  */
 export function opsPageByHandle(
-  db: Database,
+  db: Database | Tx,
   raw: string,
 ): Promise<OpsPage | null> {
   const handle = normaliseHandle(raw);
@@ -396,17 +396,33 @@ export function setPageState(
   db: Database,
   userId: string,
   state: 'live' | 'not_live',
-): Promise<{ handle: string }> {
+): Promise<{ handle: string; profileId: string; firstPublished: boolean }> {
   return guarded(async () => {
     const row = await myRow(db, userId);
     // A page TipMe suspended can be taken offline but not put back live (PR-009).
     if (state === 'live' && row.profile.status === 'suspended')
       throw new OperationError('PAGE_SUSPENDED');
-    await db
+    // The first time a page goes live is remembered on the page itself (PR-013), so "first
+    // published" stays true once ever, however long ago it was.
+    const first = state === 'live' && row.profile.firstPublishedAt === null;
+    const updated = await db
       .update(profiles)
-      .set({ pageState: state })
-      .where(eq(profiles.id, row.profile.id));
-    return { handle: row.profile.handle };
+      .set({
+        pageState: state,
+        ...(first ? { firstPublishedAt: new Date() } : {}),
+      })
+      .where(
+        and(
+          eq(profiles.id, row.profile.id),
+          ...(first ? [isNull(profiles.firstPublishedAt)] : []),
+        ),
+      )
+      .returning({ id: profiles.id });
+    return {
+      handle: row.profile.handle,
+      profileId: row.profile.id,
+      firstPublished: first && updated.length > 0,
+    };
   });
 }
 

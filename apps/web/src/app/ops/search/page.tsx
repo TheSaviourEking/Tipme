@@ -78,11 +78,17 @@ export default function OpsSearchPage() {
           Search
         </Button>
       </form>
+      {/* Only the count is announced, not every result. */}
+      <p role="status" className="tm-hint">
+        {result
+          ? total === 0
+            ? 'Nothing found.'
+            : `${total} ${total === 1 ? 'result' : 'results'}.`
+          : ''}
+      </p>
       {result && (
-        <div role="status" aria-live="polite">
-          {total === 0 ? (
-            <p>Nothing found.</p>
-          ) : (
+        <div>
+          {total === 0 ? null : (
             <>
               {result.pages.length > 0 && (
                 <Card className="settings-section">
@@ -90,8 +96,13 @@ export default function OpsSearchPage() {
                   <ul className="activity-list">
                     {result.pages.map((p) => (
                       <li key={p.profileId}>
-                        <Link href={`/@${p.handle}`}>@{p.handle}</Link> ·{' '}
-                        {p.displayName} · {p.plan === 'pro' ? 'Pro' : 'Free'} ·{' '}
+                        <Link
+                          href={`/ops/pages?handle=${encodeURIComponent(p.handle)}`}
+                        >
+                          @{p.handle}
+                        </Link>{' '}
+                        · {p.displayName} · {p.plan === 'pro' ? 'Pro' : 'Free'}{' '}
+                        ·{' '}
                         {p.suspended
                           ? 'Paused'
                           : p.pageState === 'live'
@@ -101,7 +112,7 @@ export default function OpsSearchPage() {
                     ))}
                   </ul>
                   <p className="tm-hint">
-                    Change a plan on <Link href="/ops/pages">Pages</Link>.
+                    Each page opens in Pages, where its plan can be changed.
                   </p>
                 </Card>
               )}

@@ -29,21 +29,24 @@ export function setAvatar(
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     await db.transaction(async (tx) => {
-      const [saved] = await tx
+      // The page's counter, never the photo row's: removing a photo deletes the row, and the
+      // next photo must still get a URL no cache has seen.
+      const [next] = await tx
+        .update(profiles)
+        .set({ avatarVersion: sql`${profiles.avatarVersion} + 1` })
+        .where(eq(profiles.id, profileId))
+        .returning({ version: profiles.avatarVersion });
+      const version = next!.version;
+      await tx
         .insert(profileAvatars)
-        .values({ profileId, version: 1, bytes: webp })
+        .values({ profileId, version, bytes: webp })
         .onConflictDoUpdate({
           target: profileAvatars.profileId,
-          set: {
-            version: sql`${profileAvatars.version} + 1`,
-            bytes: webp,
-            createdAt: sql`now()`,
-          },
-        })
-        .returning({ version: profileAvatars.version });
+          set: { version, bytes: webp, createdAt: sql`now()` },
+        });
       await tx
         .update(profiles)
-        .set({ avatarPath: avatarPathOf(profileId, saved!.version) })
+        .set({ avatarPath: avatarPathOf(profileId, version) })
         .where(eq(profiles.id, profileId));
     });
     return getMyProfile(db, userId);

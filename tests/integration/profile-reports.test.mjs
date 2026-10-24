@@ -140,3 +140,31 @@ test('anything but a reason from the list is refused; unknown pages and floods r
     );
   assert.deepEqual(statuses, [202, 202, 202, 429]);
 });
+
+test('many reports at once still open one issue, and old reports are purged after 180 days', async () => {
+  await livePage('+2348031270003', 'busy_page');
+  const ips = Array.from({ length: 8 }, (_, i) => `203.0.113.${i + 1}`);
+  const statuses = await Promise.all(
+    ips.map((ip) =>
+      report('busy_page', { reason: 'scam' }, ip).then((r) => r.status),
+    ),
+  );
+  assert.deepEqual(
+    statuses,
+    ips.map(() => 202),
+  );
+  const { rows } = await database.pool.query(
+    `SELECT count(*)::int AS n FROM issues WHERE kind = 'profile_reported' AND status = 'open'
+       AND subject->>'profileId' = (SELECT id::text FROM profiles WHERE handle_lower = 'busy_page')`,
+  );
+  assert.equal(rows[0].n, 1);
+
+  const { purgeProfileReports } =
+    await import('../../packages/database/dist/index.js');
+  await database.pool.query(
+    `UPDATE profile_reports SET at_minute = now() - interval '181 days'
+      WHERE profile_id = (SELECT id FROM profiles WHERE handle_lower = 'busy_page')`,
+  );
+  const purged = await purgeProfileReports(database.db, { now: new Date() });
+  assert.equal(purged, 8);
+});
