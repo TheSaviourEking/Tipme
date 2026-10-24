@@ -2626,3 +2626,8 @@ legend {
   display: grid;
   gap: var(--space-3);
 }
+
+/* Reporting a page (PR-013): quiet, below the safety note. */
+.report-page {
+  margin-top: var(--space-4);
+}

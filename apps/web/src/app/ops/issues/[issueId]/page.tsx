@@ -61,6 +61,13 @@ function Section({
   );
 }
 
+const REPORT_LABELS = {
+  impersonation: 'Pretending to be someone else',
+  scam: 'Scam or fraud',
+  abusive: 'Abusive or hateful',
+  other: 'Something else',
+} as const;
+
 function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
   return (
     <dl className="ops-facts">
@@ -295,6 +302,17 @@ export default function IssuePage() {
                     string,
                     React.ReactNode,
                   ][])
+                : []),
+              // Visitors' reports since this issue opened (PR-013): reasons and counts only.
+              ...(evidence.pageReports && evidence.pageReports.length > 0
+                ? ([
+                    [
+                      'Reports',
+                      evidence.pageReports
+                        .map((r) => `${REPORT_LABELS[r.reason]} ×${r.count}`)
+                        .join(' · '),
+                    ],
+                  ] as [string, React.ReactNode][])
                 : []),
             ]}
           />

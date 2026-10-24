@@ -3,8 +3,9 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Badge, Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
-import { Avatar } from '@/components/avatar';
+import { Avatar, hasAvatar } from '@/components/avatar';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
+import { ReportPage } from '@/components/report-page';
 import { ShareProfile } from '@/components/share-profile';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
@@ -100,7 +101,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                 <p>{profile.craft}</p>
               </div>
             )}
-            {profile.avatarPath ? (
+            {hasAvatar(profile.avatarPath) ? (
               <Avatar
                 src={profile.avatarPath}
                 name={profile.displayName}
@@ -148,6 +149,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                 <Link href="/about-preview">Learn about this preview</Link>
               </p>
             </div>
+            <ReportPage handle={profile.handle} />
           </aside>
         </div>
       </Container>

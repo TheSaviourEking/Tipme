@@ -13,6 +13,8 @@ export async function apiFetch<T>(
   init: {
     method?: string;
     body?: unknown;
+    /** A file sent as it is (a photo upload, PR-013), with its own content type. */
+    file?: Blob;
     headers?: Record<string, string>;
   } = {},
 ): Promise<SessionResult<T>> {
@@ -26,10 +28,17 @@ export async function apiFetch<T>(
       headers: {
         ...(method === 'GET'
           ? {}
-          : { 'content-type': 'application/json', 'x-tipme-csrf': '1' }),
+          : {
+              'content-type': init.file?.type || 'application/json',
+              'x-tipme-csrf': '1',
+            }),
         ...init.headers,
       },
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      ...(init.file
+        ? { body: init.file }
+        : init.body === undefined
+          ? {}
+          : { body: JSON.stringify(init.body) }),
     });
   } catch {
     return { ok: false, status: 0, code: 'NETWORK' };

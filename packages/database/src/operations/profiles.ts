@@ -22,6 +22,7 @@ import {
   emailTokens,
   handleAliases,
   handleHolds,
+  profileAvatars,
   phoneRecoveries,
   profiles,
   sessions,
@@ -340,6 +341,7 @@ const toMine = async (
     row.profile.status === 'suspended' ? row.profile.suspendedReason : null,
   plan: row.profile.plan as PagePlan,
   tipAmounts: tipAmountsOf(row.profile),
+  avatarPath: row.profile.avatarPath,
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
@@ -592,6 +594,10 @@ export function deleteAccount(
             emailPublic: false,
           })
           .where(eq(profiles.id, row.id));
+        // The photo is personal data too: its bytes go with the page (PR-013).
+        await tx
+          .delete(profileAvatars)
+          .where(eq(profileAvatars.profileId, row.id));
         await tx
           .insert(handleHolds)
           .values({

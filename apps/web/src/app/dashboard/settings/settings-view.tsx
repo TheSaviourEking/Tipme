@@ -6,6 +6,7 @@ import type { FormEvent } from 'react';
 import type { MyProfile, SessionView } from '@tipme/contracts';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { Avatar, hasAvatar } from '@/components/avatar';
 import { apiFetch } from '@/lib/session-client';
 
 function PageState() {
@@ -58,6 +59,88 @@ function PageState() {
       >
         {live ? 'Take my page offline' : 'Make my page live'}
       </Button>
+    </Card>
+  );
+}
+
+const photoErrors: Record<string, string> = {
+  INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
+  PAYLOAD_TOO_LARGE: 'That photo is over 5 MB. Please choose a smaller one.',
+};
+
+/** The page's photo (PR-013): resized to a square and stripped of location data by TipMe. */
+function PhotoSettings() {
+  const id = useId();
+  const { profile, setProfile } = useRecipient();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
+  const send = async (method: 'PUT' | 'DELETE', file?: File) => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    const result = await apiFetch<MyProfile>('/v1/me/avatar', {
+      method,
+      ...(file ? { file } : {}),
+    });
+    setBusy(false);
+    if (result.ok) {
+      setProfile(result.data);
+      setDone(method === 'PUT' ? 'Photo saved.' : 'Photo removed.');
+    } else
+      setError(
+        photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
+      );
+  };
+  const photo = profile.avatarPath ?? null;
+  return (
+    <Card className="settings-section">
+      <h2>Your photo</h2>
+      <p className="tm-hint">
+        Optional. TipMe crops it to a square and removes hidden details such as
+        where it was taken. JPEG, PNG or WebP, up to 5 MB.
+      </p>
+      {hasAvatar(photo) ? (
+        <Avatar src={photo} name={profile.displayName} size={96} />
+      ) : (
+        <p className="tm-hint">No photo yet: your page shows your initials.</p>
+      )}
+      <div className="tm-field">
+        <label htmlFor={`${id}-photo`}>
+          {photo ? 'Choose a new photo' : 'Choose a photo'}
+        </label>
+        <input
+          id={`${id}-photo`}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          aria-describedby={error ? `${id}-photo-error` : undefined}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void send('PUT', file);
+            event.target.value = '';
+          }}
+        />
+      </div>
+      {error && (
+        <p className="tm-field-error" role="alert" id={`${id}-photo-error`}>
+          {error}
+        </p>
+      )}
+      {done && (
+        <p role="status" className="tm-hint">
+          {done}
+        </p>
+      )}
+      {photo && (
+        <Button
+          variant="quiet"
+          disabled={busy}
+          onClick={() => void send('DELETE')}
+        >
+          Remove photo
+        </Button>
+      )}
     </Card>
   );
 }
@@ -740,6 +823,7 @@ export function SettingsView() {
       <PendingRecovery />
       <PageState />
       <HandleChange />
+      <PhotoSettings />
       <TipAmountsSettings />
       <AboutYou />
       <ContactDetails />

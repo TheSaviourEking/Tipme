@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { WebVitalSummary } from './analytics.js';
+import type { ProfileReportReason } from './profiles.js';
 
 // Staff admin area (PR-009, ADR-0010).
 
@@ -53,6 +54,7 @@ export const ISSUE_KINDS = [
   'unmatched_event',
   'pending_recovery',
   'message_reported',
+  'profile_reported',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
@@ -187,6 +189,8 @@ export interface OpsIssueEvidence {
     status: string;
     suspendedReason: string | null;
   } | null;
+  /** Visitors' reports of this page since the issue opened (PR-013), counts by reason only. */
+  pageReports?: { reason: ProfileReportReason; count: number }[];
   person: {
     userId: string;
     phoneHint: string | null;

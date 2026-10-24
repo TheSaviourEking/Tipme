@@ -92,6 +92,8 @@ export interface MyProfile {
   suspendedReason: string | null;
   /** Free or Pro (PR-012). Optional until the release after PR-012 (the web deploys first). */
   plan?: PagePlan;
+  /** The page's photo (PR-013): an API path, e.g. /v1/avatars/<page>/<n>.webp. Optional, as `plan`. */
+  avatarPath?: string | null;
   /** The amounts the page shows now (the standard ones on Free). Optional, as `plan`. */
   tipAmounts?: TipAmounts;
 }
@@ -133,3 +135,16 @@ export const tipAmountsSchema = z
   .object({ presetsMinor: z.array(kobo).max(8), minMinor: kobo })
   .strict();
 export type TipAmountsRequest = z.infer<typeof tipAmountsSchema>;
+
+// Reporting a page (PR-013, PRD v1.1 FR-01). A reason from this list only: no free text, so a
+// report can never carry a stranger's words or personal data.
+export const PROFILE_REPORT_REASONS = [
+  'impersonation',
+  'scam',
+  'abusive',
+  'other',
+] as const;
+export type ProfileReportReason = (typeof PROFILE_REPORT_REASONS)[number];
+export const profileReportSchema = z
+  .object({ reason: z.enum(PROFILE_REPORT_REASONS) })
+  .strict();

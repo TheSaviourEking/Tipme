@@ -11,6 +11,7 @@ import {
   boolean,
   char,
   check,
+  customType,
   date,
   doublePrecision,
   index,
@@ -919,6 +920,47 @@ export const analyticsEvents = pgTable(
       sql`at_minute = date_trunc('minute', at_minute)`,
     ),
     index('analytics_events_at').on(table.atMinute),
+  ],
+);
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
+
+/**
+ * A page's photo (PR-013): one per page, already re-encoded on the server (512×512 WebP, no
+ * metadata). In Postgres so it is backed up and recovered with everything else; about 30 KB.
+ * `version` changes with each upload, so the URL can be cached for ever.
+ */
+export const profileAvatars = pgTable('profile_avatars', {
+  profileId: uuid('profile_id')
+    .primaryKey()
+    .references(() => profiles.id),
+  version: integer('version').notNull(),
+  bytes: bytea('bytes').notNull(),
+  createdAt: createdAt(),
+});
+
+/**
+ * Visitors' reports of a page (PR-013): the page, a reason from a fixed list and the minute.
+ * No IP, user agent or free text.
+ */
+export const profileReports = pgTable(
+  'profile_reports',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    reason: text('reason').notNull(),
+    atMinute: timestamp('at_minute', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      'profile_reports_reason',
+      sql`reason IN ('impersonation', 'scam', 'abusive', 'other')`,
+    ),
+    index('profile_reports_profile').on(table.profileId, table.atMinute),
   ],
 );
 
