@@ -43,6 +43,7 @@ import {
   type AuthContext,
 } from '../auth/session.guard.js';
 import { PAYMENT_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 
@@ -82,14 +83,18 @@ export class DashboardController {
     @Query('status') status?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('q') q?: string,
   ): Promise<
     ApiDataResponse<{ items: MyTipRow[]; nextCursor: string | null }>
   > {
+    if (q !== undefined && (typeof q !== 'string' || q.length > 100))
+      throw new CodedHttpException(400, 'VALIDATION_FAILED');
     return {
       data: await listMyTips(this.database.db, await this.profile(auth), {
         status: status === 'paid' || status === 'confirming' ? status : 'all',
         ...(cursor ? { cursor: cursor.slice(0, 200) } : {}),
         limit: Number.parseInt(limit ?? '20', 10) || 20,
+        ...(q ? { q } : {}),
       }),
     };
   }

@@ -195,10 +195,11 @@ async function createMoment(
   const title = input.copy({ cash, feeFree });
   await tx.update(moments).set({ title }).where(eq(moments.id, momentId));
   const [owner] = await tx
-    .select({ userId: profiles.userId })
+    .select({ userId: profiles.userId, wants: profiles.notifyMilestones })
     .from(profiles)
     .where(eq(profiles.id, input.profileId));
-  if (owner?.userId)
+  // The moment and any reward still happen; only the notice follows the preference (PR-013).
+  if (owner?.userId && owner.wants)
     await tx.insert(notifications).values({
       id: newId(),
       userId: owner.userId,

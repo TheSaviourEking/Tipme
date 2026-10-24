@@ -175,6 +175,12 @@ export const profiles = pgTable(
     phonePublic: boolean('phone_public').notNull().default(false),
     emailPublic: boolean('email_public').notNull().default(false),
     qrStyle: text('qr_style').notNull().default('purple'),
+    // Notification preferences (PR-013): what the recipient chose not to be told about.
+    notifyTipEmails: boolean('notify_tip_emails').notNull().default(true),
+    notifyWeeklyReports: boolean('notify_weekly_reports')
+      .notNull()
+      .default(true),
+    notifyMilestones: boolean('notify_milestones').notNull().default(true),
     // Free or Pro (PR-012). Staff set it; there is no billing while money is pretend.
     plan: text('plan').notNull().default('free'),
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.

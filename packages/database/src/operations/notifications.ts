@@ -39,6 +39,7 @@ export function notifyTipSucceeded(
           displayName: profiles.displayName,
           email: users.email,
           emailVerifiedAt: users.emailVerifiedAt,
+          wantsEmail: profiles.notifyTipEmails,
         })
         .from(tips)
         .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
@@ -64,7 +65,8 @@ export function notifyTipSucceeded(
         .onConflictDoNothing()
         .returning({ id: notifications.id });
       if (inserted.length === 0) return 'duplicate' as const;
-      if (row.email && row.emailVerifiedAt) {
+      // The in-app notice always goes; the email only if the recipient wants tip emails (PR-013).
+      if (row.email && row.emailVerifiedAt && row.wantsEmail) {
         const first = row.displayName.split(/\s+/)[0];
         await writePretendMessage(tx, {
           channel: 'email',

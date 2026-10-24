@@ -2,6 +2,7 @@ import {
   profilePatchSchema,
   type HandleStatus,
   type MyProfile,
+  type NotificationPrefs,
   type OpsPage,
   type PagePlan,
   type ProfilePatch,
@@ -717,3 +718,41 @@ export function setPageSuspension(
     }),
   );
 }
+
+/** The recipient's notification preferences (PR-013). */
+export function getNotificationPrefs(
+  db: Database,
+  userId: string,
+): Promise<NotificationPrefs> {
+  return guarded(async () => prefsOf((await myRow(db, userId)).profile));
+}
+
+export function setNotificationPrefs(
+  db: Database,
+  userId: string,
+  prefs: NotificationPrefs,
+): Promise<NotificationPrefs> {
+  return guarded(async () => {
+    const row = await myRow(db, userId);
+    const [updated] = await db
+      .update(profiles)
+      .set({
+        notifyTipEmails: prefs.tipEmails,
+        notifyWeeklyReports: prefs.weeklyReports,
+        notifyMilestones: prefs.milestones,
+      })
+      .where(eq(profiles.id, row.profile.id))
+      .returning();
+    return prefsOf(updated!);
+  });
+}
+
+const prefsOf = (profile: {
+  notifyTipEmails: boolean;
+  notifyWeeklyReports: boolean;
+  notifyMilestones: boolean;
+}): NotificationPrefs => ({
+  tipEmails: profile.notifyTipEmails,
+  weeklyReports: profile.notifyWeeklyReports,
+  milestones: profile.notifyMilestones,
+});

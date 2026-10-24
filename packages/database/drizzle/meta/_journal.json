@@ -239,6 +239,13 @@
       "when": 1792857405928,
       "tag": "0033_profile_avatars",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792872641393,
+      "tag": "0034_notification_prefs",
+      "breakpoints": true
     }
   ]
 }

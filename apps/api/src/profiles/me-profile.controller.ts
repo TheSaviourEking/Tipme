@@ -17,10 +17,12 @@ import {
   deleteAccountSchema,
   pageStateSchema,
   profilePatchSchema,
+  notificationPrefsSchema,
   renameHandleSchema,
   tipAmountsSchema,
   type ApiDataResponse,
   type MyProfile,
+  type NotificationPrefs,
   type ProfilePatch,
   type TipAmountsRequest,
 } from '@tipme/contracts';
@@ -28,6 +30,8 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
+  getNotificationPrefs,
+  setNotificationPrefs,
   renameHandle,
   setTipAmounts,
   setPageState,
@@ -123,6 +127,24 @@ export class MeProfileController {
     });
     this.revalidator.revalidate(updated.handle);
     return { data: updated };
+  }
+
+  @Get('notification-preferences')
+  async preferences(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<NotificationPrefs>> {
+    return { data: await getNotificationPrefs(this.database.db, auth.userId) };
+  }
+
+  @Put('notification-preferences')
+  async setPreferences(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(notificationPrefsSchema))
+    body: NotificationPrefs,
+  ): Promise<ApiDataResponse<NotificationPrefs>> {
+    return {
+      data: await setNotificationPrefs(this.database.db, auth.userId, body),
+    };
   }
 
   @Put('page/state')
