@@ -409,3 +409,34 @@ export const opsPagePlanSchema = opsReasonSchema
   .extend({ plan: z.enum(['free', 'pro']) })
   .strict();
 export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
+
+/**
+ * Admin search results (PR-013): ids and short labels only. Never phone numbers, emails,
+ * supporter names or messages.
+ */
+export interface OpsSearchResult {
+  pages: OpsPage[];
+  tips: {
+    tipId: string;
+    handle: string | null;
+    status: string;
+    grossMinor: string;
+    currency: string;
+    at: string;
+  }[];
+  payouts: {
+    payoutId: string;
+    handle: string | null;
+    status: string;
+    amountMinor: string;
+    currency: string;
+    at: string;
+  }[];
+  ledgerTransactions: {
+    transactionId: string;
+    operationType: string;
+    tipId: string | null;
+    payoutId: string | null;
+    at: string;
+  }[];
+}

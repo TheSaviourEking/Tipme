@@ -15,6 +15,7 @@ const links = [
   { href: '/ops/visibility', label: 'Visibility' },
   { href: '/ops/market', label: 'Market' },
   { href: '/ops/pages', label: 'Pages' },
+  { href: '/ops/search', label: 'Search' },
   { href: '/ops/audit', label: 'Audit log' },
   { href: '/ops/staff', label: 'Staff & roles' },
 ] as const;

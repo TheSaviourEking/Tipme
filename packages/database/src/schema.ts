@@ -730,6 +730,7 @@ export const OPS_PERMISSIONS = [
   'payments.recheck',
   'private.view',
   'pages.plan',
+  'search.view',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 

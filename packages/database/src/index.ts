@@ -42,3 +42,4 @@ export * from './backup/backup.js';
 export * from './operations/message-flags.js';
 export * from './operations/profile-reports.js';
 export * from './operations/avatars.js';
+export * from './operations/ops-search.js';
