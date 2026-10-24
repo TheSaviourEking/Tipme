@@ -34,6 +34,8 @@ Under custody, these entries describe money that physically passes through TipMe
 
 The mock fee policy (`MOCK_FEE_POLICY_V0`: 5% cut, 1.5% provider fee, both deducted from the tip) is NOT an approved commercial policy (D-05).
 
+> **Update, PR-012 (22 Oct 2026):** new quotes use `FEE_POLICY_V1` (`proposed-v1.1`), PRD v1.1's proposed rules: TipMe keeps 10% of the tip and pays processing out of it, so the recipient receives 90%. The ledger is unchanged: `platform_fee_revenue` is the 10% minus the estimated processing, and `provider_fee_recovered` is the estimate. A fee-free reward gives the recipient the whole tip, and the processing then sits in `provider_fee_expense`, unrecovered, as TipMe's cost. Quotes and tips priced under `mock-v0` keep their recorded amounts. Still PROPOSED (D-05).
+
 ## Rationale
 
 The ledger answers "who is owed what, and who was paid what" regardless of who physically moves the money. Choosing custody becomes a legal sign-off, not a rebuild.

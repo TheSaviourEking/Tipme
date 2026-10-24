@@ -236,7 +236,7 @@ test('a suspended page: hidden, no new tips, cannot go live, in-flight tips sett
     'POST',
     '/v1/me/withdrawals',
     recipient.cookie,
-    { amountMinor: '1000' },
+    { amountMinor: '100000' },
     { 'idempotency-key': randomUUID() },
   );
   assert.ok([200, 201].includes(withdrawal.status), `${withdrawal.status}`);

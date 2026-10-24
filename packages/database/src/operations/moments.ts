@@ -112,11 +112,14 @@ async function payCash(
   return amount;
 }
 
-/** A typical TipMe fee for this recipient: the average of their last 20 paid, non-fee-free tips. */
+/**
+ * What a fee-free tip typically costs TipMe for this recipient: its whole share (TipMe's fee plus
+ * the processing it pays from it, PR-012), averaged over their last 20 paid, non-fee-free tips.
+ */
 async function typicalFee(tx: Tx, profileId: string): Promise<bigint> {
   const result = await tx.execute<{ fee: string | null }>(sql`
     SELECT AVG(fee)::bigint::text AS fee FROM (
-      SELECT q.platform_fee_minor AS fee
+      SELECT q.platform_fee_minor + q.provider_fee_minor AS fee
         FROM tips t JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id
        WHERE t.profile_id = ${profileId} AND t.status = 'SUCCEEDED' AND q.waived_platform_fee_minor = 0
        ORDER BY t.completed_at DESC LIMIT 20) recent`);

@@ -10,7 +10,7 @@ import type {
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
 import { paymentKey, payoutKey } from './keys.js';
 
-/** Same rounding as MOCK_FEE_POLICY_V0's provider fee (150 bps, half up). */
+/** Same rounding as FEE_POLICY_V1's estimated processing fee (150 bps, half up). */
 export const mockProviderFee = (amountMinor: bigint): bigint =>
   (amountMinor * 150n + 5000n) / 10000n;
 

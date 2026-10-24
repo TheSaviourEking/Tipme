@@ -133,6 +133,9 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             <AppreciationForm
               recipient={firstName}
               handle={profile.handle}
+              {...(profile.tipAmounts
+                ? { tipAmounts: profile.tipAmounts }
+                : {})}
               {...(profile.celebration
                 ? { celebration: profile.celebration }
                 : {})}

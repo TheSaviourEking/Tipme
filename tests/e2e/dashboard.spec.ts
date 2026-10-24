@@ -22,7 +22,7 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
     message: 'Lovely braids, thank you',
   });
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('NGN 1,870.00');
+  await expect(page.getByTestId('balance')).toHaveText('NGN 1,800.00');
   const row = page.getByRole('link', { name: /Tip from Ada M\./ });
   await expect(row).toContainText('Paid');
   await expect(page.getByText('Today')).toBeVisible();
@@ -40,7 +40,7 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   ).toContainText('NGN 2,000.00');
   await expect(
     breakdown.locator('div', { hasText: 'You received' }),
-  ).toContainText('NGN 1,870.00');
+  ).toContainText('NGN 1,800.00');
   await expect(
     page.getByText('Confirmed by the payment provider'),
   ).toBeVisible();
@@ -53,7 +53,7 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   await expectAccessible(page);
   await page.goto('/dashboard');
-  await expect(page.getByTestId('balance')).toHaveText('NGN 870.00');
+  await expect(page.getByTestId('balance')).toHaveText('NGN 800.00');
   await expect(async () => {
     await page.reload();
     await expect(page.getByText(/Withdrawal.*Sent/)).toBeVisible({

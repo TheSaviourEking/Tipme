@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { MyTipDetail } from '@tipme/contracts';
 import { Card, Notice, Skeleton } from '@tipme/ui';
 import { MessageControls } from '@/components/dashboard/message-controls';
+import { feeLine } from '@/lib/fee-line';
 import { naira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 
@@ -29,6 +30,7 @@ export default function TipDetailPage() {
       </Notice>
     );
   if (!tip) return <Skeleton label="Loading the tip" />;
+  const fee = feeLine(tip.platformFeeMinor, tip.providerFeeMinor);
   return (
     <div className="dashboard-section tip-detail">
       <Link href="/dashboard/tips">← All tips</Link>
@@ -63,12 +65,9 @@ export default function TipDetailPage() {
             <dd>{naira(tip.grossMinor)}</dd>
           </div>
           <div>
-            <dt>TipMe fee</dt>
-            <dd>−{naira(tip.platformFeeMinor)}</dd>
-          </div>
-          <div>
-            <dt>Payment provider fee</dt>
-            <dd>−{naira(tip.providerFeeMinor)}</dd>
+            {/* One line (PRD v1.1): what came off the tip, labelled by what it was. */}
+            <dt>{fee.label}</dt>
+            <dd>−{naira(fee.minor)}</dd>
           </div>
           <div>
             <dt>You received</dt>
