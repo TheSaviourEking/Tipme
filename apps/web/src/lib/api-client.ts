@@ -1,4 +1,5 @@
 import type {
+  ProfileReportReason,
   TipIntentCreated,
   TipQuote,
   TipStatusView,
@@ -81,4 +82,11 @@ export const mockCheckoutPay = (reference: string, outcome: string) =>
   call<{ returnUrl: string }>(
     `/v1/mock-provider/checkout/${encodeURIComponent(reference)}`,
     json({ outcome }),
+  );
+
+/** Reporting a page (PR-013): a reason from the list only. The API answers the same either way. */
+export const reportPage = (handle: string, reason: ProfileReportReason) =>
+  call<{ accepted: true }>(
+    `/v1/profiles/${encodeURIComponent(handle)}/report`,
+    json({ reason }),
   );

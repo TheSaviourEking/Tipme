@@ -3,10 +3,16 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { MyProfile, SessionView } from '@tipme/contracts';
+import type {
+  MyProfile,
+  NotificationPrefs,
+  SessionView,
+} from '@tipme/contracts';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { Avatar, hasAvatar } from '@/components/avatar';
 import { apiFetch } from '@/lib/session-client';
+import { shrinkPhoto } from '@/lib/shrink-photo';
 
 function PageState() {
   const { profile, setProfile } = useRecipient();
@@ -58,6 +64,173 @@ function PageState() {
       >
         {live ? 'Take my page offline' : 'Make my page live'}
       </Button>
+    </Card>
+  );
+}
+
+const PREF_LABELS = {
+  tipEmails: 'Email me about each tip (when my email is verified)',
+  weeklyReports: 'Tell me when my weekly report is ready',
+  milestones: 'Tell me about milestones and rewards',
+} as const;
+
+/** Notification preferences (PR-013). Sign-in codes and security warnings always go. */
+function NotificationSettings() {
+  const id = useId();
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void apiFetch<NotificationPrefs>('/v1/me/notification-preferences').then(
+      (result) => {
+        if (result.ok) setPrefs(result.data);
+      },
+    );
+  }, []);
+  // An API older than PR-013 has no preferences: say nothing rather than show a broken form.
+  if (!prefs) return null;
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setSaved(false);
+    setError('');
+    const result = await apiFetch<NotificationPrefs>(
+      '/v1/me/notification-preferences',
+      { method: 'PUT', body: prefs },
+    );
+    setBusy(false);
+    if (result.ok) {
+      setPrefs(result.data);
+      setSaved(true);
+    } else setError('We couldn’t save that. Please try again.');
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Notifications</h2>
+      <p className="tm-hint">
+        You always see your tips in TipMe, and sign-in codes and security
+        warnings always reach you.
+      </p>
+      <form className="settings-form" onSubmit={save} noValidate>
+        {(Object.keys(PREF_LABELS) as (keyof NotificationPrefs)[]).map(
+          (key) => (
+            <label key={key} className="tip-remember" htmlFor={`${id}-${key}`}>
+              <input
+                id={`${id}-${key}`}
+                type="checkbox"
+                checked={prefs[key]}
+                onChange={(e) => {
+                  setPrefs({ ...prefs, [key]: e.target.checked });
+                  setSaved(false);
+                }}
+              />
+              <span>{PREF_LABELS[key]}</span>
+            </label>
+          ),
+        )}
+        {error && (
+          <Notice tone="error" title="Not saved">
+            {error}
+          </Notice>
+        )}
+        <p role="status" className="tm-hint">
+          {saved ? 'Saved.' : ''}
+        </p>
+        <Button type="submit" disabled={busy} aria-busy={busy}>
+          Save notifications
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+const photoErrors: Record<string, string> = {
+  INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
+  PAYLOAD_TOO_LARGE: 'That photo is over 5 MB. Please choose a smaller one.',
+};
+
+/** The page's photo (PR-013): resized to a square and stripped of location data by TipMe. */
+function PhotoSettings() {
+  const id = useId();
+  const { profile, setProfile } = useRecipient();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
+  const send = async (method: 'PUT' | 'DELETE', file?: File) => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    // Shrunk here first: a phone photo uploads in seconds instead of timing out.
+    const photoFile = file ? await shrinkPhoto(file) : undefined;
+    if (photoFile && photoFile.size > 5 * 1024 * 1024) {
+      setBusy(false);
+      setError(photoErrors['PAYLOAD_TOO_LARGE']!);
+      return;
+    }
+    const result = await apiFetch<MyProfile>('/v1/me/avatar', {
+      method,
+      ...(photoFile ? { file: photoFile } : {}),
+    });
+    setBusy(false);
+    if (result.ok) {
+      setProfile(result.data);
+      setDone(method === 'PUT' ? 'Photo saved.' : 'Photo removed.');
+    } else
+      setError(
+        photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
+      );
+  };
+  // An API older than PR-013 has no photos: say nothing rather than show a form that fails.
+  if (!('avatarPath' in profile)) return null;
+  const photo = profile.avatarPath ?? null;
+  return (
+    <Card className="settings-section">
+      <h2>Your photo</h2>
+      <p className="tm-hint">
+        Optional. TipMe crops it to a square and removes hidden details such as
+        where it was taken. JPEG, PNG or WebP, up to 5 MB.
+      </p>
+      {hasAvatar(photo) ? (
+        <Avatar src={photo} name={profile.displayName} size={96} />
+      ) : (
+        <p className="tm-hint">No photo yet: your page shows your initials.</p>
+      )}
+      <div className="tm-field">
+        <label htmlFor={`${id}-photo`}>
+          {photo ? 'Choose a new photo' : 'Choose a photo'}
+        </label>
+        <input
+          id={`${id}-photo`}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          aria-describedby={error ? `${id}-photo-error` : undefined}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void send('PUT', file);
+            event.target.value = '';
+          }}
+        />
+      </div>
+      {error && (
+        <p className="tm-field-error" role="alert" id={`${id}-photo-error`}>
+          {error}
+        </p>
+      )}
+      {/* Always present, so screen readers announce what is written into it. */}
+      <p role="status" className="tm-hint">
+        {done}
+      </p>
+      {photo && (
+        <Button
+          variant="quiet"
+          disabled={busy}
+          onClick={() => void send('DELETE')}
+        >
+          Remove photo
+        </Button>
+      )}
     </Card>
   );
 }
@@ -740,9 +913,11 @@ export function SettingsView() {
       <PendingRecovery />
       <PageState />
       <HandleChange />
+      <PhotoSettings />
       <TipAmountsSettings />
       <AboutYou />
       <ContactDetails />
+      <NotificationSettings />
       <Devices />
       <DeletePage />
     </div>

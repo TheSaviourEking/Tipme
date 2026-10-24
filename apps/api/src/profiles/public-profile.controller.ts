@@ -1,24 +1,31 @@
 import {
+  Body,
   Controller,
   Get,
   Header,
+  HttpCode,
+  Post,
   Inject,
   NotFoundException,
   Param,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import type {
-  ApiDataResponse,
-  HandleStatus,
-  PublicProfile,
+import {
+  profileReportSchema,
+  type ApiDataResponse,
+  type HandleStatus,
+  type ProfileReportReason,
+  type PublicProfile,
 } from '@tipme/contracts';
 import {
   checkHandle,
   handleAliasTarget,
   normaliseHandle,
   publicProfile,
+  reportProfile,
 } from '@tipme/database';
+import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { DatabaseProvider } from '../infra/database.js';
 
@@ -44,6 +51,22 @@ export class PublicProfileController {
     if (!movedTo) throw new NotFoundException();
     response.status(308).setHeader('Location', `/v1/profiles/${movedTo}`);
     return { data: { movedTo } };
+  }
+
+  /**
+   * Reporting a page (PR-013): impersonation, a scam, abuse or other. Always 202, whether or
+   * not such a page exists, so the answer reveals nothing. Rate-limited per address.
+   */
+  @Post('profiles/:handle/report')
+  @HttpCode(202)
+  @RateLimit('reports')
+  async report(
+    @Param('handle') handle: string,
+    @Body(new ZodValidationPipe(profileReportSchema))
+    body: { reason: ProfileReportReason },
+  ): Promise<ApiDataResponse<{ accepted: true }>> {
+    await reportProfile(this.database.db, { handle, reason: body.reason });
+    return { data: { accepted: true } };
   }
 
   @Get('handles/:handle/availability')

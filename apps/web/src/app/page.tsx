@@ -4,6 +4,7 @@ import { AppreciationForm } from '@/components/appreciation-form';
 import { Avatar } from '@/components/avatar';
 import { Arrow } from '@/components/brand';
 import { CreatorArt, HowItWorksSteps } from '@/components/marketing';
+import { ViewTracker } from '@/components/view-tracker';
 import { previewMetadata } from '@/lib/metadata';
 
 export const metadata = previewMetadata(
@@ -14,6 +15,7 @@ export const metadata = previewMetadata(
 export default function Home() {
   return (
     <main id="main" tabIndex={-1}>
+      <ViewTracker name="landing_viewed" />
       <Container>
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-copy">

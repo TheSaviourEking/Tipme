@@ -18,6 +18,9 @@ export const ANALYTICS_CLIENT_EVENTS = [
   'report_shared',
   'moment_shared',
   'recipient_returned',
+  // PRD v1.1 §11 (PR-013).
+  'landing_viewed',
+  'checkout_opened',
 ] as const;
 /** Outcomes recorded only from verified server state, never from a browser. */
 export const ANALYTICS_SERVER_EVENTS = [
@@ -25,6 +28,13 @@ export const ANALYTICS_SERVER_EVENTS = [
   'payment_failed',
   'tip_completed',
   'recipient_first_tip',
+  // PRD v1.1 §11 (PR-013). Its other names exist already: tip_page_viewed = profile_viewed,
+  // tip_started = payment_started, tip_paid_verified = tip_completed, tip_failed =
+  // payment_failed (kept, so history stays comparable).
+  'profile_created',
+  'profile_published',
+  'payout_requested',
+  'payout_paid_verified',
 ] as const;
 export const ANALYTICS_SURFACES = [
   'profile',

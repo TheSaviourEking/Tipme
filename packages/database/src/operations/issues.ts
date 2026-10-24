@@ -43,6 +43,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   unmatched_event: 'info',
   pending_recovery: 'account',
   message_reported: 'account',
+  profile_reported: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -67,6 +68,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return 'The provider sent an event TipMe could not match to any payment or withdrawal.';
     case 'message_reported':
       return `${page} reported a supporter’s message. Reveal it (with a reason) to review it.`;
+    case 'profile_reported':
+      return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }

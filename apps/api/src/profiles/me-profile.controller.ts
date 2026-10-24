@@ -17,10 +17,12 @@ import {
   deleteAccountSchema,
   pageStateSchema,
   profilePatchSchema,
+  notificationPrefsSchema,
   renameHandleSchema,
   tipAmountsSchema,
   type ApiDataResponse,
   type MyProfile,
+  type NotificationPrefs,
   type ProfilePatch,
   type TipAmountsRequest,
 } from '@tipme/contracts';
@@ -28,6 +30,8 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
+  getNotificationPrefs,
+  setNotificationPrefs,
   renameHandle,
   setTipAmounts,
   setPageState,
@@ -45,6 +49,7 @@ import {
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { ServerEvents } from '../analytics/server-events.js';
 import { ProfileRevalidator } from './revalidate.js';
 
 /** The signed-in recipient's own page. Every route acts only on the caller's account. */
@@ -56,6 +61,7 @@ export class MeProfileController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(ServerEvents) private readonly events: ServerEvents,
   ) {}
 
   @Post('page')
@@ -65,7 +71,7 @@ export class MeProfileController {
     body: z.infer<typeof claimHandleSchema>,
     @Headers('x-tipme-rehearsal') rehearsal: string | undefined,
   ): Promise<ApiDataResponse<MyProfile>> {
-    await claimHandle(this.database.db, {
+    const { profileId } = await claimHandle(this.database.db, {
       userId: auth.userId,
       handle: body.handle,
       // The release check's page (PR-010): only on test copies, only for an open run.
@@ -73,6 +79,11 @@ export class MeProfileController {
         ? { rehearsalRunId: rehearsal }
         : {}),
     });
+    await this.events.record(
+      'profile_created',
+      `profile_created.${profileId}`,
+      profileId,
+    );
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 
@@ -125,18 +136,43 @@ export class MeProfileController {
     return { data: updated };
   }
 
+  @Get('notification-preferences')
+  async preferences(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<NotificationPrefs>> {
+    return { data: await getNotificationPrefs(this.database.db, auth.userId) };
+  }
+
+  @Put('notification-preferences')
+  async setPreferences(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(notificationPrefsSchema))
+    body: NotificationPrefs,
+  ): Promise<ApiDataResponse<NotificationPrefs>> {
+    return {
+      data: await setNotificationPrefs(this.database.db, auth.userId, body),
+    };
+  }
+
   @Put('page/state')
   async state(
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(pageStateSchema))
     body: z.infer<typeof pageStateSchema>,
   ): Promise<ApiDataResponse<MyProfile>> {
-    const { handle } = await setPageState(
+    const { handle, profileId, firstPublished } = await setPageState(
       this.database.db,
       auth.userId,
       body.state,
     );
     this.revalidator.revalidate(handle);
+    // Once per page, ever: the first time it goes live (PRD v1.1 §11).
+    if (firstPublished)
+      await this.events.record(
+        'profile_published',
+        `profile_published.${profileId}`,
+        profileId,
+      );
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 

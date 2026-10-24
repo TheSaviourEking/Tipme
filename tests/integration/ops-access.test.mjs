@@ -90,7 +90,7 @@ test('the full flow opens a grant with every Owner permission, and it is audited
   const data = (await me.json()).data;
   assert.equal(data.state, 'granted');
   assert.equal(data.role, 'owner');
-  assert.equal(data.permissions.length, 10);
+  assert.equal(data.permissions.length, 11);
   const audit = (
     await (await call('GET', '/v1/ops/audit', owner.cookie)).json()
   ).data;
