@@ -30,6 +30,8 @@ Enforce DB check constraints and transactional balanced posting. For multiple cu
 - Redirect and client poll NEVER authorize PAID. Provider retries can be duplicate, missing or out of order.
 - Payment finalization: lock row/unique operation key; validate allowed transition; insert balanced ledger postings; enqueue outbox event; commit atomically.
 
+> **As built (PR-014):** the state machines are in `packages/domain/src/state-machines.ts`, and `docs/architecture/state-machines.md` shows them as generated diagrams with who moves each state. The status names there (for example `SUCCEEDED`, `VERIFIED_SUCCEEDED`, `REQUESTED`) are the ones in use and will be mapped to the approved provider's names (D-03). The routes below were a proposal; the real list is `docs/api/openapi.json`, summarised in `docs/security/access-control.md`.
+
 ## Mock API contract (proposed, to refine in OpenAPI)
 ```
 GET  /api/v1/public/profiles/:handle
