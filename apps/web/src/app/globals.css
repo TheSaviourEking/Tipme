@@ -821,7 +821,9 @@ legend {
 }
 
 .profile-page {
-  background: var(--surface-subtle);
+  background:
+    radial-gradient(circle at 12% 8%, rgb(122 50 249 / 6%), transparent 28rem),
+    var(--canvas);
   padding-bottom: 5rem;
 }
 
@@ -846,8 +848,8 @@ legend {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 4.5rem;
+  grid-template-columns: minmax(0, 1.08fr) minmax(22rem, 0.92fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
   align-items: start;
 }
 
@@ -939,7 +941,9 @@ legend {
 }
 
 .profile-composer {
-  padding-top: 1rem;
+  position: sticky;
+  top: 6.5rem;
+  padding-top: var(--space-4);
 }
 
 .profile-safety {
@@ -961,6 +965,108 @@ legend {
   display: inline-block;
   padding-top: 0.4rem;
   min-height: 32px;
+}
+
+.recipient-card {
+  position: relative;
+  padding: var(--space-4) var(--space-4) var(--space-10);
+}
+
+.recipient-card::before {
+  position: absolute;
+  inset: 1.25rem 0.25rem 0 2.5rem;
+  z-index: 0;
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-object);
+  background: color-mix(in srgb, var(--surface-recessed), white 42%);
+  box-shadow: var(--shadow-raised-1);
+  content: '';
+  transform: rotate(2.1deg);
+}
+
+.recipient-card__visual {
+  position: relative;
+  z-index: 1;
+  min-height: 34rem;
+  overflow: hidden;
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-object);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-raised-2);
+}
+
+.recipient-card__portrait {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 34rem;
+  align-items: center;
+  justify-content: center;
+  object-fit: cover;
+  object-position: 50% 32%;
+  font: 700 5rem/1 var(--font-interface);
+  color: var(--brand-ink);
+}
+
+.recipient-card__craft {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  width: min(12rem, 42%);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgb(255 255 255 / 44%);
+  border-radius: var(--radius-field);
+  background: rgb(255 254 250 / 88%);
+  box-shadow: var(--shadow-raised-1);
+  color: var(--text-primary);
+  font: 400 1.05rem/1.25 var(--font-editorial);
+  transform: rotate(1.5deg);
+  backdrop-filter: blur(8px);
+}
+
+.profile-spark {
+  position: absolute;
+  bottom: 8rem;
+  left: var(--space-5);
+  width: 3.25rem;
+  fill: none;
+  stroke: white;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 2px 7px rgb(0 0 0 / 28%));
+}
+
+.recipient-card__sheet {
+  position: relative;
+  z-index: 2;
+  width: calc(100% - 2rem);
+  margin: -7.5rem auto 0;
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  border-radius: var(--radius-card);
+}
+
+.recipient-card__sheet h1 {
+  margin-bottom: var(--space-2);
+  font-size: clamp(2.45rem, 4.5vw, 4.5rem);
+  line-height: 0.95;
+  text-wrap: balance;
+}
+
+.recipient-card__sheet .eyebrow {
+  margin-bottom: var(--space-3);
+}
+
+.recipient-card__sheet .profile-role {
+  margin-bottom: var(--space-5);
+}
+
+.recipient-card__sheet .profile-bio {
+  margin-top: 0;
+}
+
+.recipient-card__sheet .profile-note {
+  margin-block: var(--space-6);
 }
 
 .review-panel {
@@ -1394,6 +1500,7 @@ legend {
   }
 
   .profile-composer {
+    position: static;
     padding-top: 0;
   }
 
@@ -1566,6 +1673,30 @@ legend {
 
   .profile-note {
     font-size: 1.2rem;
+  }
+
+  .recipient-card {
+    padding: 0 0 var(--space-6);
+  }
+
+  .recipient-card::before {
+    inset: 0.75rem 0.25rem 0 1rem;
+  }
+
+  .recipient-card__visual,
+  .recipient-card__portrait {
+    min-height: 30rem;
+  }
+
+  .recipient-card__sheet {
+    width: calc(100% - 1rem);
+    margin-top: -5.5rem;
+    padding: var(--space-6);
+  }
+
+  .recipient-card__craft {
+    top: var(--space-4);
+    right: var(--space-4);
   }
 
   .footer-top nav {

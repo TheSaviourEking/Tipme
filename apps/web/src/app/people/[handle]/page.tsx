@@ -3,7 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Badge, Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
-import { Avatar } from '@/components/avatar';
+import { RecipientCard } from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ShareProfile } from '@/components/share-profile';
 import { movedProfilePath } from '@/lib/handle-redirect';
@@ -31,20 +31,6 @@ const socialNames = {
   instagram: 'Instagram',
   x: 'X (Twitter)',
 } as const;
-
-function Initials({ name }: { name: string }) {
-  const letters = name
-    .split(/\s+/)
-    .map((part) => part[0] ?? '')
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-  return (
-    <span className="avatar avatar--initials" aria-hidden="true">
-      {letters}
-    </span>
-  );
-}
 
 function Contact({ profile }: { profile: PublicProfile }) {
   const socials = Object.entries(profile.socials ?? {}) as [
@@ -94,42 +80,21 @@ export default async function ProfilePage({ params, searchParams }: Props) {
         </div>
         <div className="profile-grid">
           <section className="profile-story" aria-labelledby="profile-name">
-            {profile.craft && (
-              <div className="profile-cover">
-                <span aria-hidden="true">✳</span>
-                <p>{profile.craft}</p>
-              </div>
-            )}
-            {profile.avatarPath ? (
-              <Avatar
-                src={profile.avatarPath}
-                name={profile.displayName}
-                size={120}
-              />
-            ) : (
-              <Initials name={profile.displayName} />
-            )}
-            <div className="profile-identity">
-              <p className="eyebrow">@{profile.handle}</p>
-              <h1 id="profile-name">{profile.displayName}</h1>
-              {profile.role && <p className="profile-role">{profile.role}</p>}
-            </div>
-            {profile.bio && <p className="profile-bio">{profile.bio}</p>}
-            {profile.note && (
-              <blockquote className="profile-note">
-                <span aria-hidden="true">“</span>
-                {profile.note}
-              </blockquote>
-            )}
-            <Contact profile={profile} />
-            <ShareProfile handle={profile.handle} />
-            <p className="profile-fineprint">
-              Payments on TipMe are pretend during the preview.
-              <br />
-              No real money moves.
-            </p>
+            <RecipientCard profile={profile}>
+              <Contact profile={profile} />
+              <ShareProfile handle={profile.handle} />
+              <p className="profile-fineprint">
+                Payments on TipMe are pretend during the preview.
+                <br />
+                No real money moves.
+              </p>
+            </RecipientCard>
           </section>
-          <aside className="profile-composer" aria-label={`Tip ${firstName}`}>
+          <aside
+            className="profile-composer"
+            aria-label={`Tip ${firstName}`}
+            data-tip-panel
+          >
             <AppreciationForm
               recipient={firstName}
               handle={profile.handle}
