@@ -1,4 +1,5 @@
 # Web agent rules
+- Before frontend work, read `docs/design/DESIGN-CONSTITUTION.md`, `REFERENCE-ANATOMY.md`, `RESPONSIVE-COMPOSITION.md`, and `VISUAL-QUALITY-GATE.md`. Do not invent page-local variants that conflict with them.
 - Next.js App Router, server components by default, interactive client islands as needed. Verify installed API and framework version before coding.
 - Render public profile metadata server-side and sanitize user content. Never render payer-sensitive info in public HTML, cache, metadata or OG assets.
 - Use design tokens from `packages/ui`, purple #7A32F9, white, black. Prioritize responsive layouts, compositional originality, and semantic content.
