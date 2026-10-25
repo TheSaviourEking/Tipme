@@ -48,12 +48,27 @@ api_host() { setting API_HOST; }
 
 # Settings that would break the first deploy, caught before anything runs.
 preflight() {
-  local password
-  password=$(setting POSTGRES_PASSWORD)
-  if [[ ! "$password" =~ ^[A-Za-z0-9_-]{16,}$ ]]; then
-    echo "POSTGRES_PASSWORD must be 16+ letters, digits, '-' or '_' (it goes inside a URL): use 'openssl rand -hex 32'." >&2
-    exit 2
-  fi
+  local name password i j
+  local -a passwords=()
+  for name in POSTGRES_PASSWORD POSTGRES_RUNTIME_PASSWORD POSTGRES_MIGRATOR_PASSWORD POSTGRES_BACKUP_PASSWORD; do
+    if ! password=$(setting "$name"); then
+      echo "$name is required in $ENV_FILE." >&2
+      exit 2
+    fi
+    if [[ ! "$password" =~ ^[A-Za-z0-9_-]{16,}$ ]]; then
+      echo "$name must be 16+ letters, digits, '-' or '_' (it goes inside a URL): use 'openssl rand -hex 32'." >&2
+      exit 2
+    fi
+    passwords+=("$password")
+  done
+  for ((i = 0; i < ${#passwords[@]}; i++)); do
+    for ((j = 0; j < i; j++)); do
+      if [[ "${passwords[$i]}" == "${passwords[$j]}" ]]; then
+        echo "Postgres role passwords must be unique." >&2
+        exit 2
+      fi
+    done
+  done
   # The image runs as uid 1000 and writes backups into this folder (Linux hosts).
   local owner
   if owner=$(stat -c %u "$TIPME_HOME/backups" 2>/dev/null) && [[ "$owner" != "1000" ]]; then
