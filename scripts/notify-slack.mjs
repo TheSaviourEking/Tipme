@@ -87,11 +87,9 @@ export function getGitCommits({ range, limit = 10, cwd = process.cwd() } = {}) {
 }
 
 /**
- * Builds a Slack Block Kit payload for deployment notifications and fix summaries.
- */
-/**
  * How the person who deployed appears in Slack. `usersJson` (the SLACK_USERS variable) maps a
- * GitHub login to a Slack member ID (a real mention, e.g. "U012AB3CD") or a display name.
+ * GitHub login to a Slack member ID, e.g. {"TheSaviourEking": "U0CB84H219C"}, which becomes a
+ * real mention. A login with no valid mapping is shown as "@login", escaped as Slack text.
  */
 export function slackMention(actor, usersJson = '') {
   let users = {};
@@ -102,13 +100,16 @@ export function slackMention(actor, usersJson = '') {
   }
   const mapped = typeof users[actor] === 'string' ? users[actor].trim() : '';
   if (/^[UW][A-Z0-9]{6,}$/.test(mapped)) return `<@${mapped}>`;
-  const name = (mapped || actor)
+  const name = actor
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   return `@${name}`;
 }
 
+/**
+ * Builds a Slack Block Kit payload for deployment notifications and fix summaries.
+ */
 export function buildSlackPayload({
   status = 'success',
   environment = 'staging',
@@ -264,7 +265,11 @@ export function buildSlackPayload({
     ],
   });
 
-  return { blocks };
+  // The notification text (and fallback where blocks cannot show); a mention here notifies them.
+  const text = actor
+    ? `${headerText} · ${slackMention(actor, slackUsers)}`
+    : headerText;
+  return { text, blocks };
 }
 
 /**

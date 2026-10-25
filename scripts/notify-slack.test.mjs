@@ -198,21 +198,31 @@ test('getGitCommits lists only what is new since the deployed version, without m
   assert.deepEqual(commits.features, []);
 });
 
-test('the person who deployed is shown by their Slack name, or pinged by their Slack ID', () => {
+test('the person who deployed is mentioned by their Slack member ID, or shown by GitHub login', () => {
   const users = JSON.stringify({
-    TheSaviourEking: 'Saviour Eking',
-    'ops-bot': 'U012AB3CD',
+    TheSaviourEking: 'U0CB84H219C',
+    'named-only': 'Saviour Eking',
   });
-  assert.equal(slackMention('TheSaviourEking', users), '@Saviour Eking');
-  // A Slack member ID becomes a real mention.
-  assert.equal(slackMention('ops-bot', users), '<@U012AB3CD>');
-  // Unmapped, or no usable map: the GitHub login, as before.
+  assert.equal(slackMention('TheSaviourEking', users), '<@U0CB84H219C>');
+  // Only member IDs are accepted; anything else falls back to the GitHub login.
+  assert.equal(slackMention('named-only', users), '@named-only');
   assert.equal(slackMention('someone-else', users), '@someone-else');
   assert.equal(slackMention('TheSaviourEking', 'not json'), '@TheSaviourEking');
   assert.equal(slackMention('TheSaviourEking', ''), '@TheSaviourEking');
-  // Slack control characters in a name cannot forge a mention or a link.
-  assert.equal(
-    slackMention('x', JSON.stringify({ x: '<!channel>' })),
-    '@&lt;!channel&gt;',
-  );
+  // Slack control characters in a login cannot forge a mention or a link.
+  assert.equal(slackMention('<!channel>', ''), '@&lt;!channel&gt;');
+});
+
+test('the payload mentions the deployer in the notification text and the Triggered by field', () => {
+  const payload = buildSlackPayload({
+    status: 'success',
+    actor: 'TheSaviourEking',
+    slackUsers: JSON.stringify({ TheSaviourEking: 'U0CB84H219C' }),
+  });
+  // Slack shows `text` in the notification; a mention there notifies the person.
+  assert.match(payload.text, /<@U0CB84H219C>/);
+  const fields = payload.blocks.flatMap((b) => b.fields ?? []);
+  const triggered = fields.find((f) => f.text.startsWith('*Triggered by:*'));
+  assert.equal(triggered.type, 'mrkdwn');
+  assert.equal(triggered.text, '*Triggered by:*\n<@U0CB84H219C>');
 });
