@@ -1,3 +1,10 @@
+# PR #18 — Staging Compose validation failure (25 October 2026)
+
+- Branch `feat/staging-db-roles`, PR #18. CI now supplies test-only values for required staging secret interpolation while validating against the intentionally blank example env.
+- Verified the same Compose `config --quiet` command locally, plus Prettier and `git diff --check`.
+- Strict Compose requirements and real staging configuration remain unchanged; no deployment or real credentials used.
+- Next exact step: verify PR #18 checks after the fix is pushed.
+
 # CI rename redirect assertion — 22 October 2026
 
 - Active branch: `feat/hardening`, based on `5e18764`. The primary `dev` worktree is untouched.

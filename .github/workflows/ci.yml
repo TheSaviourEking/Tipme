@@ -39,6 +39,14 @@ jobs:
           TIPME_VERSION: 0000000
           TIPME_ENV_FILE: ./staging.env.example
           POSTGRES_PASSWORD: ci-placeholder
+          POSTGRES_RUNTIME_PASSWORD: ci-runtime-placeholder
+          POSTGRES_MIGRATOR_PASSWORD: ci-migrator-placeholder
+          POSTGRES_BACKUP_PASSWORD: ci-backup-placeholder
+          STATUS_TOKEN_SECRET: ci-placeholder-status-token-secret-32-characters
+          AUTH_CODE_SECRET: ci-placeholder-auth-code-secret-32-characters
+          WEB_REVALIDATE_SECRET: ci-placeholder-revalidate-secret-32-characters
+          OPS_TOTP_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          BACKUP_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
   security:
     runs-on: ubuntu-latest
