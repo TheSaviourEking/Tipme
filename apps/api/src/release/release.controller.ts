@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
 import {
   Controller,
   Get,
@@ -21,6 +20,7 @@ import {
   type BackupStatus,
 } from '@tipme/database';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { bearerMatches } from '../http/bearer.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
 
@@ -123,14 +123,9 @@ export class ReleaseRunsController {
   }
 
   private authorise(authorization: string | undefined): void {
-    const token = this.config.RELEASE_CHECK_TOKEN;
-    const given = /^Bearer (.+)$/.exec(authorization ?? '')?.[1] ?? '';
     const ok =
       this.config.RELEASE_KIND === 'test' &&
-      Boolean(token) &&
-      timingSafeEqual(digest(given), digest(token ?? ''));
+      bearerMatches(authorization, this.config.RELEASE_CHECK_TOKEN);
     if (!ok) throw new CodedHttpException(404, 'NOT_FOUND');
   }
 }
-
-const digest = (value: string) => createHash('sha256').update(value).digest();

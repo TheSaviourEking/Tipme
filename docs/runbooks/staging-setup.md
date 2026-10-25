@@ -115,11 +115,14 @@ The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence t
 Then, on your machine within 30 minutes:
 
 ```sh
-RELEASE_PREVIEW_PASSWORD=... node scripts/release-enrol.mjs --web https://staging.<domain> \
-  --api https://api.staging.<domain> --phone <same number> --code <the enrolment code>
+RELEASE_PREVIEW_PASSWORD=... RELEASE_CHECK_TOKEN=... node scripts/release-enrol.mjs \
+  --web https://staging.<domain> --api https://api.staging.<domain> \
+  --phone <same number> --code <the enrolment code> --out ./release-totp.txt
 ```
 
-Add the printed secret as `RELEASE_OPS_TOTP_SECRET`, and the number as `RELEASE_OPS_PHONE`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
+(The pretend inbox on staging needs the release token as well as the password. Testers open `/dev/inbox` and enter the same token as the "Inbox key".)
+
+Add the secret from `release-totp.txt` as `RELEASE_OPS_TOTP_SECRET` (then delete the file), and the number as `RELEASE_OPS_PHONE`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
 
 ## 8. Prove it
 

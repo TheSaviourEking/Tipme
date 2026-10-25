@@ -389,9 +389,14 @@ test('minor: replaying a tip that expired before reaching the provider is refuse
       'the provider must not be asked about a payment it never saw',
     );
   };
+  // Looked up by its attempt id, the provider has no such payment, so the tip is cancelled.
   await expireStaleTips({
     db: database.db,
-    provider: { verifyTransaction: never },
+    provider: {
+      name: 'mock',
+      findPayment: async () => null,
+      verifyTransaction: never,
+    },
     now: new Date(),
   });
   const replay = await intent(stack.api, { quoteId: quoted.quoteId }, key);

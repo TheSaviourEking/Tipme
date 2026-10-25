@@ -38,7 +38,7 @@ test('sessions', async (t) => {
   });
 
   await t.test(
-    'only the token hash is stored, and use slides the expiry',
+    'only the token hash is stored, and a session ends 30 days after sign-in however often it is used',
     async () => {
       const { token, expiresAt } = await createSession(database.db, {
         userId,
@@ -53,11 +53,17 @@ test('sessions', async (t) => {
         createHash('sha256').update(token).digest('hex'),
       );
       assert.equal(JSON.stringify(rows).includes(token), false);
-      const resolved = await resolveSession(database.db, token, days(10));
-      assert.equal(resolved.userId, userId);
-      const [after] = await q('SELECT expires_at FROM sessions');
-      assert.equal(after.expires_at.getTime(), days(40).getTime());
-      assert.equal(await resolveSession(database.db, token, days(41)), null);
+      // Used every day (as a stolen token replayed by hand would be): it still ends on day 30,
+      // when the browser's cookie does.
+      for (const day of [1, 10, 20, 29])
+        assert.equal(
+          (await resolveSession(database.db, token, days(day)))?.userId,
+          userId,
+        );
+      const [after] = await q('SELECT expires_at, last_seen_at FROM sessions');
+      assert.equal(after.expires_at.getTime(), days(30).getTime());
+      assert.equal(after.last_seen_at.getTime(), days(29).getTime());
+      assert.equal(await resolveSession(database.db, token, days(31)), null);
       assert.equal(await resolveSession(database.db, 'not-a-token', t0), null);
     },
   );

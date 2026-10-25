@@ -175,8 +175,13 @@ export function totpClock(secret) {
   return async function nextCode() {
     const { totpAt } = await import('../../packages/domain/dist/index.js');
     for (;;) {
-      const current = BigInt(Math.floor(Date.now() / 30_000));
-      const step = last + 1n > current - 1n ? last + 1n : current - 1n;
+      const now = Date.now();
+      const current = BigInt(Math.floor(now / 30_000));
+      // The server accepts the previous, current and next step. The previous one expires at the
+      // next 30-second boundary, so it is used only with 5 seconds to spare: a request that
+      // crossed the boundary on its way would otherwise be refused (a CI flake).
+      const oldest = now % 30_000 < 25_000 ? current - 1n : current;
+      const step = last + 1n > oldest ? last + 1n : oldest;
       if (step <= current + 1n) {
         last = step;
         return totpAt(secret, step);

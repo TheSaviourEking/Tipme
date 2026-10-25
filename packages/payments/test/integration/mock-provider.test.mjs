@@ -45,6 +45,22 @@ test('payments start pending, report the mock fee, and can be resolved', async (
   );
 });
 
+test('starting the same attempt twice returns the same payment, found by the attempt id', async () => {
+  const mock = provider();
+  const attemptId = randomUUID();
+  const input = { attemptId, amountMinor: 100000n, currency: 'NGN' };
+  // Two starts at once (a retry racing a timed-out first call) still make one payment.
+  const [first, second] = await Promise.all([
+    mock.initializePayment(input),
+    mock.initializePayment(input),
+  ]);
+  assert.equal(first.providerReference, second.providerReference);
+  assert.deepEqual(await mock.findPayment(attemptId), {
+    providerReference: first.providerReference,
+  });
+  assert.equal(await mock.findPayment(randomUUID()), null);
+});
+
 test('a no-reply payment is captured silently', async () => {
   const mock = provider();
   const { providerReference } = await mock.initializePayment({

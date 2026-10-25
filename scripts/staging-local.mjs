@@ -273,6 +273,7 @@ if (command === 'up') {
     web: LOCAL.web,
     api: LOCAL.api,
     password: env.PREVIEW_PASSWORD,
+    token: env.RELEASE_CHECK_TOKEN,
     phone,
     enrolmentCode,
   });

@@ -83,23 +83,23 @@ stateDiagram-v2
 <!-- /generated:attempt -->
 <!-- prettier-ignore-end -->
 
-| State                | Meaning                                                                                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CREATED`            | Recorded before the provider is called. If starting the checkout fails or times out, it stays here with no provider reference                                         |
-| `INITIATED`          | The provider returned a checkout and a reference                                                                                                                      |
-| `PENDING`            | The provider says it is in progress                                                                                                                                   |
-| `VERIFIED_SUCCEEDED` | Verified paid, with the amount and currency of the quote                                                                                                              |
-| `VERIFIED_FAILED`    | Verified failed                                                                                                                                                       |
-| `EXPIRED`            | Closed by the expiry job                                                                                                                                              |
-| `UNKNOWN`            | **Only** when the provider reports an amount or currency that does not match the quote. Nothing is booked, an issue opens, and only a verified verdict can move it on |
+| State                | Meaning                                                                                                                                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CREATED`            | Recorded before the provider is called. If starting the checkout fails or times out, it stays here with no provider reference until a retry or the expiry job's lookup finds the payment |
+| `INITIATED`          | The provider returned a checkout and a reference                                                                                                                                         |
+| `PENDING`            | The provider says it is in progress                                                                                                                                                      |
+| `VERIFIED_SUCCEEDED` | Verified paid, with the amount and currency of the quote                                                                                                                                 |
+| `VERIFIED_FAILED`    | Verified failed                                                                                                                                                                          |
+| `EXPIRED`            | Closed by the expiry job                                                                                                                                                                 |
+| `UNKNOWN`            | **Only** when the provider reports an amount or currency that does not match the quote. Nothing is booked, an issue opens, and only a verified verdict can move it on                    |
 
 A provider event can arrive before TipMe has recorded `INITIATED`, so `CREATED` may jump straight to a verdict.
 
 **How a missing answer is handled:**
 
 - A payment the provider never reports stays `INITIATED` (or `PENDING`) until reconciliation asks the provider (`tests/integration/scenarios.test.mjs` scenario 7).
-- A timeout while _starting_ checkout leaves the attempt `CREATED` with no reference. Reconciliation cannot ask about it, the expiry job cancels the tip, and a capture that happened anyway would arrive only as an unmatched event for staff.
-- **Not built yet:** treating a timeout after a possible capture as `UNKNOWN` and resolving it with the provider (see the threat model, M11).
+- A timeout while _starting_ checkout leaves the attempt `CREATED` with no reference: TipMe does not know whether the provider started it. Payments are started with TipMe's attempt id as the merchant reference, and starting is idempotent per attempt, so a retry returns the same payment, never a second one. Before the expiry job may cancel such a tip it looks the payment up by the attempt id; if the provider has it, its reference is recorded and its verified status decides (`packages/database/test/integration/expire.test.mjs`, threat model M11).
+- `UNKNOWN` is kept for what the provider said but TipMe cannot accept (a wrong amount or currency); a missing answer is resolved by asking, as above.
 
 ## Withdrawal (payout)
 
@@ -165,7 +165,6 @@ The minimum withdrawal is ₦1,000 (the whole balance may always be withdrawn). 
 
 - Refunds, chargebacks and disputes: a separate record linked to the tip, with a reversing ledger entry.
 - Payout reversals (`REVERSED`) and a failure reported after `PAID`.
-- Timeouts after a possible capture resolved as `UNKNOWN`.
 - More than one attempt per tip.
 - Settlement reports.
 
