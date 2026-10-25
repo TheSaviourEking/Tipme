@@ -19,13 +19,7 @@ export const PRIVATE_PATHS = [
   '/verify-email',
 ];
 
-const MARKETING_PATHS = [
-  '/',
-  '/how-it-works',
-  '/for-creators',
-  '/legal/terms',
-  '/legal/privacy',
-];
+const MARKETING_PATHS = ['/', '/how-it-works', '/for-creators'];
 
 export interface SeoInput {
   indexing: boolean;
@@ -53,4 +47,12 @@ export function indexingEnabled(
   env: Record<string, string | undefined>,
 ): boolean {
   return env['SITE_INDEXING'] === 'on' && !env['PREVIEW_PASSWORD'];
+}
+
+export function marketingRobots(env: Record<string, string | undefined>): {
+  index: boolean;
+  follow: boolean;
+} {
+  const enabled = indexingEnabled(env);
+  return { index: enabled, follow: enabled };
 }

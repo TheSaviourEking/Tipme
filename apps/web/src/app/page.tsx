@@ -5,9 +5,9 @@ import { Avatar } from '@/components/avatar';
 import { Arrow } from '@/components/brand';
 import { CreatorArt, HowItWorksSteps } from '@/components/marketing';
 import { ViewTracker } from '@/components/view-tracker';
-import { previewMetadata } from '@/lib/metadata';
+import { marketingMetadata } from '@/lib/metadata';
 
-export const metadata = previewMetadata(
+export const metadata = marketingMetadata(
   'TipMe — A little thanks goes a long way',
   'For the people who make your day, your work, your world a little better. Explore TipMe’s non-transactional appreciation preview.',
   '/',

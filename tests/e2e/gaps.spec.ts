@@ -87,6 +87,14 @@ test('a recipient adds a photo, searches their tips and turns off tip emails', a
       timeout: 1000,
     });
   }).toPass({ timeout: 10_000 });
+  // Loaded, not just shown as alt text: the content policy must let images come from the API.
+  await expect
+    .poll(() =>
+      visitor
+        .getByRole('img', { name: /^Photo of / })
+        .evaluate((img: HTMLImageElement) => img.naturalWidth),
+    )
+    .toBeGreaterThan(0);
 
   await tipAsVisitor(browser, handle, { name: 'Bola' });
   await tipAsVisitor(browser, handle, { name: 'Chidi', amount: '5,000 NGN' });

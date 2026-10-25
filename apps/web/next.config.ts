@@ -1,16 +1,46 @@
 import type { NextConfig } from 'next';
 
-// Baseline headers that are compatible with static prerendering. A script-src/style-src CSP
-// needs per-request nonces (forcing dynamic rendering) and is deferred to a security ADR.
-// HSTS belongs at the HTTPS edge once a production domain is approved.
+const apiOrigin = process.env.NEXT_PUBLIC_API_ORIGIN || 'http://localhost:4000';
+const apiUrl = new URL(apiOrigin);
+if (
+  !['http:', 'https:'].includes(apiUrl.protocol) ||
+  apiUrl.username ||
+  apiUrl.password ||
+  apiUrl.pathname !== '/' ||
+  apiUrl.search ||
+  apiUrl.hash
+) {
+  throw new Error(
+    'NEXT_PUBLIC_API_ORIGIN must be an HTTP(S) origin without credentials, path, query or fragment.',
+  );
+}
+
+// Inline scripts/styles are required by statically rendered Next.js pages (nonces would force
+// dynamic rendering; deferred, threat model X1); every other resource class is restricted, and
+// the browser may reach only this site and the configured API origin.
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'X-Frame-Options', value: 'DENY' },
   {
     key: 'Content-Security-Policy',
-    value:
-      "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+    value: [
+      "default-src 'self'",
+      // React's development build needs eval() for its debugging tools; production never does.
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
+      "style-src 'self' 'unsafe-inline'",
+      // Uploaded profile photos are served by the API (/v1/avatars/...).
+      `img-src 'self' data: blob: ${apiUrl.origin}`,
+      "font-src 'self' data:",
+      `connect-src 'self' ${apiUrl.origin}`,
+      "media-src 'self'",
+      "manifest-src 'self'",
+      "worker-src 'self' blob:",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "object-src 'none'",
+    ].join('; '),
   },
   {
     key: 'Permissions-Policy',

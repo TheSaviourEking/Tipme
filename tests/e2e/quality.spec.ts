@@ -144,6 +144,15 @@ test('responses carry baseline security headers', async ({ request }) => {
     expect(headers['content-security-policy'], route).toContain(
       "frame-ancestors 'none'",
     );
+    expect(headers['content-security-policy'], route).toContain(
+      "default-src 'self'",
+    );
+    expect(headers['content-security-policy'], route).toContain(
+      "object-src 'none'",
+    );
+    expect(headers['content-security-policy'], route).toContain(
+      "script-src 'self' 'unsafe-inline'",
+    );
     expect(headers['permissions-policy'], route).toContain('camera=()');
     expect(headers['x-powered-by'], route).toBeUndefined();
   }
