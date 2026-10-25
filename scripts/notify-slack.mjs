@@ -61,7 +61,8 @@ export function parseCommits(rawLog) {
  */
 export function getGitCommits({ range, limit = 10, cwd = process.cwd() } = {}) {
   try {
-    const args = ['log', '--format=%h\t%s'];
+    // Merge commits only repeat their pull request's own commits.
+    const args = ['log', '--no-merges', '--format=%h\t%s'];
     if (range) {
       args.push(range);
     } else {
