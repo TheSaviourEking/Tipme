@@ -87,6 +87,24 @@ test('reduced motion disables skeleton animation', async ({ page }) => {
   expect(animation).toBe('none');
 });
 
+test('design-system tactile controls retain native button and radio semantics', async ({
+  page,
+}) => {
+  await page.goto('/design-system');
+  await expect(page.getByRole('button', { name: 'Primary' })).toHaveAttribute(
+    'type',
+    'button',
+  );
+  await expect(page.getByRole('radio', { name: 'Selected' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Option' })).not.toBeChecked();
+  await expect(
+    page.locator('.material-specimen[data-material="raised"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-material="recessed"]').first(),
+  ).toBeVisible();
+});
+
 test(
   'mobile navigation opens, closes with Escape and returns focus',
   {

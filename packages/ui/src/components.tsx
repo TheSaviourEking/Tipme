@@ -1,6 +1,7 @@
 import type { ComponentPropsWithRef, HTMLAttributes, ReactNode } from 'react';
 
 type Variant = 'primary' | 'secondary' | 'quiet';
+export type Material = 'canvas' | 'raised' | 'recessed' | 'signature';
 const classes = (...values: (string | undefined)[]) =>
   values.filter(Boolean).join(' ');
 
@@ -14,6 +15,7 @@ export function Button({
     <button
       type={type}
       className={classes('tm-button', `tm-button--${variant}`, className)}
+      data-material={variant === 'primary' ? 'signature' : 'raised'}
       {...props}
     />
   );
@@ -26,6 +28,7 @@ export function ActionLink({
   return (
     <a
       className={classes('tm-button', `tm-button--${variant}`, className)}
+      data-material={variant === 'primary' ? 'signature' : 'raised'}
       {...props}
     />
   );
@@ -36,8 +39,31 @@ export function Container({
 }: HTMLAttributes<HTMLDivElement>) {
   return <div className={classes('tm-container', className)} {...props} />;
 }
-export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={classes('tm-card', className)} {...props} />;
+export function Surface({
+  material = 'raised',
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { material?: Material }) {
+  return (
+    <div
+      className={classes('tm-surface', `tm-surface--${material}`, className)}
+      data-material={material}
+      {...props}
+    />
+  );
+}
+export function Card({
+  material = 'raised',
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { material?: Material }) {
+  return (
+    <Surface
+      material={material}
+      className={classes('tm-card', className)}
+      {...props}
+    />
+  );
 }
 export function Badge({
   className,
@@ -141,6 +167,18 @@ export function Choice({
       <input type="radio" {...props} />
       <span>{children}</span>
     </label>
+  );
+}
+export function AmountChoice(
+  props: Omit<ComponentPropsWithRef<'input'>, 'type'> & {
+    children: ReactNode;
+  },
+) {
+  return (
+    <Choice
+      {...props}
+      className={classes('tm-amount-choice', props.className)}
+    />
   );
 }
 export function Notice({

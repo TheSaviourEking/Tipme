@@ -1,13 +1,14 @@
 import {
+  AmountChoice,
   Badge,
   Button,
   Card,
-  Choice,
   Container,
   EmptyState,
   InputField,
   Notice,
   Skeleton,
+  Surface,
   TextareaField,
 } from '@tipme/ui';
 import { previewMetadata } from '@/lib/metadata';
@@ -113,7 +114,11 @@ export default function DesignSystem() {
             <h2 id="ds-materials">Materials</h2>
             <div className="material-specimens">
               {materials.map((material) => (
-                <article
+                <Surface
+                  material={
+                    material.label.toLowerCase() as
+                      'canvas' | 'raised' | 'recessed' | 'signature'
+                  }
                   className={`material-specimen material-specimen--${material.label.toLowerCase()}`}
                   key={material.token}
                 >
@@ -125,7 +130,7 @@ export default function DesignSystem() {
                   <strong>{material.label}</strong>
                   <small>{material.use}</small>
                   <code>{material.token}</code>
-                </article>
+                </Surface>
               ))}
             </div>
           </section>
@@ -136,6 +141,9 @@ export default function DesignSystem() {
               <Button variant="secondary">Secondary</Button>
               <Button variant="quiet">Quiet</Button>
               <Button disabled>Disabled</Button>
+              <Button aria-busy="true" disabled>
+                Busy
+              </Button>
             </div>
             <div className="specimen-row">
               <Badge>Badge</Badge>
@@ -173,15 +181,15 @@ export default function DesignSystem() {
             <fieldset>
               <legend>Choose a sample option</legend>
               <div className="amount-options">
-                <Choice name="ds-choice" value="a" defaultChecked>
+                <AmountChoice name="ds-choice" value="a" defaultChecked>
                   Selected
-                </Choice>
-                <Choice name="ds-choice" value="b">
+                </AmountChoice>
+                <AmountChoice name="ds-choice" value="b">
                   Option
-                </Choice>
-                <Choice name="ds-choice" value="c" disabled>
+                </AmountChoice>
+                <AmountChoice name="ds-choice" value="c" disabled>
                   Disabled
-                </Choice>
+                </AmountChoice>
               </div>
             </fieldset>
           </section>
@@ -193,7 +201,10 @@ export default function DesignSystem() {
             <Notice tone="success" title="Preferences saved">
               A generic, non-financial success example.
             </Notice>
-            <Card>
+            <Notice tone="error" title="Could not save">
+              The action is available to try again.
+            </Notice>
+            <Card material="recessed">
               <Skeleton label="Loading specimen" />
             </Card>
           </section>
