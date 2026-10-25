@@ -39,6 +39,25 @@ const swatches = [
   { token: '--text-secondary', value: '#555555', use: 'Supporting text' },
 ];
 
+const materials = [
+  { token: '--canvas', label: 'Canvas', use: 'Stable page ground' },
+  {
+    token: '--surface-raised',
+    label: 'Raised',
+    use: 'Cards and tactile controls',
+  },
+  {
+    token: '--surface-recessed',
+    label: 'Recessed',
+    use: 'Inputs and financial wells',
+  },
+  {
+    token: '--surface-signature',
+    label: 'Signature',
+    use: 'Selection and primary action',
+  },
+];
+
 export default function DesignSystem() {
   return (
     <main id="main" tabIndex={-1}>
@@ -89,6 +108,26 @@ export default function DesignSystem() {
               Body copy uses the system sans stack at a comfortable 1.7 line
               height for long-form reading.
             </p>
+          </section>
+          <section aria-labelledby="ds-materials">
+            <h2 id="ds-materials">Materials</h2>
+            <div className="material-specimens">
+              {materials.map((material) => (
+                <article
+                  className={`material-specimen material-specimen--${material.label.toLowerCase()}`}
+                  key={material.token}
+                >
+                  <span
+                    className="material-specimen__surface"
+                    style={{ background: `var(${material.token})` }}
+                    aria-hidden="true"
+                  />
+                  <strong>{material.label}</strong>
+                  <small>{material.use}</small>
+                  <code>{material.token}</code>
+                </article>
+              ))}
+            </div>
           </section>
           <section aria-labelledby="ds-actions">
             <h2 id="ds-actions">Actions</h2>

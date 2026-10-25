@@ -53,7 +53,7 @@
   background: var(--surface-base);
   border-radius: var(--radius-lg);
   padding: var(--space-8);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-raised-2);
 }
 .tm-badge {
   display: inline-flex;

@@ -1,17 +1,38 @@
 :root {
+  /* Locked brand */
   --brand-primary: #7a32f9;
-  --brand-hover: #6120cf;
-  --brand-ink: #511cb0;
+  --brand-hover: #6723e8;
+  --brand-pressed: #5718cf;
+  --brand-ink: #4d16a8;
   --brand-soft: #f1e9ff;
-  --brand-mid: #dcc5ff;
+  --brand-mid: #d9c3ff;
+  /* Physical materials */
+  --canvas: #f3f2ee;
   --surface-base: #ffffff;
-  --surface-subtle: #f7f7f7;
+  --surface-raised: #fffefa;
+  --surface-recessed: #eeede8;
+  --surface-signature: #7a32f9;
+  --surface-subtle: #f7f6f2;
+  --edge-light: rgb(255 255 255 / 92%);
+  --border-material: rgb(20 18 16 / 14%);
+  --border-subtle: #dfded8;
+  --border-control: #77736b;
+  /* Ink and feedback */
   --text-primary: #000000;
-  --text-secondary: #555555;
-  --border-subtle: #e5e5e5;
-  --border-control: #777777;
-  --font-body: Arial, Helvetica, sans-serif;
+  --text-secondary: #5d5a54;
+  --text-tertiary: #77736b;
+  --state-success: #23623b;
+  --state-success-soft: #e8f4ec;
+  --state-warning: #75500b;
+  --state-warning-soft: #fff4d8;
+  --state-danger: #9b2820;
+  --state-danger-soft: #fdecea;
+  /* Type roles; actual faces are supplied by the app */
+  --font-interface: Arial, Helvetica, sans-serif;
+  --font-body: var(--font-interface);
   --font-editorial: Georgia, 'Times New Roman', serif;
+  --font-brand: var(--font-interface);
+  --numeric-variant: tabular-nums lining-nums;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -19,26 +40,49 @@
   --text-xl: clamp(1.25rem, 2vw, 1.5rem);
   --text-heading: clamp(2rem, 4.2vw, 3.75rem);
   --text-display: clamp(3.5rem, 7.2vw, 7rem);
-  /* --text-display: clamp(3.5rem, 5.5vw, 7rem); */
+  /* 4px base, 8px primary rhythm */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
+  --space-5: 1.25rem;
   --space-6: 1.5rem;
   --space-8: 2rem;
+  --space-10: 2.5rem;
   --space-12: 3rem;
   --space-16: 4rem;
   --space-24: 6rem;
-  --radius-sm: 0.5rem;
-  --radius-md: 1rem;
-  --radius-lg: 1.75rem;
+  /* Geometry by role */
+  --radius-control: 0.625rem;
+  --radius-field: 0.875rem;
+  --radius-card: 1.625rem;
+  --radius-object: 2rem;
   --radius-pill: 999px;
-  --shadow-card: 0 20px 65px #0000000d, 0 2px 8px #00000005;
-  --shadow-float: 0 24px 60px #511cb01a;
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-field);
+  --radius-lg: var(--radius-card);
+  /* Shallow, believable elevation */
+  --shadow-raised-1:
+    0 1px 1px rgb(20 18 16 / 10%), 0 5px 14px rgb(20 18 16 / 7%);
+  --shadow-raised-2:
+    0 2px 3px rgb(20 18 16 / 10%), 0 18px 42px rgb(20 18 16 / 10%);
+  --shadow-raised-signature:
+    0 2px 2px rgb(58 17 131 / 24%), 0 12px 24px rgb(79 27 173 / 22%);
+  --shadow-recessed:
+    inset 0 1px 2px rgb(20 18 16 / 11%), inset 0 -1px 0 rgb(255 255 255 / 80%);
+  --shadow-card: var(--shadow-raised-2);
+  --shadow-float: var(--shadow-raised-2);
+  /* Motion by purpose */
+  --duration-tactile: 150ms;
+  --duration-component: 240ms;
+  --duration-spatial: 420ms;
+  --duration-appreciation: 760ms;
+  --duration-fast: var(--duration-tactile);
+  --duration-normal: var(--duration-component);
+  --duration-enter: var(--duration-spatial);
+  --ease-physical: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: var(--ease-physical);
   --container: 78rem;
-  --duration-fast: 140ms;
-  --duration-normal: 220ms;
-  --duration-enter: 450ms;
-  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --z-nav: 20;
 }
