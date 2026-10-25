@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import {
   buildSlackPayload,
   getGitCommits,
+  slackMention,
   main,
   parseCommits,
 } from './notify-slack.mjs';
@@ -195,4 +196,23 @@ test('getGitCommits lists only what is new since the deployed version, without m
   );
   assert.deepEqual(commits.fixes, []);
   assert.deepEqual(commits.features, []);
+});
+
+test('the person who deployed is shown by their Slack name, or pinged by their Slack ID', () => {
+  const users = JSON.stringify({
+    TheSaviourEking: 'Saviour Eking',
+    'ops-bot': 'U012AB3CD',
+  });
+  assert.equal(slackMention('TheSaviourEking', users), '@Saviour Eking');
+  // A Slack member ID becomes a real mention.
+  assert.equal(slackMention('ops-bot', users), '<@U012AB3CD>');
+  // Unmapped, or no usable map: the GitHub login, as before.
+  assert.equal(slackMention('someone-else', users), '@someone-else');
+  assert.equal(slackMention('TheSaviourEking', 'not json'), '@TheSaviourEking');
+  assert.equal(slackMention('TheSaviourEking', ''), '@TheSaviourEking');
+  // Slack control characters in a name cannot forge a mention or a link.
+  assert.equal(
+    slackMention('x', JSON.stringify({ x: '<!channel>' })),
+    '@&lt;!channel&gt;',
+  );
 });

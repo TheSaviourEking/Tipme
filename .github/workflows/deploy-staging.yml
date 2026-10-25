@@ -131,6 +131,8 @@ jobs:
         if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # GitHub login → Slack member ID or name, e.g. {"TheSaviourEking": "U012AB3CD"}.
+          SLACK_USERS: ${{ vars.SLACK_USERS }}
         run: |
           node scripts/notify-slack.mjs \
             --status "${{ job.status }}" \
@@ -162,6 +164,8 @@ jobs:
       - name: Notify Slack
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # GitHub login → Slack member ID or name, e.g. {"TheSaviourEking": "U012AB3CD"}.
+          SLACK_USERS: ${{ vars.SLACK_USERS }}
         run: |
           node scripts/notify-slack.mjs \
             --status "failure" \

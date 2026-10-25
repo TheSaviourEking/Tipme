@@ -89,6 +89,26 @@ export function getGitCommits({ range, limit = 10, cwd = process.cwd() } = {}) {
 /**
  * Builds a Slack Block Kit payload for deployment notifications and fix summaries.
  */
+/**
+ * How the person who deployed appears in Slack. `usersJson` (the SLACK_USERS variable) maps a
+ * GitHub login to a Slack member ID (a real mention, e.g. "U012AB3CD") or a display name.
+ */
+export function slackMention(actor, usersJson = '') {
+  let users = {};
+  try {
+    users = JSON.parse(usersJson || '{}') ?? {};
+  } catch {
+    users = {};
+  }
+  const mapped = typeof users[actor] === 'string' ? users[actor].trim() : '';
+  if (/^[UW][A-Z0-9]{6,}$/.test(mapped)) return `<@${mapped}>`;
+  const name = (mapped || actor)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `@${name}`;
+}
+
 export function buildSlackPayload({
   status = 'success',
   environment = 'staging',
@@ -97,6 +117,7 @@ export function buildSlackPayload({
   apiUrl = '',
   repo = '',
   actor = '',
+  slackUsers = '',
   runUrl = '',
   commits = {
     all: [],
@@ -140,7 +161,10 @@ export function buildSlackPayload({
   ];
 
   if (actor) {
-    fields.push({ type: 'mrkdwn', text: `*Triggered by:*\n@${actor}` });
+    fields.push({
+      type: 'mrkdwn',
+      text: `*Triggered by:*\n${slackMention(actor, slackUsers)}`,
+    });
   }
   if (links.length > 0) {
     fields.push({
@@ -293,6 +317,7 @@ export async function main(argv = process.argv, env = process.env) {
     apiUrl,
     repo,
     actor,
+    slackUsers: env.SLACK_USERS || '',
     runUrl,
     commits,
   });
