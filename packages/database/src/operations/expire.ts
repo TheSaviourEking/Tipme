@@ -2,6 +2,7 @@ import { canTransition, TIP_TRANSITIONS } from '@tipme/domain';
 import { and, asc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { paymentAttempts, paymentIntents, tipQuotes, tips } from '../schema.js';
+import { markAttemptInitiated } from './attempts.js';
 import { guarded } from './errors.js';
 import { activeTraceId } from './ids.js';
 import { recordProviderEvent } from './provider-events.js';
@@ -10,14 +11,21 @@ import { recordTransition } from './transitions.js';
 
 const EXPIRABLE = ['CREATED', 'INITIATED'] as const;
 
+/** Reconciliation's verifier, plus a lookup by TipMe's own attempt id (the merchant reference). */
+export interface PaymentLookup extends TransactionVerifier {
+  name: string;
+  findPayment(attemptId: string): Promise<{ providerReference: string } | null>;
+}
+
 /**
  * Cancels tips that were never paid: attempts still CREATED/INITIATED whose quote expired more
- * than `graceMs` ago. A payment that was started is first checked with the provider, so a tip
- * that was in fact paid is recorded as paid (verified evidence), never cancelled.
+ * than `graceMs` ago. The provider is always asked first, so a tip that was in fact paid is
+ * recorded as paid (verified evidence), never cancelled. An attempt with no provider reference
+ * (its start timed out or failed) is looked up by its own id: the provider may have started it.
  */
 export async function expireStaleTips(input: {
   db: Database;
-  provider: TransactionVerifier;
+  provider: PaymentLookup;
   now: Date;
   graceMs?: number;
   limit?: number;
@@ -55,6 +63,21 @@ export async function expireStaleTips(input: {
   let errors = 0;
   for (const candidate of candidates) {
     try {
+      if (!candidate.providerReference) {
+        const found = await input.provider.findPayment(candidate.attemptId);
+        if (found) {
+          // Record the reference first, so a webhook for it can be matched from now on.
+          const recorded = await markAttemptInitiated(db, {
+            attemptId: candidate.attemptId,
+            provider: input.provider.name,
+            providerReference: found.providerReference,
+          });
+          // Something else moved the attempt meanwhile; leave it to the next run.
+          if (recorded === 'conflict' || recorded === 'not_found') continue;
+          candidate.provider = input.provider.name;
+          candidate.providerReference = found.providerReference;
+        }
+      }
       if (candidate.provider && candidate.providerReference) {
         const answer = await input.provider.verifyTransaction(
           candidate.providerReference,

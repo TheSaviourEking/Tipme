@@ -8,7 +8,7 @@ import type {
   WebhookVerification,
 } from '../provider.js';
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
-import { paymentKey, payoutKey } from './keys.js';
+import { attemptKey, paymentKey, payoutKey } from './keys.js';
 
 /** Same rounding as FEE_POLICY_V1's estimated processing fee (150 bps, half up). */
 export const mockProviderFee = (amountMinor: bigint): bigint =>
@@ -62,7 +62,18 @@ export function createMockProvider(options: {
     name: 'mock',
 
     async initializePayment({ attemptId, amountMinor, currency, scenario }) {
+      // Like a real provider's unique merchant reference: one payment per attempt, however
+      // often the start is retried.
       const reference = `mock_pay_${randomUUID()}`;
+      const claimed = await redis.set(
+        attemptKey(prefix, attemptId),
+        reference,
+        'NX',
+      );
+      if (claimed !== 'OK') {
+        const existing = await redis.get(attemptKey(prefix, attemptId));
+        if (existing) return { providerReference: existing };
+      }
       await redis.hset(paymentKey(prefix, reference), {
         attemptId,
         amountMinor: amountMinor.toString(),
@@ -73,6 +84,11 @@ export function createMockProvider(options: {
         status: scenario === 'no-reply' ? 'succeeded' : 'pending',
       });
       return { providerReference: reference };
+    },
+
+    async findPayment(attemptId) {
+      const reference = await redis.get(attemptKey(prefix, attemptId));
+      return reference ? { providerReference: reference } : null;
     },
 
     async verifyTransaction(providerReference) {

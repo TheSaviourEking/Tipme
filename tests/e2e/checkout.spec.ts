@@ -296,6 +296,8 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
     await expireStaleTips({
       db: database.db,
       provider: {
+        name: 'mock',
+        findPayment: async () => null,
         verifyTransaction: async () => ({
           status: 'pending',
           amountMinor: 0n,

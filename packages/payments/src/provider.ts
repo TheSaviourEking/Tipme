@@ -30,12 +30,18 @@ export type TransactionStatus =
  */
 export interface PaymentProvider {
   name: string;
+  /**
+   * Starts a payment, with TipMe's attempt id as the merchant reference. Idempotent per attempt:
+   * a repeat (for example after a timeout) returns the same payment, never a second one.
+   */
   initializePayment(input: {
     attemptId: string;
     amountMinor: bigint;
     currency: string;
     scenario?: Scenario;
   }): Promise<{ providerReference: string }>;
+  /** The payment started for this attempt, if any: how a start that timed out is resolved. */
+  findPayment(attemptId: string): Promise<{ providerReference: string } | null>;
   /** Server-to-server status check: the authority for reconciliation. */
   verifyTransaction(providerReference: string): Promise<{
     status: TransactionStatus;
