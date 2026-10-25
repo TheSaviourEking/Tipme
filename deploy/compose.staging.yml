@@ -6,19 +6,11 @@ name: tipme-staging
 
 x-app: &app
   image: tipme-app:${TIPME_VERSION:?set TIPME_VERSION to the git sha}
-  env_file: ${TIPME_ENV_FILE:-/srv/tipme/staging.env}
-  environment:
-    GIT_SHA: ${TIPME_VERSION}
-    DATABASE_URL: postgres://tipme:${POSTGRES_PASSWORD:?}@postgres:5432/tipme
-    REDIS_URL: redis://redis:6379
   restart: unless-stopped
   read_only: true
   tmpfs: ['/tmp']
   security_opt: ['no-new-privileges:true']
   networks: [internal]
-  depends_on:
-    postgres: { condition: service_healthy }
-    redis: { condition: service_healthy }
 
 services:
   caddy:
@@ -45,6 +37,50 @@ services:
         './apps/api/dist/instrument.js',
         'apps/api/dist/main.js',
       ]
+    environment:
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-production}
+      PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:-}
+      NODE_ENV: ${NODE_ENV:-production}
+      HOST: ${HOST:-0.0.0.0}
+      RELEASE_KIND: ${RELEASE_KIND:-live}
+      GIT_SHA: ${TIPME_VERSION}
+      RELEASE_CHECK_TOKEN: ${RELEASE_CHECK_TOKEN:-}
+      PREVIEW_COOKIE_DOMAIN: ${PREVIEW_COOKIE_DOMAIN:-}
+      PORT: ${PORT:-4000}
+      DATABASE_URL: postgres://tipme_runtime:${POSTGRES_RUNTIME_PASSWORD:?}@postgres:5432/tipme
+      REDIS_URL: redis://redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
+      API_METRICS_PORT: ${API_METRICS_PORT:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-false}
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
+      MOCK_PROVIDER_WEBHOOK_SECRET: ${MOCK_PROVIDER_WEBHOOK_SECRET:-}
+      WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
+      STATUS_TOKEN_SECRET: ${STATUS_TOKEN_SECRET:?}
+      RATE_LIMIT_QUOTES_PER_MIN: ${RATE_LIMIT_QUOTES_PER_MIN:-30}
+      RATE_LIMIT_INTENTS_PER_MIN: ${RATE_LIMIT_INTENTS_PER_MIN:-10}
+      RATE_LIMIT_HANDLES_PER_MIN: ${RATE_LIMIT_HANDLES_PER_MIN:-60}
+      RATE_LIMIT_ANALYTICS_PER_MIN: ${RATE_LIMIT_ANALYTICS_PER_MIN:-120}
+      RATE_LIMIT_REPORTS_PER_HOUR: ${RATE_LIMIT_REPORTS_PER_HOUR:-10}
+      RATE_LIMIT_AVATARS_PER_HOUR: ${RATE_LIMIT_AVATARS_PER_HOUR:-20}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
+      RATE_LIMIT_AUTH_PER_HOUR: ${RATE_LIMIT_AUTH_PER_HOUR:-10}
+      RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: ${RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR:-3}
+      AUTH_CODE_SECRET: ${AUTH_CODE_SECRET:?}
+      MESSAGING_PROVIDER: ${MESSAGING_PROVIDER:-mock}
+      WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
+      WEB_REVALIDATE_URL: ${WEB_REVALIDATE_URL:-}
+      OPS_TOTP_KEY: ${OPS_TOTP_KEY:?}
+      OPS_TRACE_URL_TEMPLATE: ${OPS_TRACE_URL_TEMPLATE:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
     healthcheck:
       test:
         [
@@ -69,6 +105,29 @@ services:
         './apps/worker/dist/instrument.js',
         'apps/worker/dist/main.js',
       ]
+    environment:
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-production}
+      PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:-}
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgres://tipme_runtime:${POSTGRES_RUNTIME_PASSWORD:?}@postgres:5432/tipme
+      REDIS_URL: redis://redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
+      WORKER_METRICS_PORT: ${WORKER_METRICS_PORT:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      GIT_SHA: ${TIPME_VERSION}
+      RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-60000}
+      RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-120000}
+      REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-25000000}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
     mem_limit: 512m
 
   # Run by deploy.sh before switching versions: guarded, after a fresh backup.
@@ -76,10 +135,12 @@ services:
     <<: *app
     restart: 'no'
     profiles: [tools]
+    depends_on:
+      postgres: { condition: service_healthy }
     command: ['node', 'packages/database/dist/scripts/release-migrate.js']
     environment:
       GIT_SHA: ${TIPME_VERSION}
-      DATABASE_URL: postgres://tipme:${POSTGRES_PASSWORD:?}@postgres:5432/tipme
+      DATABASE_URL: postgres://tipme_migrator:${POSTGRES_MIGRATOR_PASSWORD:?}@postgres:5432/tipme
       MIGRATE_CONFIRM_DATABASE: ${MIGRATE_CONFIRM_DATABASE:-}
       MIGRATE_BACKUP_DONE: ${MIGRATE_BACKUP_DONE:-}
 
@@ -87,19 +148,44 @@ services:
   backup:
     <<: *app
     command: ['sh', 'deploy/backup-loop.sh']
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes: ['${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups']
+    environment:
+      DATABASE_URL: postgres://tipme_backup:${POSTGRES_BACKUP_PASSWORD:?}@postgres:5432/tipme
+      BACKUP_KEY: ${BACKUP_KEY:?}
+      GIT_SHA: ${TIPME_VERSION}
+      BACKUP_RETAIN: ${BACKUP_RETAIN:-14}
+      BASE_BACKUP_RETAIN: ${BASE_BACKUP_RETAIN:-7}
+    read_only: false
+    mem_limit: 384m
+
+  # Rare restore drills/incidents need database-creation privileges; never run continuously.
+  restore:
+    <<: *app
+    restart: 'no'
+    profiles: [tools]
+    command: ['node', 'packages/database/dist/scripts/restore-drill.js']
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://tipme:${POSTGRES_PASSWORD:?}@postgres:5432/tipme
+      BACKUP_KEY: ${BACKUP_KEY:?}
     volumes: ['${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups']
     read_only: false
     mem_limit: 384m
 
   # Optional off-server copy of the encrypted backups and the WAL archive (any S3-compatible
   # bucket), every 15 minutes: <remote>/backups and <remote>/wal.
-  # Configure the rclone remote with RCLONE_CONFIG_<NAME>_* settings in the env file, then
+  # Configure the rclone remote with RCLONE_CONFIG_<NAME>_* settings in offsite.env, then
   # start with `--profile offsite`.
   offsite:
     image: rclone/rclone:1.71.1
     profiles: [offsite]
     restart: unless-stopped
-    env_file: ${TIPME_ENV_FILE:-/srv/tipme/staging.env}
+    env_file:
+      - path: ${TIPME_OFFSITE_ENV_FILE:-/srv/tipme/offsite.env}
+        required: false
     entrypoint: ['sh', '/offsite-loop.sh']
     volumes:
       - '${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups:ro'
@@ -115,6 +201,9 @@ services:
       POSTGRES_DB: tipme
       POSTGRES_USER: tipme
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?}
+      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?}
+      POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:?}
     # Point-in-time recovery (PR-011): every finished WAL segment is archived to /wal, at least
     # every 5 minutes while anything changes, so at most about 5 minutes of data can be lost.
     entrypoint:
@@ -139,6 +228,8 @@ services:
       - walarchive:/wal
       - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
       - ./postgres/archive-wal.sh:/etc/postgresql/archive-wal.sh:ro
+      - ./postgres/bootstrap-roles.sh:/opt/tipme/bootstrap-roles.sh:ro
+      - ./postgres/roles.sql:/opt/tipme/roles.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U tipme -d tipme']
       interval: 5s

@@ -21,11 +21,15 @@ previous=$(current_version)
 echo "==> Database and queue"
 compose_for "$version" up -d --wait postgres redis
 
+echo "==> Database roles"
+compose_for "$version" exec -T postgres sh /opt/tipme/bootstrap-roles.sh
+
 echo "==> Backup before migrating"
 compose_for "$version" run --rm backup sh deploy/backup-loop.sh once
 
 echo "==> Migrations"
 MIGRATE_CONFIRM_DATABASE=tipme MIGRATE_BACKUP_DONE=1 compose_for "$version" run --rm migrate
+compose_for "$version" exec -T postgres sh /opt/tipme/bootstrap-roles.sh
 
 echo "==> Switching to $version"
 compose_for "$version" up -d --remove-orphans api worker caddy backup

@@ -1,3 +1,10 @@
+# PR #18 — Staging Compose validation failure (25 October 2026)
+
+- CI's placeholder-only Compose validation failed because the staging example intentionally leaves secrets blank, while `${VAR:?}` treats unset and blank values as errors.
+- Added test-only values to the workflow for every required secret, including the separated Postgres roles. Kept the example file blank and Compose's deployment-time required-variable guards unchanged.
+- Local equivalent of the workflow's `docker compose ... config --quiet` passed; Prettier and `git diff --check` passed.
+- No deploy, staging/production change, or real credential was used. Next step: let PR #18 checks rerun after push.
+
 # Slack deployment notifications & fix summaries — 23 October 2026
 
 Added Slack deployment notification integration via incoming webhook. Formats release outcomes and automatically parses Conventional Commits to extract categorised bug fixes (`fix:`), product updates/features (`feat:`), and version details with direct links to the web app, API, and commit/run URLs. Integrated into `.github/workflows/deploy-staging.yml` and documented in `docs/runbooks/staging-setup.md`. Requires repository/environment secret `SLACK_WEBHOOK_URL` (gracefully skips if not configured).
