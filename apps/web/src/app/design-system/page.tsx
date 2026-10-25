@@ -12,6 +12,11 @@ import {
   TextareaField,
 } from '@tipme/ui';
 import { previewMetadata } from '@/lib/metadata';
+import {
+  MotionSpecimen,
+  ResponsiveSpecimen,
+  SymbolSpecimen,
+} from './specimens';
 
 export const metadata = previewMetadata(
   'Design foundation',
@@ -91,7 +96,7 @@ export default function DesignSystem() {
               ))}
             </ul>
           </section>
-          <section aria-labelledby="ds-type">
+          <section data-testid="type-specimen" aria-labelledby="ds-type">
             <h2 id="ds-type">Typography</h2>
             <p className="eyebrow">Eyebrow label</p>
             <p
@@ -106,11 +111,14 @@ export default function DesignSystem() {
               <em style={{ fontFamily: 'var(--font-editorial)' }}>accent</em>
             </p>
             <p>
-              Body copy uses the system sans stack at a comfortable 1.7 line
-              height for long-form reading.
+              Body copy uses Manrope at a comfortable line height, paired with a
+              restrained editorial serif for human emphasis.
             </p>
           </section>
-          <section aria-labelledby="ds-materials">
+          <section
+            data-testid="material-specimen"
+            aria-labelledby="ds-materials"
+          >
             <h2 id="ds-materials">Materials</h2>
             <div className="material-specimens">
               {materials.map((material) => (
@@ -134,7 +142,7 @@ export default function DesignSystem() {
               ))}
             </div>
           </section>
-          <section aria-labelledby="ds-actions">
+          <section data-testid="control-specimen" aria-labelledby="ds-actions">
             <h2 id="ds-actions">Actions</h2>
             <div className="specimen-row">
               <Button>Primary</Button>
@@ -208,6 +216,9 @@ export default function DesignSystem() {
               <Skeleton label="Loading specimen" />
             </Card>
           </section>
+          <SymbolSpecimen />
+          <MotionSpecimen />
+          <ResponsiveSpecimen />
         </div>
         <EmptyState title="Nothing here yet">
           Empty states explain what is missing and what to do next.

@@ -20,7 +20,15 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: 'list',
   globalSetup: './tests/e2e/global-setup.ts',
-  use: { baseURL: WEB_ORIGIN, trace: 'retain-on-failure' },
+  use: {
+    baseURL: WEB_ORIGIN,
+    trace: 'retain-on-failure',
+    colorScheme: 'light',
+    locale: 'en-NG',
+    timezoneId: 'Africa/Lagos',
+    reducedMotion: 'reduce',
+    screenshot: 'only-on-failure',
+  },
   // One pass at desktop width. Tests tagged @mobile also run at 360px.
   // Reflow at 320px is asserted inside those tests, so the suite is not run twice.
   projects: [

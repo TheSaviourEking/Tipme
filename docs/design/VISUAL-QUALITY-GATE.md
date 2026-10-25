@@ -16,3 +16,7 @@ High-fidelity completion requires both automated and human evidence.
 - Check touch, keyboard, 200% zoom, images/fonts disabled, slow network, and screen-reader smoke.
 
 Baseline changes require an explanation of the intended visual decision. Final parity remains blocked while `reference/tipme-interface-directions.png` is absent.
+
+## Baseline authority
+
+Only an intentional design change may update a screenshot baseline. The author must run the visual spec without update mode first, inspect the produced actual/diff images at desktop and mobile, explain the intended change in the commit, then run with `--update-snapshots`. A reviewer must compare the resulting baseline with this document's anatomy checklist. CI failure alone is never permission to accept a new baseline.
