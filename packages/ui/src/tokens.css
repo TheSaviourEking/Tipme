@@ -28,10 +28,10 @@
   --state-danger: #9b2820;
   --state-danger-soft: #fdecea;
   /* Type roles; actual faces are supplied by the app */
-  --font-interface: Arial, Helvetica, sans-serif;
+  --font-interface: var(--font-manrope), 'Avenir Next', Arial, sans-serif;
   --font-body: var(--font-interface);
-  --font-editorial: Georgia, 'Times New Roman', serif;
-  --font-brand: var(--font-interface);
+  --font-editorial: var(--font-dm-serif), 'Iowan Old Style', Georgia, serif;
+  --font-brand: var(--font-nunito), var(--font-interface);
   --numeric-variant: tabular-nums lining-nums;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -85,4 +85,9 @@
   --ease-out: var(--ease-physical);
   --container: 78rem;
   --z-nav: 20;
+}
+
+.tm-numeric,
+[data-numeric='true'] {
+  font-variant-numeric: var(--numeric-variant);
 }

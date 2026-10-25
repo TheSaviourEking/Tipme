@@ -54,7 +54,7 @@ export default function Home() {
           <div className="hero-demo" id="try-it">
             <span className="demo-orbit" aria-hidden="true" />
             <div className="demo-person">
-              <Avatar src="/illustrations/ada.svg" name="Ada" size={52} />
+              <Avatar src="/portraits/ada.webp" name="Ada" size={52} />
               <div>
                 <strong>Ada Okafor</strong>
                 <span>Designer. Maker. Day-improver.</span>

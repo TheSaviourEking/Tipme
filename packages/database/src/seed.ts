@@ -16,7 +16,7 @@ export const DEMO_PROFILES = [
     role: 'Designer & generous internet person',
     bio: 'Making complicated things feel a little simpler. I share design notes, useful templates, and the occasional reminder to take a break.',
     note: 'If something I made helped you find your way, a little appreciation would make my day.',
-    avatarPath: '/illustrations/ada.svg',
+    avatarPath: '/portraits/ada.webp',
     craft: 'Thoughtful design. Freely shared.',
   },
   {
@@ -28,7 +28,7 @@ export const DEMO_PROFILES = [
     role: 'Barista & brightener of mornings',
     bio: 'Good coffee, remembered names, and a little extra care. I believe the smallest details can change someone’s whole morning.',
     note: 'Thanks for letting me be a small part of your day. Your kind words already mean a lot.',
-    avatarPath: '/illustrations/tobi.svg',
+    avatarPath: '/portraits/tobi.webp',
     craft: 'A familiar face. A brighter morning.',
   },
 ] as const;

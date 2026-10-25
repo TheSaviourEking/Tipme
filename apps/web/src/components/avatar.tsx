@@ -12,10 +12,10 @@ export function Avatar({
     <Image
       className="avatar"
       src={src}
-      alt={`Illustrated avatar of ${name}, a fictional demo recipient`}
+      alt={`Portrait of ${name}, a fictional demo recipient`}
       width={size}
       height={size}
-      unoptimized
+      sizes={`${size}px`}
     />
   );
 }

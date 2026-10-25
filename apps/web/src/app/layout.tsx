@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Nunito } from 'next/font/google';
+import { DM_Serif_Display, Manrope, Nunito } from 'next/font/google';
 import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
@@ -12,7 +12,21 @@ import './globals.css';
 const nunito = Nunito({
   weight: ['900'],
   subsets: ['latin'],
-  variable: '--font-brand',
+  variable: '--font-nunito',
+  display: 'swap',
+});
+
+const manrope = Manrope({
+  weight: ['400', '500', '600', '700'],
+  subsets: ['latin'],
+  variable: '--font-manrope',
+  display: 'swap',
+});
+
+const dmSerif = DM_Serif_Display({
+  weight: ['400'],
+  subsets: ['latin'],
+  variable: '--font-dm-serif',
   display: 'swap',
 });
 
@@ -31,7 +45,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={nunito.variable}>
+      <body
+        className={`${manrope.variable} ${dmSerif.variable} ${nunito.variable}`}
+      >
         <a className="skip-link" href="#main">
           Skip to content
         </a>
