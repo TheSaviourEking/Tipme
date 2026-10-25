@@ -36,12 +36,33 @@ test('a corrupt stored status is treated as pending, never acted on', async () =
 
 test('payout status can be fetched and follows its scenario', async () => {
   const mock = createMockProvider({ redis, prefix: prefix() });
+  const payoutId = randomUUID();
+  const idempotencyKey = randomUUID();
   const { providerReference } = await mock.initiatePayout({
-    payoutId: randomUUID(),
+    payoutId,
+    idempotencyKey,
     amountMinor: 1000n,
     currency: 'NGN',
     scenario: 'payout-failed',
   });
+  const replay = await mock.initiatePayout({
+    payoutId,
+    idempotencyKey,
+    amountMinor: 1000n,
+    currency: 'NGN',
+    scenario: 'payout-failed',
+  });
+  assert.equal(replay.providerReference, providerReference);
+  await assert.rejects(
+    mock.initiatePayout({
+      payoutId,
+      idempotencyKey,
+      amountMinor: 2000n,
+      currency: 'NGN',
+      scenario: 'payout-failed',
+    }),
+    /different payout details/,
+  );
   assert.equal(
     (await mock.fetchPayoutStatus(providerReference)).status,
     'pending',

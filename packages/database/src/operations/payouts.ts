@@ -86,6 +86,9 @@ export async function createPayout(
         .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
         .where(inArray(tips.id, ids))
         .for('update', { of: tips });
+      // The same request may have committed while this one waited for the tips' locks.
+      const afterLock = await replay();
+      if (afterLock) return afterLock;
       const claimed = await tx
         .select({ tipId: payoutItems.tipId })
         .from(payoutItems)
@@ -291,6 +294,8 @@ export interface PayoutInitiator {
   name: string;
   initiatePayout(input: {
     payoutId: string;
+    /** Stable across retries; providers must deduplicate payout creation by this key. */
+    idempotencyKey: string;
     amountMinor: bigint;
     currency: string;
     scenario?: 'payout-paid' | 'payout-failed';
@@ -331,13 +336,18 @@ export async function requestWithdrawal(
     .digest('hex');
   const created = await guarded(() =>
     db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select()
-        .from(payouts)
-        .where(eq(payouts.idempotencyKey, input.idempotencyKey));
-      if (existing) {
+      const replay = async () => {
+        const [existing] = await tx
+          .select()
+          .from(payouts)
+          .where(eq(payouts.idempotencyKey, input.idempotencyKey));
+        if (!existing) return null;
         if (existing.requestFingerprint !== fingerprint)
           throw new OperationError('IDEMPOTENCY_CONFLICT');
+        return existing;
+      };
+      const existing = await replay();
+      if (existing) {
         return {
           payoutId: existing.id,
           currency: existing.currency,
@@ -350,6 +360,14 @@ export async function requestWithdrawal(
         .from(profiles)
         .where(eq(profiles.id, input.profileId))
         .for('update');
+      const afterLock = await replay();
+      if (afterLock) {
+        return {
+          payoutId: afterLock.id,
+          currency: afterLock.currency,
+          replayed: true,
+        };
+      }
       const { availableMinor } = await balanceIn(tx, input.profileId);
       if (input.amountMinor > availableMinor)
         throw new OperationError('INSUFFICIENT_BALANCE');
@@ -361,15 +379,30 @@ export async function requestWithdrawal(
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
       const payoutId = newId();
-      await tx.insert(payouts).values({
-        id: payoutId,
-        profileId: input.profileId,
-        currency: 'NGN',
-        amountMinor: input.amountMinor,
-        status: 'REQUESTED',
-        idempotencyKey: input.idempotencyKey,
-        requestFingerprint: fingerprint,
-      });
+      const inserted = await tx
+        .insert(payouts)
+        .values({
+          id: payoutId,
+          profileId: input.profileId,
+          currency: 'NGN',
+          amountMinor: input.amountMinor,
+          status: 'REQUESTED',
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint: fingerprint,
+        })
+        .onConflictDoNothing({ target: payouts.idempotencyKey })
+        .returning({ id: payouts.id });
+      if (inserted.length === 0) {
+        const raced = await replay();
+        if (raced) {
+          return {
+            payoutId: raced.id,
+            currency: raced.currency,
+            replayed: true,
+          };
+        }
+        throw new OperationError('IDEMPOTENCY_CONFLICT');
+      }
       await recordTransition(tx, {
         entityType: 'payout',
         entityId: payoutId,
@@ -392,6 +425,7 @@ export async function requestWithdrawal(
   if (current && !current.reference && current.status === 'REQUESTED') {
     const started = await input.provider.initiatePayout({
       payoutId: created.payoutId,
+      idempotencyKey: created.payoutId,
       amountMinor: input.amountMinor,
       currency: created.currency,
       ...(input.scenario ? { scenario: input.scenario } : {}),

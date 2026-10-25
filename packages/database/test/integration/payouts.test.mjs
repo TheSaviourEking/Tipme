@@ -280,6 +280,27 @@ test('payouts and proof', async (t) => {
   );
 
   await t.test(
+    'the same payout request sent twice at once returns one payout to both',
+    async () => {
+      await database.fresh();
+      for (let i = 0; i < 5; i++) {
+        const tips = [await tipFor('ada'), await tipFor('ada')];
+        const input = {
+          profileId: ADA,
+          tipIds: tips,
+          idempotencyKey: randomUUID(),
+        };
+        const [first, second] = await Promise.all([
+          createPayout(database.db, input),
+          createPayout(database.db, input),
+        ]);
+        assert.equal(first.payoutId, second.payoutId);
+        assert.ok(first.replayed !== second.replayed, 'exactly one replays');
+      }
+    },
+  );
+
+  await t.test(
     'the proof shows both the confirmed payment and the payout, as JSON-safe strings',
     async () => {
       await database.fresh();

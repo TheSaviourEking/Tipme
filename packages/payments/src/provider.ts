@@ -58,8 +58,10 @@ export interface PaymentProvider {
   fetchPayoutStatus(providerReference: string): Promise<{
     status: 'paid' | 'failed' | 'pending' | 'not_found';
   }>;
+  /** Repeated requests with the same key must resolve to the same provider payout. */
   initiatePayout(input: {
     payoutId: string;
+    idempotencyKey: string;
     amountMinor: bigint;
     currency: string;
     scenario?: Scenario;
