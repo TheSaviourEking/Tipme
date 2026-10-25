@@ -50,7 +50,7 @@ export function rateLimitSubject(ip: string | undefined): string {
     .map((group) => parseInt(group, 16).toString(16))
     .join(':')}::/64`;
 }
-const RATE_LIMIT_ROUTE = 'tipme:rate-limit-route';
+export const RATE_LIMIT_ROUTE = 'tipme:rate-limit-route';
 
 export class RateLimitedException extends HttpException {
   constructor(readonly retryAfterSeconds: number) {
