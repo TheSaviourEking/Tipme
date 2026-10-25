@@ -23,14 +23,17 @@ export default function AboutPreview() {
         <h2>What you can do</h2>
         <p>
           Explore fictional profiles, choose an illustrative amount, add a
-          message, and review the gesture. Nothing is sent, charged or saved to
-          an account.
+          message, and review the gesture. No real payment is made, but this
+          working preview sends account and demo-tip information to TipMe’s
+          server so those features can operate.
         </p>
-        <h2>Your draft stays with you</h2>
+        <h2>What the preview stores</h2>
         <p>
-          Amounts and messages stay in this page’s memory. We do not send them
-          to an API, write them to browser storage, or include them in a share
-          link. Refreshing or leaving the page clears the draft.
+          If you sign in, your phone number and account details are sent to the
+          preview API. Demo tip amounts and messages are also sent to the API
+          and stored with the preview data. Do not use real private details or
+          sensitive messages here. A draft that has not been submitted remains
+          in this page’s memory and is cleared when you leave or refresh.
         </p>
         <h2>What still needs to be decided</h2>
         <p>

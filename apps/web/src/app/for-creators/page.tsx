@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { Container } from '@tipme/ui';
 import { Arrow } from '@/components/brand';
 import { CreatorArt, HowItWorksSteps } from '@/components/marketing';
-import { previewMetadata } from '@/lib/metadata';
+import { marketingMetadata } from '@/lib/metadata';
 
-export const metadata = previewMetadata(
+export const metadata = marketingMetadata(
   'For creators',
   'For the creators, teachers and builders who share useful things: one personal link that makes it easy to say thanks.',
   '/for-creators',

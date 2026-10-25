@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { marketingRobots } from './seo';
+
 const origin = new URL(process.env.SITE_URL ?? 'http://localhost:3000');
 if (
   !['http:', 'https:'].includes(origin.protocol) ||
@@ -43,5 +45,17 @@ export function previewMetadata(
       description,
       images: [{ url: '/opengraph-image', alt: shareCard.alt }],
     },
+  };
+}
+
+/** Marketing pages become indexable only when the explicit launch switch is enabled. */
+export function marketingMetadata(
+  title: string,
+  description: string,
+  path: string,
+): Metadata {
+  return {
+    ...previewMetadata(title, description, path),
+    robots: marketingRobots(process.env),
   };
 }

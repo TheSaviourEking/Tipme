@@ -30,8 +30,9 @@ export function LegalPlaceholder({
         </ul>
         <h2>Until then</h2>
         <p>
-          This development preview takes no payments, creates no accounts and
-          sends no data to our servers.{' '}
+          This preview does not process real payments. If you use its sign-in or
+          demo-tip features, account and demo-tip information is sent to and
+          stored by the preview service. Do not submit sensitive information.{' '}
           <Link href="/about-preview">Read about this preview</Link>.
         </p>
       </Container>
