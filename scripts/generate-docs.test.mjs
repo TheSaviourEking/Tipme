@@ -53,6 +53,28 @@ const PUBLIC_REVIEWED = [
   'POST /v1/vitals',
 ];
 
+// Public routes that exist only while payments or messages are pretend. They are refused in
+// production and are not rate-limited, so a new one must be reviewed as well.
+const PRETEND_PUBLIC_REVIEWED = [
+  'GET /v1/dev/inbox',
+  'GET /v1/diagnostics/trace-probe/{jobId}',
+  'GET /v1/mock-provider/checkout/{reference}',
+  'POST /v1/dev/jobs/weekly-report',
+  'POST /v1/diagnostics/trace-probe',
+  'POST /v1/mock-provider/checkout/{reference}',
+];
+
+test('the pretend-only public routes are exactly the reviewed ones', () => {
+  assert.deepEqual(
+    routes
+      .filter((r) => r.access === 'public' && r.pretendOnly)
+      .map((r) => r.key)
+      .sort(),
+    [...PRETEND_PUBLIC_REVIEWED].sort(),
+    'a pretend-only public route was added or removed: review it, then update this list',
+  );
+});
+
 test('the public routes are exactly the reviewed ones, and each state-changing one is rate-limited', () => {
   const realPublic = routes.filter(
     (r) => r.access === 'public' && !r.pretendOnly,
