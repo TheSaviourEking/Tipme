@@ -156,6 +156,83 @@ test('withdrawals', async (t) => {
   );
 
   await t.test(
+    'concurrent retries use one stable provider payout idempotency key',
+    async () => {
+      await database.fresh();
+      await paidTip();
+      const base = mock();
+      let calls = 0;
+      const provider = {
+        name: base.name,
+        initiatePayout: async (input) => {
+          calls += 1;
+          return base.initiatePayout(input);
+        },
+      };
+      const idempotencyKey = randomUUID();
+      const input = {
+        profileId: TOBI.id,
+        amountMinor: 100000n,
+        idempotencyKey,
+        provider,
+      };
+      const [first, replay] = await Promise.all([
+        requestWithdrawal(db, input),
+        requestWithdrawal(db, input),
+      ]);
+      assert.equal(first.payoutId, replay.payoutId);
+      assert.equal(first.providerReference, replay.providerReference);
+      assert.equal(first.providerReference, `mock_out_${first.payoutId}`);
+      assert.ok(calls >= 1 && calls <= 2);
+      assert.equal(
+        (
+          await q(
+            'SELECT count(*)::int AS n FROM payouts WHERE idempotency_key = $1',
+            [idempotencyKey],
+          )
+        )[0].n,
+        1,
+      );
+    },
+  );
+
+  await t.test(
+    'retry after an ambiguous provider timeout reuses the same payout operation',
+    async () => {
+      await database.fresh();
+      await paidTip();
+      const base = mock();
+      let firstCall = true;
+      const provider = {
+        name: base.name,
+        initiatePayout: async (input) => {
+          const result = await base.initiatePayout(input);
+          if (firstCall) {
+            firstCall = false;
+            throw new Error('provider response timed out after acceptance');
+          }
+          return result;
+        },
+      };
+      const idempotencyKey = randomUUID();
+      const input = {
+        profileId: TOBI.id,
+        amountMinor: 100000n,
+        idempotencyKey,
+        provider,
+      };
+      await assert.rejects(requestWithdrawal(db, input), /timed out/);
+      const retry = await requestWithdrawal(db, input);
+      const [row] = await q(
+        'SELECT provider_reference FROM payouts WHERE id = $1',
+        [retry.payoutId],
+      );
+      assert.equal(retry.providerReference, `mock_out_${retry.payoutId}`);
+      assert.equal(row.provider_reference, retry.providerReference);
+    },
+  );
+
+  await t.test(
     'more than the balance, zero, or two at once that add up to too much are refused',
     async () => {
       await database.fresh();

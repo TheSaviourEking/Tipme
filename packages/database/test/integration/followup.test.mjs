@@ -215,6 +215,7 @@ test('follow-up hardening', async (t) => {
       );
       const { providerReference } = await mock.initiatePayout({
         payoutId,
+        idempotencyKey: payoutId,
         amountMinor,
         currency,
         scenario: 'payout-paid',
