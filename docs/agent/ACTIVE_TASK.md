@@ -1,4 +1,15 @@
-# Slack deployment notifications & fix summaries — 23 October 2026
+# Current task — Physical Interface planning (25 October 2026)
+
+- Branch: `feat/physical-interface` in isolated worktree `/private/tmp/tipme-physical-interface`, based on committed revision `0ee4c3c`.
+- User approved the supplied three-column board as the high-fidelity UI target: 60% Physical Interface, 30% Editorial Interface, 10% Playful Interface.
+- Completed a read-only audit and wrote the approved design specification plus implementation plan. No production UI, payment behavior, contract, migration, or runtime configuration changed.
+- Baseline setup: `pnpm install --frozen-lockfile`; clean artifacts restored with `pnpm build`.
+- Baseline verification: `pnpm test` passed after build with 42/42 script tests and all 17 Turbo tasks successful. The first pre-build sandboxed run failed because `dist` artifacts were absent and loopback binding was denied; those were setup limitations, not product failures.
+- Awaiting plan review and execution-method choice before implementation.
+- Fresh builder-readiness review found and the plan now resolves test-script, screenshot-ordering, seeded-portrait, edge-fixture, success-state, and D-09 approval gaps. The original board image still needs to be copied into repository custody before final parity can be approved.
+- Next exact step: review `docs/superpowers/specs/2026-10-25-physical-interface.md` and `docs/superpowers/plans/2026-10-25-physical-interface.md`, then execute Task 1 test-first.
+
+# Previous task — Slack deployment notifications & fix summaries (23 October 2026)
 
 Added Slack deployment notification integration via incoming webhook. Formats release outcomes and automatically parses Conventional Commits to extract categorised bug fixes (`fix:`), product updates/features (`feat:`), and version details with direct links to the web app, API, and commit/run URLs. Integrated into `.github/workflows/deploy-staging.yml` and documented in `docs/runbooks/staging-setup.md`. Requires repository/environment secret `SLACK_WEBHOOK_URL` (gracefully skips if not configured).
 

@@ -1,4 +1,14 @@
-# CI rename redirect assertion — 22 October 2026
+# Current handoff — Physical Interface planning (25 October 2026)
+
+- Isolated branch/worktree: `feat/physical-interface` at `/private/tmp/tipme-physical-interface`, based on `0ee4c3c`. The original `feat/slack-deployment-notifications` worktree remains untouched with its unrelated uncommitted audit remediations.
+- Approved creative authority: the supplied board, synthesized as 60% physical material/control behavior, 30% editorial composition/typography, and 10% selective playful acknowledgement.
+- Added a repository-owned design specification and ten-task implementation plan covering governance, semantic materials, primitives, typography/assets, specimen route, public profile, tipping panel, verified success, visual baselines, and verification.
+- No production UI changed at this checkpoint.
+- A fresh builder-readiness review was completed with no edits from the reviewer. Its six plan gaps were incorporated. Remaining external input: the original board image file must be added under `docs/design/reference/` before final fidelity approval.
+- Baseline evidence: `pnpm build` succeeded with 9 tasks; `pnpm test` succeeded with 42/42 script tests and 17/17 Turbo tasks. Turbo replayed some shared-worktree cache logs; output artifacts were confirmed present in this worktree.
+- Next exact step: obtain plan review and execution-method choice, then start Task 1 test-first. Preserve all payment-state and privacy behavior.
+
+# Previous handoff — CI rename redirect assertion (22 October 2026)
 
 - Active branch: `feat/hardening`, based on `5e18764`. The primary `dev` worktree is untouched.
 - Reproduced CI run `39768906443` locally: the rename succeeds, but the test reads the URL synchronously after `goto`, before the streamed redirect finishes. The trace shows successful requests to the renamed URL between repeated visits to the old URL.
