@@ -117,17 +117,4 @@ jobs:
           key: playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm exec playwright install --with-deps chromium
       - run: docker compose up -d --wait postgres redis
-      - name: Generate Linux snapshots for PR verification (temporary)
-        run: |
-          NEXT_PUBLIC_API_ORIGIN=http://127.0.0.1:4100 NEXT_PUBLIC_PRETEND_DELIVERY=on pnpm build
-          node scripts/prepare-e2e-database.mjs
-          pnpm exec playwright test tests/e2e/profile.visual.spec.ts tests/e2e/design-system.visual.spec.ts --grep 'visual|deterministic' --update-snapshots=all
-      - name: Upload generated Linux snapshots (temporary)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-visual-snapshots-${{ github.run_id }}
-          path: |
-            tests/e2e/profile.visual.spec.ts-snapshots/*-linux.png
-            tests/e2e/design-system.visual.spec.ts-snapshots/*-linux.png
-          if-no-files-found: error
+      - run: pnpm test:e2e

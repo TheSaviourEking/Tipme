@@ -1,8 +1,9 @@
 # Current task — PR #19 Linux visual baselines (26 October 2026)
 
-- GitHub Actions confirmed the original cause: the branch had only Darwin baselines, while Linux expects four `*-linux.png` files. The first Linux snapshots were captured in a Playwright container and passed 7/7 locally, but failed pixel comparison on GitHub's Ubuntu runner; those container images are not valid CI baselines.
-- The pushed commit `d4835a3` is therefore incomplete. A temporary CI-only snapshot-generation step now captures and uploads the four Linux baselines directly from the GitHub runner. It must be removed after downloading and reviewing that artifact.
-- Next exact step: use the uploaded artifact from the current PR run, replace the four Linux PNGs, restore the ordinary `pnpm test:e2e` step, and push the corrected snapshots. Then verify the standard E2E check.
+- CI confirmed the branch needed Linux-only screenshots in addition to its Darwin baselines. The first container-generated PNGs were visually sound but did not match GitHub's Ubuntu runner.
+- The temporary snapshot-capture run `40261761860` passed its four targeted visual tests in update mode and uploaded the runner-generated baselines. Those four images have been reviewed; their composition matches the app and no source or test behavior changed.
+- The temporary workflow instrumentation has been removed; the normal `pnpm test:e2e` command is restored. The four Linux images now come from the exact GitHub runner.
+- Remaining acceptance: the standard PR E2E workflow must pass against these runner-generated images; if it does, no further code changes are needed.
 
 # Current task — Merge dev into feat/profile-composition (26 October 2026)
 

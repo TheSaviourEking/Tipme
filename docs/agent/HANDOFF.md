@@ -1,9 +1,10 @@
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
-- The first cause was missing Linux-specific screenshots; the initial fix added four Linux baselines from the Playwright container. Local targeted visual tests passed 7/7, but GitHub CI then showed the images differ from its Ubuntu runner (and one profile interaction timed out). Do not keep the container-generated PNGs as CI baselines.
-- Commit `d4835a3` is pushed to PR #19 but is not a passing fix yet. The current branch has a temporary CI step that generates Linux baselines in the actual runner and uploads them as `linux-visual-snapshots-${{ github.run_id }}`.
-- After the run completes, download and inspect the artifact, replace only the four Linux PNGs, restore the workflow's normal `pnpm test:e2e` command, and push. Verify the standard CI rerun; investigate any failure beyond visual comparisons separately.
-- The local test database and Redis used for initial capture were isolated disposable containers; the shared local test DB was not touched.
+- Linux screenshot baselines were generated directly on GitHub's Ubuntu runner in run `40261761860`; the four-image artifact was downloaded and visually inspected. The temporary workflow update step has been removed, restoring `pnpm test:e2e`.
+- The locally generated container snapshots were replaced with the runner-generated versions. Existing Darwin screenshots and application/test logic remain unchanged.
+- The temporary capture run passed (targeted visual tests in update mode); the standard full E2E suite has not yet been rerun against the corrected PNGs.
+- Remaining acceptance: verify the standard full E2E workflow on the corrected PNGs. If it passes, the fix is complete; investigate any other failure separately.
+- The initial local capture used isolated disposable PostgreSQL and Redis containers; the shared local test database was not touched.
 
 # Branch publication — profile composition (26 October 2026)
 
