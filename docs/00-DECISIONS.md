@@ -22,7 +22,7 @@
 | D-02 | Company registration, legal agreements and regulator interpretation | Legal opinion | Founder | OPEN |
 | D-03 | Payment processor permits tipping, split and settlement flow | Written provider confirmation | Payments | OPEN |
 | D-04 | Custody/non-custody and settlement account ownership | Signed funds-flow diagram | Finance/Legal | OPEN |
-| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | OPEN |
+| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | PARTLY DECIDED: flat 10% TipMe fee, provider paid from it, recipient gets 90% (ADR-0014); refunds and chargebacks OPEN |
 | D-06 | Recipient verification, payout holds and support model | Provider policy and risk plan | Risk | OPEN |
 | D-07 | Fraud, sanctions/AML and regional privacy obligations | Compliance assessment | Legal/Risk | OPEN |
 | D-08 | Hosting, monitoring budget and supported response coverage | Cost model + staffing | Engineering | OPEN |
@@ -67,5 +67,31 @@
 >   - Cash bonuses ("half the fees since the last bonus") are based on what TipMe keeps after processing (8.5% of each tip, up from 5%). They are larger, but the monthly budget still caps them.
 >   - The admin Overview tile is now "TipMe keeps (after processing)". Weeks spanning the switch mix the old and new rules.
 
+> **PR-013 notes (24 Oct 2026), all PROPOSED:**
+> - **Reporting a page (impersonation, scam, abuse):** a reason from a fixed list only. No IP, user agent or free text is kept, and the answer is the same whether or not the page exists. One open issue per page; after a review, the next report opens a new one.
+> - **Profile photos:**
+>   - Every upload is re-encoded on the server to a 512×512 WebP with no metadata (no location or camera details). JPEG, PNG and WebP only, up to 5 MB and 40 megapixels.
+>   - Stored in Postgres, so photos are backed up and recovered with everything else; object storage can come later.
+>   - Served only for live pages, and erased with the account.
+> - **Notification preferences:** tip emails, weekly-report notices and milestone notices can be turned off. In-app tip notices, sign-in codes and security warnings cannot.
+> - **Admin search:** needs the permission `search.view`. It returns ids and short labels, never phone numbers, emails, supporter names or messages. Each search is audited by its length, not its text.
+> - **Analytics (PRD v1.1 §11):**
+>   - Added: `landing_viewed`, `checkout_opened`, `profile_created`, `profile_published`, `payout_requested`, `payout_paid_verified`.
+>   - The other v1.1 names map to the existing events: `tip_page_viewed` = `profile_viewed`, `tip_started` = `payment_started`, `tip_paid_verified` = `tip_completed`, `tip_failed` = `payment_failed`.
+>   - `profile_published` is recorded once per page, ever: the page itself remembers when it first went live.
+> - **Review follow-ups:**
+>   - **Page reports** are kept 180 days.
+>   - **Photo uploads:**
+>     - Limited to 20 an hour.
+>     - At most two are processed at a time per API process, each given at most 5 seconds and 25 megapixels.
+>     - The browser shrinks a photo to 1,024 px before sending it.
+>     - A photo URL is never reused, and photos are cached for an hour at most.
+>   - **Reference matching:**
+>     - Recipients match a reference only within the 6 characters they are shown.
+>     - Staff match a whole reference or that 6-character ending, so neither can rebuild a full provider reference.
+>     - Admin search is indexed and stops after 3 seconds.
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
+
+> **Product-owner decisions (25 Oct 2026, ADR-0014):** TipMe takes a flat 10% of every tip and pays the payment provider out of it. Nobody receives a reduced fee automatically: staff grant fee-free tips and may set a custom fee per account, with a reason and an audit record. Milestones are celebrations only. This supersedes the PR-008 automatic reward notes above.

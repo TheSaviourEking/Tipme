@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
-import { buildSlackPayload, main, parseCommits } from './notify-slack.mjs';
+import {
+  buildSlackPayload,
+  getGitCommits,
+  main,
+  parseCommits,
+} from './notify-slack.mjs';
 
 test('parseCommits categorizes fixes, features, and chores', () => {
   const sampleLog = `
@@ -158,4 +167,32 @@ test('main outputs dry-run payload when --dry-run is supplied', async () => {
   } finally {
     console.log = originalLog;
   }
+});
+
+test('getGitCommits lists only what is new since the deployed version, without merge commits', (t) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'notify-slack-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  git('init', '-q', '-b', 'dev');
+  git('config', 'user.email', 'test@example.test');
+  git('config', 'user.name', 'Test');
+  const commit = (subject) => {
+    git('commit', '-q', '--allow-empty', '-m', subject);
+    return git('rev-parse', 'HEAD');
+  };
+  commit('feat: already on staging');
+  const deployed = commit('fix: also already on staging');
+  git('checkout', '-q', '-b', 'topic');
+  commit('docs: the new documents');
+  git('checkout', '-q', 'dev');
+  git('merge', '-q', '--no-ff', '-m', 'Merge pull request #13', 'topic');
+
+  const commits = getGitCommits({ range: `${deployed}..HEAD`, cwd });
+  assert.deepEqual(
+    commits.all.map((c) => c.subject),
+    ['docs: the new documents'],
+  );
+  assert.deepEqual(commits.fixes, []);
+  assert.deepEqual(commits.features, []);
 });

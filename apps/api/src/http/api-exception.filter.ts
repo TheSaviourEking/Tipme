@@ -47,6 +47,7 @@ const messages: Record<ApiErrorCode, string> = {
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
+  INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
   RECOVERY_PENDING:
     'This number is waiting to be moved to an account. Please try again when the 24 hours are up.',

@@ -68,7 +68,9 @@ export async function signUpRecipient(
   await page.getByLabel('Handle').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
-  await page.waitForURL(/\/dashboard\/settings$/);
+  // A new page lands on the welcome; these helpers continue from Settings.
+  await page.waitForURL(/\/dashboard\/welcome$/);
+  await page.goto('/dashboard/settings');
   if (live) {
     await page.getByRole('button', { name: 'Make my page live' }).click();
     await expect(page.getByText('Your page is live')).toBeVisible();
@@ -106,7 +108,11 @@ export async function tipAsVisitor(
   ).toBeVisible();
   if (message)
     await page.getByLabel('Personal message (optional)').fill(message);
-  if (name) await page.getByLabel('Your name (optional)').fill(name);
+  if (name) {
+    // The profile keeps the optional extras behind a disclosure.
+    await page.getByText('Add your name or remember tips').click();
+    await page.getByLabel('Your name (optional)').fill(name);
+  }
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
   await page.getByRole('button', { name: outcome }).click();

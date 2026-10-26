@@ -13,6 +13,8 @@ export async function apiFetch<T>(
   init: {
     method?: string;
     body?: unknown;
+    /** A file sent as it is (a photo upload, PR-013), with its own content type. */
+    file?: Blob;
     headers?: Record<string, string>;
   } = {},
 ): Promise<SessionResult<T>> {
@@ -26,10 +28,17 @@ export async function apiFetch<T>(
       headers: {
         ...(method === 'GET'
           ? {}
-          : { 'content-type': 'application/json', 'x-tipme-csrf': '1' }),
+          : {
+              'content-type': init.file?.type || 'application/json',
+              'x-tipme-csrf': '1',
+            }),
         ...init.headers,
       },
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      ...(init.file
+        ? { body: init.file }
+        : init.body === undefined
+          ? {}
+          : { body: JSON.stringify(init.body) }),
     });
   } catch {
     return { ok: false, status: 0, code: 'NETWORK' };
@@ -74,4 +83,27 @@ export function deviceLabel(): string {
             ? 'Linux'
             : 'a device';
   return `${browser} on ${os}`;
+}
+
+/** Downloads a file the signed-in recipient owns (the session cookie travels, as above). */
+export async function apiDownload(
+  path: string,
+  filename: string,
+): Promise<{ ok: boolean }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_ORIGIN}${path}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+  } catch {
+    return { ok: false };
+  }
+  if (!response.ok) return { ok: false };
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(await response.blob());
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  return { ok: true };
 }

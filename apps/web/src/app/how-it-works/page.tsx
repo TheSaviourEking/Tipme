@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { ActionLink, Container } from '@tipme/ui';
 import { Arrow } from '@/components/brand';
 import { HowItWorksSteps } from '@/components/marketing';
-import { previewMetadata } from '@/lib/metadata';
+import { marketingMetadata } from '@/lib/metadata';
 
-export const metadata = previewMetadata(
+export const metadata = marketingMetadata(
   'How it works',
   'How TipMe turns “that helped” into a thank you: find your person, make it yours, see the thought behind it.',
   '/how-it-works',
@@ -22,7 +22,7 @@ export default function HowItWorks() {
             <div>
               <p className="eyebrow">The idea is simple</p>
               <h1 id="how-title" className="page-title">
-                How TipMe <em>works.</em>
+                How TipMe works.
               </h1>
             </div>
           </div>

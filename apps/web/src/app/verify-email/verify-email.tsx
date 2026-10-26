@@ -25,7 +25,9 @@ export function VerifyEmail() {
         We’ll email you when a tip is confirmed. You can also use this address
         to recover your account.
       </p>
-      <Link href="/dashboard">Go to your dashboard</Link>
+      <Link className="tm-button tm-button--primary" href="/dashboard">
+        Go to your dashboard
+      </Link>
     </>
   ) : (
     <>
@@ -34,7 +36,9 @@ export function VerifyEmail() {
         It may have expired or already been used. Ask for a new one in your
         settings.
       </p>
-      <Link href="/dashboard/settings">Open settings</Link>
+      <Link className="tm-button tm-button--primary" href="/dashboard/settings">
+        Open settings
+      </Link>
     </>
   );
 }

@@ -5,6 +5,11 @@
 
 Do not integrate third-party components until an actual row is completed with factual results.
 
+## Physical interface typography and demo imagery
+
+- **Manrope, DM Serif Display** (SIL Open Font License 1.1, Google Fonts): loaded and self-hosted by `next/font` during the build, with no runtime third-party request. Manrope supplies interface weights 400–700, DM Serif Display supplies editorial 400; the wordmark is an SVG (Nunito was removed on 25 October 2026). The rendered candidates remain provisional under D-09. Font-disabled and narrow-layout checks are part of the visual gate.
+- **Ada and Tobi demo portraits:** original fictional images generated for TipMe with OpenAI's built-in image generation tool on 2026-10-25, then encoded as repository-owned WebP assets at 960 px width. They do not depict known people and contain no embedded text, logos, or user data. Decision: adopted for preview/demo profiles only; replaceable without changing product data contracts.
+
 ## PR-001/002 bootstrap
 
 Tailwind CSS 4.3.3 and its matching Turbopack loader come from the official Next template (MIT; https://github.com/tailwindlabs/tailwindcss). They provide build-time styling, not interactive components. This shell uses semantic HTML, system fonts and no animations or third-party component library. Next/React are framework dependencies; all selected versions are recorded in ADR-0001. Browser smoke checks cover keyboard focus, narrow viewport overflow and reduced-motion readability; this is not a full WCAG audit.
@@ -54,3 +59,9 @@ Decision: ADOPTED (pinned exact). Upgrades are deliberate and go through the rel
 - **Postgres features, not packages:** WAL archiving (`archive_command` copying to a volume) and `pg_basebackup` from the existing `postgres:16.13-alpine` and `postgresql16-client`.
 
 Decision: ADOPTED (pinned exact). Upgrades are deliberate: re-pin the digest and rerun the scan and load test.
+
+## PR-013 product gaps
+
+- **`sharp` 0.35.5** (Apache-2.0, https://sharp.pixelplumbing.com): decodes and re-encodes profile photos in the API (to a 512×512 WebP, no metadata), with a 40-megapixel limit against "pixel bombs". It was already in the lockfile through Next.js; it is now a direct, exactly pinned dependency of the API. The Docker image installs its musl (Alpine) build.
+
+Decision: ADOPTED (pinned exact).

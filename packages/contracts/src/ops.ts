@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { WebVitalSummary } from './analytics.js';
+import type { ProfileReportReason } from './profiles.js';
 
 // Staff admin area (PR-009, ADR-0010).
 
@@ -53,6 +54,7 @@ export const ISSUE_KINDS = [
   'unmatched_event',
   'pending_recovery',
   'message_reported',
+  'profile_reported',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
@@ -187,6 +189,8 @@ export interface OpsIssueEvidence {
     status: string;
     suspendedReason: string | null;
   } | null;
+  /** Visitors' reports of this page since the issue opened (PR-013), counts by reason only. */
+  pageReports?: { reason: ProfileReportReason; count: number }[];
   person: {
     userId: string;
     phoneHint: string | null;
@@ -405,3 +409,52 @@ export const opsPagePlanSchema = opsReasonSchema
   .extend({ plan: z.enum(['free', 'pro']) })
   .strict();
 export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
+
+/** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
+export interface OpsPagePricing {
+  customFeeBps: number | null;
+  feeFreeRemaining: number;
+}
+
+/** Staff set one page's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
+export const opsPageFeeSchema = opsReasonSchema
+  .extend({ feeBps: z.number().int().min(0).max(10000).nullable() })
+  .strict();
+export type OpsPageFeeRequest = z.infer<typeof opsPageFeeSchema>;
+
+/** Staff grant fee-free tips to one page (ADR-0014). */
+export const opsFeeFreeGrantSchema = opsReasonSchema
+  .extend({ count: z.number().int().min(1).max(100) })
+  .strict();
+export type OpsFeeFreeGrantRequest = z.infer<typeof opsFeeFreeGrantSchema>;
+
+/**
+ * Admin search results (PR-013): ids and short labels only. Never phone numbers, emails,
+ * supporter names or messages.
+ */
+export interface OpsSearchResult {
+  pages: OpsPage[];
+  tips: {
+    tipId: string;
+    handle: string | null;
+    status: string;
+    grossMinor: string;
+    currency: string;
+    at: string;
+  }[];
+  payouts: {
+    payoutId: string;
+    handle: string | null;
+    status: string;
+    amountMinor: string;
+    currency: string;
+    at: string;
+  }[];
+  ledgerTransactions: {
+    transactionId: string;
+    operationType: string;
+    tipId: string | null;
+    payoutId: string | null;
+    at: string;
+  }[];
+}

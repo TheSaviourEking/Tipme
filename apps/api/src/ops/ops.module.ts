@@ -6,6 +6,7 @@ import { OpsIssuesController } from './issues.controller.js';
 import { OpsActionsController } from './actions.controller.js';
 import { OpsMetricsController } from './metrics.controller.js';
 import { OpsPagesController } from './pages.controller.js';
+import { OpsSearchController } from './search.controller.js';
 import { OpsMarketController } from './market.controller.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
@@ -21,6 +22,7 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsMetricsController,
     OpsMarketController,
     OpsPagesController,
+    OpsSearchController,
   ],
   providers: [CsrfGuard, RateLimitGuard, StaffGuard, OpsGuard],
 })

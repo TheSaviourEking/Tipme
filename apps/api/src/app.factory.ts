@@ -20,6 +20,8 @@ const CROSS_ORIGIN_PATHS = [
   '/v1/mock-provider/',
   '/v1/events',
   '/v1/vitals',
+  // Reporting a page from its public page (PR-013); profile reads are public data anyway.
+  '/v1/profiles/',
 ];
 // Recipient routes carry the session cookie, so the browser must send credentials.
 const CREDENTIALED_PATHS = [

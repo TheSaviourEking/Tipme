@@ -225,6 +225,55 @@
       "when": 1792694555154,
       "tag": "0031_no_tip_maximum",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792857155654,
+      "tag": "0032_profile_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792857405928,
+      "tag": "0033_profile_avatars",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792872641393,
+      "tag": "0034_notification_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792872766325,
+      "tag": "0035_search_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792873877062,
+      "tag": "0036_avatar_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792874126407,
+      "tag": "0037_search_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792979127096,
+      "tag": "0038_staff_set_fees",
+      "breakpoints": true
     }
   ]
 }

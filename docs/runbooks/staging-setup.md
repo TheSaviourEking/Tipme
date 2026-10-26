@@ -42,13 +42,17 @@ Fill in `/srv/tipme/staging.env`:
 
 - **Hosts:** the real host names.
 - **Secrets**, using exactly these recipes (`deploy.sh` refuses a password that would break the database address):
-  - `POSTGRES_PASSWORD`: `openssl rand -hex 32`;
+  - `POSTGRES_PASSWORD`, `POSTGRES_RUNTIME_PASSWORD`, `POSTGRES_MIGRATOR_PASSWORD` and `POSTGRES_BACKUP_PASSWORD`: four different values from `openssl rand -hex 32`;
   - `OPS_TOTP_KEY` and `BACKUP_KEY`: `openssl rand -base64 32` (exactly 32 bytes);
   - every other secret: `openssl rand -base64 48`.
+- Keep the Postgres passwords distinct. The API and worker receive only `POSTGRES_RUNTIME_PASSWORD`; migrations receive `POSTGRES_MIGRATOR_PASSWORD`; scheduled backups receive `POSTGRES_BACKUP_PASSWORD` (read-only plus replication); only the one-shot restore service receives the `POSTGRES_PASSWORD` admin credential.
+- For an existing database volume, the deploy script provisions these roles and moves existing application objects to the migration owner before taking its first backup, then grants the backup role access to newly migrated objects. Do not manually reset the volume or change `POSTGRES_PASSWORD`.
 - **`BACKUP_KEY`:** save a copy off the server, in your password manager. Without it no backup can be read.
 - **`RELEASE_KIND=test`:** this copy runs the full release check.
 
 The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence the `chown` above; `deploy.sh` checks it).
+
+Off-site copies are optional. If enabling rclone, create `/srv/tipme/offsite.env` with mode 600 and put only `BACKUP_RCLONE_REMOTE` and the relevant `RCLONE_CONFIG_<NAME>_*` settings there. The offsite container reads this file only; do not add bucket credentials to `staging.env`.
 
 ## 4. Vercel (web app)
 
@@ -115,11 +119,14 @@ The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence t
 Then, on your machine within 30 minutes:
 
 ```sh
-RELEASE_PREVIEW_PASSWORD=... node scripts/release-enrol.mjs --web https://staging.<domain> \
-  --api https://api.staging.<domain> --phone <same number> --code <the enrolment code>
+RELEASE_PREVIEW_PASSWORD=... RELEASE_CHECK_TOKEN=... node scripts/release-enrol.mjs \
+  --web https://staging.<domain> --api https://api.staging.<domain> \
+  --phone <same number> --code <the enrolment code> --out ./release-totp.txt
 ```
 
-Add the printed secret as `RELEASE_OPS_TOTP_SECRET`, and the number as `RELEASE_OPS_PHONE`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
+(The pretend inbox on staging needs the release token as well as the password. Testers open `/dev/inbox` and enter the same token as the "Inbox key".)
+
+Add the secret from `release-totp.txt` as `RELEASE_OPS_TOTP_SECRET` (then delete the file), and the number as `RELEASE_OPS_PHONE`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
 
 ## 8. Prove it
 

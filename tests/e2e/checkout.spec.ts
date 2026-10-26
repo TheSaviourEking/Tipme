@@ -36,7 +36,11 @@ async function tip(
   await expect(
     page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
   ).toBeVisible();
-  if (remember) await page.getByLabel('Remember my tips on this phone').check();
+  if (remember) {
+    // The profile keeps the optional extras behind a disclosure.
+    await page.getByText('Add your name or remember tips').click();
+    await page.getByLabel('Remember my tips on this phone').check();
+  }
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pay_/);
   await expect(
@@ -52,7 +56,6 @@ const paidHeading = (page: Page) =>
 test('the breakdown shows what the recipient receives before paying', async ({
   page,
 }) => {
-  // Ada, not Tobi: the suite tips Tobi past his 10th tip, after which his tips are fee-free.
   await page.goto('/@ada');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
   await expect(
@@ -135,6 +138,23 @@ test('a payment the provider never reports is found by reconciliation', async ({
   // stays unpaid until reconciliation is proven in tests/integration/checkout-api.test.mjs.
   await tip(page, { outcome: /^No reply/ });
   await expect(paidHeading(page)).toBeVisible({ timeout: 15_000 });
+});
+
+test('a crafted "success" address never changes what the receipt says', async ({
+  page,
+}) => {
+  // PRD: "no wallet credit based solely on frontend callbacks or return URLs". The page reads
+  // the verdict from the API only, so claiming success in the address changes nothing.
+  const tipId = await tip(page, { outcome: /^Decline/ });
+  await expect(
+    page.getByRole('heading', { name: 'The payment was declined' }),
+  ).toBeVisible();
+  const crafted = `/tip/${tipId}?status=succeeded&paid=true&outcome=success&state=PAID`;
+  await page.goto(crafted);
+  await expect(
+    page.getByRole('heading', { name: 'The payment was declined' }),
+  ).toBeVisible();
+  await expect(paidHeading(page)).toHaveCount(0);
 });
 
 test('the waiting screen is announced and accessible', async ({ page }) => {
@@ -279,6 +299,8 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
     await expireStaleTips({
       db: database.db,
       provider: {
+        name: 'mock',
+        findPayment: async () => null,
         verifyTransaction: async () => ({
           status: 'pending',
           amountMinor: 0n,

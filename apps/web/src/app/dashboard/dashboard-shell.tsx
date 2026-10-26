@@ -40,26 +40,29 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <main id="main" tabIndex={-1} className="dashboard-page">
       <Container>
-        <div className="dashboard-bar">
-          <nav aria-label="Dashboard" className="dashboard-nav">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={pathname === link.href ? 'page' : undefined}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-          <Badge>Pretend payments</Badge>
-          {profile && <NotificationBell />}
-          {profile && (
-            <Button variant="quiet" onClick={() => void signOut()}>
-              Sign out
-            </Button>
-          )}
-        </div>
+        {/* The welcome is a moment of its own: no dashboard toolbar around it. */}
+        {pathname !== '/dashboard/welcome' && (
+          <div className="dashboard-bar">
+            <nav aria-label="Dashboard" className="dashboard-nav">
+              {links.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={pathname === link.href ? 'page' : undefined}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+            <Badge>Pretend payments</Badge>
+            {profile && <NotificationBell />}
+            {profile && (
+              <Button variant="quiet" onClick={() => void signOut()}>
+                Sign out
+              </Button>
+            )}
+          </div>
+        )}
         {profile?.suspended && (
           <Notice tone="neutral" title="TipMe has paused your page">
             Visitors see “This page isn’t available right now” and nobody can

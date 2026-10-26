@@ -38,14 +38,25 @@ export function Navigation() {
           <Link href="/for-creators" onClick={() => setOpen(false)}>
             For creators
           </Link>
-          <Link href="/#our-promise" onClick={() => setOpen(false)}>
-            Our promise
+          <Link href="/@ada" onClick={() => setOpen(false)}>
+            See a demo page
           </Link>
-          <Link href="/sign-in" onClick={() => setOpen(false)}>
+          {/* Guest actions; hidden in the dashboard, where someone already has a page (CSS). */}
+          <ActionLink
+            className="nav-guest"
+            variant="secondary"
+            href="/sign-in"
+            onClick={() => setOpen(false)}
+          >
             Sign in
-          </Link>
-          <ActionLink href="/@ada" onClick={() => setOpen(false)}>
-            Explore the demo <Arrow />
+          </ActionLink>
+          {/* Getting someone their own page is the one primary action. */}
+          <ActionLink
+            className="nav-guest"
+            href="/sign-up"
+            onClick={() => setOpen(false)}
+          >
+            Create your page <Arrow />
           </ActionLink>
         </nav>
       </Container>

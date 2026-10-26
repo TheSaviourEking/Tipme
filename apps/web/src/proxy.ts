@@ -1,11 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { shortLinkTarget } from '@/lib/handle-redirect';
 import { gateDecision, PREVIEW_COOKIE } from '@/lib/preview-gate';
 
 /**
- * Staging/preview only: when PREVIEW_PASSWORD is set, every page needs the preview ticket.
- * Without it the visitor is sent to the password page (and back afterwards).
+ * Short links (/ada → /@ada) are a real 308 before anything else. Then, on staging/preview only:
+ * when PREVIEW_PASSWORD is set, every page needs the preview ticket. Without it the visitor is
+ * sent to the password page (and back afterwards).
  */
 export function proxy(request: NextRequest) {
+  const short = shortLinkTarget(
+    request.nextUrl.pathname,
+    request.nextUrl.searchParams,
+  );
+  if (short) return NextResponse.redirect(new URL(short, request.url), 308);
   const password = process.env.PREVIEW_PASSWORD;
   if (!password) return NextResponse.next();
   const { pathname, search } = request.nextUrl;

@@ -81,6 +81,7 @@ test('dashboard data', async (t) => {
     { message: 'Lovely coffee' },
   );
   const lastWeek = await paidTip('tobi', 300000n, lagos('2026-10-08T09:00:00'));
+  const older = await paidTip('tobi', 250000n, lagos('2026-10-01T09:00:00'));
   const confirming = await paidTip(
     'tobi',
     100000n,
@@ -121,7 +122,12 @@ test('dashboard data', async (t) => {
       const summary = await dashboardSummary(db, TOBI.id, now);
       assert.equal(
         summary.availableMinor,
-        (earlyToday.net + lateYesterday.net + lastWeek.net).toString(),
+        (
+          earlyToday.net +
+          lateYesterday.net +
+          lastWeek.net +
+          older.net
+        ).toString(),
       );
       assert.equal(summary.confirmingMinor, confirming.net.toString());
       await createPayout(db, {
@@ -132,7 +138,7 @@ test('dashboard data', async (t) => {
       const after = await dashboardSummary(db, TOBI.id, now);
       assert.equal(
         after.availableMinor,
-        (earlyToday.net + lateYesterday.net).toString(),
+        (earlyToday.net + lateYesterday.net + older.net).toString(),
       );
     },
   );
@@ -145,18 +151,18 @@ test('dashboard data', async (t) => {
     assert.equal(first.items[1].tipId, earlyToday.tipId);
     assert.equal(first.items[1].hasMessage, true);
     const second = await listMyTips(db, TOBI.id, {
-      limit: 2,
+      limit: 3,
       status: 'all',
       cursor: first.nextCursor,
     });
     assert.deepEqual(
       second.items.map((item) => item.tipId),
-      [lateYesterday.tipId, lastWeek.tipId],
+      [lateYesterday.tipId, lastWeek.tipId, older.tipId],
     );
     assert.equal(second.items[0].supporterLabel, 'Ada M.');
     assert.equal(second.nextCursor, null);
     const paid = await listMyTips(db, TOBI.id, { limit: 50, status: 'paid' });
-    assert.equal(paid.items.length, 3);
+    assert.equal(paid.items.length, 4);
     assert.ok(paid.items.every((item) => item.state === 'paid'));
   });
 

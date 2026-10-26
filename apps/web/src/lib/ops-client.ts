@@ -44,6 +44,7 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   unmatched_event: 'Unmatched provider event',
   pending_recovery: 'Pending phone recovery',
   message_reported: 'Reported message',
+  profile_reported: 'Reported page',
 };
 export const SEVERITY_LABELS: Record<string, string> = {
   money: 'Money',

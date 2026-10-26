@@ -60,7 +60,7 @@ export async function rewardStats(
   };
 }
 
-async function addCredits(tx: Tx, profileId: string, count: number) {
+export async function addCredits(tx: Tx, profileId: string, count: number) {
   await tx
     .insert(feeFreeCredits)
     .values({ profileId, remaining: count })
@@ -195,10 +195,11 @@ async function createMoment(
   const title = input.copy({ cash, feeFree });
   await tx.update(moments).set({ title }).where(eq(moments.id, momentId));
   const [owner] = await tx
-    .select({ userId: profiles.userId })
+    .select({ userId: profiles.userId, wants: profiles.notifyMilestones })
     .from(profiles)
     .where(eq(profiles.id, input.profileId));
-  if (owner?.userId)
+  // The moment and any reward still happen; only the notice follows the preference (PR-013).
+  if (owner?.userId && owner.wants)
     await tx.insert(notifications).values({
       id: newId(),
       userId: owner.userId,
@@ -221,7 +222,7 @@ const milestoneCopy =
       return `${count} tips! A thank-you from TipMe: ${ngn(cash)} added to your balance.`;
     if (feeFree > 0)
       return `${count} tips! Your next ${feeFree} tips are fee-free.`;
-    return `${count} tips!`;
+    return `${count} tips! People keep coming back to thank you.`;
   };
 
 /**

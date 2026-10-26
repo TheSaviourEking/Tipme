@@ -1,4 +1,5 @@
 # UI library agent rules
+- Before changing shared UI, read `docs/design/DESIGN-CONSTITUTION.md`, `TOKENS-AND-MATERIALS.md`, `COMPONENT-STANDARDS.md`, `ICONOGRAPHY.md`, and `VISUAL-QUALITY-GATE.md`.
 - Tokens, accessible primitives and carefully engineered reusable components only; no app-specific finance data access.
 - Brand base: #7A32F9, white and black; neutral shades and accessible interaction states from tokens. Gradients intentionally rare.
 - No borrowed UI without license/source record and accessibility/performance review.

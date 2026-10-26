@@ -17,13 +17,45 @@ const required = [
   'packages/ui/AGENTS.md',
   'packages/contracts/AGENTS.md',
 ];
+const designDocs = [
+  'DESIGN-CONSTITUTION',
+  'REFERENCE-ANATOMY',
+  'TOKENS-AND-MATERIALS',
+  'TYPOGRAPHY',
+  'COMPONENT-STANDARDS',
+  'MOTION-AND-APPRECIATION',
+  'RESPONSIVE-COMPOSITION',
+  'ICONOGRAPHY',
+  'VISUAL-QUALITY-GATE',
+  'DECISION-LOG',
+].map((name) => `docs/design/${name}.md`);
 
-test('governance rejects suspected live credentials without printing their values', async () => {
-  const cwd = await mkdtemp(join(tmpdir(), 'tipme-governance-'));
-  for (const file of required) {
+async function writeFixture(cwd) {
+  for (const file of [...required, ...designDocs]) {
     await mkdir(dirname(join(cwd, file)), { recursive: true });
     await writeFile(join(cwd, file), 'fixture');
   }
+  await writeFile(
+    join(cwd, 'docs/design/DESIGN-CONSTITUTION.md'),
+    '60% Physical Interface\n30% Editorial Interface\n10% Playful Interface\n#7A32F9 #FFFFFF #000000\n',
+  );
+  await writeFile(
+    join(cwd, 'AGENTS.md'),
+    'Read docs/design/DESIGN-CONSTITUTION.md before frontend work.\n',
+  );
+  await writeFile(
+    join(cwd, 'apps/web/AGENTS.md'),
+    'Read docs/design/DESIGN-CONSTITUTION.md before frontend work.\n',
+  );
+  await writeFile(
+    join(cwd, 'packages/ui/AGENTS.md'),
+    'Read docs/design/DESIGN-CONSTITUTION.md before frontend work.\n',
+  );
+}
+
+test('governance rejects suspected live credentials without printing their values', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tipme-governance-'));
+  await writeFixture(cwd);
   const run = () => spawnSync('bash', [script], { cwd, encoding: 'utf8' });
   assert.equal(run().status, 0);
   const synthetic = ['sk', 'live', 'NOTAREALCREDENTIAL'].join('_');
@@ -34,4 +66,26 @@ test('governance rejects suspected live credentials without printing their value
     assert.equal((result.stdout + result.stderr).includes(synthetic), false);
     await writeFile(join(cwd, filename), '');
   }
+});
+
+test('governance requires the approved design authority and frontend instructions', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tipme-design-governance-'));
+  for (const file of required) {
+    await mkdir(dirname(join(cwd, file)), { recursive: true });
+    await writeFile(join(cwd, file), 'fixture');
+  }
+
+  const run = () => spawnSync('bash', [script], { cwd, encoding: 'utf8' });
+  assert.equal(run().status, 1, 'missing design authority must be rejected');
+
+  await writeFixture(cwd);
+  await writeFile(join(cwd, 'apps/web/AGENTS.md'), 'fixture');
+  assert.equal(
+    run().status,
+    1,
+    'missing web design instruction must be rejected',
+  );
+
+  await writeFixture(cwd);
+  assert.equal(run().status, 0, 'complete design governance must pass');
 });

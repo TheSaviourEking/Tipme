@@ -13,10 +13,19 @@ import { useDatabase } from './helpers.mjs';
 /** A provider whose answers the test sets per reference; counts every question. */
 const fakeProvider = () => {
   const answers = new Map();
+  const started = new Map();
   const asked = [];
   return {
+    name: 'mock',
     asked,
     answer: (reference, status) => answers.set(reference, status),
+    /** The provider did start this attempt's payment, but TipMe never heard back. */
+    started: (attemptId, reference) => started.set(attemptId, reference),
+    async findPayment(attemptId) {
+      asked.push(`attempt:${attemptId}`);
+      const reference = started.get(attemptId);
+      return reference ? { providerReference: reference } : null;
+    },
     async verifyTransaction(reference) {
       asked.push(reference);
       return {
@@ -57,6 +66,20 @@ test('stale tip expiry', async (t) => {
       providerReference: reference,
     });
     return { ...intent, reference };
+  };
+  // A tip whose payment start timed out: the attempt is CREATED with no provider reference.
+  const unstartedTip = async () => {
+    const { quoteId } = await createQuote(database.db, {
+      handle: 'ada',
+      tipMinor: 100000n,
+      currency: 'NGN',
+      now: quoteTime,
+    });
+    return createPaymentIntent(database.db, {
+      quoteId,
+      idempotencyKey: randomUUID(),
+      now: quoteTime,
+    });
   };
   const statuses = async ({ tipId, attemptId }) => ({
     tip: (await q('SELECT status FROM tips WHERE id = $1', [tipId]))[0].status,
@@ -122,6 +145,81 @@ test('stale tip expiry', async (t) => {
       assert.deepEqual(await statuses(tip), {
         tip: 'SUCCEEDED',
         attempt: 'VERIFIED_SUCCEEDED',
+      });
+    },
+  );
+
+  await t.test(
+    'a tip whose payment start timed out is looked up by its own id, and recorded as paid if it was',
+    async () => {
+      await database.fresh();
+      const tip = await unstartedTip();
+      const provider = fakeProvider();
+      const reference = `mock_pay_${randomUUID()}`;
+      provider.started(tip.attemptId, reference);
+      provider.answer(reference, 'succeeded');
+      const result = await expireStaleTips({
+        db: database.db,
+        provider,
+        now: staleNow,
+      });
+      assert.deepEqual(result, { expired: 0, paid: 1, errors: 0 });
+      assert.deepEqual(provider.asked, [`attempt:${tip.attemptId}`, reference]);
+      assert.deepEqual(await statuses(tip), {
+        tip: 'SUCCEEDED',
+        attempt: 'VERIFIED_SUCCEEDED',
+      });
+      const [row] = await q(
+        'SELECT provider, provider_reference FROM payment_attempts WHERE id = $1',
+        [tip.attemptId],
+      );
+      assert.deepEqual(row, {
+        provider: 'mock',
+        provider_reference: reference,
+      });
+    },
+  );
+
+  await t.test(
+    'a tip whose payment the provider never received is cancelled only after asking',
+    async () => {
+      await database.fresh();
+      const tip = await unstartedTip();
+      const provider = fakeProvider();
+      const result = await expireStaleTips({
+        db: database.db,
+        provider,
+        now: staleNow,
+      });
+      assert.deepEqual(result, { expired: 1, paid: 0, errors: 0 });
+      assert.deepEqual(provider.asked, [`attempt:${tip.attemptId}`]);
+      assert.deepEqual(await statuses(tip), {
+        tip: 'CANCELLED',
+        attempt: 'EXPIRED',
+      });
+    },
+  );
+
+  await t.test(
+    'a tip whose start cannot be looked up stays as it was',
+    async () => {
+      await database.fresh();
+      const tip = await unstartedTip();
+      const provider = {
+        ...fakeProvider(),
+        async findPayment() {
+          throw new Error('timeout');
+        },
+      };
+      const result = await expireStaleTips({
+        db: database.db,
+        provider,
+        now: staleNow,
+      });
+      assert.deepEqual(result, { expired: 0, paid: 0, errors: 1 });
+      assert.deepEqual(await statuses(tip), {
+        tip: 'AWAITING_PAYMENT',
+        attempt: 'CREATED',
       });
     },
   );

@@ -20,6 +20,7 @@ import {
   runIssueDetectors,
   lagosDaysBefore,
   purgeAnalytics,
+  purgeProfileReports,
   rollupAnalytics,
 } from '@tipme/database';
 import { createMockProvider } from '@tipme/payments';
@@ -267,7 +268,15 @@ export async function startJobWorker(
             const purged = await purgeAnalytics(database.db, {
               before: new Date(now.getTime() - ANALYTICS_RETENTION_MS),
             });
-            logger.info({ event: 'analytics.daily.completed', purged });
+            // Page reports are kept 180 days (PR-013), purged on the same daily run.
+            const reportsPurged = await purgeProfileReports(database.db, {
+              now,
+            });
+            logger.info({
+              event: 'analytics.daily.completed',
+              purged,
+              reportsPurged,
+            });
             processed.add(1, { outcome: 'rolled_up' });
             return 'rolled_up';
           }

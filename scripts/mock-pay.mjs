@@ -150,6 +150,7 @@ async function playPayout(scenario) {
   });
   const { providerReference } = await mock.initiatePayout({
     ...payout,
+    idempotencyKey: payout.payoutId,
     scenario,
   });
   await markPayoutInitiated(database.db, {

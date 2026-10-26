@@ -21,6 +21,8 @@ If conflict arises, **stop and document the conflict**. Never silently supersede
 ## First-turn behavior
 Before making changes: inspect current repo, current branch, `docs/00-DECISIONS.md`, lockfile, package scripts, and the relevant scoped AGENTS. Report: current state, files affected, plan, risks, how to validate. If repo empty: treat as greenfield. Do not pretend tests or services ran.
 
+For frontend or visual work, read `docs/design/DESIGN-CONSTITUTION.md` and its linked design authority before planning or changing UI. The design constitution governs visual decisions; product, architecture, accessibility, privacy, performance, security and finance documents remain authoritative in their domains.
+
 ## Scope, style and modification rules
 - Prefer smallest coherent implementation; deliver narrow, reviewable PRs.
 - Never modify unrelated files, secrets, migrations already deployed, or production settings without explicit reason.

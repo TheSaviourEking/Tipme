@@ -20,7 +20,12 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   await page.getByLabel('Handle').fill(handle);
   await expect(page.getByText(`@${handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${handle}` }).click();
-  await page.waitForURL(/\/dashboard\/settings$/);
+  await page.waitForURL(/\/dashboard\/welcome$/);
+  await expect(
+    page.getByRole('heading', { name: 'Welcome to TipMe.' }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'I’ll do this later' }).click();
+  await page.goto('/dashboard/settings');
   await expect(page.getByText('Your page is not live')).toBeVisible();
   await expectAccessible(page);
 

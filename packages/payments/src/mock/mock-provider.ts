@@ -8,7 +8,7 @@ import type {
   WebhookVerification,
 } from '../provider.js';
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
-import { paymentKey, payoutKey } from './keys.js';
+import { attemptKey, paymentKey, payoutKey } from './keys.js';
 
 /** Same rounding as FEE_POLICY_V1's estimated processing fee (150 bps, half up). */
 export const mockProviderFee = (amountMinor: bigint): bigint =>
@@ -62,7 +62,18 @@ export function createMockProvider(options: {
     name: 'mock',
 
     async initializePayment({ attemptId, amountMinor, currency, scenario }) {
+      // Like a real provider's unique merchant reference: one payment per attempt, however
+      // often the start is retried.
       const reference = `mock_pay_${randomUUID()}`;
+      const claimed = await redis.set(
+        attemptKey(prefix, attemptId),
+        reference,
+        'NX',
+      );
+      if (claimed !== 'OK') {
+        const existing = await redis.get(attemptKey(prefix, attemptId));
+        if (existing) return { providerReference: existing };
+      }
       await redis.hset(paymentKey(prefix, reference), {
         attemptId,
         amountMinor: amountMinor.toString(),
@@ -73,6 +84,11 @@ export function createMockProvider(options: {
         status: scenario === 'no-reply' ? 'succeeded' : 'pending',
       });
       return { providerReference: reference };
+    },
+
+    async findPayment(attemptId) {
+      const reference = await redis.get(attemptKey(prefix, attemptId));
+      return reference ? { providerReference: reference } : null;
     },
 
     async verifyTransaction(providerReference) {
@@ -121,15 +137,43 @@ export function createMockProvider(options: {
         : { ok: false, reason: 'malformed' };
     },
 
-    async initiatePayout({ payoutId, amountMinor, currency, scenario }) {
-      const reference = `mock_out_${randomUUID()}`;
-      await redis.hset(payoutKey(prefix, reference), {
+    async initiatePayout({
+      payoutId,
+      idempotencyKey,
+      amountMinor,
+      currency,
+      scenario,
+    }) {
+      const reference = `mock_out_${idempotencyKey}`;
+      const result = await redis.eval(
+        `if redis.call('EXISTS', KEYS[1]) == 0 then
+           redis.call('HSET', KEYS[1], unpack(ARGV))
+           return 0
+         end
+         for i = 1, #ARGV, 2 do
+           if ARGV[i] ~= 'scenario' and ARGV[i] ~= 'status'
+             and redis.call('HGET', KEYS[1], ARGV[i]) ~= ARGV[i + 1] then
+             return -1
+           end
+         end
+         return 1`,
+        1,
+        payoutKey(prefix, reference),
+        'payoutId',
         payoutId,
-        amountMinor: amountMinor.toString(),
+        'amountMinor',
+        amountMinor.toString(),
+        'currency',
         currency,
-        scenario: scenario ?? 'payout-paid',
-        status: 'pending',
-      });
+        'scenario',
+        scenario ?? 'payout-paid',
+        'status',
+        'pending',
+      );
+      if (result === -1)
+        throw new Error(
+          'Mock payout idempotency key was reused with different payout details',
+        );
       return { providerReference: reference };
     },
 

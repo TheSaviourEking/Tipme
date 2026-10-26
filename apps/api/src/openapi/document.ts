@@ -12,10 +12,12 @@ import { ModulesContainer } from '@nestjs/core';
 import { apiErrorCodes } from '@tipme/contracts';
 import { z } from 'zod';
 import { createApp } from '../app.factory.js';
+import { CsrfGuard } from '../auth/csrf.guard.js';
 import { SessionGuard } from '../auth/session.guard.js';
+import { RATE_LIMIT_ROUTE } from '../checkout/rate-limit.guard.js';
 import { loadApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
-import { OPS_PERMISSION, OpsGuard } from '../ops/ops.guard.js';
+import { OPS_PERMISSION, OpsGuard, StaffGuard } from '../ops/ops.guard.js';
 
 // OpenAPI 3.1 (PR-011, PRD §8), generated from what Nest actually registers: each controller's
 // paths and methods, the guards that require a session, the admin permission, and the zod schema
@@ -28,6 +30,20 @@ const PRETEND_ONLY = new Set([
   'MockCheckoutModule',
   'WebhooksModule',
 ]);
+
+/**
+ * Routes protected by something other than a session guard: what proves the caller. A route not
+ * listed here and without a guard is public. (The access-control matrix, docs/security, is
+ * generated from this, and its tests fail when a new public route is not reviewed.)
+ */
+const OTHER_ACCESS: Record<string, string> = {
+  // A supporter's receipt: the tip's own status token.
+  StatusController: 'status-token',
+  // The payment provider: a signature over the raw body, with a replay window.
+  MockWebhookController: 'provider-signature',
+  // The release check: a bearer token, and only on copies that say RELEASE_KIND=test.
+  ReleaseRunsController: 'release-token',
+};
 
 type Json = Record<string, unknown>;
 type Handler = (...args: unknown[]) => unknown;
@@ -68,6 +84,19 @@ function operation(
     ...((Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[]) ?? []),
   ];
   const session = guards.some((g) => g === SessionGuard || g === OpsGuard);
+  // Who may call it: the strongest guard that applies (grant > staff > recipient), else a
+  // route-specific proof, else anyone.
+  const access = guards.includes(OpsGuard)
+    ? 'staff-grant'
+    : guards.includes(StaffGuard)
+      ? 'staff'
+      : guards.includes(SessionGuard)
+        ? 'recipient'
+        : (OTHER_ACCESS[controller.name] ?? 'public');
+  // The guard lets reads through (it only checks state-changing requests).
+  const csrf = guards.includes(CsrfGuard) && method !== 'get';
+  const rateLimit = Reflect.getMetadata(RATE_LIMIT_ROUTE, handler) as
+    string | undefined;
   const permission = Reflect.getMetadata(OPS_PERMISSION, handler) as
     string | undefined;
   const args = Object.entries(
@@ -143,6 +172,9 @@ function operation(
         },
       },
     },
+    'x-tipme-access': access,
+    ...(csrf ? { 'x-tipme-csrf': true } : {}),
+    ...(rateLimit ? { 'x-tipme-rate-limit': rateLimit } : {}),
     ...(session ? { security: [{ session: [] }] } : {}),
     ...(permission ? { 'x-tipme-permission': permission } : {}),
   };

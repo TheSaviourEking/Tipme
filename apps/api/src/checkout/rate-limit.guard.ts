@@ -18,7 +18,14 @@ import { REDIS } from '../infra/infra.module.js';
 import { LOGGER } from '../tokens.js';
 
 type RateLimitedRoute =
-  'quotes' | 'intents' | 'auth_code' | 'auth_verify' | 'handles' | 'analytics';
+  | 'quotes'
+  | 'intents'
+  | 'auth_code'
+  | 'auth_verify'
+  | 'handles'
+  | 'analytics'
+  | 'reports'
+  | 'avatars';
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -43,7 +50,7 @@ export function rateLimitSubject(ip: string | undefined): string {
     .map((group) => parseInt(group, 16).toString(16))
     .join(':')}::/64`;
 }
-const RATE_LIMIT_ROUTE = 'tipme:rate-limit-route';
+export const RATE_LIMIT_ROUTE = 'tipme:rate-limit-route';
 
 export class RateLimitedException extends HttpException {
   constructor(readonly retryAfterSeconds: number) {
@@ -87,6 +94,16 @@ export class RateLimitGuard implements CanActivate {
       analytics: {
         limit: this.config.RATE_LIMIT_ANALYTICS_PER_MIN,
         windowMs: 60_000,
+      },
+      // Reporting a page (PR-013): a few an hour from one address is plenty for a real visitor.
+      reports: {
+        limit: this.config.RATE_LIMIT_REPORTS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // Photo uploads (PR-013): each one is a full decode and re-encode.
+      avatars: {
+        limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
+        windowMs: 3_600_000,
       },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,

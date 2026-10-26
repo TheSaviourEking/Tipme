@@ -1,10 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="TipMe">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="668 -13 120 120" role="img" aria-label="TipMe">
   <title>TipMe</title>
-  <!-- Purple rounded square background -->
-  <rect width="32" height="32" rx="8" fill="#7A32F9"/>
-  <!-- White heart mark -->
-  <path
-    d="M16 25.4l-1.2-1.1C9.3 19.5 6 16.6 6 13a6 6 0 0 1 10-4.5A6 6 0 0 1 26 13c0 3.6-3.3 6.5-8.8 11.3L16 25.4z"
-    fill="#FFFFFF"
-  />
+  <!-- Brand purple tile with the heart from the master wordmark (public/brand/tipme-wordmark.svg) -->
+  <rect x="668" y="-13" width="120" height="120" rx="28" fill="#7A32F9"/>
+  <path d="M701.259 76.9553L701.236 77.167C737.151 92.0868 770.727 77.7807 769.62 56.2653C768.512 34.7487 741.619 36.1332 741.619 36.1332L741.525 36.0404C741.525 36.0404 742.479 9.12833 720.948 8.36497C699.419 7.60052 685.767 41.2835 701.259 76.9553Z" fill="#FFFFFF" transform="translate(728 47) scale(0.78) translate(-732.13 -45.83)"/>
 </svg>

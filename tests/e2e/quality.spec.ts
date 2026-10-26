@@ -87,6 +87,24 @@ test('reduced motion disables skeleton animation', async ({ page }) => {
   expect(animation).toBe('none');
 });
 
+test('design-system tactile controls retain native button and radio semantics', async ({
+  page,
+}) => {
+  await page.goto('/design-system');
+  await expect(page.getByRole('button', { name: 'Primary' })).toHaveAttribute(
+    'type',
+    'button',
+  );
+  await expect(page.getByRole('radio', { name: 'Selected' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Option' })).not.toBeChecked();
+  await expect(
+    page.locator('.material-specimen[data-material="raised"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-material="recessed"]').first(),
+  ).toBeVisible();
+});
+
 test(
   'mobile navigation opens, closes with Escape and returns focus',
   {
@@ -144,6 +162,15 @@ test('responses carry baseline security headers', async ({ request }) => {
     expect(headers['content-security-policy'], route).toContain(
       "frame-ancestors 'none'",
     );
+    expect(headers['content-security-policy'], route).toContain(
+      "default-src 'self'",
+    );
+    expect(headers['content-security-policy'], route).toContain(
+      "object-src 'none'",
+    );
+    expect(headers['content-security-policy'], route).toContain(
+      "script-src 'self' 'unsafe-inline'",
+    );
     expect(headers['permissions-policy'], route).toContain('camera=()');
     expect(headers['x-powered-by'], route).toBeUndefined();
   }
@@ -177,6 +204,24 @@ test('old /people links permanently redirect to /@handle', async ({
   const response = await request.get('/people/ada', { maxRedirects: 0 });
   expect(response.status()).toBe(308);
   expect(response.headers()['location']).toMatch(/\/@ada$/);
+});
+
+test('short /handle links permanently redirect to /@handle without shadowing pages', async ({
+  request,
+}) => {
+  for (const [path, target] of [
+    ['/ada', /\/@ada$/],
+    ['/Ada', /\/@ada$/],
+    ['/ada?src=qr', /\/@ada\?src=qr$/],
+  ] as const) {
+    const response = await request.get(path, { maxRedirects: 0 });
+    expect(response.status(), path).toBe(308);
+    expect(response.headers()['location'], path).toMatch(target);
+  }
+  for (const path of ['/dashboard', '/sign-in'])
+    expect((await request.get(path, { maxRedirects: 0 })).status(), path).toBe(
+      200,
+    );
 });
 
 test('how it works and creator pages exist as PRD marketing routes', async ({

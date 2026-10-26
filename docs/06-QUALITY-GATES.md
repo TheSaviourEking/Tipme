@@ -25,3 +25,6 @@
 
 ## Launch gates
 Sandbox provider sign-off; legal and compliance sign-off; idempotency/race tests; full money lifecycle reconcile tests; operations/runbook; backups; alerts; on-call owner; successful staged rollback; load/recovery testing; real-device usability sample. The working mock flow is NOT a live payments release.
+
+## The test plan (PR-014)
+How to run each layer, what runs when, the mandatory money tests mapped to real tests, requirement-to-test traceability, and what is not covered yet: `docs/quality/test-plan.md`.
