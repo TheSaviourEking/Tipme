@@ -41,6 +41,11 @@ export function shouldTrack(nav: {
   return nav.globalPrivacyControl !== true && nav.doNotTrack !== '1';
 }
 
+/** Rewrites preserve the requested pathname, so the holding-page marker is the source of truth. */
+export function shouldReportWebVitals(hasCountdownPage: boolean): boolean {
+  return !hasCountdownPage;
+}
+
 /** Device class only; the user agent itself never leaves the browser in an event. */
 export const deviceIsMobile = (userAgent: string) =>
   /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent);

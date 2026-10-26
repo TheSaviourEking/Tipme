@@ -7,6 +7,7 @@
       "env": [
         "NEXT_PUBLIC_API_ORIGIN",
         "NEXT_PUBLIC_PRETEND_DELIVERY",
+        "PRODUCTION_LAUNCH_AT",
         "SITE_URL",
         "API_INTERNAL_ORIGIN",
         "NEXT_PUBLIC_PREVIEW_GATE"

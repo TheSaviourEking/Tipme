@@ -1,5 +1,21 @@
 # Design decision log
 
+## 2026-10-26 — Production launch countdown
+
+Approved for the public production hold: one focused TipMe composition with no
+navigation, footer, email capture or preview language. The visual hierarchy uses
+the established Physical/Editorial/Playful ratio: a warm canvas and raised timer
+keys, an oversized human serif headline, and purple concentrated in the seconds
+instrument. Copy is fixed to “A little thanks is almost here.” and “TipMe opens
+at midnight in Lagos.” The exact semantic release time is
+`27 October 2026 · 00:00 WAT` (`2026-10-26T23:00:00Z`).
+
+The timer's four visual values are hidden from assistive technology; one combined
+polite announcement changes no more than once a minute. Reduced motion removes
+tile transitions. The 320px and 1440px renders were inspected against the image
+board direction; the focused Playwright check passes axe, reflow, metadata,
+no-store, route preservation and operational-exemption assertions.
+
 ## 2026-10-25 — Direction hierarchy
 
 Approved: 60% Physical Interface, 30% Editorial Interface, 10% Playful Interface. Physical behavior is the foundation; editorial composition supplies humanity; play is reserved for meaningful acknowledgement.

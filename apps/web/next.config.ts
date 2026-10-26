@@ -1,4 +1,9 @@
 import type { NextConfig } from 'next';
+import { parseProductionLaunchAt } from './src/lib/production-launch';
+
+// Validate this at build/start time so a malformed production launch cannot silently expose or
+// indefinitely hide the site. The request-time gate reads the same server-only value.
+parseProductionLaunchAt(process.env.PRODUCTION_LAUNCH_AT);
 
 const apiOrigin = process.env.NEXT_PUBLIC_API_ORIGIN || 'http://localhost:4000';
 const apiUrl = new URL(apiOrigin);
@@ -51,14 +56,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Public profiles live at /@handle (PRD). A folder starting with "@" is a parallel-route slot
-  // in the App Router, so /@handle is rewritten to the internal people/[handle] route, and
-  // the old /people/handle URLs redirect permanently. Redirects only match incoming URLs,
-  // so the two cannot loop.
-  async redirects() {
-    return [
-      { source: '/people/:handle', destination: '/@:handle', permanent: true },
-    ];
-  },
+  // in the App Router, so /@handle is rewritten to the internal people/[handle] route. The legacy
+  // /people/handle redirect lives in Proxy so the production launch gate runs before it.
   async rewrites() {
     return [{ source: '/@:handle', destination: '/people/:handle' }];
   },
