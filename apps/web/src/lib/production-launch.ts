@@ -88,6 +88,7 @@ export function launchDecision({
     path === '/sitemap.xml' ||
     path === '/favicon.ico' ||
     path === '/icon.svg' ||
+    path === '/opengraph-image' ||
     path.startsWith('/coming-soon/opengraph-image')
   )
     return 'exempt';

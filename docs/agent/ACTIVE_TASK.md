@@ -11,6 +11,10 @@
 - Verified on the rebased branch: `pnpm test` (54 root tests plus 18 package
   tasks, including 55 web tests), `pnpm lint`, `pnpm typecheck`, `pnpm build`,
   `pnpm format:check`, and focused countdown Playwright (3/3).
+- Whole-branch review found the root `/opengraph-image` was rewritten during the
+  countdown. It is now exempted and covered by both unit and browser regression
+  assertions; web tests, lint, typecheck, production build and focused
+  Playwright (3/3) pass with the fix.
 - `pnpm build` passed (9/9 tasks; cache hits). The earlier uncached Webpack
   production build also passed. The focused browser run covers axe, 320px
   reflow, reduced motion, headers, metadata, route preservation and exemptions.
@@ -18,8 +22,10 @@
   and have no horizontal overflow.
 - No production settings or deployment have changed. Production API origin is
   still a separate unresolved launch dependency.
-- Next exact step: finish the whole-branch review, push this branch, and open a
-  PR against `dev`.
+- PR #21 is open against `dev`; latest step checks were still running on GitHub.
+- Next exact step: monitor CI and Vercel preview, address any failures, then
+  verify staging after merge. Production deployment and API configuration are
+  separate.
 
 # Previous task — PR #19 Linux visual baselines (26 October 2026)
 

@@ -74,11 +74,20 @@ test.describe('production countdown', () => {
     expect(html).toContain('A little thanks is almost here.');
     expect(html).toContain('/coming-soon/opengraph-image');
 
-    for (const path of ['/robots.txt', '/sitemap.xml', '/api/revalidate']) {
+    for (const path of [
+      '/robots.txt',
+      '/sitemap.xml',
+      '/api/revalidate',
+      '/opengraph-image',
+    ]) {
       const response = await request.get(path);
       expect(await response.text(), path).not.toContain(
         'A little thanks is almost here.',
       );
+      if (path === '/opengraph-image') {
+        expect(response.status()).toBe(200);
+        expect(response.headers()['content-type']).toContain('image/');
+      }
     }
     const image = await request.get('/coming-soon/opengraph-image');
     expect(image.status()).toBe(200);

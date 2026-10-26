@@ -410,7 +410,14 @@ The launch branch remains a source change only; no live Vercel configuration or
 deployment was changed. The production API origin is still a separate unresolved
 launch dependency.
 
+Whole-branch review caught the root `/opengraph-image` being rewritten to the
+countdown HTML. The root image route is now exempted and unit/browser regression
+tests verify it stays an image response during the gate. After the fix,
+`pnpm --filter @tipme/web test`, web lint/typecheck, `pnpm build`, and focused
+countdown Playwright (3/3) pass.
+
 Release steps and the `www`/apex authority boundary are in
-`apps/web/DEPLOYMENT.md`. Next exact step: finish the whole-branch review, push
-`feat/production-countdown`, and open its PR against `dev`. Do not treat the PR
-as a production deployment or production API fix.
+`apps/web/DEPLOYMENT.md`. PR #21 is open against `dev`; the latest GitHub checks
+were still running. Next exact step: monitor CI and Vercel preview, address any
+failures, then verify staging after merge. Do not treat the PR as a production
+deployment or production API fix.

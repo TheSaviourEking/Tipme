@@ -39,6 +39,7 @@ test('future launch rewrites user routes but leaves operational assets reachable
     '/sitemap.xml',
     '/favicon.ico',
     '/icon.svg',
+    '/opengraph-image',
   ])
     assert.equal(decide(path), 'exempt', path);
 });
