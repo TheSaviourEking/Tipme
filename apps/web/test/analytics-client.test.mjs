@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   deviceIsMobile,
   referrerChannel,
+  shouldReportWebVitals,
   shouldTrack,
 } from '../src/lib/analytics-core.ts';
 
@@ -34,6 +35,11 @@ test('nothing is sent when the browser asks not to be tracked', () => {
   assert.equal(shouldTrack({ doNotTrack: '1' }), false);
   assert.equal(shouldTrack({ doNotTrack: null }), true);
   assert.equal(shouldTrack({}), true);
+});
+
+test('the production holding page does not send web vitals as the preserved route', () => {
+  assert.equal(shouldReportWebVitals(true), false);
+  assert.equal(shouldReportWebVitals(false), true);
 });
 
 test('device class only, from the user agent', () => {

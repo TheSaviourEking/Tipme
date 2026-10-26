@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
+// The launch instant is request-time state; do not prerender this route as an instant page.
+export const instant = false;
+
 export default async function ComingSoonPage() {
   await connection();
   const target =
