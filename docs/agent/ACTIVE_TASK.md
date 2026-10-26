@@ -1,3 +1,10 @@
+# Current task — PR #19 Linux visual baselines (26 October 2026)
+
+- CI failed because the repository contained only macOS Playwright screenshots; Linux expected platform-suffixed baselines for the same four visual cases.
+- Added the four Linux-only baselines under `tests/e2e/*visual.spec.ts-snapshots/`. Reviewed their desktop/mobile composition against the existing Darwin images; differences are platform rendering, with no intentional design change. Existing Darwin snapshots remain untouched.
+- Verified in the Playwright 1.64.1 Noble container against the isolated disposable PostgreSQL/Redis stack: both visual specs passed, 7/7 tests, serially, with the repository's default screenshot assertion timeout. The Linux build also passed (9/9 tasks). The full E2E suite was not rerun.
+- Next exact step: publish these files on PR #19 and confirm the new E2E workflow passes; investigate only any new non-snapshot failures.
+
 # Current task — Merge dev into feat/profile-composition (26 October 2026)
 
 - The user chose: dev wins where both branches built the same feature; keep this branch's design, CSV export, staff-set fees and fee-free grants, and no automatic rewards.

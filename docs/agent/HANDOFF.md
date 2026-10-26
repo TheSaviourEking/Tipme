@@ -1,3 +1,11 @@
+# Current handoff — PR #19 Linux visual baselines (26 October 2026)
+
+- Root cause: CI's Linux Playwright project looked for four `*-linux.png` snapshots, but the branch contained only the equivalent Darwin files.
+- Four Linux baselines are added under the existing visual-spec snapshot directories. They were captured in `mcr.microsoft.com/playwright:v1.64.1-noble`, visually reviewed alongside the Darwin baselines, and leave the Darwin files unchanged.
+- Validation: Linux production build passed (9/9 tasks); `tests/e2e/profile.visual.spec.ts` and `tests/e2e/design-system.visual.spec.ts` passed 7/7 serially with default screenshot assertion timeout and snapshot update mode disabled. Full E2E was not rerun.
+- Test services used isolated disposable containers, not the shared local test database. No application source or test logic changed.
+- Next exact step: publish on PR #19 and verify its E2E workflow; diagnose any remaining failures independently.
+
 # Branch publication — profile composition (26 October 2026)
 
 - User selected `feat/profile-composition` and authorized publishing all current worktree changes. The separate `feat/physical-interface` worktree was not changed.
