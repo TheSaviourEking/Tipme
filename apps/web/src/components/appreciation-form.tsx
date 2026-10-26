@@ -3,10 +3,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { TipQuote } from '@tipme/contracts';
 import {
+  AmountChoice,
   Badge,
   Button,
   Card,
-  Choice,
   InputField,
   Notice,
   TextareaField,
@@ -47,11 +47,14 @@ export function AppreciationForm({
   recipient,
   handle,
   compact = false,
+  collapseExtras = false,
   celebration,
 }: {
   recipient: string;
   handle: string;
   compact?: boolean;
+  /** Tuck the optional name and "remember" choices behind a disclosure (profile panel). */
+  collapseExtras?: boolean;
   /** A moment the recipient shared: supporters may add their tip to it. */
   celebration?: { momentId: string; label: string };
 }) {
@@ -200,6 +203,39 @@ export function AppreciationForm({
 
   const ready = shown.kind === 'ready' ? shown.quote : null;
   const busy = submitting || shown.kind === 'loading';
+  const extras = (
+    <>
+      <InputField
+        id={`${id}-name`}
+        label="Your name (optional)"
+        maxLength={60}
+        autoComplete="name"
+        value={payerName}
+        disabled={submitting}
+        onChange={(event) => {
+          setPayerName(event.target.value);
+          draftKey.current = null;
+        }}
+        hint={`Shown to ${recipient} with your tip. Leave it empty to stay anonymous.`}
+      />
+      <label className="tip-remember" htmlFor={`${id}-remember`}>
+        <input
+          id={`${id}-remember`}
+          type="checkbox"
+          checked={remember}
+          disabled={submitting}
+          onChange={(event) => setRemember(event.target.checked)}
+        />
+        <span>
+          Remember my tips on this phone
+          <small>
+            Kept only in this browser, so we can celebrate your tips. No amounts
+            or messages.
+          </small>
+        </span>
+      </label>
+    </>
+  );
   return (
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}
@@ -243,7 +279,7 @@ export function AppreciationForm({
           </p>
           <div className="amount-options">
             {presets.map((preset, index) => (
-              <Choice
+              <AmountChoice
                 key={preset.minor}
                 ref={index === 0 ? firstChoice : undefined}
                 name={`amount-${id}`}
@@ -256,10 +292,10 @@ export function AppreciationForm({
                   track('amount_selected', { surface: 'profile', handle });
                 }}
               >
-                {preset.label}
-              </Choice>
+                ₦{preset.label}
+              </AmountChoice>
             ))}
-            <Choice
+            <AmountChoice
               name={`amount-${id}`}
               value="other"
               aria-label="Other amount"
@@ -270,7 +306,7 @@ export function AppreciationForm({
               }}
             >
               Other
-            </Choice>
+            </AmountChoice>
           </div>
           {error && selection !== 'other' && (
             <p className="tm-field-error" role="alert" id={`${id}-error`}>
@@ -325,10 +361,13 @@ export function AppreciationForm({
                   <dt>TipMe fee{ready.feeFree ? ' (fee-free)' : ''}</dt>
                   <dd>−{formatDemoAmount(Number(ready.platformFeeMinor))}</dd>
                 </div>
-                <div>
-                  <dt>Payment provider fee</dt>
-                  <dd>−{formatDemoAmount(Number(ready.providerFeeMinor))}</dd>
-                </div>
+                {/* Under the current policy TipMe pays the provider from its own fee (ADR-0014). */}
+                {ready.providerFeeMinor !== '0' && (
+                  <div>
+                    <dt>Payment provider fee</dt>
+                    <dd>−{formatDemoAmount(Number(ready.providerFeeMinor))}</dd>
+                  </div>
+                )}
               </dl>
               <p className="tip-net">
                 {recipient} receives{' '}
@@ -358,35 +397,14 @@ export function AppreciationForm({
           placeholder="Your work made a difference. Thank you."
           hint={`${message.length}/280 characters. Sent privately with your tip.`}
         />
-        <InputField
-          id={`${id}-name`}
-          label="Your name (optional)"
-          maxLength={60}
-          autoComplete="name"
-          value={payerName}
-          disabled={submitting}
-          onChange={(event) => {
-            setPayerName(event.target.value);
-            draftKey.current = null;
-          }}
-          hint={`Shown to ${recipient} with your tip. Leave it empty to stay anonymous.`}
-        />
-        <label className="tip-remember" htmlFor={`${id}-remember`}>
-          <input
-            id={`${id}-remember`}
-            type="checkbox"
-            checked={remember}
-            disabled={submitting}
-            onChange={(event) => setRemember(event.target.checked)}
-          />
-          <span>
-            Remember my tips on this phone
-            <small>
-              Kept only in this browser, so we can celebrate your tips. No
-              amounts or messages.
-            </small>
-          </span>
-        </label>
+        {collapseExtras ? (
+          <details className="composer-extras">
+            <summary>Add your name or remember tips</summary>
+            <div className="composer-extras__body">{extras}</div>
+          </details>
+        ) : (
+          extras
+        )}
         {notice && (
           <Notice tone="error" title="Not sent yet">
             {notice}

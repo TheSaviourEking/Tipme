@@ -7,10 +7,14 @@ import {
   Post,
 } from '@nestjs/common';
 import {
+  opsAccountFeeSchema,
+  opsFeeFreeGrantSchema,
   opsNoteSchema,
   opsReasonSchema,
   opsRecheckSchema,
   type ApiDataResponse,
+  type OpsAccountFeeRequest,
+  type OpsFeeFreeGrantRequest,
   type OpsNoteRequest,
   type OpsReasonRequest,
   type OpsRecheckOutcome,
@@ -19,9 +23,11 @@ import {
 import {
   addIssueNote,
   cancelRecoveries,
+  grantFeeFreeTips,
   recheckSubject,
   recordAudit,
   resolveIssue,
+  setAccountFee,
   setPageSuspension,
 } from '@tipme/database';
 import type { MockProvider } from '@tipme/payments';
@@ -41,6 +47,7 @@ const uuidParam = (value: string) => {
 
 /**
  * Decisions staff can take (PR-009). None moves money: no refunds, adjustments or payout holds.
+ * Pricing decisions (an account's fee, fee-free tips) change only future quotes (ADR-0014).
  * Every action needs a written reason and is audited in the same transaction.
  */
 @Controller('v1/ops')
@@ -164,5 +171,39 @@ export class OpsActionsController {
     });
     this.revalidator.revalidate(handle);
     return { data: { handle } };
+  }
+
+  @Post('pages/:profileId/fee')
+  @HttpCode(200)
+  @OpsPermission('fees.manage')
+  setFee(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Body(new ZodValidationPipe(opsAccountFeeSchema))
+    body: OpsAccountFeeRequest,
+  ): Promise<ApiDataResponse<{ handle: string; feeBps: number | null }>> {
+    return setAccountFee(this.database.db, {
+      profileId: uuidParam(profileId),
+      staffUserId: ops.userId,
+      feeBps: body.feeBps,
+      reason: body.reason,
+    }).then((data) => ({ data }));
+  }
+
+  @Post('pages/:profileId/fee-free')
+  @HttpCode(200)
+  @OpsPermission('fees.manage')
+  grantFeeFree(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Body(new ZodValidationPipe(opsFeeFreeGrantSchema))
+    body: OpsFeeFreeGrantRequest,
+  ): Promise<ApiDataResponse<{ remaining: number }>> {
+    return grantFeeFreeTips(this.database.db, {
+      profileId: uuidParam(profileId),
+      staffUserId: ops.userId,
+      count: body.count,
+      reason: body.reason,
+    }).then((data) => ({ data }));
   }
 }

@@ -60,7 +60,7 @@ export async function rewardStats(
   };
 }
 
-async function addCredits(tx: Tx, profileId: string, count: number) {
+export async function addCredits(tx: Tx, profileId: string, count: number) {
   await tx
     .insert(feeFreeCredits)
     .values({ profileId, remaining: count })
@@ -218,7 +218,7 @@ const milestoneCopy =
       return `${count} tips! A thank-you from TipMe: ${ngn(cash)} added to your balance.`;
     if (feeFree > 0)
       return `${count} tips! Your next ${feeFree} tips are fee-free.`;
-    return `${count} tips!`;
+    return `${count} tips! People keep coming back to thank you.`;
   };
 
 /**

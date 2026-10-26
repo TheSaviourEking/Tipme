@@ -42,6 +42,24 @@ export const opsReasonSchema = z
   .strict();
 export type OpsReasonRequest = z.infer<typeof opsReasonSchema>;
 
+/** Staff set one account's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
+export const opsAccountFeeSchema = z
+  .object({
+    feeBps: z.number().int().min(0).max(10000).nullable(),
+    reason: z.string().trim().min(10).max(500),
+  })
+  .strict();
+export type OpsAccountFeeRequest = z.infer<typeof opsAccountFeeSchema>;
+
+/** Staff grant fee-free tips to one account (ADR-0014). */
+export const opsFeeFreeGrantSchema = z
+  .object({
+    count: z.number().int().min(1).max(100),
+    reason: z.string().trim().min(10).max(500),
+  })
+  .strict();
+export type OpsFeeFreeGrantRequest = z.infer<typeof opsFeeFreeGrantSchema>;
+
 export const ISSUE_KINDS = [
   'payment_mismatch',
   'payment_conflict',
@@ -388,4 +406,27 @@ export interface MarketEntry {
   sourceUrl: string;
   note: string | null;
   createdAt: string;
+}
+
+/** A recipient in staff search results: public identity and account state, never phone or email. */
+export interface OpsAccountRow {
+  profileId: string;
+  handle: string;
+  displayName: string;
+  pageState: string;
+  status: string;
+  createdAt: string;
+}
+
+/** One account for staff: pricing (ADR-0014) and money totals as minor-unit strings. */
+export interface OpsAccountDetail extends OpsAccountRow {
+  role: string | null;
+  suspendedReason: string | null;
+  /** Staff-set TipMe fee in basis points; null means the policy's 10%. */
+  platformFeeBps: number | null;
+  feeFreeRemaining: number;
+  paidTipCount: number;
+  paidGrossMinor: string;
+  availableMinor: string;
+  confirmingMinor: string;
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DM_Serif_Display, Manrope, Nunito } from 'next/font/google';
+import { DM_Serif_Display, Manrope } from 'next/font/google';
 import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
@@ -9,13 +9,6 @@ import '@tipme/ui/components.css';
 import './globals.css';
 
 // Self-hosted at build time via next/font — no runtime external request.
-const nunito = Nunito({
-  weight: ['900'],
-  subsets: ['latin'],
-  variable: '--font-nunito',
-  display: 'swap',
-});
-
 const manrope = Manrope({
   weight: ['400', '500', '600', '700'],
   subsets: ['latin'],
@@ -44,10 +37,9 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${manrope.variable} ${dmSerif.variable} ${nunito.variable}`}
-      >
+    // Font variables must be on <html>: the :root tokens in @tipme/ui resolve them there.
+    <html lang="en" className={`${manrope.variable} ${dmSerif.variable}`}>
+      <body>
         <a className="skip-link" href="#main">
           Skip to content
         </a>

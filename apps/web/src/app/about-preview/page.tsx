@@ -22,23 +22,25 @@ export default function AboutPreview() {
         </p>
         <h2>What you can do</h2>
         <p>
-          Explore fictional profiles, choose an illustrative amount, add a
-          message, and review the gesture. Nothing is sent, charged or saved to
-          an account.
+          Create your own page, share its link or QR code, and send pretend tips
+          to any live page, including the fictional demo profiles. Pretend
+          payments move no money, and no card is ever charged.
         </p>
-        <h2>Your draft stays with you</h2>
+        <h2>What happens to what you share</h2>
         <p>
-          Amounts and messages stay in this page’s memory. We do not send them
-          to an API, write them to browser storage, or include them in a share
-          link. Refreshing or leaving the page clears the draft.
+          When you send a pretend tip, its amount and any message or name you
+          add are saved with the tip so the person you thanked can see them. If
+          you choose to remember your tips on your phone, only a note that you
+          tipped is kept in your browser, without amounts or messages. Your
+          page’s details are saved to your account on this preview.
         </p>
         <h2>What still needs to be decided</h2>
         <p>
           Launch market and currency, eligibility, fees, payment partners,
           privacy terms and settlement arrangements remain unapproved. NGN in
           the demo is an illustration—not an announced launch currency. There
-          are no verified recipients, payout promises or payment-success screens
-          here.
+          are no verified recipients or payout promises, and any “paid” screen
+          here confirms a pretend payment only.
         </p>
         <h2>Before anything goes live</h2>
         <p>

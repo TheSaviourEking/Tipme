@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createQuote, QUOTE_TTL_MS } from '../../dist/index.js';
-import { useDatabase } from './helpers.mjs';
+import {
+  createQuote,
+  grantFeeFreeTips,
+  grantOwner,
+  QUOTE_TTL_MS,
+  setAccountFee,
+} from '../../dist/index.js';
+import { ADA, useDatabase } from './helpers.mjs';
 
 test('quotes', async (t) => {
   const database = await useDatabase(t);
 
   await t.test(
-    'prices a tip with the mock policy and a 15-minute expiry',
+    'prices a tip with the flat 10% policy and a 15-minute expiry',
     async () => {
       await database.fresh();
       const now = new Date('2026-10-18T12:00:00Z');
@@ -17,8 +23,12 @@ test('quotes', async (t) => {
         currency: 'NGN',
         now,
       });
-      assert.equal(quote.breakdown.recipientNetMinor, 93500n);
-      assert.equal(quote.feePolicyVersion, 'mock-v0');
+      // TipMe takes 10% and pays the provider from it: the recipient keeps 90% (ADR-0014).
+      assert.equal(quote.breakdown.platformFeeMinor, 10000n);
+      assert.equal(quote.breakdown.providerFeeMinor, 0n);
+      assert.equal(quote.breakdown.recipientNetMinor, 90000n);
+      assert.equal(quote.feePolicyVersion, 'v1');
+      assert.equal(quote.feeFree, false);
       assert.equal(quote.expiresAt.getTime(), now.getTime() + QUOTE_TTL_MS);
       assert.equal(QUOTE_TTL_MS, 15 * 60 * 1000);
     },
@@ -62,4 +72,80 @@ test('quotes', async (t) => {
       },
     );
   });
+
+  await t.test(
+    'staff set an account fee and grant fee-free tips, each audited with its reason',
+    async () => {
+      await database.fresh();
+      const { userId: staff } = await grantOwner(database.db, {
+        phone: '+2348000009999',
+      });
+      const quoteAda = () =>
+        createQuote(database.db, {
+          handle: 'ada',
+          tipMinor: 100000n,
+          currency: 'NGN',
+        });
+
+      await setAccountFee(database.db, {
+        profileId: ADA,
+        staffUserId: staff,
+        feeBps: 500,
+        reason: 'Launch partner',
+      });
+      const custom = await quoteAda();
+      assert.equal(custom.breakdown.platformFeeMinor, 5000n);
+      assert.equal(custom.breakdown.recipientNetMinor, 95000n);
+      assert.equal(custom.feePolicyVersion, 'v1-custom-500');
+
+      const { remaining } = await grantFeeFreeTips(database.db, {
+        profileId: ADA,
+        staffUserId: staff,
+        count: 1,
+        reason: 'Apology for downtime',
+      });
+      assert.equal(remaining, 1);
+      const free = await quoteAda();
+      assert.equal(free.feeFree, true);
+      assert.equal(free.breakdown.recipientNetMinor, 100000n);
+      assert.equal(free.feePolicyVersion, 'v1-custom-500-fee-free');
+      // The one credit is reserved by the open fee-free quote: the next quote pays the fee.
+      assert.equal((await quoteAda()).feeFree, false);
+
+      await setAccountFee(database.db, {
+        profileId: ADA,
+        staffUserId: staff,
+        feeBps: null,
+        reason: 'Partnership ended',
+      });
+      const back = await quoteAda();
+      assert.equal(back.feePolicyVersion, 'v1');
+
+      const audit = (
+        await database.pool.query(
+          `SELECT action, permission, reason FROM audit_events
+            WHERE subject_id = $1 ORDER BY seq`,
+          [ADA],
+        )
+      ).rows;
+      assert.deepEqual(
+        audit.map((row) => [row.action, row.permission, row.reason]),
+        [
+          ['fee.set.500', 'fees.manage', 'Launch partner'],
+          ['fee_free.granted.1', 'fees.manage', 'Apology for downtime'],
+          ['fee.cleared', 'fees.manage', 'Partnership ended'],
+        ],
+      );
+      for (const bad of [-1, 10001, 2.5])
+        await assert.rejects(
+          setAccountFee(database.db, {
+            profileId: ADA,
+            staffUserId: staff,
+            feeBps: bad,
+            reason: 'x',
+          }),
+          { code: 'INVALID_INPUT' },
+        );
+    },
+  );
 });

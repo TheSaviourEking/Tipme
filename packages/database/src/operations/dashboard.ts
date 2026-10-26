@@ -102,12 +102,15 @@ export function listMyTips(
   input: {
     cursor?: string;
     status?: 'paid' | 'confirming' | 'all';
+    /** Matches the supporter's name, the amount (digits) or the end of the payment reference. */
+    search?: string;
     limit?: number;
   },
 ): Promise<{ items: MyTipRow[]; nextCursor: string | null }> {
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
   const after = decodeCursor(input.cursor);
   const status = input.status ?? 'all';
+  const search = tipSearch(input.search);
   return guarded(async () => {
     const rows = await db.execute<{
       tip_id: string;
@@ -129,6 +132,7 @@ export function listMyTips(
        WHERE t.profile_id = ${profileId}
          AND ${visibleTip}
          ${status === 'paid' ? sql`AND t.status = 'SUCCEEDED'` : status === 'confirming' ? sql`AND t.status <> 'SUCCEEDED'` : sql``}
+         ${search}
          ${after ? sql`AND (COALESCE(t.completed_at, t.created_at), t.id) < (${after.at}::timestamptz, ${after.id}::uuid)` : sql``}
        ORDER BY COALESCE(t.completed_at, t.created_at) DESC, t.id DESC
        LIMIT ${limit + 1}`);
@@ -150,6 +154,29 @@ export function listMyTips(
           : null,
     };
   });
+}
+
+/**
+ * A recipient's own search over their tips: the supporter's name, a whole-naira amount ("2000",
+ * "2,000", "₦2,000") or the tail of the payment reference. Never matches message text.
+ */
+function tipSearch(raw: string | undefined) {
+  const term = (raw ?? '').trim().slice(0, 60);
+  if (!term) return sql``;
+  const escaped = term.replace(/[\\%_]/g, (c) => `\\${c}`);
+  // Integer-only parsing of an amount: never floating point for money.
+  const amount = /^(\d{1,9})(?:\.(\d{1,2}))?$/.exec(
+    term.replace(/[₦,\s]/g, ''),
+  );
+  const minor = amount
+    ? BigInt(amount[1]!) * 100n + BigInt((amount[2] ?? '').padEnd(2, '0'))
+    : null;
+  return sql`AND (
+    t.payer_display_label ILIKE ${`%${escaped}%`}
+    ${minor === null ? sql`` : sql`OR t.gross_minor = ${minor}`}
+    OR EXISTS (SELECT 1 FROM payment_attempts a WHERE a.intent_id = t.intent_id
+                AND a.provider_reference ILIKE ${`%${escaped}`})
+  )`;
 }
 
 /** One of the recipient's own tips with its proof; null for anyone else's tip. */

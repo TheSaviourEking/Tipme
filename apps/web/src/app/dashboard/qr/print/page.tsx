@@ -55,7 +55,9 @@ export default function PrintCardPage() {
         >
           Print
         </Button>
-        <Link href="/dashboard/qr">Back</Link>
+        <Link className="tm-button tm-button--secondary" href="/dashboard/qr">
+          Back
+        </Link>
       </div>
     </div>
   );

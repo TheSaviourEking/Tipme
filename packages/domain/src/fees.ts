@@ -1,7 +1,6 @@
 /**
- * MOCK fee policy — NOT an approved commercial policy (docs/00-DECISIONS.md D-05).
- * Per the user's description, TipMe's cut and the provider fee are deducted from the tip:
- * the payer pays the tip amount and the recipient receives the net.
+ * Retired mock policy (5% TipMe fee plus 1.5% provider fee, both from the recipient). Kept so
+ * quotes made under it still explain themselves; new quotes use FEE_POLICY.
  */
 export const MOCK_FEE_POLICY_V0 = {
   version: 'mock-v0',
@@ -11,7 +10,26 @@ export const MOCK_FEE_POLICY_V0 = {
   maxTipMinor: 10_000_000n,
 } as const;
 
-export type FeePolicy = typeof MOCK_FEE_POLICY_V0;
+export interface FeePolicy {
+  version: string;
+  platformFeeBps: bigint;
+  /** The provider fee recovered from the recipient; under v1 TipMe pays it from its own fee. */
+  providerFeeBps: bigint;
+  minTipMinor: bigint;
+  maxTipMinor: bigint;
+}
+
+/**
+ * The product owner's policy (ADR-0014): TipMe takes a flat 10% of each tip and pays the
+ * payment provider out of it, so the recipient always receives 90%. Still pretend money.
+ */
+export const FEE_POLICY: FeePolicy = {
+  version: 'v1',
+  platformFeeBps: 1000n,
+  providerFeeBps: 0n,
+  minTipMinor: 100n,
+  maxTipMinor: 10_000_000n,
+};
 
 export interface FeeBreakdown {
   tipMinor: bigint;
@@ -29,24 +47,26 @@ export class AmountOutOfRangeError extends Error {
 const bpsOf = (amount: bigint, bps: bigint): bigint =>
   (amount * bps + 5000n) / 10000n;
 
-/** The version recorded on a quote whose TipMe fee was waived (a fee-free reward, PR-008). */
+/** The version recorded on a quote whose TipMe fee was waived (a staff-granted fee-free tip). */
 export const FEE_FREE_VERSION_SUFFIX = '-fee-free';
 
 /**
- * Prices a tip. `feeFree` waives only TipMe's own fee; the provider's fee always applies, and
- * the recipient receives the difference.
+ * Prices a tip. `platformFeeBps` is a staff-set fee for one account (it replaces the policy's
+ * fee); `feeFree` waives TipMe's fee entirely. Any provider fee recovered from the recipient
+ * still applies, and the recipient receives the difference.
  */
 export function priceTip(
   tipMinor: bigint,
-  policy: FeePolicy = MOCK_FEE_POLICY_V0,
-  options: { feeFree?: boolean } = {},
+  policy: FeePolicy = FEE_POLICY,
+  options: { feeFree?: boolean; platformFeeBps?: bigint } = {},
 ): FeeBreakdown {
   if (tipMinor < policy.minTipMinor || tipMinor > policy.maxTipMinor) {
     throw new AmountOutOfRangeError('tip outside the allowed range');
   }
-  const platformFeeMinor = options.feeFree
-    ? 0n
-    : bpsOf(tipMinor, policy.platformFeeBps);
+  const feeBps = options.platformFeeBps ?? policy.platformFeeBps;
+  if (feeBps < 0n || feeBps > 10000n)
+    throw new RangeError('fee must be between 0 and 100%');
+  const platformFeeMinor = options.feeFree ? 0n : bpsOf(tipMinor, feeBps);
   const providerFeeMinor = bpsOf(tipMinor, policy.providerFeeBps);
   const recipientNetMinor = tipMinor - platformFeeMinor - providerFeeMinor;
   if (recipientNetMinor <= 0n)

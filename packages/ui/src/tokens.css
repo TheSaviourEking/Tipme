@@ -31,7 +31,8 @@
   --font-interface: var(--font-manrope), 'Avenir Next', Arial, sans-serif;
   --font-body: var(--font-interface);
   --font-editorial: var(--font-dm-serif), 'Iowan Old Style', Georgia, serif;
-  --font-brand: var(--font-nunito), var(--font-interface);
+  /* The wordmark is an authored SVG; brand text falls back to interface type. */
+  --font-brand: var(--font-interface);
   --numeric-variant: tabular-nums lining-nums;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -66,10 +67,21 @@
     0 1px 1px rgb(20 18 16 / 10%), 0 5px 14px rgb(20 18 16 / 7%);
   --shadow-raised-2:
     0 2px 3px rgb(20 18 16 / 10%), 0 18px 42px rgb(20 18 16 / 10%);
+  /* Purple material reads through its inner edge and a tight contact shadow, never a glow. */
   --shadow-raised-signature:
-    0 2px 2px rgb(58 17 131 / 24%), 0 12px 24px rgb(79 27 173 / 22%);
+    inset 0 1px 0 rgb(255 255 255 / 22%), 0 1px 2px rgb(58 17 131 / 28%),
+    0 4px 10px -6px rgb(58 17 131 / 30%);
   --shadow-recessed:
     inset 0 1px 2px rgb(20 18 16 / 11%), inset 0 -1px 0 rgb(255 255 255 / 80%);
+  /* Elevation by role (profile reference): frame, subtle card, floating instrument. */
+  --edge-hairline: rgb(20 18 16 / 9%);
+  --shadow-frame:
+    0 1px 2px rgb(20 18 16 / 6%), 0 32px 64px -36px rgb(20 18 16 / 34%);
+  --shadow-card-subtle:
+    0 1px 1px rgb(20 18 16 / 7%), 0 14px 30px -14px rgb(20 18 16 / 20%);
+  --shadow-instrument:
+    0 1px 1px rgb(20 18 16 / 8%), 0 8px 16px -6px rgb(20 18 16 / 10%),
+    0 40px 72px -28px rgb(20 18 16 / 32%);
   --shadow-card: var(--shadow-raised-2);
   --shadow-float: var(--shadow-raised-2);
   /* Motion by purpose */

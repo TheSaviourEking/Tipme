@@ -204,6 +204,13 @@
       "when": 1792642884154,
       "tag": "0028_handle_alias_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792967438737,
+      "tag": "0029_staff_set_fees",
+      "breakpoints": true
     }
   ]
 }

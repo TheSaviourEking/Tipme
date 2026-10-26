@@ -28,6 +28,8 @@ export * from './operations/notifications.js';
 export * from './operations/email.js';
 export * from './operations/reports.js';
 export * from './operations/moments.js';
+export * from './operations/fees.js';
+export * from './operations/ops-accounts.js';
 export * from './operations/secret-box.js';
 export * from './operations/audit.js';
 export * from './operations/staff.js';

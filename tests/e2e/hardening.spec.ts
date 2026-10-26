@@ -43,7 +43,9 @@ test('a renamed page keeps its old link and QR code working, and nobody can take
   await page.getByLabel('Handle').fill(renamed);
   await page.getByRole('button', { name: 'Change handle' }).click();
   await expect(
-    page.getByText(`Saved. Your page is now at tipme.app/@${renamed}.`),
+    page.getByText(
+      `Saved. Your page is now at ${new URL(page.url()).host}/@${renamed}.`,
+    ),
   ).toBeVisible();
   await expect(
     page.getByText(`Old handles that lead here: @${handle}`),

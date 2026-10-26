@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Container } from '@tipme/ui';
+import { AuthStage } from '@/components/account/auth-stage';
 import { RecoverFlow } from './recover-flow';
 
 export const metadata: Metadata = {
@@ -10,11 +10,11 @@ export const metadata: Metadata = {
 
 export default function RecoverPage() {
   return (
-    <main id="main" tabIndex={-1} className="auth-page">
-      <Container className="auth-shell">
-        <h1>Lost your number?</h1>
-        <RecoverFlow />
-      </Container>
-    </main>
+    <AuthStage
+      title="Lost your number?"
+      lede="It happens. If you verified an email, we can move your page to your new number."
+    >
+      <RecoverFlow />
+    </AuthStage>
   );
 }

@@ -1,3 +1,67 @@
+# Branch publication — profile composition (26 October 2026)
+
+- User selected `feat/profile-composition` and authorized publishing all current worktree changes. The separate `feat/physical-interface` worktree was not changed.
+- Validation passed: `pnpm build` (9/9 tasks), `pnpm test` (all root script and package tests, 0 failures), `pnpm typecheck` (15/15 tasks), `pnpm lint`, `pnpm format:check`, and `git diff --check`.
+- Two lint findings in the new staff-account pages and four Prettier findings were fixed before final build/lint/format verification. E2E and database integration suites were not run in this turn.
+- The branch changes include theme/profile work, welcome flow, wordmark and short links, staff account/fee operations, and Drizzle migration 0029.
+
+# Current handoff — Remaining screens (25 October 2026)
+
+- Delivered (uncommitted, `feat/profile-composition`): `QuietScreen` for 404/unavailable/profile error plus new `app/error.tsx` and `app/global-error.tsx`; themed staging password page; recessed loading placeholders; staff charts fixed (text out of stretched SVGs); favicon from the wordmark heart. Staff pages all reviewed: axe clean, no overflow at 1440.
+- Verified: web 36/36, UI 4/4, domain 25/25, governance 2/2, typecheck, lint (clean), Prettier, diff-check; e2e 57/58 with no baseline changes.
+- The one e2e failure and earlier "flakes" are explained by the never-reset local `tipme_design`: Ada crossed the milestone reward, so her quote shows reduced fees (NGN 1,970.00 instead of 1,870.00), and the demo number hit the 3-codes-per-hour limit. The real suite resets its database; run full `pnpm test:e2e` on :3100/:4100 before merging.
+- Next exact step: product-owner review, then commit in pieces.
+
+# Current handoff — Master wordmark and /handle short links (25 October 2026)
+
+- Delivered (uncommitted, `feat/profile-composition`): wordmark from the product owner's SVG (header, footer, share image; Nunito removed), `/handle` → 308 `/@handle` in `proxy.ts` via `shortLinkTarget`, 68 reserved handles, and a test that every single-word route/public folder is reserved.
+- Verified: real HTTP checks (/ada, /Ada, ?src=qr → 308; pages and non-handles untouched); web unit 36/36, domain 25/25, UI 4/4, governance 2/2; typecheck, lint (now fully clean), Prettier, diff-check; e2e regression 53/54 with visual baselines re-accepted after inspection.
+- The one failing e2e test (sign-out) is environmental: the API sends at most 3 sign-in codes per number per hour (silently), and repeated local runs on the never-reset `tipme_design` exhausted it for the demo number, so the helper read a stale code. A receipt test once stayed on "Loading your tip" right after a server restart and passed on rerun; not root-caused.
+- Next exact step: before release, query the live database for existing handles that are now reserved; then commit in pieces.
+
+# Current handoff — Theme rollout: remaining pages (25 October 2026)
+
+- Delivered (uncommitted, `feat/profile-composition`): recover, verify-email, profile loading state, QR page and print view, weekly report, notification bell and toasts, staff area headings, empty state, dev inbox. Emails are plain text with no template: nothing to theme until a messaging provider is chosen (D-11).
+- Verified on a clean production build: dashboard, notifications, shell, quality (axe and 320px reflow), welcome, checkout, accounts and hardening all pass (excluding the 4 tests wired to :4100/`tipme_test`). One checkout test timed out once right after a server restart, then passed 3 times. Design-system baseline re-accepted after inspection (empty-state title). Web unit 33/33, UI 4/4, governance 2/2, typecheck, lint (0 errors), Prettier, diff-check pass.
+- A staff owner was granted on the local `tipme_design` database only, to review the staff pages.
+- Next exact step: product-owner review; full `pnpm test:e2e` on :3100/:4100 once free; reconcile with the other agent's dashboard refactor; commit in pieces.
+
+# Current handoff — Theme rollout slice 3: dashboard (25 October 2026)
+
+- Delivered (uncommitted, `feat/profile-composition`): dashboard home recomposed (page card with "Finish setting up"), segmented navigation and filters, serif titles, black in-card actions, withdraw instrument, quieter tip proof, shared neutral notice restyled. Decisions in `docs/design/DECISION-LOG.md`.
+- Verified on a clean production build (signed-in recipient with pretend tips): 58/62 of the regression set including dashboard, notifications and the first-day → tip → proof → withdrawal journey. The 4 failures are environmental: design-system baseline (re-accepted after inspection), `qr.spec` hardcodes `127.0.0.1:3100` in expected text, `reports.spec` posts to a hardcoded `:4100` (Codex's API; it failed there without effect). `moments.spec` was not run at all because it would create tips on :4100. Web unit 33/33, UI 4/4, governance 2/2, typecheck, lint (0 errors), Prettier, diff-check pass.
+- Not visually reviewed: the weekly report page and QR print view (no report existed for the session).
+- Next exact step: product-owner review; then run the full `pnpm test:e2e` on :3100/:4100 once free, and plan commits (font fix, profile, onboarding, public pages, dashboard). Another agent has an uncommitted dashboard refactor (`*-view.tsx` split) in the main checkout that will need reconciling.
+
+# Current handoff — Theme rollout slice 2, part 2 (25 October 2026)
+
+- Delivered (uncommitted, `feat/profile-composition`): header and footer redesigned, restrained purple button shadow (token and hover), receipt on theme, share-image text corrected ("No real payments"). Pretend checkout intentionally left neutral.
+- Verified on a clean production build: 56/56 of the regression set (excluding the 4 tests wired to :4100/`tipme_test`); profile and design-system baselines re-accepted after inspection; web unit 33/33, UI 4/4, governance 2/2, typecheck, lint (0 errors), Prettier, diff-check pass.
+- Next exact step: slice 3 — dashboard (home, tips, tip detail, withdraw, QR and print, reports, settings) with a gentle "finish setting up" card while the page is not live.
+
+# Current handoff — Theme rollout slice 2, part 1 (25 October 2026)
+
+- Delivered on `feat/profile-composition` (uncommitted): pages fill the screen; canvas background; public pages (home, how it works, for creators, about, legal, not found) on theme; `.tip-instrument` shared; stale copy corrected (about page needs product-owner review). Decisions in `docs/design/DECISION-LOG.md`.
+- Verified on a clean production build: 56/56 of the regression set (excluding the 4 tests wired to :4100/`tipme_test`), design-system baselines re-accepted after inspection (canvas, label case), profile baselines unchanged; web unit 33/33, UI 4/4, governance 2/2, typecheck, lint (0 errors), Prettier, diff-check pass.
+- Next exact step: slice 2 part 2 — tip status/receipt and the pretend checkout page; then slice 3 (dashboard).
+
+# Current handoff — Theme rollout slice 1: shell and onboarding (25 October 2026)
+
+- Same branch/worktree (`feat/profile-composition`), uncommitted, on top of the approved profile work. Design: `docs/superpowers/specs/2026-10-25-theme-rollout-design.md`; decisions in `docs/design/DECISION-LOG.md`.
+- Delivered: themed header/footer (single "Create your page" action; guest actions hidden on dashboard routes via CSS), sign-up/sign-in as an editorial stage plus floating card with sign-up progress, handle step with live link preview and corrected copy (renames are possible; real host instead of `tipme.app`, also in Settings), and `/dashboard/welcome` (greeting, three skippable steps with live preview, server-confirmed go-live, share). Claiming a handle now lands on the welcome. Elevation roles promoted to UI tokens.
+- Verified on a clean production build (:3300/:4300, `tipme_design`): welcome 3/3; accounts + hardening + welcome 8/10 (2 failures read Codex's :4100 API or `tipme_test` directly — environment; the cache-backstop test's UPDATE matched no rows there); shell + quality (axe, 320px reflow, nav) all pass; checkout 17/17 excluding the 2 DB-coupled tests; profile and design-system baselines re-accepted after inspection (header/footer change). Web unit 33/33, UI 4/4, governance 2/2, typecheck, lint (0 errors), Prettier, diff-check pass.
+- Next exact step: product-owner review of slice 1; then slice 2 (public pages, tip status, pretend checkout). Run full `pnpm test:e2e` once :3100/:4100 are free. Never point DB-coupled e2e tests at another agent's database.
+
+# Current handoff — Design Correction Directive 001 (25 October 2026)
+
+- Branch/worktree: `feat/profile-composition` at `.worktrees/profile-composition`, from `bead3e5`. All work uncommitted. Do not mix with `.worktrees/physical-interface`, which holds another agent's uncommitted WIP.
+- Isolated stack used for verification: DB `tipme_design` (local), API :4300, worker (queue prefix `design`), web production build :3300. Ports 3100/4100 belong to other agents, so `pnpm test:e2e` was NOT run; specs ran via a temporary config against :3300 (since deleted).
+- Verified: web unit 33/33; UI 4/4; governance 2/2; web `tsc --noEmit` and `tsconfig.tools.json` pass; web lint 0 errors (pre-existing unused `Heart` warning); Prettier and `git diff --check` pass; production build passes. E2E (shell, checkout, quality incl. axe + 320px reflow, profile and design-system visual): 50 passed, 2 failed — `double tap` and `expired tip` read `tipme_test` directly so cannot see this stack's tips (environment, not product). Double-tap invariant checked on `tipme_design`: 36 intents, 36 distinct keys, 0 duplicates. Expired-tip path not verified here.
+- Visual baselines re-accepted after inspection: profile (intentional recomposition) and design-system (font fix; old baseline was Times).
+- Round 2: measured Concept A proportions, recessed keys, collapsed optional extras on the profile. Clean build: 48 passed, 2 expected DB-coupled failures; web unit 33/33; lint 0 errors; typecheck, Prettier, governance pass. Caution: Turbopack served stale CSS from `.next/cache` after edits; `rm -rf apps/web/.next` before a verification build.
+- Untested: real `pnpm test:e2e` on :3100/:4100, forced-colors and 200% zoom by hand, screen-reader smoke, Linux CI baselines.
+- Next exact step: product-owner review; then run full `pnpm test:e2e` once :3100/:4100 are free, and choose commit boundaries (font fix separately from profile recomposition).
+
 # Current handoff — Physical Interface planning (25 October 2026)
 
 - Isolated branch/worktree: `feat/physical-interface` at `/private/tmp/tipme-physical-interface`, based on `0ee4c3c`. The original `feat/slack-deployment-notifications` worktree remains untouched with its unrelated uncommitted audit remediations.

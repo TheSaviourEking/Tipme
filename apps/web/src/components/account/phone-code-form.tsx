@@ -11,13 +11,20 @@ import { apiFetch, deviceLabel } from '@/lib/session-client';
  */
 export function PhoneCodeForm({
   onSignedIn,
+  onStepChange,
 }: {
   onSignedIn: (result: SignInVerified) => void;
+  /** Lets a surrounding progress indicator follow the number → code steps. */
+  onStepChange?: (step: 'phone' | 'code') => void;
 }) {
   const id = useId();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [step, setStep] = useState<'phone' | 'code'>('phone');
+  const [step, setStepState] = useState<'phone' | 'code'>('phone');
+  const setStep = (next: 'phone' | 'code') => {
+    setStepState(next);
+    onStepChange?.(next);
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const codeField = useRef<HTMLInputElement>(null);

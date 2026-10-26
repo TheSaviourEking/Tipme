@@ -16,7 +16,7 @@ export default function PretendInboxPage() {
   )
     notFound();
   return (
-    <main id="main" tabIndex={-1}>
+    <main id="main" tabIndex={-1} className="inbox-page">
       <Container className="section-space">
         <h1>Pretend inbox</h1>
         <p className="tm-hint">

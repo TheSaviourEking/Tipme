@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 const initialsFor = (name: string) =>
   name
@@ -28,14 +28,14 @@ export function AvatarImage({
   className?: string;
   priority?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
+  // Remembering which source failed resets the fallback when src changes, without an effect.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
-  useEffect(() => setFailed(false), [src]);
-
-  if (failed)
+  if (failedSrc === src)
     return (
       <span
         className={`${className ?? ''} avatar--initials`}
+        role="img"
         aria-label={`Portrait unavailable for ${name}`}
       >
         {initialsFor(name)}
@@ -50,8 +50,11 @@ export function AvatarImage({
       width={width}
       height={height}
       sizes={sizes}
-      priority={priority}
-      onError={() => setFailed(true)}
+      // Next 16 deprecates Image `priority`; an above-the-fold hero loads eagerly at high priority.
+      {...(priority
+        ? { loading: 'eager' as const, fetchPriority: 'high' as const }
+        : {})}
+      onError={() => setFailedSrc(src)}
     />
   );
 }

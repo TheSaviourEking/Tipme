@@ -10,6 +10,7 @@ import { Button, Card, Notice, Skeleton } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { ActivityList } from '@/components/dashboard/activity-list';
 import { Moments } from '@/components/dashboard/moments';
+import { PageCard } from '@/components/dashboard/page-card';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { change, naira } from '@/lib/money';
 import { recipientReturned, track } from '@/lib/analytics';
@@ -96,78 +97,103 @@ export default function DashboardHome() {
 
   return (
     <div className="dashboard-home">
-      <h1>Hello, {firstName}</h1>
-      <section className="balance-card" aria-labelledby="balance-label">
-        <span id="balance-label">Your balance</span>
-        <strong data-testid="balance">{naira(summary.availableMinor)}</strong>
-        {summary.confirmingMinor !== '0' && (
-          <span>{naira(summary.confirmingMinor)} still being confirmed</span>
-        )}
-      </section>
-      {firstDay ? (
-        <Card className="first-day">
-          <h2>Show your QR to get your first tip</h2>
-          <p>
-            Put your code on the counter, or show it on your phone. Your tips
-            will appear here.
-          </p>
-          <Link className="tm-button tm-button--primary" href="/dashboard/qr">
-            Show my QR
-          </Link>
-        </Card>
-      ) : (
-        <section aria-labelledby="performance-title" className="performance">
-          <h2 id="performance-title" className="sr-only">
-            How you’re doing
-          </h2>
-          <div className="perf-tiles">
-            <Tile
-              label="Today"
-              current={summary.today}
-              previous={summary.yesterday}
-              versus="vs yesterday"
-            />
-            <Tile
-              label="This week"
-              current={summary.thisWeek}
-              previous={summary.lastWeek}
-              versus="vs last week"
-            />
-          </div>
-          <TrendChart days={summary.last7Days} />
-        </section>
-      )}
-      <Moments />
-      {latestWeek && (
-        <Link
-          className="week-teaser"
-          href={`/dashboard/reports/${latestWeek.week}`}
-        >
-          <strong>Your week · {latestWeek.week}</strong>
-          <span>
-            {naira(latestWeek.data.totalNetMinor)} from{' '}
-            {latestWeek.data.tipCount}{' '}
-            {latestWeek.data.tipCount === 1 ? 'tip' : 'tips'} →
+      <div className="dashboard-home__main">
+        <header className="dashboard-greeting">
+          <h1>Hello, {firstName}.</h1>
+          <p>Here’s how your page is doing.</p>
+        </header>
+        {/* The balance as an object, with the things you do with it inside. */}
+        <section className="balance-card" aria-labelledby="balance-label">
+          <span id="balance-label" className="balance-card__label">
+            Your balance
           </span>
-        </Link>
-      )}
-      <nav className="dashboard-actions" aria-label="Actions">
-        <Link href="/dashboard/qr">Show my QR</Link>
-        <Button variant="secondary" onClick={() => void share()}>
-          Share link
-        </Button>
-        <Link href="/dashboard/withdraw">Withdraw</Link>
-      </nav>
-      <p role="status" className="tm-hint">
-        {shared}
-      </p>
-      {!firstDay && (
-        <section aria-labelledby="recent-title">
-          <h2 id="recent-title">Recent</h2>
-          <ActivityList rows={activity} />
-          <Link href="/dashboard/tips">See all tips</Link>
+          <strong data-testid="balance">{naira(summary.availableMinor)}</strong>
+          {summary.confirmingMinor !== '0' && (
+            <span className="balance-card__note">
+              {naira(summary.confirmingMinor)} still being confirmed
+            </span>
+          )}
+          <nav className="dashboard-actions" aria-label="Actions">
+            <Link
+              className="tm-button tm-button--primary balance-card__withdraw"
+              href="/dashboard/withdraw"
+            >
+              Withdraw
+            </Link>
+            <Link
+              className="tm-button tm-button--secondary"
+              href="/dashboard/qr"
+            >
+              Show my QR
+            </Link>
+            <Button variant="secondary" onClick={() => void share()}>
+              Share link
+            </Button>
+          </nav>
+          <p role="status" className="tm-hint">
+            {shared}
+          </p>
         </section>
-      )}
+        {firstDay ? (
+          <Card className="first-day">
+            <h2>Show your QR to get your first tip</h2>
+            <p>
+              Put your code on the counter, or show it on your phone. Your tips
+              will appear here.
+            </p>
+            <Link className="tm-button tm-button--primary" href="/dashboard/qr">
+              Show my QR
+            </Link>
+          </Card>
+        ) : (
+          <section aria-labelledby="performance-title" className="performance">
+            <h2 id="performance-title" className="sr-only">
+              How you’re doing
+            </h2>
+            <div className="perf-tiles">
+              <Tile
+                label="Today"
+                current={summary.today}
+                previous={summary.yesterday}
+                versus="vs yesterday"
+              />
+              <Tile
+                label="This week"
+                current={summary.thisWeek}
+                previous={summary.lastWeek}
+                versus="vs last week"
+              />
+            </div>
+            <TrendChart days={summary.last7Days} />
+          </section>
+        )}
+        {!firstDay && (
+          <section aria-labelledby="recent-title" className="dashboard-recent">
+            <div className="dashboard-recent__head">
+              <h2 id="recent-title">Recent tips</h2>
+              <Link href="/dashboard/tips">See all tips</Link>
+            </div>
+            <ActivityList rows={activity} />
+          </section>
+        )}
+      </div>
+      <aside className="dashboard-home__side" aria-label="Your page">
+        <PageCard profile={profile} />
+        {latestWeek && (
+          <Link
+            className="week-teaser"
+            href={`/dashboard/reports/${latestWeek.week}`}
+          >
+            <strong>Your week · {latestWeek.week}</strong>
+            <span>
+              {naira(latestWeek.data.totalNetMinor)} from{' '}
+              {latestWeek.data.tipCount}{' '}
+              {latestWeek.data.tipCount === 1 ? 'tip' : 'tips'} →
+            </span>
+          </Link>
+        )}
+        <Moments />
+      </aside>
     </div>
   );
 }

@@ -50,7 +50,7 @@ test('a recipient reads their week and shares it without supporters’ names', a
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Your week',
   );
-  await expect(page.getByText('NGN 1,870.00').first()).toBeVisible();
+  await expect(page.getByText('NGN 1,800.00').first()).toBeVisible();
   await expect(page.getByText('Most frequent supporter: Zed Q.')).toBeVisible();
   await expect(page.getByText('Only you can see this')).toBeVisible();
   await expectAccessible(page);

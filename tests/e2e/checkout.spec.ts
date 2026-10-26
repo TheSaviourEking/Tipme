@@ -36,7 +36,11 @@ async function tip(
   await expect(
     page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
   ).toBeVisible();
-  if (remember) await page.getByLabel('Remember my tips on this phone').check();
+  if (remember) {
+    // The profile keeps the optional extras behind a disclosure.
+    await page.getByText('Add your name or remember tips').click();
+    await page.getByLabel('Remember my tips on this phone').check();
+  }
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pay_/);
   await expect(
@@ -52,11 +56,10 @@ const paidHeading = (page: Page) =>
 test('the breakdown shows what the recipient receives before paying', async ({
   page,
 }) => {
-  // Ada, not Tobi: the suite tips Tobi past his 10th tip, after which his tips are fee-free.
   await page.goto('/@ada');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
   await expect(
-    page.getByText('Ada receives NGN 1,870.00 after fees'),
+    page.getByText('Ada receives NGN 1,800.00 after fees'),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: /^Tip NGN 2,000\.00/ }),

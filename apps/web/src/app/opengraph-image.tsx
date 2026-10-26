@@ -1,22 +1,11 @@
 import { ImageResponse } from 'next/og';
+import { WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/components/brand';
 import { shareCard } from '@/lib/metadata';
 
 // Shared, request-independent card: prerendered at build. Never include per-visitor or draft data here.
 export const alt = shareCard.alt;
 export const size = { width: shareCard.width, height: shareCard.height };
 export const contentType = 'image/png';
-
-/** Inline heart SVG — avoids font dependency for the mark in next/og context. */
-function Heart({ size: px }: { size: number }) {
-  return (
-    <svg width={px} height={px} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-        fill="#7A32F9"
-      />
-    </svg>
-  );
-}
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -40,30 +29,12 @@ export default function OpengraphImage() {
           justifyContent: 'space-between',
         }}
       >
-        {/* "tipme♥" wordmark */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-end',
-            fontSize: 56,
-            fontWeight: 900,
-            letterSpacing: '-2px',
-            lineHeight: 1,
-          }}
-        >
-          <span style={{ color: '#000000' }}>tip</span>
-          <span style={{ color: '#7A32F9' }}>me</span>
-          <span
-            style={{
-              color: '#7A32F9',
-              fontSize: 32,
-              marginBottom: 14,
-              marginLeft: 3,
-            }}
-          >
-            ♥
-          </span>
-        </div>
+        {/* The wordmark from the master file, as in the site header. */}
+        <svg width={170} height={64} viewBox={WORDMARK_VIEWBOX}>
+          {WORDMARK_PATHS.map((path) => (
+            <path key={path.d.slice(0, 24)} d={path.d} fill={path.fill} />
+          ))}
+        </svg>
         {/* Preview pill */}
         <div
           style={{
@@ -75,7 +46,7 @@ export default function OpengraphImage() {
             color: '#511CB0',
           }}
         >
-          Development preview · No payments
+          Development preview · No real payments
         </div>
       </div>
 

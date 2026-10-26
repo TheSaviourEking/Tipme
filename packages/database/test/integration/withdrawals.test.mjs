@@ -38,7 +38,7 @@ test('withdrawals', async (t) => {
       return error.code;
     }
   };
-  /** Tobi gets one confirmed ₦2,000 tip: NGN 1,870.00 net. */
+  /** Tobi gets one confirmed ₦2,000 tip: NGN 1,800.00 net (10% to TipMe). */
   const paidTip = async () => {
     const quote = await createQuote(db, {
       handle: 'tobi',
@@ -75,7 +75,7 @@ test('withdrawals', async (t) => {
     async () => {
       await database.fresh();
       await paidTip();
-      assert.equal(await available(), 187000n);
+      assert.equal(await available(), 180000n);
       const provider = mock();
       const key = randomUUID();
       const first = await requestWithdrawal(db, {
@@ -86,7 +86,7 @@ test('withdrawals', async (t) => {
         scenario: 'payout-paid',
       });
       assert.equal(first.status, 'REQUESTED');
-      assert.equal(await available(), 87000n);
+      assert.equal(await available(), 80000n);
       const [payout] = await q(
         'SELECT provider_reference FROM payouts WHERE id = $1',
         [first.payoutId],
@@ -123,7 +123,7 @@ test('withdrawals', async (t) => {
         )[0].status,
         'PAID',
       );
-      assert.equal(await available(), 87000n);
+      assert.equal(await available(), 80000n);
       const unbalanced =
         await q(`SELECT transaction_id FROM ledger_entries GROUP BY transaction_id
       HAVING SUM(CASE WHEN side = 'debit' THEN amount_minor ELSE -amount_minor END) <> 0`);
@@ -139,7 +139,7 @@ test('withdrawals', async (t) => {
       const provider = mock();
       const withdrawal = await requestWithdrawal(db, {
         profileId: TOBI.id,
-        amountMinor: 187000n,
+        amountMinor: 180000n,
         idempotencyKey: randomUUID(),
         provider,
         scenario: 'payout-failed',
@@ -151,7 +151,7 @@ test('withdrawals', async (t) => {
       );
       await provider.settlePayout(payout.provider_reference);
       await reconcilePayouts({ db, provider, now: new Date(), minAgeMs: 0 });
-      assert.equal(await available(), 187000n);
+      assert.equal(await available(), 180000n);
     },
   );
 
@@ -165,7 +165,7 @@ test('withdrawals', async (t) => {
         await errorCode(
           requestWithdrawal(db, {
             profileId: TOBI.id,
-            amountMinor: 187001n,
+            amountMinor: 180001n,
             idempotencyKey: randomUUID(),
             provider,
           }),
@@ -202,7 +202,7 @@ test('withdrawals', async (t) => {
         results.find((r) => r.status === 'rejected').reason.code,
         'INSUFFICIENT_BALANCE',
       );
-      assert.equal(await available(), 87000n);
+      assert.equal(await available(), 80000n);
     },
   );
 

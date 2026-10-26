@@ -1,8 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { MyTipRow } from '@tipme/contracts';
-import { Button, Skeleton } from '@tipme/ui';
+import { Button, InputField, Skeleton } from '@tipme/ui';
 import { naira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 
@@ -20,27 +20,38 @@ const stateText = {
 } as const;
 
 export default function TipsPage() {
+  const id = useId();
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
   const [items, setItems] = useState<MyTipRow[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
+  const query = `status=${filter}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ''}`;
 
+  // Typing waits for a pause; an answer for an older search never replaces a newer one.
   useEffect(() => {
-    void apiFetch<{ items: MyTipRow[]; nextCursor: string | null }>(
-      `/v1/me/tips?status=${filter}`,
-    ).then((result) => {
-      if (result.ok) {
-        setItems(result.data.items);
-        setNext(result.data.nextCursor);
-      }
-    });
-  }, [filter]);
+    let current = true;
+    const timer = setTimeout(() => {
+      void apiFetch<{ items: MyTipRow[]; nextCursor: string | null }>(
+        `/v1/me/tips?${query}`,
+      ).then((result) => {
+        if (current && result.ok) {
+          setItems(result.data.items);
+          setNext(result.data.nextCursor);
+        }
+      });
+    }, 250);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
 
   const more = async () => {
     if (!next) return;
     const result = await apiFetch<{
       items: MyTipRow[];
       nextCursor: string | null;
-    }>(`/v1/me/tips?status=${filter}&cursor=${encodeURIComponent(next)}`);
+    }>(`/v1/me/tips?${query}&cursor=${encodeURIComponent(next)}`);
     if (result.ok) {
       setItems((current) => [...(current ?? []), ...result.data.items]);
       setNext(result.data.nextCursor);
@@ -62,10 +73,26 @@ export default function TipsPage() {
           </Button>
         ))}
       </div>
+      <div className="tips-search" role="search">
+        <InputField
+          id={`${id}-search`}
+          label="Search your tips"
+          type="search"
+          autoComplete="off"
+          maxLength={60}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          hint="A supporter’s name, an amount like 2000, or the end of a reference."
+        />
+      </div>
       {!items ? (
         <Skeleton label="Loading your tips" />
       ) : items.length === 0 ? (
-        <p>No tips here yet.</p>
+        <p>
+          {search.trim()
+            ? `No tips match “${search.trim()}”.`
+            : 'No tips here yet.'}
+        </p>
       ) : (
         <ul className="activity-list">
           {items.map((tip) => (

@@ -66,10 +66,13 @@ export default function TipDetailPage() {
             <dt>TipMe fee</dt>
             <dd>−{naira(tip.platformFeeMinor)}</dd>
           </div>
-          <div>
-            <dt>Payment provider fee</dt>
-            <dd>−{naira(tip.providerFeeMinor)}</dd>
-          </div>
+          {/* Older tips also recovered the provider's fee from the recipient; v1 tips don't. */}
+          {tip.providerFeeMinor !== '0' && (
+            <div>
+              <dt>Payment provider fee</dt>
+              <dd>−{naira(tip.providerFeeMinor)}</dd>
+            </div>
+          )}
           <div>
             <dt>You received</dt>
             <dd>

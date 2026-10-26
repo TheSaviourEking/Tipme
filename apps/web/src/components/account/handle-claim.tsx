@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import type { HandleStatus } from '@tipme/contracts';
 import { Button, InputField } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
+import { useSiteHost } from '@/lib/site-host';
 
 const describe: Record<HandleStatus, string> = {
   available: '',
@@ -15,6 +16,7 @@ const describe: Record<HandleStatus, string> = {
 /** Choose a handle, with a live availability check, and claim it. */
 export function HandleClaim({ onClaimed }: { onClaimed: () => void }) {
   const id = useId();
+  const host = useSiteHost();
   const [raw, setRaw] = useState('');
   const [check, setCheck] = useState<{
     for: string;
@@ -73,7 +75,10 @@ export function HandleClaim({ onClaimed }: { onClaimed: () => void }) {
     <form className="auth-form" onSubmit={claim} noValidate>
       <h2>Choose your handle</h2>
       <p className="tm-hint">
-        It’s your link: tipme.app/@yourhandle. You can’t change it later.
+        It becomes your link. You can change it later in Settings.
+      </p>
+      <p className="handle-link" aria-hidden="true">
+        {host}/@<span>{raw.trim() || 'yourhandle'}</span>
       </p>
       <InputField
         id={`${id}-handle`}

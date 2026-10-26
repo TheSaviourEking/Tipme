@@ -20,7 +20,7 @@ const [, TOBI] = DEMO_PROFILES;
 const BUDGET = 25_000_000n;
 const lagos = (iso) => new Date(`${iso}+01:00`);
 
-test('moments and rewards', async (t) => {
+test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
   const database = await useDatabase(t);
   const { db } = database;
   const q = (sql, params) =>
@@ -77,7 +77,7 @@ test('moments and rewards', async (t) => {
     )[0]?.remaining ?? 0;
 
   await t.test(
-    'the 10th tip brings 5 fee-free tips, used up only by tips that succeed',
+    'the 10th tip is celebrated, and grants nothing by itself (ADR-0014)',
     async () => {
       await database.fresh();
       for (let i = 0; i < 9; i += 1) await tipAndEvaluate();
@@ -87,62 +87,53 @@ test('moments and rewards', async (t) => {
       );
       await tipAndEvaluate();
       const moments = await listMoments(db, TOBI.id);
-      assert.equal(moments[0].title, '10 tips! Your next 5 tips are fee-free.');
-      assert.equal(await credits(), 5);
+      assert.equal(
+        moments[0].title,
+        '10 tips! People keep coming back to thank you.',
+      );
+      assert.equal(await credits(), 0);
       const next = await createQuote(db, {
         handle: 'tobi',
         tipMinor: 200000n,
         currency: 'NGN',
       });
-      assert.equal(next.breakdown.platformFeeMinor, 0n);
-      assert.equal(next.feePolicyVersion, 'mock-v0-fee-free');
-      assert.equal(await credits(), 5);
-      const freeTip = await tipAndEvaluate();
-      assert.equal(freeTip.quote.breakdown.platformFeeMinor, 0n);
-      assert.equal(await credits(), 4);
+      assert.equal(next.breakdown.platformFeeMinor, 20000n);
+      assert.equal(next.feePolicyVersion, 'v1');
     },
   );
 
   await t.test(
-    'the 50th tip pays a cash bonus of half the fees, booked as TipMe’s own cost',
+    'the 50th tip is celebrated without a cash bonus or any reward booking',
     async () => {
       await database.fresh();
       for (let i = 0; i < 50; i += 1) await tipAndEvaluate();
       const moment = (await listMoments(db, TOBI.id)).find(
         (m) => m.key === `milestone.50.${TOBI.id}`,
       );
-      assert.match(
-        moment.title,
-        /^50 tips! A thank-you from TipMe: NGN [\d,]+\.\d\d added to your balance\.$/,
-      );
-      const [grant] = await q(
-        "SELECT cash_minor FROM reward_grants WHERE kind = 'cash'",
-      );
-      const fees =
-        await q(`SELECT COALESCE(SUM(q.platform_fee_minor), 0)::bigint AS fees FROM tips t
-      JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id WHERE t.status = 'SUCCEEDED'`);
-      assert.ok(BigInt(grant.cash_minor) > 0n);
-      assert.ok(BigInt(grant.cash_minor) * 2n <= BigInt(fees[0].fees));
-      const entries =
-        await q(`SELECT a.code, e.side FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
-      JOIN ledger_transactions t ON t.id = e.transaction_id WHERE t.operation_type = 'reward' ORDER BY a.code`);
-      assert.deepEqual(
-        entries.map((e) => [e.code, e.side]),
-        [
-          ['promotions_expense', 'debit'],
-          ['recipient_payable', 'credit'],
-        ],
-      );
-      const { availableMinor } = await balanceOf(db, TOBI.id);
       assert.equal(
-        availableMinor,
-        50n * 187000n - 0n + BigInt(grant.cash_minor) + 5n * 10000n,
+        moment.title,
+        '50 tips! People keep coming back to thank you.',
       );
+      assert.equal(
+        (await q(`SELECT count(*)::int AS n FROM reward_grants`))[0].n,
+        0,
+      );
+      assert.equal(
+        (
+          await q(
+            `SELECT count(*)::int AS n FROM ledger_transactions WHERE operation_type = 'reward'`,
+          )
+        )[0].n,
+        0,
+      );
+      // Each ₦2,000 tip leaves Tobi ₦1,800; the provider's fee is TipMe's cost.
+      const { availableMinor } = await balanceOf(db, TOBI.id);
+      assert.equal(availableMinor, 50n * 180000n);
     },
   );
 
   await t.test(
-    'two tips crossing a milestone together make one moment, one reward',
+    'two tips crossing a milestone together make one moment and no reward',
     async () => {
       await database.fresh();
       for (let i = 0; i < 8; i += 1) await paid();
@@ -171,9 +162,9 @@ test('moments and rewards', async (t) => {
       );
       assert.equal(
         (await q(`SELECT count(*)::int AS n FROM reward_grants`))[0].n,
-        1,
+        0,
       );
-      assert.equal(await credits(), 5);
+      assert.equal(await credits(), 0);
     },
   );
 
@@ -181,8 +172,6 @@ test('moments and rewards', async (t) => {
     'the last fee-free credit is used once, never below zero',
     async () => {
       await database.fresh();
-      // Fee history first: a fee-free tip must stay within half the fees earned.
-      for (let i = 0; i < 4; i += 1) await paid();
       await q(
         'INSERT INTO fee_free_credits (profile_id, remaining) VALUES ($1, 1)',
         [TOBI.id],
@@ -190,33 +179,6 @@ test('moments and rewards', async (t) => {
       // Both quotes are fee-free (one credit left); both succeed at once.
       await Promise.all([paid(), paid()]);
       assert.equal(await credits(), 0);
-    },
-  );
-
-  await t.test(
-    'with no budget left, the cash bonus becomes fee-free tips',
-    async () => {
-      await database.fresh();
-      for (let i = 0; i < 49; i += 1) await tipAndEvaluate();
-      const tip = await paid();
-      await evaluateTipMoments(db, {
-        profileId: TOBI.id,
-        tipId: tip.tipId,
-        now: new Date(),
-        budgetPerMonthMinor: 0n,
-      });
-      assert.equal(
-        (
-          await q(
-            "SELECT count(*)::int AS n FROM reward_grants WHERE kind = 'cash'",
-          )
-        )[0].n,
-        0,
-      );
-      const moment = (await listMoments(db, TOBI.id)).find(
-        (m) => m.key === `milestone.50.${TOBI.id}`,
-      );
-      assert.equal(moment.title, '50 tips! Your next 5 tips are fee-free.');
     },
   );
 
@@ -251,6 +213,10 @@ test('moments and rewards', async (t) => {
         budgetPerMonthMinor: BUDGET,
       });
       assert.equal(again.created, 0);
+      assert.equal(
+        (await q(`SELECT count(*)::int AS n FROM reward_grants`))[0].n,
+        0,
+      );
     },
   );
 
@@ -327,48 +293,37 @@ test('review fixes: rewards', async (t) => {
     return quote;
   };
 
-  await t.test(
-    'fix: an open fee-free quote reserves its credit and its cost',
-    async () => {
-      await database.fresh();
-      // Two normal tips: room for exactly one waived NGN 100.00 fee (half of NGN 200.00 earned).
-      await paid();
-      await paid();
-      await q(
-        'INSERT INTO fee_free_credits (profile_id, remaining) VALUES ($1, 5) ON CONFLICT (profile_id) DO UPDATE SET remaining = 5',
-        [TOBI.id],
-      );
-      const first = await createQuote(db, {
-        handle: 'tobi',
-        tipMinor: 200000n,
-        currency: 'NGN',
-      });
-      const second = await createQuote(db, {
-        handle: 'tobi',
-        tipMinor: 200000n,
-        currency: 'NGN',
-      });
-      assert.equal(first.feeFree, true);
-      assert.equal(second.feeFree, false);
-    },
-  );
+  await t.test('fix: an open fee-free quote reserves its credit', async () => {
+    await database.fresh();
+    await q(
+      'INSERT INTO fee_free_credits (profile_id, remaining) VALUES ($1, 1) ON CONFLICT (profile_id) DO UPDATE SET remaining = 1',
+      [TOBI.id],
+    );
+    const first = await createQuote(db, {
+      handle: 'tobi',
+      tipMinor: 200000n,
+      currency: 'NGN',
+    });
+    const second = await createQuote(db, {
+      handle: 'tobi',
+      tipMinor: 200000n,
+      currency: 'NGN',
+    });
+    assert.equal(first.feeFree, true);
+    assert.equal(second.feeFree, false);
+  });
 
   await t.test(
-    'fix: fee-free tips promised with a cash bonus can actually be used',
+    'a granted credit is honoured without any fee history (no automatic cap)',
     async () => {
       await database.fresh();
-      for (let i = 0; i < 100; i += 1) await paid();
-      const hundred = (await listMoments(db, TOBI.id)).find(
-        (m) => m.key === `milestone.100.${TOBI.id}`,
+      await q(
+        'INSERT INTO fee_free_credits (profile_id, remaining) VALUES ($1, 1)',
+        [TOBI.id],
       );
-      const next = await createQuote(db, {
-        handle: 'tobi',
-        tipMinor: 200000n,
-        currency: 'NGN',
-      });
-      if (/fee-free/.test(hundred.title))
-        assert.equal(next.feeFree, true, hundred.title);
-      else assert.doesNotMatch(hundred.title, /fee-free/);
+      const quote = await paid();
+      assert.equal(quote.feeFree, true);
+      assert.equal(quote.breakdown.recipientNetMinor, 200000n);
     },
   );
 });

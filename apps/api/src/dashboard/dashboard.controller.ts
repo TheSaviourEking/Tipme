@@ -82,6 +82,7 @@ export class DashboardController {
     @Query('status') status?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('q') q?: string,
   ): Promise<
     ApiDataResponse<{ items: MyTipRow[]; nextCursor: string | null }>
   > {
@@ -89,6 +90,9 @@ export class DashboardController {
       data: await listMyTips(this.database.db, await this.profile(auth), {
         status: status === 'paid' || status === 'confirming' ? status : 'all',
         ...(cursor ? { cursor: cursor.slice(0, 200) } : {}),
+        ...(typeof q === 'string' && q.trim()
+          ? { search: q.slice(0, 60) }
+          : {}),
         limit: Number.parseInt(limit ?? '20', 10) || 20,
       }),
     };

@@ -19,12 +19,28 @@ test('TipMe assigns local build-time fonts to distinct type roles', () => {
   assert.match(layout, /Manrope/);
   assert.match(layout, /DM_Serif_Display/);
   assert.match(layout, /display:\s*'swap'/);
-  assert.match(layout, /--font-nunito/);
+  // The wordmark is an SVG from the master file, so no brand font is downloaded.
+  assert.doesNotMatch(layout, /Nunito/);
   assert.doesNotMatch(layout, /weight:\s*\['100'/);
 
   assert.match(tokens, /--font-interface:\s*var\(--font-manrope\)/);
   assert.match(tokens, /--font-editorial:\s*var\(--font-dm-serif\)/);
   assert.match(tokens, /font-variant-numeric:\s*var\(--numeric-variant\)/);
+});
+
+test('the wordmark renders from the master SVG file', () => {
+  const brand = readFileSync(
+    new URL('../src/lib/wordmark.ts', import.meta.url),
+    'utf8',
+  );
+  const master = readFileSync(
+    new URL('../public/brand/tipme-wordmark.svg', import.meta.url),
+    'utf8',
+  );
+  const paths = [...master.matchAll(/<path d="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(paths.length, 7);
+  for (const d of paths)
+    assert.ok(brand.includes(d), 'path missing from the wordmark module');
 });
 
 test('fictional demo portraits are optimized repository assets', () => {

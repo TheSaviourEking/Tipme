@@ -93,8 +93,9 @@
       linear-gradient(rgb(255 255 255 / 24%), transparent 36%),
       var(--brand-hover);
     box-shadow:
-      0 3px 3px rgb(58 17 131 / 20%),
-      0 14px 28px rgb(79 27 173 / 25%);
+      inset 0 1px 0 rgb(255 255 255 / 24%),
+      0 2px 3px rgb(58 17 131 / 28%),
+      0 6px 12px -6px rgb(58 17 131 / 32%);
     transform: translateY(-1px);
   }
 
@@ -299,11 +300,11 @@ textarea.tm-input {
 
 .tm-notice {
   padding: 1rem 1.1rem;
-  border: 1px solid var(--border-material);
-  border-left: 4px solid var(--brand-primary);
+  border: 1px solid var(--edge-hairline);
+  border-left: 3px solid var(--brand-primary);
   border-radius: var(--radius-control);
-  background: var(--brand-soft);
-  color: var(--brand-ink);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   font-size: var(--text-sm);
   line-height: 1.6;
 }
@@ -331,7 +332,13 @@ textarea.tm-input {
 
 .tm-empty-mark {
   color: var(--brand-primary);
-  font-size: 3rem;
+  font-size: 2rem;
+}
+
+.tm-empty h2 {
+  margin: var(--space-3) 0 var(--space-2);
+  font: 400 clamp(1.75rem, 3vw, 2.25rem) / 1.1 var(--font-editorial);
+  letter-spacing: -0.015em;
 }
 
 .tm-empty p {
@@ -348,8 +355,9 @@ textarea.tm-input {
 
 .tm-skeleton > span:not(.sr-only) {
   height: 2rem;
-  border-radius: var(--radius-control);
-  background: var(--border-subtle);
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
   animation: tm-pulse 1.8s ease-in-out infinite alternate;
 }
 

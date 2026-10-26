@@ -1,9 +1,8 @@
 import {
   AmountOutOfRangeError,
   FEE_FREE_VERSION_SUFFIX,
-  feeFreeAllowed,
   assertCurrency,
-  MOCK_FEE_POLICY_V0,
+  FEE_POLICY,
   priceTip,
   type FeeBreakdown,
 } from '@tipme/domain';
@@ -12,7 +11,6 @@ import type { Database, Tx } from '../client.js';
 import { feeFreeCredits, profiles, tipQuotes } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { rewardStats } from './moments.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -51,6 +49,7 @@ async function quote(
       id: profiles.id,
       handle: profiles.handle,
       displayName: profiles.displayName,
+      platformFeeBps: profiles.platformFeeBps,
     })
     .from(profiles)
     .where(
@@ -62,9 +61,20 @@ async function quote(
       ),
     );
   if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
+  // A staff-set account fee replaces the policy's 10% (ADR-0014).
+  const accountFee =
+    profile.platformFeeBps === null
+      ? undefined
+      : BigInt(profile.platformFeeBps);
+  const baseVersion =
+    accountFee === undefined
+      ? FEE_POLICY.version
+      : `${FEE_POLICY.version}-custom-${accountFee}`;
   let breakdown: FeeBreakdown;
   try {
-    breakdown = priceTip(input.tipMinor, MOCK_FEE_POLICY_V0);
+    breakdown = priceTip(input.tipMinor, FEE_POLICY, {
+      ...(accountFee === undefined ? {} : { platformFeeBps: accountFee }),
+    });
   } catch (error) {
     if (error instanceof AmountOutOfRangeError)
       throw new OperationError('AMOUNT_OUT_OF_RANGE');
@@ -75,9 +85,9 @@ async function quote(
   );
   const quoteId = newId();
   const priced = breakdown;
-  // A fee-free reward waives TipMe's fee while credits last and the lifetime cap allows it.
-  // Open fee-free quotes reserve their credit and their cost, under a lock on the credits row,
-  // so quotes made before any of them is paid can never overspend either.
+  // Staff-granted fee-free tips waive TipMe's fee while credits last; the grant is the decision,
+  // so no lifetime cap applies (ADR-0014). Open fee-free quotes reserve their credit under a lock
+  // on the credits row, so quotes made before any of them is paid can never overspend it.
   const { waivedPlatformFeeMinor, finalBreakdown, feePolicyVersion } =
     await db.transaction(async (tx) => {
       const [credits] = await tx
@@ -87,28 +97,17 @@ async function quote(
         .for('update');
       let waived = 0n;
       let chosen = priced;
-      let version: string = MOCK_FEE_POLICY_V0.version;
+      let version = baseVersion;
       if ((credits?.remaining ?? 0) > 0 && priced.platformFeeMinor > 0n) {
         const open = await openFeeFreeQuotes(
           tx,
           profile.id,
           expiresAt.getTime() - QUOTE_TTL_MS,
         );
-        const stats = await rewardStats(tx, profile.id);
-        if (
-          feeFreeAllowed({
-            credits: (credits?.remaining ?? 0) - open.count,
-            waivedFeeMinor: priced.platformFeeMinor,
-            lifetimeFeesMinor: stats.lifetimeFeesMinor,
-            lifetimeRewardCostMinor:
-              stats.lifetimeRewardCostMinor + open.waivedMinor,
-          })
-        ) {
+        if ((credits?.remaining ?? 0) - open.count > 0) {
           waived = priced.platformFeeMinor;
-          chosen = priceTip(input.tipMinor, MOCK_FEE_POLICY_V0, {
-            feeFree: true,
-          });
-          version = `${MOCK_FEE_POLICY_V0.version}${FEE_FREE_VERSION_SUFFIX}`;
+          chosen = priceTip(input.tipMinor, FEE_POLICY, { feeFree: true });
+          version = `${baseVersion}${FEE_FREE_VERSION_SUFFIX}`;
         }
       }
       await tx.insert(tipQuotes).values({

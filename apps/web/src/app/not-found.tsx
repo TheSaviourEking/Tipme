@@ -1,24 +1,25 @@
 import Link from 'next/link';
-import { ActionLink, Container } from '@tipme/ui';
+import { QuietScreen } from '@/components/quiet-screen';
+
 export default function NotFound() {
   return (
-    <main id="main" tabIndex={-1}>
-      <Container className="unavailable-page">
-        <span className="large-flower" aria-hidden="true">
-          ✳
-        </span>
-        <p className="eyebrow">A little detour</p>
-        <h1>This profile isn’t available.</h1>
-        <p>
-          The link may be incorrect, or the page may no longer be here.
-          <br />
-          You can still explore one of our fictional demo profiles.
-        </p>
-        <ActionLink href="/@ada">Explore Ada’s demo profile</ActionLink>
-        <Link className="text-link" href="/">
-          Back to TipMe
-        </Link>
-      </Container>
-    </main>
+    <QuietScreen
+      title="We can’t find that page"
+      actions={
+        <>
+          <Link className="tm-button tm-button--primary" href="/">
+            Go to TipMe
+          </Link>
+          <Link className="text-link" href="/@ada">
+            See a demo page
+          </Link>
+        </>
+      }
+    >
+      <p>
+        The link may be mistyped, or the page may have moved. Looking for
+        someone? Ask them for their TipMe link or QR code.
+      </p>
+    </QuietScreen>
   );
 }

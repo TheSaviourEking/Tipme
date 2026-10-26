@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { Container } from '@tipme/ui';
+import { AuthStage } from '@/components/account/auth-stage';
 import { SignInView } from './sign-in-view';
 
 export const metadata: Metadata = {
@@ -10,14 +10,13 @@ export const metadata: Metadata = {
 
 export default function SignInPage() {
   return (
-    <main id="main" tabIndex={-1} className="auth-page">
-      <Container className="auth-shell">
-        <h1>Sign in to TipMe</h1>
-        <p className="auth-lede">Use the phone number you signed up with.</p>
-        <Suspense>
-          <SignInView />
-        </Suspense>
-      </Container>
-    </main>
+    <AuthStage
+      title="Welcome back."
+      lede="Use the phone number you signed up with, and we’ll send you a code."
+    >
+      <Suspense>
+        <SignInView />
+      </Suspense>
+    </AuthStage>
   );
 }

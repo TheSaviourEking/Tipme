@@ -167,8 +167,8 @@ test('dashboard data', async (t) => {
       assert.equal(detail.message, 'Lovely coffee');
       assert.equal(detail.grossMinor, '100000');
       assert.equal(detail.netMinor, earlyToday.net.toString());
-      assert.equal(detail.platformFeeMinor, '5000');
-      assert.equal(detail.providerFeeMinor, '1500');
+      assert.equal(detail.platformFeeMinor, '10000');
+      assert.equal(detail.providerFeeMinor, '0');
       assert.equal(detail.proof.verified, true);
       assert.equal(detail.proof.provider, 'mock');
       assert.equal(detail.proof.referenceTail, earlyToday.reference.slice(-6));
@@ -233,4 +233,59 @@ test('fix: an unpaid tip never reaches the dashboard, nor its message', async (t
     ),
     false,
   );
+});
+
+test('a recipient searches their tips by name, amount or reference, never message text', async (t) => {
+  const database = await useDatabase(t);
+  await database.fresh();
+  const { db } = database;
+  const pay = async (tipMinor, { label, message } = {}) => {
+    const quote = await createQuote(db, {
+      handle: 'ada',
+      tipMinor,
+      currency: 'NGN',
+    });
+    const intent = await createPaymentIntent(db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+      ...(label ? { payerDisplayLabel: label } : {}),
+      ...(message ? { message } : {}),
+    });
+    const reference = `mock_pay_${randomUUID()}`;
+    await markAttemptInitiated(db, {
+      attemptId: intent.attemptId,
+      provider: 'mock',
+      providerReference: reference,
+    });
+    await recordProviderEvent(db, {
+      provider: 'mock',
+      providerEventId: `evt_${randomUUID()}`,
+      eventType: 'payment.succeeded',
+      attemptId: intent.attemptId,
+      providerReference: reference,
+      amountMinor: tipMinor,
+      currency: 'NGN',
+      providerFeeMinor: 3000n,
+      signatureVerified: true,
+      payload: {},
+    });
+    return { tipId: intent.tipId, reference };
+  };
+  const kemi = await pay(200000n, { label: 'Kemi B.' });
+  const guest = await pay(500000n, { message: 'Zed was here' });
+  const tunde = await pay(100000n, { label: 'Tunde' });
+  const found = async (search) =>
+    (await listMyTips(db, ADA.id, { status: 'all', search })).items.map(
+      (row) => row.tipId,
+    );
+
+  assert.deepEqual(await found('kem'), [kemi.tipId]);
+  assert.deepEqual(await found('5,000'), [guest.tipId]);
+  assert.deepEqual(await found('₦1000'), [tunde.tipId]);
+  assert.deepEqual(await found('2000.00'), [kemi.tipId]);
+  assert.deepEqual(await found(tunde.reference.slice(-8)), [tunde.tipId]);
+  assert.deepEqual(await found('Zed'), []);
+  assert.deepEqual(await found('%'), []);
+  assert.deepEqual(await found('_'), []);
+  assert.equal((await found('')).length, 3);
 });

@@ -7,7 +7,7 @@ Do not integrate third-party components until an actual row is completed with fa
 
 ## Physical interface typography and demo imagery
 
-- **Manrope, DM Serif Display, Nunito** (SIL Open Font License 1.1, Google Fonts): loaded and self-hosted by `next/font` during the build, with no runtime third-party request. Manrope supplies interface weights 400–700, DM Serif Display supplies editorial 400, and Nunito supplies the 900 brand treatment. The rendered candidates remain provisional under D-09. Font-disabled and narrow-layout checks are part of the visual gate.
+- **Manrope, DM Serif Display** (SIL Open Font License 1.1, Google Fonts): loaded and self-hosted by `next/font` during the build, with no runtime third-party request. Manrope supplies interface weights 400–700, DM Serif Display supplies editorial 400; the wordmark is an SVG (Nunito was removed on 25 October 2026). The rendered candidates remain provisional under D-09. Font-disabled and narrow-layout checks are part of the visual gate.
 - **Ada and Tobi demo portraits:** original fictional images generated for TipMe with OpenAI's built-in image generation tool on 2026-10-25, then encoded as repository-owned WebP assets at 960 px width. They do not depict known people and contain no embedded text, logos, or user data. Decision: adopted for preview/demo profiles only; replaceable without changing product data contracts.
 
 ## PR-001/002 bootstrap

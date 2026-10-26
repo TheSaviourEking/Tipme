@@ -1,10 +1,45 @@
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 import type { PublicProfile } from '@tipme/contracts';
 import { Surface } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
-import { ProfileSpark } from './profile-symbols';
 
-export function RecipientCard({
+const initialsFor = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((part) => part[0] ?? '')
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+/** The portrait the page is composed around; a framed monogram when none is shared. */
+export function RecipientPortrait({ profile }: { profile: PublicProfile }) {
+  return (
+    <figure className="profile-portrait" data-profile-portrait>
+      {profile.avatarPath ? (
+        <AvatarImage
+          className="profile-portrait__media"
+          src={profile.avatarPath}
+          name={profile.displayName}
+          width={960}
+          height={1200}
+          sizes="(max-width: 800px) calc(100vw - 2.5rem), 34vw"
+          priority
+        />
+      ) : (
+        <span
+          className="profile-portrait__media avatar--initials"
+          role="img"
+          aria-label={`Portrait unavailable for ${profile.displayName}`}
+        >
+          {initialsFor(profile.displayName)}
+        </span>
+      )}
+    </figure>
+  );
+}
+
+export function RecipientIdentity({
   profile,
   children,
 }: {
@@ -12,46 +47,27 @@ export function RecipientCard({
   children?: ReactNode;
 }) {
   return (
-    <article className="recipient-card" data-profile-card>
-      <div className="recipient-card__visual">
-        {profile.avatarPath ? (
-          <AvatarImage
-            className="recipient-card__portrait"
+    <Surface className="profile-identity" material="raised" data-profile-card>
+      <div className="profile-identity__head">
+        {/* Decorative repeat of the portrait: the figure above carries the description. */}
+        {profile.avatarPath && (
+          <Image
+            className="profile-identity__avatar"
             src={profile.avatarPath}
-            name={profile.displayName}
-            width={960}
-            height={1200}
-            sizes="(max-width: 800px) calc(100vw - 2rem), 50vw"
-            priority
+            alt=""
+            width={96}
+            height={96}
+            sizes="48px"
           />
-        ) : (
-          <span
-            className="recipient-card__portrait avatar--initials"
-            aria-label={`Portrait unavailable for ${profile.displayName}`}
-          >
-            {profile.displayName
-              .split(/\s+/)
-              .map((part) => part[0] ?? '')
-              .join('')
-              .slice(0, 2)
-              .toUpperCase()}
-          </span>
         )}
-        <ProfileSpark />
-        {profile.craft && (
-          <p className="recipient-card__craft">{profile.craft}</p>
-        )}
+        <div>
+          <h1 id="profile-name">{profile.displayName}</h1>
+          <p className="profile-identity__handle">@{profile.handle}</p>
+        </div>
       </div>
-      <Surface className="recipient-card__sheet" material="raised">
-        <p className="eyebrow">@{profile.handle}</p>
-        <h1 id="profile-name">{profile.displayName}</h1>
-        {profile.role && <p className="profile-role">{profile.role}</p>}
-        {profile.bio && <p className="profile-bio">{profile.bio}</p>}
-        {profile.note && (
-          <blockquote className="profile-note">{profile.note}</blockquote>
-        )}
-        {children}
-      </Surface>
-    </article>
+      {profile.role && <p className="profile-role">{profile.role}</p>}
+      {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+      {children}
+    </Surface>
   );
 }

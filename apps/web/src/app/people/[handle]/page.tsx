@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
-import { Badge, Container } from '@tipme/ui';
+import { Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
-import { RecipientCard } from '@/components/profile/recipient-card';
+import {
+  RecipientIdentity,
+  RecipientPortrait,
+} from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ShareProfile } from '@/components/share-profile';
 import { movedProfilePath } from '@/lib/handle-redirect';
@@ -72,46 +75,66 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
       <Container>
-        <div className="profile-breadcrumb">
+        <nav className="profile-breadcrumb" aria-label="Breadcrumb">
           <Link href="/">Home</Link>
           <span aria-hidden="true">/</span>
-          <span>Meet {firstName}</span>
-          <Badge>Pretend payments</Badge>
-        </div>
-        <div className="profile-grid">
-          <section className="profile-story" aria-labelledby="profile-name">
-            <RecipientCard profile={profile}>
-              <Contact profile={profile} />
-              <ShareProfile handle={profile.handle} />
-              <p className="profile-fineprint">
-                Payments on TipMe are pretend during the preview.
-                <br />
-                No real money moves.
+          <span aria-current="page">Meet {firstName}</span>
+        </nav>
+        {/* Portrait-led composition: the identity card and tipping panel overlap the portrait. */}
+        <div className="profile-stage">
+          <div className="profile-scene">
+            <div className="profile-headline">
+              <p className="profile-headline__title">Support Great People</p>
+              <p className="profile-headline__lede">
+                A simpler, more thoughtful way to send appreciation.
               </p>
-            </RecipientCard>
-          </section>
+            </div>
+            <RecipientPortrait profile={profile} />
+            <section
+              className="profile-identity-slot"
+              aria-labelledby="profile-name"
+            >
+              <RecipientIdentity profile={profile} />
+            </section>
+          </div>
           <aside
-            className="profile-composer"
+            className="profile-composer tip-instrument"
             aria-label={`Tip ${firstName}`}
             data-tip-panel
           >
             <AppreciationForm
               recipient={firstName}
               handle={profile.handle}
+              collapseExtras
               {...(profile.celebration
                 ? { celebration: profile.celebration }
                 : {})}
             />
-            <div className="profile-safety">
-              <span aria-hidden="true">◇</span>
-              <p>
-                No account. Pretend payments only: no real money moves.
-                <br />
-                <Link href="/about-preview">Learn about this preview</Link>
-              </p>
-            </div>
           </aside>
         </div>
+        <section className="profile-more" aria-label={`More from ${firstName}`}>
+          {(profile.craft ?? profile.note) && (
+            <div className="profile-more__words">
+              {profile.craft && (
+                <p className="profile-more__craft">{profile.craft}</p>
+              )}
+              {profile.note && (
+                <blockquote className="profile-note">{profile.note}</blockquote>
+              )}
+            </div>
+          )}
+          <div className="profile-more__links">
+            <Contact profile={profile} />
+            <ShareProfile handle={profile.handle} />
+          </div>
+          <div className="profile-safety">
+            <p>
+              No account needed. Payments on TipMe are pretend during the
+              preview: no real money moves.
+            </p>
+            <Link href="/about-preview">Learn about this preview</Link>
+          </div>
+        </section>
       </Container>
     </main>
   );

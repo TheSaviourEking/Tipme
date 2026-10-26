@@ -121,3 +121,10 @@ test('whatever happens, TipMe never gives back more than half the fees a recipie
     }
   }
 });
+
+test('no milestone or best period grants a reward by itself: only staff grant them (ADR-0014)', () => {
+  for (const milestone of REWARDS.milestones)
+    assert.equal(milestone.reward, 'none', `tip ${milestone.count}`);
+  assert.equal(REWARDS.bestWeek, 'none');
+  assert.equal(REWARDS.bestMonth, 'none');
+});

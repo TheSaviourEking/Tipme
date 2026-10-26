@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { OpsAccessController } from './ops-access.controller.js';
+import { OpsAccountsController } from './accounts.controller.js';
 import { OpsIssuesController } from './issues.controller.js';
 import { OpsActionsController } from './actions.controller.js';
 import { OpsMetricsController } from './metrics.controller.js';
@@ -19,6 +20,7 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsActionsController,
     OpsMetricsController,
     OpsMarketController,
+    OpsAccountsController,
   ],
   providers: [CsrfGuard, RateLimitGuard, StaffGuard, OpsGuard],
 })

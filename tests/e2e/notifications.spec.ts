@@ -42,7 +42,7 @@ test('a recipient is told about a confirmed tip, verifies an email and is emaile
   await page.getByRole('button', { name: 'Notifications, 2 unread' }).click();
   // The toast may still be showing the same words: look in the panel.
   const panel = page.locator('#notification-list');
-  await expect(panel.getByText('NGN 1,870.00 from Bola')).toBeVisible();
+  await expect(panel.getByText('NGN 1,800.00 from Bola')).toBeVisible();
   await expect(
     panel.getByText('Your first tip! Someone noticed your work.'),
   ).toBeVisible();
@@ -71,6 +71,6 @@ test('a recipient is told about a confirmed tip, verifies an email and is emaile
   await tipAsVisitor(browser, handle, { name: 'Chidi' });
   await readMail(
     page,
-    new RegExp(`k•••@${domain}.*You got a ₦1,870 tip on TipMe.*Chidi`, 's'),
+    new RegExp(`k•••@${domain}.*You got a ₦1,800 tip on TipMe.*Chidi`, 's'),
   );
 });

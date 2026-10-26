@@ -1,7 +1,8 @@
+import Image from 'next/image';
 import Link from 'next/link';
-import { Container } from '@tipme/ui';
+import { ActionLink, Container } from '@tipme/ui';
 import { Arrow } from '@/components/brand';
-import { CreatorArt, HowItWorksSteps } from '@/components/marketing';
+import { HowItWorksSteps } from '@/components/marketing';
 import { previewMetadata } from '@/lib/metadata';
 
 export const metadata = previewMetadata(
@@ -13,17 +14,25 @@ export const metadata = previewMetadata(
 export default function ForCreators() {
   return (
     <main id="main" tabIndex={-1}>
-      <section
-        className="use-cases section-space"
-        aria-labelledby="creators-title"
-      >
+      <section className="section-space" aria-labelledby="creators-title">
         <Container>
-          <article className="use-case creator-case">
-            <CreatorArt />
+          {/* A real person beside the promise, as on the home page. */}
+          <article className="creator-hero">
+            <div className="person-card__photo">
+              <Image
+                src="/portraits/ada.webp"
+                alt="Ada Okafor, a fictional demo creator"
+                width={960}
+                height={1200}
+                sizes="(max-width: 860px) calc(100vw - 2.5rem), 40vw"
+                loading="eager"
+                fetchPriority="high"
+              />
+            </div>
             <div className="use-case-copy">
               <span className="eyebrow">For creators</span>
               <h1 id="creators-title" className="page-title">
-                For the generous <em>minds.</em>
+                For the generous minds.
               </h1>
               <p>
                 The tutorial that finally clicked. The template that saved an
@@ -34,9 +43,14 @@ export default function ForCreators() {
                 Supporters choose their own amount and can add a few words.
                 Nothing is expected, and nothing is hidden.
               </p>
-              <Link className="text-link" href="/@ada">
-                Meet a demo creator <Arrow diagonal />
-              </Link>
+              <div className="home-actions">
+                <ActionLink className="home-primary" href="/sign-up">
+                  Create your page <Arrow />
+                </ActionLink>
+                <Link className="text-link" href="/@ada">
+                  Meet a demo creator <Arrow diagonal />
+                </Link>
+              </div>
             </div>
           </article>
         </Container>

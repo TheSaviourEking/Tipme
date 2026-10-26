@@ -174,12 +174,18 @@ export const profiles = pgTable(
     phonePublic: boolean('phone_public').notNull().default(false),
     emailPublic: boolean('email_public').notNull().default(false),
     qrStyle: text('qr_style').notNull().default('purple'),
+    // A staff-set TipMe fee for this account in basis points (ADR-0014); null means the policy's.
+    platformFeeBps: integer('platform_fee_bps'),
     createdAt: createdAt(),
   },
   () => [
     check(
       'profiles_page_state',
       sql`page_state IN ('live', 'not_live', 'deleted')`,
+    ),
+    check(
+      'profiles_platform_fee_bps',
+      sql`platform_fee_bps IS NULL OR platform_fee_bps BETWEEN 0 AND 10000`,
     ),
   ],
 );
@@ -698,6 +704,8 @@ export const OPS_PERMISSIONS = [
   'audit.view',
   'payments.recheck',
   'private.view',
+  // Set an account's TipMe fee and grant fee-free tips (ADR-0014).
+  'fees.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
