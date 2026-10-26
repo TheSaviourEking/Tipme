@@ -3,11 +3,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { MyProfile, SessionView } from '@tipme/contracts';
+import type {
+  MyProfile,
+  NotificationPrefs,
+  SessionView,
+} from '@tipme/contracts';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
-import { preparePhoto } from '@/lib/photo';
-import { apiFetch, apiUpload } from '@/lib/session-client';
+import { Avatar } from '@/components/avatar';
+import { hasAvatar } from '@/lib/avatar-source';
+import { apiFetch } from '@/lib/session-client';
+import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 
 function PageState() {
@@ -63,6 +69,173 @@ function PageState() {
       >
         {live ? 'Take my page offline' : 'Make my page live'}
       </Button>
+    </Card>
+  );
+}
+
+const PREF_LABELS = {
+  tipEmails: 'Email me about each tip (when my email is verified)',
+  weeklyReports: 'Tell me when my weekly report is ready',
+  milestones: 'Tell me about milestones and rewards',
+} as const;
+
+/** Notification preferences (PR-013). Sign-in codes and security warnings always go. */
+function NotificationSettings() {
+  const id = useId();
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void apiFetch<NotificationPrefs>('/v1/me/notification-preferences').then(
+      (result) => {
+        if (result.ok) setPrefs(result.data);
+      },
+    );
+  }, []);
+  // An API older than PR-013 has no preferences: say nothing rather than show a broken form.
+  if (!prefs) return null;
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setSaved(false);
+    setError('');
+    const result = await apiFetch<NotificationPrefs>(
+      '/v1/me/notification-preferences',
+      { method: 'PUT', body: prefs },
+    );
+    setBusy(false);
+    if (result.ok) {
+      setPrefs(result.data);
+      setSaved(true);
+    } else setError('We couldn’t save that. Please try again.');
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Notifications</h2>
+      <p className="tm-hint">
+        You always see your tips in TipMe, and sign-in codes and security
+        warnings always reach you.
+      </p>
+      <form className="settings-form" onSubmit={save} noValidate>
+        {(Object.keys(PREF_LABELS) as (keyof NotificationPrefs)[]).map(
+          (key) => (
+            <label key={key} className="tip-remember" htmlFor={`${id}-${key}`}>
+              <input
+                id={`${id}-${key}`}
+                type="checkbox"
+                checked={prefs[key]}
+                onChange={(e) => {
+                  setPrefs({ ...prefs, [key]: e.target.checked });
+                  setSaved(false);
+                }}
+              />
+              <span>{PREF_LABELS[key]}</span>
+            </label>
+          ),
+        )}
+        {error && (
+          <Notice tone="error" title="Not saved">
+            {error}
+          </Notice>
+        )}
+        <p role="status" className="tm-hint">
+          {saved ? 'Saved.' : ''}
+        </p>
+        <Button type="submit" disabled={busy} aria-busy={busy}>
+          Save notifications
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+const photoErrors: Record<string, string> = {
+  INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
+  PAYLOAD_TOO_LARGE: 'That photo is over 5 MB. Please choose a smaller one.',
+};
+
+/** The page's photo (PR-013): resized to a square and stripped of location data by TipMe. */
+function PhotoSettings() {
+  const id = useId();
+  const { profile, setProfile } = useRecipient();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
+  const send = async (method: 'PUT' | 'DELETE', file?: File) => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    // Shrunk here first: a phone photo uploads in seconds instead of timing out.
+    const photoFile = file ? await shrinkPhoto(file) : undefined;
+    if (photoFile && photoFile.size > 5 * 1024 * 1024) {
+      setBusy(false);
+      setError(photoErrors['PAYLOAD_TOO_LARGE']!);
+      return;
+    }
+    const result = await apiFetch<MyProfile>('/v1/me/avatar', {
+      method,
+      ...(photoFile ? { file: photoFile } : {}),
+    });
+    setBusy(false);
+    if (result.ok) {
+      setProfile(result.data);
+      setDone(method === 'PUT' ? 'Photo saved.' : 'Photo removed.');
+    } else
+      setError(
+        photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
+      );
+  };
+  // An API older than PR-013 has no photos: say nothing rather than show a form that fails.
+  if (!('avatarPath' in profile)) return null;
+  const photo = profile.avatarPath ?? null;
+  return (
+    <Card className="settings-section">
+      <h2>Your photo</h2>
+      <p className="tm-hint">
+        Optional. TipMe crops it to a square and removes hidden details such as
+        where it was taken. JPEG, PNG or WebP, up to 5 MB.
+      </p>
+      {hasAvatar(photo) ? (
+        <Avatar src={photo} name={profile.displayName} size={96} />
+      ) : (
+        <p className="tm-hint">No photo yet: your page shows your initials.</p>
+      )}
+      <div className="tm-field">
+        <label htmlFor={`${id}-photo`}>
+          {photo ? 'Choose a new photo' : 'Choose a photo'}
+        </label>
+        <input
+          id={`${id}-photo`}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          aria-describedby={error ? `${id}-photo-error` : undefined}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void send('PUT', file);
+            event.target.value = '';
+          }}
+        />
+      </div>
+      {error && (
+        <p className="tm-field-error" role="alert" id={`${id}-photo-error`}>
+          {error}
+        </p>
+      )}
+      {/* Always present, so screen readers announce what is written into it. */}
+      <p role="status" className="tm-hint">
+        {done}
+      </p>
+      {photo && (
+        <Button
+          variant="quiet"
+          disabled={busy}
+          onClick={() => void send('DELETE')}
+        >
+          Remove photo
+        </Button>
+      )}
     </Card>
   );
 }
@@ -149,6 +322,154 @@ function HandleChange() {
   );
 }
 
+const nairaText = (minor: string) =>
+  new Intl.NumberFormat('en').format(Number(minor) / 100);
+
+/** Whole naira typed by the recipient, as kobo; null when not a whole amount. */
+const wholeNairaMinor = (value: string): string | null => {
+  const digits = value.trim().replaceAll(',', '');
+  return /^\d{1,6}$/.test(digits) ? String(Number(digits) * 100) : null;
+};
+
+/** Free pages show the standard amounts; Pro pages choose their own (PR-012). */
+function TipAmountsSettings() {
+  const id = useId();
+  const { profile, setProfile } = useRecipient();
+  // An API older than PR-012 sends neither: treat the page as Free with the standard amounts.
+  const amounts = profile.tipAmounts ?? {
+    presetsMinor: ['100000', '200000', '500000'],
+    minMinor: '100000',
+  };
+  const pro = profile.plan === 'pro';
+  const [presets, setPresets] = useState(() =>
+    [0, 1, 2, 3].map((i) =>
+      amounts.presetsMinor[i] ? nairaText(amounts.presetsMinor[i]) : '',
+    ),
+  );
+  const [minimum, setMinimum] = useState(nairaText(amounts.minMinor));
+  // Which field the problem is in, so the message sits next to it.
+  const [error, setError] = useState<{
+    field: 'presets' | 'minimum';
+    text: string;
+  } | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!pro)
+    return (
+      <Card className="settings-section">
+        <h2>Tip amounts</h2>
+        <p className="tm-hint">
+          Your page offers NGN {amounts.presetsMinor.map(nairaText).join(', ')},
+          and supporters can tip any amount from NGN{' '}
+          {nairaText(amounts.minMinor)}. Choosing your own amounts and minimum
+          is part of TipMe Pro.
+        </p>
+      </Card>
+    );
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setSaved(false);
+    const filled = presets.filter((value) => value.trim() !== '');
+    const presetsMinor = filled.map(wholeNairaMinor);
+    const minMinor = wholeNairaMinor(minimum);
+    if (presetsMinor.length === 0 || presetsMinor.includes(null)) {
+      setError({
+        field: 'presets',
+        text: 'Use whole naira amounts, like 2000 or 2,000.',
+      });
+      return;
+    }
+    if (!minMinor) {
+      setError({
+        field: 'minimum',
+        text: 'Use a whole naira amount, like 2000 or 2,000.',
+      });
+      return;
+    }
+    setBusy(true);
+    const result = await apiFetch<MyProfile>('/v1/me/tip-amounts', {
+      method: 'PUT',
+      body: { presetsMinor, minMinor },
+    });
+    setBusy(false);
+    if (result.ok) {
+      setProfile(result.data);
+      setSaved(true);
+      return;
+    }
+    if (result.code === 'PRO_REQUIRED')
+      setError({
+        field: 'presets',
+        text: 'Choosing your own amounts is part of TipMe Pro.',
+      });
+    else if (result.fields?.includes('minMinor'))
+      setError({
+        field: 'minimum',
+        text: 'The smallest tip must be at least NGN 1,000, in whole naira.',
+      });
+    else
+      setError({
+        field: 'presets',
+        text: 'Use 1 to 4 different amounts, each at least your smallest tip.',
+      });
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Tip amounts (Pro)</h2>
+      <p className="tm-hint">
+        Choose the amounts on your page and the smallest tip you accept.
+        Supporters can still type their own amount, from your minimum up.
+      </p>
+      <form className="settings-form" onSubmit={save} noValidate>
+        <fieldset className="tip-amount-fields">
+          <legend>Amounts on your page (NGN)</legend>
+          {presets.map((value, index) => (
+            <InputField
+              key={index}
+              id={`${id}-preset-${index}`}
+              label={`Amount ${index + 1}${index === 0 ? '' : ' (optional)'}`}
+              inputMode="numeric"
+              autoComplete="off"
+              value={value}
+              {...(index === 0 && error?.field === 'presets'
+                ? { error: error.text }
+                : {})}
+              onChange={(e) => {
+                setPresets((current) =>
+                  current.map((v, i) => (i === index ? e.target.value : v)),
+                );
+                setSaved(false);
+              }}
+            />
+          ))}
+        </fieldset>
+        <InputField
+          id={`${id}-minimum`}
+          label="Smallest tip (NGN)"
+          inputMode="numeric"
+          autoComplete="off"
+          hint="At least NGN 1,000."
+          value={minimum}
+          onChange={(e) => {
+            setMinimum(e.target.value);
+            setSaved(false);
+          }}
+          {...(error?.field === 'minimum' ? { error: error.text } : {})}
+        />
+        {saved && (
+          <p role="status" className="tm-hint">
+            Saved. Your page now shows these amounts.
+          </p>
+        )}
+        <Button type="submit" disabled={busy} aria-busy={busy}>
+          Save tip amounts
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
 const fieldLabels: Record<string, string> = {
   displayName: 'Display name',
   role: 'What you do',
@@ -157,99 +478,6 @@ const fieldLabels: Record<string, string> = {
   'socials.instagram': 'Instagram link',
   'socials.x': 'X (Twitter) link',
 };
-
-/** The page's photo: prepared on this device (no metadata), then shown on the public page. */
-function Photo() {
-  const { profile, setProfile } = useRecipient();
-  const [status, setStatus] = useState('');
-  const [busy, setBusy] = useState(false);
-  const choose = async (file: File | undefined) => {
-    if (!file) return;
-    setBusy(true);
-    setStatus('Preparing your photo…');
-    try {
-      const blob = await preparePhoto(file);
-      setStatus('Uploading…');
-      const result = await apiUpload<MyProfile>('/v1/me/avatar', blob);
-      if (result.ok) {
-        setProfile(result.data);
-        setStatus('Saved. Your page shows your new photo.');
-      } else setStatus('We couldn’t save that photo. Please try another.');
-    } catch (error) {
-      setStatus(
-        error instanceof Error ? error.message : 'Something went wrong.',
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  const remove = async () => {
-    setBusy(true);
-    const result = await apiFetch<MyProfile>('/v1/me/avatar', {
-      method: 'DELETE',
-    });
-    setBusy(false);
-    if (result.ok) {
-      setProfile(result.data);
-      setStatus('Removed. Your page shows your initials.');
-    } else setStatus('We couldn’t remove it. Please try again.');
-  };
-  return (
-    <Card className="settings-section settings-photo">
-      <h2>Your photo</h2>
-      <div className="settings-photo__row">
-        {profile.avatarPath ? (
-          // eslint-disable-next-line @next/next/no-img-element -- a just-changed photo, shown as is
-          <img
-            className="settings-photo__preview"
-            src={profile.avatarPath}
-            alt="Your current photo"
-            width={96}
-            height={120}
-          />
-        ) : (
-          <span className="settings-photo__preview" aria-hidden="true">
-            {profile.displayName
-              .split(/\s+/)
-              .map((part) => part[0] ?? '')
-              .join('')
-              .slice(0, 2)
-              .toUpperCase()}
-          </span>
-        )}
-        <div>
-          <p className="tm-hint">
-            People tip people: a clear photo of your face helps supporters know
-            it’s really you. It’s cropped to a portrait and its hidden details
-            (like location) are removed on this device first.
-          </p>
-          <label className="tm-button tm-button--secondary settings-photo__pick">
-            {profile.avatarPath ? 'Choose a new photo' : 'Add a photo'}
-            <input
-              className="sr-only"
-              type="file"
-              accept="image/*"
-              disabled={busy}
-              onChange={(event) => void choose(event.target.files?.[0])}
-            />
-          </label>
-          {profile.avatarPath && (
-            <Button
-              variant="quiet"
-              disabled={busy}
-              onClick={() => void remove()}
-            >
-              Remove photo
-            </Button>
-          )}
-        </div>
-      </div>
-      <p role="status" className="tm-hint">
-        {status}
-      </p>
-    </Card>
-  );
-}
 
 function AboutYou() {
   const id = useId();
@@ -585,65 +813,6 @@ function ContactDetails() {
   );
 }
 
-/** Which emails to receive. Security emails always go out; the in-app list keeps everything. */
-function EmailPreferences() {
-  const { profile, setProfile } = useRecipient();
-  const [status, setStatus] = useState('');
-  const save = async (patch: {
-    emailTips?: boolean;
-    emailWeekly?: boolean;
-  }) => {
-    setStatus('Saving…');
-    const result = await apiFetch<MyProfile>('/v1/me/profile', {
-      method: 'PATCH',
-      body: patch,
-    });
-    if (result.ok) {
-      setProfile(result.data);
-      setStatus('Saved.');
-    } else setStatus('We couldn’t save that. Please try again.');
-  };
-  return (
-    <Card className="settings-section">
-      <h2>Emails</h2>
-      {!profile.emailVerified && (
-        <p className="tm-hint">
-          Add and confirm an email under Phone and email to receive these.
-        </p>
-      )}
-      <label className="tip-remember">
-        <input
-          type="checkbox"
-          checked={profile.emailTips ?? true}
-          onChange={(event) => void save({ emailTips: event.target.checked })}
-        />
-        <span>
-          Email me when a tip is confirmed
-          <small>Every tip still shows in your dashboard.</small>
-        </span>
-      </label>
-      <label className="tip-remember">
-        <input
-          type="checkbox"
-          checked={profile.emailWeekly ?? true}
-          onChange={(event) => void save({ emailWeekly: event.target.checked })}
-        />
-        <span>
-          Email me my week on TipMe
-          <small>A short summary each Monday.</small>
-        </span>
-      </label>
-      <p className="tm-hint">
-        Emails that keep your account safe, like confirming an address or a
-        change of number, are always sent.
-      </p>
-      <p role="status" className="tm-hint">
-        {status}
-      </p>
-    </Card>
-  );
-}
-
 function Devices() {
   const [sessions, setSessions] = useState<SessionView[] | null>(null);
   const [round, setRound] = useState(0);
@@ -750,10 +919,11 @@ export function SettingsView() {
       <PendingRecovery />
       <PageState />
       <HandleChange />
-      <Photo />
+      <PhotoSettings />
+      <TipAmountsSettings />
       <AboutYou />
       <ContactDetails />
-      <EmailPreferences />
+      <NotificationSettings />
       <Devices />
       <DeletePage />
     </div>

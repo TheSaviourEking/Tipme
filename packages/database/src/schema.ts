@@ -1,6 +1,5 @@
 import {
   ISSUE_KINDS,
-  PROFILE_REPORT_REASONS,
   type OpsIssueKind as IssueKind,
   type OpsIssueSeverity as IssueSeverity,
   type OpsIssueSubject as IssueSubject,
@@ -12,6 +11,7 @@ import {
   boolean,
   char,
   check,
+  customType,
   date,
   doublePrecision,
   index,
@@ -26,7 +26,6 @@ import {
   unique,
   uniqueIndex,
   uuid,
-  customType,
 } from 'drizzle-orm/pg-core';
 
 // Money is bigint minor units (mode 'bigint' keeps it a JS bigint) plus an ISO 4217 currency.
@@ -176,21 +175,57 @@ export const profiles = pgTable(
     phonePublic: boolean('phone_public').notNull().default(false),
     emailPublic: boolean('email_public').notNull().default(false),
     qrStyle: text('qr_style').notNull().default('purple'),
-    // Email preferences (security emails are always sent). In-app notifications always appear.
-    emailTips: boolean('email_tips').notNull().default(true),
-    emailWeekly: boolean('email_weekly').notNull().default(true),
-    // A staff-set TipMe fee for this account in basis points (ADR-0014); null means the policy's.
-    platformFeeBps: integer('platform_fee_bps'),
+    // The page's photo version (PR-013): only ever goes up, so a photo URL is never reused, not
+    // even after removing a photo and adding another.
+    avatarVersion: integer('avatar_version').notNull().default(0),
+    // When the page first went live (PR-013): `profile_published` is recorded once, ever.
+    firstPublishedAt: timestamp('first_published_at', { withTimezone: true }),
+    // Notification preferences (PR-013): what the recipient chose not to be told about.
+    notifyTipEmails: boolean('notify_tip_emails').notNull().default(true),
+    notifyWeeklyReports: boolean('notify_weekly_reports')
+      .notNull()
+      .default(true),
+    notifyMilestones: boolean('notify_milestones').notNull().default(true),
+    // Free or Pro (PR-012). Staff set it; there is no billing while money is pretend.
+    plan: text('plan').notNull().default('free'),
+    // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
+    tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
+    minTipMinor: minor('min_tip_minor'),
+    // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
+    customFeeBps: integer('custom_fee_bps'),
     createdAt: createdAt(),
   },
-  () => [
+  (table) => [
     check(
       'profiles_page_state',
       sql`page_state IN ('live', 'not_live', 'deleted')`,
     ),
+    check('profiles_plan', sql`plan IN ('free', 'pro')`),
     check(
-      'profiles_platform_fee_bps',
-      sql`platform_fee_bps IS NULL OR platform_fee_bps BETWEEN 0 AND 10000`,
+      'profiles_custom_fee_bps',
+      sql`custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 0 AND 10000`,
+    ),
+    // Admin search by handle prefix (PR-013); the unique index cannot serve LIKE 'x%'.
+    index('profiles_handle_prefix').on(
+      table.handleLower.op('text_pattern_ops'),
+    ),
+    // Amounts in whole naira, never below the ₦1,000 floor (no maximum); 1 to 4 presets.
+    check(
+      'profiles_min_tip',
+      sql`min_tip_minor IS NULL OR (min_tip_minor >= 100000 AND min_tip_minor % 100 = 0)`,
+    ),
+    check(
+      'profiles_tip_presets',
+      sql`tip_presets_minor IS NULL OR cardinality(tip_presets_minor) BETWEEN 1 AND 4`,
+    ),
+    // Set together, and every preset at least the page's minimum.
+    check(
+      'profiles_tip_amounts_together',
+      sql`(tip_presets_minor IS NULL) = (min_tip_minor IS NULL)`,
+    ),
+    check(
+      'profiles_tip_presets_range',
+      sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
     ),
   ],
 );
@@ -485,6 +520,11 @@ export const paymentAttempts = pgTable(
       table.provider,
       table.providerReference,
     ),
+    // Admin search (PR-013): a whole reference, or the 6-character ending staff see.
+    index('payment_attempts_reference').on(table.providerReference),
+    index('payment_attempts_reference_end').on(
+      sql`lower(right(${table.providerReference}, 6))`,
+    ),
   ],
 );
 
@@ -514,6 +554,11 @@ export const payouts = pgTable(
     unique('payouts_provider_reference').on(
       table.provider,
       table.providerReference,
+    ),
+    // Admin search (PR-013).
+    index('payouts_reference').on(table.providerReference),
+    index('payouts_reference_end').on(
+      sql`lower(right(${table.providerReference}, 6))`,
     ),
   ],
 );
@@ -624,7 +669,12 @@ export const ledgerTransactions = pgTable(
       .notNull()
       .defaultNow(),
   },
-  () => [currencyCheck('ledger_transactions')],
+  (table) => [
+    currencyCheck('ledger_transactions'),
+    // Admin search (PR-013): a tip's or a payout's ledger entries.
+    index('ledger_transactions_tip').on(table.tipId),
+    index('ledger_transactions_payout').on(table.payoutId),
+  ],
 );
 
 /** Append-only; balanced per transaction at commit (deferred constraint trigger). */
@@ -709,7 +759,8 @@ export const OPS_PERMISSIONS = [
   'audit.view',
   'payments.recheck',
   'private.view',
-  // Set an account's TipMe fee and grant fee-free tips (ADR-0014).
+  'pages.plan',
+  'search.view',
   'fees.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
@@ -818,7 +869,7 @@ export const auditEvents = pgTable(
 
 // ---- Issues inbox (PR-009) ----
 
-export { ISSUE_KINDS, PROFILE_REPORT_REASONS };
+export { ISSUE_KINDS };
 export type { IssueKind, IssueSeverity, IssueSubject };
 
 /**
@@ -907,6 +958,47 @@ export const analyticsEvents = pgTable(
       sql`at_minute = date_trunc('minute', at_minute)`,
     ),
     index('analytics_events_at').on(table.atMinute),
+  ],
+);
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
+
+/**
+ * A page's photo (PR-013): one per page, already re-encoded on the server (512×512 WebP, no
+ * metadata). In Postgres so it is backed up and recovered with everything else; about 30 KB.
+ * `version` changes with each upload, so the URL can be cached for ever.
+ */
+export const profileAvatars = pgTable('profile_avatars', {
+  profileId: uuid('profile_id')
+    .primaryKey()
+    .references(() => profiles.id),
+  version: integer('version').notNull(),
+  bytes: bytea('bytes').notNull(),
+  createdAt: createdAt(),
+});
+
+/**
+ * Visitors' reports of a page (PR-013): the page, a reason from a fixed list and the minute.
+ * No IP, user agent or free text.
+ */
+export const profileReports = pgTable(
+  'profile_reports',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    reason: text('reason').notNull(),
+    atMinute: timestamp('at_minute', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      'profile_reports_reason',
+      sql`reason IN ('impersonation', 'scam', 'abusive', 'other')`,
+    ),
+    index('profile_reports_profile').on(table.profileId, table.atMinute),
   ],
 );
 
@@ -1036,56 +1128,4 @@ export const messageFlags = pgTable(
       sql`report_reason IS NULL OR report_reason IN ('abusive', 'spam', 'other')`,
     ),
   ],
-);
-
-/**
- * Reports about a public page from anyone (no account needed). Staff read them on the account
- * page; reports of one page on one day share a single issue in the inbox.
- */
-export const profileReports = pgTable(
-  'profile_reports',
-  {
-    id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id),
-    reason: text('reason').notNull(),
-    details: text('details'),
-    createdAt: createdAt(),
-  },
-  (table) => [
-    index('profile_reports_profile').on(table.profileId, table.createdAt),
-    check(
-      'profile_reports_reason',
-      sql`reason IN (${sql.raw(PROFILE_REPORT_REASONS.map((r) => `'${r}'`).join(', '))})`,
-    ),
-    check(
-      'profile_reports_details_length',
-      sql`details IS NULL OR char_length(details) <= 500`,
-    ),
-  ],
-);
-
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType: () => 'bytea',
-});
-
-/**
- * Profile photos: a validated plain WebP (no metadata), never the original upload. A page has at
- * most one; replacing or removing it deletes the old row. Served by id from the web app.
- */
-export const avatars = pgTable(
-  'avatars',
-  {
-    id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id)
-      .unique(),
-    bytes: bytea('bytes').notNull(),
-    width: integer('width').notNull(),
-    height: integer('height').notNull(),
-    createdAt: createdAt(),
-  },
-  () => [check('avatars_size', sql`octet_length(bytes) <= 400000`)],
 );

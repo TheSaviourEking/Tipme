@@ -24,7 +24,7 @@ function stage({ password = 'hexpassword0123456789abcdef' } = {}) {
   mkdirSync(bin);
   writeFileSync(
     join(home, 'staging.env'),
-    `API_HOST=api.staging.example.test\nPOSTGRES_PASSWORD=${password}\n`,
+    `API_HOST=api.staging.example.test\nPOSTGRES_PASSWORD=${password}\nPOSTGRES_RUNTIME_PASSWORD=runtime-password-1234\nPOSTGRES_MIGRATOR_PASSWORD=migrator-password-1234\nPOSTGRES_BACKUP_PASSWORD=backup-password-1234\n`,
   );
   const fake = (name, body) => {
     writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
@@ -97,10 +97,22 @@ test('a deploy of a shipped image backs up, migrates with the database named, sw
   assert.equal(result.status, 0, result.stderr);
   const calls = read('calls.log').split('\n');
   const at = (pattern) => calls.findIndex((line) => pattern.test(line));
+  const roles = calls.flatMap((line, index) =>
+    line.includes('exec -T postgres sh /opt/tipme/bootstrap-roles.sh')
+      ? [index]
+      : [],
+  );
   const backup = at(/run --rm backup/);
   const migrate = at(/run --rm migrate.*confirm=tipme backup=1/);
   const up = at(/up -d --remove-orphans api/);
-  assert.ok(backup >= 0 && backup < migrate && migrate < up, calls.join('\n'));
+  assert.ok(
+    roles.length === 2 &&
+      roles[0] < backup &&
+      backup < migrate &&
+      migrate < roles[1] &&
+      roles[1] < up,
+    calls.join('\n'),
+  );
   assert.ok(
     calls.some((l) => l.includes('releases/aaaaaaa1/compose.staging.yml')),
     'uses that version’s files',
@@ -163,6 +175,32 @@ test('a database password that would break the connection address is refused bef
   assert.equal(read('calls.log'), '', 'nothing was backed up or migrated');
 });
 
+test('reused passwords cannot collapse database role separation', () => {
+  const { run, read, ship, home } = stage();
+  writeFileSync(
+    join(home, 'staging.env'),
+    `API_HOST=api.staging.example.test\nPOSTGRES_PASSWORD=runtime-password-1234\nPOSTGRES_RUNTIME_PASSWORD=runtime-password-1234\nPOSTGRES_MIGRATOR_PASSWORD=migrator-password-1234\nPOSTGRES_BACKUP_PASSWORD=backup-password-1234\n`,
+  );
+  ship('aaaaaaa1');
+  const result = run('deploy.sh', ['aaaaaaa1']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /must be unique/);
+  assert.equal(read('calls.log'), '');
+});
+
+test('a missing database role password refuses deployment before Compose runs', () => {
+  const { run, read, ship, home } = stage();
+  writeFileSync(
+    join(home, 'staging.env'),
+    `API_HOST=api.staging.example.test\nPOSTGRES_PASSWORD=admin-password-123456\nPOSTGRES_RUNTIME_PASSWORD=runtime-password-1234\nPOSTGRES_MIGRATOR_PASSWORD=migrator-password-1234\n`,
+  );
+  ship('aaaaaaa1');
+  const result = run('deploy.sh', ['aaaaaaa1']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /POSTGRES_BACKUP_PASSWORD is required/);
+  assert.equal(read('calls.log'), '');
+});
+
 test('only the last five versions are kept (images and files), so rollback targets stay and the disk does not fill', () => {
   const { run, read, ship, exists } = stage();
   const versions = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'].map(
@@ -214,4 +252,37 @@ test('rolling back to a version without WAL archiving says so, and how to restor
   assert.equal(back.status, 0, back.stderr);
   assert.match(back.stderr, /WAL archiving is OFF/);
   assert.match(back.stderr, /point-in-time recovery/);
+});
+
+test('staging passes every setting the API and worker read (no silent defaults)', () => {
+  // Each service gets only the settings listed for it in compose.staging.yml; a setting the
+  // config reads but compose does not pass would silently take its default on staging.
+  const compose = readFileSync(
+    new URL('../deploy/compose.staging.yml', import.meta.url),
+    'utf8',
+  );
+  const passedTo = (service) => {
+    const block = compose.split(new RegExp(`^  ${service}:\\n`, 'm'))[1] ?? '';
+    const body = block.split(/^  [a-z]/m)[0];
+    return new Set(
+      [...body.matchAll(/^ {6}([A-Z][A-Z0-9_]+):/gm)].map((m) => m[1]),
+    );
+  };
+  // Only for tests: never set on a real copy.
+  const testOnly = new Set(['TRACE_PROBE_TEST_DELAY_MS']);
+  for (const service of ['api', 'worker']) {
+    const config = readFileSync(
+      new URL(`../apps/${service}/src/config.ts`, import.meta.url),
+      'utf8',
+    );
+    const read = [...config.matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm)].map(
+      (m) => m[1],
+    );
+    assert.ok(read.length > 5, `${service}: no settings found`);
+    const passed = passedTo(service);
+    const missing = read.filter(
+      (key) => !passed.has(key) && !testOnly.has(key),
+    );
+    assert.deepEqual(missing, [], `${service} settings missing from compose`);
+  }
 });

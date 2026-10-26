@@ -97,8 +97,12 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
         tipMinor: 200000n,
         currency: 'NGN',
       });
-      assert.equal(next.breakdown.platformFeeMinor, 20000n);
-      assert.equal(next.feePolicyVersion, 'v1');
+      // The standard 10%, processing included: no fee-free tip appeared by itself.
+      assert.equal(
+        next.breakdown.platformFeeMinor + next.breakdown.providerFeeMinor,
+        20000n,
+      );
+      assert.equal(next.feePolicyVersion, 'proposed-v1.1');
     },
   );
 

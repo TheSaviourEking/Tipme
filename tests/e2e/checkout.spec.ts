@@ -140,6 +140,23 @@ test('a payment the provider never reports is found by reconciliation', async ({
   await expect(paidHeading(page)).toBeVisible({ timeout: 15_000 });
 });
 
+test('a crafted "success" address never changes what the receipt says', async ({
+  page,
+}) => {
+  // PRD: "no wallet credit based solely on frontend callbacks or return URLs". The page reads
+  // the verdict from the API only, so claiming success in the address changes nothing.
+  const tipId = await tip(page, { outcome: /^Decline/ });
+  await expect(
+    page.getByRole('heading', { name: 'The payment was declined' }),
+  ).toBeVisible();
+  const crafted = `/tip/${tipId}?status=succeeded&paid=true&outcome=success&state=PAID`;
+  await page.goto(crafted);
+  await expect(
+    page.getByRole('heading', { name: 'The payment was declined' }),
+  ).toBeVisible();
+  await expect(paidHeading(page)).toHaveCount(0);
+});
+
 test('the waiting screen is announced and accessible', async ({ page }) => {
   // UI-state check: the real status response is held at "waiting" for this page only.
   await page.route('**/v1/tips/*/status', async (route) => {
@@ -282,6 +299,8 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
     await expireStaleTips({
       db: database.db,
       provider: {
+        name: 'mock',
+        findPayment: async () => null,
         verifyTransaction: async () => ({
           status: 'pending',
           amountMinor: 0n,

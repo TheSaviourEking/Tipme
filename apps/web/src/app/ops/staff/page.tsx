@@ -5,13 +5,16 @@ import { useOpsAccess } from '@/lib/ops-client';
 const DESCRIPTIONS: Record<string, string> = {
   'analytics.view': 'See health, visibility and market numbers',
   'audit.view': 'Read the audit log',
+  'fees.manage': 'Set a page’s fee and grant fee-free tips, with a reason',
   'issues.resolve': 'Resolve issues',
   'issues.view': 'See issues and their evidence, add notes',
   'market.edit': 'Add and change market observations',
+  'pages.plan': 'Move a page between Free and Pro, with a reason',
   'pages.suspend': 'Pause and restore recipient pages',
   'payments.recheck': 'Ask the provider about a payment or withdrawal',
   'private.view': 'Reveal private details, with a reason',
   'recoveries.cancel': 'Cancel a pending phone recovery',
+  'search.view': 'Search pages, tips, withdrawals and ledger entries',
 };
 
 /** Read-only for now: roles are granted with `pnpm ops:grant-owner` (ADR-0010). */

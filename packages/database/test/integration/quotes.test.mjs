@@ -4,6 +4,7 @@ import {
   createQuote,
   grantFeeFreeTips,
   grantOwner,
+  pagePricing,
   QUOTE_TTL_MS,
   setAccountFee,
 } from '../../dist/index.js';
@@ -13,7 +14,7 @@ test('quotes', async (t) => {
   const database = await useDatabase(t);
 
   await t.test(
-    'prices a tip with the flat 10% policy and a 15-minute expiry',
+    'prices a tip with the mock policy and a 15-minute expiry',
     async () => {
       await database.fresh();
       const now = new Date('2026-10-18T12:00:00Z');
@@ -23,12 +24,8 @@ test('quotes', async (t) => {
         currency: 'NGN',
         now,
       });
-      // TipMe takes 10% and pays the provider from it: the recipient keeps 90% (ADR-0014).
-      assert.equal(quote.breakdown.platformFeeMinor, 10000n);
-      assert.equal(quote.breakdown.providerFeeMinor, 0n);
       assert.equal(quote.breakdown.recipientNetMinor, 90000n);
-      assert.equal(quote.feePolicyVersion, 'v1');
-      assert.equal(quote.feeFree, false);
+      assert.equal(quote.feePolicyVersion, 'proposed-v1.1');
       assert.equal(quote.expiresAt.getTime(), now.getTime() + QUOTE_TTL_MS);
       assert.equal(QUOTE_TTL_MS, 15 * 60 * 1000);
     },
@@ -72,7 +69,6 @@ test('quotes', async (t) => {
       },
     );
   });
-
   await t.test(
     'staff set an account fee and grant fee-free tips, each audited with its reason',
     async () => {
@@ -94,9 +90,15 @@ test('quotes', async (t) => {
         reason: 'Launch partner',
       });
       const custom = await quoteAda();
-      assert.equal(custom.breakdown.platformFeeMinor, 5000n);
+      // 5% of ₦1,000 = ₦50 to TipMe, its ₦15 processing estimate inside it (ADR-0014).
+      assert.equal(custom.breakdown.platformFeeMinor, 3500n);
+      assert.equal(custom.breakdown.providerFeeMinor, 1500n);
       assert.equal(custom.breakdown.recipientNetMinor, 95000n);
-      assert.equal(custom.feePolicyVersion, 'v1-custom-500');
+      assert.equal(custom.feePolicyVersion, 'proposed-v1.1-custom-500');
+      assert.deepEqual(await pagePricing(database.db, ADA), {
+        customFeeBps: 500,
+        feeFreeRemaining: 0,
+      });
 
       const { remaining } = await grantFeeFreeTips(database.db, {
         profileId: ADA,
@@ -105,10 +107,11 @@ test('quotes', async (t) => {
         reason: 'Apology for downtime',
       });
       assert.equal(remaining, 1);
+      // Honoured although Ada has never paid TipMe a fee: staff grants have no lifetime cap.
       const free = await quoteAda();
       assert.equal(free.feeFree, true);
       assert.equal(free.breakdown.recipientNetMinor, 100000n);
-      assert.equal(free.feePolicyVersion, 'v1-custom-500-fee-free');
+      assert.equal(free.feePolicyVersion, 'proposed-v1.1-custom-500-fee-free');
       // The one credit is reserved by the open fee-free quote: the next quote pays the fee.
       assert.equal((await quoteAda()).feeFree, false);
 
@@ -119,7 +122,7 @@ test('quotes', async (t) => {
         reason: 'Partnership ended',
       });
       const back = await quoteAda();
-      assert.equal(back.feePolicyVersion, 'v1');
+      assert.equal(back.feePolicyVersion, 'proposed-v1.1');
 
       const audit = (
         await database.pool.query(

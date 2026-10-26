@@ -53,6 +53,9 @@ function ensureEnv() {
     // Drills sign the release-check staff in many times an hour; real copies keep 3.
     RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: '100',
     POSTGRES_PASSWORD: secret(24),
+    POSTGRES_RUNTIME_PASSWORD: secret(24),
+    POSTGRES_MIGRATOR_PASSWORD: secret(24),
+    POSTGRES_BACKUP_PASSWORD: secret(24),
     PREVIEW_PASSWORD: secret(),
     MOCK_PROVIDER_WEBHOOK_SECRET: secret(),
     STATUS_TOKEN_SECRET: secret(),
@@ -129,6 +132,13 @@ async function deploy(tag) {
   ensureEnv();
   compose(tag, ['up', '-d', '--wait', 'postgres', 'redis']);
   compose(tag, [
+    'exec',
+    '-T',
+    'postgres',
+    'sh',
+    '/opt/tipme/bootstrap-roles.sh',
+  ]);
+  compose(tag, [
     'run',
     '--rm',
     'backup',
@@ -140,6 +150,13 @@ async function deploy(tag) {
     MIGRATE_CONFIRM_DATABASE: 'tipme',
     MIGRATE_BACKUP_DONE: '1',
   });
+  compose(tag, [
+    'exec',
+    '-T',
+    'postgres',
+    'sh',
+    '/opt/tipme/bootstrap-roles.sh',
+  ]);
   compose(tag, [
     'up',
     '-d',
@@ -273,6 +290,7 @@ if (command === 'up') {
     web: LOCAL.web,
     api: LOCAL.api,
     password: env.PREVIEW_PASSWORD,
+    token: env.RELEASE_CHECK_TOKEN,
     phone,
     enrolmentCode,
   });

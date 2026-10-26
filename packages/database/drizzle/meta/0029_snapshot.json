@@ -1,5 +1,5 @@
 {
-  "id": "4eeafa48-1bc6-4b5e-a1be-99515b8bde16",
+  "id": "e7c9e4ce-0638-4905-b112-2945aed05db2",
   "prevId": "03bd8177-38e5-46ed-8cd4-5b37ecd826b0",
   "version": "7",
   "dialect": "postgresql",
@@ -2305,9 +2305,22 @@
           "notNull": true,
           "default": "'purple'"
         },
-        "platform_fee_bps": {
-          "name": "platform_fee_bps",
-          "type": "integer",
+        "plan": {
+          "name": "plan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'free'"
+        },
+        "tip_presets_minor": {
+          "name": "tip_presets_minor",
+          "type": "bigint[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_tip_minor": {
+          "name": "min_tip_minor",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
@@ -2350,9 +2363,17 @@
           "name": "profiles_page_state",
           "value": "page_state IN ('live', 'not_live', 'deleted')"
         },
-        "profiles_platform_fee_bps": {
-          "name": "profiles_platform_fee_bps",
-          "value": "platform_fee_bps IS NULL OR platform_fee_bps BETWEEN 0 AND 10000"
+        "profiles_plan": {
+          "name": "profiles_plan",
+          "value": "plan IN ('free', 'pro')"
+        },
+        "profiles_min_tip": {
+          "name": "profiles_min_tip",
+          "value": "min_tip_minor IS NULL OR (min_tip_minor BETWEEN 100000 AND 10000000 AND min_tip_minor % 100 = 0)"
+        },
+        "profiles_tip_presets": {
+          "name": "profiles_tip_presets",
+          "value": "tip_presets_minor IS NULL OR cardinality(tip_presets_minor) BETWEEN 1 AND 4"
         }
       },
       "isRLSEnabled": false
@@ -2686,7 +2707,7 @@
       "checkConstraints": {
         "role_permissions_known": {
           "name": "role_permissions_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'fees.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan')"
         }
       },
       "isRLSEnabled": false

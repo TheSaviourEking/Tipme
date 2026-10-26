@@ -12,9 +12,10 @@ import { apiFetch } from '@/lib/session-client';
 const links = [
   { href: '/ops', label: 'Overview' },
   { href: '/ops/issues', label: 'Issues' },
-  { href: '/ops/accounts', label: 'Accounts' },
   { href: '/ops/visibility', label: 'Visibility' },
   { href: '/ops/market', label: 'Market' },
+  { href: '/ops/pages', label: 'Pages' },
+  { href: '/ops/search', label: 'Search' },
   { href: '/ops/audit', label: 'Audit log' },
   { href: '/ops/staff', label: 'Staff & roles' },
 ] as const;

@@ -20,7 +20,7 @@
 ## The restore drill (monthly, and before release day)
 
 ```sh
-/srv/tipme/live/scripts/compose.sh run --rm backup node packages/database/dist/scripts/restore-drill.js
+/srv/tipme/live/scripts/compose.sh run --rm restore node packages/database/dist/scripts/restore-drill.js
 ```
 
 **What it does:**
@@ -54,7 +54,7 @@ This replaces the live database. Do it only during an incident, after the drill 
 
    ```sh
    /srv/tipme/live/scripts/compose.sh run --rm -e BACKUP_FILE=/backups/<file> \
-     -e RESTORE_CONFIRM_DATABASE=tipme backup node packages/database/dist/scripts/restore.js
+     -e RESTORE_CONFIRM_DATABASE=tipme restore node packages/database/dist/scripts/restore.js
    ```
 
    The tool:
@@ -64,10 +64,12 @@ This replaces the live database. Do it only during an incident, after the drill 
    - proves the result against the backup's manifest.
 
    It prints `Restore DONE and proved` or the list of problems.
+   The one-shot `restore` service uses the database admin role because it must create or replace databases. Never start it as a long-running service.
 
-4. **Put back a matching version:** roll back the API and worker (`/srv/tipme/live/scripts/rollback.sh <version>`) to the version that backup came from (its name is in the file name), since a newer version may expect a newer schema. If that version is no longer on the server, ship it again with the workflow. Then start `api worker backup`.
-5. **Check:** run the release check (read-only, then `--full`).
-6. **Money records:** the restored ledger is the source of truth up to the backup's time. Record the incident window: tips and payouts after it must be reconciled with the provider before anyone is paid.
+4. **Restore least-privilege grants:** while the matching compose release is running, run `/srv/tipme/live/scripts/compose.sh exec -T postgres sh /opt/tipme/bootstrap-roles.sh`. This transfers restored application objects to the migration role and reapplies the runtime/backup grants.
+5. **Put back a matching version:** roll back the API and worker (`/srv/tipme/live/scripts/rollback.sh <version>`) to the version that backup came from (its name is in the file name), since a newer version may expect a newer schema. If that version is no longer on the server, ship it again with the workflow. Then start `api worker backup`.
+6. **Check:** run the release check (read-only, then `--full`).
+7. **Money records:** the restored ledger is the source of truth up to the backup's time. Record the incident window: tips and payouts after it must be reconciled with the provider before anyone is paid.
 
 ## Restoring to a moment (point in time)
 

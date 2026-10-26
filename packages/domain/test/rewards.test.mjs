@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   cashBonusAmount,
   feeFreeAllowed,
-  MOCK_FEE_POLICY_V0,
+  FEE_POLICY_V1,
   priceTip,
   REWARDS,
 } from '../dist/index.js';
@@ -25,17 +25,14 @@ test('a cash bonus is half the fees since the last bonus, within the lifetime ca
   assert.equal(bonus(0n, 0n, 0n, NO_LIMIT), 0n);
 });
 
-test('fee-free pricing waives only TipMe’s fee', () => {
-  const normal = priceTip(200000n, MOCK_FEE_POLICY_V0);
-  const free = priceTip(200000n, MOCK_FEE_POLICY_V0, { feeFree: true });
+test('fee-free pricing waives TipMe’s whole 10%: the recipient receives the full tip', () => {
+  const free = priceTip(200000n, FEE_POLICY_V1, { feeFree: true });
   assert.equal(free.platformFeeMinor, 0n);
-  assert.equal(free.providerFeeMinor, normal.providerFeeMinor);
+  // Processing is then TipMe's own cost (an unrecovered provider fee in the ledger).
+  assert.equal(free.providerFeeMinor, 0n);
+  assert.equal(free.recipientNetMinor, 200000n);
   assert.equal(
-    free.recipientNetMinor,
-    normal.recipientNetMinor + normal.platformFeeMinor,
-  );
-  assert.equal(
-    free.tipMinor + 0n,
+    free.tipMinor,
     free.platformFeeMinor + free.providerFeeMinor + free.recipientNetMinor,
   );
 });
@@ -120,11 +117,4 @@ test('whatever happens, TipMe never gives back more than half the fees a recipie
       assert.ok(budget >= 0n);
     }
   }
-});
-
-test('no milestone or best period grants a reward by itself: only staff grant them (ADR-0014)', () => {
-  for (const milestone of REWARDS.milestones)
-    assert.equal(milestone.reward, 'none', `tip ${milestone.count}`);
-  assert.equal(REWARDS.bestWeek, 'none');
-  assert.equal(REWARDS.bestMonth, 'none');
 });

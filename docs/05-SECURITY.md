@@ -23,3 +23,8 @@ SAST + dependency analysis + secret scanning in CI; authz tests across roles/ten
 
 ## Gate
 Engineering does not invent legal or regulatory approval. External counsel/partner and product owner approve actual flow.
+
+## Where the detail lives (PR-014)
+- Who may do what, route by route (generated from the API): `docs/security/access-control.md`.
+- Threats, what stops them, the evidence, and what must be closed before real money: `docs/security/threat-model.md`.
+- Payment, attempt and withdrawal state machines (generated from the domain): `docs/architecture/state-machines.md`.

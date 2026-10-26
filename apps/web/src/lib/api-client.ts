@@ -1,4 +1,5 @@
 import type {
+  ProfileReportReason,
   TipIntentCreated,
   TipQuote,
   TipStatusView,
@@ -83,12 +84,9 @@ export const mockCheckoutPay = (reference: string, outcome: string) =>
     json({ outcome }),
   );
 
-/** Report a public page to TipMe (no account needed). */
-export const reportPage = (
-  handle: string,
-  body: { reason: string; details?: string },
-) =>
-  call<{ reported: true }>(
+/** Reporting a page (PR-013): a reason from the list only. The API answers the same either way. */
+export const reportPage = (handle: string, reason: ProfileReportReason) =>
+  call<{ accepted: true }>(
     `/v1/profiles/${encodeURIComponent(handle)}/report`,
-    json(body),
+    json({ reason }),
   );

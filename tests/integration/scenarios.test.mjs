@@ -222,6 +222,7 @@ for (const scenario of ['payout-paid', 'payout-failed']) {
     );
     const { providerReference } = await mock.initiatePayout({
       payoutId,
+      idempotencyKey: payoutId,
       amountMinor,
       currency,
       scenario,

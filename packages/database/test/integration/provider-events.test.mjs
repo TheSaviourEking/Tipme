@@ -70,7 +70,7 @@ test('provider events', async (t) => {
         1,
       );
       assert.equal(await balanceOf('recipient_payable', ADA), '90000');
-      assert.equal(await balanceOf('platform_fee_revenue'), '10000');
+      assert.equal(await balanceOf('platform_fee_revenue'), '8500');
       const outbox = await q('SELECT dedupe_key, payload FROM outbox_events');
       assert.deepEqual(
         outbox.map((row) => row.dedupe_key),

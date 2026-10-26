@@ -50,6 +50,47 @@
 > - **Handle renames:** old handles keep leading to the page (at most 5) and nobody else can claim them; on deletion they are held 90 days like the current handle.
 > - **Web vitals:** anonymous page-speed samples (metric, value, page kind, device class) follow the analytics rules: off in production until D-07, GPC/DNT honoured, kept 90 days.
 
+> **PR-012 notes (22 Oct 2026), all PROPOSED (pretend money):**
+> - **v1.1 commercial rules applied for testing:**
+>   - TipMe keeps a 10% fee and pays processing out of it, so a ₦5,000 tip gives the recipient ₦4,500.
+>   - The minimum tip is ₦1,000 and there is **no maximum**: supporters tip what they want (the user's decision; the API only bounds the input to 12 digits of kobo, and a real provider's own limits will apply). The minimum withdrawal is ₦1,000.
+>   - These are the PRD v1.1 *proposed* rules. They are not approved pricing (D-05) and do not enable real money.
+> - **Free and Pro (the user's decision):**
+>   - Every page starts on **Free**: standard amounts of ₦1,000, ₦2,000 and ₦5,000, plus any custom amount from ₦1,000.
+>   - **Pro** lets the recipient choose 1–4 preset amounts and their own minimum, never below ₦1,000. The fee and withdrawal minimum are the same as Free.
+>   - Pro is granted by staff with a written reason and is audited; there is no billing until payments are approved.
+>   - Pro pricing, and whether Pro changes the fee, are open.
+>   - **Leftover balances:** a withdrawal under ₦1,000 is allowed only when it takes the whole available balance, so nobody is left with money they cannot withdraw or an account they cannot close (the user's decision).
+> - **What the new fee changes in rewards and reports:**
+>   - A fee-free tip now gives the recipient the whole tip, and costs TipMe its whole 10% (processing included).
+>   - The lifetime cap (half of what TipMe kept) is checked against that full cost. So the 10th-tip reward is 4 fee-free ₦2,000 tips, not 5.
+>   - Cash bonuses ("half the fees since the last bonus") are based on what TipMe keeps after processing (8.5% of each tip, up from 5%). They are larger, but the monthly budget still caps them.
+>   - The admin Overview tile is now "TipMe keeps (after processing)". Weeks spanning the switch mix the old and new rules.
+
+> **PR-013 notes (24 Oct 2026), all PROPOSED:**
+> - **Reporting a page (impersonation, scam, abuse):** a reason from a fixed list only. No IP, user agent or free text is kept, and the answer is the same whether or not the page exists. One open issue per page; after a review, the next report opens a new one.
+> - **Profile photos:**
+>   - Every upload is re-encoded on the server to a 512×512 WebP with no metadata (no location or camera details). JPEG, PNG and WebP only, up to 5 MB and 40 megapixels.
+>   - Stored in Postgres, so photos are backed up and recovered with everything else; object storage can come later.
+>   - Served only for live pages, and erased with the account.
+> - **Notification preferences:** tip emails, weekly-report notices and milestone notices can be turned off. In-app tip notices, sign-in codes and security warnings cannot.
+> - **Admin search:** needs the permission `search.view`. It returns ids and short labels, never phone numbers, emails, supporter names or messages. Each search is audited by its length, not its text.
+> - **Analytics (PRD v1.1 §11):**
+>   - Added: `landing_viewed`, `checkout_opened`, `profile_created`, `profile_published`, `payout_requested`, `payout_paid_verified`.
+>   - The other v1.1 names map to the existing events: `tip_page_viewed` = `profile_viewed`, `tip_started` = `payment_started`, `tip_paid_verified` = `tip_completed`, `tip_failed` = `payment_failed`.
+>   - `profile_published` is recorded once per page, ever: the page itself remembers when it first went live.
+> - **Review follow-ups:**
+>   - **Page reports** are kept 180 days.
+>   - **Photo uploads:**
+>     - Limited to 20 an hour.
+>     - At most two are processed at a time per API process, each given at most 5 seconds and 25 megapixels.
+>     - The browser shrinks a photo to 1,024 px before sending it.
+>     - A photo URL is never reused, and photos are cached for an hour at most.
+>   - **Reference matching:**
+>     - Recipients match a reference only within the 6 characters they are shown.
+>     - Staff match a whole reference or that 6-character ending, so neither can rebuild a full provider reference.
+>     - Admin search is indexed and stops after 3 seconds.
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 

@@ -1,6 +1,6 @@
 {
-  "id": "a9502730-a7c8-4d35-8348-e883c5241674",
-  "prevId": "d7d5d680-1bf6-4e2c-a460-e55f32604dcd",
+  "id": "e4a1046c-1bc0-4293-ba98-8cb1be3b5b3b",
+  "prevId": "c2e278e4-e126-407b-802e-0fc5df973f91",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -256,77 +256,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.avatars": {
-      "name": "avatars",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bytes": {
-          "name": "bytes",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "avatars_profile_id_profiles_id_fk": {
-          "name": "avatars_profile_id_profiles_id_fk",
-          "tableFrom": "avatars",
-          "tableTo": "profiles",
-          "columnsFrom": ["profile_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "avatars_profile_id_unique": {
-          "name": "avatars_profile_id_unique",
-          "nullsNotDistinct": false,
-          "columns": ["profile_id"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "avatars_size": {
-          "name": "avatars_size",
-          "value": "octet_length(bytes) <= 400000"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.backup_runs": {
@@ -2257,18 +2186,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "details": {
-          "name": "details",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
+        "at_minute": {
+          "name": "at_minute",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": true
         }
       },
       "indexes": {
@@ -2282,7 +2204,7 @@
               "nulls": "last"
             },
             {
-              "expression": "created_at",
+              "expression": "at_minute",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2312,10 +2234,6 @@
         "profile_reports_reason": {
           "name": "profile_reports_reason",
           "value": "reason IN ('impersonation', 'scam', 'abusive', 'other')"
-        },
-        "profile_reports_details_length": {
-          "name": "profile_reports_details_length",
-          "value": "details IS NULL OR char_length(details) <= 500"
         }
       },
       "isRLSEnabled": false
@@ -2461,23 +2379,22 @@
           "notNull": true,
           "default": "'purple'"
         },
-        "email_tips": {
-          "name": "email_tips",
-          "type": "boolean",
+        "plan": {
+          "name": "plan",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": "'free'"
         },
-        "email_weekly": {
-          "name": "email_weekly",
-          "type": "boolean",
+        "tip_presets_minor": {
+          "name": "tip_presets_minor",
+          "type": "bigint[]",
           "primaryKey": false,
-          "notNull": true,
-          "default": true
+          "notNull": false
         },
-        "platform_fee_bps": {
-          "name": "platform_fee_bps",
-          "type": "integer",
+        "min_tip_minor": {
+          "name": "min_tip_minor",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
@@ -2520,9 +2437,25 @@
           "name": "profiles_page_state",
           "value": "page_state IN ('live', 'not_live', 'deleted')"
         },
-        "profiles_platform_fee_bps": {
-          "name": "profiles_platform_fee_bps",
-          "value": "platform_fee_bps IS NULL OR platform_fee_bps BETWEEN 0 AND 10000"
+        "profiles_plan": {
+          "name": "profiles_plan",
+          "value": "plan IN ('free', 'pro')"
+        },
+        "profiles_min_tip": {
+          "name": "profiles_min_tip",
+          "value": "min_tip_minor IS NULL OR (min_tip_minor >= 100000 AND min_tip_minor % 100 = 0)"
+        },
+        "profiles_tip_presets": {
+          "name": "profiles_tip_presets",
+          "value": "tip_presets_minor IS NULL OR cardinality(tip_presets_minor) BETWEEN 1 AND 4"
+        },
+        "profiles_tip_amounts_together": {
+          "name": "profiles_tip_amounts_together",
+          "value": "(tip_presets_minor IS NULL) = (min_tip_minor IS NULL)"
+        },
+        "profiles_tip_presets_range": {
+          "name": "profiles_tip_presets_range",
+          "value": "tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)"
         }
       },
       "isRLSEnabled": false
@@ -2856,7 +2789,7 @@
       "checkConstraints": {
         "role_permissions_known": {
           "name": "role_permissions_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'fees.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan')"
         }
       },
       "isRLSEnabled": false

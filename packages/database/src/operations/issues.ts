@@ -69,7 +69,7 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
     case 'message_reported':
       return `${page} reported a supporter’s message. Reveal it (with a reason) to review it.`;
     case 'profile_reported':
-      return `Someone reported ${page} (impersonation, scam or abuse). Open the account to read the reports.`;
+      return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }

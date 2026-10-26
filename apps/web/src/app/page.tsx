@@ -4,9 +4,10 @@ import { ActionLink, Badge, Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { Arrow } from '@/components/brand';
 import { HowItWorksSteps } from '@/components/marketing';
-import { previewMetadata } from '@/lib/metadata';
+import { ViewTracker } from '@/components/view-tracker';
+import { marketingMetadata } from '@/lib/metadata';
 
-export const metadata = previewMetadata(
+export const metadata = marketingMetadata(
   'TipMe — A little thanks goes a long way',
   'For the people who make your day, your work, your world a little better. Explore TipMe’s non-transactional appreciation preview.',
   '/',
@@ -36,6 +37,7 @@ const people = [
 export default function Home() {
   return (
     <main id="main" tabIndex={-1} className="home-page">
+      <ViewTracker name="landing_viewed" />
       <Container>
         {/* The profile's composition, introduced: a real person, and the instrument to thank them. */}
         <section className="home-hero" aria-labelledby="hero-title">

@@ -13,6 +13,8 @@ export async function apiFetch<T>(
   init: {
     method?: string;
     body?: unknown;
+    /** A file sent as it is (a photo upload, PR-013), with its own content type. */
+    file?: Blob;
     headers?: Record<string, string>;
   } = {},
 ): Promise<SessionResult<T>> {
@@ -26,10 +28,17 @@ export async function apiFetch<T>(
       headers: {
         ...(method === 'GET'
           ? {}
-          : { 'content-type': 'application/json', 'x-tipme-csrf': '1' }),
+          : {
+              'content-type': init.file?.type || 'application/json',
+              'x-tipme-csrf': '1',
+            }),
         ...init.headers,
       },
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      ...(init.file
+        ? { body: init.file }
+        : init.body === undefined
+          ? {}
+          : { body: JSON.stringify(init.body) }),
     });
   } catch {
     return { ok: false, status: 0, code: 'NETWORK' };
@@ -97,34 +106,4 @@ export async function apiDownload(
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   return { ok: true };
-}
-
-/** Sends a file the recipient made (their photo) as a raw body, with the usual protections. */
-export async function apiUpload<T>(
-  path: string,
-  body: Blob,
-): Promise<SessionResult<T>> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_ORIGIN}${path}`, {
-      method: 'PUT',
-      credentials: 'include',
-      cache: 'no-store',
-      headers: { 'content-type': body.type, 'x-tipme-csrf': '1' },
-      body,
-    });
-  } catch {
-    return { ok: false, status: 0, code: 'NETWORK' };
-  }
-  const json = (await response.json().catch(() => null)) as {
-    data?: T;
-    error?: { code?: string };
-  } | null;
-  return response.ok && json?.data !== undefined
-    ? { ok: true, status: response.status, data: json.data }
-    : {
-        ok: false,
-        status: response.status,
-        code: json?.error?.code ?? 'UNKNOWN',
-      };
 }

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   PRIVATE_PATHS,
   indexingEnabled,
+  marketingRobots,
   robotsFor,
   sitemapFor,
 } from '../src/lib/seo.ts';
@@ -41,8 +42,6 @@ test('once indexing is on, marketing pages are listed and private areas are alwa
     `${origin}/`,
     `${origin}/how-it-works`,
     `${origin}/for-creators`,
-    `${origin}/legal/terms`,
-    `${origin}/legal/privacy`,
   ]);
   for (const url of urls)
     assert.equal(
@@ -57,5 +56,17 @@ test('indexing needs an explicit switch and is never on behind the preview passw
   assert.equal(
     indexingEnabled({ SITE_INDEXING: 'on', PREVIEW_PASSWORD: 'x' }),
     false,
+  );
+});
+
+test('marketing metadata follows the indexing switch while remaining noindex by default', () => {
+  assert.deepEqual(marketingRobots({}), { index: false, follow: false });
+  assert.deepEqual(marketingRobots({ SITE_INDEXING: 'on' }), {
+    index: true,
+    follow: true,
+  });
+  assert.deepEqual(
+    marketingRobots({ SITE_INDEXING: 'on', PREVIEW_PASSWORD: 'configured' }),
+    { index: false, follow: false },
   );
 });

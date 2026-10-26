@@ -74,6 +74,15 @@
 
 # Previous handoff — CI rename redirect assertion (22 October 2026)
 
+# PR #18 — Staging Compose validation failure (25 October 2026)
+
+- Branch `feat/staging-db-roles`, PR #18. CI now supplies test-only values for required staging secret interpolation while validating against the intentionally blank example env.
+- Verified the same Compose `config --quiet` command locally, plus Prettier and `git diff --check`.
+- Strict Compose requirements and real staging configuration remain unchanged; no deployment or real credentials used.
+- Next exact step: verify PR #18 checks after the fix is pushed.
+
+# CI rename redirect assertion — 22 October 2026
+
 - Active branch: `feat/hardening`, based on `5e18764`. The primary `dev` worktree is untouched.
 - Reproduced CI run `39768906443` locally: the rename succeeds, but the test reads the URL synchronously after `goto`, before the streamed redirect finishes. The trace shows successful requests to the renamed URL between repeated visits to the old URL.
 - Changed only `tests/e2e/hardening.spec.ts`: use Playwright's retrying `toHaveURL` before retrying navigation, and assert `?src=qr` is preserved. Existing page-content and old-handle reservation assertions remain.
@@ -354,3 +363,7 @@ Added automated Slack deployment notifications and fix summaries:
 ## Update — buildable-now slices, part 2 (26 October 2026)
 
 Profile reports, CSV export, email preferences and profile photos (migrations 0030–0032) are uncommitted on `feat/profile-composition` after `4752f43`. Real-browser testing found two bugs that unit and integration tests could not: Chrome embeds an sRGB colour profile in every WebP (the server now strips it instead of refusing), and the report endpoint was missing from the API's cross-origin allow-list. Both are fixed and covered by `tests/e2e/photos-and-reports.spec.ts` and a CORS integration test. Design-stack e2e 63/63; integration 133/133. Full `pnpm test:e2e` on :3100/:4100 has still not been run on this branch.
+
+## Update — dev merged into feat/profile-composition (26 October 2026)
+
+dev's PR-012/PR-013 features won where both branches built the same thing; this branch adds the redesign, CSV export, staff-set fees and fee-free grants (ADR-0014, migration 0038, admin Pages screen) and turns off automatic milestone rewards. Verified on throwaway containers and the isolated design stack (web 3300, API 4300, `tipme_design`): integration 339/339 (62 files, all database files included), e2e 75/75 with `tests/e2e/stack.ts` temporarily pointed at that stack (reports/qr specs and the four tests that open `tipme_test` excluded), typecheck, lint, format, unit and docs tests. Not run: the full `pnpm test:e2e` on 3100/4100 (held by another worktree's servers). Note: an e2e run applied migration 0038 to the local `tipme_test`; reverting it was blocked, so it is still there.

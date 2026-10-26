@@ -5,6 +5,7 @@ import { sessions, users } from '../schema.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 
+/** A session ends this long after sign-in, however often it is used (the cookie's own life). */
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const hashToken = (token: string) =>
@@ -33,7 +34,7 @@ export function createSession(
   });
 }
 
-/** The live session for a cookie token (sliding 30-day expiry), or null. */
+/** The live session for a cookie token, or null. Use is recorded but never extends it. */
 export function resolveSession(
   db: Database,
   token: string,
@@ -43,10 +44,7 @@ export function resolveSession(
   return guarded(async () => {
     const [row] = await db
       .update(sessions)
-      .set({
-        lastSeenAt: now,
-        expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
-      })
+      .set({ lastSeenAt: now })
       .where(
         and(
           eq(sessions.tokenSha256, hashToken(token)),

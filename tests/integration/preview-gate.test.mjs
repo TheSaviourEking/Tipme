@@ -17,6 +17,7 @@ startTelemetry({
 });
 
 const PASSWORD = 'staging-preview-password-for-tests-only!';
+const RELEASE_TOKEN = 'release-check-token-for-tests-only-0123456789';
 const WEB = 'https://staging.example.test';
 let database;
 let gated;
@@ -33,6 +34,7 @@ before(async () => {
       PREVIEW_PASSWORD: PASSWORD,
       PREVIEW_COOKIE_DOMAIN: 'staging.example.test',
       RELEASE_KIND: 'test',
+      RELEASE_CHECK_TOKEN: RELEASE_TOKEN,
       GIT_SHA: 'abc1234',
     },
   });
@@ -59,6 +61,29 @@ test('without the preview cookie every app route is refused, including the prete
     assert.equal(response.status, 401, path);
     assert.equal((await response.json()).error.code, 'PREVIEW_REQUIRED');
   }
+});
+
+test('behind the preview password, the pretend inbox still needs the release token', async () => {
+  // The preview password is shared with every tester; it must not also hand out sign-in codes.
+  for (const authorization of [undefined, 'Bearer nope', RELEASE_TOKEN])
+    assert.equal(
+      (
+        await get(gated.api, '/v1/dev/inbox', {
+          cookie: ticket(),
+          ...(authorization ? { authorization } : {}),
+        })
+      ).status,
+      404,
+      String(authorization),
+    );
+  const allowed = await get(gated.api, '/v1/dev/inbox', {
+    cookie: ticket(),
+    authorization: `Bearer ${RELEASE_TOKEN}`,
+  });
+  assert.equal(allowed.status, 200);
+  assert.ok(Array.isArray((await allowed.json()).data));
+  // Outside preview (local development and tests) it needs nothing.
+  assert.equal((await get(open.api, '/v1/dev/inbox')).status, 200);
 });
 
 test('a valid ticket or the server key passes; a forged or expired ticket does not', async () => {

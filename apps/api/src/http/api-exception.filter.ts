@@ -45,6 +45,9 @@ const messages: Record<ApiErrorCode, string> = {
     'Your page already keeps 5 old handles. Choose one of them, or keep your current handle.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
+  WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
+  PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
+  INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
   RECOVERY_PENDING:
     'This number is waiting to be moved to an account. Please try again when the 24 hours are up.',
@@ -97,6 +100,8 @@ const operationErrors: Partial<
   ALREADY_HAS_PAGE: { status: 409, code: 'ALREADY_HAS_PAGE' },
   HAS_BALANCE: { status: 409, code: 'HAS_BALANCE' },
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
+  WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
+  PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },
   ENROLMENT_INVALID: { status: 400, code: 'ENROLMENT_INVALID' },
@@ -116,6 +121,16 @@ const operationErrors: Partial<
     status: 400,
     code: 'VALIDATION_FAILED',
     fields: ['message'],
+  },
+  INVALID_TIP_PRESETS: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['presetsMinor'],
+  },
+  INVALID_TIP_MINIMUM: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['minMinor'],
   },
 };
 

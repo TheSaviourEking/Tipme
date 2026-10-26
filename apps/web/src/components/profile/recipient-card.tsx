@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { PublicProfile } from '@tipme/contracts';
 import { Surface } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
+import { API_ORIGIN, avatarSource } from '@/lib/avatar-source';
 
 const initialsFor = (name: string) =>
   name
@@ -46,18 +47,22 @@ export function RecipientIdentity({
   profile: PublicProfile;
   children?: ReactNode;
 }) {
+  const picture = profile.avatarPath
+    ? avatarSource(profile.avatarPath, profile.displayName, API_ORIGIN)
+    : null;
   return (
     <Surface className="profile-identity" material="raised" data-profile-card>
       <div className="profile-identity__head">
         {/* Decorative repeat of the portrait: the figure above carries the description. */}
-        {profile.avatarPath && (
+        {picture && (
           <Image
             className="profile-identity__avatar"
-            src={profile.avatarPath}
+            src={picture.src}
             alt=""
             width={96}
             height={96}
             sizes="48px"
+            unoptimized={!picture.src.startsWith('/')}
           />
         )}
         <div>

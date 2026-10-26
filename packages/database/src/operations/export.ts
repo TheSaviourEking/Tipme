@@ -9,8 +9,7 @@ const HEADER = [
   'Date (Lagos)',
   'From',
   'Tip (NGN)',
-  'TipMe fee (NGN)',
-  'Provider fee (NGN)',
+  'TipMe fee, processing included (NGN)',
   'You received (NGN)',
   'Status',
   'Reference ends',
@@ -38,15 +37,14 @@ export function exportMyTipsCsv(
       at: string;
       label: string | null;
       gross: string;
-      platform_fee: string;
-      provider_fee: string;
+      fee: string;
       net: string;
       status: string;
       reference: string | null;
     }>(sql`
       SELECT to_char(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'Africa/Lagos', 'YYYY-MM-DD HH24:MI') AS at,
              t.payer_display_label AS label, t.gross_minor::text AS gross,
-             q.platform_fee_minor::text AS platform_fee, q.provider_fee_minor::text AS provider_fee,
+             (q.platform_fee_minor + q.provider_fee_minor)::text AS fee,
              q.recipient_net_minor::text AS net, t.status::text AS status,
              (SELECT a.provider_reference FROM payment_attempts a WHERE a.intent_id = t.intent_id
                ORDER BY a.created_at DESC LIMIT 1) AS reference
@@ -73,8 +71,7 @@ export function exportMyTipsCsv(
           row.at,
           row.label ?? 'A guest',
           naira(row.gross),
-          naira(row.platform_fee),
-          naira(row.provider_fee),
+          naira(row.fee),
           naira(row.net),
           row.status === 'SUCCEEDED' ? 'Paid' : 'Confirming',
           row.reference ? row.reference.slice(-6) : '',

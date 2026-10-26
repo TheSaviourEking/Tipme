@@ -6,7 +6,7 @@ import { guarded, OperationError } from './errors.js';
 import { addCredits } from './moments.js';
 
 /**
- * Staff set (or clear, with `feeBps: null`) one account's TipMe fee (ADR-0014). New quotes use
+ * Staff set (or clear, with `feeBps: null`) one account’s TipMe share, processing included (ADR-0014). New quotes use
  * it; quotes already given keep their price. Audited with its reason in the same transaction.
  */
 export function setAccountFee(
@@ -29,7 +29,7 @@ export function setAccountFee(
     db.transaction(async (tx) => {
       const [row] = await tx
         .update(profiles)
-        .set({ platformFeeBps: input.feeBps })
+        .set({ customFeeBps: input.feeBps })
         .where(
           and(
             eq(profiles.id, input.profileId),
@@ -92,4 +92,26 @@ export function grantFeeFreeTips(
       return { remaining: credits?.remaining ?? 0 };
     }),
   );
+}
+
+/** One page's pricing for staff, or null when there is no such (non-deleted) page. */
+export function pagePricing(
+  db: Database,
+  profileId: string,
+): Promise<{ customFeeBps: number | null; feeFreeRemaining: number } | null> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({
+        customFeeBps: profiles.customFeeBps,
+        remaining: feeFreeCredits.remaining,
+      })
+      .from(profiles)
+      .leftJoin(feeFreeCredits, eq(feeFreeCredits.profileId, profiles.id))
+      .where(
+        and(eq(profiles.id, profileId), ne(profiles.pageState, 'deleted')),
+      );
+    return row
+      ? { customFeeBps: row.customFeeBps, feeFreeRemaining: row.remaining ?? 0 }
+      : null;
+  });
 }

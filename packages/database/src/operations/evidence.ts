@@ -15,6 +15,7 @@ import {
   users,
 } from '../schema.js';
 import { maskEmail } from './email.js';
+import { pageReportCounts } from './profile-reports.js';
 import { guarded } from './errors.js';
 import { issueById, relatedOpenIssues } from './issues.js';
 import { phoneHint } from './phone.js';
@@ -192,6 +193,15 @@ export function issueEvidence(
               page.status === 'suspended' ? page.suspendedReason : null,
           }
         : null,
+      ...(issue.kind === 'profile_reported' && page
+        ? {
+            pageReports: await pageReportCounts(
+              db,
+              page.id,
+              new Date(issue.openedAt),
+            ),
+          }
+        : {}),
       person: user
         ? {
             userId: user.id,

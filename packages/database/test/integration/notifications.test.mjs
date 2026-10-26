@@ -19,7 +19,6 @@ import {
   resolveSession,
   startEmailVerification,
   startRecovery,
-  updateMyProfile,
 } from '../../dist/index.js';
 import { useDatabase } from './helpers.mjs';
 
@@ -117,7 +116,6 @@ test('notifications, email, phone change and recovery', async (t) => {
       await notifyTipSucceeded(db, { tipId: second, profileId: TOBI.id });
       const email = await latest();
       assert.equal(email.subject, 'You got a ₦1,800 tip on TipMe');
-
       await markRead(
         db,
         TOBI.userId,
@@ -127,33 +125,6 @@ test('notifications, email, phone change and recovery', async (t) => {
         (await listNotifications(db, TOBI.userId, { unreadOnly: true })).length,
         1,
       );
-      // Turning tip emails off stops the email; the in-app notification still arrives.
-      await updateMyProfile(db, TOBI.userId, { emailTips: false });
-      const emailsBefore = (
-        await database.pool.query(
-          "SELECT count(*)::int AS n FROM pretend_outbox WHERE channel = 'email'",
-        )
-      ).rows[0].n;
-      const third = await tip();
-      assert.equal(
-        await notifyTipSucceeded(db, { tipId: third, profileId: TOBI.id }),
-        'created',
-      );
-      assert.equal(
-        (
-          await database.pool.query(
-            "SELECT count(*)::int AS n FROM pretend_outbox WHERE channel = 'email'",
-          )
-        ).rows[0].n,
-        emailsBefore,
-      );
-      assert.equal(
-        (await listNotifications(db, TOBI.userId, {})).some(
-          (n) => n.tipId === third,
-        ),
-        true,
-      );
-      await updateMyProfile(db, TOBI.userId, { emailTips: true });
       // Ada never sees Tobi's notifications, and cannot mark them read.
       assert.equal((await listNotifications(db, ADA.userId, {})).length, 0);
     },

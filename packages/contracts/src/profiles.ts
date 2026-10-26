@@ -49,8 +49,6 @@ export const profilePatchSchema = z
     phonePublic: z.boolean(),
     emailPublic: z.boolean(),
     qrStyle: z.string().regex(/^[a-z]{3,12}$/),
-    emailTips: z.boolean(),
-    emailWeekly: z.boolean(),
   })
   .partial()
   .strict();
@@ -89,15 +87,15 @@ export interface MyProfile {
   phone: string | null;
   email: string | null;
   emailVerified: boolean;
-  /** The page's photo (served by the web app), or null for initials. Optional while deploying. */
-  avatarPath?: string | null;
-  /** Email when a tip is confirmed. Optional: the web app deploys before the API. */
-  emailTips?: boolean;
-  /** Email the weekly summary. Optional for the same reason. */
-  emailWeekly?: boolean;
   /** TipMe paused the page (PR-009): it cannot go live; the reason is shown to the recipient. */
   suspended: boolean;
   suspendedReason: string | null;
+  /** Free or Pro (PR-012). Optional until the release after PR-012 (the web deploys first). */
+  plan?: PagePlan;
+  /** The page's photo (PR-013): an API path, e.g. /v1/avatars/<page>/<n>.webp. Optional, as `plan`. */
+  avatarPath?: string | null;
+  /** The amounts the page shows now (the standard ones on Free). Optional, as `plan`. */
+  tipAmounts?: TipAmounts;
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
@@ -114,22 +112,50 @@ export interface PublicProfile {
   email?: string;
   /** A moment the recipient chose to share, for 14 days ("add to the celebration"). */
   celebration?: { momentId: string; label: string };
+  /** The amounts this page offers (PR-012). Optional until the release after PR-012. */
+  tipAmounts?: TipAmounts;
 }
 
 /** Changing the page's handle (PR-011); the old one keeps pointing at the page. */
 export const renameHandleSchema = claimHandleSchema;
 
-/** Why someone reports a public page (no account needed). */
+// Free and Pro (PR-012). Free pages show the standard amounts; staff can make a page Pro, and
+// a Pro page chooses its own preset amounts and minimum (never below the ₦1,000 floor).
+export type PagePlan = 'free' | 'pro';
+
+/** Kobo as strings. Supporters may type any amount from `minMinor` up; there is no maximum. */
+export interface TipAmounts {
+  presetsMinor: string[];
+  minMinor: string;
+}
+
+const kobo = z.string().regex(/^\d{1,12}$/);
+/** Shape only; the amounts themselves are checked by the domain rule on the server. */
+export const tipAmountsSchema = z
+  .object({ presetsMinor: z.array(kobo).max(8), minMinor: kobo })
+  .strict();
+export type TipAmountsRequest = z.infer<typeof tipAmountsSchema>;
+
+// Reporting a page (PR-013, PRD v1.1 FR-01). A reason from this list only: no free text, so a
+// report can never carry a stranger's words or personal data.
 export const PROFILE_REPORT_REASONS = [
   'impersonation',
   'scam',
   'abusive',
   'other',
 ] as const;
+export type ProfileReportReason = (typeof PROFILE_REPORT_REASONS)[number];
 export const profileReportSchema = z
+  .object({ reason: z.enum(PROFILE_REPORT_REASONS) })
+  .strict();
+
+// Notification preferences (PR-013, PRD v1.1 FR-05). All on by default. Sign-in codes, recovery
+// warnings and in-app tip notices are never optional, so they are not listed here.
+export const notificationPrefsSchema = z
   .object({
-    reason: z.enum(PROFILE_REPORT_REASONS),
-    details: z.string().trim().max(500).optional(),
+    tipEmails: z.boolean(),
+    weeklyReports: z.boolean(),
+    milestones: z.boolean(),
   })
   .strict();
-export type ProfileReportRequest = z.infer<typeof profileReportSchema>;
+export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;

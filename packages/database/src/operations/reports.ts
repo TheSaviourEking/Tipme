@@ -155,12 +155,13 @@ export function runWeeklyReports(
             userId: profiles.userId,
             email: users.email,
             verified: users.emailVerifiedAt,
-            emailWeekly: profiles.emailWeekly,
+            wants: profiles.notifyWeeklyReports,
           })
           .from(profiles)
           .leftJoin(users, eq(users.id, profiles.userId))
           .where(eq(profiles.id, profileId));
-        if (!owner?.userId) return true;
+        // The report is made either way; telling them about it is their choice (PR-013).
+        if (!owner?.userId || !owner.wants) return true;
         const body = `${ngn(BigInt(data.totalNetMinor))} from ${data.tipCount} ${data.tipCount === 1 ? 'tip' : 'tips'}`;
         await tx.insert(notifications).values({
           id: newId(),
@@ -170,7 +171,7 @@ export function runWeeklyReports(
           title: 'Your week on TipMe',
           body,
         });
-        if (owner.email && owner.verified && owner.emailWeekly)
+        if (owner.email && owner.verified)
           await writePretendMessage(tx, {
             channel: 'email',
             recipientHint: maskEmail(owner.email),

@@ -39,6 +39,14 @@ jobs:
           TIPME_VERSION: 0000000
           TIPME_ENV_FILE: ./staging.env.example
           POSTGRES_PASSWORD: ci-placeholder
+          POSTGRES_RUNTIME_PASSWORD: ci-runtime-placeholder
+          POSTGRES_MIGRATOR_PASSWORD: ci-migrator-placeholder
+          POSTGRES_BACKUP_PASSWORD: ci-backup-placeholder
+          STATUS_TOKEN_SECRET: ci-placeholder-status-token-secret-32-characters
+          AUTH_CODE_SECRET: ci-placeholder-auth-code-secret-32-characters
+          WEB_REVALIDATE_SECRET: ci-placeholder-revalidate-secret-32-characters
+          OPS_TOTP_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          BACKUP_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
   security:
     runs-on: ubuntu-latest
@@ -52,6 +60,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
+          # setup-node v5 turns on pnpm caching by itself (package.json names pnpm). This job
+          # installs nothing, so there is no store to save and the post-job step would fail it.
+          package-manager-cache: false
       - name: Dependencies with known high or critical vulnerabilities (production only)
         run: pnpm audit --prod --audit-level=high
       - name: Secrets in the repository history (gitleaks, pinned by digest)

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { WebVitalSummary } from './analytics.js';
+import type { ProfileReportReason } from './profiles.js';
 
 // Staff admin area (PR-009, ADR-0010).
 
@@ -41,24 +42,6 @@ export const opsReasonSchema = z
   .object({ reason: z.string().trim().min(10).max(500) })
   .strict();
 export type OpsReasonRequest = z.infer<typeof opsReasonSchema>;
-
-/** Staff set one account's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
-export const opsAccountFeeSchema = z
-  .object({
-    feeBps: z.number().int().min(0).max(10000).nullable(),
-    reason: z.string().trim().min(10).max(500),
-  })
-  .strict();
-export type OpsAccountFeeRequest = z.infer<typeof opsAccountFeeSchema>;
-
-/** Staff grant fee-free tips to one account (ADR-0014). */
-export const opsFeeFreeGrantSchema = z
-  .object({
-    count: z.number().int().min(1).max(100),
-    reason: z.string().trim().min(10).max(500),
-  })
-  .strict();
-export type OpsFeeFreeGrantRequest = z.infer<typeof opsFeeFreeGrantSchema>;
 
 export const ISSUE_KINDS = [
   'payment_mismatch',
@@ -206,6 +189,8 @@ export interface OpsIssueEvidence {
     status: string;
     suspendedReason: string | null;
   } | null;
+  /** Visitors' reports of this page since the issue opened (PR-013), counts by reason only. */
+  pageReports?: { reason: ProfileReportReason; count: number }[];
   person: {
     userId: string;
     phoneHint: string | null;
@@ -409,26 +394,67 @@ export interface MarketEntry {
   createdAt: string;
 }
 
-/** A recipient in staff search results: public identity and account state, never phone or email. */
-export interface OpsAccountRow {
+/** A page as staff see it when changing its plan (PR-012). */
+export interface OpsPage {
   profileId: string;
   handle: string;
   displayName: string;
-  pageState: string;
-  status: string;
-  createdAt: string;
+  plan: 'free' | 'pro';
+  pageState: 'live' | 'not_live' | 'deleted';
+  suspended: boolean;
 }
 
-/** One account for staff: pricing (ADR-0014) and money totals as minor-unit strings. */
-export interface OpsAccountDetail extends OpsAccountRow {
-  role: string | null;
-  suspendedReason: string | null;
-  avatarPath: string | null;
-  /** Staff-set TipMe fee in basis points; null means the policy's 10%. */
-  platformFeeBps: number | null;
+/** Making a page Pro or Free again: always with a written reason (audited). */
+export const opsPagePlanSchema = opsReasonSchema
+  .extend({ plan: z.enum(['free', 'pro']) })
+  .strict();
+export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
+
+/** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
+export interface OpsPagePricing {
+  customFeeBps: number | null;
   feeFreeRemaining: number;
-  paidTipCount: number;
-  paidGrossMinor: string;
-  availableMinor: string;
-  confirmingMinor: string;
+}
+
+/** Staff set one page's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
+export const opsPageFeeSchema = opsReasonSchema
+  .extend({ feeBps: z.number().int().min(0).max(10000).nullable() })
+  .strict();
+export type OpsPageFeeRequest = z.infer<typeof opsPageFeeSchema>;
+
+/** Staff grant fee-free tips to one page (ADR-0014). */
+export const opsFeeFreeGrantSchema = opsReasonSchema
+  .extend({ count: z.number().int().min(1).max(100) })
+  .strict();
+export type OpsFeeFreeGrantRequest = z.infer<typeof opsFeeFreeGrantSchema>;
+
+/**
+ * Admin search results (PR-013): ids and short labels only. Never phone numbers, emails,
+ * supporter names or messages.
+ */
+export interface OpsSearchResult {
+  pages: OpsPage[];
+  tips: {
+    tipId: string;
+    handle: string | null;
+    status: string;
+    grossMinor: string;
+    currency: string;
+    at: string;
+  }[];
+  payouts: {
+    payoutId: string;
+    handle: string | null;
+    status: string;
+    amountMinor: string;
+    currency: string;
+    at: string;
+  }[];
+  ledgerTransactions: {
+    transactionId: string;
+    operationType: string;
+    tipId: string | null;
+    payoutId: string | null;
+    at: string;
+  }[];
 }

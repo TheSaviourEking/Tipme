@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  Headers,
   HttpCode,
   Inject,
   Module,
@@ -15,22 +16,35 @@ import {
   runWeeklyReports,
 } from '@tipme/database';
 import { z } from 'zod';
+import { API_CONFIG, type ApiConfig } from '../config.js';
+import { bearerMatches } from '../http/bearer.js';
+import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 
 /**
  * What the pretend messenger and mailbox "sent", newest first, so codes and links can be used
  * locally and in tests. Registered only with MESSAGING_PROVIDER=mock (refused in production).
+ * On a preview copy (staging) everyone with the shared preview password could read every
+ * sign-in code, so there it also needs the release token; anyone else gets 404.
  */
 @Controller('v1/dev/inbox')
 export class PretendInboxController {
   constructor(
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
   ) {}
 
   @Get()
   @Header('Cache-Control', 'no-store')
-  async inbox(): Promise<ApiDataResponse<PretendMessage[]>> {
+  async inbox(
+    @Headers('authorization') authorization: string | undefined,
+  ): Promise<ApiDataResponse<PretendMessage[]>> {
+    if (
+      this.config.DEPLOYMENT_MODE === 'preview' &&
+      !bearerMatches(authorization, this.config.RELEASE_CHECK_TOKEN)
+    )
+      throw new CodedHttpException(404, 'NOT_FOUND');
     const rows = await listPretendOutbox(this.database.db, { limit: 30 });
     return {
       data: rows.map((row) => ({

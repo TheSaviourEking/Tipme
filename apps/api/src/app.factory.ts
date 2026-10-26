@@ -20,9 +20,9 @@ const CROSS_ORIGIN_PATHS = [
   '/v1/mock-provider/',
   '/v1/events',
   '/v1/vitals',
+  // Reporting a page from its public page (PR-013); profile reads are public data anyway.
+  '/v1/profiles/',
 ];
-// Reporting a page is the one profile route a visitor's browser calls (reads stay server-side).
-const CROSS_ORIGIN_PATTERNS = [/^\/v1\/profiles\/[^/?]+\/report(\?|$)/];
 // Recipient routes carry the session cookie, so the browser must send credentials.
 const CREDENTIALED_PATHS = [
   '/v1/auth/',
@@ -74,9 +74,7 @@ export async function createApp(
       CREDENTIALED_PATHS.some((path) => url.startsWith(path));
     callback(null, {
       origin:
-        credentialed ||
-        CROSS_ORIGIN_PATHS.some((path) => url.startsWith(path)) ||
-        CROSS_ORIGIN_PATTERNS.some((pattern) => pattern.test(url))
+        credentialed || CROSS_ORIGIN_PATHS.some((path) => url.startsWith(path))
           ? [webOrigin]
           : false,
       methods: credentialed
@@ -92,8 +90,6 @@ export async function createApp(
     });
   });
   app.useBodyParser('json', { limit: '16kb' });
-  // Profile photos only: a browser-made WebP, checked again before it is stored.
-  app.useBodyParser('raw', { type: 'image/webp', limit: '400kb' });
   app.useGlobalFilters(
     new ApiExceptionFilter(
       logger,

@@ -2,7 +2,7 @@
 
 ## Deploy a commit
 
-**Normally: GitHub Actions → Deploy staging → Run workflow** (or automatically after the checks pass on `main`, when the repository variable `STAGING_AUTO_DEPLOY` is `true`). The workflow:
+**Normally: GitHub Actions → Deploy staging → Run workflow** (or automatically after the checks pass on a push to `dev`, when `STAGING_AUTO_DEPLOY` is `true` on the `staging` environment; staging follows `dev`). The workflow:
 
 1. runs every check on the commit;
 2. builds `tipme-app:<version>` once (version = the 12-character commit id);

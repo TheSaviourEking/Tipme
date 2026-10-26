@@ -2,7 +2,9 @@
 # runs the full release check against staging (PR-010, ADR-0011). The server never builds.
 #
 # Run it by hand (Actions → Deploy staging → Run workflow), or automatically after the checks pass
-# on main when the repository variable STAGING_AUTO_DEPLOY is "true".
+# on a push to dev (staging follows dev) when STAGING_AUTO_DEPLOY is "true" on the staging
+# environment. Every run that deploys, fails its checks or is stopped posts to Slack when
+# SLACK_WEBHOOK_URL is set.
 #
 # Repository settings → Environments → "staging":
 #   secrets:   STAGING_SSH_KEY (private key of the server's deploy user), STAGING_SSH_KNOWN_HOSTS
@@ -16,7 +18,7 @@ on:
   workflow_run:
     workflows: [Workspace checks]
     types: [completed]
-    branches: [main]
+    branches: [dev]
 permissions:
   contents: read
 concurrency:
@@ -29,14 +31,28 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci.yml
 
+  # Environment variables are not readable in a job's `if:` (it is evaluated before the job
+  # enters the environment), so the auto-deploy switch is read here, inside the environment.
+  # Only pushes to dev count: a pull request whose branch is dev also reports head_branch dev.
+  gate:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      go: ${{ steps.switch.outputs.go }}
+      checks: ${{ github.event.workflow_run.conclusion }}
+    steps:
+      - id: switch
+        run: echo "go=${{ vars.STAGING_AUTO_DEPLOY == 'true' }}" >> "$GITHUB_OUTPUT"
+
   deploy:
-    needs: checks
+    needs: [checks, gate]
     if: >-
       always() &&
       (needs.checks.result == 'success' ||
-       (github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        vars.STAGING_AUTO_DEPLOY == 'true'))
+       (needs.gate.outputs.go == 'true' && needs.gate.outputs.checks == 'success'))
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 40
@@ -44,10 +60,20 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 20
+          # Full history, so the Slack summary can list everything since the deployed version.
+          fetch-depth: 0
 
       - name: Version
         run: echo "VERSION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
+
+      # What staging runs now (public, no secrets), read before it changes. The Slack summary lists
+      # the commits from there to this version; without it, it falls back to the last few commits.
+      - name: Deployed version
+        run: |
+          previous=$(curl -fsS --max-time 10 "${{ vars.STAGING_API_URL }}/health/release" | jq -r '.data.version // empty' || true)
+          if [[ "$previous" =~ ^[0-9a-f]{7,40}$ ]] && git cat-file -e "$previous^{commit}" 2>/dev/null; then
+            echo "PREVIOUS_VERSION=$previous" >> "$GITHUB_ENV"
+          fi
 
       - name: Build the image (once, here)
         run: docker build -f deploy/Dockerfile -t "tipme-app:$VERSION" .
@@ -110,6 +136,37 @@ jobs:
             --status "${{ job.status }}" \
             --environment "staging" \
             --version "$VERSION" \
+            ${PREVIOUS_VERSION:+--commit-range "$PREVIOUS_VERSION..HEAD"} \
+            --web-url "${{ vars.STAGING_WEB_URL }}" \
+            --api-url "${{ vars.STAGING_API_URL }}" \
+            --repo "${{ github.repository }}" \
+            --actor "${{ github.actor }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  # The deploy never started: the checks failed on a manual run, or on the dev push it would
+  # have followed. Say so in Slack instead of staying silent. (Auto-deploy switched off, or a
+  # pull request run, posts nothing.)
+  notify-stopped:
+    needs: [checks, gate, deploy]
+    if: >-
+      always() && needs.deploy.result == 'skipped' &&
+      (needs.checks.result == 'failure' ||
+       (needs.gate.outputs.go == 'true' && needs.gate.outputs.checks == 'failure'))
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 20
+      - name: Notify Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          node scripts/notify-slack.mjs \
+            --status "failure" \
+            --environment "staging" \
+            --version "$(git rev-parse --short=12 HEAD)" \
             --web-url "${{ vars.STAGING_WEB_URL }}" \
             --api-url "${{ vars.STAGING_API_URL }}" \
             --repo "${{ github.repository }}" \

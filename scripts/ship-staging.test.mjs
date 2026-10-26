@@ -72,6 +72,8 @@ test('shipping copies that version’s deploy files and streams its image to the
     'scripts/offsite-loop.sh',
     'postgres/pg_hba.conf',
     'postgres/archive-wal.sh',
+    'postgres/bootstrap-roles.sh',
+    'postgres/roles.sql',
   ])
     assert.ok(existsSync(join(release, file)), file);
   assert.equal(

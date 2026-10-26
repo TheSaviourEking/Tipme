@@ -83,6 +83,68 @@ test('operations carry ids, request schemas from the contracts, auth and permiss
   assert.ok(document.paths['/v1/dev/inbox'].get.tags.includes('pretend only'));
 });
 
+test('every operation says who may call it, whether it needs CSRF, and its rate limit (feeds the access matrix)', () => {
+  const op = (method, path) => document.paths[path][method];
+  const access = (method, path) => [
+    op(method, path)['x-tipme-access'],
+    op(method, path)['x-tipme-csrf'] ?? false,
+    op(method, path)['x-tipme-rate-limit'] ?? null,
+  ];
+  assert.deepEqual(access('post', '/v1/tip-quotes'), [
+    'public',
+    false,
+    'quotes',
+  ]);
+  assert.deepEqual(access('post', '/v1/auth/code'), [
+    'public',
+    true,
+    'auth_code',
+  ]);
+  assert.deepEqual(access('put', '/v1/me/handle'), ['recipient', true, null]);
+  assert.deepEqual(access('get', '/v1/me/tips'), ['recipient', false, null]);
+  assert.deepEqual(access('get', '/v1/ops/issues'), [
+    'staff-grant',
+    false,
+    null,
+  ]);
+  assert.deepEqual(access('post', '/v1/ops/pages/{profileId}/plan'), [
+    'staff-grant',
+    true,
+    null,
+  ]);
+  assert.deepEqual(access('post', '/v1/ops/enrol'), [
+    'staff',
+    true,
+    'auth_verify',
+  ]);
+  assert.deepEqual(access('get', '/v1/tips/{tipId}/status'), [
+    'status-token',
+    false,
+    null,
+  ]);
+  assert.deepEqual(access('post', '/v1/webhooks/mock'), [
+    'provider-signature',
+    false,
+    null,
+  ]);
+  assert.deepEqual(access('post', '/v1/release/runs'), [
+    'release-token',
+    false,
+    null,
+  ]);
+  assert.deepEqual(access('post', '/v1/profiles/{handle}/report'), [
+    'public',
+    false,
+    'reports',
+  ]);
+  for (const [path, item] of Object.entries(document.paths))
+    for (const [method, operation] of Object.entries(item))
+      assert.ok(
+        operation['x-tipme-access'],
+        `${method.toUpperCase()} ${path} has no access type`,
+      );
+});
+
 test('docs/api/openapi.json is up to date (pnpm api:openapi regenerates it)', () => {
   const committed = JSON.parse(
     readFileSync(new URL('../../docs/api/openapi.json', import.meta.url)),

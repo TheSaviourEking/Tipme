@@ -56,9 +56,17 @@ export function apiCall(
 
 type Message = { id: string; to: string; body: string };
 const codeMessages = async (page: Page, phone: string): Promise<Message[]> => {
-  const inbox = await (
-    await apiCall(page.request, 'GET', '/v1/dev/inbox')
-  ).json();
+  const inbox =
+    await // On a preview copy the inbox also needs the release token.
+    (
+      await apiCall(
+        page.request,
+        'GET',
+        '/v1/dev/inbox',
+        undefined,
+        env.token ? { authorization: `Bearer ${env.token}` } : {},
+      )
+    ).json();
   const last4 = phone.replace(/\D/g, '').slice(-4);
   return (inbox.data as Message[]).filter(
     (m) => m.to.endsWith(last4) && /Your TipMe code is/.test(m.body),

@@ -8,8 +8,8 @@ import {
   RecipientPortrait,
 } from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
+import { ReportPage } from '@/components/report-page';
 import { ShareProfile } from '@/components/share-profile';
-import { ReportPage } from '@/components/profile/report-page';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getPublicProfile } from '@/lib/profiles-api';
@@ -107,6 +107,9 @@ export default async function ProfilePage({ params, searchParams }: Props) {
               recipient={firstName}
               handle={profile.handle}
               collapseExtras
+              {...(profile.tipAmounts
+                ? { tipAmounts: profile.tipAmounts }
+                : {})}
               {...(profile.celebration
                 ? { celebration: profile.celebration }
                 : {})}

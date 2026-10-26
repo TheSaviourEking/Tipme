@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Container, Skeleton } from '@tipme/ui';
+import { ViewTracker } from '@/components/view-tracker';
 import { MockCheckoutView } from './mock-checkout-view';
 
 export const metadata: Metadata = {
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 export default function MockCheckoutPage() {
   return (
     <main id="main" tabIndex={-1} className="mock-checkout-page">
+      <ViewTracker name="checkout_opened" surface="checkout" />
       <Container>
         <Suspense fallback={<Skeleton label="Loading the payment" />}>
           <MockCheckoutView />

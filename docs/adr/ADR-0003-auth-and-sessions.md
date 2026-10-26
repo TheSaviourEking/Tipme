@@ -26,11 +26,11 @@ Recipients need accounts to see their tips, earnings and settings. The user chos
   - Per client per hour: `RATE_LIMIT_AUTH_PER_HOUR` code requests (default 10) and three times that many verifications.
   - 5 wrong codes lock the number for 15 minutes.
   - The code request always answers 202, so it never reveals whether a number has an account.
-- **Delivery:** through a pretend messenger. A development-only `GET /v1/dev/inbox` and `/dev/inbox` page show what would have been sent. It is registered only with `MESSAGING_PROVIDER=mock`, which is refused in production.
+- **Delivery:** through a pretend messenger. A development-only `GET /v1/dev/inbox` and `/dev/inbox` page show what would have been sent. It is registered only with `MESSAGING_PROVIDER=mock`, which is refused in production. On a preview copy (staging) it also needs the release token (amended 2026-10-25), because the shared preview password alone would hand out every sign-in code.
 - **Sessions:**
   - A 256-bit random token in cookie `tipme_session`: `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` except on plain-HTTP localhost.
   - Postgres stores only its SHA-256.
-  - Sliding 30-day expiry.
+  - Ends 30 days after sign-in, however often it is used (the cookie's own life). Amended 2026-10-25: it used to slide 30 days from each use, which let a stolen token replayed by hand live forever while the browser's cookie still expired after 30 days.
   - Every sign-in creates a new token and ends the browser's previous session.
   - Recipients can list their devices, sign one out, or sign out all others. Deleting the account ends every session.
 - **CSRF:**

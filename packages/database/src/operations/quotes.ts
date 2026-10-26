@@ -2,7 +2,7 @@ import {
   AmountOutOfRangeError,
   FEE_FREE_VERSION_SUFFIX,
   assertCurrency,
-  FEE_POLICY,
+  FEE_POLICY_V1,
   priceTip,
   type FeeBreakdown,
 } from '@tipme/domain';
@@ -11,6 +11,7 @@ import type { Database, Tx } from '../client.js';
 import { feeFreeCredits, profiles, tipQuotes } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { tipAmountsOf } from './profiles.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -49,7 +50,10 @@ async function quote(
       id: profiles.id,
       handle: profiles.handle,
       displayName: profiles.displayName,
-      platformFeeBps: profiles.platformFeeBps,
+      plan: profiles.plan,
+      tipPresetsMinor: profiles.tipPresetsMinor,
+      minTipMinor: profiles.minTipMinor,
+      customFeeBps: profiles.customFeeBps,
     })
     .from(profiles)
     .where(
@@ -61,19 +65,20 @@ async function quote(
       ),
     );
   if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
-  // A staff-set account fee replaces the policy's 10% (ADR-0014).
-  const accountFee =
-    profile.platformFeeBps === null
-      ? undefined
-      : BigInt(profile.platformFeeBps);
+  const minTipMinor = BigInt(tipAmountsOf(profile).minMinor);
+  // A share staff set for this account (ADR-0014), recorded in the quote's version.
+  const shareBps =
+    profile.customFeeBps === null ? undefined : BigInt(profile.customFeeBps);
   const baseVersion =
-    accountFee === undefined
-      ? FEE_POLICY.version
-      : `${FEE_POLICY.version}-custom-${accountFee}`;
+    shareBps === undefined
+      ? FEE_POLICY_V1.version
+      : `${FEE_POLICY_V1.version}-custom-${profile.customFeeBps}`;
   let breakdown: FeeBreakdown;
   try {
-    breakdown = priceTip(input.tipMinor, FEE_POLICY, {
-      ...(accountFee === undefined ? {} : { platformFeeBps: accountFee }),
+    // A Pro page's own minimum (PR-012), enforced here whatever the page showed.
+    breakdown = priceTip(input.tipMinor, FEE_POLICY_V1, {
+      minTipMinor,
+      ...(shareBps === undefined ? {} : { shareBps }),
     });
   } catch (error) {
     if (error instanceof AmountOutOfRangeError)
@@ -85,9 +90,9 @@ async function quote(
   );
   const quoteId = newId();
   const priced = breakdown;
-  // Staff-granted fee-free tips waive TipMe's fee while credits last; the grant is the decision,
-  // so no lifetime cap applies (ADR-0014). Open fee-free quotes reserve their credit under a lock
-  // on the credits row, so quotes made before any of them is paid can never overspend it.
+  // Fee-free tips are granted by staff (ADR-0014) and honoured while credits last. Open
+  // fee-free quotes reserve their credit, under a lock on the credits row, so quotes made before
+  // any of them is paid can never use more credits than were granted.
   const { waivedPlatformFeeMinor, finalBreakdown, feePolicyVersion } =
     await db.transaction(async (tx) => {
       const [credits] = await tx
@@ -97,16 +102,21 @@ async function quote(
         .for('update');
       let waived = 0n;
       let chosen = priced;
-      let version = baseVersion;
-      if ((credits?.remaining ?? 0) > 0 && priced.platformFeeMinor > 0n) {
+      let version: string = baseVersion;
+      const share = priced.platformFeeMinor + priced.providerFeeMinor;
+      if ((credits?.remaining ?? 0) > 0 && share > 0n) {
         const open = await openFeeFreeQuotes(
           tx,
           profile.id,
           expiresAt.getTime() - QUOTE_TTL_MS,
         );
         if ((credits?.remaining ?? 0) - open.count > 0) {
-          waived = priced.platformFeeMinor;
-          chosen = priceTip(input.tipMinor, FEE_POLICY, { feeFree: true });
+          // TipMe gives up its whole share, the processing it would have paid from it included.
+          waived = share;
+          chosen = priceTip(input.tipMinor, FEE_POLICY_V1, {
+            feeFree: true,
+            minTipMinor,
+          });
           version = `${baseVersion}${FEE_FREE_VERSION_SUFFIX}`;
         }
       }
@@ -160,7 +170,7 @@ export function findQuoteCharge(
   });
 }
 
-/** Fee-free quotes still open (not expired, not paid, not failed): each holds a credit and its cost. */
+/** Fee-free quotes still open (not expired, not paid, not failed): each holds a credit. */
 async function openFeeFreeQuotes(
   tx: Tx,
   profileId: string,

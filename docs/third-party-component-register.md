@@ -59,3 +59,9 @@ Decision: ADOPTED (pinned exact). Upgrades are deliberate and go through the rel
 - **Postgres features, not packages:** WAL archiving (`archive_command` copying to a volume) and `pg_basebackup` from the existing `postgres:16.13-alpine` and `postgresql16-client`.
 
 Decision: ADOPTED (pinned exact). Upgrades are deliberate: re-pin the digest and rerun the scan and load test.
+
+## PR-013 product gaps
+
+- **`sharp` 0.35.5** (Apache-2.0, https://sharp.pixelplumbing.com): decodes and re-encodes profile photos in the API (to a 512×512 WebP, no metadata), with a 40-megapixel limit against "pixel bombs". It was already in the lockfile through Next.js; it is now a direct, exactly pinned dependency of the API. The Docker image installs its musl (Alpine) build.
+
+Decision: ADOPTED (pinned exact).

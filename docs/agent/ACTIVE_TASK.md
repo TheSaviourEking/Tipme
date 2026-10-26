@@ -1,3 +1,9 @@
+# Current task — Merge dev into feat/profile-composition (26 October 2026)
+
+- The user chose: dev wins where both branches built the same feature; keep this branch's design, CSV export, staff-set fees and fee-free grants, and no automatic rewards.
+- Backend (database, domain, contracts, API) taken from dev, then: migration 0038 (`custom_fee_bps`, `fees.manage`), staff pricing endpoints under `/v1/ops/pages/:profileId/{pricing,fee,fee-free}`, a Pricing card on the admin Pages screen, CSV export, milestone rewards off, reserved handles for short links. Web: redesign merged into dev's split views (`*-view.tsx`), dev's report, photo, search and notification UI kept.
+- Verification and open items: see HANDOFF.
+
 # Current task — Buildable-now slices, part 2 (26 October 2026)
 
 - Uncommitted on `feat/profile-composition` (after `4752f43`): profile reports (migration 0030), CSV export, email preferences (0031), profile photos (0032) with staff removal, the staff account page's photo, and fixes found in a real browser: the server now strips the sRGB colour profile Chrome always embeds (every upload was refused), and `POST /v1/profiles/:handle/report` is allowed cross-origin for the web app only (every browser report failed its preflight). Photo alt text no longer calls real people "fictional". New e2e spec `tests/e2e/photos-and-reports.spec.ts`.
@@ -79,6 +85,15 @@
 - Next exact step: review `docs/superpowers/specs/2026-10-25-physical-interface.md` and `docs/superpowers/plans/2026-10-25-physical-interface.md`, then execute Task 1 test-first.
 
 # Previous task — Slack deployment notifications & fix summaries (23 October 2026)
+
+# PR #18 — Staging Compose validation failure (25 October 2026)
+
+- CI's placeholder-only Compose validation failed because the staging example intentionally leaves secrets blank, while `${VAR:?}` treats unset and blank values as errors.
+- Added test-only values to the workflow for every required secret, including the separated Postgres roles. Kept the example file blank and Compose's deployment-time required-variable guards unchanged.
+- Local equivalent of the workflow's `docker compose ... config --quiet` passed; Prettier and `git diff --check` passed.
+- No deploy, staging/production change, or real credential was used. Next step: let PR #18 checks rerun after push.
+
+# Slack deployment notifications & fix summaries — 23 October 2026
 
 Added Slack deployment notification integration via incoming webhook. Formats release outcomes and automatically parses Conventional Commits to extract categorised bug fixes (`fix:`), product updates/features (`feat:`), and version details with direct links to the web app, API, and commit/run URLs. Integrated into `.github/workflows/deploy-staging.yml` and documented in `docs/runbooks/staging-setup.md`. Requires repository/environment secret `SLACK_WEBHOOK_URL` (gracefully skips if not configured).
 

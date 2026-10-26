@@ -33,7 +33,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/health/backups": {
@@ -63,7 +64,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/health/live": {
@@ -93,7 +95,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/health/ready": {
@@ -123,7 +126,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/health/release": {
@@ -153,7 +157,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/auth/code": {
@@ -204,7 +209,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_code"
       }
     },
     "/v1/auth/email/confirm": {
@@ -254,7 +262,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
       }
     },
     "/v1/auth/recover": {
@@ -305,7 +316,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_code"
       }
     },
     "/v1/auth/recover/code": {
@@ -361,7 +375,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_code"
       }
     },
     "/v1/auth/recover/complete": {
@@ -422,7 +439,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
       }
     },
     "/v1/auth/sign-out": {
@@ -446,6 +466,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -511,16 +533,27 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
       }
     },
-    "/v1/avatars/{file}": {
+    "/v1/avatars/{profileId}/{file}": {
       "get": {
-        "operationId": "PublicProfile.avatar",
+        "operationId": "Avatar.serve",
         "tags": [
-          "PublicProfile"
+          "Avatar"
         ],
         "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "file",
             "in": "path",
@@ -551,7 +584,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/dev/inbox": {
@@ -582,7 +616,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/dev/jobs/weekly-report": {
@@ -634,7 +669,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/diagnostics/trace-probe": {
@@ -693,7 +729,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/diagnostics/trace-probe/{jobId}": {
@@ -734,7 +771,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/events": {
@@ -765,7 +803,9 @@
                       "qr_printed",
                       "report_shared",
                       "moment_shared",
-                      "recipient_returned"
+                      "recipient_returned",
+                      "landing_viewed",
+                      "checkout_opened"
                     ]
                   },
                   "flowId": {
@@ -837,7 +877,9 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "analytics"
       }
     },
     "/v1/handles/{handle}/availability": {
@@ -877,7 +919,9 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "handles"
       }
     },
     "/v1/me/account": {
@@ -921,6 +965,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -956,6 +1002,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -965,9 +1012,9 @@
     },
     "/v1/me/avatar": {
       "delete": {
-        "operationId": "MeProfile.removeAvatar",
+        "operationId": "Avatar.remove",
         "tags": [
-          "MeProfile"
+          "Avatar"
         ],
         "responses": {
           "200": {
@@ -991,6 +1038,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -998,9 +1047,9 @@
         ]
       },
       "put": {
-        "operationId": "MeProfile.setAvatar",
+        "operationId": "Avatar.upload",
         "tags": [
-          "MeProfile"
+          "Avatar"
         ],
         "responses": {
           "200": {
@@ -1024,6 +1073,9 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "avatars",
         "security": [
           {
             "session": []
@@ -1059,6 +1111,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1115,6 +1168,9 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_code",
         "security": [
           {
             "session": []
@@ -1150,6 +1206,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1206,6 +1263,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1241,6 +1300,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1279,6 +1339,106 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/notification-preferences": {
+      "get": {
+        "operationId": "MeProfile.preferences",
+        "tags": [
+          "MeProfile"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "MeProfile.setPreferences",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipEmails": {
+                    "type": "boolean"
+                  },
+                  "weeklyReports": {
+                    "type": "boolean"
+                  },
+                  "milestones": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "tipEmails",
+                  "weeklyReports",
+                  "milestones"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1314,6 +1474,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1367,6 +1528,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1423,6 +1586,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1481,6 +1646,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1542,6 +1709,9 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify",
         "security": [
           {
             "session": []
@@ -1598,6 +1768,9 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_code",
         "security": [
           {
             "session": []
@@ -1633,6 +1806,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1711,12 +1885,6 @@
                   "qrStyle": {
                     "type": "string",
                     "pattern": "^[a-z]{3,12}$"
-                  },
-                  "emailTips": {
-                    "type": "boolean"
-                  },
-                  "emailWeekly": {
-                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -1746,6 +1914,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1781,6 +1951,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1816,6 +1987,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1851,6 +2024,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1896,6 +2070,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1931,6 +2106,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -1959,6 +2135,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -1997,6 +2175,74 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/tip-amounts": {
+      "put": {
+        "operationId": "MeProfile.tipAmounts",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "presetsMinor": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^\\d{1,12}$"
+                    }
+                  },
+                  "minMinor": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}$"
+                  }
+                },
+                "required": [
+                  "presetsMinor",
+                  "minMinor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -2032,6 +2278,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -2077,6 +2324,7 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -2122,6 +2370,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -2191,6 +2441,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -2246,6 +2498,8 @@
             }
           }
         },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -2291,7 +2545,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       },
       "post": {
         "operationId": "MockCheckout.pay",
@@ -2356,181 +2611,8 @@
               }
             }
           }
-        }
-      }
-    },
-    "/v1/ops/accounts": {
-      "get": {
-        "operationId": "OpsAccounts.search",
-        "tags": [
-          "OpsAccounts"
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DataResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error with a stable code; never echoes request values.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
         },
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "x-tipme-permission": "issues.view"
-      }
-    },
-    "/v1/ops/accounts/{profileId}": {
-      "get": {
-        "operationId": "OpsAccounts.detail",
-        "tags": [
-          "OpsAccounts"
-        ],
-        "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DataResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error with a stable code; never echoes request values.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "x-tipme-permission": "issues.view"
-      }
-    },
-    "/v1/ops/accounts/{profileId}/reports": {
-      "get": {
-        "operationId": "OpsAccounts.reports",
-        "tags": [
-          "OpsAccounts"
-        ],
-        "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DataResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error with a stable code; never echoes request values.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "x-tipme-permission": "issues.view"
-      }
-    },
-    "/v1/ops/accounts/{profileId}/tips": {
-      "get": {
-        "operationId": "OpsAccounts.tips",
-        "tags": [
-          "OpsAccounts"
-        ],
-        "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DataResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error with a stable code; never echoes request values.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-access": "public"
       }
     },
     "/v1/ops/audit": {
@@ -2561,6 +2643,7 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -2616,7 +2699,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "staff",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
       }
     },
     "/v1/ops/enrol/confirm": {
@@ -2666,7 +2752,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "staff",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
       }
     },
     "/v1/ops/grant": {
@@ -2716,7 +2805,10 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "staff",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
       }
     },
     "/v1/ops/issues": {
@@ -2814,6 +2906,7 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -2860,6 +2953,7 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -2927,6 +3021,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -2994,6 +3090,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3061,6 +3159,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3124,6 +3224,7 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -3235,6 +3336,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3293,6 +3396,7 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -3409,6 +3513,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3455,6 +3561,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3490,7 +3598,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "staff"
       }
     },
     "/v1/ops/metrics/health": {
@@ -3521,6 +3630,7 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -3557,6 +3667,7 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -3565,15 +3676,15 @@
         "x-tipme-permission": "analytics.view"
       }
     },
-    "/v1/ops/pages/{profileId}/avatar/remove": {
-      "post": {
-        "operationId": "OpsActions.removeAvatar",
+    "/v1/ops/pages/{handle}": {
+      "get": {
+        "operationId": "OpsPages.page",
         "tags": [
-          "OpsActions"
+          "OpsPages"
         ],
         "parameters": [
           {
-            "name": "profileId",
+            "name": "handle",
             "in": "path",
             "required": true,
             "schema": {
@@ -3581,27 +3692,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "reason": {
-                    "type": "string",
-                    "minLength": 10,
-                    "maxLength": 500
-                  }
-                },
-                "required": [
-                  "reason"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Success.",
@@ -3624,19 +3714,20 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
           }
         ],
-        "x-tipme-permission": "pages.suspend"
+        "x-tipme-permission": "pages.plan"
       }
     },
     "/v1/ops/pages/{profileId}/fee": {
       "post": {
-        "operationId": "OpsActions.setFee",
+        "operationId": "OpsPages.fee",
         "tags": [
-          "OpsActions"
+          "OpsPages"
         ],
         "parameters": [
           {
@@ -3655,6 +3746,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
                   "feeBps": {
                     "anyOf": [
                       {
@@ -3666,16 +3762,11 @@
                         "type": "null"
                       }
                     ]
-                  },
-                  "reason": {
-                    "type": "string",
-                    "minLength": 10,
-                    "maxLength": 500
                   }
                 },
                 "required": [
-                  "feeBps",
-                  "reason"
+                  "reason",
+                  "feeBps"
                 ],
                 "additionalProperties": false
               }
@@ -3704,6 +3795,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3714,9 +3807,9 @@
     },
     "/v1/ops/pages/{profileId}/fee-free": {
       "post": {
-        "operationId": "OpsActions.grantFeeFree",
+        "operationId": "OpsPages.feeFree",
         "tags": [
-          "OpsActions"
+          "OpsPages"
         ],
         "parameters": [
           {
@@ -3735,20 +3828,20 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "count": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 100
-                  },
                   "reason": {
                     "type": "string",
                     "minLength": 10,
                     "maxLength": 500
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
                   }
                 },
                 "required": [
-                  "count",
-                  "reason"
+                  "reason",
+                  "count"
                 ],
                 "additionalProperties": false
               }
@@ -3777,6 +3870,132 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "fees.manage"
+      }
+    },
+    "/v1/ops/pages/{profileId}/plan": {
+      "post": {
+        "operationId": "OpsPages.plan",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "plan": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "pro"
+                    ]
+                  }
+                },
+                "required": [
+                  "reason",
+                  "plan"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.plan"
+      }
+    },
+    "/v1/ops/pages/{profileId}/pricing": {
+      "get": {
+        "operationId": "OpsPages.pricing",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
         "security": [
           {
             "session": []
@@ -3844,6 +4063,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3911,6 +4132,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -3978,12 +4201,51 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
           }
         ],
         "x-tipme-permission": "payments.recheck"
+      }
+    },
+    "/v1/ops/search": {
+      "get": {
+        "operationId": "OpsSearch.search",
+        "tags": [
+          "OpsSearch"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "search.view"
       }
     },
     "/v1/ops/sign-out": {
@@ -4006,7 +4268,9 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "staff",
+        "x-tipme-csrf": true
       }
     },
     "/v1/ops/users/{userId}/cancel-recovery": {
@@ -4068,6 +4332,8 @@
             }
           }
         },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
         "security": [
           {
             "session": []
@@ -4113,7 +4379,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/profiles/{handle}/report": {
@@ -4147,10 +4414,6 @@
                       "abusive",
                       "other"
                     ]
-                  },
-                  "details": {
-                    "type": "string",
-                    "maxLength": 500
                   }
                 },
                 "required": [
@@ -4162,7 +4425,7 @@
           }
         },
         "responses": {
-          "201": {
+          "202": {
             "description": "Success.",
             "content": {
               "application/json": {
@@ -4182,7 +4445,9 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "reports"
       }
     },
     "/v1/release/runs": {
@@ -4212,7 +4477,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "release-token"
       }
     },
     "/v1/release/runs/{id}/finish": {
@@ -4252,7 +4518,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "release-token"
       }
     },
     "/v1/tip-intents": {
@@ -4316,7 +4583,9 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "intents"
       }
     },
     "/v1/tip-quotes": {
@@ -4377,7 +4646,9 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "quotes"
       }
     },
     "/v1/tips/{tipId}/status": {
@@ -4417,7 +4688,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "status-token"
       }
     },
     "/v1/vitals": {
@@ -4492,7 +4764,9 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "analytics"
       }
     },
     "/v1/webhooks/mock": {
@@ -4523,7 +4797,8 @@
               }
             }
           }
-        }
+        },
+        "x-tipme-access": "provider-signature"
       }
     }
   },
@@ -4581,6 +4856,9 @@
                   "ALREADY_HAS_PAGE",
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",
+                  "WITHDRAWAL_TOO_SMALL",
+                  "PRO_REQUIRED",
+                  "INVALID_IMAGE",
                   "PHONE_TAKEN",
                   "RECOVERY_PENDING",
                   "FORBIDDEN",

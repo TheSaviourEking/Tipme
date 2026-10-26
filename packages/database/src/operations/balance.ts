@@ -2,20 +2,8 @@ import { sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { guarded } from './errors.js';
 
-/**
- * What TipMe owes a recipient, from the ledger: `recipient_payable` credits minus debits, less
- * payouts still in flight (REQUESTED / PROCESSING), which are reserved. Money still being
- * confirmed by the provider is reported separately and is never part of the balance.
- */
-export async function balanceIn(
-  tx: Database | Tx,
-  profileId: string,
-): Promise<{ availableMinor: bigint; confirmingMinor: bigint }> {
-  const result = await tx.execute<{
-    payable: string | null;
-    reserved: string | null;
-    confirming: string | null;
-  }>(sql`
+export function balanceQuery(profileId: string) {
+  return sql`
     SELECT
       (SELECT COALESCE(SUM(CASE WHEN e.side = 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
          FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
@@ -31,7 +19,23 @@ export async function balanceIn(
                OR (t.status = 'AWAITING_PAYMENT' AND EXISTS (
                      SELECT 1 FROM payment_attempts pa
                       WHERE pa.intent_id = t.intent_id AND pa.status = 'PENDING')))) AS confirming
-  `);
+  `;
+}
+
+/**
+ * What TipMe owes a recipient, from the ledger: `recipient_payable` credits minus debits, less
+ * payouts still in flight (REQUESTED / PROCESSING), which are reserved. Money still being
+ * confirmed by the provider is reported separately and is never part of the balance.
+ */
+export async function balanceIn(
+  tx: Database | Tx,
+  profileId: string,
+): Promise<{ availableMinor: bigint; confirmingMinor: bigint }> {
+  const result = await tx.execute<{
+    payable: string | null;
+    reserved: string | null;
+    confirming: string | null;
+  }>(balanceQuery(profileId));
   const row = result.rows[0];
   return {
     availableMinor: BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0'),

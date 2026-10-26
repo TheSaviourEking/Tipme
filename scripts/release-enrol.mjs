@@ -5,10 +5,13 @@
 //      docker compose ... run --rm -e TIPME_CONFIRM_DATABASE=tipme migrate \
 //        node packages/database/dist/scripts/grant-owner.js --phone <number> --role release_check
 // 2. From your machine:
-//      RELEASE_PREVIEW_PASSWORD=... node scripts/release-enrol.mjs --web <url> --api <url> \
-//        --phone <number> --code <enrolment code>
-//    It signs in through the pretend inbox, registers an authenticator and prints its secret once.
-//    Store it as RELEASE_OPS_TOTP_SECRET wherever you run `pnpm release:check --full`.
+//      RELEASE_PREVIEW_PASSWORD=... RELEASE_CHECK_TOKEN=... node scripts/release-enrol.mjs \
+//        --web <url> --api <url> --phone <number> --code <enrolment code> [--out <file>]
+//    It signs in through the pretend inbox (which needs the release token on a preview copy),
+//    registers an authenticator and prints its secret once, or writes it to --out (mode 600)
+//    so it never reaches the terminal. Store it as RELEASE_OPS_TOTP_SECRET wherever you run
+//    `pnpm release:check --full`.
+import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
@@ -22,6 +25,7 @@ export async function enrolReleaseStaff({
   web,
   api,
   password,
+  token,
   phone,
   enrolmentCode,
 }) {
@@ -30,13 +34,14 @@ export async function enrolReleaseStaff({
   const cookies = new Map();
   if (password)
     cookies.set('__Secure-tipme_preview', issuePreviewTicket(password));
-  const call = async (method, path, body) => {
+  const call = async (method, path, body, extra = {}) => {
     const response = await fetch(`${api}${path}`, {
       method,
       headers: {
         origin: web,
         'x-tipme-csrf': '1',
         cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join('; '),
+        ...extra,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -53,7 +58,12 @@ export async function enrolReleaseStaff({
     'sending the sign-in code',
   );
   const inbox = await json(
-    await call('GET', '/v1/dev/inbox'),
+    await call(
+      'GET',
+      '/v1/dev/inbox',
+      undefined,
+      token ? { authorization: `Bearer ${token}` } : {},
+    ),
     'reading the pretend inbox',
   );
   const last4 = phone.replace(/\D/g, '').slice(-4);
@@ -89,6 +99,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       api: { type: 'string' },
       phone: { type: 'string' },
       code: { type: 'string' },
+      out: { type: 'string' },
       insecure: { type: 'boolean', default: false },
     },
   });
@@ -104,13 +115,21 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       web: new URL(values.web).origin,
       api: new URL(values.api).origin,
       password: process.env.RELEASE_PREVIEW_PASSWORD ?? '',
+      token: process.env.RELEASE_CHECK_TOKEN ?? '',
       phone: values.phone,
       enrolmentCode: values.code,
     });
-    console.log(
-      'Authenticator registered. Store this as RELEASE_OPS_TOTP_SECRET (shown once):',
-    );
-    console.log(secret);
+    if (values.out) {
+      writeFileSync(values.out, `${secret}\n`, { mode: 0o600, flag: 'wx' });
+      console.log(
+        `Authenticator registered. Its secret is in ${values.out} (mode 600); store it as RELEASE_OPS_TOTP_SECRET, then delete the file.`,
+      );
+    } else {
+      console.log(
+        'Authenticator registered. Store this as RELEASE_OPS_TOTP_SECRET (shown once):',
+      );
+      console.log(secret);
+    }
   } catch (error) {
     console.error(`Release enrolment failed: ${error.message}`);
     process.exit(1);

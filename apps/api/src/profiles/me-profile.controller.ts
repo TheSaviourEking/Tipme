@@ -17,18 +17,23 @@ import {
   deleteAccountSchema,
   pageStateSchema,
   profilePatchSchema,
+  notificationPrefsSchema,
   renameHandleSchema,
+  tipAmountsSchema,
   type ApiDataResponse,
   type MyProfile,
+  type NotificationPrefs,
   type ProfilePatch,
+  type TipAmountsRequest,
 } from '@tipme/contracts';
 import {
   claimHandle,
   deleteAccount,
   getMyProfile,
-  removeMyAvatar,
-  setMyAvatar,
+  getNotificationPrefs,
+  setNotificationPrefs,
   renameHandle,
+  setTipAmounts,
   setPageState,
   updateMyProfile,
 } from '@tipme/database';
@@ -42,9 +47,9 @@ import {
   type AuthContext,
 } from '../auth/session.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
-import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { ServerEvents } from '../analytics/server-events.js';
 import { ProfileRevalidator } from './revalidate.js';
 
 /** The signed-in recipient's own page. Every route acts only on the caller's account. */
@@ -56,6 +61,7 @@ export class MeProfileController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(ServerEvents) private readonly events: ServerEvents,
   ) {}
 
   @Post('page')
@@ -65,7 +71,7 @@ export class MeProfileController {
     body: z.infer<typeof claimHandleSchema>,
     @Headers('x-tipme-rehearsal') rehearsal: string | undefined,
   ): Promise<ApiDataResponse<MyProfile>> {
-    await claimHandle(this.database.db, {
+    const { profileId } = await claimHandle(this.database.db, {
       userId: auth.userId,
       handle: body.handle,
       // The release check's page (PR-010): only on test copies, only for an open run.
@@ -73,6 +79,11 @@ export class MeProfileController {
         ? { rehearsalRunId: rehearsal }
         : {}),
     });
+    await this.events.record(
+      'profile_created',
+      `profile_created.${profileId}`,
+      profileId,
+    );
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 
@@ -111,46 +122,58 @@ export class MeProfileController {
     return { data: await getMyProfile(this.database.db, auth.userId) };
   }
 
+  /** A Pro page's own preset amounts and minimum (PR-012); refused on Free (PRO_REQUIRED). */
+  @Put('tip-amounts')
+  async tipAmounts(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(tipAmountsSchema)) body: TipAmountsRequest,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const updated = await setTipAmounts(this.database.db, auth.userId, {
+      presetsMinor: body.presetsMinor.map(BigInt),
+      minTipMinor: BigInt(body.minMinor),
+    });
+    this.revalidator.revalidate(updated.handle);
+    return { data: updated };
+  }
+
+  @Get('notification-preferences')
+  async preferences(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<NotificationPrefs>> {
+    return { data: await getNotificationPrefs(this.database.db, auth.userId) };
+  }
+
+  @Put('notification-preferences')
+  async setPreferences(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(notificationPrefsSchema))
+    body: NotificationPrefs,
+  ): Promise<ApiDataResponse<NotificationPrefs>> {
+    return {
+      data: await setNotificationPrefs(this.database.db, auth.userId, body),
+    };
+  }
+
   @Put('page/state')
   async state(
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(pageStateSchema))
     body: z.infer<typeof pageStateSchema>,
   ): Promise<ApiDataResponse<MyProfile>> {
-    const { handle } = await setPageState(
+    const { handle, profileId, firstPublished } = await setPageState(
       this.database.db,
       auth.userId,
       body.state,
     );
     this.revalidator.revalidate(handle);
+    // Once per page, ever: the first time it goes live (PRD v1.1 §11).
+    if (firstPublished)
+      await this.events.record(
+        'profile_published',
+        `profile_published.${profileId}`,
+        profileId,
+      );
     return { data: await getMyProfile(this.database.db, auth.userId) };
-  }
-
-  /** A profile photo: the raw WebP body the browser made (any metadata is refused). */
-  @Put('avatar')
-  async setAvatar(
-    @CurrentUser() auth: AuthContext,
-    @Body() body: unknown,
-  ): Promise<ApiDataResponse<MyProfile>> {
-    if (!Buffer.isBuffer(body))
-      throw new CodedHttpException(415, 'VALIDATION_FAILED');
-    await setMyAvatar(this.database.db, {
-      userId: auth.userId,
-      bytes: new Uint8Array(body),
-    });
-    const profile = await getMyProfile(this.database.db, auth.userId);
-    this.revalidator.revalidate(profile.handle);
-    return { data: profile };
-  }
-
-  @Delete('avatar')
-  async removeAvatar(
-    @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<MyProfile>> {
-    await removeMyAvatar(this.database.db, auth.userId);
-    const profile = await getMyProfile(this.database.db, auth.userId);
-    this.revalidator.revalidate(profile.handle);
-    return { data: profile };
   }
 
   @Delete('account')

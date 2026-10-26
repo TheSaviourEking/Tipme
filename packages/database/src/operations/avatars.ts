@@ -1,24 +1,18 @@
-import { inspectAvatar } from '@tipme/domain';
-import { and, eq, ne } from 'drizzle-orm';
-import type { Database, Tx } from '../client.js';
-import { avatars, profiles } from '../schema.js';
-import { recordAudit } from './audit.js';
+import type { MyProfile } from '@tipme/contracts';
+import { and, eq, ne, sql } from 'drizzle-orm';
+import type { Database } from '../client.js';
+import { profileAvatars, profiles } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
-import { newId } from './ids.js';
+import { getMyProfile } from './profiles.js';
 
-/** The public path a stored photo is served at by the web app. */
-export const avatarPath = (id: string) => `/avatars/${id}.webp`;
+// Profile photos (PR-013). The bytes stored here are always the server's own re-encoding
+// (the API never stores an upload as sent); this module only keeps and serves them.
 
-async function replace(tx: Tx, profileId: string, next: string | null) {
-  await tx.delete(avatars).where(eq(avatars.profileId, profileId));
-  await tx
-    .update(profiles)
-    .set({ avatarPath: next })
-    .where(eq(profiles.id, profileId));
-}
+export const avatarPathOf = (profileId: string, version: number) =>
+  `/v1/avatars/${profileId}/${version}.webp`;
 
-async function ownPage(tx: Tx, userId: string) {
-  const [page] = await tx
+async function myPageId(db: Database, userId: string) {
+  const [page] = await db
     .select({ id: profiles.id })
     .from(profiles)
     .where(and(eq(profiles.userId, userId), ne(profiles.pageState, 'deleted')));
@@ -26,74 +20,77 @@ async function ownPage(tx: Tx, userId: string) {
   return page.id;
 }
 
-/** The recipient sets their photo; anything but a plain, bounded WebP is refused. */
-export function setMyAvatar(
+/** Replaces the page's photo with already re-encoded WebP bytes; a new version, a new URL. */
+export function setAvatar(
   db: Database,
-  input: { userId: string; bytes: Uint8Array },
-): Promise<{ avatarPath: string }> {
-  const photo = inspectAvatar(input.bytes);
-  if (!photo) return Promise.reject(new OperationError('INVALID_INPUT'));
-  return guarded(() =>
-    db.transaction(async (tx) => {
-      const profileId = await ownPage(tx, input.userId);
-      const id = newId();
-      const path = avatarPath(id);
-      await replace(tx, profileId, path);
-      await tx.insert(avatars).values({
-        id,
-        profileId,
-        bytes: Buffer.from(photo.bytes),
-        width: photo.width,
-        height: photo.height,
-      });
-      return { avatarPath: path };
-    }),
-  );
+  userId: string,
+  webp: Buffer,
+): Promise<MyProfile> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    await db.transaction(async (tx) => {
+      // The page's counter, never the photo row's: removing a photo deletes the row, and the
+      // next photo must still get a URL no cache has seen.
+      const [next] = await tx
+        .update(profiles)
+        .set({ avatarVersion: sql`${profiles.avatarVersion} + 1` })
+        .where(eq(profiles.id, profileId))
+        .returning({ version: profiles.avatarVersion });
+      const version = next!.version;
+      await tx
+        .insert(profileAvatars)
+        .values({ profileId, version, bytes: webp })
+        .onConflictDoUpdate({
+          target: profileAvatars.profileId,
+          set: { version, bytes: webp, createdAt: sql`now()` },
+        });
+      await tx
+        .update(profiles)
+        .set({ avatarPath: avatarPathOf(profileId, version) })
+        .where(eq(profiles.id, profileId));
+    });
+    return getMyProfile(db, userId);
+  });
 }
 
-/** The recipient removes their photo; the page falls back to their initials. */
-export function removeMyAvatar(db: Database, userId: string): Promise<void> {
-  return guarded(() =>
-    db.transaction(async (tx) => {
-      await replace(tx, await ownPage(tx, userId), null);
-    }),
-  );
+/** Removes the page's photo: its URL stops working at once. */
+export function removeAvatar(db: Database, userId: string): Promise<MyProfile> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(profileAvatars)
+        .where(eq(profileAvatars.profileId, profileId));
+      await tx
+        .update(profiles)
+        .set({ avatarPath: null })
+        .where(eq(profiles.id, profileId));
+    });
+    return getMyProfile(db, userId);
+  });
 }
 
-/** Staff remove a page's photo with a reason (impersonation, abuse), audited. */
-export function removeAvatarByStaff(
+/**
+ * A photo to serve: only the current version, and only while the page is live and not paused
+ * (a hidden page's photo is as unavailable as the page itself).
+ */
+export function avatarFor(
   db: Database,
-  input: { profileId: string; staffUserId: string; reason: string },
-): Promise<{ handle: string }> {
-  return guarded(() =>
-    db.transaction(async (tx) => {
-      const [page] = await tx
-        .select({ id: profiles.id, handle: profiles.handle })
-        .from(profiles)
-        .where(eq(profiles.id, input.profileId));
-      if (!page) throw new OperationError('PROFILE_NOT_FOUND');
-      await replace(tx, input.profileId, null);
-      await recordAudit(tx, {
-        staffUserId: input.staffUserId,
-        action: 'avatar.removed',
-        permission: 'pages.suspend',
-        subjectType: 'profile',
-        subjectId: input.profileId,
-        reason: input.reason,
-      });
-      return { handle: page.handle };
-    }),
-  );
-}
-
-/** A stored photo's bytes by id, or null (unknown, removed, or a deleted page's). */
-export function avatarBytes(db: Database, id: string): Promise<Buffer | null> {
+  input: { profileId: string; version: number },
+): Promise<Buffer | null> {
   return guarded(async () => {
     const [row] = await db
-      .select({ bytes: avatars.bytes })
-      .from(avatars)
-      .innerJoin(profiles, eq(profiles.id, avatars.profileId))
-      .where(and(eq(avatars.id, id), ne(profiles.pageState, 'deleted')));
+      .select({ bytes: profileAvatars.bytes })
+      .from(profileAvatars)
+      .innerJoin(profiles, eq(profiles.id, profileAvatars.profileId))
+      .where(
+        and(
+          eq(profileAvatars.profileId, input.profileId),
+          eq(profileAvatars.version, input.version),
+          eq(profiles.pageState, 'live'),
+          eq(profiles.status, 'active'),
+        ),
+      );
     return row?.bytes ?? null;
   });
 }

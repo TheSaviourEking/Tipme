@@ -4,10 +4,10 @@ import {
   Get,
   Header,
   HttpCode,
+  Post,
   Inject,
   NotFoundException,
   Param,
-  Post,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -15,19 +15,18 @@ import {
   profileReportSchema,
   type ApiDataResponse,
   type HandleStatus,
-  type ProfileReportRequest,
+  type ProfileReportReason,
   type PublicProfile,
 } from '@tipme/contracts';
 import {
   checkHandle,
   handleAliasTarget,
   normaliseHandle,
-  avatarBytes,
   publicProfile,
   reportProfile,
 } from '@tipme/database';
-import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { DatabaseProvider } from '../infra/database.js';
 
 @Controller('v1')
@@ -35,44 +34,6 @@ export class PublicProfileController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
   ) {}
-
-  /** A stored profile photo by id (`<uuid>.webp`); ids are random, bytes never change. */
-  @Get('avatars/:file')
-  async avatar(
-    @Param('file') file: string,
-    @Res() response: Response,
-  ): Promise<void> {
-    const id = /^([0-9a-f-]{36})\.webp$/.exec(file)?.[1];
-    const bytes = id ? await avatarBytes(this.database.db, id) : null;
-    if (!bytes) throw new NotFoundException();
-    response
-      .status(200)
-      .setHeader('Content-Type', 'image/webp')
-      .setHeader('X-Content-Type-Options', 'nosniff')
-      .setHeader('Cache-Control', 'public, max-age=31536000, immutable')
-      .send(bytes);
-  }
-
-  /**
-   * Anyone reports a live page (impersonation, scam, abuse); it reaches the staff inbox. Pages
-   * that aren't live answer 404 like unknown ones. Limited per client per hour.
-   */
-  @Post('profiles/:handle/report')
-  @HttpCode(201)
-  @RateLimit('reports')
-  async report(
-    @Param('handle') handle: string,
-    @Body(new ZodValidationPipe(profileReportSchema))
-    body: ProfileReportRequest,
-  ): Promise<ApiDataResponse<{ reported: true }>> {
-    return {
-      data: await reportProfile(this.database.db, {
-        handle: handle.slice(0, 40),
-        reason: body.reason,
-        ...(body.details ? { details: body.details } : {}),
-      }),
-    };
-  }
 
   /**
    * A live page's public details. Not live, deleted and unknown pages are all 404. An old handle
@@ -90,6 +51,22 @@ export class PublicProfileController {
     if (!movedTo) throw new NotFoundException();
     response.status(308).setHeader('Location', `/v1/profiles/${movedTo}`);
     return { data: { movedTo } };
+  }
+
+  /**
+   * Reporting a page (PR-013): impersonation, a scam, abuse or other. Always 202, whether or
+   * not such a page exists, so the answer reveals nothing. Rate-limited per address.
+   */
+  @Post('profiles/:handle/report')
+  @HttpCode(202)
+  @RateLimit('reports')
+  async report(
+    @Param('handle') handle: string,
+    @Body(new ZodValidationPipe(profileReportSchema))
+    body: { reason: ProfileReportReason },
+  ): Promise<ApiDataResponse<{ accepted: true }>> {
+    await reportProfile(this.database.db, { handle, reason: body.reason });
+    return { data: { accepted: true } };
   }
 
   @Get('handles/:handle/availability')

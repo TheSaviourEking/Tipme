@@ -22,17 +22,18 @@ export default function AboutPreview() {
         </p>
         <h2>What you can do</h2>
         <p>
-          Create your own page, share its link or QR code, and send pretend tips
-          to any live page, including the fictional demo profiles. Pretend
-          payments move no money, and no card is ever charged.
+          Explore fictional profiles, choose an illustrative amount, add a
+          message, and review the gesture. No real payment is made, but this
+          working preview sends account and demo-tip information to TipMe’s
+          server so those features can operate.
         </p>
-        <h2>What happens to what you share</h2>
+        <h2>What the preview stores</h2>
         <p>
-          When you send a pretend tip, its amount and any message or name you
-          add are saved with the tip so the person you thanked can see them. If
-          you choose to remember your tips on your phone, only a note that you
-          tipped is kept in your browser, without amounts or messages. Your
-          page’s details are saved to your account on this preview.
+          If you sign in, your phone number and account details are sent to the
+          preview API. Demo tip amounts and messages are also sent to the API
+          and stored with the preview data. Do not use real private details or
+          sensitive messages here. A draft that has not been submitted remains
+          in this page’s memory and is cleared when you leave or refresh.
         </p>
         <h2>What still needs to be decided</h2>
         <p>

@@ -10,14 +10,14 @@ The mock policy (`mock-v0`) deducted a 5% TipMe fee and a 1.5% provider fee from
 
 ## Decisions
 
-1. **Fee policy `v1`.** TipMe's fee is 10% of the tip (half-up to the kobo). The provider fee recovered from the recipient is 0, so a ₦2,000 tip always pays the recipient ₦1,800. The provider's actual fee is TipMe's expense, posted as today to `provider_fee_expense`; `provider_fee_recovered` simply stays 0. No ledger or constraint change. `mock-v0` stays defined so older quotes still explain themselves.
-2. **Per-account fee.** `profiles.platform_fee_bps` (nullable, 0–10000). When set, it replaces the 10% for that recipient's new quotes; the quote records `v1-custom-<bps>`. Staff set or clear it with a written reason (`fees.manage`), audited in the same transaction.
-3. **Staff-granted fee-free tips.** Staff add fee-free tips to an account with a reason (`fees.manage`, audited). A granted credit is always honoured (no automatic lifetime cap: the grant is the decision). Open quotes still reserve credits so concurrent quotes cannot overspend them.
-4. **No automatic rewards.** Milestones and best weeks or months are celebrations only (moments and notifications). The cash-bonus code stays but no milestone triggers it.
-5. **Minimum tip unchanged** (₦1). The PRD's proposed ₦1,000 floor is not part of the decision.
+1. **Fee policy.** TipMe keeps 10% of the tip and pays processing out of it, so the recipient always receives 90%. This is dev's `proposed-v1.1` policy (PR-012), which already implements the rule: a processing estimate sits inside the 10% and the provider's actual fee is TipMe's. A ₦2,000 tip pays the recipient ₦1,800.
+2. **Per-account fee.** `profiles.custom_fee_bps` (nullable, 0–10000, migration 0038). When set, it replaces the 10% share for that page's new quotes, processing still inside it; the quote records `proposed-v1.1-custom-<bps>`. Staff set or clear it on the admin Pages screen with a written reason (`fees.manage`), audited in the same transaction.
+3. **Staff-granted fee-free tips.** Staff add fee-free tips to a page with a reason (`fees.manage`, audited). A granted credit is always honoured (no lifetime cap: the grant is the decision). Open quotes still reserve credits so concurrent quotes cannot use more than were granted.
+4. **No automatic rewards.** Milestones and best weeks or months are celebrations only (moments and notifications). The cash-bonus code stays but nothing triggers it.
+5. **Minimum tip.** ₦1,000, with Free and Pro pages as decided in PR-012 (`docs/00-DECISIONS.md`).
 
 ## Consequences
 
-- Every new quote changes: e2e and integration expectations move from net 93.5% to 90% of the tip.
+- Merged onto dev's PR-012 pricing on 26 October 2026; the earlier `v1` policy on `feat/profile-composition` (minimum ₦1) was replaced by it.
 - The existing `owner` role is granted `fees.manage` by migration, so current owners can use it without re-running the grant.
 - Money-affecting staff actions still lack the two-person rule (AGENTS.md); with one Owner it cannot be enforced yet. Recorded as an open item.

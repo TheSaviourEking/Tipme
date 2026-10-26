@@ -61,6 +61,13 @@ function Section({
   );
 }
 
+const REPORT_LABELS = {
+  impersonation: 'Pretending to be someone else',
+  scam: 'Scam or fraud',
+  abusive: 'Abusive or hateful',
+  other: 'Something else',
+} as const;
+
 function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
   return (
     <dl className="ops-facts">
@@ -281,9 +288,12 @@ export default function IssuePage() {
                 </a>,
               ],
               [
-                'Account',
-                <Link key="account" href={`/ops/accounts/${page.profileId}`}>
-                  Open the account (reports, pricing, tips)
+                'Plan and pricing',
+                <Link
+                  key="pricing"
+                  href={`/ops/pages?handle=${encodeURIComponent(page.handle)}`}
+                >
+                  Open the page’s plan and pricing
                 </Link>,
               ],
               [
@@ -301,6 +311,17 @@ export default function IssuePage() {
                     string,
                     React.ReactNode,
                   ][])
+                : []),
+              // Visitors' reports since this issue opened (PR-013): reasons and counts only.
+              ...(evidence.pageReports && evidence.pageReports.length > 0
+                ? ([
+                    [
+                      'Reports',
+                      evidence.pageReports
+                        .map((r) => `${REPORT_LABELS[r.reason]} ×${r.count}`)
+                        .join(' · '),
+                    ],
+                  ] as [string, React.ReactNode][])
                 : []),
             ]}
           />
@@ -367,7 +388,8 @@ export default function IssuePage() {
             rows={[
               ['Status', tipProof.tip.status],
               ['Amount', naira(tipProof.breakdown.grossMinor)],
-              ['TipMe fee', naira(tipProof.breakdown.platformFeeMinor)],
+              // Since PR-012 processing is paid out of TipMe's 10%; this is what TipMe keeps.
+              ['TipMe keeps', naira(tipProof.breakdown.platformFeeMinor)],
               ['Recipient gets', naira(tipProof.breakdown.recipientNetMinor)],
               [
                 'Ledger',
