@@ -1,7 +1,7 @@
 # TipMe production countdown — design
 
-**Date:** 26 October 2026  
-**Target:** 27 October 2026, 00:00 Africa/Lagos (`2026-10-26T23:00:00Z`)  
+**Date:** 26 October 2026
+**Target:** 27 October 2026, 00:00 Africa/Lagos (`2026-10-26T23:00:00Z`)
 **Status:** Approved by the product owner for `usetipme.xyz`
 
 ## Intent

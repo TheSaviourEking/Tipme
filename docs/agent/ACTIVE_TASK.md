@@ -6,17 +6,20 @@
   physical/editorial responsive styling, social image, telemetry suppression and
   focused browser coverage.
 - No Vercel setting, production domain or live deployment has been changed.
-- Verified: `pnpm --filter @tipme/web test` (55/55), web lint, web typecheck,
-  Prettier check on the changed files, and `git diff --check`. Earlier focused
-  countdown Playwright (3/3) and production Webpack build also passed. Turbopack
-  cannot bind its CSS worker port in this execution sandbox; the supported
-  Webpack builder completed successfully after fetching configured fonts.
+- Rebased onto current `origin/dev`; the branch is now 6 commits ahead and 0
+  behind.
+- Verified on the rebased branch: `pnpm test` (54 root tests plus 18 package
+  tasks, including 55 web tests), `pnpm lint`, `pnpm typecheck`, `pnpm build`,
+  `pnpm format:check`, and focused countdown Playwright (3/3).
+- `pnpm build` passed (9/9 tasks; cache hits). The earlier uncached Webpack
+  production build also passed. The focused browser run covers axe, 320px
+  reflow, reduced motion, headers, metadata, route preservation and exemptions.
 - Visual inspection: 320px and 1440px captures both match the approved direction
   and have no horizontal overflow.
-- The worktree is 8 commits behind and 5 commits ahead of `origin/main`; these
-  local changes do not make the branch integration-ready.
-- Next exact step: reconcile with the current `dev` target, then run full
-  repository gates and a fresh whole-branch review before opening a PR.
+- No production settings or deployment have changed. Production API origin is
+  still a separate unresolved launch dependency.
+- Next exact step: finish the whole-branch review, push this branch, and open a
+  PR against `dev`.
 
 # Previous task — PR #19 Linux visual baselines (26 October 2026)
 

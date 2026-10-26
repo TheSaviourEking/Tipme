@@ -398,15 +398,19 @@ announces time accessibly at most once per minute, disables motion when requeste
 and reloads the preserved route at launch. The 320px and 1440px renders were
 inspected and accepted in-session.
 
-Evidence: `pnpm --filter @tipme/web test` (55/55), web lint, web typecheck,
-Prettier check on the changed files, and `git diff --check` all pass. Earlier
-focused Playwright passed 3/3 (axe, 320px reflow, reduced motion, headers,
-metadata, route preservation/exemptions), and the Webpack production build
-passed. Turbopack cannot bind its CSS worker port in this sandbox; the supported
-Webpack build completed. No live deployment or Vercel configuration was changed.
+The branch was rebased onto current `origin/dev` and is now 6 commits ahead, 0
+behind. Validation on the rebased branch: `pnpm test` (54 root tests plus 18
+successful package tasks, including 55 web tests), `pnpm lint`, `pnpm typecheck`,
+`pnpm build` (9/9 tasks, cached), `pnpm format:check`, and focused countdown
+Playwright (3/3) all pass. The earlier uncached Webpack production build also
+passed. Browser coverage includes axe, 320px reflow, reduced motion, response
+headers, metadata, route preservation and operational exemptions.
+
+The launch branch remains a source change only; no live Vercel configuration or
+deployment was changed. The production API origin is still a separate unresolved
+launch dependency.
 
 Release steps and the `www`/apex authority boundary are in
-`apps/web/DEPLOYMENT.md`. The branch is currently 8 commits behind and 5 commits
-ahead of `origin/main`. Next exact step: reconcile it with the current `dev`
-target, then run full repository validation and a fresh whole-branch review
-before opening a PR. Do not treat this narrow commit as production-ready.
+`apps/web/DEPLOYMENT.md`. Next exact step: finish the whole-branch review, push
+`feat/production-countdown`, and open its PR against `dev`. Do not treat the PR
+as a production deployment or production API fix.
