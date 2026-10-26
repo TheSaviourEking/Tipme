@@ -2,8 +2,9 @@
 
 - Linux screenshot baselines were generated directly on GitHub's Ubuntu runner in run `40261761860`; the four-image artifact was downloaded and visually inspected. The temporary workflow update step has been removed, restoring `pnpm test:e2e`.
 - The locally generated container snapshots were replaced with the runner-generated versions. Existing Darwin screenshots and application/test logic remain unchanged.
-- The temporary capture run passed (targeted visual tests in update mode); the standard full E2E suite has not yet been rerun against the corrected PNGs.
-- Remaining acceptance: verify the standard full E2E workflow on the corrected PNGs. If it passes, the fix is complete; investigate any other failure separately.
+- Standard CI passed on commit `41c787d`: E2E 5m19s, integration 6m57s, security, static, and Vercel checks all green. PR #19 is mergeable.
+- No application source or test logic changed. Only the four Linux baselines and continuity records remain in the final PR diff.
+- Next exact step: product-owner review and merge when authorized; no further code changes are pending.
 - The initial local capture used isolated disposable PostgreSQL and Redis containers; the shared local test database was not touched.
 
 # Branch publication — profile composition (26 October 2026)

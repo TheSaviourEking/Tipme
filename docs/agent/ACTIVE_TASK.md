@@ -3,7 +3,8 @@
 - CI confirmed the branch needed Linux-only screenshots in addition to its Darwin baselines. The first container-generated PNGs were visually sound but did not match GitHub's Ubuntu runner.
 - The temporary snapshot-capture run `40261761860` passed its four targeted visual tests in update mode and uploaded the runner-generated baselines. Those four images have been reviewed; their composition matches the app and no source or test behavior changed.
 - The temporary workflow instrumentation has been removed; the normal `pnpm test:e2e` command is restored. The four Linux images now come from the exact GitHub runner.
-- Remaining acceptance: the standard PR E2E workflow must pass against these runner-generated images; if it does, no further code changes are needed.
+- Standard verification passed on commit `41c787d`: E2E 5m19s, integration 6m57s, security, static, and both Vercel previews all passed. PR #19 is open and mergeable.
+- No further code changes are pending. Next step is product-owner review and merge when authorized.
 
 # Current task — Merge dev into feat/profile-composition (26 October 2026)
 
