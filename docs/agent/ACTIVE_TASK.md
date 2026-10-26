@@ -10,6 +10,29 @@
 - CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 points at `790918a` and reports `CLEAN`. It remains open for review; do not merge until authorized and until migration `0039` is reconciled with the Bachs branch.
 - No migration was applied and no payment operation occurred. The only deployment was the PR preview. The full E2E suite passed in CI; local full E2E remains unrun because port 4100 is occupied by the active API in `.worktrees/physical-interface`.
 
+# Current task — Provider integration decision baseline (26 October 2026)
+
+- Branch/worktree: `feat/provider-integrations-bachs` /
+  `.worktrees/provider-integrations-bachs`, based on `origin/dev` at `1738947`.
+- Isolated worktree verified clean before Task 0. The companion
+  `docs/provider-agnostic-bachs-guide` worktree and its uncommitted documentation
+  were not copied, changed or committed.
+- Task 0 records Bachs direct-charge behavior as sandbox-only. Live money remains
+  blocked on D-01 through D-07, written provider approval and legal/risk review;
+  direct-charge merchant-of-record behavior still conflicts with the proposed
+  custodial model in ADR-0006.
+- Launch auth decision from product owner: email OTP via Resend; phone OTP is
+  coming soon. D-11 remains open pending provider/account/domain and readiness
+  evidence. No auth implementation, provider credentials or Vercel/server
+  settings changed in Task 0.
+- Bachs docs identify a processing-fee fallback that may silently charge the
+  connected recipient if the platform balance is insufficient. ADR-0004 records
+  fail-closed detection as a live requirement.
+- Task 0 documentation formatting passed with the repository's Prettier binary;
+  no application tests were run because no application code changed.
+- Next exact step: begin Task 1 by adding provider-neutral payment contract tests
+  and types. Keep provider calls in sandbox and do not enable live payments.
+
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
 - Branch: `feat/production-countdown`, isolated in `.worktrees/profile-composition`.

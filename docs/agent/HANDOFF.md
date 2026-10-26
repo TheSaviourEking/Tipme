@@ -10,6 +10,28 @@
 - CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 points at `790918a` and reports `CLEAN`; it remains open for review and was not merged. The PR preview was deployed; no production deployment or real payment occurred.
 - Next: product-owner review. Before merging with Bachs, resolve the `0039` migration collision and regenerate the journal/snapshot as needed. Keep the separate Bachs and physical-interface worktrees untouched.
 
+# Current handoff — Provider integration decision baseline (26 October 2026)
+
+- Dedicated implementation worktree: `.worktrees/provider-integrations-bachs`,
+  branch `feat/provider-integrations-bachs`, base `origin/dev` commit `1738947`.
+- Task 0 records Bachs direct-charge/provider boundaries as sandbox-only in
+  `docs/adr/ADR-0004-bachs-connect-and-provider-boundaries.md`. D-01 through D-07
+  remain live blockers; no production credentials, environment, DNS, server,
+  database or deployment were changed.
+- The user selected email OTP via Resend for launch and phone OTP as coming soon.
+  D-11 remains open pending verified domain, contract, deliverability, cost and
+  operational evidence. The current phone-OTP code has not been migrated.
+- Bachs documentation confirms direct charges make the connected account the
+  merchant of record and describes a silent processing-fee fallback to the
+  connected account. Live use requires legal funds-flow approval and robust
+  detection/handling of the fallback.
+- The companion docs worktree still has its own uncommitted files and remains
+  untouched.
+- Task 0 documentation formatting passed with the repository's Prettier binary;
+  no application tests were run because no application code changed.
+- Next exact step: begin Task 1 with provider-neutral payment contract tests and
+  types. Keep Bachs calls in sandbox and do not enable real payments.
+
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
 - Linux screenshot baselines were generated directly on GitHub's Ubuntu runner in run `40261761860`; the four-image artifact was downloaded and visually inspected. The temporary workflow update step has been removed, restoring `pnpm test:e2e`.
