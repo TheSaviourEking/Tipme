@@ -1,9 +1,8 @@
 # Current task — PR #19 Linux visual baselines (26 October 2026)
 
-- CI failed because the repository contained only macOS Playwright screenshots; Linux expected platform-suffixed baselines for the same four visual cases.
-- Added the four Linux-only baselines under `tests/e2e/*visual.spec.ts-snapshots/`. Reviewed their desktop/mobile composition against the existing Darwin images; differences are platform rendering, with no intentional design change. Existing Darwin snapshots remain untouched.
-- Verified in the Playwright 1.64.1 Noble container against the isolated disposable PostgreSQL/Redis stack: both visual specs passed, 7/7 tests, serially, with the repository's default screenshot assertion timeout. The Linux build also passed (9/9 tasks). The full E2E suite was not rerun.
-- Next exact step: publish these files on PR #19 and confirm the new E2E workflow passes; investigate only any new non-snapshot failures.
+- GitHub Actions confirmed the original cause: the branch had only Darwin baselines, while Linux expects four `*-linux.png` files. The first Linux snapshots were captured in a Playwright container and passed 7/7 locally, but failed pixel comparison on GitHub's Ubuntu runner; those container images are not valid CI baselines.
+- The pushed commit `d4835a3` is therefore incomplete. A temporary CI-only snapshot-generation step now captures and uploads the four Linux baselines directly from the GitHub runner. It must be removed after downloading and reviewing that artifact.
+- Next exact step: use the uploaded artifact from the current PR run, replace the four Linux PNGs, restore the ordinary `pnpm test:e2e` step, and push the corrected snapshots. Then verify the standard E2E check.
 
 # Current task — Merge dev into feat/profile-composition (26 October 2026)
 

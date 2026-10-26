@@ -1,10 +1,9 @@
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
-- Root cause: CI's Linux Playwright project looked for four `*-linux.png` snapshots, but the branch contained only the equivalent Darwin files.
-- Four Linux baselines are added under the existing visual-spec snapshot directories. They were captured in `mcr.microsoft.com/playwright:v1.64.1-noble`, visually reviewed alongside the Darwin baselines, and leave the Darwin files unchanged.
-- Validation: Linux production build passed (9/9 tasks); `tests/e2e/profile.visual.spec.ts` and `tests/e2e/design-system.visual.spec.ts` passed 7/7 serially with default screenshot assertion timeout and snapshot update mode disabled. Full E2E was not rerun.
-- Test services used isolated disposable containers, not the shared local test database. No application source or test logic changed.
-- Next exact step: publish on PR #19 and verify its E2E workflow; diagnose any remaining failures independently.
+- The first cause was missing Linux-specific screenshots; the initial fix added four Linux baselines from the Playwright container. Local targeted visual tests passed 7/7, but GitHub CI then showed the images differ from its Ubuntu runner (and one profile interaction timed out). Do not keep the container-generated PNGs as CI baselines.
+- Commit `d4835a3` is pushed to PR #19 but is not a passing fix yet. The current branch has a temporary CI step that generates Linux baselines in the actual runner and uploads them as `linux-visual-snapshots-${{ github.run_id }}`.
+- After the run completes, download and inspect the artifact, replace only the four Linux PNGs, restore the workflow's normal `pnpm test:e2e` command, and push. Verify the standard CI rerun; investigate any failure beyond visual comparisons separately.
+- The local test database and Redis used for initial capture were isolated disposable containers; the shared local test DB was not touched.
 
 # Branch publication — profile composition (26 October 2026)
 
