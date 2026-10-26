@@ -281,6 +281,12 @@ export default function IssuePage() {
                 </a>,
               ],
               [
+                'Account',
+                <Link key="account" href={`/ops/accounts/${page.profileId}`}>
+                  Open the account (reports, pricing, tips)
+                </Link>,
+              ],
+              [
                 'State',
                 page.status === 'suspended'
                   ? 'Paused by TipMe'

@@ -1,3 +1,10 @@
+# Current task — Buildable-now slices, part 2 (26 October 2026)
+
+- Uncommitted on `feat/profile-composition` (after `4752f43`): profile reports (migration 0030), CSV export, email preferences (0031), profile photos (0032) with staff removal, the staff account page's photo, and fixes found in a real browser: the server now strips the sRGB colour profile Chrome always embeds (every upload was refused), and `POST /v1/profiles/:handle/report` is allowed cross-origin for the web app only (every browser report failed its preflight). Photo alt text no longer calls real people "fictional". New e2e spec `tests/e2e/photos-and-reports.spec.ts`.
+- Verified: integration 133/133 on throwaway containers (OpenAPI regenerated); checkout API 18/18 with a new CORS test; avatar tests 3/3 in domain (incl. a Chrome-shaped file) and 3/3 integration; domain 31/31; web 38/38; typecheck 15/15; lint 15/15; diff-check. Design-stack e2e: see HANDOFF.
+- Environmental: the never-reset `tipme_design` still holds one fee-free credit for Ada from the old automatic rewards, so one checkout test shows a fee-free quote there.
+- Next exact step: product-owner review, then commit (not yet authorised for this part).
+
 # Branch publication — profile composition (26 October 2026)
 
 - User selected `feat/profile-composition` and authorized publishing all changes in its isolated worktree. The separate `feat/physical-interface` worktree was left untouched.

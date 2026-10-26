@@ -39,6 +39,7 @@ export function notifyTipSucceeded(
           displayName: profiles.displayName,
           email: users.email,
           emailVerifiedAt: users.emailVerifiedAt,
+          emailTips: profiles.emailTips,
         })
         .from(tips)
         .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
@@ -64,7 +65,7 @@ export function notifyTipSucceeded(
         .onConflictDoNothing()
         .returning({ id: notifications.id });
       if (inserted.length === 0) return 'duplicate' as const;
-      if (row.email && row.emailVerifiedAt) {
+      if (row.email && row.emailVerifiedAt && row.emailTips) {
         const first = row.displayName.split(/\s+/)[0];
         await writePretendMessage(tx, {
           channel: 'email',

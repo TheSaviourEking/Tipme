@@ -6,7 +6,8 @@ import type { FormEvent } from 'react';
 import type { MyProfile, SessionView } from '@tipme/contracts';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
-import { apiFetch } from '@/lib/session-client';
+import { preparePhoto } from '@/lib/photo';
+import { apiFetch, apiUpload } from '@/lib/session-client';
 import { useSiteHost } from '@/lib/site-host';
 
 function PageState() {
@@ -156,6 +157,99 @@ const fieldLabels: Record<string, string> = {
   'socials.instagram': 'Instagram link',
   'socials.x': 'X (Twitter) link',
 };
+
+/** The page's photo: prepared on this device (no metadata), then shown on the public page. */
+function Photo() {
+  const { profile, setProfile } = useRecipient();
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const choose = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setStatus('Preparing your photo…');
+    try {
+      const blob = await preparePhoto(file);
+      setStatus('Uploading…');
+      const result = await apiUpload<MyProfile>('/v1/me/avatar', blob);
+      if (result.ok) {
+        setProfile(result.data);
+        setStatus('Saved. Your page shows your new photo.');
+      } else setStatus('We couldn’t save that photo. Please try another.');
+    } catch (error) {
+      setStatus(
+        error instanceof Error ? error.message : 'Something went wrong.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    setBusy(true);
+    const result = await apiFetch<MyProfile>('/v1/me/avatar', {
+      method: 'DELETE',
+    });
+    setBusy(false);
+    if (result.ok) {
+      setProfile(result.data);
+      setStatus('Removed. Your page shows your initials.');
+    } else setStatus('We couldn’t remove it. Please try again.');
+  };
+  return (
+    <Card className="settings-section settings-photo">
+      <h2>Your photo</h2>
+      <div className="settings-photo__row">
+        {profile.avatarPath ? (
+          // eslint-disable-next-line @next/next/no-img-element -- a just-changed photo, shown as is
+          <img
+            className="settings-photo__preview"
+            src={profile.avatarPath}
+            alt="Your current photo"
+            width={96}
+            height={120}
+          />
+        ) : (
+          <span className="settings-photo__preview" aria-hidden="true">
+            {profile.displayName
+              .split(/\s+/)
+              .map((part) => part[0] ?? '')
+              .join('')
+              .slice(0, 2)
+              .toUpperCase()}
+          </span>
+        )}
+        <div>
+          <p className="tm-hint">
+            People tip people: a clear photo of your face helps supporters know
+            it’s really you. It’s cropped to a portrait and its hidden details
+            (like location) are removed on this device first.
+          </p>
+          <label className="tm-button tm-button--secondary settings-photo__pick">
+            {profile.avatarPath ? 'Choose a new photo' : 'Add a photo'}
+            <input
+              className="sr-only"
+              type="file"
+              accept="image/*"
+              disabled={busy}
+              onChange={(event) => void choose(event.target.files?.[0])}
+            />
+          </label>
+          {profile.avatarPath && (
+            <Button
+              variant="quiet"
+              disabled={busy}
+              onClick={() => void remove()}
+            >
+              Remove photo
+            </Button>
+          )}
+        </div>
+      </div>
+      <p role="status" className="tm-hint">
+        {status}
+      </p>
+    </Card>
+  );
+}
 
 function AboutYou() {
   const id = useId();
@@ -491,6 +585,65 @@ function ContactDetails() {
   );
 }
 
+/** Which emails to receive. Security emails always go out; the in-app list keeps everything. */
+function EmailPreferences() {
+  const { profile, setProfile } = useRecipient();
+  const [status, setStatus] = useState('');
+  const save = async (patch: {
+    emailTips?: boolean;
+    emailWeekly?: boolean;
+  }) => {
+    setStatus('Saving…');
+    const result = await apiFetch<MyProfile>('/v1/me/profile', {
+      method: 'PATCH',
+      body: patch,
+    });
+    if (result.ok) {
+      setProfile(result.data);
+      setStatus('Saved.');
+    } else setStatus('We couldn’t save that. Please try again.');
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Emails</h2>
+      {!profile.emailVerified && (
+        <p className="tm-hint">
+          Add and confirm an email under Phone and email to receive these.
+        </p>
+      )}
+      <label className="tip-remember">
+        <input
+          type="checkbox"
+          checked={profile.emailTips ?? true}
+          onChange={(event) => void save({ emailTips: event.target.checked })}
+        />
+        <span>
+          Email me when a tip is confirmed
+          <small>Every tip still shows in your dashboard.</small>
+        </span>
+      </label>
+      <label className="tip-remember">
+        <input
+          type="checkbox"
+          checked={profile.emailWeekly ?? true}
+          onChange={(event) => void save({ emailWeekly: event.target.checked })}
+        />
+        <span>
+          Email me my week on TipMe
+          <small>A short summary each Monday.</small>
+        </span>
+      </label>
+      <p className="tm-hint">
+        Emails that keep your account safe, like confirming an address or a
+        change of number, are always sent.
+      </p>
+      <p role="status" className="tm-hint">
+        {status}
+      </p>
+    </Card>
+  );
+}
+
 function Devices() {
   const [sessions, setSessions] = useState<SessionView[] | null>(null);
   const [round, setRound] = useState(0);
@@ -597,8 +750,10 @@ export function SettingsView() {
       <PendingRecovery />
       <PageState />
       <HandleChange />
+      <Photo />
       <AboutYou />
       <ContactDetails />
+      <EmailPreferences />
       <Devices />
       <DeletePage />
     </div>

@@ -17,6 +17,7 @@ export interface OpsAccountRow {
 export interface OpsAccountDetail extends OpsAccountRow {
   role: string | null;
   suspendedReason: string | null;
+  avatarPath: string | null;
   /** Staff-set fee in basis points, or null when the policy's 10% applies (ADR-0014). */
   platformFeeBps: number | null;
   feeFreeRemaining: number;
@@ -84,6 +85,7 @@ export function accountDetail(
       created_at: string;
       role: string | null;
       suspended_reason: string | null;
+      avatar_path: string | null;
       platform_fee_bps: number | null;
       fee_free_remaining: number;
       paid_count: number;
@@ -91,7 +93,7 @@ export function accountDetail(
     }>(sql`
       SELECT p.id AS profile_id, p.handle, p.display_name, p.page_state, p.status::text AS status,
              to_char(p.created_at AT TIME ZONE 'UTC', ${iso}) AS created_at,
-             p.role, p.suspended_reason, p.platform_fee_bps,
+             p.role, p.suspended_reason, p.avatar_path, p.platform_fee_bps,
              COALESCE((SELECT remaining FROM fee_free_credits c WHERE c.profile_id = p.id), 0)
                AS fee_free_remaining,
              (SELECT count(*)::int FROM tips t WHERE t.profile_id = p.id AND t.status = 'SUCCEEDED')
@@ -112,6 +114,7 @@ export function accountDetail(
       createdAt: row.created_at,
       role: row.role,
       suspendedReason: row.suspended_reason,
+      avatarPath: row.avatar_path,
       platformFeeBps: row.platform_fee_bps,
       feeFreeRemaining: row.fee_free_remaining,
       paidTipCount: row.paid_count,

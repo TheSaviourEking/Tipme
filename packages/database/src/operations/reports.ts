@@ -155,6 +155,7 @@ export function runWeeklyReports(
             userId: profiles.userId,
             email: users.email,
             verified: users.emailVerifiedAt,
+            emailWeekly: profiles.emailWeekly,
           })
           .from(profiles)
           .leftJoin(users, eq(users.id, profiles.userId))
@@ -169,7 +170,7 @@ export function runWeeklyReports(
           title: 'Your week on TipMe',
           body,
         });
-        if (owner.email && owner.verified)
+        if (owner.email && owner.verified && owner.emailWeekly)
           await writePretendMessage(tx, {
             channel: 'email',
             recipientHint: maskEmail(owner.email),

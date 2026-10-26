@@ -19,6 +19,19 @@ import { apiFetch } from '@/lib/session-client';
 
 const STANDARD_BPS = 1000;
 
+interface PageReport {
+  id: string;
+  reason: string;
+  details: string | null;
+  createdAt: string;
+}
+const REPORT_REASONS: Record<string, string> = {
+  impersonation: 'Pretending to be someone else',
+  scam: 'Scam or misleading page',
+  abusive: 'Abusive or hateful content',
+  other: 'Something else',
+};
+
 const problem = (code: string) =>
   code === 'FORBIDDEN'
     ? 'Your role can’t do that.'
@@ -86,6 +99,7 @@ export default function OpsAccountPage() {
   const access = useOpsAccess();
   const [account, setAccount] = useState<OpsAccountDetail | null>(null);
   const [tips, setTips] = useState<MyTipRow[] | null>(null);
+  const [reports, setReports] = useState<PageReport[]>([]);
   const [missing, setMissing] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -94,15 +108,17 @@ export default function OpsAccountPage() {
       Promise.all([
         apiFetch<OpsAccountDetail>(`/v1/ops/accounts/${profileId}`),
         apiFetch<{ items: MyTipRow[] }>(`/v1/ops/accounts/${profileId}/tips`),
+        apiFetch<PageReport[]>(`/v1/ops/accounts/${profileId}/reports`),
       ]),
     [profileId],
   );
 
   const applyLoad = useCallback(
-    ([detail, list]: Awaited<ReturnType<typeof load>>) => {
+    ([detail, list, reported]: Awaited<ReturnType<typeof load>>) => {
       if (detail.ok) setAccount(detail.data);
       else setMissing(true);
       if (list.ok) setTips(list.data.items);
+      if (reported.ok) setReports(reported.data);
     },
     [],
   );
@@ -178,6 +194,25 @@ export default function OpsAccountPage() {
         </Card>
       </div>
 
+      {reports.length > 0 && (
+        <Card className="settings-section">
+          <h2>Reports about this page</h2>
+          <ul className="activity-list">
+            {reports.map((report) => (
+              <li key={report.id}>
+                <div className="activity-list__row">
+                  <span>
+                    {REPORT_REASONS[report.reason] ?? report.reason}
+                    {report.details && <small>“{report.details}”</small>}
+                  </span>
+                  <span className="tm-hint">{when(report.createdAt)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card className="settings-section">
         <h2>Pricing</h2>
         <p>
@@ -248,6 +283,30 @@ export default function OpsAccountPage() {
       {can(access, 'pages.suspend') && (
         <Card className="settings-section">
           <h2>Page</h2>
+          {account.avatarPath && (
+            <div className="settings-photo__row">
+              {/* eslint-disable-next-line @next/next/no-img-element -- staff review the stored photo as is */}
+              <img
+                className="settings-photo__preview"
+                src={account.avatarPath}
+                alt={`Photo on @${account.handle}’s page`}
+                width={96}
+                height={120}
+              />
+              <ReasonAction
+                open="Remove photo"
+                field="Why remove this photo? (for example, it shows someone else)"
+                submit="Remove photo"
+                onSubmit={(reason) =>
+                  act(
+                    `${base}/avatar/remove`,
+                    { reason },
+                    'The photo is removed; the page shows initials.',
+                  )
+                }
+              />
+            </div>
+          )}
           <ReasonAction
             open={
               account.status === 'suspended' ? 'Restore page' : 'Pause page'

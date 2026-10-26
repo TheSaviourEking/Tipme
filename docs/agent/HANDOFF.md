@@ -350,3 +350,7 @@ Added automated Slack deployment notifications and fix summaries:
 - `.github/workflows/deploy-staging.yml`: added `fetch-depth: 20` and a `Notify Slack` step running on `if: always()` after release checks.
 - `docs/runbooks/staging-setup.md`: documented the optional `SLACK_WEBHOOK_URL` secret.
   Verification: all 31 script unit tests pass; `pnpm format:check` and governance pass; ESLint passes with 0 errors.
+
+## Update — buildable-now slices, part 2 (26 October 2026)
+
+Profile reports, CSV export, email preferences and profile photos (migrations 0030–0032) are uncommitted on `feat/profile-composition` after `4752f43`. Real-browser testing found two bugs that unit and integration tests could not: Chrome embeds an sRGB colour profile in every WebP (the server now strips it instead of refusing), and the report endpoint was missing from the API's cross-origin allow-list. Both are fixed and covered by `tests/e2e/photos-and-reports.spec.ts` and a CORS integration test. Design-stack e2e 63/63; integration 133/133. Full `pnpm test:e2e` on :3100/:4100 has still not been run on this branch.

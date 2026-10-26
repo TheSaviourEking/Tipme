@@ -82,3 +82,13 @@ export const mockCheckoutPay = (reference: string, outcome: string) =>
     `/v1/mock-provider/checkout/${encodeURIComponent(reference)}`,
     json({ outcome }),
   );
+
+/** Report a public page to TipMe (no account needed). */
+export const reportPage = (
+  handle: string,
+  body: { reason: string; details?: string },
+) =>
+  call<{ reported: true }>(
+    `/v1/profiles/${encodeURIComponent(handle)}/report`,
+    json(body),
+  );

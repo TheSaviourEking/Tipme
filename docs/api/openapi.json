@@ -514,6 +514,46 @@
         }
       }
     },
+    "/v1/avatars/{file}": {
+      "get": {
+        "operationId": "PublicProfile.avatar",
+        "tags": [
+          "PublicProfile"
+        ],
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/dev/inbox": {
       "get": {
         "operationId": "PretendInbox.inbox",
@@ -923,6 +963,74 @@
         ]
       }
     },
+    "/v1/me/avatar": {
+      "delete": {
+        "operationId": "MeProfile.removeAvatar",
+        "tags": [
+          "MeProfile"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "MeProfile.setAvatar",
+        "tags": [
+          "MeProfile"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/dashboard": {
       "get": {
         "operationId": "Dashboard.summary",
@@ -987,6 +1095,41 @@
         },
         "responses": {
           "202": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/exports/tips.csv": {
+      "get": {
+        "operationId": "Dashboard.exportTips",
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
             "description": "Success.",
             "content": {
               "application/json": {
@@ -1568,6 +1711,12 @@
                   "qrStyle": {
                     "type": "string",
                     "pattern": "^[a-z]{3,12}$"
+                  },
+                  "emailTips": {
+                    "type": "boolean"
+                  },
+                  "emailWeekly": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -2210,6 +2359,180 @@
         }
       }
     },
+    "/v1/ops/accounts": {
+      "get": {
+        "operationId": "OpsAccounts.search",
+        "tags": [
+          "OpsAccounts"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "issues.view"
+      }
+    },
+    "/v1/ops/accounts/{profileId}": {
+      "get": {
+        "operationId": "OpsAccounts.detail",
+        "tags": [
+          "OpsAccounts"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "issues.view"
+      }
+    },
+    "/v1/ops/accounts/{profileId}/reports": {
+      "get": {
+        "operationId": "OpsAccounts.reports",
+        "tags": [
+          "OpsAccounts"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "issues.view"
+      }
+    },
+    "/v1/ops/accounts/{profileId}/tips": {
+      "get": {
+        "operationId": "OpsAccounts.tips",
+        "tags": [
+          "OpsAccounts"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "issues.view"
+      }
+    },
     "/v1/ops/audit": {
       "get": {
         "operationId": "OpsAccess.audit",
@@ -2444,7 +2767,8 @@
                 "stuck_tip",
                 "unmatched_event",
                 "pending_recovery",
-                "message_reported"
+                "message_reported",
+                "profile_reported"
               ]
             }
           },
@@ -3241,6 +3565,73 @@
         "x-tipme-permission": "analytics.view"
       }
     },
+    "/v1/ops/pages/{profileId}/avatar/remove": {
+      "post": {
+        "operationId": "OpsActions.removeAvatar",
+        "tags": [
+          "OpsActions"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
+      }
+    },
     "/v1/ops/pages/{profileId}/fee": {
       "post": {
         "operationId": "OpsActions.setFee",
@@ -3703,6 +4094,75 @@
         ],
         "responses": {
           "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{handle}/report": {
+      "post": {
+        "operationId": "PublicProfile.report",
+        "tags": [
+          "PublicProfile"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "impersonation",
+                      "scam",
+                      "abusive",
+                      "other"
+                    ]
+                  },
+                  "details": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
             "description": "Success.",
             "content": {
               "application/json": {

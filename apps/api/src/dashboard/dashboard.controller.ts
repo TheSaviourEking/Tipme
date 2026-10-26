@@ -10,8 +10,10 @@ import {
   HttpCode,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   messageReportSchema,
   withdrawalRequestSchema,
@@ -24,6 +26,7 @@ import {
 } from '@tipme/contracts';
 import {
   dashboardSummary,
+  exportMyTipsCsv,
   getWeeklyReport,
   listMyTips,
   listWeeklyReports,
@@ -96,6 +99,27 @@ export class DashboardController {
         limit: Number.parseInt(limit ?? '20', 10) || 20,
       }),
     };
+  }
+
+  /** The recipient's own tips as CSV (amounts and status only; never messages). */
+  @Get('exports/tips.csv')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  async exportTips(
+    @CurrentUser() auth: AuthContext,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    const { csv } = await exportMyTipsCsv(
+      this.database.db,
+      await this.profile(auth),
+    );
+    const day = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="tipme-tips-${day}.csv"`,
+    );
+    // A byte-order mark so spreadsheet apps read the naira sign and names as UTF-8.
+    return `\ufeff${csv}`;
   }
 
   @Get('tips/:tipId')

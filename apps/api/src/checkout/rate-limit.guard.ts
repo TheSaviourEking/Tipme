@@ -18,7 +18,13 @@ import { REDIS } from '../infra/infra.module.js';
 import { LOGGER } from '../tokens.js';
 
 type RateLimitedRoute =
-  'quotes' | 'intents' | 'auth_code' | 'auth_verify' | 'handles' | 'analytics';
+  | 'quotes'
+  | 'intents'
+  | 'auth_code'
+  | 'auth_verify'
+  | 'handles'
+  | 'analytics'
+  | 'reports';
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -90,6 +96,10 @@ export class RateLimitGuard implements CanActivate {
       },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      reports: {
+        limit: this.config.RATE_LIMIT_REPORTS_PER_HOUR,
         windowMs: 3_600_000,
       },
       // Verifying is limited more loosely: guessing one number is stopped by its own lockout.

@@ -26,6 +26,8 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
+  removeMyAvatar,
+  setMyAvatar,
   renameHandle,
   setPageState,
   updateMyProfile,
@@ -40,6 +42,7 @@ import {
   type AuthContext,
 } from '../auth/session.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from './revalidate.js';
@@ -121,6 +124,33 @@ export class MeProfileController {
     );
     this.revalidator.revalidate(handle);
     return { data: await getMyProfile(this.database.db, auth.userId) };
+  }
+
+  /** A profile photo: the raw WebP body the browser made (any metadata is refused). */
+  @Put('avatar')
+  async setAvatar(
+    @CurrentUser() auth: AuthContext,
+    @Body() body: unknown,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    if (!Buffer.isBuffer(body))
+      throw new CodedHttpException(415, 'VALIDATION_FAILED');
+    await setMyAvatar(this.database.db, {
+      userId: auth.userId,
+      bytes: new Uint8Array(body),
+    });
+    const profile = await getMyProfile(this.database.db, auth.userId);
+    this.revalidator.revalidate(profile.handle);
+    return { data: profile };
+  }
+
+  @Delete('avatar')
+  async removeAvatar(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    await removeMyAvatar(this.database.db, auth.userId);
+    const profile = await getMyProfile(this.database.db, auth.userId);
+    this.revalidator.revalidate(profile.handle);
+    return { data: profile };
   }
 
   @Delete('account')

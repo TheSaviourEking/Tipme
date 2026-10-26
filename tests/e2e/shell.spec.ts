@@ -50,7 +50,7 @@ test('profile supports keyboard amount selection, validation and a server quote'
   await expect(page.locator('[data-profile-card]')).toBeVisible();
   await expect(
     page.getByRole('img', {
-      name: 'Portrait of Ada Okafor, a fictional demo recipient',
+      name: 'Photo of Ada Okafor',
     }),
   ).toBeVisible();
   await page.getByRole('button', { name: /^Tip/ }).click();

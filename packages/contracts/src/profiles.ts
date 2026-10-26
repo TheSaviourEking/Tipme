@@ -49,6 +49,8 @@ export const profilePatchSchema = z
     phonePublic: z.boolean(),
     emailPublic: z.boolean(),
     qrStyle: z.string().regex(/^[a-z]{3,12}$/),
+    emailTips: z.boolean(),
+    emailWeekly: z.boolean(),
   })
   .partial()
   .strict();
@@ -87,6 +89,12 @@ export interface MyProfile {
   phone: string | null;
   email: string | null;
   emailVerified: boolean;
+  /** The page's photo (served by the web app), or null for initials. Optional while deploying. */
+  avatarPath?: string | null;
+  /** Email when a tip is confirmed. Optional: the web app deploys before the API. */
+  emailTips?: boolean;
+  /** Email the weekly summary. Optional for the same reason. */
+  emailWeekly?: boolean;
   /** TipMe paused the page (PR-009): it cannot go live; the reason is shown to the recipient. */
   suspended: boolean;
   suspendedReason: string | null;
@@ -110,3 +118,18 @@ export interface PublicProfile {
 
 /** Changing the page's handle (PR-011); the old one keeps pointing at the page. */
 export const renameHandleSchema = claimHandleSchema;
+
+/** Why someone reports a public page (no account needed). */
+export const PROFILE_REPORT_REASONS = [
+  'impersonation',
+  'scam',
+  'abusive',
+  'other',
+] as const;
+export const profileReportSchema = z
+  .object({
+    reason: z.enum(PROFILE_REPORT_REASONS),
+    details: z.string().trim().max(500).optional(),
+  })
+  .strict();
+export type ProfileReportRequest = z.infer<typeof profileReportSchema>;

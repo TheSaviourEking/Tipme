@@ -9,6 +9,7 @@ import {
 } from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ShareProfile } from '@/components/share-profile';
+import { ReportPage } from '@/components/profile/report-page';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getPublicProfile } from '@/lib/profiles-api';
@@ -133,6 +134,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
               preview: no real money moves.
             </p>
             <Link href="/about-preview">Learn about this preview</Link>
+            <ReportPage handle={profile.handle} />
           </div>
         </section>
       </Container>

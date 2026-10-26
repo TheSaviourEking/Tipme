@@ -46,7 +46,7 @@ export function AvatarImage({
     <Image
       className={className}
       src={src}
-      alt={`Portrait of ${name}, a fictional demo recipient`}
+      alt={`Photo of ${name}`}
       width={width}
       height={height}
       sizes={sizes}

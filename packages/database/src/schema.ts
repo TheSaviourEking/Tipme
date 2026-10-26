@@ -1,5 +1,6 @@
 import {
   ISSUE_KINDS,
+  PROFILE_REPORT_REASONS,
   type OpsIssueKind as IssueKind,
   type OpsIssueSeverity as IssueSeverity,
   type OpsIssueSubject as IssueSubject,
@@ -25,6 +26,7 @@ import {
   unique,
   uniqueIndex,
   uuid,
+  customType,
 } from 'drizzle-orm/pg-core';
 
 // Money is bigint minor units (mode 'bigint' keeps it a JS bigint) plus an ISO 4217 currency.
@@ -174,6 +176,9 @@ export const profiles = pgTable(
     phonePublic: boolean('phone_public').notNull().default(false),
     emailPublic: boolean('email_public').notNull().default(false),
     qrStyle: text('qr_style').notNull().default('purple'),
+    // Email preferences (security emails are always sent). In-app notifications always appear.
+    emailTips: boolean('email_tips').notNull().default(true),
+    emailWeekly: boolean('email_weekly').notNull().default(true),
     // A staff-set TipMe fee for this account in basis points (ADR-0014); null means the policy's.
     platformFeeBps: integer('platform_fee_bps'),
     createdAt: createdAt(),
@@ -813,7 +818,7 @@ export const auditEvents = pgTable(
 
 // ---- Issues inbox (PR-009) ----
 
-export { ISSUE_KINDS };
+export { ISSUE_KINDS, PROFILE_REPORT_REASONS };
 export type { IssueKind, IssueSeverity, IssueSubject };
 
 /**
@@ -1031,4 +1036,56 @@ export const messageFlags = pgTable(
       sql`report_reason IS NULL OR report_reason IN ('abusive', 'spam', 'other')`,
     ),
   ],
+);
+
+/**
+ * Reports about a public page from anyone (no account needed). Staff read them on the account
+ * page; reports of one page on one day share a single issue in the inbox.
+ */
+export const profileReports = pgTable(
+  'profile_reports',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    reason: text('reason').notNull(),
+    details: text('details'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('profile_reports_profile').on(table.profileId, table.createdAt),
+    check(
+      'profile_reports_reason',
+      sql`reason IN (${sql.raw(PROFILE_REPORT_REASONS.map((r) => `'${r}'`).join(', '))})`,
+    ),
+    check(
+      'profile_reports_details_length',
+      sql`details IS NULL OR char_length(details) <= 500`,
+    ),
+  ],
+);
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
+
+/**
+ * Profile photos: a validated plain WebP (no metadata), never the original upload. A page has at
+ * most one; replacing or removing it deletes the old row. Served by id from the web app.
+ */
+export const avatars = pgTable(
+  'avatars',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id)
+      .unique(),
+    bytes: bytea('bytes').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    createdAt: createdAt(),
+  },
+  () => [check('avatars_size', sql`octet_length(bytes) <= 400000`)],
 );

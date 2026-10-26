@@ -14,6 +14,7 @@ export const RESERVED_HANDLES = [
   'admin',
   'api',
   'app',
+  'avatars',
   'blog',
   'brand',
   'business',

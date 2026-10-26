@@ -71,6 +71,7 @@ export const ISSUE_KINDS = [
   'unmatched_event',
   'pending_recovery',
   'message_reported',
+  'profile_reported',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
@@ -422,6 +423,7 @@ export interface OpsAccountRow {
 export interface OpsAccountDetail extends OpsAccountRow {
   role: string | null;
   suspendedReason: string | null;
+  avatarPath: string | null;
   /** Staff-set TipMe fee in basis points; null means the policy's 10%. */
   platformFeeBps: number | null;
   feeFreeRemaining: number;

@@ -185,6 +185,23 @@ test('CORS allows only the web origin', async () => {
   assert.equal(health.headers.get('access-control-allow-origin'), null);
 });
 
+test('a visitor’s browser can report a page, without credentials; profiles stay server-only', async () => {
+  const preflight = (path) =>
+    fetch(`${stack.api}${path}`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: WEB,
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+  const report = await preflight('/v1/profiles/ada/report');
+  assert.equal(report.headers.get('access-control-allow-origin'), WEB);
+  assert.equal(report.headers.get('access-control-allow-credentials'), null);
+  const profile = await preflight('/v1/profiles/ada');
+  assert.equal(profile.headers.get('access-control-allow-origin'), null);
+});
+
 test('the 31st quote in a minute from one address is rate limited', async () => {
   const limited = await startStack({
     databaseUrl: database.url,

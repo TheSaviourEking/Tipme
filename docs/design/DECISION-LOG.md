@@ -87,3 +87,12 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - Loading placeholders are recessed wells instead of flat grey bars.
 - Staff charts: text moved out of stretched SVGs into HTML (labels were distorted and overlapped at wide widths); lines use non-scaling strokes.
 - Favicon: the wordmark's heart, white on a purple tile, measured and centred.
+
+## 2026-10-26 — Buildable-now slices: fees, search, reports, export, emails, photos
+
+- Fees follow ADR-0014: a flat 10% TipMe fee; nothing is recovered from the recipient for the provider (the provider's fee is TipMe's cost). Reduced or zero fees happen only when staff set them on an account page, with a written, audited reason. Milestones celebrate; they no longer change fees. A provider-fee row of ₦0 is hidden rather than shown.
+- Recipients can search their tips (supporter name, whole-naira amount, or the last characters of a reference) and download them as CSV. The CSV leaves out message text and neutralises spreadsheet formulas.
+- Anyone can report a live public page from a quiet disclosure under the tipping panel (no account needed, rate limited). Staff get at most one issue per page per Lagos day and read every report on the account page.
+- Staff find recipients by handle (including old handles) or name, never by phone or email. The account page shows status, totals, reports, pricing and photo moderation; opening one is audited.
+- Recipients choose whether to get an email per tip and the weekly summary (both on by default).
+- Photos: the browser crops to the portrait's 4:5 frame and re-encodes to WebP (which drops camera metadata); the server accepts only a still WebP under 400 KB with no EXIF or XMP and stores it in Postgres. Browsers always embed an sRGB colour profile when encoding, so the server removes that chunk rather than refusing the photo (found in a real-browser test). Photo alt text is now "Photo of {name}": the old "a fictional demo recipient" wording became untrue once real people could upload photos. No image library was added to the API, to keep native binaries out of its container. Staff can remove a photo with a reason; the page falls back to initials.

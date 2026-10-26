@@ -10,6 +10,7 @@ import { isReservedHandle, normaliseHandle } from '@tipme/domain';
 import { and, asc, count, eq, gt, isNull, ne } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  avatars,
   emailTokens,
   handleAliases,
   handleHolds,
@@ -181,6 +182,9 @@ const toMine = async (
   phone: row.phone,
   email: row.email,
   emailVerified: row.emailVerifiedAt !== null,
+  avatarPath: row.profile.avatarPath,
+  emailTips: row.profile.emailTips,
+  emailWeekly: row.profile.emailWeekly,
   suspended: row.profile.status === 'suspended',
   suspendedReason:
     row.profile.status === 'suspended' ? row.profile.suspendedReason : null,
@@ -227,6 +231,12 @@ export function updateMyProfile(
           ? { emailPublic: values.emailPublic }
           : {}),
         ...(values.qrStyle !== undefined ? { qrStyle: values.qrStyle } : {}),
+        ...(values.emailTips !== undefined
+          ? { emailTips: values.emailTips }
+          : {}),
+        ...(values.emailWeekly !== undefined
+          ? { emailWeekly: values.emailWeekly }
+          : {}),
       })
       .where(eq(profiles.id, row.profile.id));
     return toMine(db, await myRow(db, userId));
@@ -435,6 +445,8 @@ export function deleteAccount(
             emailPublic: false,
           })
           .where(eq(profiles.id, row.id));
+        // The photo is personal data: its bytes go with the page, not just the path.
+        await tx.delete(avatars).where(eq(avatars.profileId, row.id));
         await tx
           .insert(handleHolds)
           .values({

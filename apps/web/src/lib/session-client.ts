@@ -75,3 +75,56 @@ export function deviceLabel(): string {
             : 'a device';
   return `${browser} on ${os}`;
 }
+
+/** Downloads a file the signed-in recipient owns (the session cookie travels, as above). */
+export async function apiDownload(
+  path: string,
+  filename: string,
+): Promise<{ ok: boolean }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_ORIGIN}${path}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+  } catch {
+    return { ok: false };
+  }
+  if (!response.ok) return { ok: false };
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(await response.blob());
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  return { ok: true };
+}
+
+/** Sends a file the recipient made (their photo) as a raw body, with the usual protections. */
+export async function apiUpload<T>(
+  path: string,
+  body: Blob,
+): Promise<SessionResult<T>> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_ORIGIN}${path}`, {
+      method: 'PUT',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'content-type': body.type, 'x-tipme-csrf': '1' },
+      body,
+    });
+  } catch {
+    return { ok: false, status: 0, code: 'NETWORK' };
+  }
+  const json = (await response.json().catch(() => null)) as {
+    data?: T;
+    error?: { code?: string };
+  } | null;
+  return response.ok && json?.data !== undefined
+    ? { ok: true, status: response.status, data: json.data }
+    : {
+        ok: false,
+        status: response.status,
+        code: json?.error?.code ?? 'UNKNOWN',
+      };
+}

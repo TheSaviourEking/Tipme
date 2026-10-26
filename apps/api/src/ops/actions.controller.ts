@@ -24,6 +24,7 @@ import {
   addIssueNote,
   cancelRecoveries,
   grantFeeFreeTips,
+  removeAvatarByStaff,
   recheckSubject,
   recordAudit,
   resolveIssue,
@@ -205,5 +206,23 @@ export class OpsActionsController {
       count: body.count,
       reason: body.reason,
     }).then((data) => ({ data }));
+  }
+
+  /** Staff remove a page's photo (impersonation, abuse), with a reason the audit log keeps. */
+  @Post('pages/:profileId/avatar/remove')
+  @HttpCode(200)
+  @OpsPermission('pages.suspend')
+  async removeAvatar(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ removed: true }>> {
+    const { handle } = await removeAvatarByStaff(this.database.db, {
+      profileId: uuidParam(profileId),
+      staffUserId: ops.userId,
+      reason: body.reason,
+    });
+    this.revalidator.revalidate(handle);
+    return { data: { removed: true } };
   }
 }

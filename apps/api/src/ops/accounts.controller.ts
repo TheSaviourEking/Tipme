@@ -8,6 +8,7 @@ import type {
 import {
   accountDetail,
   listMyTips,
+  listProfileReports,
   recordAudit,
   searchAccounts,
 } from '@tipme/database';
@@ -81,5 +82,22 @@ export class OpsAccountsController {
           : {}),
       }),
     };
+  }
+
+  @Get(':profileId/reports')
+  @Header('Cache-Control', 'private, no-store')
+  @OpsPermission('issues.view')
+  async reports(@Param('profileId') profileId: string): Promise<
+    ApiDataResponse<
+      {
+        id: string;
+        reason: string;
+        details: string | null;
+        createdAt: string;
+      }[]
+    >
+  > {
+    if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
+    return { data: await listProfileReports(this.database.db, profileId) };
   }
 }
