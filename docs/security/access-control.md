@@ -32,19 +32,20 @@ Status: money is pretend. Nothing here approves real payments (`docs/00-DECISION
 
 Two roles exist today. **Owner** holds every permission; staff are created only on the server with `pnpm ops:grant-owner`. **release_check** is the release check's own staff account and holds only `issues.view`, `issues.resolve`, `analytics.view` and `audit.view`. A new role is a row in the database (a name and a set of permissions) and needs no code change. A role with fewer permissions gets `403` on the rest (tested).
 
-| Permission          | What it allows                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| `issues.view`       | Read the issues inbox and an issue's evidence; add notes                                    |
-| `issues.resolve`    | Resolve an issue, with a reason                                                             |
-| `pages.suspend`     | Pause or restore a page, with a reason the recipient sees                                   |
-| `recoveries.cancel` | Cancel a pending phone-number move (email recovery), with a reason                          |
-| `analytics.view`    | Read the Overview, visibility and market numbers                                            |
-| `market.edit`       | Add, edit or archive hand-entered market observations                                       |
-| `audit.view`        | Read the audit log                                                                          |
-| `payments.recheck`  | Ask the payment provider for the current status of a payment or withdrawal                  |
-| `private.view`      | Reveal a supporter's message and similar private detail, with a reason (audited)            |
-| `pages.plan`        | Look a page up and move it between Free and Pro, with a reason                              |
-| `search.view`       | Search pages, tips, withdrawals and ledger entries (ids and labels only; audited by length) |
+| Permission          | What it allows                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `issues.view`       | Read the issues inbox and an issue's evidence; add notes                                                          |
+| `issues.resolve`    | Resolve an issue, with a reason                                                                                   |
+| `pages.suspend`     | Pause or restore a page, with a reason the recipient sees                                                         |
+| `recoveries.cancel` | Cancel a pending phone-number move (email recovery), with a reason                                                |
+| `analytics.view`    | Read the Overview, visibility and market numbers                                                                  |
+| `market.edit`       | Add, edit or archive hand-entered market observations                                                             |
+| `audit.view`        | Read the audit log                                                                                                |
+| `payments.recheck`  | Ask the payment provider for the current status of a payment or withdrawal                                        |
+| `private.view`      | Reveal a supporter's message and similar private detail, with a reason (audited)                                  |
+| `pages.plan`        | Look a page up and move it between Free and Pro, with a reason                                                    |
+| `search.view`       | Search pages, tips, withdrawals and ledger entries (ids and labels only; audited by length)                       |
+| `fees.manage`       | Set one page's TipMe fee or return it to the standard 10%, and grant fee-free tips, each with a reason (ADR-0014) |
 
 ### Which routes each permission unlocks
 
@@ -55,6 +56,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | --- | --- |
 | `analytics.view` | GET `/v1/ops/market`<br>GET `/v1/ops/market/series`<br>GET `/v1/ops/metrics/health`<br>GET `/v1/ops/metrics/visibility` |
 | `audit.view` | GET `/v1/ops/audit` |
+| `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
 | `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
@@ -133,6 +135,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
+| GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
 | GET | `/v1/me/moments` | n/a (read) | – | – |
 | POST | `/v1/me/moments/{id}/share` | yes | – | – |
@@ -188,7 +191,10 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/metrics/health` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/metrics/visibility` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/pages/{handle}` | `pages.plan` | n/a (read) | – | – |
+| POST | `/v1/ops/pages/{profileId}/fee` | `fees.manage` | yes | – | – |
+| POST | `/v1/ops/pages/{profileId}/fee-free` | `fees.manage` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/plan` | `pages.plan` | yes | – | – |
+| GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/recheck` | `payments.recheck` | yes | – | – |

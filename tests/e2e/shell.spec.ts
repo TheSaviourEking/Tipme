@@ -47,6 +47,12 @@ test('profile supports keyboard amount selection, validation and a server quote'
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     'Ada Okafor',
   );
+  await expect(page.locator('[data-profile-card]')).toBeVisible();
+  await expect(
+    page.getByRole('img', {
+      name: 'Portrait of Ada Okafor, a fictional demo recipient',
+    }),
+  ).toBeVisible();
   await page.getByRole('button', { name: /^Tip/ }).click();
   await expect(
     page.getByText('Choose an amount or enter your own.'),

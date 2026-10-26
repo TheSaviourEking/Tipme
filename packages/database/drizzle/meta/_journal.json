@@ -267,6 +267,13 @@
       "when": 1792874126407,
       "tag": "0037_search_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792979127096,
+      "tag": "0038_staff_set_fees",
+      "breakpoints": true
     }
   ]
 }

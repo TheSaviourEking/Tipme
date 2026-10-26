@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { Button, Container, Notice } from '@tipme/ui';
+import { Button } from '@tipme/ui';
+import { QuietScreen } from '@/components/quiet-screen';
+
 export default function ProfileError({
   reset,
 }: {
@@ -8,18 +10,21 @@ export default function ProfileError({
   reset: () => void;
 }) {
   return (
-    <main id="main" tabIndex={-1}>
-      <Container className="unavailable-page">
-        <h1>Let’s try that again.</h1>
-        <Notice tone="error" title="We couldn’t load this profile.">
-          No appreciation has been sent. Please retry, or return to the home
-          page.
-        </Notice>
-        <Button onClick={reset}>Try again</Button>
-        <Link className="text-link" href="/">
-          Back to TipMe
-        </Link>
-      </Container>
-    </main>
+    <QuietScreen
+      title="Let’s try that again"
+      actions={
+        <>
+          <Button onClick={reset}>Try again</Button>
+          <Link className="text-link" href="/">
+            Back to TipMe
+          </Link>
+        </>
+      }
+    >
+      <p>
+        We couldn’t load this page. No appreciation has been sent, so nothing is
+        lost.
+      </p>
+    </QuietScreen>
   );
 }

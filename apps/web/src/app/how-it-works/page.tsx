@@ -22,7 +22,7 @@ export default function HowItWorks() {
             <div>
               <p className="eyebrow">The idea is simple</p>
               <h1 id="how-title" className="page-title">
-                How TipMe <em>works.</em>
+                How TipMe works.
               </h1>
             </div>
           </div>

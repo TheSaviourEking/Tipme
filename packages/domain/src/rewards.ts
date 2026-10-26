@@ -1,7 +1,7 @@
 /**
- * Surprise moments and rewards (PR-008). Pretend money only until D-05 and legal review.
- * TipMe gives back at most half of the fees a recipient has earned it, over their lifetime:
- * cash bonuses plus waived fees together. All values here are the single place to tune them.
+ * Surprise moments and rewards (PR-008). Since ADR-0014 nothing is granted automatically:
+ * milestones and best periods are celebrations only, and fee-free tips come from staff. The
+ * cash-bonus rules below stay for a future, deliberate decision. Pretend money only.
  */
 export type MilestoneReward =
   'none' | 'cash' | { feeFree: number } | { cash: true; feeFree: number };
@@ -15,13 +15,13 @@ export const REWARDS = {
   fallbackFeeFree: 5,
   milestones: [
     { count: 1, reward: 'none' },
-    { count: 10, reward: { feeFree: 5 } },
-    { count: 50, reward: 'cash' },
-    { count: 100, reward: { cash: true, feeFree: 10 } },
+    { count: 10, reward: 'none' },
+    { count: 50, reward: 'none' },
+    { count: 100, reward: 'none' },
   ] as readonly { count: number; reward: MilestoneReward }[],
   bestPeriod: { minPriorWeeks: 4, minPriorMonths: 2, minTipsInPeriod: 5 },
   bestWeek: 'none' as MilestoneReward,
-  bestMonth: 'cash' as MilestoneReward,
+  bestMonth: 'none' as MilestoneReward,
   /** A shared moment shows on the public page for this long. */
   publicWindowDays: 14,
 } as const;

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Container } from '@tipme/ui';
+import { Container, Surface } from '@tipme/ui';
 import { VerifyEmail } from './verify-email';
 
 export const metadata: Metadata = {
@@ -11,8 +11,10 @@ export const metadata: Metadata = {
 export default function VerifyEmailPage() {
   return (
     <main id="main" tabIndex={-1} className="auth-page">
-      <Container className="auth-shell">
-        <VerifyEmail />
+      <Container>
+        <Surface material="raised" className="auth-card verify-card">
+          <VerifyEmail />
+        </Surface>
       </Container>
     </main>
   );

@@ -1,14 +1,27 @@
 import Link from 'next/link';
+import { WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
 
-/** Primary brand wordmark: "tip" (black) + "me" (purple) + "♥" (superscript). */
+export { WORDMARK_PATHS, WORDMARK_VIEWBOX };
+
+export function Wordmark({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox={WORDMARK_VIEWBOX}
+      aria-hidden="true"
+      focusable="false"
+    >
+      {WORDMARK_PATHS.map((path) => (
+        <path key={path.d.slice(0, 24)} d={path.d} fill={path.fill} />
+      ))}
+    </svg>
+  );
+}
+
 export function Brand() {
   return (
     <Link className="brand" href="/" aria-label="TipMe home">
-      <span className="brand-tip">tip</span>
-      <span className="brand-me">me</span>
-      <span className="brand-heart" aria-hidden="true">
-        ♥
-      </span>
+      <Wordmark className="brand__mark" />
     </Link>
   );
 }

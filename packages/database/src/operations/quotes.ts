@@ -1,7 +1,6 @@
 import {
   AmountOutOfRangeError,
   FEE_FREE_VERSION_SUFFIX,
-  feeFreeAllowed,
   assertCurrency,
   FEE_POLICY_V1,
   priceTip,
@@ -12,7 +11,6 @@ import type { Database, Tx } from '../client.js';
 import { feeFreeCredits, profiles, tipQuotes } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { rewardStats } from './moments.js';
 import { tipAmountsOf } from './profiles.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
@@ -55,6 +53,7 @@ async function quote(
       plan: profiles.plan,
       tipPresetsMinor: profiles.tipPresetsMinor,
       minTipMinor: profiles.minTipMinor,
+      customFeeBps: profiles.customFeeBps,
     })
     .from(profiles)
     .where(
@@ -67,10 +66,20 @@ async function quote(
     );
   if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
   const minTipMinor = BigInt(tipAmountsOf(profile).minMinor);
+  // A share staff set for this account (ADR-0014), recorded in the quote's version.
+  const shareBps =
+    profile.customFeeBps === null ? undefined : BigInt(profile.customFeeBps);
+  const baseVersion =
+    shareBps === undefined
+      ? FEE_POLICY_V1.version
+      : `${FEE_POLICY_V1.version}-custom-${profile.customFeeBps}`;
   let breakdown: FeeBreakdown;
   try {
     // A Pro page's own minimum (PR-012), enforced here whatever the page showed.
-    breakdown = priceTip(input.tipMinor, FEE_POLICY_V1, { minTipMinor });
+    breakdown = priceTip(input.tipMinor, FEE_POLICY_V1, {
+      minTipMinor,
+      ...(shareBps === undefined ? {} : { shareBps }),
+    });
   } catch (error) {
     if (error instanceof AmountOutOfRangeError)
       throw new OperationError('AMOUNT_OUT_OF_RANGE');
@@ -81,9 +90,9 @@ async function quote(
   );
   const quoteId = newId();
   const priced = breakdown;
-  // A fee-free reward waives TipMe's fee while credits last and the lifetime cap allows it.
-  // Open fee-free quotes reserve their credit and their cost, under a lock on the credits row,
-  // so quotes made before any of them is paid can never overspend either.
+  // Fee-free tips are granted by staff (ADR-0014) and honoured while credits last. Open
+  // fee-free quotes reserve their credit, under a lock on the credits row, so quotes made before
+  // any of them is paid can never use more credits than were granted.
   const { waivedPlatformFeeMinor, finalBreakdown, feePolicyVersion } =
     await db.transaction(async (tx) => {
       const [credits] = await tx
@@ -93,31 +102,22 @@ async function quote(
         .for('update');
       let waived = 0n;
       let chosen = priced;
-      let version: string = FEE_POLICY_V1.version;
-      if ((credits?.remaining ?? 0) > 0 && priced.platformFeeMinor > 0n) {
+      let version: string = baseVersion;
+      const share = priced.platformFeeMinor + priced.providerFeeMinor;
+      if ((credits?.remaining ?? 0) > 0 && share > 0n) {
         const open = await openFeeFreeQuotes(
           tx,
           profile.id,
           expiresAt.getTime() - QUOTE_TTL_MS,
         );
-        const stats = await rewardStats(tx, profile.id);
-        if (
-          feeFreeAllowed({
-            credits: (credits?.remaining ?? 0) - open.count,
-            // What a fee-free tip costs TipMe: its whole share, processing included (PR-012).
-            waivedFeeMinor: priced.platformFeeMinor + priced.providerFeeMinor,
-            lifetimeFeesMinor: stats.lifetimeFeesMinor,
-            lifetimeRewardCostMinor:
-              stats.lifetimeRewardCostMinor + open.waivedMinor,
-          })
-        ) {
+        if ((credits?.remaining ?? 0) - open.count > 0) {
           // TipMe gives up its whole share, the processing it would have paid from it included.
-          waived = priced.platformFeeMinor + priced.providerFeeMinor;
+          waived = share;
           chosen = priceTip(input.tipMinor, FEE_POLICY_V1, {
             feeFree: true,
             minTipMinor,
           });
-          version = `${FEE_POLICY_V1.version}${FEE_FREE_VERSION_SUFFIX}`;
+          version = `${baseVersion}${FEE_FREE_VERSION_SUFFIX}`;
         }
       }
       await tx.insert(tipQuotes).values({
@@ -170,7 +170,7 @@ export function findQuoteCharge(
   });
 }
 
-/** Fee-free quotes still open (not expired, not paid, not failed): each holds a credit and its cost. */
+/** Fee-free quotes still open (not expired, not paid, not failed): each holds a credit. */
 async function openFeeFreeQuotes(
   tx: Tx,
   profileId: string,

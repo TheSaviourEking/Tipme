@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Container } from '@tipme/ui';
+import { AuthStage } from '@/components/account/auth-stage';
 import { SignUpFlow } from './sign-up-flow';
 
 export const metadata: Metadata = {
@@ -9,15 +9,16 @@ export const metadata: Metadata = {
 
 export default function SignUpPage() {
   return (
-    <main id="main" tabIndex={-1} className="auth-page">
-      <Container className="auth-shell">
-        <h1>Create your TipMe page</h1>
-        <p className="auth-lede">
-          A phone number and a handle is all it takes. Payments are pretend
-          during the preview.
-        </p>
-        <SignUpFlow />
-      </Container>
-    </main>
+    <AuthStage
+      title="Your page, in a minute."
+      lede="A phone number and a handle is all it takes to start receiving thanks. Payments are pretend during the preview."
+      promises={[
+        'No card or bank details to start',
+        'Your number stays private',
+        'Skip anything and finish later',
+      ]}
+    >
+      <SignUpFlow />
+    </AuthStage>
   );
 }

@@ -10,12 +10,15 @@ import type {
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
-import { Avatar, hasAvatar } from '@/components/avatar';
+import { Avatar } from '@/components/avatar';
+import { hasAvatar } from '@/lib/avatar-source';
 import { apiFetch } from '@/lib/session-client';
 import { shrinkPhoto } from '@/lib/shrink-photo';
+import { useSiteHost } from '@/lib/site-host';
 
 function PageState() {
   const { profile, setProfile } = useRecipient();
+  const host = useSiteHost();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const live = profile.pageState === 'live';
@@ -49,7 +52,9 @@ function PageState() {
             : 'Visitors see “This page isn’t available right now”, and nobody can tip you.'}
       </p>
       <p>
-        <Link href={`/@${profile.handle}`}>tipme.app/@{profile.handle}</Link>
+        <Link href={`/@${profile.handle}`}>
+          {host}/@{profile.handle}
+        </Link>
       </p>
       {error && (
         <Notice tone="error" title="Not changed">
@@ -246,6 +251,7 @@ const renameErrors: Record<string, string> = {
 function HandleChange() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
+  const host = useSiteHost();
   // An API older than PR-011 does not send it (the web app deploys first).
   const previous = profile.previousHandles ?? [];
   const [handle, setHandle] = useState(profile.handle);
@@ -301,7 +307,7 @@ function HandleChange() {
         )}
         {saved && (
           <p role="status" className="tm-hint">
-            Saved. Your page is now at tipme.app/@{profile.handle}.
+            Saved. Your page is now at {host}/@{profile.handle}.
           </p>
         )}
         <Button

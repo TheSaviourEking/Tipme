@@ -191,6 +191,8 @@ export const profiles = pgTable(
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
     tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
     minTipMinor: minor('min_tip_minor'),
+    // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
+    customFeeBps: integer('custom_fee_bps'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -199,6 +201,10 @@ export const profiles = pgTable(
       sql`page_state IN ('live', 'not_live', 'deleted')`,
     ),
     check('profiles_plan', sql`plan IN ('free', 'pro')`),
+    check(
+      'profiles_custom_fee_bps',
+      sql`custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 0 AND 10000`,
+    ),
     // Admin search by handle prefix (PR-013); the unique index cannot serve LIKE 'x%'.
     index('profiles_handle_prefix').on(
       table.handleLower.op('text_pattern_ops'),
@@ -755,6 +761,7 @@ export const OPS_PERMISSIONS = [
   'private.view',
   'pages.plan',
   'search.view',
+  'fees.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 

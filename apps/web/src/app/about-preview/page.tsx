@@ -40,8 +40,8 @@ export default function AboutPreview() {
           Launch market and currency, eligibility, fees, payment partners,
           privacy terms and settlement arrangements remain unapproved. NGN in
           the demo is an illustration—not an announced launch currency. There
-          are no verified recipients, payout promises or payment-success screens
-          here.
+          are no verified recipients or payout promises, and any “paid” screen
+          here confirms a pretend payment only.
         </p>
         <h2>Before anything goes live</h2>
         <p>

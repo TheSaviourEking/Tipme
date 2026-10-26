@@ -5,7 +5,7 @@ import type { MyTipRow } from '@tipme/contracts';
 import { Button, InputField, Skeleton } from '@tipme/ui';
 import { naira } from '@/lib/money';
 import { useRecipient } from '@/components/account/recipient-context';
-import { apiFetch } from '@/lib/session-client';
+import { apiDownload, apiFetch } from '@/lib/session-client';
 
 type Filter = 'all' | 'paid' | 'confirming';
 const filters: { value: Filter; label: string }[] = [
@@ -31,7 +31,9 @@ export default function TipsPage() {
   const [searched, setSearched] = useState('');
   const [items, setItems] = useState<MyTipRow[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
+  const [download, setDownload] = useState('');
 
+  // Typing waits for a pause; an answer for an older search never replaces a newer one.
   useEffect(() => {
     const timer = setTimeout(() => setSearched(query.trim()), 300);
     return () => clearTimeout(timer);
@@ -101,6 +103,29 @@ export default function TipsPage() {
             {option.label}
           </Button>
         ))}
+      </div>
+      <div className="tips-tools">
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            setDownload('Preparing your file…');
+            const day = new Date().toISOString().slice(0, 10);
+            const result = await apiDownload(
+              '/v1/me/exports/tips.csv',
+              `tipme-tips-${day}.csv`,
+            );
+            setDownload(
+              result.ok
+                ? 'Downloaded. Amounts and status only; messages stay private.'
+                : 'We couldn’t prepare the file. Please try again.',
+            );
+          }}
+        >
+          Download as CSV
+        </Button>
+        <p role="status" className="tm-hint">
+          {download}
+        </p>
       </div>
       {!items ? (
         <Skeleton label="Loading your tips" />

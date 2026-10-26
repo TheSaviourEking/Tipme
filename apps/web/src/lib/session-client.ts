@@ -84,3 +84,26 @@ export function deviceLabel(): string {
             : 'a device';
   return `${browser} on ${os}`;
 }
+
+/** Downloads a file the signed-in recipient owns (the session cookie travels, as above). */
+export async function apiDownload(
+  path: string,
+  filename: string,
+): Promise<{ ok: boolean }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_ORIGIN}${path}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+  } catch {
+    return { ok: false };
+  }
+  if (!response.ok) return { ok: false };
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(await response.blob());
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  return { ok: true };
+}

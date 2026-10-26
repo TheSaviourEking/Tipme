@@ -159,7 +159,7 @@ test('the seeded demo recipients can sign in to their live pages', async () => {
   );
   const page = (await (await call('GET', '/v1/profiles/tobi')).json()).data;
   assert.equal(page.role, 'Barista & brightener of mornings');
-  assert.equal(page.avatarPath, '/illustrations/tobi.svg');
+  assert.equal(page.avatarPath, '/portraits/tobi.webp');
 });
 
 test('fix: changing the phone number refreshes the public page', async () => {

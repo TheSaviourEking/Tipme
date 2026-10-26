@@ -22,7 +22,7 @@
 | D-02 | Company registration, legal agreements and regulator interpretation | Legal opinion | Founder | OPEN |
 | D-03 | Payment processor permits tipping, split and settlement flow | Written provider confirmation | Payments | OPEN |
 | D-04 | Custody/non-custody and settlement account ownership | Signed funds-flow diagram | Finance/Legal | OPEN |
-| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | OPEN |
+| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | PARTLY DECIDED: flat 10% TipMe fee, provider paid from it, recipient gets 90% (ADR-0014); refunds and chargebacks OPEN |
 | D-06 | Recipient verification, payout holds and support model | Provider policy and risk plan | Risk | OPEN |
 | D-07 | Fraud, sanctions/AML and regional privacy obligations | Compliance assessment | Legal/Risk | OPEN |
 | D-08 | Hosting, monitoring budget and supported response coverage | Cost model + staffing | Engineering | OPEN |
@@ -93,3 +93,5 @@
 
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
+
+> **Product-owner decisions (25 Oct 2026, ADR-0014):** TipMe takes a flat 10% of every tip and pays the payment provider out of it. Nobody receives a reduced fee automatically: staff grant fee-free tips and may set a custom fee per account, with a reason and an audit record. Milestones are celebrations only. This supersedes the PR-008 automatic reward notes above.

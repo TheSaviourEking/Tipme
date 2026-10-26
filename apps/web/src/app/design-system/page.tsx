@@ -1,16 +1,22 @@
 import {
+  AmountChoice,
   Badge,
   Button,
   Card,
-  Choice,
   Container,
   EmptyState,
   InputField,
   Notice,
   Skeleton,
+  Surface,
   TextareaField,
 } from '@tipme/ui';
 import { previewMetadata } from '@/lib/metadata';
+import {
+  MotionSpecimen,
+  ResponsiveSpecimen,
+  SymbolSpecimen,
+} from './specimens';
 
 export const metadata = previewMetadata(
   'Design foundation',
@@ -37,6 +43,25 @@ const swatches = [
   },
   { token: '--brand-soft', value: '#F1E9FF', use: 'Quiet emphasis surfaces' },
   { token: '--text-secondary', value: '#555555', use: 'Supporting text' },
+];
+
+const materials = [
+  { token: '--canvas', label: 'Canvas', use: 'Stable page ground' },
+  {
+    token: '--surface-raised',
+    label: 'Raised',
+    use: 'Cards and tactile controls',
+  },
+  {
+    token: '--surface-recessed',
+    label: 'Recessed',
+    use: 'Inputs and financial wells',
+  },
+  {
+    token: '--surface-signature',
+    label: 'Signature',
+    use: 'Selection and primary action',
+  },
 ];
 
 export default function DesignSystem() {
@@ -71,7 +96,7 @@ export default function DesignSystem() {
               ))}
             </ul>
           </section>
-          <section aria-labelledby="ds-type">
+          <section data-testid="type-specimen" aria-labelledby="ds-type">
             <h2 id="ds-type">Typography</h2>
             <p className="eyebrow">Eyebrow label</p>
             <p
@@ -86,17 +111,47 @@ export default function DesignSystem() {
               <em style={{ fontFamily: 'var(--font-editorial)' }}>accent</em>
             </p>
             <p>
-              Body copy uses the system sans stack at a comfortable 1.7 line
-              height for long-form reading.
+              Body copy uses Manrope at a comfortable line height, paired with a
+              restrained editorial serif for human emphasis.
             </p>
           </section>
-          <section aria-labelledby="ds-actions">
+          <section
+            data-testid="material-specimen"
+            aria-labelledby="ds-materials"
+          >
+            <h2 id="ds-materials">Materials</h2>
+            <div className="material-specimens">
+              {materials.map((material) => (
+                <Surface
+                  material={
+                    material.label.toLowerCase() as
+                      'canvas' | 'raised' | 'recessed' | 'signature'
+                  }
+                  className={`material-specimen material-specimen--${material.label.toLowerCase()}`}
+                  key={material.token}
+                >
+                  <span
+                    className="material-specimen__surface"
+                    style={{ background: `var(${material.token})` }}
+                    aria-hidden="true"
+                  />
+                  <strong>{material.label}</strong>
+                  <small>{material.use}</small>
+                  <code>{material.token}</code>
+                </Surface>
+              ))}
+            </div>
+          </section>
+          <section data-testid="control-specimen" aria-labelledby="ds-actions">
             <h2 id="ds-actions">Actions</h2>
             <div className="specimen-row">
               <Button>Primary</Button>
               <Button variant="secondary">Secondary</Button>
               <Button variant="quiet">Quiet</Button>
               <Button disabled>Disabled</Button>
+              <Button aria-busy="true" disabled>
+                Busy
+              </Button>
             </div>
             <div className="specimen-row">
               <Badge>Badge</Badge>
@@ -134,15 +189,15 @@ export default function DesignSystem() {
             <fieldset>
               <legend>Choose a sample option</legend>
               <div className="amount-options">
-                <Choice name="ds-choice" value="a" defaultChecked>
+                <AmountChoice name="ds-choice" value="a" defaultChecked>
                   Selected
-                </Choice>
-                <Choice name="ds-choice" value="b">
+                </AmountChoice>
+                <AmountChoice name="ds-choice" value="b">
                   Option
-                </Choice>
-                <Choice name="ds-choice" value="c" disabled>
+                </AmountChoice>
+                <AmountChoice name="ds-choice" value="c" disabled>
                   Disabled
-                </Choice>
+                </AmountChoice>
               </div>
             </fieldset>
           </section>
@@ -154,10 +209,16 @@ export default function DesignSystem() {
             <Notice tone="success" title="Preferences saved">
               A generic, non-financial success example.
             </Notice>
-            <Card>
+            <Notice tone="error" title="Could not save">
+              The action is available to try again.
+            </Notice>
+            <Card material="recessed">
               <Skeleton label="Loading specimen" />
             </Card>
           </section>
+          <SymbolSpecimen />
+          <MotionSpecimen />
+          <ResponsiveSpecimen />
         </div>
         <EmptyState title="Nothing here yet">
           Empty states explain what is missing and what to do next.

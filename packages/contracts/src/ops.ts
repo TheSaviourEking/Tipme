@@ -410,6 +410,24 @@ export const opsPagePlanSchema = opsReasonSchema
   .strict();
 export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
 
+/** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
+export interface OpsPagePricing {
+  customFeeBps: number | null;
+  feeFreeRemaining: number;
+}
+
+/** Staff set one page's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
+export const opsPageFeeSchema = opsReasonSchema
+  .extend({ feeBps: z.number().int().min(0).max(10000).nullable() })
+  .strict();
+export type OpsPageFeeRequest = z.infer<typeof opsPageFeeSchema>;
+
+/** Staff grant fee-free tips to one page (ADR-0014). */
+export const opsFeeFreeGrantSchema = opsReasonSchema
+  .extend({ count: z.number().int().min(1).max(100) })
+  .strict();
+export type OpsFeeFreeGrantRequest = z.infer<typeof opsFeeFreeGrantSchema>;
+
 /**
  * Admin search results (PR-013): ids and short labels only. Never phone numbers, emails,
  * supporter names or messages.

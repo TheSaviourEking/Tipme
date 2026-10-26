@@ -39,12 +39,16 @@ export const FEE_FREE_VERSION_SUFFIX = '-fee-free';
  * Prices a tip. TipMe's share (processing included) comes off the tip and the recipient receives
  * the rest. `feeFree` waives TipMe's whole share: the recipient receives the full tip and TipMe
  * pays the processing itself. `minTipMinor` is a page's own minimum; it can only raise the floor.
+ * `shareBps` is a share staff set for one account (ADR-0014), used instead of the policy's.
  */
 export function priceTip(
   tipMinor: bigint,
   policy: FeePolicy = FEE_POLICY_V1,
-  options: { feeFree?: boolean; minTipMinor?: bigint } = {},
+  options: { feeFree?: boolean; minTipMinor?: bigint; shareBps?: bigint } = {},
 ): FeeBreakdown {
+  const shareBps = options.shareBps ?? policy.tipmeShareBps;
+  if (shareBps < 0n || shareBps > 10000n)
+    throw new RangeError('share must be between 0 and 10000 basis points');
   const floor =
     options.minTipMinor !== undefined &&
     options.minTipMinor > policy.minTipMinor
@@ -61,7 +65,7 @@ export function priceTip(
       payerTotalMinor: tipMinor,
       recipientNetMinor: tipMinor,
     };
-  const shareMinor = bpsOf(tipMinor, policy.tipmeShareBps);
+  const shareMinor = bpsOf(tipMinor, shareBps);
   const estimatedProcessing = bpsOf(tipMinor, policy.providerFeeBps);
   // Processing is paid from TipMe's share and can never take more than it.
   const providerFeeMinor =

@@ -45,7 +45,10 @@ export function Tile({
   );
 }
 
-/** Horizontal bars, each labelled with its value. */
+/**
+ * Horizontal bars, each labelled with its value. Labels are HTML beside a stretched bar (as in
+ * the funnel): text inside a stretched SVG would stretch with it.
+ */
 export function BarChart({
   title,
   rows,
@@ -57,50 +60,40 @@ export function BarChart({
 }) {
   const id = useId();
   const max = Math.max(1, ...rows.map((row) => row.value));
-  const height = rows.length * 32;
   return (
     <figure className="ops-chart" aria-labelledby={`${id}-caption`}>
       <figcaption id={`${id}-caption`}>{title}</figcaption>
       {rows.length === 0 ? (
         <p className="tm-hint">Nothing recorded yet.</p>
       ) : (
-        <svg
-          viewBox={`0 0 320 ${height}`}
-          width="100%"
-          height={height}
-          aria-hidden="true"
-          preserveAspectRatio="none"
-        >
-          {rows.map((row, index) => (
-            <g key={row.label} transform={`translate(0 ${index * 32})`}>
-              <text x="0" y="18" className="ops-chart__label">
-                {row.label}
-              </text>
-              <rect
-                x="110"
-                y="6"
-                height="18"
-                rx="4"
-                width={Math.max(2, (row.value / max) * 170)}
-                className="ops-chart__bar"
-              />
-              <text
-                x={116 + Math.max(2, (row.value / max) * 170)}
-                y="19"
-                className="ops-chart__value"
+        <ul className="ops-funnel" aria-hidden="true">
+          {rows.map((row) => (
+            <li key={row.label}>
+              <span className="ops-funnel__label">{row.label}</span>
+              <svg
+                viewBox="0 0 200 14"
+                width="100%"
+                height="14"
+                preserveAspectRatio="none"
               >
-                {row.value}
-              </text>
-            </g>
+                <rect
+                  width={Math.max(2, (row.value / max) * 200)}
+                  height="14"
+                  rx="4"
+                  className="ops-chart__bar"
+                />
+              </svg>
+              <span className="ops-funnel__value">{row.value}</span>
+            </li>
           ))}
-        </svg>
+        </ul>
       )}
       <DataTable rows={rows} unit={unit} />
     </figure>
   );
 }
 
-/** One line over time, with the first and last labels on the axis. */
+/** One line over time; the axis labels sit in HTML so they stay at reading size at any width. */
 export function LineChart({
   title,
   points,
@@ -114,28 +107,33 @@ export function LineChart({
   const max = Math.max(1, ...points.map((p) => p.value));
   const step = points.length > 1 ? 300 / (points.length - 1) : 0;
   const path = points
-    .map((p, i) => `${10 + i * step},${110 - (p.value / max) * 95}`)
+    .map((p, i) => `${i * step},${100 - (p.value / max) * 95}`)
     .join(' ');
   return (
     <figure className="ops-chart" aria-labelledby={`${id}-caption`}>
       <figcaption id={`${id}-caption`}>{title}</figcaption>
-      <svg viewBox="0 0 320 130" width="100%" aria-hidden="true">
-        <line x1="10" y1="110" x2="310" y2="110" className="ops-chart__axis" />
+      {points.length > 0 && (
+        <p className="ops-chart__max" aria-hidden="true">
+          Peak {max}
+        </p>
+      )}
+      <svg
+        className="ops-chart__plot"
+        viewBox="0 0 300 100"
+        width="100%"
+        height="160"
+        aria-hidden="true"
+        preserveAspectRatio="none"
+      >
+        <line x1="0" y1="100" x2="300" y2="100" className="ops-chart__axis" />
         <polyline points={path} className="ops-chart__line" />
-        {points.length > 0 && (
-          <>
-            <text x="10" y="126" className="ops-chart__label">
-              {points[0]!.label}
-            </text>
-            <text x="310" y="126" textAnchor="end" className="ops-chart__label">
-              {points.at(-1)!.label}
-            </text>
-            <text x="10" y="12" className="ops-chart__label">
-              max {max}
-            </text>
-          </>
-        )}
       </svg>
+      {points.length > 0 && (
+        <div className="ops-chart__axis-labels" aria-hidden="true">
+          <span>{points[0]!.label}</span>
+          <span>{points.at(-1)!.label}</span>
+        </div>
+      )}
       <DataTable rows={points} unit={unit} />
     </figure>
   );

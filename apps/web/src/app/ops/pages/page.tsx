@@ -3,6 +3,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { OpsPage } from '@tipme/contracts';
 import { Badge, Button, Card, InputField, Notice } from '@tipme/ui';
+import { PagePricing } from '@/components/ops/page-pricing';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
@@ -137,6 +138,9 @@ export default function OpsPagesPage() {
             onSubmit={(reason) => changePlan(page, reason)}
           />
         </Card>
+      )}
+      {page && can(access, 'fees.manage') && (
+        <PagePricing key={page.profileId} profileId={page.profileId} />
       )}
     </div>
   );

@@ -22,7 +22,7 @@ async function apiTip(request: APIRequestContext, handle: string) {
   });
 }
 
-test('the 10th tip is celebrated with fee-free tips, and a shared moment invites supporters to add to it', async ({
+test('the 10th tip is celebrated without changing the fee, and a shared moment invites supporters to add to it', async ({
   page,
   browser,
   request,
@@ -35,8 +35,7 @@ test('the 10th tip is celebrated with fee-free tips, and a shared moment invites
   await expect(async () => {
     await page.goto('/dashboard');
     await expect(
-      // 10 ₦2,000 tips: the lifetime cap (half of what TipMe kept) covers 4 fee-free tips.
-      page.getByText('10 tips! Your next 4 tips are fee-free.'),
+      page.getByText('10 tips! People keep coming back to thank you.'),
     ).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expectAccessible(page);
@@ -44,12 +43,13 @@ test('the 10th tip is celebrated with fee-free tips, and a shared moment invites
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(`/@${handle}`);
   await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
+  // Milestones grant nothing by themselves: the next supporter sees the normal 10% (ADR-0014).
   await expect(
     visitor.locator('.tip-breakdown div', { hasText: 'TipMe fee' }),
-  ).toContainText('fee-free');
+  ).toContainText('NGN 200.00');
   await expect(
     visitor.locator('.tip-breakdown div', { hasText: 'TipMe fee' }),
-  ).toContainText('NGN 0.00');
+  ).not.toContainText('fee-free');
 
   const moment = page.locator('.moment-list li', { hasText: '10 tips!' });
   await moment.getByRole('button', { name: 'Share on my page' }).click();

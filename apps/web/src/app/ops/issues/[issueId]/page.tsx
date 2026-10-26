@@ -288,6 +288,15 @@ export default function IssuePage() {
                 </a>,
               ],
               [
+                'Plan and pricing',
+                <Link
+                  key="pricing"
+                  href={`/ops/pages?handle=${encodeURIComponent(page.handle)}`}
+                >
+                  Open the page’s plan and pricing
+                </Link>,
+              ],
+              [
                 'State',
                 page.status === 'suspended'
                   ? 'Paused by TipMe'

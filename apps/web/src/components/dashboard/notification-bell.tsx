@@ -88,7 +88,16 @@ export function NotificationBell() {
         aria-controls="notification-list"
         onClick={() => void toggle()}
       >
-        <span aria-hidden="true">🔔</span>
+        {/* An authored icon; the button's accessible name carries the meaning. */}
+        <svg
+          className="bell__icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15z" />
+          <path d="M10 20.5a2 2 0 0 0 4 0" />
+        </svg>
         {unread.length > 0 && (
           <span className="bell__count" aria-hidden="true">
             {unread.length}

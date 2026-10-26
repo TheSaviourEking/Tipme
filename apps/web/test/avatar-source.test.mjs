@@ -21,6 +21,17 @@ test('an uploaded photo is served by the API; the demo illustrations by the web 
       alt: 'Illustrated avatar of Ada, a fictional demo recipient',
     },
   );
+  assert.deepEqual(
+    avatarSource('/portraits/ada.webp', 'Ada', 'https://api.example.test'),
+    {
+      src: '/portraits/ada.webp',
+      alt: 'Portrait of Ada, a fictional demo recipient',
+    },
+  );
+  assert.equal(
+    avatarSource('/portraits/../x.webp', 'Ada', 'https://api.example.test'),
+    null,
+  );
   // Nothing else is ever turned into an image source.
   assert.equal(
     avatarSource(

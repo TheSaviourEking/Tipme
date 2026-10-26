@@ -91,3 +91,24 @@ test('a Pro page’s amounts: 1–4 unique presets in whole naira, each at least
   );
   assert.equal(ok([50000000n], 50000000n), true, 'a large minimum is fine');
 });
+
+test('a staff-set share replaces the 10% for one account; processing still comes out of it', async () => {
+  const { priceTip, FEE_POLICY_V1 } = await import('../dist/index.js');
+  // 8% of ₦5,000 = ₦400 to TipMe (₦75 processing inside it), ₦4,600 to the recipient.
+  assert.deepEqual(priceTip(500000n, FEE_POLICY_V1, { shareBps: 800n }), {
+    tipMinor: 500000n,
+    platformFeeMinor: 32500n,
+    providerFeeMinor: 7500n,
+    payerTotalMinor: 500000n,
+    recipientNetMinor: 460000n,
+  });
+  // 0%: the recipient receives everything and TipMe pays the processing itself.
+  const free = priceTip(500000n, FEE_POLICY_V1, { shareBps: 0n });
+  assert.equal(free.recipientNetMinor, 500000n);
+  assert.equal(free.platformFeeMinor + free.providerFeeMinor, 0n);
+  for (const shareBps of [-1n, 10001n])
+    assert.throws(
+      () => priceTip(500000n, FEE_POLICY_V1, { shareBps }),
+      RangeError,
+    );
+});
