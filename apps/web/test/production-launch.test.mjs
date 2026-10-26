@@ -20,7 +20,10 @@ test('the Lagos midnight target is an explicit, exact instant', () => {
     '2026-02-30T00:00:00Z',
     '2026-10-27T00:00:00+25:00',
   ])
-    assert.throws(() => parseProductionLaunchAt(invalid), /PRODUCTION_LAUNCH_AT/);
+    assert.throws(
+      () => parseProductionLaunchAt(invalid),
+      /PRODUCTION_LAUNCH_AT/,
+    );
 });
 
 test('future launch rewrites user routes but leaves operational assets reachable', () => {

@@ -5,7 +5,9 @@ export type LaunchDecision = 'pass' | 'rewrite' | 'redirect-home' | 'exempt';
 const explicitInstantPattern =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 
-export function parseProductionLaunchAt(value: string | undefined): number | null {
+export function parseProductionLaunchAt(
+  value: string | undefined,
+): number | null {
   if (value === undefined) return null;
 
   const match = explicitInstantPattern.exec(value);

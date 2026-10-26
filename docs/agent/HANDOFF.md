@@ -376,3 +376,37 @@ Profile reports, CSV export, email preferences and profile photos (migrations 00
 ## Update — dev merged into feat/profile-composition (26 October 2026)
 
 dev's PR-012/PR-013 features won where both branches built the same thing; this branch adds the redesign, CSV export, staff-set fees and fee-free grants (ADR-0014, migration 0038, admin Pages screen) and turns off automatic milestone rewards. Verified on throwaway containers and the isolated design stack (web 3300, API 4300, `tipme_design`): integration 339/339 (62 files, all database files included), e2e 75/75 with `tests/e2e/stack.ts` temporarily pointed at that stack (reports/qr specs and the four tests that open `tipme_test` excluded), typecheck, lint, format, unit and docs tests. Not run: the full `pnpm test:e2e` on 3100/4100 (held by another worktree's servers). Note: an e2e run applied migration 0038 to the local `tipme_test`; reverting it was blocked, so it is still there.
+
+# Update — Production countdown for usetipme.xyz (26 October 2026)
+
+Work is isolated on `feat/production-countdown`, based on the verified
+`feat/profile-composition` state. The launch target is 27 October 2026 at 00:00
+Lagos time, represented unambiguously as `2026-10-26T23:00:00Z`.
+
+Implementation state: user-facing routes rewrite to `/coming-soon` before the
+target while preserving the requested URL; framework assets and required
+operational routes remain reachable. Rewrites are no-store/noindex. At and after
+the target the normal app and legacy/short redirects resume automatically, and a
+direct stale `/coming-soon` request goes home. Invalid or timezone-less launch
+settings fail at build/start; an unset setting leaves every non-countdown
+environment unchanged.
+
+The page uses the project wordmark, warm canvas, editorial headline, tactile
+four-key timer and concentrated purple seconds key. It hides global chrome,
+suppresses misclassified web-vitals telemetry, publishes a dedicated OG image,
+announces time accessibly at most once per minute, disables motion when requested
+and reloads the preserved route at launch. The 320px and 1440px renders were
+inspected and accepted in-session.
+
+Evidence: `pnpm --filter @tipme/web test` (55/55), web lint, web typecheck,
+Prettier check on the changed files, and `git diff --check` all pass. Earlier
+focused Playwright passed 3/3 (axe, 320px reflow, reduced motion, headers,
+metadata, route preservation/exemptions), and the Webpack production build
+passed. Turbopack cannot bind its CSS worker port in this sandbox; the supported
+Webpack build completed. No live deployment or Vercel configuration was changed.
+
+Release steps and the `www`/apex authority boundary are in
+`apps/web/DEPLOYMENT.md`. The branch is currently 8 commits behind and 5 commits
+ahead of `origin/main`. Next exact step: reconcile it with the current `dev`
+target, then run full repository validation and a fresh whole-branch review
+before opening a PR. Do not treat this narrow commit as production-ready.

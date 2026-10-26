@@ -1,4 +1,24 @@
-# Current task — PR #19 Linux visual baselines (26 October 2026)
+# Current task — Production countdown for usetipme.xyz (26 October 2026)
+
+- Branch: `feat/production-countdown`, isolated in `.worktrees/profile-composition`.
+- Delivered: strict server-only launch parsing, pre-launch rewrites with no-store
+  headers, automatic release at `2026-10-26T23:00:00Z`, accessible countdown,
+  physical/editorial responsive styling, social image, telemetry suppression and
+  focused browser coverage.
+- No Vercel setting, production domain or live deployment has been changed.
+- Verified: `pnpm --filter @tipme/web test` (55/55), web lint, web typecheck,
+  Prettier check on the changed files, and `git diff --check`. Earlier focused
+  countdown Playwright (3/3) and production Webpack build also passed. Turbopack
+  cannot bind its CSS worker port in this execution sandbox; the supported
+  Webpack builder completed successfully after fetching configured fonts.
+- Visual inspection: 320px and 1440px captures both match the approved direction
+  and have no horizontal overflow.
+- The worktree is 8 commits behind and 5 commits ahead of `origin/main`; these
+  local changes do not make the branch integration-ready.
+- Next exact step: reconcile with the current `dev` target, then run full
+  repository gates and a fresh whole-branch review before opening a PR.
+
+# Previous task — PR #19 Linux visual baselines (26 October 2026)
 
 - CI confirmed the branch needed Linux-only screenshots in addition to its Darwin baselines. The first container-generated PNGs were visually sound but did not match GitHub's Ubuntu runner.
 - The temporary snapshot-capture run `40261761860` passed its four targeted visual tests in update mode and uploaded the runner-generated baselines. Those four images have been reviewed; their composition matches the app and no source or test behavior changed.

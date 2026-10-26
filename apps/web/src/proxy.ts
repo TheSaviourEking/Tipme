@@ -19,9 +19,7 @@ export function proxy(request: NextRequest) {
     now: Date.now(),
   });
   if (launch === 'rewrite') {
-    const response = NextResponse.rewrite(
-      new URL('/coming-soon', request.url),
-    );
+    const response = NextResponse.rewrite(new URL('/coming-soon', request.url));
     response.headers.set('Cache-Control', 'private, no-store, max-age=0');
     response.headers.set('CDN-Cache-Control', 'no-store');
     response.headers.set('Vercel-CDN-Cache-Control', 'no-store');
