@@ -198,6 +198,7 @@ export class OpsActionsController {
     try {
       answer = await this.bachsProvider.verifyTransaction(
         `${target.accountReference}:${body.checkoutId}`,
+        target.expectation,
       );
     } catch (error) {
       if (error instanceof BachsApiError && error.statusCode === 404) {

@@ -95,8 +95,10 @@ test('checkout recovery verifies matching provider evidence before attaching and
   const database = await databaseFor(t);
   const { attemptId, issueId, quote } = await unknownCheckout(database);
   const bachsProvider = {
-    async verifyTransaction(reference) {
+    async verifyTransaction(reference, expectation) {
       assert.equal(reference, 'acct_ada123:chk_test123');
+      // A ₦1,000 tip: Bachs confirms success only against TipMe's ₦100 share.
+      assert.deepEqual(expectation, { platformFeeMinor: 10000n });
       return {
         status: 'succeeded',
         amountMinor: BigInt(quote.payer_total_minor),

@@ -80,6 +80,11 @@ export interface PaymentProvider<TWebhookEvent = NormalizedProviderEvent> {
     feeMinor: bigint;
     feePaidBy?: FeePaidBy;
     platformFeeMinor?: bigint;
+    /**
+     * Set with `pending` when the provider has taken the money but its settlement evidence
+     * (fee bearer, platform fee) is not final yet: the payment must never be expired.
+     */
+    collected?: true;
   }>;
   verifyWebhook(
     rawBody: Buffer,

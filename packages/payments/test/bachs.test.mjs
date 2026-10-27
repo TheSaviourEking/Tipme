@@ -296,6 +296,7 @@ test('recipient-borne processing fee holds a completed payment pending', async (
     feeMinor: 1500n,
     feePaidBy: 'connected_account',
     platformFeeMinor: 0n,
+    collected: true,
   });
 });
 
@@ -328,6 +329,7 @@ test('recipient fee attribution blocks success even when Bachs omits a fee amoun
     feeMinor: 0n,
     feePaidBy: 'connected_account',
     platformFeeMinor: 0n,
+    collected: true,
   });
 });
 
@@ -364,6 +366,7 @@ test('missing fee amount or fee attribution never marks a payment successful', a
           feeMinor: 0n,
           feePaidBy: feePaidBy ?? 'unknown',
           platformFeeMinor: 0n,
+          collected: true,
         },
       );
     });
@@ -936,4 +939,48 @@ test('a read-only Bachs adapter needs no webhook secret and refuses every webhoo
     'x-bachs-signature-v2': `t=${Math.floor(Date.now() / 1000)},v1=${'a'.repeat(64)}`,
   });
   assert.equal(verification.ok, false);
+});
+
+test('a paid checkout awaiting settlement is pending but reported as collected', async () => {
+  let responseIndex = 0;
+  const responses = [
+    jsonResponse({
+      checkout_id: 'chk_123abc',
+      status: 'completed',
+      amount: '1000.00',
+      currency: 'NGN',
+      payment_status: 'paid',
+      charge: { payment_id: 'ch_123abc' },
+    }),
+    // Settlement fields (fee_paid_by, fees) are not there yet.
+    jsonResponse({
+      payment_id: 'ch_123abc',
+      status: 'succeeded',
+      amount: '1000.00',
+      currency: 'NGN',
+      platform_fee: '105.00',
+    }),
+  ];
+  const provider = makeProvider(async () => responses[responseIndex++]);
+  const answer = await provider.verifyTransaction('acct_123abc:chk_123abc', {
+    platformFeeMinor: 10500n,
+  });
+  assert.equal(answer.status, 'pending');
+  assert.equal(answer.collected, true);
+});
+
+test('an open or expired checkout is never reported as collected', async () => {
+  for (const status of ['open', 'expired']) {
+    const provider = makeProvider(async () =>
+      jsonResponse({
+        checkout_id: 'chk_123abc',
+        status,
+        amount: '1000.00',
+        currency: 'NGN',
+        payment_status: null,
+      }),
+    );
+    const answer = await provider.verifyTransaction('acct_123abc:chk_123abc');
+    assert.equal(answer.collected, undefined, status);
+  }
 });

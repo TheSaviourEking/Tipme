@@ -419,6 +419,8 @@ export function getUnknownBachsAttemptForOperations(
   amountMinor: bigint;
   currency: string;
   accountReference: string;
+  /** TipMe's whole quoted share: the platform fee the provider must report. */
+  expectation: { platformFeeMinor: bigint };
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -427,6 +429,8 @@ export function getUnknownBachsAttemptForOperations(
         profileId: paymentIntents.profileId,
         amountMinor: tipQuotes.payerTotalMinor,
         currency: tipQuotes.currency,
+        platformFeeMinor: tipQuotes.platformFeeMinor,
+        providerFeeMinor: tipQuotes.providerFeeMinor,
         accountReference: paymentAccounts.providerAccountReference,
       })
       .from(paymentAttempts)
@@ -454,7 +458,12 @@ export function getUnknownBachsAttemptForOperations(
         ),
       );
     if (!row?.accountReference) return null;
-    return { ...row, accountReference: row.accountReference };
+    const { platformFeeMinor, providerFeeMinor, ...target } = row;
+    return {
+      ...target,
+      accountReference: row.accountReference,
+      expectation: { platformFeeMinor: platformFeeMinor + providerFeeMinor },
+    };
   });
 }
 

@@ -475,6 +475,7 @@ export function createBachsProvider(
       const paymentReference =
         checkout.charge?.payment_id ?? checkout.charge?.id;
       if (!paymentReference) {
+        // Completed and paid, but the charge is not linked yet: money was taken.
         return {
           status: 'pending',
           amountMinor: providerAmountToMinor(
@@ -484,6 +485,7 @@ export function createBachsProvider(
           currency: checkout.currency,
           feeMinor: 0n,
           feePaidBy: 'unknown',
+          collected: true,
         };
       }
 
@@ -516,19 +518,20 @@ export function createBachsProvider(
         platformFeeMinor === expectation.platformFeeMinor;
       const verifiedProcessingFee =
         actualFeeBearer === 'platform' && fee !== null;
-      const status =
+      // Bachs took the money, but the fee evidence that lets TipMe book it is not final (or
+      // does not match): hold it pending, and say it was collected so it is never expired.
+      const unverifiedSuccess =
         providerStatus === 'succeeded' &&
-        (!verifiedPlatformFee || !verifiedProcessingFee)
-          ? 'pending'
-          : providerStatus;
+        (!verifiedPlatformFee || !verifiedProcessingFee);
 
       return {
-        status,
+        status: unverifiedSuccess ? 'pending' : providerStatus,
         amountMinor,
         currency: payment.currency,
         feeMinor,
         feePaidBy: actualFeeBearer,
         platformFeeMinor,
+        ...(unverifiedSuccess ? { collected: true as const } : {}),
       };
     },
 

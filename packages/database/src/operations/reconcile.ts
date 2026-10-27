@@ -1,21 +1,43 @@
 import { and, asc, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { paymentAttempts, payouts } from '../schema.js';
+import {
+  paymentAttempts,
+  paymentIntents,
+  payouts,
+  tipQuotes,
+} from '../schema.js';
 import { recordAudit } from './audit.js';
 import { guarded, OperationError } from './errors.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordPayoutOutcome } from './payouts.js';
 import { recordProviderEvent } from './provider-events.js';
 
-/** What reconciliation needs from a provider: an authoritative, server-to-server status check. */
+/**
+ * What reconciliation needs from a provider: an authoritative, server-to-server status check.
+ * `expectation` is TipMe's whole quoted share (processing included); a provider that reports
+ * the platform fee it applied (Bachs) confirms success only when the two match.
+ */
 export interface TransactionVerifier {
-  verifyTransaction(providerReference: string): Promise<{
+  verifyTransaction(
+    providerReference: string,
+    expectation?: { platformFeeMinor: bigint },
+  ): Promise<{
     status: 'succeeded' | 'failed' | 'pending' | 'not_found';
     amountMinor: bigint;
     currency: string;
     feeMinor: bigint;
+    /** Pending, but the provider has already taken the money: never expire it. */
+    collected?: true;
   }>;
 }
+
+/** TipMe's whole share of a quote, as sent to the provider as its platform fee. */
+export const quotedShare = (quote: {
+  platformFeeMinor: bigint;
+  providerFeeMinor: bigint;
+}): { platformFeeMinor: bigint } => ({
+  platformFeeMinor: quote.platformFeeMinor + quote.providerFeeMinor,
+});
 
 export type ProviderResolver<T> = T | ((provider: string) => T);
 
@@ -36,6 +58,7 @@ export async function findAttemptsToReconcile(
     provider: string;
     providerReference: string;
     createdAt: Date;
+    expectation: { platformFeeMinor: bigint };
   }[]
 > {
   const rows = await db
@@ -44,8 +67,12 @@ export async function findAttemptsToReconcile(
       provider: paymentAttempts.provider,
       providerReference: paymentAttempts.providerReference,
       createdAt: paymentAttempts.createdAt,
+      platformFeeMinor: tipQuotes.platformFeeMinor,
+      providerFeeMinor: tipQuotes.providerFeeMinor,
     })
     .from(paymentAttempts)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, paymentAttempts.intentId))
+    .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
     .where(
       and(
         inArray(paymentAttempts.status, ['INITIATED', 'PENDING', 'UNKNOWN']),
@@ -60,13 +87,14 @@ export async function findAttemptsToReconcile(
       asc(paymentAttempts.createdAt),
     )
     .limit(input.limit);
-  return rows.flatMap((row) =>
+  return rows.flatMap(({ platformFeeMinor, providerFeeMinor, ...row }) =>
     row.provider && row.providerReference
       ? [
           {
             ...row,
             provider: row.provider,
             providerReference: row.providerReference,
+            expectation: quotedShare({ platformFeeMinor, providerFeeMinor }),
           },
         ]
       : [],
@@ -105,7 +133,7 @@ export async function reconcileAttempts(input: {
       const answer = await providerFor(
         input.provider,
         attempt.provider,
-      ).verifyTransaction(attempt.providerReference);
+      ).verifyTransaction(attempt.providerReference, attempt.expectation);
       if (answer.status === 'succeeded' || answer.status === 'failed') {
         const result = await recordProviderEvent(input.db, {
           provider: attempt.provider,

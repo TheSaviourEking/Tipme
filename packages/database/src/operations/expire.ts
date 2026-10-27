@@ -6,7 +6,7 @@ import { markAttemptInitiated } from './attempts.js';
 import { guarded } from './errors.js';
 import { activeTraceId } from './ids.js';
 import { recordProviderEvent } from './provider-events.js';
-import type { TransactionVerifier } from './reconcile.js';
+import { quotedShare, type TransactionVerifier } from './reconcile.js';
 import { recordTransition } from './transitions.js';
 
 const EXPIRABLE = ['CREATED', 'INITIATED'] as const;
@@ -38,6 +38,8 @@ export async function expireStaleTips(input: {
         attemptId: paymentAttempts.id,
         provider: paymentAttempts.provider,
         providerReference: paymentAttempts.providerReference,
+        platformFeeMinor: tipQuotes.platformFeeMinor,
+        providerFeeMinor: tipQuotes.providerFeeMinor,
       })
       .from(paymentAttempts)
       .innerJoin(
@@ -85,7 +87,23 @@ export async function expireStaleTips(input: {
       if (candidate.provider && candidate.providerReference) {
         const answer = await provider.verifyTransaction(
           candidate.providerReference,
+          quotedShare(candidate),
         );
+        if (answer.status === 'pending' && answer.collected) {
+          // The provider took the money but its settlement evidence is not final: never cancel
+          // a paid tip. Mark it pending (unbooked) so reconciliation and the issue inbox follow it.
+          await recordProviderEvent(db, {
+            provider: candidate.provider,
+            providerEventId: `expiry.${candidate.attemptId}.collected`,
+            eventType: 'payment.pending',
+            attemptId: candidate.attemptId,
+            providerReference: candidate.providerReference,
+            signatureVerified: true,
+            payload: { source: 'expiry', collected: true },
+            now,
+          });
+          continue;
+        }
         if (answer.status === 'succeeded' || answer.status === 'failed') {
           // Same deterministic ID as reconciliation, so the two can never both apply it.
           const result = await recordProviderEvent(db, {
