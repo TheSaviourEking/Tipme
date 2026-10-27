@@ -218,11 +218,20 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The browser and the system packages it needs are cached: a slow Ubuntu mirror once
+      # held one shard's install for eight minutes.
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
-      - run: pnpm exec playwright install --with-deps chromium
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/playwright-apt
+          key: playwright-chromium-apt-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium and its system packages (from the cache when present)
+        run: |
+          mkdir -p ~/.cache/playwright-apt
+          sudo cp ~/.cache/playwright-apt/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+          pnpm exec playwright install --with-deps chromium
+          cp /var/cache/apt/archives/*.deb ~/.cache/playwright-apt/ 2>/dev/null || true
       - run: docker compose up -d --wait postgres redis
       # Build, lint, typecheck and test results of unchanged packages are reused from the last
       # run (turbo.json declares every setting that changes a build, so a stale one is never used).
