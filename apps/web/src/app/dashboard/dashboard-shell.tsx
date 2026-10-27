@@ -2,7 +2,11 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import type { BachsPaymentAccountStatus, MyProfile } from '@tipme/contracts';
+import type {
+  BachsPaymentAccountStatus,
+  MyProfile,
+  VisitsToday,
+} from '@tipme/contracts';
 import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
@@ -37,15 +41,27 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [payments, setPayments] = useState<
     BachsPaymentAccountStatus | null | undefined
   >(undefined);
+  const [visitsToday, setVisitsToday] = useState<number | null>(null);
   const refreshAttention = useCallback(() => {
     void apiFetch<BachsPaymentAccountStatus>('/v1/me/payment-account').then(
-      (result) => setPayments(result.ok ? result.data : null),
+      (result) => {
+        const account = result.ok ? result.data : null;
+        setPayments(account);
+        // Only worth asking while tips are blocked: the number is shown in that notice alone.
+        if (
+          account?.enabled &&
+          !(account.status === 'ACTIVE' && account.chargesEnabled)
+        )
+          void apiFetch<VisitsToday>('/v1/me/visits-today').then((visits) =>
+            setVisitsToday(visits.ok ? visits.data.visits : null),
+          );
+      },
     );
   }, []);
   useEffect(refreshAttention, [refreshAttention, pathname]);
   const attention =
     profile && payments !== undefined
-      ? ownerAttention({ profile, payments })
+      ? ownerAttention({ profile, payments, visitsToday })
       : null;
   const needsFix = new Set(attention?.map((item) => item.navHref));
 

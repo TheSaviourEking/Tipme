@@ -15,6 +15,11 @@ export interface DashboardSummary {
   withdrawalsAvailable: boolean;
 }
 
+/** Browsing sessions that opened the owner's page today (Lagos); null while analytics are off. */
+export interface VisitsToday {
+  visits: number | null;
+}
+
 export type TipState = 'paid' | 'confirming' | 'failed' | 'cancelled';
 
 export interface MyTipRow {

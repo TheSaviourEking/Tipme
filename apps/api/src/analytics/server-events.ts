@@ -13,7 +13,8 @@ import { LOGGER } from '../tokens.js';
  */
 @Injectable()
 export class ServerEvents {
-  private readonly enabled: boolean;
+  /** Whether anonymous analytics are collected at all (off in production until D-07). */
+  readonly enabled: boolean;
   constructor(
     @Inject(API_CONFIG) config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,

@@ -164,6 +164,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/me/tips/{tipId}` | n/a (read) | – | – |
 | POST | `/v1/me/tips/{tipId}/message/hide` | yes | – | – |
 | POST | `/v1/me/tips/{tipId}/message/report` | yes | – | – |
+| GET | `/v1/me/visits-today` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
 
 #### Signed-in staff, before an admin grant

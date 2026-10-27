@@ -109,3 +109,42 @@ test('payments come before the page, so the most urgent fix is first', () => {
     ['set_up_payments', 'page_offline'],
   );
 });
+
+test('while supporters can’t tip yet, the owner hears how often the page was opened today', () => {
+  const [item] = ownerAttention({
+    profile: ready,
+    payments: payments(null),
+    visitsToday: 3,
+  });
+  assert.equal(
+    item.body,
+    'Your page was opened 3 times today, but nobody could tip you yet. It takes a few minutes to set up.',
+  );
+  const [once] = ownerAttention({
+    profile: ready,
+    payments: payments('ONBOARDING'),
+    visitsToday: 1,
+  });
+  assert.match(
+    once.body,
+    /^Your page was opened once today, but nobody could tip you yet\./,
+  );
+  // No visits, analytics off (null) or nothing blocking tips: the usual words, no number.
+  for (const visitsToday of [0, null, undefined])
+    assert.doesNotMatch(
+      ownerAttention({
+        profile: ready,
+        payments: payments(null),
+        visitsToday,
+      })[0].body,
+      /opened/,
+    );
+  assert.doesNotMatch(
+    ownerAttention({
+      profile: { ...ready, pageState: 'not_live' },
+      payments: payments('ACTIVE'),
+      visitsToday: 4,
+    })[0].body,
+    /opened/,
+  );
+});

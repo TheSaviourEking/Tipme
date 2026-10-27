@@ -24,14 +24,22 @@ const SETTINGS = '/dashboard/settings';
 export function ownerAttention({
   profile,
   payments,
+  visitsToday,
 }: {
   profile: Pick<MyProfile, 'emailVerified' | 'pageState' | 'suspended'>;
   payments: Pick<
     BachsPaymentAccountStatus,
     'enabled' | 'status' | 'chargesEnabled' | 'requirementsDue'
   > | null;
+  /** Sessions that opened the page today; null while analytics are off. */
+  visitsToday?: number | null;
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
+  // A real number makes it concrete: people came, and couldn't tip. Otherwise the usual words.
+  const cantTip = (usual: string, detail: string) =>
+    visitsToday && visitsToday > 0
+      ? `Your page was opened ${visitsToday === 1 ? 'once' : `${visitsToday} times`} today, but nobody could tip you yet. ${detail}`
+      : usual;
   // Without a payment provider that needs setup (test payments), or when the account could
   // not be read, there is nothing true to say about payments.
   if (payments?.enabled) {
@@ -40,7 +48,10 @@ export function ownerAttention({
       items.push({
         id: 'payments_checking',
         title: 'We’re checking your payment account',
-        body: 'Supporters can’t tip you until it’s confirmed. TipMe will check it for you, so there’s no need to start again.',
+        body: cantTip(
+          'Supporters can’t tip you until it’s confirmed. TipMe will check it for you, so there’s no need to start again.',
+          'TipMe is checking your payment account, so there’s no need to start again.',
+        ),
         navHref: SETTINGS,
       });
     else if (status === null || status === 'FAILED')
@@ -49,7 +60,10 @@ export function ownerAttention({
           ? {
               id: 'set_up_payments',
               title: 'Set up payments to start receiving tips',
-              body: 'Supporters can’t tip you until this is done. It takes a few minutes.',
+              body: cantTip(
+                'Supporters can’t tip you until this is done. It takes a few minutes.',
+                'It takes a few minutes to set up.',
+              ),
               action: {
                 href: `${SETTINGS}#payments`,
                 label: 'Set up payments',
@@ -59,7 +73,10 @@ export function ownerAttention({
           : {
               id: 'verify_email',
               title: 'Confirm your email to set up payments',
-              body: 'Supporters can’t tip you until payments are set up, and that starts with a confirmed email.',
+              body: cantTip(
+                'Supporters can’t tip you until payments are set up, and that starts with a confirmed email.',
+                'Setting up payments starts with a confirmed email.',
+              ),
               action: { href: `${SETTINGS}#contact`, label: 'Confirm email' },
               navHref: SETTINGS,
             },
@@ -71,8 +88,14 @@ export function ownerAttention({
         title: 'Finish setting up payments',
         body:
           left > 0
-            ? `Supporters can’t tip you yet. Your payment account needs ${left} more ${left === 1 ? 'detail' : 'details'}.`
-            : 'Supporters can’t tip you until your payment account is complete.',
+            ? cantTip(
+                `Supporters can’t tip you yet. Your payment account needs ${left} more ${left === 1 ? 'detail' : 'details'}.`,
+                `Your payment account needs ${left} more ${left === 1 ? 'detail' : 'details'}.`,
+              )
+            : cantTip(
+                'Supporters can’t tip you until your payment account is complete.',
+                'Your payment account isn’t complete yet.',
+              ),
         action: { href: `${SETTINGS}#payments`, label: 'Continue setup' },
         navHref: SETTINGS,
       });

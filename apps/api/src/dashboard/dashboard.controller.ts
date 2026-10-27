@@ -20,6 +20,7 @@ import {
   type ActivityRow,
   ApiDataResponse,
   type DashboardSummary,
+  type VisitsToday,
   type MyTipDetail,
   type MyTipRow,
   type WeeklyReportData,
@@ -36,6 +37,7 @@ import {
   recentActivity,
   reportMessage,
   requestWithdrawal,
+  visitsToday,
   withdrawalsAvailable,
 } from '@tipme/database';
 import type { MockProvider } from '@tipme/payments';
@@ -82,6 +84,22 @@ export class DashboardController {
       }),
     ]);
     return { data: { ...summary, withdrawalsAvailable: available } };
+  }
+
+  /** For "your page was opened N times today" while supporters can't tip yet. */
+  @Get('visits-today')
+  @Header('Cache-Control', 'private, no-store')
+  async visits(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<VisitsToday>> {
+    if (!this.events.enabled) return { data: { visits: null } };
+    return {
+      data: {
+        visits: await visitsToday(this.database.db, {
+          profileId: await this.profile(auth),
+        }),
+      },
+    };
   }
 
   @Get('tips')
