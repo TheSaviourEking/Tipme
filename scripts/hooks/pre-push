@@ -4,6 +4,10 @@
 # runs only on request: TIPME_PREPUSH_E2E=1 git push. Skip everything once: git push --no-verify.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
+# Git exports GIT_DIR and friends to hooks. Left set, a test that creates its own scratch
+# repository would commit, branch and set user.name in this one instead.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
 
 step() { printf '\npre-push: %s\n' "$1"; }
 

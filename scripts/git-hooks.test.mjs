@@ -6,9 +6,11 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { installHooks } from './install-git-hooks.mjs';
 
@@ -67,5 +69,38 @@ test('the prepare script succeeds where scripts/ is not copied (the Docker build
     execFileSync('sh', ['-c', scripts.prepare], { cwd: folder, stdio: 'pipe' });
   } finally {
     rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('the hook clears the git variables git sets for it, so tests that make their own repository never write into this one', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'tipme-hookenv-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: repo });
+    const bin = join(repo, 'bin');
+    execFileSync('mkdir', [bin]);
+    const record = join(repo, 'env.txt');
+    for (const name of ['pnpm', 'node'])
+      writeFileSync(join(bin, name), `#!/bin/sh\nenv >> '${record}'\n`, {
+        mode: 0o755,
+      });
+    execFileSync(
+      'bash',
+      [fileURLToPath(new URL('./hooks/pre-push', import.meta.url))],
+      {
+        cwd: repo,
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          HOME: repo,
+          GIT_DIR: join(repo, '.git'),
+          GIT_INDEX_FILE: join(repo, '.git', 'index'),
+        },
+        stdio: 'pipe',
+      },
+    );
+    const seen = readFileSync(record, 'utf8');
+    assert.doesNotMatch(seen, /^GIT_DIR=/m);
+    assert.doesNotMatch(seen, /^GIT_INDEX_FILE=/m);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
   }
 });
