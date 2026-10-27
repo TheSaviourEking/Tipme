@@ -93,6 +93,7 @@ test('checkout sends direct-charge account context, full TipMe share, and stable
     success_url: 'https://usetipme.xyz/checkout/return',
     cancel_url: 'https://usetipme.xyz/checkout/cancel',
     customer_creation: 'if_required',
+    payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
     platform_fee: '105.00',
   });
   assert.deepEqual(result, {
@@ -1103,4 +1104,100 @@ test('an ambiguous Bachs outcome says why, without any message text', async () =
       assert.deepEqual(error.diagnostic, expected);
       return true;
     });
+});
+
+test('every Bachs checkout offers only naira methods: NGN card and NGN bank transfer', async () => {
+  let body;
+  const provider = makeProvider(async (_url, init) => {
+    body = JSON.parse(init.body);
+    return jsonResponse({
+      checkout_id: 'chk_naira',
+      checkout_url: 'https://sandbox-checkout.bachs.io/c/chk_naira',
+      status: 'open',
+    });
+  });
+  await provider.initializePayment({
+    attemptId: 'attempt-naira',
+    amountMinor: 120000n,
+    currency: 'NGN',
+    recipientAccountReference: 'acct_123abc',
+    tipmeShareMinor: 12000n,
+    successUrl: 'https://usetipme.xyz/return',
+    cancelUrl: 'https://usetipme.xyz/cancel',
+  });
+  assert.deepEqual(body.payment_method_types, [
+    'NGN_CARD',
+    'NGN_BANK_TRANSFER',
+  ]);
+});
+
+test('a payment Bachs took in another currency is reported as such, so it is flagged and never booked', async () => {
+  let responseIndex = 0;
+  const responses = [
+    jsonResponse({
+      checkout_id: 'chk_crypto',
+      status: 'completed',
+      amount: '1200.00',
+      currency: 'NGN',
+      payment_status: 'succeeded',
+      charge: { payment_id: 'ch_crypto' },
+    }),
+    jsonResponse({
+      payment_id: 'ch_crypto',
+      status: 'succeeded',
+      amount: '86.173200',
+      amount_paid: '86.173200',
+      currency: 'USDT_TRC20',
+      platform_fee: null,
+      fee_paid_by: 'merchant',
+      fees: { amount: '1.292598', currency: 'USDT_TRC20' },
+    }),
+  ];
+  const provider = makeProvider(async () => responses[responseIndex++]);
+  const answer = await provider.verifyTransaction('acct_123abc:chk_crypto', {
+    platformFeeMinor: 12000n,
+  });
+  // A definite answer whose currency can never match the naira quote: TipMe holds it as a
+  // mismatch (nothing booked, a money issue), instead of failing to read it forever.
+  assert.equal(answer.status, 'succeeded');
+  assert.equal(answer.currency, 'USDT_TRC20');
+  assert.notEqual(answer.currency, 'NGN');
+});
+
+test('a collection webhook in a currency TipMe cannot parse is still a trigger, not a 400', () => {
+  const provider = makeProvider(async () => {
+    throw new Error('no network');
+  });
+  const rawBody = Buffer.from(
+    JSON.stringify({
+      id: 'evt_crypto',
+      type: 'collection.succeeded',
+      organization_id: 'acct_123abc',
+      account: 'acct_123abc',
+      data: {
+        checkout_id: 'chk_crypto',
+        reference: 'attempt-crypto',
+        status: 'SUCCEEDED',
+        amount: '86.173200',
+        currency: 'USDT_TRC20',
+        settlement_amount: '120000.00',
+        settlement_currency: 'NGN',
+        processing_fee: '1.292598',
+        processing_fee_currency: 'USDT_TRC20',
+        fee_bearer: 'merchant',
+      },
+    }),
+  );
+  const timestamp = String(Math.floor(NOW.getTime() / 1000));
+  const result = provider.verifyWebhook(
+    rawBody,
+    {
+      'x-bachs-signature-v2': `t=${timestamp},v1=${sign(CURRENT_SECRET, timestamp, rawBody)}`,
+    },
+    NOW,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.event.kind, 'payment');
+  assert.equal(result.event.providerReference, 'acct_123abc:chk_crypto');
+  assert.equal(result.event.amountMinor, undefined);
 });

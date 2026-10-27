@@ -141,4 +141,41 @@ test('Bachs confirmation and expiry', async (t) => {
     assert.equal(result.expired, 1);
     assert.deepEqual(await status(), { attempt: 'EXPIRED', tip: 'CANCELLED' });
   });
+
+  await t.test(
+    'a payment Bachs took in crypto is held as a mismatch: a money alert, nothing booked',
+    async () => {
+      await started();
+      const ledgerRows = async () =>
+        (
+          await database.pool.query(
+            'SELECT count(*)::int AS n FROM ledger_entries',
+          )
+        ).rows[0].n;
+      const before = await ledgerRows();
+      const bachs = verifier(() => ({
+        status: 'succeeded',
+        amountMinor: 0n,
+        currency: 'USDT_TRC20',
+        feeMinor: 0n,
+      }));
+      await reconcileAttempts({
+        db,
+        provider: bachs,
+        now: new Date(),
+        minAgeMs: 0,
+      });
+      assert.deepEqual(await status(), {
+        attempt: 'UNKNOWN',
+        tip: 'AWAITING_PAYMENT',
+      });
+      assert.equal(await ledgerRows(), before);
+      const alerts = (
+        await database.pool.query(
+          `SELECT event_type FROM outbox_events WHERE event_type = 'payment.mismatch'`,
+        )
+      ).rows;
+      assert.equal(alerts.length, 1);
+    },
+  );
 });

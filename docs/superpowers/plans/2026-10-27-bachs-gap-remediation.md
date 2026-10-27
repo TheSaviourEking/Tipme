@@ -216,3 +216,11 @@ The receipt page gave up after 2 minutes and only "Try again" showed the paid ti
 A live tip went UNKNOWN 0.6 s after starting and the log said only `UncertainProviderOutcomeError`. Ambiguous outcomes should carry an allowlisted cause (no response, unreadable reply, unexpected format, or Bachs' HTTP status and error code), never message text.
 
 - [ ] Failing tests in the adapter and the checkout classifier; implement; commit.
+
+### Task 15: Naira only, and never lose a payment in another currency
+
+A live sandbox supporter paid ₦1,200 in USDT_TRC20 because checkouts did not restrict payment methods. TipMe could not read that payment (three-letter currency check), so the tip sat INITIATED with no issue, and the webhook was answered with 400.
+
+- [x] Checkouts send `payment_method_types: ["NGN_CARD", "NGN_BANK_TRANSFER"]`.
+- [x] A payment in another currency is reported as a definite outcome with its real currency, so TipMe holds it as a mismatch (money issue, nothing booked).
+- [x] A collection webhook whose amount TipMe cannot parse is still accepted as a trigger.
