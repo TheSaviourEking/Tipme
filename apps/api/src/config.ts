@@ -181,6 +181,19 @@ export const apiConfigSchema = z
           message: 'required for Bachs sandbox',
         });
       }
+      // Bachs sends supporters back to the web app and refuses local addresses.
+      const webHost = new URL(config.WEB_ORIGIN).hostname;
+      if (
+        ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'].includes(webHost) ||
+        webHost.endsWith('.localhost')
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['WEB_ORIGIN'],
+          message:
+            'Bachs needs a public web address (for example an https tunnel), not localhost',
+        });
+      }
       if (!config.MOCK_PROVIDER_WEBHOOK_SECRET) {
         context.addIssue({
           code: 'custom',
