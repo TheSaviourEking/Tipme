@@ -41,6 +41,7 @@ const paymentSchema = z.object({
   amount: z.string(),
   amount_paid: z.string().nullable().optional(),
   currency: z.string().length(3),
+  platform_fee: z.string().nullable().optional(),
   fee_paid_by: z.enum(['merchant', 'platform']).nullable().optional(),
   fees: z
     .object({
@@ -52,9 +53,19 @@ const paymentSchema = z.object({
 });
 
 const accountSchema = z.object({
-  id: z.string().startsWith('acct_'),
+  id: z.string().trim().min(1).max(200),
   is_active: z.boolean().optional(),
   capabilities: z.record(z.string(), z.unknown()).nullable().optional(),
+  responsibilities: z
+    .object({
+      fees: z
+        .object({ collector: z.enum(['platform', 'merchant']) })
+        .nullable()
+        .optional(),
+    })
+    .passthrough()
+    .nullable()
+    .optional(),
   requirements: z
     .object({
       currently_due: z.array(z.string()).optional(),
@@ -92,7 +103,9 @@ export interface BachsProviderConfig {
 export interface BachsRecipientAccount {
   accountReference: string;
   active: boolean | null;
-  cardCollectionStatus: string | null;
+  ngnCardCollectionStatus: string | null;
+  bankTransferStatus: string | null;
+  feeCollector: 'platform' | 'connected_account' | 'unknown';
   requirementsDue: string[];
 }
 
@@ -157,14 +170,35 @@ function scopedCheckoutReference(
   return `${accountReference}:${checkoutId}`;
 }
 
+function providerIdentifier(value: string, label: string): string {
+  if (
+    value.length < 1 ||
+    value.length > 200 ||
+    value.includes(':') ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    throw new TypeError(`Invalid Bachs ${label}`);
+  }
+  return value;
+}
+
 function parseScopedCheckoutReference(value: string): {
   accountReference: string;
   checkoutId: string;
 } {
-  const match = /^(acct_[A-Za-z0-9]+):(chk_[A-Za-z0-9]+)$/.exec(value);
-  if (!match?.[1] || !match[2])
+  const separator = value.indexOf(':');
+  if (separator <= 0 || separator === value.length - 1)
     throw new TypeError('Invalid Bachs checkout reference');
-  return { accountReference: match[1], checkoutId: match[2] };
+  return {
+    accountReference: providerIdentifier(
+      value.slice(0, separator),
+      'account reference',
+    ),
+    checkoutId: providerIdentifier(
+      value.slice(separator + 1),
+      'checkout reference',
+    ),
+  };
 }
 
 function bachsHostedUrl(value: string): string {
@@ -190,19 +224,28 @@ function normalizedAccount(
     account.capabilities && typeof account.capabilities === 'object'
       ? account.capabilities
       : {};
-  const cardCollection = capabilities['card_collection'];
-  const cardCollectionStatus =
-    typeof cardCollection === 'object' &&
-    cardCollection !== null &&
-    'status' in cardCollection &&
-    typeof cardCollection.status === 'string'
-      ? cardCollection.status
+  const capabilityStatus = (name: string): string | null => {
+    const capability = capabilities[name];
+    return typeof capability === 'object' &&
+      capability !== null &&
+      'status' in capability &&
+      typeof capability.status === 'string'
+      ? capability.status
       : null;
+  };
+  const collector = account.responsibilities?.fees?.collector;
 
   return {
     accountReference: account.id,
     active: account.is_active ?? null,
-    cardCollectionStatus,
+    ngnCardCollectionStatus: capabilityStatus('ngn_card_collection'),
+    bankTransferStatus: capabilityStatus('bank_transfer'),
+    feeCollector:
+      collector === 'platform'
+        ? 'platform'
+        : collector === 'merchant'
+          ? 'connected_account'
+          : 'unknown',
     requirementsDue: account.requirements?.currently_due ?? [],
   };
 }
@@ -241,8 +284,7 @@ export function createBachsProvider(
   const client = new BachsApiClient(config);
 
   async function getAccount(accountReference: string) {
-    if (!/^acct_[A-Za-z0-9]+$/.test(accountReference))
-      throw new TypeError('Invalid Bachs account reference');
+    providerIdentifier(accountReference, 'account reference');
     const account = await client.request({
       method: 'GET',
       path: `/v1/accounts/${encodeURIComponent(accountReference)}`,
@@ -266,8 +308,7 @@ export function createBachsProvider(
           'Bachs checkout requires an account, complete TipMe share, success URL, and cancel URL',
         );
       }
-      if (!/^acct_[A-Za-z0-9]+$/.test(input.recipientAccountReference))
-        throw new TypeError('Invalid Bachs account reference');
+      providerIdentifier(input.recipientAccountReference, 'account reference');
       if (input.amountMinor <= 0n)
         throw new RangeError('Checkout amount must be positive');
       if (
@@ -363,7 +404,7 @@ export function createBachsProvider(
       return bachsHostedUrl(checkout.checkout_url);
     },
 
-    async verifyTransaction(providerReference) {
+    async verifyTransaction(providerReference, expectation) {
       const scopedReference = parseScopedCheckoutReference(providerReference);
 
       const checkout = await client.request({
@@ -386,7 +427,9 @@ export function createBachsProvider(
         };
       if (
         checkoutStatus !== 'completed' ||
-        checkout.payment_status?.toLowerCase() !== 'paid'
+        !['paid', 'succeeded'].includes(
+          checkout.payment_status?.toLowerCase() ?? '',
+        )
       ) {
         return {
           status: 'pending',
@@ -434,11 +477,19 @@ export function createBachsProvider(
           'Bachs processing fee currency differs from payment currency',
         );
 
+      const platformFeeMinor =
+        payment.platform_fee === null || payment.platform_fee === undefined
+          ? 0n
+          : providerAmountToMinor(payment.platform_fee, payment.currency);
       const actualFeeBearer = feePaidBy(payment.fee_paid_by);
       const verifiedPlatformFee =
+        expectation !== undefined &&
+        platformFeeMinor === expectation.platformFeeMinor;
+      const verifiedProcessingFee =
         actualFeeBearer === 'platform' && fee !== null;
       const status =
-        providerStatus === 'succeeded' && !verifiedPlatformFee
+        providerStatus === 'succeeded' &&
+        (!verifiedPlatformFee || !verifiedProcessingFee)
           ? 'pending'
           : providerStatus;
 
@@ -448,6 +499,7 @@ export function createBachsProvider(
         currency: payment.currency,
         feeMinor,
         feePaidBy: actualFeeBearer,
+        platformFeeMinor,
       };
     },
 
@@ -474,7 +526,8 @@ export function createBachsProvider(
           configuration: {
             merchant: {
               capabilities: {
-                card_collection: { requested: true },
+                ngn_card_collection: { requested: true },
+                bank_transfer: { requested: true },
               },
             },
           },
@@ -489,8 +542,7 @@ export function createBachsProvider(
 
     async createOnboardingLink(input) {
       const accountReference = input.accountReference;
-      if (!/^acct_[A-Za-z0-9]+$/.test(accountReference))
-        throw new TypeError('Invalid Bachs account reference');
+      providerIdentifier(accountReference, 'account reference');
       const refreshUrl = validateHttpsOrLocalUrl(input.refreshUrl);
       const returnUrl = validateHttpsOrLocalUrl(input.returnUrl);
       const result = await client.request({

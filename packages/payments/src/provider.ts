@@ -28,6 +28,12 @@ export type NormalizedProviderEvent =
       feePaidBy: FeePaidBy;
     }
   | {
+      kind: 'account';
+      eventId: string;
+      eventType: 'account.updated' | 'capability.updated';
+      accountReference: string;
+    }
+  | {
       kind: 'ignored';
       eventId: string;
       eventType: string;
@@ -64,12 +70,16 @@ export interface PaymentProvider<TWebhookEvent = NormalizedProviderEvent> {
   /** Returns null only for a definite absence; unsupported lookup must fail as uncertain. */
   findPayment(attemptId: string): Promise<{ providerReference: string } | null>;
   /** Server-to-server status check: the authority for reconciliation. */
-  verifyTransaction(providerReference: string): Promise<{
+  verifyTransaction(
+    providerReference: string,
+    expectation?: { platformFeeMinor: bigint },
+  ): Promise<{
     status: TransactionStatus;
     amountMinor: bigint;
     currency: string;
     feeMinor: bigint;
     feePaidBy?: FeePaidBy;
+    platformFeeMinor?: bigint;
   }>;
   verifyWebhook(
     rawBody: Buffer,

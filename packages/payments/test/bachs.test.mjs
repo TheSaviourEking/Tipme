@@ -242,18 +242,25 @@ test('lookup scopes checkout and payment reads to the connected account', async 
       amount: '1000.00',
       amount_paid: '1000.00',
       currency: 'NGN',
+      platform_fee: '105.00',
       fee_paid_by: 'platform',
       fees: { amount: '15.00', currency: 'NGN' },
     });
   });
 
-  assert.deepEqual(await provider.verifyTransaction('acct_123abc:chk_123abc'), {
-    status: 'succeeded',
-    amountMinor: 100000n,
-    currency: 'NGN',
-    feeMinor: 1500n,
-    feePaidBy: 'platform',
-  });
+  assert.deepEqual(
+    await provider.verifyTransaction('acct_123abc:chk_123abc', {
+      platformFeeMinor: 10500n,
+    }),
+    {
+      status: 'succeeded',
+      amountMinor: 100000n,
+      currency: 'NGN',
+      feeMinor: 1500n,
+      feePaidBy: 'platform',
+      platformFeeMinor: 10500n,
+    },
+  );
   assert.equal(requests.length, 2);
   assert.equal(requests[0].init.headers['X-Account-Id'], 'acct_123abc');
   assert.equal(requests[1].init.headers['X-Account-Id'], 'acct_123abc');
@@ -287,6 +294,7 @@ test('recipient-borne processing fee holds a completed payment pending', async (
     currency: 'NGN',
     feeMinor: 1500n,
     feePaidBy: 'connected_account',
+    platformFeeMinor: 0n,
   });
 });
 
@@ -318,6 +326,7 @@ test('recipient fee attribution blocks success even when Bachs omits a fee amoun
     currency: 'NGN',
     feeMinor: 0n,
     feePaidBy: 'connected_account',
+    platformFeeMinor: 0n,
   });
 });
 
@@ -353,6 +362,7 @@ test('missing fee amount or fee attribution never marks a payment successful', a
           currency: 'NGN',
           feeMinor: 0n,
           feePaidBy: feePaidBy ?? 'unknown',
+          platformFeeMinor: 0n,
         },
       );
     });
@@ -398,7 +408,7 @@ test('open checkout remains pending and an expired checkout is a definite failur
   });
 });
 
-test('account creation fixes platform fee collection and requests merchant card collection', async () => {
+test('account creation requests NGN methods and trusts returned fee responsibility', async () => {
   let requestBody;
   let requestHeaders;
   const provider = makeProvider(async (_url, init) => {
@@ -406,9 +416,13 @@ test('account creation fixes platform fee collection and requests merchant card 
     requestHeaders = init.headers;
     return jsonResponse(
       {
-        id: 'acct_123abc',
+        id: 'legacy-account-123',
         is_active: false,
-        capabilities: { card_collection: { status: 'pending' } },
+        capabilities: {
+          ngn_card_collection: { status: 'pending' },
+          bank_transfer: { status: 'active' },
+        },
+        responsibilities: { fees: { collector: 'merchant' } },
         requirements: { currently_due: ['individual.address'] },
       },
       201,
@@ -424,7 +438,12 @@ test('account creation fixes platform fee collection and requests merchant card 
   });
 
   assert.deepEqual(requestBody.configuration, {
-    merchant: { capabilities: { card_collection: { requested: true } } },
+    merchant: {
+      capabilities: {
+        ngn_card_collection: { requested: true },
+        bank_transfer: { requested: true },
+      },
+    },
   });
   assert.deepEqual(requestBody.responsibilities, {
     fees: { collector: 'platform' },
@@ -434,11 +453,125 @@ test('account creation fixes platform fee collection and requests merchant card 
     'tipme-account-recipient-123',
   );
   assert.deepEqual(account, {
-    accountReference: 'acct_123abc',
+    accountReference: 'legacy-account-123',
     active: false,
-    cardCollectionStatus: 'pending',
+    ngnCardCollectionStatus: 'pending',
+    bankTransferStatus: 'active',
+    feeCollector: 'connected_account',
     requirementsDue: ['individual.address'],
   });
+});
+
+test('checkout success accepts succeeded and exposes the authoritative platform fee', async () => {
+  let responseIndex = 0;
+  const responses = [
+    jsonResponse({
+      checkout_id: 'checkout-opaque',
+      status: 'completed',
+      amount: '1000.00',
+      currency: 'NGN',
+      payment_status: 'succeeded',
+      charge: { payment_id: 'payment-opaque' },
+    }),
+    jsonResponse({
+      payment_id: 'payment-opaque',
+      status: 'succeeded',
+      amount: '1000.00',
+      currency: 'NGN',
+      platform_fee: '105.00',
+      fee_paid_by: 'platform',
+      fees: { amount: '15.00', currency: 'NGN' },
+    }),
+  ];
+  const provider = makeProvider(async () => responses[responseIndex++]);
+
+  assert.deepEqual(
+    await provider.verifyTransaction('legacy-account-123:checkout-opaque', {
+      platformFeeMinor: 10500n,
+    }),
+    {
+      status: 'succeeded',
+      amountMinor: 100000n,
+      currency: 'NGN',
+      feeMinor: 1500n,
+      feePaidBy: 'platform',
+      platformFeeMinor: 10500n,
+    },
+  );
+});
+
+test('missing platform fee keeps an otherwise succeeded payment pending', async () => {
+  let responseIndex = 0;
+  const responses = [
+    jsonResponse({
+      checkout_id: 'chk_123abc',
+      status: 'completed',
+      amount: '1000.00',
+      currency: 'NGN',
+      payment_status: 'paid',
+      charge: { payment_id: 'pay_123abc' },
+    }),
+    jsonResponse({
+      payment_id: 'pay_123abc',
+      status: 'succeeded',
+      amount: '1000.00',
+      currency: 'NGN',
+      platform_fee: null,
+      fee_paid_by: 'platform',
+      fees: { amount: '15.00', currency: 'NGN' },
+    }),
+  ];
+  const provider = makeProvider(async () => responses[responseIndex++]);
+
+  assert.equal(
+    (
+      await provider.verifyTransaction('acct_123abc:chk_123abc', {
+        platformFeeMinor: 10500n,
+      })
+    ).status,
+    'pending',
+  );
+});
+
+test('account and capability webhooks retain only normalized lifecycle evidence', () => {
+  const provider = makeProvider(async () => {
+    throw new Error('webhook verification must not call the network');
+  });
+  const rawBody = Buffer.from(
+    JSON.stringify({
+      id: 'evt_account_restricted',
+      type: 'capability.updated',
+      account: 'legacy-account-123',
+      data: {
+        capability: 'ngn_card_collection',
+        status: 'restricted',
+        customer: { email: 'private@example.com' },
+      },
+    }),
+  );
+  const timestamp = String(Math.floor(NOW.getTime() / 1000));
+  const result = provider.verifyWebhook(
+    rawBody,
+    {
+      'X-Bachs-Signature-V2': `t=${timestamp},v1=${sign(
+        CURRENT_SECRET,
+        timestamp,
+        rawBody,
+      )}`,
+    },
+    NOW,
+  );
+
+  assert.deepEqual(result, {
+    ok: true,
+    event: {
+      kind: 'account',
+      eventId: 'evt_account_restricted',
+      eventType: 'capability.updated',
+      accountReference: 'legacy-account-123',
+    },
+  });
+  assert.ok(!JSON.stringify(result).includes('private@example.com'));
 });
 
 test('onboarding links are returned only for Bachs HTTPS URLs', async () => {

@@ -15,6 +15,8 @@ const SUPPORTED_EVENT_TYPES = new Set([
   'collection.failed',
   'collection.underpaid',
   'checkout.completed',
+  'account.updated',
+  'capability.updated',
 ]);
 
 const eventEnvelopeSchema = z.object({
@@ -144,9 +146,20 @@ function normalizeEvent(
     nullableString(event.account) ?? nullableString(event.organization_id);
   if (
     accountReference !== null &&
-    !/^acct_[A-Za-z0-9]+$/.test(accountReference)
+    (accountReference.length > 200 ||
+      accountReference.includes(':') ||
+      /[\u0000-\u001f\u007f]/.test(accountReference))
   ) {
     return undefined;
+  }
+  if (event.type === 'account.updated' || event.type === 'capability.updated') {
+    if (!accountReference) return undefined;
+    return {
+      kind: 'account',
+      eventId: event.id,
+      eventType: event.type,
+      accountReference,
+    };
   }
   const checkoutId = nullableString(data['checkout_id']);
   const operationReference = nullableString(data['reference']);
