@@ -4548,6 +4548,17 @@
                     "type": "string",
                     "maxLength": 60
                   },
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "thank_you",
+                      "great_service",
+                      "helped_me",
+                      "celebration",
+                      "gift",
+                      "other"
+                    ]
+                  },
                   "celebrationMomentId": {
                     "type": "string",
                     "format": "uuid",

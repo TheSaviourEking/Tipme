@@ -3,10 +3,11 @@
 - Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 already merged and is not being reused.
 - Scope: recipient onboarding guidance on the homepage/dashboard; business coming-soon and voluntary mailto interest path; navbar/copy cleanup; optional structured tip purpose through contract, API, database migration, checkout form and recipient detail; `/for-businesses` layout alignment.
 - Migration `0039_tip_purpose` is additive and has not been applied to any database. The separate Bachs branch also currently contains migration 0039; coordinate/resequence before both branches are merged.
-- Verification: `pnpm test` passed (54 root tests; all 18 package tasks, including 55 web, 31 API, 9 contracts and 3 database unit tests); `pnpm typecheck` passed (15/15); `pnpm lint` passed (15/15); `pnpm build` passed (9/9); `pnpm format:check` and `git diff --check` passed; checkout Playwright discovery listed 21 tests.
-- Added contract-schema and database-integration coverage for tip purpose plus a checkout E2E assertion that the selected purpose is sent. Database integration execution and browser E2E execution were not run because no isolated test stack was available. Migration was not applied.
-- Browser review showed the business page composed and centred at desktop; the narrow viewport tool rendered at 400px and reported no horizontal overflow. No deployment or payment operation occurred.
-- PR #23 is open against `dev`; GitHub Actions and Vercel preview checks are pending. Next: review the latest CI/preview, then reconcile migration numbering with Bachs before merge.
+- Earlier local checks passed: `pnpm test` (54 root tests and all 18 package tasks), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), `pnpm format:check`, and `git diff --check`.
+- PR CI run `40424132431`: static, security, and Vercel checks passed; integration failed at the generated OpenAPI freshness check; E2E had 79 passed, 6 failed, and 3 skipped. Two functional failures were stale dashboard/welcome assertions; the other four were desktop/mobile visual screenshot mismatches.
+- Follow-up changes now regenerate `docs/api/openapi.json`, align those two E2E assertions with the current UI, and upload PNG-only Playwright diagnostics for three days on E2E failure. In this worktree, `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, and Playwright discovery (4 onboarding tests) passed.
+- Focused local browser execution is still unverified: port 4100 is occupied by the active API in `.worktrees/physical-interface`; the test runner refuses to reuse it, and that process was left untouched. CI must verify the corrected flows and provide the screenshot artifacts for human review before baselines are changed.
+- No migration was applied, and no deployment or payment operation occurred. PR #23 remains open against `dev`; after the next CI run, review the visual artifacts and then coordinate migration numbering with Bachs before merge.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 

@@ -80,7 +80,9 @@ test('a new recipient is welcomed and sets up their page one small step at a tim
   await expect(page.getByText('Done', { exact: true })).toBeVisible();
   await expect(page.getByText('Put your page online')).toBeVisible();
   await expect(page.getByText('Live', { exact: true })).toBeVisible();
-  await expect(page.getByText('Share your link or QR')).toBeVisible();
+  await expect(
+    page.getByText('Share your link or QR', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('Set up payments and payouts')).toBeVisible();
   await expect(page.getByText('Coming later', { exact: true })).toBeVisible();
 

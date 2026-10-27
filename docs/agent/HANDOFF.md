@@ -2,11 +2,11 @@
 
 - Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 was already merged; these follow-up changes are separate.
 - Scope includes homepage/dashboard recipient onboarding, business coming-soon and mailto interest form, navbar and test-mode copy, optional structured tip purpose end-to-end, and the centred `/for-businesses` layout.
-- The new optional purpose has contract validation, a database CHECK constraint, and a nullable `tips.purpose` column via `0039_tip_purpose`. Added contract and database integration tests plus checkout E2E request coverage. The integration suite and browser E2E were not executed; no local isolated test stack was started. The migration was not applied.
-- Validation passed: `pnpm test` (54 root tests; all 18 package tasks, including web 55/API 31/contracts 9/database unit 3), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), `pnpm format:check`, `git diff --check`. `pnpm exec playwright test --list tests/e2e/checkout.spec.ts` discovered 21 tests.
-- Visual check: business page reviewed at desktop and 400px; no horizontal overflow. No production/staging deployment or real payment.
-- Migration coordination: `.worktrees/provider-integrations-bachs` also has a migration numbered 0039. If both PRs are to land, rebase/regenerate one migration and its snapshot/journal after choosing merge order.
-- PR #23 is open against `dev`; GitHub Actions and Vercel preview checks are pending. Next: monitor the latest CI/preview and coordinate migration numbering with Bachs before merge. Keep the separate Bachs and physical-interface worktrees untouched.
+- The new optional purpose has contract validation, a database CHECK constraint, and a nullable `tips.purpose` column via `0039_tip_purpose`. The migration has not been applied. Migration `0039` also exists on `.worktrees/provider-integrations-bachs`; resequence/regenerate the journal and snapshot before combining branches.
+- PR CI run `40424132431`: static, security, and Vercel passed; integration stopped at the stale OpenAPI document; E2E reported 79 passed, 6 failed, 3 skipped. Two E2E failures were outdated assertions and four were visual mismatches. The generated OpenAPI JSON and two assertions are now fixed; failure-only PNG artifacts (3-day retention) were added to CI to support visual review.
+- Verified in this worktree: `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, and Playwright discovery (4 dashboard/welcome tests). Local Playwright execution remains unverified because port 4100 is occupied by the active API in `.worktrees/physical-interface`; it was not stopped or reused.
+- Earlier checks also passed: `pnpm test` (54 root tests; all 18 package tasks), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), and `pnpm format:check`. Browser review of `/for-businesses` showed a centred desktop layout and no horizontal overflow at 400px.
+- No deployment or real payment occurred. PR #23 remains open against `dev`. Next: push the follow-up, review the new CI PNG diagnostics before changing screenshot baselines, then reconcile migration numbering with Bachs. Keep the separate Bachs and physical-interface worktrees untouched.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 

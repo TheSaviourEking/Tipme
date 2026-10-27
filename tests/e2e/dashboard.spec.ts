@@ -13,7 +13,7 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   const { handle } = await signUpRecipient(page, testInfo);
   await page.goto('/dashboard');
   await expect(
-    page.getByText('Show your QR to get your first tip'),
+    page.getByRole('heading', { name: 'Get your page ready to share' }),
   ).toBeVisible();
   await expectAccessible(page);
 
