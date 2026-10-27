@@ -1,3 +1,10 @@
+# Current task — public page tip readiness (27 October 2026)
+
+- Branch/worktree: `feat/public-tip-readiness` / `.worktrees/public-readiness`, from `origin/dev` at `c7e6612`. Slice 2 of 3 of the owner-experience work (slice 1 is PR #29).
+- `PublicProfile.acceptingTips` (optional; absent means true): false while new tips need the owner's own Bachs account and it isn't ready, by the same rule checkout applies (`getReadyPaymentAccount`). The profile shows "<Name> can't receive tips just yet." in place of the form.
+- Cache: the owner's own setup refresh revalidates the public page at once; webhook and staff updates rely on the page cache's 30-second backstop.
+- No migration. Verified: database and API readiness tests (seen failing first), web unit 56/56, API unit 36/36, typecheck 15/15, lint 15/15, OpenAPI up to date, full integration on a throwaway PostgreSQL (127.0.0.1:5434), and a browser check at 1440 and 390 px against a stand-in API (panel shown, no form, no overflow).
+
 # Current task — Bachs gap remediation (27 October 2026)
 
 - PR #24 is open and ready for review against `dev`. CI run `40500650198`

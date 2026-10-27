@@ -142,3 +142,8 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - New recipients with no tips see a dashboard checklist for profile details, publishing, sharing, and payment setup. Profile photos remain optional; payment setup is clearly marked unavailable until provider and funds-flow approvals are complete.
 - The dashboard states that payments remain in test mode and real payment/payout setup is blocked on provider and funds-flow approvals.
 - Business interest is a mailto draft to the owner's provided inbox (`usetipme@gmail.com`), not a server submission. The visitor must choose to send it; TipMe does not persist the form value.
+
+## 2026-10-27 — Public page before tips are ready
+
+- While the owner hasn't finished the payment account that new tips need, the profile's tipping panel shows "<Name> can't receive tips just yet." with one line of explanation, in place of the form. Same panel material and position as the form, so the composition holds; no badge and no button, because the supporter has nothing to do.
+- Said before the supporter chooses an amount, never after they press Tip.

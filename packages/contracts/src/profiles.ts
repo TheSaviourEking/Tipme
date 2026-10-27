@@ -114,6 +114,11 @@ export interface PublicProfile {
   celebration?: { momentId: string; label: string };
   /** The amounts this page offers (PR-012). Optional until the release after PR-012. */
   tipAmounts?: TipAmounts;
+  /**
+   * False while the owner hasn't finished setting up the payment account that tips need, so the
+   * page says so before a supporter fills in the form. Absent from older APIs: treat as true.
+   */
+  acceptingTips?: boolean;
 }
 
 /** Changing the page's handle (PR-011); the old one keeps pointing at the page. */
