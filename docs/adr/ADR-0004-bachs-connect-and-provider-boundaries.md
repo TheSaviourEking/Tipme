@@ -215,6 +215,35 @@ live funds flow or provider after legal, risk and provider review.
   implementation does not itself authorize enabling even sandbox runtime
   selection, and does not change the live-payment gate.
 
+## Gap remediation status — 27 October 2026
+
+- **Confirmation.** Reconciliation, expiry and staff recovery pass TipMe's quoted
+  share (processing included) as the expected platform fee. A Bachs payment is
+  confirmed only when Bachs reports that exact platform fee and that the platform
+  paid the processing fee; anything else stays pending and surfaces as an issue.
+- **Expiry.** A payment Bachs has collected but not yet settled is reported as
+  `collected`; expiry moves it to `PENDING` (unbooked) and never cancels the tip.
+- **Checkout start.** A definite Bachs 4xx (except 408/409) fails the attempt and
+  the tip with `PAYMENT_START_REJECTED`; timeouts, 5xx and conflicts stay
+  `UNKNOWN`. Logs carry the error name, HTTP status and provider code only.
+- **Readiness.** One adapter rule (`bachsAccountReadiness`) decides `ACTIVE`:
+  active account, active `ngn_card_collection`, platform fee responsibility as
+  read back from Bachs. Recipient-paid fees or a restricted capability make the
+  account `RESTRICTED`. `account.updated` and `capability.updated` webhooks
+  trigger an authoritative re-read.
+- **Withdrawals.** Money collected by a provider other than the payout provider
+  cannot be withdrawn (`WITHDRAWAL_UNAVAILABLE`); Bachs payouts stay unsupported.
+  The worker builds a read-only adapter from the API key and holds no webhook
+  secret.
+- **Refunds and disputes.** Each Bachs refund, dispute or chargeback event raises
+  one `payment_reversed` money issue (migration 0041) and changes no balance.
+- **Identifiers.** Account and checkout IDs are opaque (no prefix assumed).
+- **Still open (live blockers):** refund, dispute and negative-balance handling in
+  the ledger; Bachs payouts; automated platform-balance (reserve) monitoring;
+  confirming Bachs' exact refund/dispute event names and success statuses
+  against captured sandbox fixtures; a provider-neutral account/onboarding
+  interface. None of these is simulated.
+
 ## Linked PRD requirements
 
 PRD payment-provider abstraction, guest checkout, truthful payment status and

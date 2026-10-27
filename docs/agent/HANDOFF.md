@@ -520,3 +520,7 @@ Verified in the current branch: repository unit tests (web 55/API 31/contracts 9
 ## /for-businesses layout fix (2026-10-27)
 
 Recomposed into `.business-page` (max-width 44rem, centred, spaced intro with `lead-copy`) and the interest form as a raised card. Checked visually at desktop and 400px (no overflow; the browser tool constrained the requested 320px viewport to 400px). Copy and labels unchanged; E2E not run (no stack).
+
+## Update — Bachs gap remediation (27 October 2026)
+
+Nine-task plan completed on `feat/provider-integrations-bachs` (commits after `ddd3f56`): payment confirmation and expiry safety, clean checkout refusals, authoritative account readiness with webhook refresh, withdrawal blocking for Bachs money, a secretless worker, refund/dispute money issues (migration 0041) and opaque IDs. Integration 364/364, unit 18/18 + 55/55, typecheck and lint 15/15. E2E and a live sandbox run are still to do; see ACTIVE_TASK and ADR-0004's "Gap remediation status".

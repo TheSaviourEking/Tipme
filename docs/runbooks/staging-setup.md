@@ -51,7 +51,16 @@ Fill in `/srv/tipme/staging.env`:
 - **`BACKUP_KEY`:** save a copy off the server, in your password manager. Without it no backup can be read.
 - **`RELEASE_KIND=test`:** this copy runs the full release check.
 
-To test Bachs checkout in this isolated staging copy, set `PAYMENT_PROVIDER=bachs-sandbox` and populate `BACHS_SANDBOX_API_KEY` and `BACHS_WEBHOOK_SECRET` in `/srv/tipme/staging.env`, then redeploy. The staging Compose file forwards these values to both the API and worker. Keep `DEPLOYMENT_MODE=preview`, the shared `PREVIEW_PASSWORD`, and `PAYMENTS_LIVE_ENABLED=false`; never put Bachs credentials in the web app or configure a live key. The default remains `PAYMENT_PROVIDER=mock`.
+To test Bachs checkout in this isolated staging copy, set `PAYMENT_PROVIDER=bachs-sandbox` and populate `BACHS_SANDBOX_API_KEY` and `BACHS_WEBHOOK_SECRET` in `/srv/tipme/staging.env`, then redeploy. The staging Compose file forwards the API key to the API and worker, and the webhook secrets to the API only (the worker only reads statuses). Keep `DEPLOYMENT_MODE=preview`, the shared `PREVIEW_PASSWORD`, and `PAYMENTS_LIVE_ENABLED=false`; never put Bachs credentials in the web app or configure a live key. The default remains `PAYMENT_PROVIDER=mock`.
+
+### Bachs sandbox webhook endpoint
+
+1. In the Bachs sandbox Dashboard, add a webhook endpoint `https://<api-host>/v1/webhooks/bachs` with `event_source=connect/all`, so events from recipients' connected accounts reach TipMe (direct charges are made on those accounts).
+2. Subscribe to `checkout.completed`, `collection.succeeded`, `collection.failed`, `collection.underpaid`, `account.updated`, `capability.updated`, and every refund, dispute and chargeback event Bachs offers. Refunds and disputes are not modelled yet: each one opens a "Refund or dispute reported" money issue and changes no balance.
+3. Copy the endpoint's signing secret into `BACHS_WEBHOOK_SECRET` and redeploy the API.
+4. Send a test event from the Dashboard and confirm the API logs `webhook.processed` (a test event for an unknown account is stored as unmatched, which is expected). A `webhook.rejected` log means the secret or clock is wrong.
+5. Failed deliveries can be replayed from the Dashboard: delivery is idempotent, and account events simply re-read the account from Bachs.
+6. Before each test session, check the platform balance in the Dashboard. TipMe pays Bachs' processing fee; if the balance cannot cover it, Bachs silently charges the recipient. Those payments stay pending in TipMe and surface as issues, but there is no automated reserve alert yet.
 
 The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence the `chown` above; `deploy.sh` checks it).
 

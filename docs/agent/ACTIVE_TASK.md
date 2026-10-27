@@ -1,3 +1,11 @@
+# Current task — Bachs gap remediation (27 October 2026)
+
+- Branch `feat/provider-integrations-bachs`, continued from `ddd3f56` at the user's request. Plan: `docs/superpowers/plans/2026-10-27-bachs-gap-remediation.md` (Tasks 1–9); ledger and rulings in `.superpowers/sdd/2026-10-27-bachs-gap-remediation/progress.md`.
+- Fixed: Bachs payments can be confirmed (callers pass the quoted TipMe share); expiry never cancels a collected-but-unsettled payment; definite 4xx checkout refusals fail cleanly (`PAYMENT_START_REJECTED`); one readiness rule with Bachs' real fee responsibility; account/capability webhooks re-read the account; withdrawals of Bachs-collected money refused (`WITHDRAWAL_UNAVAILABLE`); worker holds no webhook secret; refunds/disputes raise `payment_reversed` money issues (migration 0041); opaque Bachs IDs; `ddd3f56` compile breaks fixed.
+- Verified: integration 364/364 (69 files, throwaway PostgreSQL 16 on 127.0.0.1:5434 and Redis on 6380, no shared database touched); `pnpm test` 18/18 tasks and 55/55 root tests; `pnpm typecheck` 15/15; `pnpm lint` 15/15; `pnpm format:check`; `pnpm api:openapi --check`; generated docs unchanged; `git diff --check`.
+- Not run: e2e, a real Bachs sandbox scenario. The uncommitted payer-total-only tip form, its e2e copy changes and the design-log entry are someone else's work and were left uncommitted.
+- Still open (live blockers): refund/dispute ledger handling, Bachs payouts, automated reserve monitoring, confirming Bachs event names/statuses with captured sandbox fixtures, a provider-neutral account interface. The stuck sandbox attempt `01a17c0b…` still needs a Dashboard check before any retry.
+
 # Current task — recipient onboarding, business page and tip purpose (27 October 2026)
 
 - Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 already merged and is not being reused.

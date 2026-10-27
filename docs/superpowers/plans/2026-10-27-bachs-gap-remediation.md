@@ -31,12 +31,14 @@
 ### Task 1: Provider evidence and NGN account readiness
 
 **Files:**
+
 - Modify: `packages/payments/src/provider.ts`
 - Modify: `packages/payments/src/bachs/provider.ts`
 - Modify: `packages/payments/src/bachs/webhooks.ts`
 - Test: `packages/payments/test/bachs.test.mjs`
 
 **Interfaces:**
+
 - Produces normalized platform-fee evidence, fee responsibility, NGN capability state, opaque provider account identifiers, and account lifecycle webhook events.
 - Consumed by Tasks 2, 3, and 4.
 
@@ -49,6 +51,7 @@
 ### Task 2: Correct checkout failure classification and diagnostics
 
 **Files:**
+
 - Modify: `apps/api/src/checkout/checkout.service.ts`
 - Modify: `packages/database/src/operations/attempts.ts`
 - Modify: `packages/database/src/schema.ts` only if durable diagnostic fields are necessary
@@ -56,6 +59,7 @@
 - Test: `tests/integration/checkout-api.test.mjs`
 
 **Interfaces:**
+
 - Consumes `BachsApiError` and ambiguous-outcome errors from the adapter.
 - Produces a safe definite-failure transition and allowlisted structured diagnostic evidence.
 
@@ -68,6 +72,7 @@
 ### Task 3: Enforce authoritative recipient-account readiness
 
 **Files:**
+
 - Modify: `apps/api/src/profiles/payment-accounts.controller.ts`
 - Modify: `apps/api/src/ops/actions.controller.ts`
 - Modify: `packages/database/src/operations/payment-accounts.ts`
@@ -75,6 +80,7 @@
 - Test: provider/account API tests as appropriate
 
 **Interfaces:**
+
 - Consumes normalized NGN capability and fee responsibility from Task 1.
 - Produces local `ACTIVE` only when a usable NGN collection capability and platform fee responsibility are authoritative.
 
@@ -87,6 +93,7 @@
 ### Task 4: Remove mock payout and unnecessary worker-secret paths
 
 **Files:**
+
 - Modify: `apps/api/src/dashboard/dashboard.controller.ts`
 - Modify: API provider composition only as required
 - Modify: `apps/worker/src/config.ts`
@@ -96,6 +103,7 @@
 - Test: `apps/worker/test/config.test.mjs`
 
 **Interfaces:**
+
 - Consumes persisted payment provenance/provider capabilities.
 - Produces a hard withdrawal rejection for unsupported Bachs money and a read-only worker adapter that needs no webhook secret.
 
@@ -109,6 +117,7 @@
 ### Task 5: Account lifecycle reconciliation and webhook operations
 
 **Files:**
+
 - Modify: `apps/api/src/webhooks/webhook.service.ts`
 - Modify: provider webhook/controller types as needed
 - Modify: `packages/database/src/operations/payment-accounts.ts`
@@ -117,6 +126,7 @@
 - Test: database payment-account integration tests
 
 **Interfaces:**
+
 - Consumes normalized account/capability events from Task 1.
 - Produces idempotent authoritative account refresh triggers plus immediate payment reconciliation triggers.
 
@@ -129,12 +139,14 @@
 ### Task 6: Operational truth and final verification
 
 **Files:**
+
 - Modify: `docs/adr/ADR-0004-bachs-connect-and-provider-boundaries.md`
 - Modify: Bachs staging/runbook/configuration documentation
 - Modify: `docs/agent/ACTIVE_TASK.md`
 - Modify: `docs/agent/HANDOFF.md`
 
 **Interfaces:**
+
 - Consumes all preceding verified behavior.
 - Produces exact webhook provisioning, reserve monitoring, settlement UX, unsupported money-movement boundaries, and takeover instructions.
 
@@ -144,12 +156,12 @@
 - [ ] Review the full branch diff for secrets, live enablement, mock-money leakage, and unrelated files.
 - [ ] Commit documentation separately, excluding pre-existing unrelated changes.
 
-
 ### Task 7: Confirm Bachs payments, and never expire a paid one
 
 Added 27 October after review: `verifyTransaction` only reports `succeeded` when it is given the expected platform fee, but reconciliation, expiry and staff recovery never pass one, so no Bachs payment can ever be confirmed. Expiry also cancels a still-INITIATED attempt whenever the provider answers anything but succeeded/failed, which cancels a paid checkout that is waiting for settlement.
 
 **Files:**
+
 - Modify: `packages/payments/src/provider.ts` (a normalized "paid, settlement unverified" signal)
 - Modify: `packages/payments/src/bachs/provider.ts`
 - Modify: `packages/database/src/operations/reconcile.ts`, `packages/database/src/operations/expire.ts`
