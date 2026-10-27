@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  BachsApiError,
-  UncertainProviderOutcomeError,
-} from '@tipme/payments';
+import { BachsApiError, UncertainProviderOutcomeError } from '@tipme/payments';
 import { classifyBachsStartError } from '../dist/checkout/checkout.service.js';
 
 test('definite Bachs rejection is safe to fail and exposes only allowlisted diagnostics', () => {

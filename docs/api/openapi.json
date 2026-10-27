@@ -2779,7 +2779,7 @@
                   },
                   "accountReference": {
                     "type": "string",
-                    "pattern": "^acct_[A-Za-z0-9]{1,60}$"
+                    "pattern": "^[^\\s:/\\u0000-\\u001f\\u007f]{1,200}$"
                   },
                   "dashboardVerified": {
                     "type": "boolean",
@@ -2859,7 +2859,7 @@
                   },
                   "checkoutId": {
                     "type": "string",
-                    "pattern": "^chk_[A-Za-z0-9]{1,60}$"
+                    "pattern": "^[^\\s:/\\u0000-\\u001f\\u007f]{1,200}$"
                   },
                   "dashboardVerified": {
                     "type": "boolean",
@@ -3113,6 +3113,7 @@
                 "payment_unresolved",
                 "payment_attempt_unresolved",
                 "payment_account_unresolved",
+                "payment_reversed",
                 "payout_failed",
                 "payout_conflict",
                 "provider_event_conflict",
@@ -5160,6 +5161,7 @@
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",
                   "WITHDRAWAL_TOO_SMALL",
+                  "WITHDRAWAL_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "INVALID_IMAGE",
                   "PHONE_TAKEN",
@@ -5176,6 +5178,7 @@
                   "EMAIL_VERIFICATION_REQUIRED",
                   "PAYMENT_ACCOUNT_REQUIRED",
                   "PROVIDER_OUTCOME_UNKNOWN",
+                  "PAYMENT_START_REJECTED",
                   "INTERNAL_ERROR"
                 ]
               },

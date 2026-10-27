@@ -97,10 +97,7 @@ for (const [label, error] of [
   ['a 503', new UncertainProviderOutcomeError('a', 'Bachs returned HTTP 503')],
 ]) {
   test(`${label} leaves the start UNKNOWN for reconciliation`, async (t) => {
-    const { service, quoteId, statuses } = await serviceThatFailsWith(
-      t,
-      error,
-    );
+    const { service, quoteId, statuses } = await serviceThatFailsWith(t, error);
     await assert.rejects(service.createIntent({ quoteId }, randomUUID()), {
       code: 'PROVIDER_OUTCOME_UNKNOWN',
     });
