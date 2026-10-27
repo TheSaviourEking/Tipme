@@ -7,7 +7,8 @@
 - Reviewed CI expected/actual/diff images at desktop and mobile. The changes are intentional: optional purpose selector and approved navigation/footer/test-mode copy. The profile remains readable with no apparent overlap. Updated all eight Darwin/Linux snapshots; Darwin visual specs pass 4/4 using a temporary config against the built PR web app. Linux baselines match reviewed actuals from CI.
 - Verified in this worktree: `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, Playwright discovery (4 dashboard/welcome tests), and focused visual Playwright (4/4). Full local E2E was not run because port 4100 belongs to the active `.worktrees/physical-interface` API; it was left untouched. The local visual run did not reset or write to a database.
 - Earlier checks also passed: `pnpm test` (54 root tests; all 18 package tasks), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), and `pnpm format:check`. Browser review of `/for-businesses` showed a centred desktop layout and no horizontal overflow at 400px.
-- No deployment or real payment occurred. PR #23 remains open against `dev`. Next: commit and push the baselines plus design decision note, then confirm fresh CI is green. Before merging with Bachs, resolve migration-number collision `0039`. Keep the separate Bachs and physical-interface worktrees untouched.
+- Final CI run `40431576309` passed E2E, integration, static, security, and Vercel. PR #23 points at `0f0ccc3` and reports `CLEAN`; it remains open for review and was not merged. The PR preview was deployed; no production deployment or real payment occurred.
+- Next: product-owner review. Before merging with Bachs, resolve the `0039` migration collision and regenerate the journal/snapshot as needed. Keep the separate Bachs and physical-interface worktrees untouched.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
