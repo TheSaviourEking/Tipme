@@ -33,10 +33,12 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
   const visitor = await (await browser.newContext()).newPage();
   const quoteFor = async ({
     platformFeeMinor,
+    providerFeeMinor,
     recipientNetMinor,
     feeFree,
   }: {
     platformFeeMinor: string;
+    providerFeeMinor: string;
     recipientNetMinor: string;
     feeFree: boolean;
   }) =>
@@ -54,14 +56,17 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
       const quote = await (await quoteResponse).json();
       expect(quote.data).toMatchObject({
         platformFeeMinor,
+        providerFeeMinor,
         recipientNetMinor,
         payerTotalMinor: '200000',
         feeFree,
       });
     }).toPass({ timeout: 15_000 });
-  // 8% of ₦2,000 (processing included) leaves ₦1,840.
+  // 8% of ₦2,000 is TipMe's ₦160 share, processing included: ₦130 fee plus the ₦30
+  // processing estimate (1.5%). The recipient receives ₦1,840.
   await quoteFor({
-    platformFeeMinor: '16000',
+    platformFeeMinor: '13000',
+    providerFeeMinor: '3000',
     recipientNetMinor: '184000',
     feeFree: false,
   });
@@ -72,6 +77,7 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
   await expect(staff.getByText('1 fee-free tip granted.')).toBeVisible();
   await quoteFor({
     platformFeeMinor: '0',
+    providerFeeMinor: '0',
     recipientNetMinor: '200000',
     feeFree: true,
   });
