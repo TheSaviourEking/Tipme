@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TipPurpose } from './checkout.js';
 
 /** What a recipient's dashboard shows. Amounts are decimal strings of minor units. */
 export interface DashboardSummary {
@@ -29,6 +30,8 @@ export interface MyTipDetail {
   state: TipState;
   at: string;
   supporterLabel: string | null;
+  /** Why the supporter tipped; shown with a paid tip only. */
+  purpose: TipPurpose | null;
   message: string | null;
   /** The recipient hid this message (PR-011); its text is no longer returned. */
   messageHidden: boolean;

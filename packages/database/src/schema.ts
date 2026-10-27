@@ -468,6 +468,7 @@ export const tips = pgTable(
     grossMinor: minor('gross_minor').notNull(),
     status: tipStatus('status').notNull(),
     payerDisplayLabel: text('payer_display_label'),
+    purpose: text('purpose'),
     // Started from a recipient's shared celebration ("add to the celebration").
     celebrationMomentId: uuid('celebration_moment_id'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
@@ -479,6 +480,10 @@ export const tips = pgTable(
     check(
       'tips_label_length',
       sql`payer_display_label IS NULL OR char_length(payer_display_label) <= 60`,
+    ),
+    check(
+      'tips_purpose_known',
+      sql`purpose IS NULL OR purpose IN ('thank_you', 'great_service', 'helped_me', 'celebration', 'gift', 'other')`,
     ),
     index('tips_profile_created').on(table.profileId, table.createdAt),
   ],

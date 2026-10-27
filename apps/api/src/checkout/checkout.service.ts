@@ -70,6 +70,7 @@ export class CheckoutService {
       idempotencyKey,
       message: request.message,
       payerDisplayLabel: request.payerDisplayLabel,
+      purpose: request.purpose,
       celebrationMomentId: request.celebrationMomentId,
     });
     const start = await findAttemptStart(db, intent.attemptId);

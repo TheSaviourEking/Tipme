@@ -61,13 +61,12 @@ export default function WithdrawPage() {
       <p>
         Available: <strong>{naira(summary.availableMinor)}</strong>
       </p>
-      <Notice title="Pretend withdrawal">
-        No real money moves during the preview. The pretend bank pays straight
-        away.
+      <Notice title="Test withdrawal">
+        No real money moves in test mode. The test bank pays straight away.
       </Notice>
       {done && (
         <Notice tone="success" title="Withdrawal requested">
-          {done} is on its way to your pretend bank.{' '}
+          {done} is on its way to your test bank.{' '}
           <Link href="/dashboard">Back to your dashboard</Link>
         </Notice>
       )}

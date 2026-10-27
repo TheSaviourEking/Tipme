@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { and, eq, isNotNull } from 'drizzle-orm';
+import type { TipPurpose } from '@tipme/contracts';
 import type { Database, Tx } from '../client.js';
 import {
   moments,
@@ -38,6 +39,8 @@ export interface CreatePaymentIntentInput {
   quoteId: string;
   idempotencyKey: string;
   payerDisplayLabel?: string;
+  /** One of the contract's tip purposes; the API validates it before it gets here. */
+  purpose?: TipPurpose;
   /** A shared moment of this recipient the supporter is adding to ("add to the celebration"). */
   celebrationMomentId?: string;
   message?: string;
@@ -182,6 +185,7 @@ export async function createPaymentIntent(
         grossMinor: quote.tipMinor,
         status: 'AWAITING_PAYMENT',
         payerDisplayLabel: label,
+        purpose: input.purpose ?? null,
         celebrationMomentId: await sharedMomentOf(
           tx,
           quote.profileId,

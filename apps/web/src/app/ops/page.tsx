@@ -83,8 +83,8 @@ export default function OpsOverviewPage() {
     <div className="ops-dashboard">
       <h1>Overview</h1>
       <p className="tm-hint">
-        This week (from Monday, Lagos time) against all of last week. Pretend
-        money only.
+        This week (from Monday, Lagos time) against all of last week. Test money
+        only.
       </p>
       {!health.collecting && (
         <Notice tone="neutral" title="Anonymous collection is off">

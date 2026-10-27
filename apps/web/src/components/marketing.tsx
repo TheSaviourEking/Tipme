@@ -24,8 +24,8 @@ export function HowItWorksSteps() {
         <span>03</span>
         <h3>See the thought behind it.</h3>
         <p>
-          Review the full amount and what they receive, then pay. In this
-          preview the payment is pretend and no money moves.
+          Review the full amount and what they receive, then pay. Payments are
+          still in test mode; real payments are not available yet.
         </p>
       </li>
     </ol>

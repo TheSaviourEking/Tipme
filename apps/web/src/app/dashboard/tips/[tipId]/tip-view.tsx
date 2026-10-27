@@ -7,6 +7,7 @@ import { Card, Notice, Skeleton } from '@tipme/ui';
 import { MessageControls } from '@/components/dashboard/message-controls';
 import { feeLine } from '@/lib/fee-line';
 import { naira } from '@/lib/money';
+import { purposeLabels } from '@/lib/tip-purpose';
 import { apiFetch } from '@/lib/session-client';
 
 export default function TipDetailPage() {
@@ -42,6 +43,11 @@ export default function TipDetailPage() {
           timeZone: 'Africa/Lagos',
         })}
       </p>
+      {tip.purpose && (
+        <p>
+          <strong>For:</strong> {purposeLabels[tip.purpose]}
+        </p>
+      )}
       {tip.message && (
         <>
           <blockquote className="message-preview">{tip.message}</blockquote>
@@ -77,8 +83,7 @@ export default function TipDetailPage() {
           </div>
         </dl>
         <p className="tm-hint">
-          Pretend payment · fees from the illustrative policy{' '}
-          {tip.feePolicyVersion}.
+          Test mode · fees from policy {tip.feePolicyVersion}.
         </p>
       </Card>
       <Card className="proof">
@@ -88,7 +93,7 @@ export default function TipDetailPage() {
             <p className="proof__ok">✓ Confirmed by the payment provider</p>
             <p>
               {tip.proof.provider === 'mock'
-                ? 'Pretend provider'
+                ? 'Test provider'
                 : tip.proof.provider}
               {tip.proof.referenceTail && (
                 <> · Reference ending …{tip.proof.referenceTail}</>

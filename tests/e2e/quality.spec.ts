@@ -11,6 +11,7 @@ const routes = [
   '/@not-a-person',
   '/how-it-works',
   '/for-creators',
+  '/for-businesses',
   '/legal/privacy',
   '/legal/terms',
 ];
@@ -61,6 +62,55 @@ test('the quoted breakdown is accessible', async ({ page }) => {
     page.getByText(/^Tobi receives NGN [\d,]+\.\d\d after fees$/),
   ).toBeVisible();
   await expectAccessible(page);
+});
+
+test('homepage makes creating a recipient page a clear next step', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(
+    page
+      .getByRole('main')
+      .getByRole('link', { name: /Create your page/ })
+      .first(),
+  ).toHaveAttribute('href', '/sign-up');
+  await expect(page.getByText('Want to receive tips?')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Your page. Your link. Your thanks.' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Payments are in test mode/).last(),
+  ).toBeVisible();
+  await expect(page.locator('.home-hero__portrait figcaption')).toContainText(
+    'fictional demo recipient',
+  );
+});
+
+test('business page clearly says accounts are not open yet', async ({
+  page,
+}) => {
+  await page.goto('/for-businesses');
+  await expect(
+    page.getByRole('heading', { name: 'Business pages are not open yet.' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/have not announced a launch date/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /Create an individual page/ }),
+  ).toHaveAttribute('href', '/sign-up');
+  await page.getByLabel('Your email address').fill('business@example.com');
+  await page.getByRole('button', { name: 'Prepare email' }).click();
+  const emailLink = page.getByRole('link', { name: 'Open email app' });
+  const href = await emailLink.getAttribute('href');
+  if (!href) throw new Error('The business interest email link has no URL.');
+  expect(href).toContain('mailto:usetipme@gmail.com?');
+  expect(decodeURIComponent(href.replaceAll('+', ' '))).toContain(
+    'business@example.com',
+  );
+  await expect(page.getByRole('status')).toContainText(
+    'press Send to register your interest',
+  );
 });
 
 test('arrowing through amounts never pulls focus out of the radio group', async ({
@@ -176,7 +226,7 @@ test('responses carry baseline security headers', async ({ request }) => {
   }
 });
 
-test('legal pages are clearly labelled placeholders, linked from every page', async ({
+test('legal pages say they are coming soon, linked from every page', async ({
   page,
 }) => {
   for (const [path, title] of [
@@ -185,16 +235,12 @@ test('legal pages are clearly labelled placeholders, linked from every page', as
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(title);
-    await expect(
-      page
-        .getByText('Placeholder — not a legal document', { exact: false })
-        .first(),
-    ).toBeVisible();
-    await expect(page).toHaveTitle(new RegExp(`${title} \\(placeholder\\)`));
+    await expect(page.getByText('Coming soon', { exact: true })).toBeVisible();
+    await expect(page).toHaveTitle(new RegExp(title));
   }
   await page.goto('/');
   const footer = page.getByRole('navigation', { name: 'Footer navigation' });
-  await footer.getByRole('link', { name: 'Privacy (placeholder)' }).click();
+  await footer.getByRole('link', { name: 'Privacy' }).click();
   await expect(page).toHaveURL(/\/legal\/privacy$/);
 });
 
@@ -234,7 +280,7 @@ test('how it works and creator pages exist as PRD marketing routes', async ({
   );
   await expect(page.locator('main ol.steps > li')).toHaveCount(3);
   await page.goto('/for-creators');
-  await expect(page).toHaveTitle(/For creators/);
+  await expect(page).toHaveTitle(/For individuals/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'For the generous minds',
   );
@@ -260,8 +306,10 @@ test('main navigation points to the marketing pages', async ({
     'href',
     '/how-it-works',
   );
-  await expect(nav.getByRole('link', { name: 'For creators' })).toHaveAttribute(
-    'href',
-    '/for-creators',
-  );
+  await expect(
+    nav.getByRole('link', { name: 'For individuals' }),
+  ).toHaveAttribute('href', '/for-creators');
+  await expect(
+    nav.getByRole('link', { name: 'For Businesses' }),
+  ).toHaveAttribute('href', '/for-businesses');
 });

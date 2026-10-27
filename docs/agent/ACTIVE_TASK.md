@@ -1,3 +1,15 @@
+# Current task — recipient onboarding, business page and tip purpose (27 October 2026)
+
+- Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 already merged and is not being reused.
+- Scope: recipient onboarding guidance on the homepage/dashboard; business coming-soon and voluntary mailto interest path; navbar/copy cleanup; optional structured tip purpose through contract, API, database migration, checkout form and recipient detail; `/for-businesses` layout alignment.
+- Migration `0039_tip_purpose` is additive and has not been applied to any database. The separate Bachs branch also currently contains migration 0039; coordinate/resequence before both branches are merged.
+- Earlier local checks passed: `pnpm test` (54 root tests and all 18 package tasks), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), `pnpm format:check`, and `git diff --check`.
+- PR CI run `40424132431` exposed a stale OpenAPI file, two outdated onboarding assertions, and four desktop/mobile screenshot mismatches. Follow-up commit `94ac1ab` regenerated the OpenAPI document, corrected the assertions, and added failure-only PNG diagnostics with three-day retention.
+- CI run `40426539167`: integration, security, static, Vercel, dashboard and welcome checks passed; E2E had only four visual failures. The expected/actual/diff images were reviewed at desktop and mobile. Differences were the intended purpose selector and approved navigation/footer/test-mode copy; the profile composition remained readable with no overlap. All eight Darwin/Linux visual baselines have now been refreshed.
+- Verified in this worktree: `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, Playwright discovery (4 onboarding tests), and the focused visual specs (4/4) after updating Darwin snapshots. Linux baselines were taken from the reviewed CI actual images. Full local E2E was not run because the normal port 4100 API belongs to `.worktrees/physical-interface`; it was left running and untouched. The focused visual run used the built PR web app and read-only local API; no database reset occurred.
+- CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 points at `790918a` and reports `CLEAN`. It remains open for review; do not merge until authorized and until migration `0039` is reconciled with the Bachs branch.
+- No migration was applied and no payment operation occurred. The only deployment was the PR preview. The full E2E suite passed in CI; local full E2E remains unrun because port 4100 is occupied by the active API in `.worktrees/physical-interface`.
+
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
 - Branch: `feat/production-countdown`, isolated in `.worktrees/profile-composition`.
@@ -22,10 +34,8 @@
   and have no horizontal overflow.
 - No production settings or deployment have changed. Production API origin is
   still a separate unresolved launch dependency.
-- PR #21 is open against `dev`; latest step checks were still running on GitHub.
-- Next exact step: monitor CI and Vercel preview, address any failures, then
-  verify staging after merge. Production deployment and API configuration are
-  separate.
+- PR #21 was merged into `dev` on 26 October 2026. Production deployment and
+  API configuration remain separate.
 
 # Previous task — PR #19 Linux visual baselines (26 October 2026)
 
@@ -204,3 +214,16 @@ PR-003 to PR-008 are complete.
 ## Next exact step
 
 Stop. PR-009 (analytics and ops view) needs explicit authorisation.
+
+## Navbar, "test mode" copy and tip purpose (uncommitted)
+
+- Navbar: "For individuals" (still `/for-creators`) and "For Businesses" (new `/for-businesses` coming-soon page, replacing "See a demo page").
+- "Pretend" wording replaced with neutral "Test mode" across web copy; real payments remain unapproved, so a test-mode notice stays.
+- Structured optional tip purpose: contracts `tipPurposes`, `tips.purpose` column + migration `0039_tip_purpose` (not applied to any database), form select, recipient tip detail.
+
+## Recipient onboarding path (uncommitted)
+
+- Homepage clarifies that Ada is a fictional demo, surfaces the create-page action, and explains the three recipient setup steps. The portrait caption is constrained so the overlapping tip panel does not cover it.
+- The first-day dashboard now guides recipients through profile details, publishing, and sharing tools, with a payment/payout step clearly marked unavailable pending provider and funds-flow approvals.
+- Business page copy states that business accounts are not open and no launch date has been announced; it links to individual signup and provides a mailto draft to `usetipme@gmail.com`. Submissions are not stored by TipMe; the visitor must send the draft.
+- The separate Bachs branch has sandbox account onboarding, but it is not integrated into this UI branch; no live payout flow is represented here.

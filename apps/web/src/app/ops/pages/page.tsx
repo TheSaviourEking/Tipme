@@ -95,7 +95,7 @@ export default function OpsPagesPage() {
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
         below NGN 1,000). The fee and withdrawal minimum are the same as Free.
-        There is no billing while payments are pretend.
+        There is no billing while payments are in test mode.
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField

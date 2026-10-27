@@ -11,7 +11,7 @@ export default function SignUpPage() {
   return (
     <AuthStage
       title="Your page, in a minute."
-      lede="A phone number and a handle is all it takes to start receiving thanks. Payments are pretend during the preview."
+      lede="A phone number and a handle is all it takes to start receiving thanks. Payments are in test mode."
       promises={[
         'No card or bank details to start',
         'Your number stays private',

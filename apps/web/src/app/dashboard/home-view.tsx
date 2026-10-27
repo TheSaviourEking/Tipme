@@ -94,6 +94,10 @@ export default function DashboardHome() {
     );
   if (!summary || !activity) return <Skeleton label="Loading your numbers" />;
   const firstDay = activity.length === 0 && summary.availableMinor === '0';
+  const profileDetailsComplete =
+    profile.displayName !== profile.handle &&
+    Boolean(profile.role?.trim() || profile.bio?.trim());
+  const pageReady = profileDetailsComplete && profile.pageState === 'live';
 
   return (
     <div className="dashboard-home">
@@ -135,15 +139,66 @@ export default function DashboardHome() {
           </p>
         </section>
         {firstDay ? (
-          <Card className="first-day">
-            <h2>Show your QR to get your first tip</h2>
-            <p>
-              Put your code on the counter, or show it on your phone. Your tips
-              will appear here.
-            </p>
-            <Link className="tm-button tm-button--primary" href="/dashboard/qr">
-              Show my QR
-            </Link>
+          <Card className="first-day recipient-setup">
+            <div>
+              <p className="eyebrow">Your next steps</p>
+              <h2>
+                {pageReady
+                  ? 'Your page is ready to share'
+                  : 'Get your page ready to share'}
+              </h2>
+              <p>
+                {pageReady
+                  ? 'Your page is live. Share your link or QR code so supporters can find you.'
+                  : 'Set up the page supporters will see, then share your link or QR code.'}
+              </p>
+            </div>
+            <ol className="recipient-setup__steps">
+              <li>
+                <div>
+                  <strong>Make your page feel like you</strong>
+                  <p>
+                    Add what you do and a short introduction. A photo is
+                    optional.
+                  </p>
+                </div>
+                <span>{profileDetailsComplete ? 'Done' : 'To do'}</span>
+                {!profileDetailsComplete && (
+                  <Link href="/dashboard/settings">Edit page</Link>
+                )}
+              </li>
+              <li>
+                <div>
+                  <strong>Put your page online</strong>
+                  <p>You can take it offline again whenever you want.</p>
+                </div>
+                <span>{profile.pageState === 'live' ? 'Live' : 'To do'}</span>
+                {profile.pageState !== 'live' && (
+                  <Link href="/dashboard/settings">Page settings</Link>
+                )}
+              </li>
+              <li>
+                <div>
+                  <strong>Share your link or QR</strong>
+                  <p>Let people know where to send their thanks.</p>
+                </div>
+                <span>
+                  {profile.pageState === 'live' ? 'Next' : 'After publishing'}
+                </span>
+                <Link href="/dashboard/qr">Sharing tools</Link>
+              </li>
+              <li>
+                <div>
+                  <strong>Set up payments and payouts</strong>
+                  <p>
+                    Account setup is not available yet. Real payments and
+                    payouts remain disabled until provider and funds-flow
+                    approvals are complete.
+                  </p>
+                </div>
+                <span>Coming later</span>
+              </li>
+            </ol>
           </Card>
         ) : (
           <section aria-labelledby="performance-title" className="performance">

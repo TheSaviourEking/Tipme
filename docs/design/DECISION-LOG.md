@@ -1,5 +1,16 @@
 # Design decision log
 
+## 2026-10-27 — Recipient onboarding and tip-purpose baselines
+
+Accepted for PR #23: the public profile gains an optional structured tip-purpose
+selector, while navigation, footer, and preview copy reflect the current
+individual/business and test-mode experience. The selector adds a deliberate
+step before the personal message; desktop remains the portrait-led composition,
+and mobile remains a readable single sequence with no overlap. The Darwin and
+Linux screenshot baselines were refreshed only after reviewing the CI
+expected/actual/diff images at both sizes. This changes presentation only; it
+does not change payment outcomes or provider behavior.
+
 ## 2026-10-26 — Production launch countdown
 
 Approved for the public production hold: one focused TipMe composition with no
@@ -111,3 +122,14 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - One fee line everywhere, as dev shows it: "TipMe fee (10%, includes processing)". The CSV has one fee column to match.
 - The demo pages keep their portrait photos (`/portraits/*.webp`), described as fictional demo recipients; uploaded photos are described as "Photo of {name}".
 - dev's "Report this page" quiet button sits under the preview note, aligned with it.
+
+## 2026-10-27 — Business interest page composition
+
+- The coming-soon page uses one centred editorial column with deliberate vertical rhythm between the eyebrow, headline, lede and primary action. The voluntary interest form sits in a raised card at the same width, with a mobile-safe stacked layout.
+
+## 2026-10-27 — Recipient onboarding path
+
+- The homepage now explains the recipient journey beside the Ada tipping demo: create a personal link, make the page recognizable, and share the link or QR. The primary action continues to `/sign-up`; the demo remains explicitly identified as fictional.
+- New recipients with no tips see a dashboard checklist for profile details, publishing, sharing, and payment setup. Profile photos remain optional; payment setup is clearly marked unavailable until provider and funds-flow approvals are complete.
+- The dashboard states that payments remain in test mode and real payment/payout setup is blocked on provider and funds-flow approvals.
+- Business interest is a mailto draft to the owner's provided inbox (`usetipme@gmail.com`), not a server submission. The visitor must choose to send it; TipMe does not persist the form value.

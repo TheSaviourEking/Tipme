@@ -4,7 +4,7 @@ import { Container } from '@tipme/ui';
 import { InboxView } from './inbox-view';
 
 export const metadata: Metadata = {
-  title: 'Pretend inbox',
+  title: 'Test inbox',
   robots: { index: false, follow: false },
 };
 
@@ -18,7 +18,7 @@ export default function PretendInboxPage() {
   return (
     <main id="main" tabIndex={-1} className="inbox-page">
       <Container className="section-space">
-        <h1>Pretend inbox</h1>
+        <h1>Test inbox</h1>
         <p className="tm-hint">
           Development only. Nothing here was really sent: there is no messaging
           provider yet.

@@ -22,10 +22,10 @@ export default function AboutPreview() {
         </p>
         <h2>What you can do</h2>
         <p>
-          Explore fictional profiles, choose an illustrative amount, add a
-          message, and review the gesture. No real payment is made, but this
-          working preview sends account and demo-tip information to TipMe’s
-          server so those features can operate.
+          Explore fictional profiles, choose an amount, add a message, and
+          review the gesture. No real payment is made, but this working preview
+          sends account and demo-tip information to TipMe’s server so those
+          features can operate.
         </p>
         <h2>What the preview stores</h2>
         <p>
@@ -41,7 +41,7 @@ export default function AboutPreview() {
           privacy terms and settlement arrangements remain unapproved. NGN in
           the demo is an illustration—not an announced launch currency. There
           are no verified recipients or payout promises, and any “paid” screen
-          here confirms a pretend payment only.
+          here confirms a test-mode payment only.
         </p>
         <h2>Before anything goes live</h2>
         <p>

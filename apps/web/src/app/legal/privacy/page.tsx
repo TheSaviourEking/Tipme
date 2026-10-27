@@ -2,8 +2,8 @@ import { LegalPlaceholder } from '@/components/legal-placeholder';
 import { previewMetadata } from '@/lib/metadata';
 
 export const metadata = previewMetadata(
-  'Privacy notice (placeholder)',
-  'Placeholder for TipMe’s privacy notice. Not a legal document.',
+  'Privacy notice',
+  'TipMe’s privacy notice is coming soon.',
   '/legal/privacy',
 );
 

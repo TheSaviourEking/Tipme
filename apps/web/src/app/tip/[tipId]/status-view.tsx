@@ -195,9 +195,7 @@ export function StatusView() {
   const profile = `/@${tip.recipient.handle}`;
   return (
     <Card className={`tip-status-card tip-status-card--${tip.state}`}>
-      <p className="tip-status-pretend">
-        Pretend payment · no real money moved
-      </p>
+      <p className="tip-status-pretend">Test mode · no real money moved</p>
       <div role="status" aria-live="polite" className="tip-status-live">
         {tip.state === 'waiting' && (
           <>

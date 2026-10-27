@@ -54,7 +54,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </Link>
               ))}
             </nav>
-            <Badge>Pretend payments</Badge>
+            <Badge>Test mode</Badge>
             {profile && <NotificationBell />}
             {profile && (
               <Button variant="quiet" onClick={() => void signOut()}>

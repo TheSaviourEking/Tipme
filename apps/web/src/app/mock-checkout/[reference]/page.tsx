@@ -5,7 +5,7 @@ import { ViewTracker } from '@/components/view-tracker';
 import { MockCheckoutView } from './mock-checkout-view';
 
 export const metadata: Metadata = {
-  title: 'Pretend payment provider',
+  title: 'Test payment provider',
   robots: { index: false, follow: false },
   referrer: 'no-referrer',
 };
