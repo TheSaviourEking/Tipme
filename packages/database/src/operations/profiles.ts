@@ -37,6 +37,10 @@ import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { newId } from './ids.js';
 import { publicCelebration } from './moments.js';
+import {
+  getReadyPaymentAccount,
+  type PaymentAccountEnvironment,
+} from './payment-accounts.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
 /** Old handles a page keeps pointing at itself (PR-011). */
@@ -524,6 +528,13 @@ export function handleAliasTarget(
 export function publicProfile(
   db: Database,
   raw: string,
+  options: {
+    /** Set when new tips need the owner's own account with this provider (the same rule checkout applies). */
+    requiredAccount?: {
+      provider: string;
+      environment: PaymentAccountEnvironment;
+    };
+  } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
   if (!handle) return Promise.resolve(null);
@@ -548,6 +559,12 @@ export function publicProfile(
     const { profile } = row;
     const socials = profile.socials as Socials;
     const celebration = await publicCelebration(db, profile.id);
+    const acceptingTips = options.requiredAccount
+      ? (await getReadyPaymentAccount(db, {
+          profileId: profile.id,
+          ...options.requiredAccount,
+        })) !== null
+      : true;
     return {
       handle: profile.handle,
       displayName: profile.displayName,
@@ -565,6 +582,7 @@ export function publicProfile(
         : {}),
       ...(celebration ? { celebration } : {}),
       tipAmounts: tipAmountsOf(profile),
+      acceptingTips,
     };
   });
 }

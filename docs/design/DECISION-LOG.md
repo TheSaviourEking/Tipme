@@ -143,6 +143,11 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - The dashboard states that payments remain in test mode and real payment/payout setup is blocked on provider and funds-flow approvals.
 - Business interest is a mailto draft to the owner's provided inbox (`usetipme@gmail.com`), not a server submission. The visitor must choose to send it; TipMe does not persist the form value.
 
+## 2026-10-27 — Public page before tips are ready
+
+- While the owner hasn't finished the payment account that new tips need, the profile's tipping panel shows "<Name> can't receive tips just yet." with one line of explanation, in place of the form. Same panel material and position as the form, so the composition holds; no badge and no button, because the supporter has nothing to do.
+- Said before the supporter chooses an amount, never after they press Tip.
+
 ## 2026-10-27 — Owner attention
 
 - Anything that stops an owner earning (payments not set up, unfinished or being checked, an unconfirmed email blocking payment setup, the page offline) appears above every dashboard page as the shared neutral notice, one per issue, most urgent first, each with one primary button that names the fix. It disappears as soon as the problem is gone. The welcome flow does not show it.

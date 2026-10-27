@@ -1045,6 +1045,18 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   margin-top: calc(var(--space-3) * -1);
 }
 
+/* In place of the form while the owner sets up payments: no badge to clear, nothing below. */
+.tip-instrument .tips-not-ready h2 {
+  padding-right: 0;
+  margin: 0 0 var(--space-3);
+  font-weight: 600;
+}
+
+.tip-instrument .tips-not-ready .composer-description {
+  margin: 0;
+  line-height: 1.6;
+}
+
 .tip-instrument fieldset legend,
 .tip-instrument .tm-field label {
   font-size: 0.8125rem;
