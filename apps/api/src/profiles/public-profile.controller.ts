@@ -27,12 +27,14 @@ import {
 } from '@tipme/database';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from '../infra/database.js';
 
 @Controller('v1')
 export class PublicProfileController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
   ) {}
 
   /**
@@ -45,7 +47,12 @@ export class PublicProfileController {
     @Param('handle') handle: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ApiDataResponse<PublicProfile | { movedTo: string }>> {
-    const page = await publicProfile(this.database.db, handle);
+    // New tips through Bachs need the owner's own ready account; checkout refuses them otherwise.
+    const page = await publicProfile(this.database.db, handle, {
+      ...(this.config.PAYMENT_PROVIDER === 'bachs-sandbox'
+        ? { requiredAccount: { provider: 'bachs', environment: 'sandbox' } }
+        : {}),
+    });
     if (page) return { data: page };
     const movedTo = await handleAliasTarget(this.database.db, handle);
     if (!movedTo) throw new NotFoundException();

@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
+import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import {
   RecipientIdentity,
   RecipientPortrait,
@@ -103,17 +104,21 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             aria-label={`Tip ${firstName}`}
             data-tip-panel
           >
-            <AppreciationForm
-              recipient={firstName}
-              handle={profile.handle}
-              collapseExtras
-              {...(profile.tipAmounts
-                ? { tipAmounts: profile.tipAmounts }
-                : {})}
-              {...(profile.celebration
-                ? { celebration: profile.celebration }
-                : {})}
-            />
+            {profile.acceptingTips === false ? (
+              <TipsNotReady recipient={firstName} />
+            ) : (
+              <AppreciationForm
+                recipient={firstName}
+                handle={profile.handle}
+                collapseExtras
+                {...(profile.tipAmounts
+                  ? { tipAmounts: profile.tipAmounts }
+                  : {})}
+                {...(profile.celebration
+                  ? { celebration: profile.celebration }
+                  : {})}
+              />
+            )}
           </aside>
         </div>
         <section className="profile-more" aria-label={`More from ${firstName}`}>

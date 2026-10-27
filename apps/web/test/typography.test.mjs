@@ -16,9 +16,22 @@ const seed = readFileSync(
 );
 
 test('TipMe assigns local build-time fonts to distinct type roles', () => {
-  assert.match(layout, /Manrope/);
-  assert.match(layout, /DM_Serif_Display/);
+  assert.match(layout, /Manrope-Latin\.woff2/);
+  assert.match(layout, /DMSerifDisplay-Latin\.woff2/);
   assert.match(layout, /display:\s*'swap'/);
+  // Fonts ship in the repository: a build never downloads them, so a failed download can't
+  // fail it, and each is kept with its licence.
+  assert.doesNotMatch(layout, /next\/font\/google/);
+  for (const file of [
+    'Manrope-Latin.woff2',
+    'DMSerifDisplay-Latin.woff2',
+    'OFL-Manrope.txt',
+    'OFL-DMSerifDisplay.txt',
+  ])
+    assert.ok(
+      existsSync(new URL(`../src/fonts/${file}`, import.meta.url)),
+      file,
+    );
   // The wordmark is an SVG from the master file, so no brand font is downloaded.
   assert.doesNotMatch(layout, /Nunito/);
   assert.doesNotMatch(layout, /weight:\s*\['100'/);

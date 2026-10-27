@@ -65,6 +65,7 @@ export function getPaymentAccountRecipient(
   userId: string,
 ): Promise<{
   profileId: string;
+  handle: string;
   displayName: string;
   verifiedEmail: string | null;
 } | null> {
@@ -72,6 +73,7 @@ export function getPaymentAccountRecipient(
     const [recipient] = await db
       .select({
         profileId: profiles.id,
+        handle: profiles.handle,
         pageState: profiles.pageState,
         status: profiles.status,
         displayName: profiles.displayName,
@@ -86,6 +88,7 @@ export function getPaymentAccountRecipient(
       throw new OperationError('PAGE_SUSPENDED');
     return {
       profileId: recipient.profileId,
+      handle: recipient.handle,
       displayName: recipient.displayName,
       verifiedEmail: recipient.emailVerifiedAt ? recipient.email : null,
     };

@@ -5,6 +5,20 @@
 - Integration files now run in parallel: `prepareTestTemplate` migrates `tipme_it` once, and with `TIPME_TEST_TEMPLATE` set each test process works in its own copy (`openTestDatabase`); `scripts/test-integration.mjs` runs them (`TEST_CONCURRENCY`, `TEST_SHARD`) and drops the copies. CI splits integration and e2e into three shards each, moves the load test and the OpenAPI check into their own jobs, reuses Turborepo results between runs, and skips integration, load and e2e on documentation-only pull requests.
 - Verified locally: the new database and runner tests (seen failing first), script tests 67/67, lint and typecheck; the whole integration suite at 4 files in parallel in 142 s and 126 s (368 pass both times; the 12 backup tests fail only on macOS, where Docker cannot reach 127.0.0.1, as before); no copies left behind.
 
+# Current task — steadier CI (27 October 2026)
+
+- Branch/worktree: `ci/steady-builds` / `.worktrees/steady-builds`, from `origin/dev` at `c7e6612`.
+- Fonts: Manrope and DM Serif Display now ship in `apps/web/src/fonts/` (OFL, Latin and Latin Extended, WOFF2) via `next/font/local`; CI run `40548134712` had failed when the Google Fonts download failed during the build.
+- Load test: missed budgets (k6 exit 99) get one more run before failing (`withOneRetry` in `scripts/load-test.mjs`); the same run later missed the dashboard and profile budgets on a slow runner while the identical code measured 13 ms elsewhere.
+- Verified: typography test and retry tests seen failing first; Turbopack production build passes with both fonts bundled and no Google URL in the output; the real load test passes, and with budgets scaled to 0.001 it retries once and fails with exit 99.
+
+# Current task — public page tip readiness (27 October 2026)
+
+- Branch/worktree: `feat/public-tip-readiness` / `.worktrees/public-readiness`, from `origin/dev` at `c7e6612`. Slice 2 of 3 of the owner-experience work (slice 1 is PR #29).
+- `PublicProfile.acceptingTips` (optional; absent means true): false while new tips need the owner's own Bachs account and it isn't ready, by the same rule checkout applies (`getReadyPaymentAccount`). The profile shows "<Name> can't receive tips just yet." in place of the form.
+- Cache: the owner's own setup refresh revalidates the public page at once; webhook and staff updates rely on the page cache's 30-second backstop.
+- No migration. Verified: database and API readiness tests (seen failing first), web unit 56/56, API unit 36/36, typecheck 15/15, lint 15/15, OpenAPI up to date, full integration on a throwaway PostgreSQL (127.0.0.1:5434), and a browser check at 1440 and 390 px against a stand-in API (panel shown, no form, no overflow).
+
 # Current task — owner attention (27 October 2026)
 
 - Branch/worktree: `feat/owner-attention` / `.worktrees/owner-attention`, from `origin/dev` at `c7e6612`.

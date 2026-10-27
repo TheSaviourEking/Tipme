@@ -42,6 +42,7 @@ import { CsrfGuard } from '../auth/csrf.guard.js';
 import { BACHS_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { LOGGER } from '../tokens.js';
+import { ProfileRevalidator } from './revalidate.js';
 
 @Controller('v1/me/payment-account')
 @UseGuards(SessionGuard, CsrfGuard)
@@ -52,6 +53,8 @@ export class PaymentAccountsController {
     @Inject(BACHS_PROVIDER_TOKEN)
     private readonly provider: BachsProvider | null,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(ProfileRevalidator)
+    private readonly revalidator: Pick<ProfileRevalidator, 'revalidate'>,
   ) {}
 
   @Get()
@@ -191,6 +194,9 @@ export class PaymentAccountsController {
       feeCollector: remoteAccount.feeCollector,
       requirementsDue: remoteAccount.requirementsDue,
     });
+    // The public page says whether tips can be taken; this may have just changed the answer.
+    // Webhook and staff updates rely on the page cache's 30-second backstop.
+    this.revalidator.revalidate(recipient.handle);
     if (account.status === 'ACTIVE')
       return { data: { status: 'ACTIVE', chargesEnabled: true } };
     if (account.status !== 'ONBOARDING' && account.status !== 'RESTRICTED')
