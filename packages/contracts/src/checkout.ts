@@ -26,11 +26,23 @@ export interface TipQuote {
   feeFree: boolean;
 }
 
+/** Why the supporter is tipping. A closed list: it is stored, filtered and shown to the recipient. */
+export const tipPurposes = [
+  'thank_you',
+  'great_service',
+  'helped_me',
+  'celebration',
+  'gift',
+  'other',
+] as const;
+export type TipPurpose = (typeof tipPurposes)[number];
+
 export const tipIntentRequestSchema = z
   .object({
     quoteId: z.uuid(),
     message: z.string().max(280).optional(),
     payerDisplayLabel: z.string().max(60).optional(),
+    purpose: z.enum(tipPurposes).optional(),
     celebrationMomentId: z.uuid().optional(),
   })
   .strict();

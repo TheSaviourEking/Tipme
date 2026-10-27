@@ -52,7 +52,10 @@ export const deviceIsMobile = (userAgent: string) =>
 
 const VITAL_PAGES: [RegExp, WebVitalPage][] = [
   [/^\/$/, 'home'],
-  [/^\/(how-it-works|for-creators|about-preview|legal)(\/|$)/, 'marketing'],
+  [
+    /^\/(how-it-works|for-creators|for-businesses|about-preview|legal)(\/|$)/,
+    'marketing',
+  ],
   [/^\/(people\/|@)[^/]+$/, 'profile'],
   [/^\/mock-checkout\//, 'checkout'],
   [/^\/tip\//, 'status'],

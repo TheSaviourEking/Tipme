@@ -30,7 +30,7 @@ const describeFailure = (code: string, status: number) =>
     ? 'This payment has expired and can no longer be paid.'
     : status === 404
       ? 'This payment doesn’t exist.'
-      : 'The pretend provider is unavailable. Please try again.';
+      : 'The test provider is unavailable. Please try again.';
 
 type Summary = {
   amountMinor: string;
@@ -74,7 +74,7 @@ export function MockCheckoutView() {
   return (
     <section className="mock-provider" aria-labelledby="mock-provider-title">
       <p className="mock-provider__label">
-        Pretend payment provider · no real money
+        Test payment provider · no real money
       </p>
       <h1 id="mock-provider-title">Confirm payment</h1>
       {failed && (
@@ -103,7 +103,7 @@ export function MockCheckoutView() {
           </p>
           <p>To {summary.recipientDisplayName}, via TipMe</p>
           <fieldset className="mock-provider__outcomes" disabled={paying}>
-            <legend>Choose what the pretend provider does</legend>
+            <legend>Choose what the test provider does</legend>
             {outcomes.map(({ outcome, label, hint }) => (
               <button
                 key={outcome}

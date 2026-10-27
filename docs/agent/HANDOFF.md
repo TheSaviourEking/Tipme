@@ -1,3 +1,13 @@
+# Current handoff — recipient onboarding, business page and tip purpose (27 October 2026)
+
+- Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 was already merged; these follow-up changes are separate.
+- Scope includes homepage/dashboard recipient onboarding, business coming-soon and mailto interest form, navbar and test-mode copy, optional structured tip purpose end-to-end, and the centred `/for-businesses` layout.
+- The new optional purpose has contract validation, a database CHECK constraint, and a nullable `tips.purpose` column via `0039_tip_purpose`. Added contract and database integration tests plus checkout E2E request coverage. The integration suite and browser E2E were not executed; no local isolated test stack was started. The migration was not applied.
+- Validation passed: `pnpm test` (54 root tests; all 18 package tasks, including web 55/API 31/contracts 9/database unit 3), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), `pnpm format:check`, `git diff --check`. `pnpm exec playwright test --list tests/e2e/checkout.spec.ts` discovered 21 tests.
+- Visual check: business page reviewed at desktop and 400px; no horizontal overflow. No production/staging deployment or real payment.
+- Migration coordination: `.worktrees/provider-integrations-bachs` also has a migration numbered 0039. If both PRs are to land, rebase/regenerate one migration and its snapshot/journal after choosing merge order.
+- Next exact step: commit and push this branch, open the PR against `dev`, then monitor CI. Keep the separate Bachs and physical-interface worktrees untouched.
+
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
 - Linux screenshot baselines were generated directly on GitHub's Ubuntu runner in run `40261761860`; the four-image artifact was downloaded and visually inspected. The temporary workflow update step has been removed, restoring `pnpm test:e2e`.
@@ -417,7 +427,22 @@ tests verify it stays an image response during the gate. After the fix,
 countdown Playwright (3/3) pass.
 
 Release steps and the `www`/apex authority boundary are in
-`apps/web/DEPLOYMENT.md`. PR #21 is open against `dev`; the latest GitHub checks
-were still running. Next exact step: monitor CI and Vercel preview, address any
-failures, then verify staging after merge. Do not treat the PR as a production
-deployment or production API fix.
+`apps/web/DEPLOYMENT.md`. PR #21 was merged into `dev` on 26 October 2026. Do
+not treat that PR as a production deployment or production API fix.
+
+## Navbar / copy / purpose state
+
+Verified in the current branch: repository unit tests (web 55/API 31/contracts 9/database unit 3), typecheck, lint, build and formatting. Contract and database integration tests for purpose were added, plus checkout E2E request coverage. Database integration and browser E2E execution remain unrun because an isolated local stack was unavailable; migration 0039 was not applied.
+
+## Recipient onboarding path
+
+- In `feat/production-countdown`, homepage recipient journey, visible demo caption, first-day dashboard checklist (including a clearly unavailable payment/payout step), business coming-soon wording and mailto interest handoff, and E2E assertions were added. Existing unrelated changes in this worktree were preserved.
+- Verified: `pnpm --filter @tipme/web test` (55/55), `pnpm --filter @tipme/web exec tsc --noEmit`, targeted ESLint, `pnpm --filter @tipme/web build`, Prettier, `git diff --check`, and Playwright test discovery (30 tests found across the two focused specs). Local browser review confirmed the full Ada caption is visible, the business-interest email draft is correctly formed, and a 400px viewport has no horizontal overflow.
+- Not run: Playwright E2E execution (local stack/database not started) and any payment account onboarding.
+- Business contact uses a mailto draft to `usetipme@gmail.com` (provided by the product owner); it does not submit or store data on TipMe servers. Browser-based form verification is covered by a new E2E assertion, but E2E was not executed.
+- Still blocked: sandbox payment account onboarding remains on the separate Bachs branch; real payout onboarding remains blocked on D-01–D-07.
+- Next exact step: integrate sandbox account setup after the Bachs branch is merged; do not describe it as a live payout path.
+
+## /for-businesses layout fix (2026-10-27)
+
+Recomposed into `.business-page` (max-width 44rem, centred, spaced intro with `lead-copy`) and the interest form as a raised card. Checked visually at desktop and 400px (no overflow; the browser tool constrained the requested 320px viewport to 400px). Copy and labels unchanged; E2E not run (no stack).

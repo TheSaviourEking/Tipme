@@ -1,0 +1,2 @@
+ALTER TABLE "tips" ADD COLUMN "purpose" text;--> statement-breakpoint
+ALTER TABLE "tips" ADD CONSTRAINT "tips_purpose_known" CHECK (purpose IS NULL OR purpose IN ('thank_you', 'great_service', 'helped_me', 'celebration', 'gift', 'other'));

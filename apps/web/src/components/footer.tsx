@@ -7,7 +7,8 @@ const groups = [
     title: 'TipMe',
     links: [
       { href: '/how-it-works', label: 'How it works' },
-      { href: '/for-creators', label: 'For creators' },
+      { href: '/for-creators', label: 'For individuals' },
+      { href: '/for-businesses', label: 'For Businesses' },
       { href: '/#our-promise', label: 'Our promise' },
     ],
   },
@@ -23,9 +24,8 @@ const groups = [
     title: 'About',
     links: [
       { href: '/about-preview', label: 'About this preview' },
-      { href: '/design-system', label: 'Design foundation' },
-      { href: '/legal/privacy', label: 'Privacy (placeholder)' },
-      { href: '/legal/terms', label: 'Terms (placeholder)' },
+      { href: '/legal/privacy', label: 'Privacy' },
+      { href: '/legal/terms', label: 'Terms' },
     ],
   },
 ] as const;
@@ -56,7 +56,7 @@ export function Footer() {
         </div>
         <div className="footer-bottom">
           <span>© 2026 TipMe. A little thanks goes a long way.</span>
-          <span>Development preview · Pretend payments only</span>
+          <span>Development preview · Test mode</span>
         </div>
       </Container>
     </footer>

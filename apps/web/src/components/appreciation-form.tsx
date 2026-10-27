@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { TipAmounts, TipQuote } from '@tipme/contracts';
+import type { TipAmounts, TipPurpose, TipQuote } from '@tipme/contracts';
 import {
   AmountChoice,
   Badge,
@@ -16,6 +16,7 @@ import { newUuid } from '@/lib/random-id';
 import { createTip, quoteTip, type ApiFailure } from '@/lib/api-client';
 import { formatDemoAmount } from '@/lib/demo-amount';
 import { amountOptions } from '@/lib/tip-amounts';
+import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
 import { Arrow } from './brand';
 
@@ -67,6 +68,7 @@ export function AppreciationForm({
   const [custom, setCustom] = useState('');
   const [message, setMessage] = useState('');
   const [payerName, setPayerName] = useState('');
+  const [purpose, setPurpose] = useState<TipPurpose | ''>('');
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [quote, setQuote] = useState<QuoteState>({ kind: 'idle' });
@@ -165,6 +167,7 @@ export function AppreciationForm({
     const result = await createTip(draftKey.current, {
       quoteId: current.quoteId,
       ...(trimmed ? { message: trimmed } : {}),
+      ...(purpose ? { purpose } : {}),
       ...(payerName.trim() ? { payerDisplayLabel: payerName.trim() } : {}),
       ...(joining && celebration
         ? { celebrationMomentId: celebration.momentId }
@@ -245,7 +248,7 @@ export function AppreciationForm({
     >
       <div className="composer-topline">
         <span className="eyebrow">A little appreciation</span>
-        <Badge>Pretend payments</Badge>
+        <Badge>Test mode</Badge>
       </div>
       {/* No browser form restoration: after Back, the controls must match React's state. */}
       <form onSubmit={submit} noValidate autoComplete="off">
@@ -278,7 +281,7 @@ export function AppreciationForm({
         >
           <legend>Choose an amount</legend>
           <p id={`${id}-currency`} className="tm-hint">
-            NGN · Illustrative currency, not a launch commitment.
+            Amounts are in NGN.
           </p>
           <div className="amount-options">
             {presets.map((preset, index) => (
@@ -381,12 +384,36 @@ export function AppreciationForm({
                 {formatDemoAmount(Number(ready.recipientNetMinor))} after fees
               </p>
               <p className="tm-hint">
-                Illustrative fees from a pretend provider (
-                {ready.feePolicyVersion}
+                Fees from policy ({ready.feePolicyVersion}
                 ). You pay {formatDemoAmount(Number(ready.payerTotalMinor))}.
               </p>
             </>
           )}
+        </div>
+        <div className="tm-field">
+          <label htmlFor={`${id}-purpose`}>
+            What is this tip for? (optional)
+          </label>
+          <select
+            id={`${id}-purpose`}
+            className="tm-input"
+            value={purpose}
+            disabled={submitting}
+            onChange={(event) => {
+              const selected = purposeOptions.find(
+                (option) => option.value === event.currentTarget.value,
+              );
+              setPurpose(selected?.value ?? '');
+              draftKey.current = null;
+            }}
+          >
+            <option value="">Choose a reason</option>
+            {purposeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
         <TextareaField
           id={`${id}-message`}
@@ -431,7 +458,7 @@ export function AppreciationForm({
           <Arrow />
         </Button>
         <p className="composer-disclaimer">
-          Payments here are pretend: no real money moves.
+          TipMe is in test mode: no real money moves yet.
           <br />
           You’ll confirm on the payment provider’s page next.
         </p>

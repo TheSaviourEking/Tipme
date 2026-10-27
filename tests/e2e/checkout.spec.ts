@@ -23,16 +23,22 @@ async function tip(
     handle = 'tobi',
     amount = '2,000 NGN',
     remember = false,
+    purpose,
     outcome = /^Pay/,
   }: {
     handle?: string;
     amount?: string;
     remember?: boolean;
+    purpose?: string;
     outcome?: RegExp;
   } = {},
 ) {
   await page.goto(`/@${handle}`);
   await page.getByRole('radio', { name: amount }).check();
+  if (purpose)
+    await page
+      .getByLabel('What is this tip for? (optional)')
+      .selectOption(purpose);
   await expect(
     page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
   ).toBeVisible();
@@ -44,7 +50,7 @@ async function tip(
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pay_/);
   await expect(
-    page.getByText('Pretend payment provider · no real money'),
+    page.getByText('Test payment provider · no real money'),
   ).toBeVisible();
   await page.getByRole('button', { name: outcome }).click();
   await page.waitForURL(/\/tip\/[0-9a-f-]{36}/);
@@ -52,6 +58,20 @@ async function tip(
 }
 const paidHeading = (page: Page) =>
   page.getByRole('heading', { name: /^Paid\. .+ got your thanks\.$/ });
+
+test('a supporter can attach a structured purpose to a tip', async ({
+  page,
+}) => {
+  const intentRequest = page.waitForRequest(
+    (request) =>
+      request.url().endsWith('/v1/tip-intents') && request.method() === 'POST',
+  );
+  await tip(page, { handle: 'ada', purpose: 'great_service' });
+  expect((await intentRequest).postDataJSON()).toMatchObject({
+    purpose: 'great_service',
+  });
+  await expect(paidHeading(page)).toBeVisible();
+});
 
 test('the breakdown shows what the recipient receives before paying', async ({
   page,
@@ -265,9 +285,7 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
 test('fix: every receipt says the payment was pretend', async ({ page }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();
-  await expect(
-    page.getByText('Pretend payment · no real money moved'),
-  ).toBeVisible();
+  await expect(page.getByText('Test mode · no real money moved')).toBeVisible();
 });
 
 test('fix: an expired tip is described honestly and cannot be paid afterwards', async ({
@@ -418,7 +436,7 @@ test('minor: the pretend provider page can retry loading', async ({ page }) => {
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
   await expect(
-    page.getByText('The pretend provider is unavailable. Please try again.'),
+    page.getByText('The test provider is unavailable. Please try again.'),
   ).toBeVisible();
   await page.unroute('**/v1/mock-provider/checkout/*');
   await page.getByRole('button', { name: 'Try again' }).click();

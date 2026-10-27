@@ -2,8 +2,8 @@ import { LegalPlaceholder } from '@/components/legal-placeholder';
 import { previewMetadata } from '@/lib/metadata';
 
 export const metadata = previewMetadata(
-  'Terms of use (placeholder)',
-  'Placeholder for TipMe’s terms of use. Not a legal document.',
+  'Terms of use',
+  'TipMe’s terms of use is coming soon.',
   '/legal/terms',
 );
 

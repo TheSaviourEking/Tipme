@@ -155,6 +155,21 @@ test('payment intents', async (t) => {
     },
   );
 
+  await t.test('tip purpose is persisted with the tip', async () => {
+    await database.fresh();
+    const { quoteId } = await quote();
+    const { tipId } = await createPaymentIntent(database.db, {
+      quoteId,
+      idempotencyKey: randomUUID(),
+      purpose: 'great_service',
+    });
+    const { rows } = await database.pool.query(
+      'SELECT purpose FROM tips WHERE id = $1',
+      [tipId],
+    );
+    assert.equal(rows[0].purpose, 'great_service');
+  });
+
   await t.test(
     'database errors never carry request values upward',
     async () => {

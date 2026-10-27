@@ -678,6 +678,15 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.6;
 }
 
+.home-recipient-note {
+  max-width: 22rem;
+  margin: var(--space-5) 0 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .home-footnote {
   max-width: 22rem;
   margin: var(--space-6) 0 0;
@@ -710,6 +719,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   left: var(--space-4);
   bottom: var(--space-4);
   display: grid;
+  width: min(12rem, calc(100% - var(--space-8)));
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--edge-hairline);
   border-radius: var(--radius-field);
@@ -737,10 +747,16 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   text-align: center;
 }
 
-.home-people__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(1.5rem, 4vw, 3rem);
+.recipient-start__steps {
+  margin-block: var(--space-10) var(--space-6);
+}
+
+.recipient-start__notice {
+  max-width: 44rem;
+  margin: 0 0 var(--space-5);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.6;
 }
 
 .person-card__photo {
@@ -811,7 +827,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     margin: var(--space-4) 0 0;
   }
 
-  .home-people__grid,
   .steps,
   .promise-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1379,6 +1394,53 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
 .prose-page .lead {
   font-size: 1.25rem;
+}
+
+.business-page {
+  display: grid;
+  gap: var(--space-12);
+  max-width: 44rem;
+  margin-inline: auto;
+}
+
+.business-page__intro {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-5);
+}
+
+.business-page__intro .lead-copy {
+  margin: 0;
+}
+
+.business-interest {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+}
+
+.business-interest h2 {
+  margin: 0;
+  font: 400 1.75rem / 1.15 var(--font-editorial);
+}
+
+.business-interest > p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.business-interest__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.business-interest [role='status'] {
+  margin: 0;
+  line-height: 1.6;
 }
 
 /* Tailwind's reset removes list markers; prose lists need them to read as lists. */
@@ -2918,6 +2980,67 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   letter-spacing: -0.015em;
 }
 
+.recipient-setup {
+  align-content: start;
+}
+
+.recipient-setup > div:first-child > p:not(.eyebrow) {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.recipient-setup__steps {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recipient-setup__steps li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-3);
+  border-top: 1px solid var(--edge-hairline);
+}
+
+.recipient-setup__steps li > div {
+  grid-column: 1;
+}
+
+.recipient-setup__steps li strong {
+  display: block;
+}
+
+.recipient-setup__steps li p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.recipient-setup__steps li > span {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.recipient-setup__steps li a {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-underline-offset: 0.2em;
+}
+
 .perf-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3282,6 +3405,17 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
   .perf-tiles {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recipient-setup__steps li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recipient-setup__steps li > span,
+  .recipient-setup__steps li a {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
   }
 }
 

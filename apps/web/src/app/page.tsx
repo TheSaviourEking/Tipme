@@ -13,27 +13,6 @@ export const metadata = marketingMetadata(
   '/',
 );
 
-const people = [
-  {
-    handle: 'ada',
-    name: 'Ada Okafor',
-    photo: '/portraits/ada.webp',
-    kicker: 'On the internet',
-    title: 'For the generous minds.',
-    copy: 'The creators, teachers and builders who put something useful into the world. A personal link makes it easier to say thanks.',
-    link: 'Meet a demo creator',
-  },
-  {
-    handle: 'tobi',
-    name: 'Tobi Adeyemi',
-    photo: '/portraits/tobi.webp',
-    kicker: 'Out in the world',
-    title: 'For the extra-mile people.',
-    copy: 'The familiar faces who make ordinary moments better. A QR code at the counter puts a person behind every little thank you.',
-    link: 'Meet a demo professional',
-  },
-] as const;
-
 export default function Home() {
   return (
     <main id="main" tabIndex={-1} className="home-page">
@@ -63,6 +42,10 @@ export default function Home() {
                   See how it works
                 </Link>
               </div>
+              <p className="home-recipient-note">
+                Want to receive tips? Your own page takes about a minute to
+                start.
+              </p>
               <p className="home-footnote">
                 No pressure. No grand gesture. Just a thoughtful way to say “you
                 made a difference.”
@@ -90,6 +73,50 @@ export default function Home() {
         </section>
       </Container>
 
+      <section
+        className="recipient-start section-space"
+        aria-labelledby="recipient-start-title"
+      >
+        <Container>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">For recipients</p>
+              <h2 id="recipient-start-title">
+                Your page. Your link. Your thanks.
+              </h2>
+            </div>
+            <p>
+              Set up a page supporters can find, make it feel like you, then
+              share it wherever people meet your work.
+            </p>
+          </div>
+          <ol className="steps recipient-start__steps">
+            <li>
+              <span>01</span>
+              <h3>Choose your link</h3>
+              <p>Create an account and claim a personal TipMe address.</p>
+            </li>
+            <li>
+              <span>02</span>
+              <h3>Make it yours</h3>
+              <p>Add the name and a few details supporters will recognise.</p>
+            </li>
+            <li>
+              <span>03</span>
+              <h3>Share your page</h3>
+              <p>Copy your link or QR code and let people know it is yours.</p>
+            </li>
+          </ol>
+          <p className="recipient-start__notice">
+            Payments are in test mode. Real payments and payout setup are not
+            available until provider and funds-flow approvals are complete.
+          </p>
+          <ActionLink className="home-primary" href="/sign-up">
+            Create your page <Arrow />
+          </ActionLink>
+        </Container>
+      </section>
+
       <section className="manifesto">
         <Container>
           <h2>
@@ -101,49 +128,6 @@ export default function Home() {
             The tutorial that finally clicked. The coffee made just right. The
             person who went out of their way. This is for them.
           </p>
-        </Container>
-      </section>
-
-      <section
-        className="home-people section-space"
-        id="made-for-you"
-        aria-labelledby="people-title"
-      >
-        <Container>
-          <div className="section-heading">
-            <h2 id="people-title">
-              Good people.
-              <br />
-              Everywhere.
-            </h2>
-            <p>
-              On your screen or around the corner. Appreciation belongs wherever
-              care shows up.
-            </p>
-          </div>
-          <div className="home-people__grid">
-            {people.map((person) => (
-              <article className="person-card" key={person.handle}>
-                <div className="person-card__photo">
-                  <Image
-                    src={person.photo}
-                    alt={`${person.name}, a fictional demo recipient`}
-                    width={960}
-                    height={1200}
-                    sizes="(max-width: 860px) calc(100vw - 2.5rem), 40vw"
-                  />
-                </div>
-                <div className="person-card__sheet">
-                  <p className="person-card__kicker">{person.kicker}</p>
-                  <h3>{person.title}</h3>
-                  <p>{person.copy}</p>
-                  <Link className="text-link" href={`/@${person.handle}`}>
-                    {person.link} <Arrow diagonal />
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
         </Container>
       </section>
 
@@ -194,8 +178,8 @@ export default function Home() {
                 <h3>Clarity before commitment.</h3>
                 <p>
                   You see the full cost and what the person receives before you
-                  pay. In this preview the fees are illustrative and no money
-                  moves.
+                  pay. Payments are still in test mode; real payments are not
+                  available yet.
                 </p>
               </li>
               <li>

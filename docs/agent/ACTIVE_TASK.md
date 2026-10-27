@@ -1,3 +1,13 @@
+# Current task — recipient onboarding, business page and tip purpose (27 October 2026)
+
+- Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 already merged and is not being reused.
+- Scope: recipient onboarding guidance on the homepage/dashboard; business coming-soon and voluntary mailto interest path; navbar/copy cleanup; optional structured tip purpose through contract, API, database migration, checkout form and recipient detail; `/for-businesses` layout alignment.
+- Migration `0039_tip_purpose` is additive and has not been applied to any database. The separate Bachs branch also currently contains migration 0039; coordinate/resequence before both branches are merged.
+- Verification: `pnpm test` passed (54 root tests; all 18 package tasks, including 55 web, 31 API, 9 contracts and 3 database unit tests); `pnpm typecheck` passed (15/15); `pnpm lint` passed (15/15); `pnpm build` passed (9/9); `pnpm format:check` and `git diff --check` passed; checkout Playwright discovery listed 21 tests.
+- Added contract-schema and database-integration coverage for tip purpose plus a checkout E2E assertion that the selected purpose is sent. Database integration execution and browser E2E execution were not run because no isolated test stack was available. Migration was not applied.
+- Browser review showed the business page composed and centred at desktop; the narrow viewport tool rendered at 400px and reported no horizontal overflow. No deployment or payment operation occurred.
+- Next exact step: commit the scoped changes, push this branch and open a PR against `dev`; then review CI and coordinate migration numbering with Bachs before merge.
+
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
 - Branch: `feat/production-countdown`, isolated in `.worktrees/profile-composition`.
@@ -22,10 +32,8 @@
   and have no horizontal overflow.
 - No production settings or deployment have changed. Production API origin is
   still a separate unresolved launch dependency.
-- PR #21 is open against `dev`; latest step checks were still running on GitHub.
-- Next exact step: monitor CI and Vercel preview, address any failures, then
-  verify staging after merge. Production deployment and API configuration are
-  separate.
+- PR #21 was merged into `dev` on 26 October 2026. Production deployment and
+  API configuration remain separate.
 
 # Previous task — PR #19 Linux visual baselines (26 October 2026)
 
@@ -204,3 +212,16 @@ PR-003 to PR-008 are complete.
 ## Next exact step
 
 Stop. PR-009 (analytics and ops view) needs explicit authorisation.
+
+## Navbar, "test mode" copy and tip purpose (uncommitted)
+
+- Navbar: "For individuals" (still `/for-creators`) and "For Businesses" (new `/for-businesses` coming-soon page, replacing "See a demo page").
+- "Pretend" wording replaced with neutral "Test mode" across web copy; real payments remain unapproved, so a test-mode notice stays.
+- Structured optional tip purpose: contracts `tipPurposes`, `tips.purpose` column + migration `0039_tip_purpose` (not applied to any database), form select, recipient tip detail.
+
+## Recipient onboarding path (uncommitted)
+
+- Homepage clarifies that Ada is a fictional demo, surfaces the create-page action, and explains the three recipient setup steps. The portrait caption is constrained so the overlapping tip panel does not cover it.
+- The first-day dashboard now guides recipients through profile details, publishing, and sharing tools, with a payment/payout step clearly marked unavailable pending provider and funds-flow approvals.
+- Business page copy states that business accounts are not open and no launch date has been announced; it links to individual signup and provides a mailto draft to `usetipme@gmail.com`. Submissions are not stored by TipMe; the visitor must send the draft.
+- The separate Bachs branch has sandbox account onboarding, but it is not integrated into this UI branch; no live payout flow is represented here.
