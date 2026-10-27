@@ -883,3 +883,42 @@ test('definite client errors are not mislabeled as uncertain writes', async () =
       error.providerCode === 'INVALID_REQUEST',
   );
 });
+
+test('an account can take tips only with active NGN card collection and platform-paid fees', async () => {
+  const { bachsAccountReadiness } = await import('../dist/index.js');
+  const account = (overrides) => ({
+    accountReference: 'acct_ready',
+    active: true,
+    ngnCardCollectionStatus: 'active',
+    bankTransferStatus: 'active',
+    feeCollector: 'platform',
+    requirementsDue: [],
+    ...overrides,
+  });
+  assert.deepEqual(bachsAccountReadiness(account({})), {
+    status: 'ACTIVE',
+    chargesEnabled: true,
+  });
+  // Not yet: still onboarding, nothing is wrong.
+  for (const overrides of [
+    { ngnCardCollectionStatus: 'pending' },
+    { ngnCardCollectionStatus: null },
+    { active: null },
+    { feeCollector: 'unknown' },
+  ])
+    assert.deepEqual(bachsAccountReadiness(account(overrides)), {
+      status: 'ONBOARDING',
+      chargesEnabled: false,
+    });
+  // Blocked: the recipient would bear Bachs' fees, or Bachs restricted the account.
+  for (const overrides of [
+    { feeCollector: 'connected_account' },
+    { ngnCardCollectionStatus: 'restricted' },
+    { ngnCardCollectionStatus: 'inactive' },
+    { active: false },
+  ])
+    assert.deepEqual(bachsAccountReadiness(account(overrides)), {
+      status: 'RESTRICTED',
+      chargesEnabled: false,
+    });
+});

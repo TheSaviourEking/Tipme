@@ -36,6 +36,7 @@ import {
 } from '@tipme/database';
 import {
   BachsApiError,
+  bachsAccountReadiness,
   type BachsProvider,
   type MockProvider,
 } from '@tipme/payments';
@@ -309,7 +310,7 @@ export class OpsActionsController {
   ): Promise<
     ApiDataResponse<{
       outcome: 'recovered' | 'not_found' | 'mismatch' | 'not_pending';
-      status?: 'ACTIVE' | 'ONBOARDING';
+      status?: 'ACTIVE' | 'ONBOARDING' | 'RESTRICTED';
     }>
   > {
     const issue = await issueById(this.database.db, body.issueId);
@@ -383,17 +384,14 @@ export class OpsActionsController {
       );
       return { data: { outcome: 'mismatch' } };
     }
-    const chargesEnabled =
-      remoteAccount.active === true &&
-      remoteAccount.ngnCardCollectionStatus === 'active';
-    const status = chargesEnabled ? 'ACTIVE' : 'ONBOARDING';
+    const { status, chargesEnabled } = bachsAccountReadiness(remoteAccount);
     await recoverUnknownPaymentAccount(this.database.db, {
       issueId: body.issueId,
       profileId,
       providerAccountReference: body.accountReference,
       status,
       chargesEnabled,
-      feeCollector: 'platform',
+      feeCollector: remoteAccount.feeCollector,
       requirementsDue: remoteAccount.requirementsDue,
       dashboardVerified: true,
       staffUserId: ops.userId,

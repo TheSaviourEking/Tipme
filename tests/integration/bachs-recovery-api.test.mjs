@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { OpsActionsController } from '../../apps/api/dist/ops/actions.controller.js';
+import { PaymentAccountsController } from '../../apps/api/dist/profiles/payment-accounts.controller.js';
 import {
   beginPaymentAccountCreation,
   claimAttemptStart,
@@ -228,6 +229,7 @@ test('account recovery fetches provider status, links only the verified recipien
         accountReference: reference,
         active: true,
         ngnCardCollectionStatus: 'active',
+        feeCollector: 'platform',
         requirementsDue: [],
       };
     },
@@ -259,4 +261,120 @@ test('account recovery fetches provider status, links only the verified recipien
     ])
   ).rows[0];
   assert.equal(issue.status, 'resolved');
+});
+
+test('staff recovery never activates an account whose recipient would bear Bachs fees', async (t) => {
+  const database = await databaseFor(t);
+  await database.pool.query(
+    `UPDATE users SET email = $1, email_verified_at = now() WHERE id = $2`,
+    ['sandbox-recipient@example.test', '00000000-0000-7000-8000-000000007b11'],
+  );
+  await beginPaymentAccountCreation(database.db, {
+    profileId: TOBI,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await markPaymentAccountCreationUnknown(database.db, {
+    profileId: TOBI,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await runIssueDetectors(database.db, new Date());
+  const issueId = (
+    await database.pool.query(
+      `SELECT id FROM issues WHERE kind = 'payment_account_unresolved' AND subject->>'profileId' = $1`,
+      [TOBI],
+    )
+  ).rows[0]?.id;
+  const result = await controller(database.db, {
+    async getRecipientAccount(reference) {
+      return {
+        accountReference: reference,
+        active: true,
+        ngnCardCollectionStatus: 'active',
+        feeCollector: 'connected_account',
+        requirementsDue: [],
+      };
+    },
+  }).recoverBachsAccount(
+    { userId: staffUserId },
+    {
+      issueId,
+      accountReference: 'acct_tobi123',
+      dashboardVerified: true,
+      reason: 'Confirmed account belongs to the verified recipient',
+    },
+  );
+  assert.deepEqual(result.data, { outcome: 'recovered', status: 'RESTRICTED' });
+  const account = (
+    await database.pool.query(
+      `SELECT status, charges_enabled, fee_collector FROM payment_accounts WHERE profile_id = $1`,
+      [TOBI],
+    )
+  ).rows[0];
+  assert.deepEqual(account, {
+    status: 'RESTRICTED',
+    charges_enabled: false,
+    fee_collector: 'connected_account',
+  });
+});
+
+test('refreshing onboarding stores what Bachs reports and blocks recipient-paid fees', async (t) => {
+  const database = await databaseFor(t);
+  await database.pool.query(
+    `UPDATE users SET email = $1, email_verified_at = now() WHERE id = $2`,
+    ['sandbox-recipient@example.test', '00000000-0000-7000-8000-000000007b11'],
+  );
+  await beginPaymentAccountCreation(database.db, {
+    profileId: TOBI,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await updatePaymentAccountStatus(database.db, {
+    profileId: TOBI,
+    provider: 'bachs',
+    environment: 'sandbox',
+    providerAccountReference: 'acct_tobi123',
+    status: 'ONBOARDING',
+    chargesEnabled: false,
+    payoutsEnabled: false,
+    feeCollector: 'unknown',
+    requirementsDue: [],
+  });
+  const accounts = new PaymentAccountsController(
+    { PAYMENT_PROVIDER: 'bachs-sandbox', WEB_ORIGIN: 'http://127.0.0.1:3000' },
+    { db: database.db },
+    {
+      async getRecipientAccount(reference) {
+        return {
+          accountReference: reference,
+          active: true,
+          ngnCardCollectionStatus: 'active',
+          bankTransferStatus: 'active',
+          feeCollector: 'connected_account',
+          requirementsDue: [],
+        };
+      },
+      async createOnboardingLink() {
+        return 'https://connect.bachs.io/onboarding/test';
+      },
+    },
+    logger,
+  );
+  const result = await accounts.onboard(
+    { userId: '00000000-0000-7000-8000-000000007b11' },
+    { country: 'NG', entityType: 'individual' },
+  );
+  assert.equal(result.data.status, 'RESTRICTED');
+  const account = (
+    await database.pool.query(
+      `SELECT status, charges_enabled, fee_collector FROM payment_accounts WHERE profile_id = $1`,
+      [TOBI],
+    )
+  ).rows[0];
+  assert.deepEqual(account, {
+    status: 'RESTRICTED',
+    charges_enabled: false,
+    fee_collector: 'connected_account',
+  });
 });

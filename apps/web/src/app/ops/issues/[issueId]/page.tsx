@@ -117,7 +117,7 @@ type RecoveryResult = {
     | 'mismatch'
     | 'not_pending'
     | 'recovered';
-  status?: 'ACTIVE' | 'ONBOARDING';
+  status?: 'ACTIVE' | 'ONBOARDING' | 'RESTRICTED';
 };
 
 function BachsRecoveryAction({

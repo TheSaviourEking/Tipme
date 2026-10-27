@@ -25,6 +25,7 @@ import {
 import type { Logger } from '@tipme/observability';
 import {
   BachsApiError,
+  bachsAccountReadiness,
   type BachsRecipientAccount,
   type BachsProvider,
 } from '@tipme/payments';
@@ -178,18 +179,16 @@ export class PaymentAccountsController {
       }
     }
 
-    const chargesEnabled =
-      remoteAccount.active === true &&
-      remoteAccount.ngnCardCollectionStatus === 'active';
+    const { status, chargesEnabled } = bachsAccountReadiness(remoteAccount);
     const account = await updatePaymentAccountStatus(this.database.db, {
       profileId: recipient.profileId,
       provider: 'bachs',
       environment: 'sandbox',
       providerAccountReference: remoteAccount.accountReference,
-      status: chargesEnabled ? 'ACTIVE' : 'ONBOARDING',
+      status,
       chargesEnabled,
       payoutsEnabled: false,
-      feeCollector: 'platform',
+      feeCollector: remoteAccount.feeCollector,
       requirementsDue: remoteAccount.requirementsDue,
     });
     if (account.status === 'ACTIVE')

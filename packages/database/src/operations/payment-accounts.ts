@@ -256,7 +256,7 @@ export function recoverUnknownPaymentAccount(
     providerAccountReference: string;
     status: 'ONBOARDING' | 'ACTIVE' | 'RESTRICTED';
     chargesEnabled: boolean;
-    feeCollector: 'platform';
+    feeCollector: 'platform' | 'connected_account' | 'unknown';
     requirementsDue: string[];
     dashboardVerified: true;
     staffUserId: string;
@@ -274,6 +274,7 @@ export function recoverUnknownPaymentAccount(
         requirement.length > 100 ||
         /[\r\n]/.test(requirement),
     ) ||
+    !FEE_COLLECTORS.has(input.feeCollector) ||
     (input.status === 'ACTIVE') !== input.chargesEnabled ||
     input.dashboardVerified !== true ||
     input.reason.trim().length < 10

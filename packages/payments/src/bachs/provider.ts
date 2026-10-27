@@ -250,6 +250,37 @@ function normalizedAccount(
   };
 }
 
+const BLOCKED_CAPABILITY = new Set([
+  'restricted',
+  'inactive',
+  'disabled',
+  'rejected',
+]);
+
+/**
+ * Whether TipMe may start checkouts for this account, from Bachs' own account read. Ready needs
+ * an active account, active NGN card collection and fees charged to the platform; a recipient
+ * who would bear Bachs' fees, or a restricted account, is blocked rather than left onboarding.
+ */
+export function bachsAccountReadiness(account: BachsRecipientAccount): {
+  status: 'ACTIVE' | 'ONBOARDING' | 'RESTRICTED';
+  chargesEnabled: boolean;
+} {
+  if (
+    account.active === false ||
+    account.feeCollector === 'connected_account' ||
+    BLOCKED_CAPABILITY.has(account.ngnCardCollectionStatus ?? '')
+  )
+    return { status: 'RESTRICTED', chargesEnabled: false };
+  if (
+    account.active === true &&
+    account.ngnCardCollectionStatus === 'active' &&
+    account.feeCollector === 'platform'
+  )
+    return { status: 'ACTIVE', chargesEnabled: true };
+  return { status: 'ONBOARDING', chargesEnabled: false };
+}
+
 function validateHttpsOrLocalUrl(value: string): string {
   const url = new URL(urlInputSchema.parse(value));
   if (
