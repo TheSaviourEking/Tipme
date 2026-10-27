@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DM_Serif_Display, Manrope } from 'next/font/google';
+import localFont from 'next/font/local';
 import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
@@ -8,19 +8,22 @@ import '@tipme/ui/tokens.css';
 import '@tipme/ui/components.css';
 import './globals.css';
 
-// Self-hosted at build time via next/font — no runtime external request.
-const manrope = Manrope({
-  weight: ['400', '500', '600', '700'],
-  subsets: ['latin'],
+// Both fonts ship in the repository (src/fonts/, SIL OFL 1.1, Latin and Latin Extended only), so a
+// build never downloads them and no page makes a third-party font request.
+const manrope = localFont({
+  src: '../fonts/Manrope-Latin.woff2',
+  weight: '200 800',
   variable: '--font-manrope',
   display: 'swap',
 });
 
-const dmSerif = DM_Serif_Display({
-  weight: ['400'],
-  subsets: ['latin'],
+const dmSerif = localFont({
+  src: '../fonts/DMSerifDisplay-Latin.woff2',
+  weight: '400',
+  style: 'normal',
   variable: '--font-dm-serif',
   display: 'swap',
+  adjustFontFallback: 'Times New Roman',
 });
 
 export const metadata: Metadata = {
