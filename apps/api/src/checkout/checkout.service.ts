@@ -12,11 +12,16 @@ import {
   findAttemptStart,
   findQuoteCharge,
   getReadyPaymentAccount,
+  markAttemptStartFailed,
   markAttemptUnknown,
   markAttemptInitiated,
   OperationError,
 } from '@tipme/database';
-import type { BachsProvider, MockProvider } from '@tipme/payments';
+import {
+  BachsApiError,
+  type BachsProvider,
+  type MockProvider,
+} from '@tipme/payments';
 import type { Logger } from '@tipme/observability';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
@@ -31,6 +36,38 @@ import {
 import { createStatusToken } from './status-token.js';
 
 /** Guest checkout through the PR-005 operations; prices and fees only ever come from the server. */
+/**
+ * Whether a failed Bachs checkout start is a definite refusal (nothing was created, so the
+ * attempt can fail) or ambiguous (the checkout may exist, so it stays UNKNOWN and is never
+ * retried). Only allowlisted fields go into diagnostics: never messages, bodies or PII.
+ */
+export function classifyBachsStartError(error: unknown): {
+  outcome: 'failed' | 'unknown';
+  diagnostic: Record<string, string | number>;
+} {
+  // A 4xx is a refusal; 408 (timeout) and 409 (conflict) may hide an accepted request.
+  if (
+    error instanceof BachsApiError &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500 &&
+    error.statusCode !== 408 &&
+    error.statusCode !== 409
+  ) {
+    return {
+      outcome: 'failed',
+      diagnostic: {
+        error: error.name,
+        provider_http_status: error.statusCode,
+        ...(error.providerCode ? { provider_code: error.providerCode } : {}),
+      },
+    };
+  }
+  return {
+    outcome: 'unknown',
+    diagnostic: { error: error instanceof Error ? error.name : typeof error },
+  };
+}
+
 @Injectable()
 export class CheckoutService {
   private readonly webOrigin: string;
@@ -151,6 +188,20 @@ export class CheckoutService {
           idempotencyKey: `tipme-checkout-${intent.attemptId}`,
         });
       } catch (error) {
+        const { outcome, diagnostic } = classifyBachsStartError(error);
+        if (outcome === 'failed') {
+          await markAttemptStartFailed(db, {
+            attemptId: intent.attemptId,
+            provider: 'bachs',
+          });
+          this.logger.warn({
+            event: 'payment.start_rejected',
+            provider: 'bachs',
+            attempt_id: intent.attemptId,
+            ...diagnostic,
+          });
+          throw new CodedHttpException(502, 'PAYMENT_START_REJECTED');
+        }
         await markAttemptUnknown(db, {
           attemptId: intent.attemptId,
           provider: 'bachs',
@@ -159,7 +210,7 @@ export class CheckoutService {
           event: 'payment.start_unknown',
           provider: 'bachs',
           attempt_id: intent.attemptId,
-          error: error instanceof Error ? error.name : typeof error,
+          ...diagnostic,
         });
         const current = await findAttemptStart(db, intent.attemptId);
         if (current?.reference && current.provider === 'bachs')

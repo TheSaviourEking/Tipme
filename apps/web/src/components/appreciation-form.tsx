@@ -41,6 +41,8 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
     return 'This person can’t receive tips right now.';
   if (failure.code === 'PAYMENT_ACCOUNT_REQUIRED')
     return 'This person hasn’t finished setting up payments yet, so they can’t receive tips right now. Nothing was charged.';
+  if (failure.code === 'PAYMENT_START_REJECTED')
+    return 'The payment couldn’t be started, and nothing was charged. Please try again later.';
   if (failure.code === 'PROVIDER_OUTCOME_UNKNOWN')
     return 'We couldn’t confirm whether your payment started. Please don’t tip again yet: wait a few minutes, and TipMe will check. Nothing is shown as paid until it is confirmed.';
   if (failure.code === 'DEPENDENCY_UNAVAILABLE')

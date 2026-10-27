@@ -385,7 +385,7 @@ export class OpsActionsController {
     }
     const chargesEnabled =
       remoteAccount.active === true &&
-      remoteAccount.cardCollectionStatus === 'active';
+      remoteAccount.ngnCardCollectionStatus === 'active';
     const status = chargesEnabled ? 'ACTIVE' : 'ONBOARDING';
     await recoverUnknownPaymentAccount(this.database.db, {
       issueId: body.issueId,

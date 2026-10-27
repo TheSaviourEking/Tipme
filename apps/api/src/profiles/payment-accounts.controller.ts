@@ -180,7 +180,7 @@ export class PaymentAccountsController {
 
     const chargesEnabled =
       remoteAccount.active === true &&
-      remoteAccount.cardCollectionStatus === 'active';
+      remoteAccount.ngnCardCollectionStatus === 'active';
     const account = await updatePaymentAccountStatus(this.database.db, {
       profileId: recipient.profileId,
       provider: 'bachs',

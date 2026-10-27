@@ -34,6 +34,7 @@ export const apiErrorCodes = [
   'EMAIL_VERIFICATION_REQUIRED',
   'PAYMENT_ACCOUNT_REQUIRED',
   'PROVIDER_OUTCOME_UNKNOWN',
+  'PAYMENT_START_REJECTED',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];

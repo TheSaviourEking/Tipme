@@ -206,6 +206,73 @@ export function markAttemptUnknown(
 }
 
 /**
+ * The provider definitely refused to start this payment (for example a 4xx with no checkout):
+ * the claimed attempt fails and its tip fails with it, so the supporter can start a new tip.
+ * Only a STARTING claim by the same provider moves; nothing external is retried.
+ */
+export function markAttemptStartFailed(
+  db: Database,
+  input: {
+    attemptId: string;
+    provider: string;
+    traceId?: string | null;
+  },
+): Promise<'failed' | 'already_failed' | 'conflict' | 'not_found'> {
+  const traceId = input.traceId ?? activeTraceId();
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      // Attempt before tip: the same lock order as provider events and expiry.
+      const [attempt] = await tx
+        .select({
+          status: paymentAttempts.status,
+          provider: paymentAttempts.provider,
+          intentId: paymentAttempts.intentId,
+        })
+        .from(paymentAttempts)
+        .where(eq(paymentAttempts.id, input.attemptId))
+        .for('update');
+      if (!attempt) return 'not_found' as const;
+      if (attempt.provider !== input.provider) return 'conflict' as const;
+      if (attempt.status === 'VERIFIED_FAILED')
+        return 'already_failed' as const;
+      if (attempt.status !== 'STARTING') return 'conflict' as const;
+      const [tip] = await tx
+        .select({ id: tips.id, status: tips.status })
+        .from(tips)
+        .where(eq(tips.intentId, attempt.intentId))
+        .for('update');
+      await tx
+        .update(paymentAttempts)
+        .set({ status: 'VERIFIED_FAILED', startClaimedAt: null })
+        .where(eq(paymentAttempts.id, input.attemptId));
+      await recordTransition(tx, {
+        entityType: 'attempt',
+        entityId: input.attemptId,
+        fromStatus: 'STARTING',
+        toStatus: 'VERIFIED_FAILED',
+        cause: 'system',
+        traceId,
+      });
+      if (tip && tip.status === 'AWAITING_PAYMENT') {
+        await tx
+          .update(tips)
+          .set({ status: 'FAILED' })
+          .where(eq(tips.id, tip.id));
+        await recordTransition(tx, {
+          entityType: 'tip',
+          entityId: tip.id,
+          fromStatus: tip.status,
+          toStatus: 'FAILED',
+          cause: 'system',
+          traceId,
+        });
+      }
+      return 'failed' as const;
+    }),
+  );
+}
+
+/**
  * Converts abandoned STARTING claims to UNKNOWN and opens the normal payment-unresolved issue.
  * This only records the unresolved state; it never replays the external create operation.
  */

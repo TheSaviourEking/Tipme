@@ -64,6 +64,8 @@ export class WebhookService {
 
   async applyBachs(event: NormalizedProviderEvent): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
+    // Account and capability events are reconciled in Task 5; until then they are kept as unmatched.
+    if (event.kind !== 'payment') return this.unmatchedBachs(event);
     const { accountReference, operationReference, providerReference } = event;
     if (!accountReference || !providerReference)
       return this.unmatchedBachs(event);

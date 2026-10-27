@@ -227,7 +227,7 @@ test('account recovery fetches provider status, links only the verified recipien
       return {
         accountReference: reference,
         active: true,
-        cardCollectionStatus: 'active',
+        ngnCardCollectionStatus: 'active',
         requirementsDue: [],
       };
     },
