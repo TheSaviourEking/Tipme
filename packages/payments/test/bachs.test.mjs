@@ -941,6 +941,51 @@ test('a read-only Bachs adapter needs no webhook secret and refuses every webhoo
   assert.equal(verification.ok, false);
 });
 
+test('refund and dispute events become reversals, carrying ids only', () => {
+  const provider = makeProvider(async () => {
+    throw new Error('no network');
+  });
+  for (const type of ['refund.created', 'dispute.created', 'charge.refunded']) {
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        id: `evt_${type}`,
+        type,
+        account: 'acct_123abc',
+        data: {
+          checkout_id: 'chk_123abc',
+          reference: 'attempt-123',
+          amount: '1000.00',
+          currency: 'NGN',
+          reason: 'customer said: private words',
+        },
+      }),
+    );
+    const timestamp = String(Math.floor(NOW.getTime() / 1000));
+    const result = provider.verifyWebhook(
+      rawBody,
+      {
+        'x-bachs-signature-v2': `t=${timestamp},v1=${sign(CURRENT_SECRET, timestamp, rawBody)}`,
+      },
+      NOW,
+    );
+    assert.deepEqual(
+      result,
+      {
+        ok: true,
+        event: {
+          kind: 'reversal',
+          eventId: `evt_${type}`,
+          eventType: type,
+          accountReference: 'acct_123abc',
+          providerReference: 'acct_123abc:chk_123abc',
+          operationReference: 'attempt-123',
+        },
+      },
+      type,
+    );
+  }
+});
+
 test('a paid checkout awaiting settlement is pending but reported as collected', async () => {
   let responseIndex = 0;
   const responses = [

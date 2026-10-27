@@ -49,6 +49,7 @@ export const ISSUE_KINDS = [
   'payment_unresolved',
   'payment_attempt_unresolved',
   'payment_account_unresolved',
+  'payment_reversed',
   'payout_failed',
   'payout_conflict',
   'provider_event_conflict',

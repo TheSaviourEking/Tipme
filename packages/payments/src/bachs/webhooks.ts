@@ -134,9 +134,15 @@ function safeMinor(value: unknown, currency: unknown): bigint | undefined {
   }
 }
 
+// Refunds, disputes and chargebacks are not modelled yet (ADR-0004); each one is surfaced to
+// staff instead of being ignored. The exact Bachs names are matched by family.
+const REVERSAL_EVENT =
+  /^(refund|dispute|chargeback)\.|^charge\.(refund|dispute)/;
+
 function normalizeEvent(
   event: z.infer<typeof eventEnvelopeSchema>,
 ): NormalizedProviderEvent | undefined {
+  if (REVERSAL_EVENT.test(event.type)) return normalizeReversal(event);
   if (!SUPPORTED_EVENT_TYPES.has(event.type))
     return { kind: 'ignored', eventId: event.id, eventType: event.type };
 
@@ -253,6 +259,30 @@ function normalizeEvent(
   }
 
   return undefined;
+}
+
+/** Ids only: amounts, reasons and customer details stay out of TipMe. */
+function normalizeReversal(
+  event: z.infer<typeof eventEnvelopeSchema>,
+): NormalizedProviderEvent | undefined {
+  const accountReference =
+    nullableString(event.account) ?? nullableString(event.organization_id);
+  if (
+    !accountReference ||
+    accountReference.length > 200 ||
+    accountReference.includes(':') ||
+    /[\u0000-\u001f\u007f]/.test(accountReference)
+  )
+    return undefined;
+  const checkoutId = nullableString(event.data['checkout_id']);
+  return {
+    kind: 'reversal',
+    eventId: event.id,
+    eventType: event.type,
+    accountReference,
+    providerReference: checkoutId ? `${accountReference}:${checkoutId}` : null,
+    operationReference: nullableString(event.data['reference']),
+  };
 }
 
 export function verifyBachsWebhook(

@@ -26,6 +26,7 @@ const EVENT_KINDS: Record<string, IssueKind> = {
   'payment.mismatch': 'payment_mismatch',
   'payment.conflict': 'payment_conflict',
   'payment.unresolved': 'payment_unresolved',
+  'payment.reversed': 'payment_reversed',
   'payout.failed': 'payout_failed',
   'payout.conflict': 'payout_conflict',
   'provider_event.conflict': 'provider_event_conflict',
@@ -40,6 +41,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_unresolved: 'money',
   payment_attempt_unresolved: 'money',
   payment_account_unresolved: 'account',
+  payment_reversed: 'money',
   payout_failed: 'money',
   payout_conflict: 'money',
   provider_event_conflict: 'money',
@@ -64,6 +66,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A Bachs checkout for a tip to ${page} has an unknown outcome. Find and verify the checkout in Bachs Dashboard; do not retry it.`;
     case 'payment_account_unresolved':
       return `Bachs account setup for ${page} has an unknown outcome. Confirm the recipient account in Bachs Dashboard before linking it.`;
+    case 'payment_reversed':
+      return `Bachs reported a refund or dispute on a paid tip to ${page}. TipMe changed no balance: review it in Bachs Dashboard.`;
     case 'payout_failed':
       return `A withdrawal for ${page} failed. The money is back in their balance.`;
     case 'payout_conflict':

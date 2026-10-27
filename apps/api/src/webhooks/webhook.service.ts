@@ -7,6 +7,7 @@ import {
 } from '@tipme/payments';
 import { z } from 'zod';
 import {
+  enqueueOutbox,
   findBachsAttemptByOperationReference,
   findPaymentAccountByReference,
   updatePaymentAccountStatus,
@@ -75,26 +76,10 @@ export class WebhookService {
     if (event.kind === 'ignored') return 'ignored';
     if (event.kind === 'account')
       return this.refreshBachsAccount(event, accounts);
-    if (event.kind !== 'payment') return this.unmatchedBachs(event);
-    const { accountReference, operationReference, providerReference } = event;
-    if (!accountReference || !providerReference)
-      return this.unmatchedBachs(event);
-
-    let attemptId: string | null = null;
-    if (operationReference) {
-      if (!z.uuid().safeParse(operationReference).success)
-        return this.unmatchedBachs(event);
-      attemptId = await findBachsAttemptByOperationReference(this.database.db, {
-        attemptId: operationReference,
-        accountReference,
-      });
-    } else {
-      attemptId = await findBachsAttemptByReference(this.database.db, {
-        providerReference,
-        accountReference,
-      });
-    }
-    if (!attemptId) return this.unmatchedBachs(event);
+    if (event.kind === 'reversal') return this.flagBachsReversal(event);
+    const { providerReference } = event;
+    const attemptId = await this.matchBachsAttempt(event);
+    if (!attemptId || !providerReference) return this.unmatchedBachs(event);
 
     try {
       const result = await recordProviderEvent(this.database.db, {
@@ -134,6 +119,48 @@ export class WebhookService {
       reason,
     });
     return 'unmatched';
+  }
+
+  /** The attempt a Bachs event is about, matched only through the persisted account mapping. */
+  private async matchBachsAttempt(event: {
+    accountReference: string | null;
+    operationReference: string | null;
+    providerReference: string | null;
+  }): Promise<string | null> {
+    const { accountReference, operationReference, providerReference } = event;
+    if (!accountReference || !providerReference) return null;
+    if (operationReference) {
+      if (!z.uuid().safeParse(operationReference).success) return null;
+      return findBachsAttemptByOperationReference(this.database.db, {
+        attemptId: operationReference,
+        accountReference,
+      });
+    }
+    return findBachsAttemptByReference(this.database.db, {
+      providerReference,
+      accountReference,
+    });
+  }
+
+  /**
+   * Refunds and disputes are not modelled yet (ADR-0004): each one raises a money issue for
+   * staff, once per Bachs event, and never changes a balance or the ledger.
+   */
+  private async flagBachsReversal(
+    event: Extract<NormalizedProviderEvent, { kind: 'reversal' }>,
+  ): Promise<string> {
+    const attemptId = await this.matchBachsAttempt(event);
+    if (!attemptId) return this.unmatchedBachs(event);
+    await this.database.db.transaction((tx) =>
+      enqueueOutbox(tx, {
+        eventType: 'payment.reversed',
+        aggregateId: attemptId,
+        // Dedupe keys allow word characters, dots and dashes only.
+        dedupeSuffix: event.eventId.replace(/[^\w.-]/g, '_'),
+        payload: { attemptId, eventType: event.eventType },
+      }),
+    );
+    return 'reversal_flagged';
   }
 
   /**

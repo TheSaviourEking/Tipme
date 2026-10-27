@@ -34,6 +34,15 @@ export type NormalizedProviderEvent =
       accountReference: string;
     }
   | {
+      /** A refund, dispute or chargeback: money moving back. Never booked; staff review it. */
+      kind: 'reversal';
+      eventId: string;
+      eventType: string;
+      accountReference: string;
+      providerReference: string | null;
+      operationReference: string | null;
+    }
+  | {
       kind: 'ignored';
       eventId: string;
       eventType: string;
