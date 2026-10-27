@@ -7,6 +7,7 @@ import { Button, Card, Notice, Skeleton } from '@tipme/ui';
 import { tipStatus } from '@/lib/api-client';
 import { formatDemoAmount } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
+import { nextCheckDelay } from '@/lib/status-polling';
 import {
   forgetMyTips,
   recognitionMessage,
@@ -20,10 +21,6 @@ type Screen =
   | { kind: 'tip'; view: TipStatusView };
 
 const FINAL = new Set(['paid', 'declined', 'cancelled']);
-const GIVE_UP_AFTER_MS = 2 * 60 * 1000;
-/** 1 s for the first ten checks, then 2 s, then 5 s after half a minute. */
-const delayFor = (attempt: number, elapsedMs: number) =>
-  attempt < 10 ? 1000 : elapsedMs < 30_000 ? 2000 : 5000;
 
 /** The receipt token: from the #t= fragment, else from this tab's session. Null when absent. */
 function currentToken(tipId: string): string | null {
@@ -110,15 +107,12 @@ export function StatusView() {
       } else {
         setOffline(true);
       }
-      const elapsed = Date.now() - started;
-      if (elapsed >= GIVE_UP_AFTER_MS) {
+      const delay = nextCheckDelay(attempt, Date.now() - started);
+      if (delay === null) {
         setStopped(true);
         return;
       }
-      timer = setTimeout(
-        () => void poll(attempt + 1),
-        delayFor(attempt, elapsed),
-      );
+      timer = setTimeout(() => void poll(attempt + 1), delay);
     };
     void poll(0);
     return () => {
@@ -195,7 +189,7 @@ export function StatusView() {
   const profile = `/@${tip.recipient.handle}`;
   return (
     <Card className={`tip-status-card tip-status-card--${tip.state}`}>
-      <p className="tip-status-pretend">Test mode · no real money moved</p>
+      <p className="tip-status-pretend">Test payment · no real money moved</p>
       <div role="status" aria-live="polite" className="tip-status-live">
         {tip.state === 'waiting' && (
           <>

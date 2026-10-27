@@ -7,7 +7,7 @@ import {
   PAYOUT_TRANSITIONS,
 } from '@tipme/domain';
 import type { PayoutStatus } from '@tipme/domain';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   paymentIntents,
@@ -378,6 +378,18 @@ export async function requestWithdrawal(
         input.amountMinor !== availableMinor
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
+      // Money can only leave through the provider that collected it. A paid tip collected by any
+      // other provider (Bachs direct charges sit in the recipient's own Bachs account, and Bachs
+      // payouts are unsupported) blocks the withdrawal rather than paying it out twice.
+      const foreign = await tx.execute<{ found: boolean }>(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM tips t
+            JOIN payment_attempts a ON a.intent_id = t.intent_id
+           WHERE t.profile_id = ${input.profileId} AND t.status = 'SUCCEEDED'
+             AND a.status = 'VERIFIED_SUCCEEDED' AND a.provider IS DISTINCT FROM ${input.provider.name}
+        ) AS found`);
+      if (foreign.rows[0]?.found)
+        throw new OperationError('WITHDRAWAL_UNAVAILABLE');
       const payoutId = newId();
       const inserted = await tx
         .insert(payouts)

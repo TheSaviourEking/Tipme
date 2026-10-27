@@ -47,6 +47,9 @@ export const ISSUE_KINDS = [
   'payment_mismatch',
   'payment_conflict',
   'payment_unresolved',
+  'payment_attempt_unresolved',
+  'payment_account_unresolved',
+  'payment_reversed',
   'payout_failed',
   'payout_conflict',
   'provider_event_conflict',
@@ -251,6 +254,39 @@ export type OpsRecheckRequest = z.infer<typeof opsRecheckSchema>;
 
 export type OpsRecheckOutcome =
   'applied' | 'unchanged' | 'unresolved' | 'error' | 'not_pending';
+
+/**
+ * A Bachs ID as staff copy it from the dashboard. Bachs documents IDs as opaque, so no prefix is
+ * required; whitespace, `/` and `:` are refused (TipMe scopes checkouts as `<account>:<checkout>`).
+ */
+const providerIdSchema = z
+  .string()
+  .regex(/^[^\s:/\u0000-\u001f\u007f]{1,200}$/);
+
+/** Attach a dashboard-found checkout ID only after the server verifies its scoped status. */
+export const opsBachsCheckoutRecoverySchema = opsReasonSchema
+  .extend({
+    issueId: z.uuid(),
+    attemptId: z.uuid(),
+    checkoutId: providerIdSchema,
+    dashboardVerified: z.literal(true),
+  })
+  .strict();
+export type OpsBachsCheckoutRecoveryRequest = z.infer<
+  typeof opsBachsCheckoutRecoverySchema
+>;
+
+/** Recover an ambiguous sandbox account after staff match it in the provider dashboard. */
+export const opsBachsAccountRecoverySchema = opsReasonSchema
+  .extend({
+    issueId: z.uuid(),
+    accountReference: providerIdSchema,
+    dashboardVerified: z.literal(true),
+  })
+  .strict();
+export type OpsBachsAccountRecoveryRequest = z.infer<
+  typeof opsBachsAccountRecoverySchema
+>;
 
 /** A count this week (Monday 00:00 Lagos to now) and the whole of last week. */
 export interface OpsWeekCount {

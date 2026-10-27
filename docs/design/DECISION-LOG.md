@@ -1,5 +1,14 @@
 # Design decision log
 
+## 2026-10-27 — Payer-total-only tip summary
+
+At the product owner's direction, the public tip quote displays only the exact
+amount the supporter pays. The fee breakdown, recipient net, and fee-policy
+version are removed from that summary; quote calculation and payment behavior
+are unchanged. This presentation conflicts with PRD v1.1's fee-treatment
+disclosure requirement and no-hidden-fees principle. Revisit before enabling
+real payments; live payments remain disabled.
+
 ## 2026-10-27 — Recipient onboarding and tip-purpose baselines
 
 Accepted for PR #23: the public profile gains an optional structured tip-purpose

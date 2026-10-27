@@ -11,6 +11,8 @@ import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   autoResolveIssues,
   createDatabase,
+  expireStalePaymentAccountCreations,
+  expireStaleAttemptStarts,
   evaluatePeriodMoments,
   expireStaleTips,
   previousIsoWeek,
@@ -23,7 +25,12 @@ import {
   purgeProfileReports,
   rollupAnalytics,
 } from '@tipme/database';
-import { createMockProvider } from '@tipme/payments';
+import {
+  createBachsProvider,
+  createMockProvider,
+  type BachsProvider,
+  type MockProvider,
+} from '@tipme/payments';
 import { Redis } from 'ioredis';
 import { closeWithin } from './close-within.js';
 import { ensureSchedule } from './ensure-schedule.js';
@@ -117,10 +124,23 @@ export async function startJobWorker(
     config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
   // Reconciliation asks the provider (never charges); it shares the fail-fast Redis client.
   // The worker only asks the provider for statuses; without a secret it can never accept webhooks.
-  const provider = createMockProvider({
+  const mockProvider = createMockProvider({
     redis: markers,
     prefix: config.QUEUE_PREFIX,
   });
+  const bachsProvider: BachsProvider | null =
+    // Read-only: the worker only asks Bachs for statuses, so it never holds a webhook secret.
+    config.BACHS_SANDBOX_API_KEY
+      ? createBachsProvider({ apiKey: config.BACHS_SANDBOX_API_KEY })
+      : null;
+  const defaultProvider = mockProvider;
+  const providerFor = (name: string): BachsProvider | MockProvider => {
+    if (name === 'mock') return mockProvider;
+    if (name === 'bachs' && bachsProvider) return bachsProvider;
+    throw new Error('Unsupported persisted payment provider');
+  };
+  const providerForExpiry = (name: string | null) =>
+    name ? providerFor(name) : defaultProvider;
   const schedule = ensureSchedule({
     queue,
     id: RECONCILE_JOB,
@@ -193,22 +213,35 @@ export async function startJobWorker(
         try {
           if (job.name === RECONCILE_JOB) {
             const now = new Date();
+            const unknownStarts = await expireStaleAttemptStarts(database.db, {
+              olderThan: new Date(now.getTime() - config.RECONCILE_MIN_AGE_MS),
+              now,
+            });
+            const unknownAccounts = await expireStalePaymentAccountCreations(
+              database.db,
+              {
+                olderThan: new Date(
+                  now.getTime() - config.RECONCILE_MIN_AGE_MS,
+                ),
+                now,
+              },
+            );
             const payments = await reconcileAttempts({
               db: database.db,
-              provider,
+              provider: providerFor,
               now,
               minAgeMs: config.RECONCILE_MIN_AGE_MS,
             });
             const payoutResult = await reconcilePayouts({
               db: database.db,
-              provider,
+              provider: providerFor,
               now,
               minAgeMs: config.RECONCILE_MIN_AGE_MS,
             });
             // Never-paid tips are cancelled, after the provider confirms they were not paid.
             const expiry = await expireStaleTips({
               db: database.db,
-              provider,
+              provider: providerForExpiry,
               now,
             });
             // Then the admin inbox: open issues for what still needs a person, close cleared ones.
@@ -218,6 +251,8 @@ export async function startJobWorker(
               event: 'reconcile.completed',
               issues_opened: detected.opened,
               issues_auto_resolved: cleared.resolved,
+              unknown_starts: unknownStarts,
+              unknown_account_creations: unknownAccounts,
               ...payments,
               payouts_checked: payoutResult.checked,
               payouts_applied: payoutResult.applied,

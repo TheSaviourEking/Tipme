@@ -425,12 +425,15 @@ test('provider events', async (t) => {
         database.db,
         paidEvent(attemptId, { providerReference: 'right-ref' }),
       );
-      await recordProviderEvent(
-        database.db,
-        paidEvent(attemptId, {
-          providerReference: 'late-ref',
-          eventType: 'payment.failed',
-        }),
+      await assert.rejects(
+        recordProviderEvent(
+          database.db,
+          paidEvent(attemptId, {
+            providerReference: 'late-ref',
+            eventType: 'payment.failed',
+          }),
+        ),
+        { code: 'INVALID_INPUT' },
       );
       const [attempt] = await q(
         'SELECT provider_reference FROM payment_attempts WHERE id = $1',

@@ -10,6 +10,7 @@ export const workerConfigSchema = z
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('production'),
+    RELEASE_KIND: z.enum(['test', 'live']).default('live'),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
@@ -27,9 +28,13 @@ export const workerConfigSchema = z
       .string()
       .regex(/^[a-z0-9-]{1,32}$/)
       .default('tipme'),
-    // Only the mock provider exists until a real one is approved (D-03); live payments stay off.
-    PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
+    // Sandbox only: selectable in test and password-protected preview, never production.
+    PAYMENT_PROVIDER: z.enum(['mock', 'bachs-sandbox']).default('mock'),
     PAYMENTS_LIVE_ENABLED: z.literal('false').default('false'),
+    BACHS_SANDBOX_API_KEY: z
+      .string()
+      .regex(/^sk_sandbox_.+$/)
+      .optional(),
     // Anonymous analytics (PR-009). Unset: on in development and test, off in production (D-07).
     ANALYTICS_ENABLED: z
       .enum(['true', 'false'])
@@ -90,6 +95,37 @@ export const workerConfigSchema = z
         code: 'custom',
         path: ['PAYMENT_PROVIDER'],
         message: 'mock not allowed in production',
+      });
+    }
+    if (config.PAYMENT_PROVIDER === 'bachs-sandbox') {
+      if (
+        config.NODE_ENV === 'production' &&
+        config.DEPLOYMENT_MODE !== 'preview'
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['PAYMENT_PROVIDER'],
+          message:
+            'Bachs sandbox is allowed only in test or password-protected preview',
+        });
+      }
+      if (!config.BACHS_SANDBOX_API_KEY) {
+        context.addIssue({
+          code: 'custom',
+          path: ['BACHS_SANDBOX_API_KEY'],
+          message: 'required for Bachs sandbox',
+        });
+      }
+    }
+    if (
+      config.BACHS_SANDBOX_API_KEY &&
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['BACHS_SANDBOX_API_KEY'],
+        message: 'Bachs sandbox credentials are restricted to test or preview',
       });
     }
   });

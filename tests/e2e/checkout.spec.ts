@@ -39,9 +39,7 @@ async function tip(
     await page
       .getByLabel('What is this tip for? (optional)')
       .selectOption(purpose);
-  await expect(
-    page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
-  ).toBeVisible();
+  await expect(page.getByText(/You pay NGN [\d,]+\.\d\d/)).toBeVisible();
   if (remember) {
     // The profile keeps the optional extras behind a disclosure.
     await page.getByText('Add your name or remember tips').click();
@@ -73,14 +71,18 @@ test('a supporter can attach a structured purpose to a tip', async ({
   await expect(paidHeading(page)).toBeVisible();
 });
 
-test('the breakdown shows what the recipient receives before paying', async ({
+test('the tip form shows only the payer total before continuing', async ({
   page,
 }) => {
   await page.goto('/@ada');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
+  await expect(page.locator('.tip-breakdown')).toHaveCount(0);
   await expect(
-    page.getByText('Ada receives NGN 1,800.00 after fees'),
-  ).toBeVisible();
+    page
+      .locator('.tip-quote')
+      .getByText(/TipMe fee|receives NGN|Fees from policy/),
+  ).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: /^Tip NGN 2,000\.00/ }),
   ).toBeEnabled();
@@ -285,7 +287,9 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
 test('fix: every receipt says the payment was pretend', async ({ page }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();
-  await expect(page.getByText('Test mode · no real money moved')).toBeVisible();
+  await expect(
+    page.getByText('Test payment · no real money moved'),
+  ).toBeVisible();
 });
 
 test('fix: an expired tip is described honestly and cannot be paid afterwards', async ({

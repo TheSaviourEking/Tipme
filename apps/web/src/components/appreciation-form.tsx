@@ -39,6 +39,14 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
     return `That amount can’t be tipped here right now (this page allows ${rangeText}). Please refresh the page to see the current amounts.`;
   if (failure.code === 'PROFILE_NOT_FOUND')
     return 'This person can’t receive tips right now.';
+  if (failure.code === 'PAYMENT_ACCOUNT_REQUIRED')
+    return 'This person hasn’t finished setting up payments yet, so they can’t receive tips right now. Nothing was charged.';
+  if (failure.code === 'PAYMENT_START_REJECTED')
+    return 'The payment couldn’t be started, and nothing was charged. Please try again later.';
+  if (failure.code === 'PROVIDER_OUTCOME_UNKNOWN')
+    return 'We couldn’t confirm whether your payment started. Please don’t tip again yet: wait a few minutes, and TipMe will check. Nothing is shown as paid until it is confirmed.';
+  if (failure.code === 'DEPENDENCY_UNAVAILABLE')
+    return 'The payment provider is unavailable right now. Nothing was charged. Please try again in a moment.';
   return 'Something went wrong on our side. Please try again.';
 };
 
@@ -248,7 +256,7 @@ export function AppreciationForm({
     >
       <div className="composer-topline">
         <span className="eyebrow">A little appreciation</span>
-        <Badge>Test mode</Badge>
+        <Badge>Test payments</Badge>
       </div>
       {/* No browser form restoration: after Back, the controls must match React's state. */}
       <form onSubmit={submit} noValidate autoComplete="off">
@@ -357,37 +365,9 @@ export function AppreciationForm({
             </div>
           )}
           {ready && (
-            <>
-              <dl className="tip-breakdown">
-                <div>
-                  <dt>Your tip</dt>
-                  <dd>{formatDemoAmount(Number(ready.tipMinor))}</dd>
-                </div>
-                <div>
-                  {/* PRD v1.1: one fee, 10% of the tip, with processing paid out of it. */}
-                  <dt>
-                    {ready.feeFree
-                      ? 'TipMe fee (fee-free tip)'
-                      : 'TipMe fee (10%, includes processing)'}
-                  </dt>
-                  <dd>
-                    −
-                    {formatDemoAmount(
-                      Number(ready.platformFeeMinor) +
-                        Number(ready.providerFeeMinor),
-                    )}
-                  </dd>
-                </div>
-              </dl>
-              <p className="tip-net">
-                {recipient} receives{' '}
-                {formatDemoAmount(Number(ready.recipientNetMinor))} after fees
-              </p>
-              <p className="tm-hint">
-                Fees from policy ({ready.feePolicyVersion}
-                ). You pay {formatDemoAmount(Number(ready.payerTotalMinor))}.
-              </p>
-            </>
+            <p className="tip-payment-total">
+              You pay {formatDemoAmount(Number(ready.payerTotalMinor))}
+            </p>
           )}
         </div>
         <div className="tm-field">

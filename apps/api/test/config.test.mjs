@@ -112,6 +112,73 @@ test('a container may bind every interface; a copy is live unless it says test (
   );
 });
 
+test('Bachs sandbox is selectable in test and preview only, never production', () => {
+  const bachs = {
+    ...valid,
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+    // Bachs sends supporters back to the web app, so it must be public.
+    WEB_ORIGIN: 'https://tipme-tunnel.example.com',
+  };
+  assert.equal(
+    loadApiConfig({ ...bachs, NODE_ENV: 'test' }).PAYMENT_PROVIDER,
+    'bachs-sandbox',
+  );
+  assert.equal(
+    loadApiConfig({
+      ...bachs,
+      NODE_ENV: 'production',
+      DEPLOYMENT_MODE: 'preview',
+      RELEASE_KIND: 'test',
+      PREVIEW_PASSWORD: 'p'.repeat(32),
+      WEB_ORIGIN: 'https://tipme-demo.example.com',
+    }).PAYMENT_PROVIDER,
+    'bachs-sandbox',
+  );
+  assert.throws(
+    () => loadApiConfig({ ...bachs, NODE_ENV: 'production' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.throws(() =>
+    loadApiConfig({
+      ...bachs,
+      NODE_ENV: 'test',
+      BACHS_SANDBOX_API_KEY: undefined,
+    }),
+  );
+});
+
+test('the Bachs sandbox refuses a local web address, because Bachs cannot send supporters back to it', () => {
+  for (const WEB_ORIGIN of [
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://app.localhost:3000',
+  ])
+    assert.throws(
+      () =>
+        loadApiConfig({
+          ...valid,
+          NODE_ENV: 'test',
+          PAYMENT_PROVIDER: 'bachs-sandbox',
+          BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+          BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+          WEB_ORIGIN,
+        }),
+      /WEB_ORIGIN/,
+      WEB_ORIGIN,
+    );
+  // The mock provider keeps working locally.
+  assert.equal(
+    loadApiConfig({
+      ...valid,
+      NODE_ENV: 'test',
+      WEB_ORIGIN: 'http://localhost:3000',
+    }).PAYMENT_PROVIDER,
+    'mock',
+  );
+});
+
 test('sign-in codes stay at 3 per number per hour unless a copy raises it (PR-010)', () => {
   assert.equal(
     loadApiConfig({ ...valid, NODE_ENV: 'test' })

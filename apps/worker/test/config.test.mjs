@@ -82,3 +82,56 @@ test('hosted preview is explicit and never enables live payments', () => {
     /PAYMENT_PROVIDER/,
   );
 });
+
+test('Bachs sandbox is selectable in test and preview only, never production', () => {
+  const base = {
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+  };
+  assert.equal(
+    loadWorkerConfig({ ...base, NODE_ENV: 'test', RELEASE_KIND: 'test' })
+      .PAYMENT_PROVIDER,
+    'bachs-sandbox',
+  );
+  assert.throws(
+    () =>
+      loadWorkerConfig({
+        ...base,
+        NODE_ENV: 'production',
+        DEPLOYMENT_MODE: 'production',
+      }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.throws(
+    () =>
+      loadWorkerConfig({
+        ...base,
+        NODE_ENV: 'test',
+        BACHS_SANDBOX_API_KEY: undefined,
+      }),
+    /BACHS_SANDBOX_API_KEY/,
+  );
+  assert.throws(() =>
+    loadWorkerConfig({
+      ...base,
+      NODE_ENV: 'test',
+      PAYMENTS_LIVE_ENABLED: 'true',
+    }),
+  );
+});
+
+test('the worker reads Bachs with its API key alone and never needs or accepts webhook secrets', () => {
+  const config = loadWorkerConfig({
+    NODE_ENV: 'test',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_worker_only',
+  });
+  assert.equal(config.BACHS_SANDBOX_API_KEY, 'sk_sandbox_worker_only');
+  assert.equal('BACHS_WEBHOOK_SECRET' in config, false);
+});

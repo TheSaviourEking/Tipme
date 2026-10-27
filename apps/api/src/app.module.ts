@@ -41,11 +41,10 @@ export class AppModule {
         MomentsModule,
         OpsModule,
         AnalyticsModule,
+        WebhooksModule,
+        ...(config.PAYMENT_PROVIDER === 'mock' ? [MockCheckoutModule] : []),
         ...(config.MESSAGING_PROVIDER === 'mock' ? [PretendInboxModule] : []),
         ...(config.DIAGNOSTICS_ENABLED ? [DiagnosticsModule] : []),
-        ...(config.PAYMENT_PROVIDER === 'mock'
-          ? [WebhooksModule, MockCheckoutModule]
-          : []),
       ],
       controllers: [
         HealthController,

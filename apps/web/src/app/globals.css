@@ -1139,21 +1139,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   margin-top: calc(var(--space-4) * -1);
 }
 
-.tip-instrument .tip-breakdown {
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
-  border-radius: 0.75rem;
-  background: var(--surface-recessed);
-  box-shadow: var(--shadow-recessed);
-  font-size: 0.8125rem;
-}
-
-.tip-instrument .tip-net {
-  margin-top: var(--space-2);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-}
-
 .tip-instrument .tip-remember {
   font-size: 0.8125rem;
 }
@@ -1815,10 +1800,11 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   font-variant-numeric: tabular-nums;
 }
 
-.tip-net {
+.tip-payment-total {
   margin: 0;
   font-weight: 700;
   color: var(--brand-ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .tip-remember {
@@ -3857,6 +3843,23 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   display: grid;
   gap: var(--space-3);
   width: 100%;
+}
+
+.ops-recovery {
+  max-width: 40rem;
+}
+
+.ops-recovery__confirm {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--space-2);
+  color: var(--text-primary);
+}
+
+.ops-recovery__confirm input {
+  margin-top: 0.25rem;
+  accent-color: var(--brand-primary);
 }
 
 .ops-table-wrap {

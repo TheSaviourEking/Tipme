@@ -50,7 +50,9 @@ export default function WithdrawPage() {
         ? 'That is more than your available balance.'
         : result.code === 'WITHDRAWAL_TOO_SMALL'
           ? 'The smallest withdrawal is NGN 1,000.'
-          : 'We couldn’t request the withdrawal. Please try again.',
+          : result.code === 'WITHDRAWAL_UNAVAILABLE'
+            ? 'Withdrawals aren’t available yet for tips paid through this payment provider. Your tips are safe; nothing was sent.'
+            : 'We couldn’t request the withdrawal. Please try again.',
     );
   };
 

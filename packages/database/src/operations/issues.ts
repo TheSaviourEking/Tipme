@@ -4,7 +4,9 @@ import type { Database, Tx } from '../client.js';
 import {
   issueNotes,
   issues,
+  paymentAccounts,
   paymentAttempts,
+  paymentIntents,
   payouts,
   phoneRecoveries,
   profiles,
@@ -24,6 +26,7 @@ const EVENT_KINDS: Record<string, IssueKind> = {
   'payment.mismatch': 'payment_mismatch',
   'payment.conflict': 'payment_conflict',
   'payment.unresolved': 'payment_unresolved',
+  'payment.reversed': 'payment_reversed',
   'payout.failed': 'payout_failed',
   'payout.conflict': 'payout_conflict',
   'provider_event.conflict': 'provider_event_conflict',
@@ -36,6 +39,9 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_mismatch: 'money',
   payment_conflict: 'money',
   payment_unresolved: 'money',
+  payment_attempt_unresolved: 'money',
+  payment_account_unresolved: 'account',
+  payment_reversed: 'money',
   payout_failed: 'money',
   payout_conflict: 'money',
   provider_event_conflict: 'money',
@@ -56,6 +62,12 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The provider says a payment succeeded for a tip to ${page} that had already ended. Money may have been taken.`;
     case 'payment_unresolved':
       return `The provider has no record of a payment for a tip to ${page} after 30 minutes.`;
+    case 'payment_attempt_unresolved':
+      return `A Bachs checkout for a tip to ${page} has an unknown outcome. Find and verify the checkout in Bachs Dashboard; do not retry it.`;
+    case 'payment_account_unresolved':
+      return `Bachs account setup for ${page} has an unknown outcome. Confirm the recipient account in Bachs Dashboard before linking it.`;
+    case 'payment_reversed':
+      return `Bachs reported a refund or dispute on a paid tip to ${page}. TipMe changed no balance: review it in Bachs Dashboard.`;
     case 'payout_failed':
       return `A withdrawal for ${page} failed. The money is back in their balance.`;
     case 'payout_conflict':
@@ -241,6 +253,63 @@ export function runIssueDetectors(
         })
       )
         opened += 1;
+    const unknownAccounts = await db
+      .select({ id: paymentAccounts.id, profileId: paymentAccounts.profileId })
+      .from(paymentAccounts)
+      .where(
+        and(
+          eq(paymentAccounts.provider, 'bachs'),
+          eq(paymentAccounts.environment, 'sandbox'),
+          eq(paymentAccounts.status, 'UNKNOWN'),
+          isNull(paymentAccounts.providerAccountReference),
+          sql`NOT EXISTS (
+            SELECT 1 FROM issues i
+             WHERE i.dedupe_key = 'payment_account_unresolved.' || ${paymentAccounts.id}
+          )`,
+        ),
+      )
+      .limit(500);
+    for (const row of unknownAccounts)
+      if (
+        await openIssue(db, {
+          dedupeKey: `payment_account_unresolved.${row.id}`,
+          kind: 'payment_account_unresolved',
+          subject: { profileId: row.profileId },
+          now,
+        })
+      )
+        opened += 1;
+    const unknownAttempts = await db
+      .select({ id: paymentAttempts.id, tipId: tips.id })
+      .from(paymentAttempts)
+      .innerJoin(
+        paymentIntents,
+        eq(paymentIntents.id, paymentAttempts.intentId),
+      )
+      .innerJoin(tips, eq(tips.intentId, paymentIntents.id))
+      .where(
+        and(
+          eq(paymentAttempts.provider, 'bachs'),
+          eq(paymentAttempts.status, 'UNKNOWN'),
+          isNull(paymentAttempts.providerReference),
+          lt(paymentAttempts.createdAt, stuckBefore),
+          sql`NOT EXISTS (
+            SELECT 1 FROM issues i
+             WHERE i.dedupe_key = 'payment_attempt_unresolved.' || ${paymentAttempts.id}
+          )`,
+        ),
+      )
+      .limit(500);
+    for (const row of unknownAttempts)
+      if (
+        await openIssue(db, {
+          dedupeKey: `payment_attempt_unresolved.${row.id}`,
+          kind: 'payment_attempt_unresolved',
+          subject: { attemptId: row.id, tipId: row.tipId },
+          now,
+        })
+      )
+        opened += 1;
     const recoveries = await db
       .select({ id: phoneRecoveries.id, userId: phoneRecoveries.userId })
       .from(phoneRecoveries)
@@ -315,6 +384,23 @@ export function autoResolveIssues(
         FROM issues i JOIN payment_attempts a ON a.id = (i.subject->>'attemptId')::uuid
        WHERE i.status = 'open' AND i.kind = 'payment_unresolved'
          AND a.status IN ('VERIFIED_SUCCEEDED', 'VERIFIED_FAILED', 'EXPIRED')
+      UNION ALL
+      SELECT i.id, 'The provider gave a final answer for the payment.'
+        FROM issues i
+        JOIN payment_attempts a
+          ON a.id = (i.subject->>'attemptId')::uuid
+       WHERE i.status = 'open' AND i.kind = 'payment_attempt_unresolved'
+         AND a.status IN ('VERIFIED_SUCCEEDED', 'VERIFIED_FAILED', 'EXPIRED')
+      UNION ALL
+      SELECT i.id, 'The Bachs recipient account was found and its status was synchronized.'
+        FROM issues i
+        JOIN payment_accounts a
+          ON a.profile_id = (i.subject->>'profileId')::uuid
+         AND a.provider = 'bachs'
+         AND a.environment = 'sandbox'
+       WHERE i.status = 'open' AND i.kind = 'payment_account_unresolved'
+         AND a.status <> 'UNKNOWN'
+         AND a.provider_account_reference IS NOT NULL
       UNION ALL
       SELECT i.id, 'The recovery was completed or cancelled.'
         FROM issues i JOIN phone_recoveries r ON r.id = (i.subject->>'recoveryId')::uuid

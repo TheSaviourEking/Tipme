@@ -9,6 +9,7 @@ export const TIP_STATUSES = [
 ] as const;
 export const ATTEMPT_STATUSES = [
   'CREATED',
+  'STARTING',
   'INITIATED',
   'PENDING',
   'VERIFIED_SUCCEEDED',
@@ -45,15 +46,24 @@ export const TIP_TRANSITIONS: TransitionTable<TipStatus> = {
   CANCELLED: [],
 };
 
-// Provider events can arrive before TipMe records INITIATED, so CREATED may jump straight to a verdict.
-// UNKNOWN resolves only to a verified outcome, never back to pending.
+// STARTING claims the one allowed provider create call before it leaves TipMe. A signed event can
+// establish that an ambiguous create produced a pending checkout; UNKNOWN can then resolve to a
+// known provider reference/status, but never back to CREATED (which would permit a duplicate write).
 export const ATTEMPT_TRANSITIONS: TransitionTable<AttemptStatus> = {
   CREATED: [
+    'STARTING',
     'INITIATED',
     'PENDING',
     'VERIFIED_SUCCEEDED',
     'VERIFIED_FAILED',
     'EXPIRED',
+    'UNKNOWN',
+  ],
+  STARTING: [
+    'INITIATED',
+    'PENDING',
+    'VERIFIED_SUCCEEDED',
+    'VERIFIED_FAILED',
     'UNKNOWN',
   ],
   INITIATED: [
@@ -64,7 +74,7 @@ export const ATTEMPT_TRANSITIONS: TransitionTable<AttemptStatus> = {
     'UNKNOWN',
   ],
   PENDING: ['VERIFIED_SUCCEEDED', 'VERIFIED_FAILED', 'EXPIRED', 'UNKNOWN'],
-  UNKNOWN: ['VERIFIED_SUCCEEDED', 'VERIFIED_FAILED'],
+  UNKNOWN: ['PENDING', 'VERIFIED_SUCCEEDED', 'VERIFIED_FAILED'],
   VERIFIED_SUCCEEDED: [],
   VERIFIED_FAILED: [],
   EXPIRED: [],
