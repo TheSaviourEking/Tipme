@@ -15,8 +15,8 @@
 - Dedicated implementation worktree: `.worktrees/provider-integrations-bachs`,
   branch `feat/provider-integrations-bachs`, rebased onto `origin/dev` commit
   `da0c62a`. The rebase completed without remaining conflicts. Commits
-  `0084177` and `788bd28` contain the funds-flow ADR and integration; no PR has
-  been opened yet.
+  `0084177` and `788bd28` contain the funds-flow ADR and integration. Draft
+  PR #24 is open against `dev`; the branch is published.
 - The Bachs typed REST adapter, account persistence/onboarding API, one-shot
   checkout-start claim, durable unknown states, raw-body signature verification,
   scoped event correlation, fee-attribution gate, and audited staff recovery
@@ -68,9 +68,10 @@
   because the shared local test database already has the old
   `payment_account_status` enum; no reset was performed. No live-provider or
   browser test was run.
-- Next exact step: finalize the diff, commit, push without force, and open a
-  draft PR. Keep the provider gate limited to protected preview/test; live
-  payments remain blocked by D-01–D-07 and written provider/legal approval.
+- Next exact step: review PR #24 CI, then validate the protected-preview
+  sandbox flow only after an operator explicitly authorizes that test. Keep the
+  provider gate limited to protected preview/test; live payments remain blocked
+  by D-01–D-07 and written provider/legal approval.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 

@@ -16,7 +16,7 @@
   `.worktrees/provider-integrations-bachs`, rebased onto `origin/dev` at
   `da0c62a`. The rebase completed without remaining conflicts; commits
   `0084177` and `788bd28` contain the accepted sandbox-funds-flow ADR and
-  implementation. No PR has been opened yet.
+  implementation. Draft PR #24 is open against `dev`; the branch is published.
 - The typed Bachs REST adapter, recipient-account persistence, one-shot
   checkout-start claim, durable `UNKNOWN` outcome, signed webhook correlation,
   API account/onboarding/webhook routes, and audited staff recovery workflows
@@ -61,8 +61,9 @@
   while reapplying migrations to the shared local test DB: its old Bachs
   `payment_account_status` enum already exists. The DB was not reset or changed.
   No live-provider or browser test was run.
-- Next exact step: finalize the diff, commit, push without force, and open a
-  draft PR. Keep live payments disabled.
+- Next exact step: review PR #24 CI, then validate the protected-preview
+  sandbox flow only after an operator explicitly authorizes that test. Keep
+  live payments disabled.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
