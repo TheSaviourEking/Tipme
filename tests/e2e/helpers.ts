@@ -103,9 +103,7 @@ export async function tipAsVisitor(
     });
   }).toPass({ timeout: 10_000 });
   await page.getByRole('radio', { name: amount }).check();
-  await expect(
-    page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
-  ).toBeVisible();
+  await expect(page.getByText(/^You pay NGN [\d,]+\.\d\d$/)).toBeVisible();
   if (message)
     await page.getByLabel('Personal message (optional)').fill(message);
   if (name) {
