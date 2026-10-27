@@ -11,6 +11,8 @@ export interface DashboardSummary {
   thisWeek: string;
   lastWeek: string;
   last7Days: { date: string; netMinor: string }[];
+  /** False when part of the balance was collected by a provider TipMe cannot pay out through yet. */
+  withdrawalsAvailable: boolean;
 }
 
 export type TipState = 'paid' | 'confirming' | 'failed' | 'cancelled';

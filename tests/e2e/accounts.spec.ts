@@ -86,6 +86,21 @@ test('a new recipient signs up, claims a handle and controls whether the page is
     ).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 5000 });
   expect(await fitsViewport(page)).toBe(true);
+
+  // The owner is told on every dashboard page, with the one step that fixes it.
+  const attention = page.getByRole('region', { name: 'Needs your attention' });
+  await expect(attention.getByText('Your page is offline')).toBeVisible();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
+  await expect(attention.getByText('Your page is offline')).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Settings (needs your attention)' }),
+  ).toBeVisible();
+  await attention.getByRole('link', { name: 'Make my page live' }).click();
+  await page.getByRole('button', { name: 'Make my page live' }).click();
+  await expect(attention).toHaveCount(0);
+  await expect(
+    page.getByRole('link', { name: 'Settings', exact: true }),
+  ).toBeVisible();
 });
 
 test('a session survives a reload and signing out ends it', async ({

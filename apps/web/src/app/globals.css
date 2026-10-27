@@ -2867,6 +2867,28 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     0 1px 2px rgb(20 18 16 / 14%);
 }
 
+/* Marks the tab that leads to something the owner must fix (owner attention). */
+.dashboard-nav__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: var(--space-2);
+  border-radius: 50%;
+  background: var(--brand-primary);
+}
+
+/* What stops the owner earning, above every dashboard page, each with its one fix. */
+.owner-attention {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.owner-attention__action {
+  display: flex;
+  width: fit-content;
+  margin-top: var(--space-3);
+}
+
 .dashboard-home h1,
 .dashboard-section h1 {
   margin: 0;
