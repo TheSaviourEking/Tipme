@@ -32,7 +32,7 @@
     "trace:demo": "node scripts/trace-demo.mjs",
     "mock:pay": "pnpm --filter @tipme/database --filter @tipme/payments build && node --env-file-if-exists=.env scripts/mock-pay.mjs",
     "pr:merge": "node scripts/pr-merge.mjs",
-    "prepare": "node scripts/install-git-hooks.mjs"
+    "prepare": "[ ! -f scripts/install-git-hooks.mjs ] || node scripts/install-git-hooks.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
