@@ -28,7 +28,7 @@
     "docs:generate": "node scripts/generate-docs.mjs",
     "api:openapi": "node apps/api/dist/openapi/generate.js",
     "test:load": "node scripts/load-test.mjs",
-    "test:integration": "turbo run build && node --import ./packages/observability/dist/register.js --test --test-concurrency=1 \"packages/database/test/integration/*.test.mjs\" \"packages/payments/test/integration/*.test.mjs\" \"tests/integration/*.test.mjs\"",
+    "test:integration": "turbo run build --filter=!@tipme/web && node scripts/test-integration.mjs",
     "trace:demo": "node scripts/trace-demo.mjs",
     "mock:pay": "pnpm --filter @tipme/database --filter @tipme/payments build && node --env-file-if-exists=.env scripts/mock-pay.mjs",
     "pr:merge": "node scripts/pr-merge.mjs",
