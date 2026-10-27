@@ -66,10 +66,12 @@
   Darwin snapshots used a temporary config and read-only requests to the
   existing local API. Linux snapshots use the reviewed CI actuals.
 - No Bachs credentials or API requests, real payments, staging changes, or
-  production configuration changes. PR CI for these fixes has not yet run.
-- Next exact step: commit and push the CI fixes, then rerun PR #24 checks. Keep
-  live payments disabled; validate the protected-preview sandbox only after
-  an operator explicitly authorizes that test.
+  production configuration changes. CI run `40452019057` passed static,
+  security, integration and E2E on implementation commit `141f100`; the Vercel
+  preview also passed. PR #24 remains open and draft.
+- Next exact step: product-owner review of PR #24. Validate the protected
+  preview only after an operator explicitly authorizes that test; keep live
+  payments disabled.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 

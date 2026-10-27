@@ -75,10 +75,12 @@
   Playwright passed 4/4. The Darwin run used a temporary config with read-only
   requests to the existing local API; Linux snapshots are the reviewed CI
   actuals.
-- PR CI for these fixes has not yet run. Next exact step: commit and push the
-  fixes, rerun PR #24 checks, and update the PR evidence. Keep the provider
-  gate limited to protected preview/test; live payments remain blocked by
-  D-01–D-07 and written provider/legal approval.
+- CI run `40452019057` passed static, security, integration and E2E on
+  implementation commit `141f100`; the Vercel preview passed as well. PR #24
+  remains open and draft. Next exact step: product-owner review. Validate the
+  protected-preview flow only after an operator explicitly authorizes it; keep
+  the provider gate limited to test/protected preview, with live payments
+  blocked by D-01–D-07 and written provider/legal approval.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
