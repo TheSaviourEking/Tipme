@@ -6,7 +6,7 @@
 - Verification: `pnpm test` passed (54 root tests; all 18 package tasks, including 55 web, 31 API, 9 contracts and 3 database unit tests); `pnpm typecheck` passed (15/15); `pnpm lint` passed (15/15); `pnpm build` passed (9/9); `pnpm format:check` and `git diff --check` passed; checkout Playwright discovery listed 21 tests.
 - Added contract-schema and database-integration coverage for tip purpose plus a checkout E2E assertion that the selected purpose is sent. Database integration execution and browser E2E execution were not run because no isolated test stack was available. Migration was not applied.
 - Browser review showed the business page composed and centred at desktop; the narrow viewport tool rendered at 400px and reported no horizontal overflow. No deployment or payment operation occurred.
-- PR #23 is open against `dev`; CI run 40423966228 was pending when last checked. Next: review CI/preview, then reconcile migration numbering with Bachs before merge.
+- PR #23 is open against `dev`; GitHub Actions and Vercel preview checks are pending. Next: review the latest CI/preview, then reconcile migration numbering with Bachs before merge.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
