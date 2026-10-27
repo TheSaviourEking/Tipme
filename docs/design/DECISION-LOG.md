@@ -142,3 +142,11 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - New recipients with no tips see a dashboard checklist for profile details, publishing, sharing, and payment setup. Profile photos remain optional; payment setup is clearly marked unavailable until provider and funds-flow approvals are complete.
 - The dashboard states that payments remain in test mode and real payment/payout setup is blocked on provider and funds-flow approvals.
 - Business interest is a mailto draft to the owner's provided inbox (`usetipme@gmail.com`), not a server submission. The visitor must choose to send it; TipMe does not persist the form value.
+
+## 2026-10-27 — Owner attention
+
+- Anything that stops an owner earning (payments not set up, unfinished or being checked, an unconfirmed email blocking payment setup, the page offline) appears above every dashboard page as the shared neutral notice, one per issue, most urgent first, each with one primary button that names the fix. It disappears as soon as the problem is gone. The welcome flow does not show it.
+- The dashboard tab that leads to the fix carries a small purple dot, announced to screen readers as "(needs your attention)". Purple is the signature material, used here as a mark, not a fill.
+- Tone is encouraging, not alarming: the neutral notice, not the error tone, because nothing has gone wrong yet; the owner has a step left.
+- When payments need the owner's own provider account, the first-day checklist shows the real payment step instead of "Coming later".
+- Withdraw says up front when the balance cannot be paid out yet, and shows no amount form.

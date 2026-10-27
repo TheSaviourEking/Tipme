@@ -6,6 +6,7 @@ import type {
   BachsPaymentAccountStatus,
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { useRecipient } from '@/components/account/recipient-context';
 import { apiFetch } from '@/lib/session-client';
 
 type Load =
@@ -31,6 +32,7 @@ export function PaymentAccountCard() {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const { refreshAttention } = useRecipient();
 
   const refresh = useCallback(async () => {
     const result = await apiFetch<BachsPaymentAccountStatus>(
@@ -39,7 +41,9 @@ export function PaymentAccountCard() {
     setLoad(
       result.ok ? { kind: 'ready', account: result.data } : { kind: 'failed' },
     );
-  }, []);
+    // The dashboard's "needs your attention" notice reads the same account.
+    refreshAttention();
+  }, [refreshAttention]);
 
   useEffect(() => {
     const returning =
@@ -99,14 +103,14 @@ export function PaymentAccountCard() {
 
   if (load.kind === 'loading')
     return (
-      <Card className="settings-section" aria-busy="true">
+      <Card id="payments" className="settings-section" aria-busy="true">
         <h2>Test payments</h2>
         <p className="tm-hint">Checking your payment account…</p>
       </Card>
     );
   if (load.kind === 'failed')
     return (
-      <Card className="settings-section">
+      <Card id="payments" className="settings-section">
         <h2>Test payments</h2>
         <Notice tone="error" title="Couldn’t load your payment account">
           Please try again.
@@ -124,7 +128,7 @@ export function PaymentAccountCard() {
   const pending = status === 'CREATING' || status === 'UNKNOWN';
 
   return (
-    <Card className="settings-section">
+    <Card id="payments" className="settings-section">
       <h2>Test payments</h2>
       <p className="tm-hint">
         Sandbox only: no real money moves. Set up a test payment account so
