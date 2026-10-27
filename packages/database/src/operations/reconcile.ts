@@ -17,6 +17,14 @@ export interface TransactionVerifier {
   }>;
 }
 
+export type ProviderResolver<T> = T | ((provider: string) => T);
+
+function providerFor<T>(provider: ProviderResolver<T>, name: string): T {
+  return typeof provider === 'function'
+    ? (provider as (provider: string) => T)(name)
+    : provider;
+}
+
 const UNRESOLVED_AFTER_MS = 30 * 60 * 1000;
 
 export async function findAttemptsToReconcile(
@@ -72,7 +80,7 @@ export async function findAttemptsToReconcile(
  */
 export async function reconcileAttempts(input: {
   db: Database;
-  provider: TransactionVerifier;
+  provider: ProviderResolver<TransactionVerifier>;
   now: Date;
   minAgeMs: number;
   limit?: number;
@@ -94,9 +102,10 @@ export async function reconcileAttempts(input: {
   let errors = 0;
   for (const attempt of attempts) {
     try {
-      const answer = await input.provider.verifyTransaction(
-        attempt.providerReference,
-      );
+      const answer = await providerFor(
+        input.provider,
+        attempt.provider,
+      ).verifyTransaction(attempt.providerReference);
       if (answer.status === 'succeeded' || answer.status === 'failed') {
         const result = await recordProviderEvent(input.db, {
           provider: attempt.provider,
@@ -158,7 +167,7 @@ export interface PayoutVerifier {
  */
 export async function reconcilePayouts(input: {
   db: Database;
-  provider: PayoutVerifier;
+  provider: ProviderResolver<PayoutVerifier>;
   now: Date;
   minAgeMs: number;
   limit?: number;
@@ -190,9 +199,10 @@ export async function reconcilePayouts(input: {
   for (const payout of candidates) {
     if (!payout.provider || !payout.providerReference) continue;
     try {
-      const answer = await input.provider.fetchPayoutStatus(
-        payout.providerReference,
-      );
+      const answer = await providerFor(
+        input.provider,
+        payout.provider,
+      ).fetchPayoutStatus(payout.providerReference);
       if (answer.status === 'paid' || answer.status === 'failed') {
         const result = await recordPayoutOutcome(input.db, {
           payoutId: payout.payoutId,
@@ -229,7 +239,7 @@ export type RecheckOutcome =
  */
 export async function recheckSubject(input: {
   db: Database;
-  provider: TransactionVerifier & PayoutVerifier;
+  provider: ProviderResolver<TransactionVerifier & PayoutVerifier>;
   attemptId?: string;
   payoutId?: string;
   staffUserId: string;

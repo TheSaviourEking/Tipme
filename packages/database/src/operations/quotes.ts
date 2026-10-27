@@ -157,11 +157,20 @@ async function quote(
 export function findQuoteCharge(
   db: Database,
   quoteId: string,
-): Promise<{ payerTotalMinor: bigint; currency: string } | null> {
+): Promise<{
+  profileId: string;
+  payerTotalMinor: bigint;
+  platformFeeMinor: bigint;
+  providerFeeMinor: bigint;
+  currency: string;
+} | null> {
   return guarded(async () => {
     const [row] = await db
       .select({
+        profileId: tipQuotes.profileId,
         payerTotalMinor: tipQuotes.payerTotalMinor,
+        platformFeeMinor: tipQuotes.platformFeeMinor,
+        providerFeeMinor: tipQuotes.providerFeeMinor,
         currency: tipQuotes.currency,
       })
       .from(tipQuotes)

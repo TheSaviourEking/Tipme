@@ -4,6 +4,7 @@ export * from './diagnostics.js';
 export * from './jobs.js';
 export * from './webhooks.js';
 export * from './checkout.js';
+export * from './payment-accounts.js';
 export * from './auth.js';
 export * from './profiles.js';
 export * from './dashboard.js';

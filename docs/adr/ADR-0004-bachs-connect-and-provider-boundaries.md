@@ -75,10 +75,15 @@ approval before live operations.
    platform actually paid the processing fee.
 5. **Evidence and state.** Only authenticated, deduplicated provider evidence
    or authoritative server-side lookup may advance payment or payout state.
-   Stable operation-derived idempotency keys are required. A timed-out provider
-   write is reconciled by that key before retry. A valid event with a mismatched
-   connected account, amount or currency is retained as a verified mismatch and
-   never credits the recipient.
+   Stable operation-derived idempotency keys are required. Bachs' documented
+   idempotency cache covers successful writes for 24 hours, but the API has no
+   checkout lookup by TipMe reference or idempotency key. A timed-out or
+   otherwise ambiguous checkout create must remain unknown and must not be
+   automatically retried; the adapter is not runtime-selectable until the
+   application has a durable unknown-attempt state and a safe operations
+   resolution path. A valid event with a mismatched connected account, amount
+   or currency is retained as a verified mismatch and never credits the
+   recipient.
 6. **Historical routing.** New operations use the configured default provider.
    Reconciliation and support for existing attempts and payouts always use
    their persisted provider, even after the default changes.
@@ -113,8 +118,9 @@ approval before live operations.
   policy.
 - D-07: fraud, sanctions/AML, privacy, retention and incident-response review.
 - Sandbox acceptance demonstrating attribution, idempotent checkout, verified
-  webhooks, timeout reconciliation, fee fallback detection, historical-provider
-  routing and payout status handling without real transactions.
+  webhooks, safe preservation of ambiguous writes without blind retry, fee
+  fallback detection, historical-provider routing and payout status handling
+  without real transactions.
 
 ## Rationale
 
@@ -158,10 +164,54 @@ live funds flow or provider after legal, risk and provider review.
   documentation were reviewed on 26 October 2026 (links below). They describe
   sandbox/live separation, direct-charge merchant-of-record behavior and the
   processing-fee fallback.
+- The official webhook guide and OpenAPI schema were reviewed for signatures,
+  account headers, request fields and response shapes.
 - Resend's Node.js setup requires an API key and verified sender domain; neither
   has been provisioned or tested here.
 - No provider account, credentials, external transaction, deployment or live
   environment was accessed or changed.
+
+## Implementation note — 26 October 2026
+
+- This sandbox adapter uses typed REST with Node `fetch`; the official
+  `@bachs/sdk` checkout surface does not expose the required Connect account
+  header and direct-charge fields. Marketplace discovery found no Bachs
+  integration.
+- The adapter hard-codes the sandbox API origin, accepts only `sk_sandbox_`
+  credentials, and is not selected by the API or worker.
+- Provider checkout references include the connected-account reference so
+  status reads remain scoped to the same account. The adapter never treats
+  checkout redirects as payment proof.
+- When Bachs reports that the connected account bore a processing fee, the
+  adapter returns the collection as pending for financial reconciliation rather
+  than allowing the current flow to credit the full quoted recipient amount.
+- Payout operations are explicitly unsupported in this adapter slice. Account
+  onboarding, checkout, webhook verification and transaction lookup do not
+  constitute a complete payment launch integration.
+- Deterministic fake-transport tests cover request construction, exact currency
+  conversion, webhook verification and uncertain outcomes. No Bachs credential
+  was available and no provider API call or transaction was made.
+
+## Operator recovery implementation status — 26 October 2026
+
+- Unknown Bachs checkout attempts older than 30 minutes now open a dedicated
+  money issue. Staff may submit a checkout ID found in Bachs Dashboard only
+  against that open issue. TipMe performs an account-scoped authoritative read
+  and compares the provider amount and currency with the stored quote before
+  persisting the checkout reference. Not-found or mismatched results remain
+  `UNKNOWN` and unlinked; matched pending results remain eligible for ordinary
+  provider reconciliation. Only a verified provider result can reach the
+  existing provider-event/ledger path.
+- Ambiguous account creation opens a staff issue. Recovery is available only
+  for a recipient with a verified TipMe email. Staff attest that the Dashboard
+  account belongs to that recipient and that the platform-fee configuration
+  was checked; the API fetches current account status before an atomic mapping,
+  audit and issue-resolution transaction. Payouts remain disabled.
+- These workflows are tested with fake provider responses and the guarded local
+  `tipme_test` database. They have not been exercised against Bachs. The API
+  and worker still reject runtime selection of `bachs-sandbox`; this
+  implementation does not itself authorize enabling even sandbox runtime
+  selection, and does not change the live-payment gate.
 
 ## Linked PRD requirements
 
@@ -175,6 +225,8 @@ custody-neutral ledger; ADR-0014 fee policy.
 - Bachs direct charges: <https://docs.bachs.io/connect/split-payments/direct.md>
 - Bachs platform fees: <https://docs.bachs.io/connect/platform-fees.md>
 - Bachs processing fees and fallback: <https://docs.bachs.io/connect/processing-fees.md>
+- Bachs webhook signing: <https://docs.bachs.io/guides/webhooks/overview>
+- Bachs OpenAPI schema: <https://docs.bachs.io/docs/openapi/openapi.json>
 - Resend Node.js setup and verified-domain prerequisite:
   <https://resend.com/docs/send-with-nodejs>
 - Existing fee policy: `ADR-0014-flat-fee-and-staff-granted-rewards.md`

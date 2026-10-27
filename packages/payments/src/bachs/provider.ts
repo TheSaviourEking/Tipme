@@ -1,0 +1,522 @@
+import { z } from 'zod';
+import type {
+  FeePaidBy,
+  NormalizedProviderEvent,
+  PaymentProvider,
+  ProviderCapabilities,
+  TransactionStatus,
+  WebhookVerification,
+} from '../provider.js';
+import { UnsupportedProviderCapabilityError } from '../provider.js';
+import { BachsApiClient, SANDBOX_API_ORIGIN } from './client.js';
+import { BachsProtocolError, UncertainProviderOutcomeError } from './errors.js';
+import { decimalToMinor, minorToDecimal } from './money.js';
+import { verifyBachsWebhook } from './webhooks.js';
+
+const checkoutCreatedSchema = z.object({
+  checkout_id: z.string().min(1),
+  checkout_url: z.string().url(),
+  status: z.string().min(1),
+});
+
+const checkoutSessionSchema = z.object({
+  checkout_id: z.string().min(1),
+  checkout_url: z.string().url().optional(),
+  status: z.string().min(1),
+  amount: z.string(),
+  currency: z.string().length(3),
+  payment_status: z.string().nullable().optional(),
+  charge: z
+    .object({
+      payment_id: z.string().nullable().optional(),
+      id: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+
+const paymentSchema = z.object({
+  payment_id: z.string().min(1),
+  status: z.string().min(1),
+  amount: z.string(),
+  amount_paid: z.string().nullable().optional(),
+  currency: z.string().length(3),
+  fee_paid_by: z.enum(['merchant', 'platform']).nullable().optional(),
+  fees: z
+    .object({
+      amount: z.string(),
+      currency: z.string().length(3),
+    })
+    .nullable()
+    .optional(),
+});
+
+const accountSchema = z.object({
+  id: z.string().startsWith('acct_'),
+  is_active: z.boolean().optional(),
+  capabilities: z.record(z.string(), z.unknown()).nullable().optional(),
+  requirements: z
+    .object({
+      currently_due: z.array(z.string()).optional(),
+    })
+    .passthrough()
+    .nullable()
+    .optional(),
+});
+
+const accountLinkSchema = z.object({
+  url: z.string().url(),
+});
+
+const accountInputSchema = z.object({
+  contactEmail: z.email(),
+  country: z.string().regex(/^[A-Z]{2}$/),
+  displayName: z.string().trim().min(1).max(255).optional(),
+  entityType: z.enum(['individual', 'company']),
+  idempotencyKey: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[\w.:-]+$/),
+});
+
+const urlInputSchema = z.string().url();
+
+export interface BachsProviderConfig {
+  apiKey: string;
+  webhookSecrets: readonly string[];
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}
+
+export interface BachsRecipientAccount {
+  accountReference: string;
+  active: boolean | null;
+  cardCollectionStatus: string | null;
+  requirementsDue: string[];
+}
+
+export interface BachsProvider extends PaymentProvider<NormalizedProviderEvent> {
+  createRecipientAccount(input: {
+    contactEmail: string;
+    country: string;
+    displayName?: string;
+    entityType: 'individual' | 'company';
+    idempotencyKey: string;
+  }): Promise<BachsRecipientAccount>;
+  createOnboardingLink(input: {
+    accountReference: string;
+    refreshUrl: string;
+    returnUrl: string;
+  }): Promise<string>;
+  getRecipientAccount(accountReference: string): Promise<BachsRecipientAccount>;
+  getCheckoutUrl(providerReference: string): Promise<string>;
+}
+
+const capabilities: ProviderCapabilities = {
+  hostedCheckout: true,
+  connectedAccounts: true,
+  platformFees: true,
+  payouts: false,
+  lookupByOperationReference: false,
+};
+
+function statusValue(value: string): TransactionStatus {
+  const status = value.toLowerCase();
+  if (status === 'succeeded' || status === 'accepted' || status === 'overpaid')
+    return 'succeeded';
+  if (status === 'failed' || status === 'canceled' || status === 'cancelled')
+    return 'failed';
+  return 'pending';
+}
+
+function providerAmountToMinor(value: string, currency: string): bigint {
+  try {
+    return decimalToMinor(value, currency);
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError)
+      throw new BachsProtocolError(
+        'Bachs returned an invalid amount or currency precision',
+      );
+    throw error;
+  }
+}
+
+function feePaidBy(
+  value: 'merchant' | 'platform' | null | undefined,
+): FeePaidBy {
+  if (value === 'platform') return 'platform';
+  if (value === 'merchant') return 'connected_account';
+  return 'unknown';
+}
+
+function scopedCheckoutReference(
+  accountReference: string,
+  checkoutId: string,
+): string {
+  return `${accountReference}:${checkoutId}`;
+}
+
+function parseScopedCheckoutReference(value: string): {
+  accountReference: string;
+  checkoutId: string;
+} {
+  const match = /^(acct_[A-Za-z0-9]+):(chk_[A-Za-z0-9]+)$/.exec(value);
+  if (!match?.[1] || !match[2])
+    throw new TypeError('Invalid Bachs checkout reference');
+  return { accountReference: match[1], checkoutId: match[2] };
+}
+
+function bachsHostedUrl(value: string): string {
+  const url = new URL(value);
+  if (
+    url.protocol !== 'https:' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.port !== '' ||
+    !(url.hostname === 'bachs.io' || url.hostname.endsWith('.bachs.io'))
+  ) {
+    throw new BachsProtocolError(
+      'Bachs returned a URL outside its HTTPS domain',
+    );
+  }
+  return url.toString();
+}
+
+function normalizedAccount(
+  account: z.infer<typeof accountSchema>,
+): BachsRecipientAccount {
+  const capabilities =
+    account.capabilities && typeof account.capabilities === 'object'
+      ? account.capabilities
+      : {};
+  const cardCollection = capabilities['card_collection'];
+  const cardCollectionStatus =
+    typeof cardCollection === 'object' &&
+    cardCollection !== null &&
+    'status' in cardCollection &&
+    typeof cardCollection.status === 'string'
+      ? cardCollection.status
+      : null;
+
+  return {
+    accountReference: account.id,
+    active: account.is_active ?? null,
+    cardCollectionStatus,
+    requirementsDue: account.requirements?.currently_due ?? [],
+  };
+}
+
+function validateHttpsOrLocalUrl(value: string): string {
+  const url = new URL(urlInputSchema.parse(value));
+  if (
+    url.username !== '' ||
+    url.password !== '' ||
+    (url.protocol !== 'https:' &&
+      !(
+        url.protocol === 'http:' &&
+        ['localhost', '127.0.0.1'].includes(url.hostname)
+      ))
+  ) {
+    throw new TypeError('Return URLs must use HTTPS or a localhost origin');
+  }
+  return url.toString();
+}
+
+export function createBachsProvider(
+  config: BachsProviderConfig,
+): BachsProvider {
+  if (config.webhookSecrets.length === 0)
+    throw new TypeError('At least one Bachs webhook secret is required');
+  if (config.webhookSecrets.length > 5)
+    throw new TypeError('At most five Bachs webhook secrets may be configured');
+  if (
+    config.webhookSecrets.some(
+      (secret) => secret.length < 16 || /[\r\n]/.test(secret),
+    )
+  ) {
+    throw new TypeError('Invalid Bachs webhook secret');
+  }
+
+  const client = new BachsApiClient(config);
+
+  async function getAccount(accountReference: string) {
+    if (!/^acct_[A-Za-z0-9]+$/.test(accountReference))
+      throw new TypeError('Invalid Bachs account reference');
+    const account = await client.request({
+      method: 'GET',
+      path: `/v1/accounts/${encodeURIComponent(accountReference)}`,
+      schema: accountSchema,
+    });
+    return normalizedAccount(account);
+  }
+
+  return {
+    name: 'bachs',
+    capabilities,
+
+    async initializePayment(input) {
+      if (
+        !input.recipientAccountReference ||
+        input.tipmeShareMinor === undefined ||
+        !input.successUrl ||
+        !input.cancelUrl
+      ) {
+        throw new TypeError(
+          'Bachs checkout requires an account, complete TipMe share, success URL, and cancel URL',
+        );
+      }
+      if (!/^acct_[A-Za-z0-9]+$/.test(input.recipientAccountReference))
+        throw new TypeError('Invalid Bachs account reference');
+      if (input.amountMinor <= 0n)
+        throw new RangeError('Checkout amount must be positive');
+      if (
+        input.tipmeShareMinor < 0n ||
+        input.tipmeShareMinor >= input.amountMinor
+      ) {
+        throw new RangeError(
+          'TipMe share must be non-negative and less than the tip',
+        );
+      }
+
+      const idempotencyKey =
+        input.idempotencyKey ?? `tipme-checkout-${input.attemptId}`;
+      if (!/^[\w.:-]{1,255}$/.test(idempotencyKey))
+        throw new TypeError('Invalid Bachs idempotency key');
+
+      const successUrl = validateHttpsOrLocalUrl(input.successUrl);
+      const cancelUrl = validateHttpsOrLocalUrl(input.cancelUrl);
+      const body: Record<string, unknown> = {
+        pricing: {
+          amount: minorToDecimal(input.amountMinor, input.currency),
+          currency: input.currency,
+        },
+        reference: input.attemptId,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        customer_creation: 'if_required',
+      };
+      if (input.tipmeShareMinor > 0n) {
+        body['platform_fee'] = minorToDecimal(
+          input.tipmeShareMinor,
+          input.currency,
+        );
+      }
+
+      const checkout = await client.request({
+        method: 'POST',
+        path: '/v1/checkout-sessions',
+        accountReference: input.recipientAccountReference,
+        idempotencyKey,
+        operationReference: input.attemptId,
+        body,
+        schema: checkoutCreatedSchema,
+      });
+      if (checkout.status.toLowerCase() !== 'open') {
+        throw new UncertainProviderOutcomeError(
+          input.attemptId,
+          'Bachs created a checkout in an unexpected state',
+        );
+      }
+
+      let checkoutUrl: string;
+      try {
+        checkoutUrl = bachsHostedUrl(checkout.checkout_url);
+      } catch (error) {
+        if (error instanceof BachsProtocolError) {
+          throw new UncertainProviderOutcomeError(
+            input.attemptId,
+            'Bachs created a checkout but returned an unsafe URL',
+          );
+        }
+        throw error;
+      }
+
+      return {
+        providerReference: scopedCheckoutReference(
+          input.recipientAccountReference,
+          checkout.checkout_id,
+        ),
+        checkoutUrl,
+      };
+    },
+
+    async findPayment(attemptId) {
+      throw new UncertainProviderOutcomeError(
+        attemptId,
+        'Bachs does not support checkout lookup by TipMe operation reference',
+      );
+    },
+
+    async getCheckoutUrl(providerReference) {
+      const scopedReference = parseScopedCheckoutReference(providerReference);
+      const checkout = await client.request({
+        method: 'GET',
+        path: `/v1/checkout-sessions/${encodeURIComponent(scopedReference.checkoutId)}`,
+        accountReference: scopedReference.accountReference,
+        schema: checkoutSessionSchema,
+      });
+      if (!checkout.checkout_url)
+        throw new BachsProtocolError(
+          'Bachs did not return the hosted checkout URL',
+        );
+      return bachsHostedUrl(checkout.checkout_url);
+    },
+
+    async verifyTransaction(providerReference) {
+      const scopedReference = parseScopedCheckoutReference(providerReference);
+
+      const checkout = await client.request({
+        method: 'GET',
+        path: `/v1/checkout-sessions/${encodeURIComponent(scopedReference.checkoutId)}`,
+        accountReference: scopedReference.accountReference,
+        schema: checkoutSessionSchema,
+      });
+      const checkoutStatus = checkout.status.toLowerCase();
+      if (checkoutStatus === 'expired' || checkoutStatus === 'cancelled')
+        return {
+          status: 'failed',
+          amountMinor: providerAmountToMinor(
+            checkout.amount,
+            checkout.currency,
+          ),
+          currency: checkout.currency,
+          feeMinor: 0n,
+          feePaidBy: 'unknown',
+        };
+      if (
+        checkoutStatus !== 'completed' ||
+        checkout.payment_status?.toLowerCase() !== 'paid'
+      ) {
+        return {
+          status: 'pending',
+          amountMinor: providerAmountToMinor(
+            checkout.amount,
+            checkout.currency,
+          ),
+          currency: checkout.currency,
+          feeMinor: 0n,
+          feePaidBy: 'unknown',
+        };
+      }
+
+      const paymentReference =
+        checkout.charge?.payment_id ?? checkout.charge?.id;
+      if (!paymentReference) {
+        return {
+          status: 'pending',
+          amountMinor: providerAmountToMinor(
+            checkout.amount,
+            checkout.currency,
+          ),
+          currency: checkout.currency,
+          feeMinor: 0n,
+          feePaidBy: 'unknown',
+        };
+      }
+
+      const payment = await client.request({
+        method: 'GET',
+        path: `/v1/payments/${encodeURIComponent(paymentReference)}`,
+        accountReference: scopedReference.accountReference,
+        schema: paymentSchema,
+      });
+      const amount = payment.amount_paid ?? payment.amount;
+      const amountMinor = providerAmountToMinor(amount, payment.currency);
+      const providerStatus = statusValue(payment.status);
+      const fee = payment.fees ?? null;
+      const feeMinor =
+        fee && fee.currency === payment.currency
+          ? providerAmountToMinor(fee.amount, fee.currency)
+          : 0n;
+      if (fee && fee.currency !== payment.currency)
+        throw new BachsProtocolError(
+          'Bachs processing fee currency differs from payment currency',
+        );
+
+      const actualFeeBearer = feePaidBy(payment.fee_paid_by);
+      const verifiedPlatformFee =
+        actualFeeBearer === 'platform' && fee !== null;
+      const status =
+        providerStatus === 'succeeded' && !verifiedPlatformFee
+          ? 'pending'
+          : providerStatus;
+
+      return {
+        status,
+        amountMinor,
+        currency: payment.currency,
+        feeMinor,
+        feePaidBy: actualFeeBearer,
+      };
+    },
+
+    verifyWebhook(
+      rawBody,
+      headers,
+      now,
+    ): WebhookVerification<NormalizedProviderEvent> {
+      return verifyBachsWebhook(rawBody, headers, config.webhookSecrets, now);
+    },
+
+    async createRecipientAccount(input) {
+      const validInput = accountInputSchema.parse(input);
+      const account = await client.request({
+        method: 'POST',
+        path: '/v1/accounts',
+        idempotencyKey: validInput.idempotencyKey,
+        operationReference: validInput.idempotencyKey,
+        body: {
+          contact_email: validInput.contactEmail,
+          country: validInput.country,
+          display_name: validInput.displayName,
+          entity_type: validInput.entityType,
+          configuration: {
+            merchant: {
+              capabilities: {
+                card_collection: { requested: true },
+              },
+            },
+          },
+          responsibilities: {
+            fees: { collector: 'platform' },
+          },
+        },
+        schema: accountSchema,
+      });
+      return normalizedAccount(account);
+    },
+
+    async createOnboardingLink(input) {
+      const accountReference = input.accountReference;
+      if (!/^acct_[A-Za-z0-9]+$/.test(accountReference))
+        throw new TypeError('Invalid Bachs account reference');
+      const refreshUrl = validateHttpsOrLocalUrl(input.refreshUrl);
+      const returnUrl = validateHttpsOrLocalUrl(input.returnUrl);
+      const result = await client.request({
+        method: 'POST',
+        path: `/v1/accounts/${encodeURIComponent(accountReference)}/account-links`,
+        body: {
+          type: 'onboarding',
+          refresh_url: refreshUrl,
+          return_url: returnUrl,
+        },
+        operationReference: accountReference,
+        schema: accountLinkSchema,
+      });
+      return bachsHostedUrl(result.url);
+    },
+
+    getRecipientAccount: getAccount,
+
+    async initiatePayout() {
+      throw new UnsupportedProviderCapabilityError('payouts');
+    },
+
+    async fetchPayoutStatus() {
+      throw new UnsupportedProviderCapabilityError('payout status lookup');
+    },
+  };
+}
+
+export { SANDBOX_API_ORIGIN };

@@ -38,6 +38,18 @@ const currencyCheck = (table: string) =>
 
 export const tipStatus = pgEnum('tip_status', TIP_STATUSES);
 export const attemptStatus = pgEnum('attempt_status', ATTEMPT_STATUSES);
+export const providerEnvironment = pgEnum('provider_environment', [
+  'sandbox',
+  'live',
+]);
+export const paymentAccountStatus = pgEnum('payment_account_status', [
+  'CREATING',
+  'UNKNOWN',
+  'ONBOARDING',
+  'ACTIVE',
+  'RESTRICTED',
+  'FAILED',
+]);
 export const payoutStatus = pgEnum('payout_status', PAYOUT_STATUSES);
 export const profileVisibility = pgEnum('profile_visibility', [
   'public',
@@ -226,6 +238,57 @@ export const profiles = pgTable(
     check(
       'profiles_tip_presets_range',
       sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
+    ),
+  ],
+);
+
+/** Provider-owned recipient account references and normalized readiness only; no KYC payloads. */
+export const paymentAccounts = pgTable(
+  'payment_accounts',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    provider: text('provider').notNull(),
+    environment: providerEnvironment('environment').notNull(),
+    providerAccountReference: text('provider_account_reference'),
+    status: paymentAccountStatus('status').notNull(),
+    chargesEnabled: boolean('charges_enabled').notNull().default(false),
+    payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
+    feeCollector: text('fee_collector').notNull().default('unknown'),
+    requirementsDue: text('requirements_due')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique('payment_accounts_profile_provider_environment').on(
+      table.profileId,
+      table.provider,
+      table.environment,
+    ),
+    unique('payment_accounts_provider_environment_reference').on(
+      table.provider,
+      table.environment,
+      table.providerAccountReference,
+    ),
+    check(
+      'payment_accounts_fee_collector',
+      sql`fee_collector IN ('platform', 'connected_account', 'unknown')`,
+    ),
+    check(
+      'payment_accounts_requirements_bound',
+      sql`cardinality(requirements_due) <= 50`,
+    ),
+    check(
+      'payment_accounts_active_can_charge',
+      sql`status <> 'ACTIVE' OR charges_enabled`,
     ),
   ],
 );
@@ -517,6 +580,8 @@ export const paymentAttempts = pgTable(
     status: attemptStatus('status').notNull(),
     // When reconciliation last asked the provider; least-recently-checked goes first (no starvation).
     lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
+    // Set before an external create call so concurrent requests cannot start a second checkout.
+    startClaimedAt: timestamp('start_claimed_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (table) => [

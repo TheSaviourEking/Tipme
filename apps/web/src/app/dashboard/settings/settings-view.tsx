@@ -13,6 +13,7 @@ import { useRecipient } from '@/components/account/recipient-context';
 import { Avatar } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
 import { apiFetch } from '@/lib/session-client';
+import { PaymentAccountCard } from './payment-account-card';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 
@@ -918,6 +919,7 @@ export function SettingsView() {
       <h1>Settings</h1>
       <PendingRecovery />
       <PageState />
+      <PaymentAccountCard />
       <HandleChange />
       <PhotoSettings />
       <TipAmountsSettings />

@@ -1,8 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { MockWebhook } from '@tipme/contracts';
+import type { NormalizedProviderEvent } from '@tipme/payments';
+import { z } from 'zod';
 import {
+  findBachsAttemptByOperationReference,
+  findBachsAttemptByReference,
   findAttemptByReference,
   findPayoutByReference,
+  OperationError,
   recordPayoutOutcome,
   recordProviderEvent,
   recordUnmatchedEvent,
@@ -57,6 +62,57 @@ export class WebhookService {
     return result.outcome;
   }
 
+  async applyBachs(event: NormalizedProviderEvent): Promise<string> {
+    if (event.kind === 'ignored') return 'ignored';
+    const { accountReference, operationReference, providerReference } = event;
+    if (!accountReference || !providerReference)
+      return this.unmatchedBachs(event);
+
+    let attemptId: string | null = null;
+    if (operationReference) {
+      if (!z.uuid().safeParse(operationReference).success)
+        return this.unmatchedBachs(event);
+      attemptId = await findBachsAttemptByOperationReference(
+        this.database.db,
+        { attemptId: operationReference, accountReference },
+      );
+    } else {
+      attemptId = await findBachsAttemptByReference(this.database.db, {
+        providerReference,
+        accountReference,
+      });
+    }
+    if (!attemptId) return this.unmatchedBachs(event);
+
+    try {
+      const result = await recordProviderEvent(this.database.db, {
+        provider: 'bachs',
+        providerEventId: event.eventId,
+        eventType: 'payment.pending',
+        attemptId,
+        providerReference,
+        ...(event.amountMinor === undefined
+          ? {}
+          : { amountMinor: event.amountMinor }),
+        ...(event.currency === undefined ? {} : { currency: event.currency }),
+        ...(event.feeMinor === undefined
+          ? {}
+          : { providerFeeMinor: event.feeMinor }),
+        signatureVerified: true,
+        payload: event,
+      });
+      return result.outcome;
+    } catch (error) {
+      if (
+        error instanceof OperationError &&
+        error.code === 'INVALID_INPUT'
+      ) {
+        return this.unmatchedBachs(event);
+      }
+      throw error;
+    }
+  }
+
   private async unmatched(
     event: MockWebhook,
     reason: 'unknown_attempt' | 'unknown_payout',
@@ -67,6 +123,17 @@ export class WebhookService {
       eventType: event.type,
       payload: event,
       reason,
+    });
+    return 'unmatched';
+  }
+
+  private async unmatchedBachs(event: NormalizedProviderEvent): Promise<string> {
+    await recordUnmatchedEvent(this.database.db, {
+      provider: 'bachs',
+      providerEventId: event.eventId,
+      eventType: event.eventType,
+      payload: event,
+      reason: 'unknown_attempt',
     });
     return 'unmatched';
   }

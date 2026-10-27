@@ -66,6 +66,12 @@ const messages: Record<ApiErrorCode, string> = {
   RATE_LIMITED: 'Too many requests. Please wait and retry.',
   DEPENDENCY_UNAVAILABLE:
     'A required service is temporarily unavailable. Please retry.',
+  EMAIL_VERIFICATION_REQUIRED:
+    'Verify your email address before connecting a payment account.',
+  PAYMENT_ACCOUNT_REQUIRED:
+    'Connect and activate a payment account before accepting tips.',
+  PROVIDER_OUTCOME_UNKNOWN:
+    'The provider may have accepted the request. Do not retry; contact support.',
   INTERNAL_ERROR: 'Something went wrong.',
 };
 
@@ -108,6 +114,10 @@ const operationErrors: Partial<
   PAGE_SUSPENDED: { status: 409, code: 'PAGE_SUSPENDED' },
   ISSUE_RESOLVED: { status: 409, code: 'ISSUE_RESOLVED' },
   ISSUE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  EMAIL_VERIFICATION_REQUIRED: {
+    status: 409,
+    code: 'EMAIL_VERIFICATION_REQUIRED',
+  },
   MARKET_ENTRY_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },

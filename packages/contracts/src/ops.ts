@@ -47,6 +47,8 @@ export const ISSUE_KINDS = [
   'payment_mismatch',
   'payment_conflict',
   'payment_unresolved',
+  'payment_attempt_unresolved',
+  'payment_account_unresolved',
   'payout_failed',
   'payout_conflict',
   'provider_event_conflict',
@@ -251,6 +253,31 @@ export type OpsRecheckRequest = z.infer<typeof opsRecheckSchema>;
 
 export type OpsRecheckOutcome =
   'applied' | 'unchanged' | 'unresolved' | 'error' | 'not_pending';
+
+/** Attach a dashboard-found checkout ID only after the server verifies its scoped status. */
+export const opsBachsCheckoutRecoverySchema = opsReasonSchema
+  .extend({
+    issueId: z.uuid(),
+    attemptId: z.uuid(),
+    checkoutId: z.string().regex(/^chk_[A-Za-z0-9]{1,60}$/),
+    dashboardVerified: z.literal(true),
+  })
+  .strict();
+export type OpsBachsCheckoutRecoveryRequest = z.infer<
+  typeof opsBachsCheckoutRecoverySchema
+>;
+
+/** Recover an ambiguous sandbox account after staff match it in the provider dashboard. */
+export const opsBachsAccountRecoverySchema = opsReasonSchema
+  .extend({
+    issueId: z.uuid(),
+    accountReference: z.string().regex(/^acct_[A-Za-z0-9]{1,60}$/),
+    dashboardVerified: z.literal(true),
+  })
+  .strict();
+export type OpsBachsAccountRecoveryRequest = z.infer<
+  typeof opsBachsAccountRecoverySchema
+>;
 
 /** A count this week (Monday 00:00 Lagos to now) and the whole of last week. */
 export interface OpsWeekCount {

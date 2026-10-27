@@ -7,30 +7,59 @@
 - Reviewed CI expected/actual/diff images at desktop and mobile. The changes are intentional: optional purpose selector and approved navigation/footer/test-mode copy. The profile remains readable with no apparent overlap. Updated all eight Darwin/Linux snapshots; Darwin visual specs pass 4/4 using a temporary config against the built PR web app. Linux baselines match reviewed actuals from CI.
 - Verified in this worktree: `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, Playwright discovery (4 dashboard/welcome tests), and focused visual Playwright (4/4). Full local E2E was not run because port 4100 belongs to the active `.worktrees/physical-interface` API; it was left untouched. The local visual run did not reset or write to a database.
 - Earlier checks also passed: `pnpm test` (54 root tests; all 18 package tasks), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), and `pnpm format:check`. Browser review of `/for-businesses` showed a centred desktop layout and no horizontal overflow at 400px.
-- CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 points at `790918a` and reports `CLEAN`; it remains open for review and was not merged. The PR preview was deployed; no production deployment or real payment occurred.
+- CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 was subsequently merged into `dev` at `da0c62a`; its preview was deployed, with no production deployment or real payment.
 - Next: product-owner review. Before merging with Bachs, resolve the `0039` migration collision and regenerate the journal/snapshot as needed. Keep the separate Bachs and physical-interface worktrees untouched.
 
-# Current handoff — Provider integration decision baseline (26 October 2026)
+# Current handoff — Bachs sandbox integration safety and routing (26 October 2026)
 
 - Dedicated implementation worktree: `.worktrees/provider-integrations-bachs`,
-  branch `feat/provider-integrations-bachs`, base `origin/dev` commit `1738947`.
-- Task 0 records Bachs direct-charge/provider boundaries as sandbox-only in
-  `docs/adr/ADR-0004-bachs-connect-and-provider-boundaries.md`. D-01 through D-07
-  remain live blockers; no production credentials, environment, DNS, server,
-  database or deployment were changed.
-- The user selected email OTP via Resend for launch and phone OTP as coming soon.
-  D-11 remains open pending verified domain, contract, deliverability, cost and
-  operational evidence. The current phone-OTP code has not been migrated.
-- Bachs documentation confirms direct charges make the connected account the
-  merchant of record and describes a silent processing-fee fallback to the
-  connected account. Live use requires legal funds-flow approval and robust
-  detection/handling of the fallback.
-- The companion docs worktree still has its own uncommitted files and remains
-  untouched.
-- Task 0 documentation formatting passed with the repository's Prettier binary;
-  no application tests were run because no application code changed.
-- Next exact step: begin Task 1 with provider-neutral payment contract tests and
-  types. Keep Bachs calls in sandbox and do not enable real payments.
+  branch `feat/provider-integrations-bachs`, base `origin/dev` commit `1738947`
+  with Task 0 at `32fd687`. The companion documentation worktree was not touched.
+- The Bachs typed REST adapter, account persistence/onboarding API, one-shot
+  checkout-start claim, durable unknown states, raw-body signature verification,
+  scoped event correlation, fee-attribution gate, and audited staff recovery
+  workflows are implemented. The API provider/event and database transition
+  rules keep webhook/redirect evidence from marking a tip paid without
+  authoritative verification.
+- Reconciliation, expiry and staff re-check resolve historical providers by
+  each persisted attempt/payout provider; focused database coverage exercises
+  both mock and Bachs attempts. Bachs payout operations are explicitly
+  unsupported.
+- Checkout recovery accepts only a dashboard-found checkout on the matching
+  open issue, verifies it using the persisted connected account and exact quote
+  amount/currency, and leaves not-found/mismatch unlinked and `UNKNOWN`.
+  Account recovery requires the recipient's verified email and explicit
+  dashboard attestation, fetches provider status, then stores the mapping and
+  resolves the issue transactionally. Payouts stay disabled.
+- **Bachs sandbox is now selectable, user-approved, non-production only**:
+  `PAYMENT_PROVIDER=bachs-sandbox` is accepted in `NODE_ENV=test` and
+  password-protected preview (`DEPLOYMENT_MODE=preview`), never plain
+  production. It requires an `sk_sandbox_` key and webhook secret;
+  `PAYMENTS_LIVE_ENABLED` stays literal `false`. The checkout provider routes
+  new attempts to Bachs; the worker no longer rejects it. UI: dashboard
+  settings has a "Test payments" onboarding card (status, setup, continue,
+  return re-sync); the tip form maps `PAYMENT_ACCOUNT_REQUIRED`,
+  `PROVIDER_OUTCOME_UNKNOWN`, `DEPENDENCY_UNAVAILABLE`; labels say "Test
+  payments". Untested against real Bachs (no sandbox credentials yet) and no
+  browser/e2e run.
+- Bachs cannot find checkout creation by TipMe's operation reference. Ambiguous
+  writes stay `UNKNOWN` and are never retried. Platform-paid fee preference is
+  not proof: connected-account, unknown or missing fee evidence stays pending.
+  There is no recipient-facing onboarding UI.
+- No Bachs credentials, provider API requests, real payment, deployment or
+  production configuration change. Tests use fake transport; D-01–D-07 and
+  written provider/legal approval remain blockers. Live payments stay disabled.
+- Verified this continuation: API/database/contracts/payments/domain build
+  passed (6/6 tasks); API/database/contracts typechecks passed; API tests 36/36,
+  contracts 10/10, database unit tests 3/3, provider-routing integration 3/3,
+  recovery API tests 4/4, recovery DB integration 2/2, affected lint and
+  `git diff --check` passed. Web route typegen succeeded, but full web
+  typecheck reports implicit-`any` errors in untouched pages; the edited issue
+  page has no reported error. No browser run, external Bachs request, or
+  deployment was made.
+- Next exact step: review the final migration/diff and staff recovery UX. Keep
+  the provider gate closed until explicit sandbox-test approval; live payments
+  remain blocked by D-01–D-07 and written provider/legal approval.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 

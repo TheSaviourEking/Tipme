@@ -25,7 +25,7 @@ export interface PaymentLookup extends TransactionVerifier {
  */
 export async function expireStaleTips(input: {
   db: Database;
-  provider: PaymentLookup;
+  provider: PaymentLookup | ((provider: string | null) => PaymentLookup);
   now: Date;
   graceMs?: number;
   limit?: number;
@@ -63,23 +63,27 @@ export async function expireStaleTips(input: {
   let errors = 0;
   for (const candidate of candidates) {
     try {
+      const provider =
+        typeof input.provider === 'function'
+          ? input.provider(candidate.provider)
+          : input.provider;
       if (!candidate.providerReference) {
-        const found = await input.provider.findPayment(candidate.attemptId);
+        const found = await provider.findPayment(candidate.attemptId);
         if (found) {
           // Record the reference first, so a webhook for it can be matched from now on.
           const recorded = await markAttemptInitiated(db, {
             attemptId: candidate.attemptId,
-            provider: input.provider.name,
+            provider: provider.name,
             providerReference: found.providerReference,
           });
           // Something else moved the attempt meanwhile; leave it to the next run.
           if (recorded === 'conflict' || recorded === 'not_found') continue;
-          candidate.provider = input.provider.name;
+          candidate.provider = provider.name;
           candidate.providerReference = found.providerReference;
         }
       }
       if (candidate.provider && candidate.providerReference) {
-        const answer = await input.provider.verifyTransaction(
+        const answer = await provider.verifyTransaction(
           candidate.providerReference,
         );
         if (answer.status === 'succeeded' || answer.status === 'failed') {

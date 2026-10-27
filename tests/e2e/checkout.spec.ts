@@ -285,7 +285,9 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
 test('fix: every receipt says the payment was pretend', async ({ page }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();
-  await expect(page.getByText('Test mode · no real money moved')).toBeVisible();
+  await expect(
+    page.getByText('Test payment · no real money moved'),
+  ).toBeVisible();
 });
 
 test('fix: an expired tip is described honestly and cannot be paid afterwards', async ({

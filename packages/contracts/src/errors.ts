@@ -31,6 +31,9 @@ export const apiErrorCodes = [
   'PROFILE_NOT_FOUND',
   'RATE_LIMITED',
   'DEPENDENCY_UNAVAILABLE',
+  'EMAIL_VERIFICATION_REQUIRED',
+  'PAYMENT_ACCOUNT_REQUIRED',
+  'PROVIDER_OUTCOME_UNKNOWN',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];

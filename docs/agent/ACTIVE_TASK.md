@@ -7,31 +7,57 @@
 - PR CI run `40424132431` exposed a stale OpenAPI file, two outdated onboarding assertions, and four desktop/mobile screenshot mismatches. Follow-up commit `94ac1ab` regenerated the OpenAPI document, corrected the assertions, and added failure-only PNG diagnostics with three-day retention.
 - CI run `40426539167`: integration, security, static, Vercel, dashboard and welcome checks passed; E2E had only four visual failures. The expected/actual/diff images were reviewed at desktop and mobile. Differences were the intended purpose selector and approved navigation/footer/test-mode copy; the profile composition remained readable with no overlap. All eight Darwin/Linux visual baselines have now been refreshed.
 - Verified in this worktree: `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, Playwright discovery (4 onboarding tests), and the focused visual specs (4/4) after updating Darwin snapshots. Linux baselines were taken from the reviewed CI actual images. Full local E2E was not run because the normal port 4100 API belongs to `.worktrees/physical-interface`; it was left running and untouched. The focused visual run used the built PR web app and read-only local API; no database reset occurred.
-- CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 points at `790918a` and reports `CLEAN`. It remains open for review; do not merge until authorized and until migration `0039` is reconciled with the Bachs branch.
+- CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 was subsequently merged into `dev` at `da0c62a`.
 - No migration was applied and no payment operation occurred. The only deployment was the PR preview. The full E2E suite passed in CI; local full E2E remains unrun because port 4100 is occupied by the active API in `.worktrees/physical-interface`.
 
-# Current task — Provider integration decision baseline (26 October 2026)
+# Current task — Bachs sandbox integration safety and routing (26 October 2026)
 
 - Branch/worktree: `feat/provider-integrations-bachs` /
-  `.worktrees/provider-integrations-bachs`, based on `origin/dev` at `1738947`.
-- Isolated worktree verified clean before Task 0. The companion
-  `docs/provider-agnostic-bachs-guide` worktree and its uncommitted documentation
-  were not copied, changed or committed.
-- Task 0 records Bachs direct-charge behavior as sandbox-only. Live money remains
-  blocked on D-01 through D-07, written provider approval and legal/risk review;
-  direct-charge merchant-of-record behavior still conflicts with the proposed
-  custodial model in ADR-0006.
-- Launch auth decision from product owner: email OTP via Resend; phone OTP is
-  coming soon. D-11 remains open pending provider/account/domain and readiness
-  evidence. No auth implementation, provider credentials or Vercel/server
-  settings changed in Task 0.
-- Bachs docs identify a processing-fee fallback that may silently charge the
-  connected recipient if the platform balance is insufficient. ADR-0004 records
-  fail-closed detection as a live requirement.
-- Task 0 documentation formatting passed with the repository's Prettier binary;
-  no application tests were run because no application code changed.
-- Next exact step: begin Task 1 by adding provider-neutral payment contract tests
-  and types. Keep provider calls in sandbox and do not enable live payments.
+  `.worktrees/provider-integrations-bachs`, based on `origin/dev` at `1738947`
+  with Task 0 committed as `32fd687`. The separate documentation worktree
+  remains untouched.
+- The typed Bachs REST adapter, recipient-account persistence, one-shot
+  checkout-start claim, durable `UNKNOWN` outcome, signed webhook correlation,
+  API account/onboarding/webhook routes, and audited staff recovery workflows
+  are implemented in this worktree. Recovery covers ambiguous checkout IDs and
+  recipient-account creation; it never retries provider writes or manually
+  marks payments paid.
+- Reconciliation, expiry and staff re-check now resolve provider adapters by
+  the persisted attempt/payout provider. A focused database integration test
+  covers historical mock/Bachs attempt routing.
+- Checkout recovery requires a matching open issue, a dashboard-found checkout
+  ID, an authoritative Bachs read, and exact expected amount/currency. Not-found
+  or mismatch remains `UNKNOWN` and unlinked. Account recovery requires verified
+  recipient email, staff attestation to dashboard identity/fee settings, and a
+  successful server-side account fetch; payouts stay disabled.
+- **Bachs sandbox is selectable in test/preview only** (user-approved).
+  Production still rejects it, credentials need `sk_sandbox_`, and
+  `PAYMENTS_LIVE_ENABLED` remains literal `false`. Checkout UI and recipient
+  onboarding card were updated; see HANDOFF.md.
+- Bachs has no checkout lookup by TipMe reference/idempotency key and its
+  successful idempotency cache is limited to 24 hours. Unknown writes are never
+  retried. Bachs payouts remain unsupported; recipient onboarding UI now exists
+  on dashboard settings.
+- Live payments remain blocked by D-01 through D-07, written provider approval,
+  legal/risk review, and reconciliation of Bachs direct-charge
+  merchant-of-record behavior with the proposed custodial model in ADR-0006.
+- No Bachs credentials, provider requests, real payments, production changes,
+  commits beyond Task 0, or PRs were made. Adapter/recovery tests use fake
+  provider responses. Resend/auth work is outside this task; D-11 remains open.
+- Verified in this continuation:
+  - API/database/contracts/payments/domain build passed (6/6 tasks). API,
+    database and contracts typechecks passed. Web route typegen passed, but the
+    full web typecheck failed on implicit-`any` errors in unrelated pages.
+  - API suite passed (36/36), contracts tests (10/10), database unit tests
+    (3/3), provider-routing DB regression (3/3), Bachs recovery API tests (4/4)
+    and focused recovery DB integration tests (2/2), using local `tipme_test`.
+  - API/database/contracts lint, focused web ESLint, Prettier and
+    `git diff --check` passed.
+  - The edited ops issue page had no reported type error. No browser run,
+    external Bachs call or preview deployment.
+- Next exact step: inspect the final migration/diff and review the recovery UX.
+  Keep provider selection and live payments disabled pending separate explicit
+  approval.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
