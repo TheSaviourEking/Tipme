@@ -20,7 +20,7 @@ export function dashboardSummary(
   db: Database,
   profileId: string,
   now: Date,
-): Promise<DashboardSummary> {
+): Promise<Omit<DashboardSummary, 'withdrawalsAvailable'>> {
   return guarded(async () => {
     const at = now.toISOString();
     const rows = await db.execute<{

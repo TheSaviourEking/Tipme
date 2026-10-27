@@ -44,7 +44,7 @@ function Tile({
 }
 
 export default function DashboardHome() {
-  const { profile } = useRecipient();
+  const { profile, attention, paymentsNeedSetup } = useRecipient();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activity, setActivity] = useState<ActivityRow[] | null>(null);
   const [latestWeek, setLatestWeek] = useState<{
@@ -97,7 +97,10 @@ export default function DashboardHome() {
   const profileDetailsComplete =
     profile.displayName !== profile.handle &&
     Boolean(profile.role?.trim() || profile.bio?.trim());
-  const pageReady = profileDetailsComplete && profile.pageState === 'live';
+  // The first payment-related notice, if any (they are listed most urgent first).
+  const paymentTodo = attention?.find((item) => item.id !== 'page_offline');
+  const pageReady =
+    profileDetailsComplete && profile.pageState === 'live' && !paymentTodo;
 
   return (
     <div className="dashboard-home">
@@ -187,17 +190,43 @@ export default function DashboardHome() {
                 </span>
                 <Link href="/dashboard/qr">Sharing tools</Link>
               </li>
-              <li>
-                <div>
-                  <strong>Set up payments and payouts</strong>
-                  <p>
-                    Account setup is not available yet. Real payments and
-                    payouts remain disabled until provider and funds-flow
-                    approvals are complete.
-                  </p>
-                </div>
-                <span>Coming later</span>
-              </li>
+              {/* Nothing until known, so the step never flips from one story to another. */}
+              {paymentsNeedSetup === null ? null : paymentsNeedSetup ? (
+                <li>
+                  <div>
+                    <strong>Set up payments</strong>
+                    <p>
+                      {paymentTodo
+                        ? paymentTodo.body
+                        : 'Supporters can tip you. No real money moves in test mode.'}
+                    </p>
+                  </div>
+                  <span>
+                    {!paymentTodo
+                      ? 'Done'
+                      : paymentTodo.id === 'payments_checking'
+                        ? 'Checking'
+                        : 'To do'}
+                  </span>
+                  {paymentTodo?.action && (
+                    <Link href={paymentTodo.action.href}>
+                      {paymentTodo.action.label}
+                    </Link>
+                  )}
+                </li>
+              ) : (
+                <li>
+                  <div>
+                    <strong>Set up payments and payouts</strong>
+                    <p>
+                      Account setup is not available yet. Real payments and
+                      payouts remain disabled until provider and funds-flow
+                      approvals are complete.
+                    </p>
+                  </div>
+                  <span>Coming later</span>
+                </li>
+              )}
             </ol>
           </Card>
         ) : (

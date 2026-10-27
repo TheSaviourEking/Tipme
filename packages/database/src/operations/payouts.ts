@@ -308,6 +308,31 @@ export interface PayoutInitiator {
  * provider confirms the payout as paid; until then the amount is reserved, and a failed payout
  * simply releases it.
  */
+// Money can only leave through the provider that collected it. A paid tip collected by any other
+// provider (Bachs direct charges sit in the recipient's own Bachs account, and Bachs payouts are
+// unsupported) blocks the withdrawal rather than paying it out twice.
+async function collectedElsewhere(
+  db: Pick<Database, 'execute'>,
+  input: { profileId: string; provider: string },
+): Promise<boolean> {
+  const foreign = await db.execute<{ found: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM tips t
+        JOIN payment_attempts a ON a.intent_id = t.intent_id
+       WHERE t.profile_id = ${input.profileId} AND t.status = 'SUCCEEDED'
+         AND a.status = 'VERIFIED_SUCCEEDED' AND a.provider IS DISTINCT FROM ${input.provider}
+    ) AS found`);
+  return Boolean(foreign.rows[0]?.found);
+}
+
+/** Whether a withdrawal through `provider` can be requested at all, before an amount is chosen. */
+export function withdrawalsAvailable(
+  db: Database,
+  input: { profileId: string; provider: string },
+): Promise<boolean> {
+  return guarded(async () => !(await collectedElsewhere(db, input)));
+}
+
 export async function requestWithdrawal(
   db: Database,
   input: {
@@ -378,17 +403,12 @@ export async function requestWithdrawal(
         input.amountMinor !== availableMinor
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
-      // Money can only leave through the provider that collected it. A paid tip collected by any
-      // other provider (Bachs direct charges sit in the recipient's own Bachs account, and Bachs
-      // payouts are unsupported) blocks the withdrawal rather than paying it out twice.
-      const foreign = await tx.execute<{ found: boolean }>(sql`
-        SELECT EXISTS (
-          SELECT 1 FROM tips t
-            JOIN payment_attempts a ON a.intent_id = t.intent_id
-           WHERE t.profile_id = ${input.profileId} AND t.status = 'SUCCEEDED'
-             AND a.status = 'VERIFIED_SUCCEEDED' AND a.provider IS DISTINCT FROM ${input.provider.name}
-        ) AS found`);
-      if (foreign.rows[0]?.found)
+      if (
+        await collectedElsewhere(tx, {
+          profileId: input.profileId,
+          provider: input.provider.name,
+        })
+      )
         throw new OperationError('WITHDRAWAL_UNAVAILABLE');
       const payoutId = newId();
       const inserted = await tx
