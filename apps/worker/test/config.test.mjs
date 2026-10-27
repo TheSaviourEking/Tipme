@@ -122,3 +122,16 @@ test('Bachs sandbox is selectable in test and preview only, never production', (
     }),
   );
 });
+
+test('the worker reads Bachs with its API key alone and never needs or accepts webhook secrets', () => {
+  const config = loadWorkerConfig({
+    NODE_ENV: 'test',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_worker_only',
+  });
+  assert.equal(config.BACHS_SANDBOX_API_KEY, 'sk_sandbox_worker_only');
+  assert.equal('BACHS_WEBHOOK_SECRET' in config, false);
+});

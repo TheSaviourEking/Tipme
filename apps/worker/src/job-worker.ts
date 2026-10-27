@@ -129,16 +129,9 @@ export async function startJobWorker(
     prefix: config.QUEUE_PREFIX,
   });
   const bachsProvider: BachsProvider | null =
-    config.BACHS_SANDBOX_API_KEY && config.BACHS_WEBHOOK_SECRET
-      ? createBachsProvider({
-          apiKey: config.BACHS_SANDBOX_API_KEY,
-          webhookSecrets: [
-            config.BACHS_WEBHOOK_SECRET,
-            ...(config.BACHS_PREVIOUS_WEBHOOK_SECRET
-              ? [config.BACHS_PREVIOUS_WEBHOOK_SECRET]
-              : []),
-          ],
-        })
+    // Read-only: the worker only asks Bachs for statuses, so it never holds a webhook secret.
+    config.BACHS_SANDBOX_API_KEY
+      ? createBachsProvider({ apiKey: config.BACHS_SANDBOX_API_KEY })
       : null;
   const defaultProvider = mockProvider;
   const providerFor = (name: string): BachsProvider | MockProvider => {

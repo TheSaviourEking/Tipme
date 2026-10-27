@@ -95,7 +95,8 @@ const urlInputSchema = z.string().url();
 
 export interface BachsProviderConfig {
   apiKey: string;
-  webhookSecrets: readonly string[];
+  /** Omitted for a read-only adapter (the worker): it then refuses every webhook. */
+  webhookSecrets?: readonly string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -300,14 +301,11 @@ function validateHttpsOrLocalUrl(value: string): string {
 export function createBachsProvider(
   config: BachsProviderConfig,
 ): BachsProvider {
-  if (config.webhookSecrets.length === 0)
-    throw new TypeError('At least one Bachs webhook secret is required');
-  if (config.webhookSecrets.length > 5)
+  const webhookSecrets = config.webhookSecrets ?? [];
+  if (webhookSecrets.length > 5)
     throw new TypeError('At most five Bachs webhook secrets may be configured');
   if (
-    config.webhookSecrets.some(
-      (secret) => secret.length < 16 || /[\r\n]/.test(secret),
-    )
+    webhookSecrets.some((secret) => secret.length < 16 || /[\r\n]/.test(secret))
   ) {
     throw new TypeError('Invalid Bachs webhook secret');
   }
@@ -539,7 +537,7 @@ export function createBachsProvider(
       headers,
       now,
     ): WebhookVerification<NormalizedProviderEvent> {
-      return verifyBachsWebhook(rawBody, headers, config.webhookSecrets, now);
+      return verifyBachsWebhook(rawBody, headers, webhookSecrets, now);
     },
 
     async createRecipientAccount(input) {

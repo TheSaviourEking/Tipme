@@ -46,6 +46,8 @@ const messages: Record<ApiErrorCode, string> = {
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
+  WITHDRAWAL_UNAVAILABLE:
+    'Withdrawals are not available yet for tips paid through this payment provider.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
@@ -109,6 +111,7 @@ const operationErrors: Partial<
   HAS_BALANCE: { status: 409, code: 'HAS_BALANCE' },
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
+  WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },

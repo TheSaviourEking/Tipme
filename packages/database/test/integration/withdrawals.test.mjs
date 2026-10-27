@@ -311,3 +311,59 @@ test('withdrawals', async (t) => {
     assert.equal(withdrawal.status, 'REQUESTED');
   });
 });
+
+test('money collected by a provider without payouts can never be withdrawn through another', async (t) => {
+  const database = await useDatabase(t);
+  const { db } = database;
+  await database.fresh();
+  const quote = await createQuote(db, {
+    handle: 'tobi',
+    tipMinor: 200000n,
+    currency: 'NGN',
+  });
+  const intent = await createPaymentIntent(db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  const reference = 'acct_tobi:chk_paid';
+  await markAttemptInitiated(db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    providerReference: reference,
+  });
+  await recordProviderEvent(db, {
+    provider: 'bachs',
+    providerEventId: `evt_${randomUUID()}`,
+    eventType: 'payment.succeeded',
+    attemptId: intent.attemptId,
+    providerReference: reference,
+    amountMinor: 200000n,
+    currency: 'NGN',
+    providerFeeMinor: 3000n,
+    signatureVerified: true,
+    payload: {},
+  });
+  assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 180000n);
+  let started = false;
+  await assert.rejects(
+    requestWithdrawal(db, {
+      profileId: TOBI.id,
+      amountMinor: 180000n,
+      idempotencyKey: randomUUID(),
+      provider: {
+        name: 'mock',
+        async initiatePayout() {
+          started = true;
+          return { providerReference: 'never' };
+        },
+      },
+    }),
+    { code: 'WITHDRAWAL_UNAVAILABLE' },
+  );
+  assert.equal(started, false);
+  assert.equal(
+    (await database.pool.query('SELECT count(*)::int AS n FROM payouts'))
+      .rows[0].n,
+    0,
+  );
+});

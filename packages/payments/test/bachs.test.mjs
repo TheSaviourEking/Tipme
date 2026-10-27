@@ -144,7 +144,7 @@ test('fee-free checkout omits platform_fee and invalid checkout input never reac
   assert.equal(requestCount, 1);
 });
 
-test('Bachs adapter rejects live keys and requires webhook secrets', () => {
+test('Bachs adapter rejects live keys and malformed webhook secrets', () => {
   assert.throws(
     () =>
       createBachsProvider({
@@ -153,8 +153,9 @@ test('Bachs adapter rejects live keys and requires webhook secrets', () => {
       }),
     /sandbox API keys only/,
   );
+  // The API requires a secret in its config; a read-only adapter (the worker) has none.
   assert.throws(
-    () => createBachsProvider({ apiKey: API_KEY, webhookSecrets: [] }),
+    () => createBachsProvider({ apiKey: API_KEY, webhookSecrets: ['short'] }),
     /webhook secret/,
   );
 });
@@ -921,4 +922,18 @@ test('an account can take tips only with active NGN card collection and platform
       status: 'RESTRICTED',
       chargesEnabled: false,
     });
+});
+
+test('a read-only Bachs adapter needs no webhook secret and refuses every webhook', async () => {
+  const { createBachsProvider } = await import('../dist/index.js');
+  const provider = createBachsProvider({
+    apiKey: 'sk_sandbox_read_only',
+    fetchImpl: async () => {
+      throw new Error('no network in this test');
+    },
+  });
+  const verification = provider.verifyWebhook(Buffer.from('{}'), {
+    'x-bachs-signature-v2': `t=${Math.floor(Date.now() / 1000)},v1=${'a'.repeat(64)}`,
+  });
+  assert.equal(verification.ok, false);
 });

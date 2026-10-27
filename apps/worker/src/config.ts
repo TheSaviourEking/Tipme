@@ -35,8 +35,6 @@ export const workerConfigSchema = z
       .string()
       .regex(/^sk_sandbox_.+$/)
       .optional(),
-    BACHS_WEBHOOK_SECRET: z.string().min(16).optional(),
-    BACHS_PREVIOUS_WEBHOOK_SECRET: z.string().min(16).optional(),
     // Anonymous analytics (PR-009). Unset: on in development and test, off in production (D-07).
     ANALYTICS_ENABLED: z
       .enum(['true', 'false'])
@@ -118,18 +116,9 @@ export const workerConfigSchema = z
           message: 'required for Bachs sandbox',
         });
       }
-      if (!config.BACHS_WEBHOOK_SECRET) {
-        context.addIssue({
-          code: 'custom',
-          path: ['BACHS_WEBHOOK_SECRET'],
-          message: 'required for Bachs sandbox',
-        });
-      }
     }
     if (
-      (config.BACHS_SANDBOX_API_KEY ||
-        config.BACHS_WEBHOOK_SECRET ||
-        config.BACHS_PREVIOUS_WEBHOOK_SECRET) &&
+      config.BACHS_SANDBOX_API_KEY &&
       config.NODE_ENV === 'production' &&
       config.DEPLOYMENT_MODE !== 'preview'
     ) {
