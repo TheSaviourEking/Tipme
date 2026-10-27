@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Browser, type Page } from '@playwright/test';
+import { tipFromProfile } from '../shared/tip-flow';
 
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 export async function expectAccessible(page: Page) {
@@ -102,18 +103,11 @@ export async function tipAsVisitor(
       timeout: 1000,
     });
   }).toPass({ timeout: 10_000 });
-  await page.getByRole('radio', { name: amount }).check();
-  await expect(page.getByText(/^You pay NGN [\d,]+\.\d\d$/)).toBeVisible();
-  if (message)
-    await page.getByLabel('Personal message (optional)').fill(message);
-  if (name) {
-    // The profile keeps the optional extras behind a disclosure.
-    await page.getByText('Add your name or remember tips').click();
-    await page.getByLabel('Your name (optional)').fill(name);
-  }
-  await page.getByRole('button', { name: /^Tip NGN/ }).click();
-  await page.waitForURL(/\/mock-checkout\//);
-  await page.getByRole('button', { name: outcome }).click();
-  await page.waitForURL(/\/tip\//);
+  await tipFromProfile(page, {
+    amount,
+    outcome,
+    ...(name ? { name } : {}),
+    ...(message ? { message } : {}),
+  });
   await context.close();
 }

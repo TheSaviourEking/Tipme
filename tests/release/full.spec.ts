@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { tipFromProfile } from '../shared/tip-flow';
 import { apiCall, env, newVisitor, signIn } from './client';
 
 // The full release check (PR-010): the whole story on a `test` copy, as a tagged rehearsal.
@@ -48,15 +49,10 @@ async function tip(
 ) {
   await page.goto(`/@${handle}?src=qr`);
   await expect(page).toHaveURL(new RegExp(`/@${handle}$`));
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  // The tip summary shows only what the supporter pays.
-  await expect(page.getByText(/^You pay NGN [\d,]+\.\d\d$/)).toBeVisible();
-  if (message)
-    await page.getByLabel('Personal message (optional)').fill(message);
-  await page.getByRole('button', { name: /^Tip NGN/ }).click();
-  await page.waitForURL(/\/mock-checkout\//);
-  await page.getByRole('button', { name: new RegExp(`^${outcome}`) }).click();
-  await page.waitForURL(/\/tip\//);
+  await tipFromProfile(page, {
+    outcome: new RegExp(`^${outcome}`),
+    ...(message ? { message } : {}),
+  });
 }
 
 test('the whole story works together, and leaves nothing visible behind', async ({
