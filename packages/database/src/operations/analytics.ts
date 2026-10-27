@@ -228,3 +228,24 @@ export function lagosDaysBefore(now: Date, days: number): string[] {
     out.push(format.format(new Date(now.getTime() - back * 86_400_000)));
   return out;
 }
+
+/**
+ * How many browsing sessions opened the owner's page today (Lagos day), counted as the daily
+ * totals count visits. Shown to the owner while supporters can't tip them yet.
+ */
+export function visitsToday(
+  db: Database,
+  input: { profileId: string; now?: Date },
+): Promise<number> {
+  return guarded(async () => {
+    const result = await db.execute<{ visits: number }>(sql`
+      SELECT count(DISTINCT e.flow_id)::int AS visits
+        FROM analytics_events e
+        JOIN profiles p ON p.handle_lower = e.handle
+       WHERE p.id = ${input.profileId}
+         AND e.name = 'profile_viewed' AND e.flow_id IS NOT NULL AND NOT e.rehearsal
+         AND (e.at_minute AT TIME ZONE ${ZONE})::date
+           = (${(input.now ?? new Date()).toISOString()}::timestamptz AT TIME ZONE ${ZONE})::date`);
+    return result.rows[0]?.visits ?? 0;
+  });
+}

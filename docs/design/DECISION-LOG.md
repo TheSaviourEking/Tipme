@@ -150,3 +150,8 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - Tone is encouraging, not alarming: the neutral notice, not the error tone, because nothing has gone wrong yet; the owner has a step left.
 - When payments need the owner's own provider account, the first-day checklist shows the real payment step instead of "Coming later".
 - Withdraw says up front when the balance cannot be paid out yet, and shows no amount form.
+
+## 2026-10-27 — Visits while tips are blocked
+
+- While a payment notice is showing, its text leads with today's visits when there were any: "Your page was opened 3 times today, but nobody could tip you yet." A concrete number is a stronger reason to finish setup than a general warning. With no visits, or with analytics off, the usual words appear and no number is shown (never a misleading zero).
+- A visit is counted as the daily analytics totals count it (one browsing session opening the page on a Lagos day), so it follows the analytics rules: off in production until D-07.

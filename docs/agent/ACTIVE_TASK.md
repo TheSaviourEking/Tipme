@@ -1,3 +1,9 @@
+# Current task — visits while tips are blocked (27 October 2026)
+
+- Branch/worktree: `feat/missed-visits` / `.worktrees/missed-visits`, stacked on `feat/owner-attention` (PR #29). Slice 3 of 3 of the owner-experience work.
+- `GET /v1/me/visits-today` (`visitsToday`, counted like the daily analytics totals) returns `{ visits: null }` while analytics are off (production until D-07). The payment notice leads with "Your page was opened N times today, but nobody could tip you yet." when N > 0.
+- No migration. Verified: database test (seen failing first), web rules 9/9 (seen failing first), API test (written after the endpoint, so not seen failing), web unit 65/65, API unit 36/36, typecheck 15/15, lint 15/15, OpenAPI regenerated, full integration 368/368 on a throwaway PostgreSQL (127.0.0.1:5434), browser check at 1440 and 390 px against a stand-in API.
+
 # Current task — owner attention (27 October 2026)
 
 - Branch/worktree: `feat/owner-attention` / `.worktrees/owner-attention`, from `origin/dev` at `c7e6612`.
