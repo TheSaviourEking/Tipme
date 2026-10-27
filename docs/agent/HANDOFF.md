@@ -42,7 +42,19 @@
   settings has a "Test payments" onboarding card (status, setup, continue,
   return re-sync); the tip form maps `PAYMENT_ACCOUNT_REQUIRED`,
   `PROVIDER_OUTCOME_UNKNOWN`, `DEPENDENCY_UNAVAILABLE`; labels say "Test
-  payments". Untested against real Bachs; no browser/e2e run.
+  payments". No provider checkout has been exercised end to end; a local
+  profile-only browser smoke did not submit a checkout.
+- Product-owner UI follow-up (27 October): the public tip quote displays only
+  the exact payer total; fee breakdown, recipient net, and policy-version copy
+  are removed without changing quote or payment calculations. This conflicts
+  with PRD v1.1's fee-treatment disclosure requirement; revisit before enabling
+  real payments.
+- Verified the UI change with `pnpm --filter @tipme/web test` (55/55),
+  `pnpm --filter @tipme/web lint`, `pnpm --filter @tipme/web build`,
+  `pnpm typecheck` (15/15), targeted ESLint/Prettier, and `git diff --check`.
+  Local browser smoke on Ada's profile selected NGN 5,000 and showed only
+  “You pay NGN 5,000.00”; no checkout was submitted. E2E was not run because
+  its global setup resets `tipme_test`.
 - Migration `0040_bachs_sandbox_recovery` follows merged `0039_tip_purpose`.
   It combines the Bachs schema and issue-kind updates and preserves the custom
   status-transition function. The superseded `0039_bachs_sandbox_payment_accounts`
@@ -58,9 +70,10 @@
   not proof: connected-account, unknown or missing fee evidence stays pending.
   Dashboard settings includes recipient-facing sandbox setup guidance; payouts
   remain disabled.
-- No Bachs credentials, provider API requests, real payment, deployment or
-  production configuration change. Tests use fake transport; D-01–D-07 and
-  written provider/legal approval remain blockers. Live payments stay disabled.
+- At implementation/CI time no Bachs credentials or provider requests were
+  used; adapter tests used fake transport. See the later local sandbox
+  validation below. D-01–D-07 and written provider/legal approval remain
+  blockers. Live payments stay disabled.
 - After the PR CI fixes, `pnpm build` (9/9), `pnpm typecheck` (15/15),
   `pnpm lint` (15/15), `pnpm format:check`, `pnpm test` (55 root tests and
   18/18 workspace tasks), CI-pinned Gitleaks (102 commits scanned, no leaks),
@@ -77,10 +90,35 @@
   actuals.
 - CI run `40452019057` passed static, security, integration and E2E on
   implementation commit `141f100`; the Vercel preview passed as well. PR #24
-  remains open and draft. Next exact step: product-owner review. Validate the
-  protected-preview flow only after an operator explicitly authorizes it; keep
-  the provider gate limited to test/protected preview, with live payments
-  blocked by D-01–D-07 and written provider/legal approval.
+  remains open and draft.
+
+## Local sandbox validation (27 October 2026)
+
+- User-provided ignored `.env` and `apps/web/.env.local` were copied into this
+  worktree with mode `0600`; local web uses port 3001 because 3000 was occupied.
+  Secrets were not printed or tracked.
+- `pnpm build`, `pnpm db:migrate`, and `pnpm db:seed` passed. The test used the
+  existing shared local `tipme_local` database and Redis containers; no database
+  reset occurred. Web is left running at `http://localhost:3001`, API at
+  `http://localhost:4000`, and the worker is running.
+- `/health` and `/@ada` returned HTTP 200. Recipient sign-in and mock email
+  confirmation succeeded. Bachs sandbox recipient-account creation returned
+  `ACTIVE` with charges enabled.
+- Guest quote creation returned HTTP 201. A single Bachs checkout-start attempt
+  returned HTTP 503 `PROVIDER_OUTCOME_UNKNOWN` (`BachsApiError`). Attempt
+  `01a17c0b-8042-7715-9858-156eb54b83fb` is persisted as `UNKNOWN` with no
+  provider reference; its tip is `AWAITING_PAYMENT`, and the worker created an
+  open `payment_unresolved` issue. No card details or payment submission; no
+  live payment, deployment, staging or production change.
+- The provider HTTP status/code was not logged; root cause remains unresolved.
+  Do not retry the attempt or create a new checkout until the Bachs sandbox
+  dashboard and open issue are reviewed and the authoritative recovery flow is
+  used. Bachs has no operation-reference lookup.
+- No application source changes remain. Next exact step: inspect the open
+  issue and corresponding Bachs sandbox dashboard record for this attempt;
+  investigate the rejected checkout, resolve only with authoritative provider
+  evidence, then resume checkout testing. Keep live payments disabled and PR
+  #24 unmerged until then.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
@@ -523,4 +561,6 @@ Recomposed into `.business-page` (max-width 44rem, centred, spaced intro with `l
 
 ## Update — Bachs gap remediation (27 October 2026)
 
-Nine-task plan completed on `feat/provider-integrations-bachs` (commits after `ddd3f56`): payment confirmation and expiry safety, clean checkout refusals, authoritative account readiness with webhook refresh, withdrawal blocking for Bachs money, a secretless worker, refund/dispute money issues (migration 0041) and opaque IDs. Integration 364/364, unit 18/18 + 55/55, typecheck and lint 15/15. E2E and a live sandbox run are still to do; see ACTIVE_TASK and ADR-0004's "Gap remediation status".
+Tasks 1–14 are implemented on `feat/provider-integrations-bachs` through `9132bcc`: payment confirmation and expiry safety, clean checkout refusals, authoritative account readiness with webhook refresh, withdrawal blocking for Bachs money, a secretless worker, refund/dispute money issues (migration 0041), opaque IDs, sandbox error-shape handling, production-origin enforcement, immediate webhook reconciliation, 15-minute receipt polling and safe unknown-outcome diagnostics. The plan ledger has the per-task commands and rulings. The original nine-task checkpoint passed integration 364/364, unit 18/18 + 55/55, typecheck and lint 15/15; later tasks have targeted evidence in the ledger.
+
+The payer-total-only public tip summary is now prepared for its own UI commit with matching design and E2E expectations. Fresh checks passed: web unit 56/56, web lint, web typecheck, targeted Prettier, `git diff --check`, and a Next production Webpack build. The default Turbopack build failed for an environment restriction (its CSS worker could not bind a local port), not a source error. Full browser E2E was not run because its setup resets the test database.

@@ -1,9 +1,10 @@
 # Current task — Bachs gap remediation (27 October 2026)
 
-- Branch `feat/provider-integrations-bachs`, continued from `ddd3f56` at the user's request. Plan: `docs/superpowers/plans/2026-10-27-bachs-gap-remediation.md` (Tasks 1–9); ledger and rulings in `.superpowers/sdd/2026-10-27-bachs-gap-remediation/progress.md`.
+- Branch `feat/provider-integrations-bachs`, continued from `ddd3f56` at the user's request. Plan: `docs/superpowers/plans/2026-10-27-bachs-gap-remediation.md`; Tasks 1–14 and rulings are recorded in `.superpowers/sdd/2026-10-27-bachs-gap-remediation/progress.md`. Current implementation head before the UI commit: `9132bcc`.
 - Fixed: Bachs payments can be confirmed (callers pass the quoted TipMe share); expiry never cancels a collected-but-unsettled payment; definite 4xx checkout refusals fail cleanly (`PAYMENT_START_REJECTED`); one readiness rule with Bachs' real fee responsibility; account/capability webhooks re-read the account; withdrawals of Bachs-collected money refused (`WITHDRAWAL_UNAVAILABLE`); worker holds no webhook secret; refunds/disputes raise `payment_reversed` money issues (migration 0041); opaque Bachs IDs; `ddd3f56` compile breaks fixed.
 - Verified: integration 364/364 (69 files, throwaway PostgreSQL 16 on 127.0.0.1:5434 and Redis on 6380, no shared database touched); `pnpm test` 18/18 tasks and 55/55 root tests; `pnpm typecheck` 15/15; `pnpm lint` 15/15; `pnpm format:check`; `pnpm api:openapi --check`; generated docs unchanged; `git diff --check`.
-- Not run: e2e, a real Bachs sandbox scenario. The uncommitted payer-total-only tip form, its e2e copy changes and the design-log entry are someone else's work and were left uncommitted.
+- Later sandbox checks exercised connected-account setup and checkout behavior; see the local validation record below and the plan ledger for the follow-up fixes. Full E2E remains unrun in this worktree.
+- Payer-total-only tip-form UI is ready to commit with its design record and E2E expectations. Fresh validation: web unit tests 56/56, web lint and typecheck passed, and the Next production Webpack build passed. The default Turbopack build could not be used in this environment because its CSS worker was denied permission to bind a local port. No checkout or payment was submitted by these UI checks.
 - Still open (live blockers): refund/dispute ledger handling, Bachs payouts, automated reserve monitoring, confirming Bachs event names/statuses with captured sandbox fixtures, a provider-neutral account interface. The stuck sandbox attempt `01a17c0b…` still needs a Dashboard check before any retry.
 
 # Current task — recipient onboarding, business page and tip purpose (27 October 2026)
@@ -43,6 +44,17 @@
   Production still rejects it, credentials need `sk_sandbox_`, and
   `PAYMENTS_LIVE_ENABLED` remains literal `false`. Checkout UI and recipient
   onboarding card were updated; see HANDOFF.md.
+- Product-owner UI follow-up (27 October): the public tip quote now displays
+  only the exact payer total. Fee breakdown, recipient net, and policy-version
+  copy are removed; the API quote and payment calculations are unchanged. This
+  conflicts with PRD v1.1's fee-treatment disclosure requirement; revisit before
+  enabling real payments.
+- Verified the UI change with `pnpm --filter @tipme/web test` (55/55),
+  `pnpm --filter @tipme/web lint`, `pnpm --filter @tipme/web build`,
+  `pnpm typecheck` (15/15), targeted ESLint/Prettier, and `git diff --check`.
+  A local browser smoke on Ada's profile selected NGN 5,000 and showed only
+  “You pay NGN 5,000.00”; no checkout was submitted. E2E was not run because
+  its global setup resets `tipme_test`.
 - Migration `0040_bachs_sandbox_recovery` now follows merged
   `0039_tip_purpose`, combining the Bachs schema and issue-kind changes while
   preserving the custom transition trigger. Superseded Bachs migration files
@@ -58,9 +70,10 @@
 - Live payments remain blocked by D-01 through D-07, written provider approval,
   legal/risk review, and reconciliation of Bachs direct-charge
   merchant-of-record behavior with the proposed custodial model in ADR-0006.
-- No Bachs credentials were read, no provider API call/payment was made, and no
-  deployment or production configuration was changed. Adapter tests use fake
-  transport. Resend/auth work is outside this task; D-11 remains open.
+- At implementation/CI time, no Bachs credentials or provider API requests were
+  used; adapter tests used fake transport. See the local sandbox validation
+  below for the later operator-approved test. Resend/auth work is outside this
+  task; D-11 remains open.
 - Verified after the CI fixes: `pnpm build` (9/9), `pnpm typecheck` (15/15),
   `pnpm lint` (15/15), `pnpm format:check`, `pnpm test` (55 root tests and
   18/18 workspace tasks), CI-pinned Gitleaks (102 commits scanned, no leaks),
@@ -73,13 +86,45 @@
   Darwin/Linux profile snapshots. Focused visual Playwright passed 4/4;
   Darwin snapshots used a temporary config and read-only requests to the
   existing local API. Linux snapshots use the reviewed CI actuals.
-- No Bachs credentials or API requests, real payments, staging changes, or
-  production configuration changes. CI run `40452019057` passed static,
-  security, integration and E2E on implementation commit `141f100`; the Vercel
-  preview also passed. PR #24 remains open and draft.
-- Next exact step: product-owner review of PR #24. Validate the protected
-  preview only after an operator explicitly authorizes that test; keep live
-  payments disabled.
+- CI run `40452019057` passed static, security, integration and E2E on
+  implementation commit `141f100`; the Vercel preview also passed. PR #24
+  remains open and draft.
+
+## Local sandbox validation (27 October 2026)
+
+- Copied the user's ignored root `.env` and `apps/web/.env.local` into this
+  worktree; both are mode `0600`. The root `WEB_ORIGIN` is `http://localhost:3001`
+  because another local Node process already owned port 3000. No secrets were
+  printed or tracked.
+- `pnpm build`, `pnpm db:migrate`, and `pnpm db:seed` passed. The local
+  `tipme_local` database is on the existing shared local Postgres container
+  (Compose project `tipme`); it was migrated and seeded, not reset. Existing
+  local Redis was reused.
+- Local web is left running at `http://localhost:3001`, API at
+  `http://localhost:4000`, and the Bachs-configured worker is running.
+  `/health` and `/@ada` returned HTTP 200. Browser smoke completed recipient
+  sign-in using the pretend inbox, confirmed a synthetic local email, and
+  created a sandbox recipient account; the API returned `ACTIVE` with charges
+  enabled.
+- Guest quote creation returned HTTP 201. One Bachs checkout-start attempt
+  returned HTTP 503 `PROVIDER_OUTCOME_UNKNOWN`; the API logged `BachsApiError`.
+  Attempt `01a17c0b-8042-7715-9858-156eb54b83fb` is durably `UNKNOWN`, has no
+  provider reference, and its tip remains `AWAITING_PAYMENT`. The worker opened
+  a `payment_unresolved` issue. No card details were entered and no payment was
+  submitted; the Bachs sandbox API was contacted for account setup and checkout
+  initialization. No live payment, staging change, or production change.
+- The exact Bachs HTTP status/provider code was not logged, so the checkout
+  failure's cause is unresolved. Do not retry this attempt or create another
+  checkout until the open issue is checked against the Bachs sandbox dashboard
+  and resolved through the authoritative recovery flow. The provider adapter
+  has no lookup by TipMe operation reference.
+- Tracked Next.js dev-generated changes were reverted; no application source
+  change remains. `git status` was clean before this continuity update.
+
+- Next exact step: inspect the open `payment_unresolved` issue and the matching
+  Bachs sandbox dashboard record for the attempt above. Do not retry its
+  checkout. Keep live payments disabled and PR #24 unmerged until the outcome
+  and error cause are understood.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 

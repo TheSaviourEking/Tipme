@@ -365,37 +365,9 @@ export function AppreciationForm({
             </div>
           )}
           {ready && (
-            <>
-              <dl className="tip-breakdown">
-                <div>
-                  <dt>Your tip</dt>
-                  <dd>{formatDemoAmount(Number(ready.tipMinor))}</dd>
-                </div>
-                <div>
-                  {/* PRD v1.1: one fee, 10% of the tip, with processing paid out of it. */}
-                  <dt>
-                    {ready.feeFree
-                      ? 'TipMe fee (fee-free tip)'
-                      : 'TipMe fee (10%, includes processing)'}
-                  </dt>
-                  <dd>
-                    −
-                    {formatDemoAmount(
-                      Number(ready.platformFeeMinor) +
-                        Number(ready.providerFeeMinor),
-                    )}
-                  </dd>
-                </div>
-              </dl>
-              <p className="tip-net">
-                {recipient} receives{' '}
-                {formatDemoAmount(Number(ready.recipientNetMinor))} after fees
-              </p>
-              <p className="tm-hint">
-                Fees from policy ({ready.feePolicyVersion}
-                ). You pay {formatDemoAmount(Number(ready.payerTotalMinor))}.
-              </p>
-            </>
+            <p className="tip-payment-total">
+              You pay {formatDemoAmount(Number(ready.payerTotalMinor))}
+            </p>
           )}
         </div>
         <div className="tm-field">
