@@ -56,22 +56,29 @@
 - Bachs cannot find checkout creation by TipMe's operation reference. Ambiguous
   writes stay `UNKNOWN` and are never retried. Platform-paid fee preference is
   not proof: connected-account, unknown or missing fee evidence stays pending.
-  There is no recipient-facing onboarding UI.
+  Dashboard settings includes recipient-facing sandbox setup guidance; payouts
+  remain disabled.
 - No Bachs credentials, provider API requests, real payment, deployment or
   production configuration change. Tests use fake transport; D-01–D-07 and
   written provider/legal approval remain blockers. Live payments stay disabled.
-- Verified after rebase: `pnpm build` (9/9), `pnpm typecheck` (15/15),
-  `pnpm lint` (15/15), `pnpm format:check`, root tooling tests (55/55),
-  staging deployment tests (12/12), API OpenAPI and generated-doc checks,
-  Drizzle generation (“No schema changes”), and `git diff --check` passed.
-  Full `pnpm test` reached the API suite but four Bachs recovery tests failed
-  because the shared local test database already has the old
-  `payment_account_status` enum; no reset was performed. No live-provider or
-  browser test was run.
-- Next exact step: review PR #24 CI, then validate the protected-preview
-  sandbox flow only after an operator explicitly authorizes that test. Keep the
-  provider gate limited to protected preview/test; live payments remain blocked
-  by D-01–D-07 and written provider/legal approval.
+- After the PR CI fixes, `pnpm build` (9/9), `pnpm typecheck` (15/15),
+  `pnpm lint` (15/15), `pnpm format:check`, `pnpm test` (55 root tests and
+  18/18 workspace tasks), CI-pinned Gitleaks (102 commits scanned, no leaks),
+  and `git diff --check` passed. The two targeted integration files passed
+  23/23 on a disposable local PostgreSQL container. The full integration suite
+  was not run locally; no shared or staging database was reset.
+- The database-dependent Bachs recovery API test now belongs to
+  `tests/integration/`; the provider-reference test asserts mismatches are
+  rejected without changing the saved reference. The synthetic historical
+  key finding is ignored by its single Gitleaks fingerprint. All four
+  Darwin/Linux profile baselines now say “Test payments”; focused visual
+  Playwright passed 4/4. The Darwin run used a temporary config with read-only
+  requests to the existing local API; Linux snapshots are the reviewed CI
+  actuals.
+- PR CI for these fixes has not yet run. Next exact step: commit and push the
+  fixes, rerun PR #24 checks, and update the PR evidence. Keep the provider
+  gate limited to protected preview/test; live payments remain blocked by
+  D-01–D-07 and written provider/legal approval.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 

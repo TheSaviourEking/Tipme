@@ -10,7 +10,7 @@ import {
   minorToDecimal,
 } from '../dist/index.js';
 
-const API_KEY = 'sk_sandbox_test-key';
+const API_KEY = 'sk_sandbox_test';
 const CURRENT_SECRET = 'current-secret-0123456789';
 const PREVIOUS_SECRET = 'previous-secret-0123456789';
 const NOW = new Date('2026-10-26T12:00:00.000Z');

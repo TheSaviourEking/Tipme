@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { OpsActionsController } from '../dist/ops/actions.controller.js';
+import { OpsActionsController } from '../../apps/api/dist/ops/actions.controller.js';
 import {
   beginPaymentAccountCreation,
   claimAttemptStart,
@@ -12,12 +12,12 @@ import {
   runIssueDetectors,
   seedDemoProfiles,
   updatePaymentAccountStatus,
-} from '../../../packages/database/dist/index.js';
-import { openTestDatabase } from '../../../packages/database/dist/test-support.js';
+} from '../../packages/database/dist/index.js';
+import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
   ADA,
   TOBI,
-} from '../../../packages/database/test/integration/helpers.mjs';
+} from '../../packages/database/test/integration/helpers.mjs';
 
 const staffUserId = '00000000-0000-7000-8000-00000000a0a1';
 const logger = { info() {}, warn() {}, error() {} };

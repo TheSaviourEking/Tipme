@@ -53,17 +53,23 @@
 - No Bachs credentials were read, no provider API call/payment was made, and no
   deployment or production configuration was changed. Adapter tests use fake
   transport. Resend/auth work is outside this task; D-11 remains open.
-- Verified after the rebase: `pnpm build` (9/9), `pnpm typecheck` (15/15),
-  `pnpm lint` (15/15), `pnpm format:check`, root tooling tests (55/55),
-  staging deployment tests (12/12), API OpenAPI check, generated-doc check,
-  Drizzle generation (“No schema changes”), and `git diff --check` passed.
-  Full `pnpm test` reached the API suite but four Bachs recovery tests failed
-  while reapplying migrations to the shared local test DB: its old Bachs
-  `payment_account_status` enum already exists. The DB was not reset or changed.
-  No live-provider or browser test was run.
-- Next exact step: review PR #24 CI, then validate the protected-preview
-  sandbox flow only after an operator explicitly authorizes that test. Keep
-  live payments disabled.
+- Verified after the CI fixes: `pnpm build` (9/9), `pnpm typecheck` (15/15),
+  `pnpm lint` (15/15), `pnpm format:check`, `pnpm test` (55 root tests and
+  18/18 workspace tasks), CI-pinned Gitleaks (102 commits scanned, no leaks),
+  and `git diff --check` passed. Targeted integration tests passed 23/23 on a
+  disposable local PostgreSQL container; no shared or staging database was
+  reset. The full integration suite was not run locally.
+- Moved the PostgreSQL-dependent recovery test into `tests/integration/`,
+  corrected the mismatched provider-reference assertion, narrowed the
+  historical Gitleaks exception to one fingerprint, and refreshed all four
+  Darwin/Linux profile snapshots. Focused visual Playwright passed 4/4;
+  Darwin snapshots used a temporary config and read-only requests to the
+  existing local API. Linux snapshots use the reviewed CI actuals.
+- No Bachs credentials or API requests, real payments, staging changes, or
+  production configuration changes. PR CI for these fixes has not yet run.
+- Next exact step: commit and push the CI fixes, then rerun PR #24 checks. Keep
+  live payments disabled; validate the protected-preview sandbox only after
+  an operator explicitly authorizes that test.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
