@@ -22,8 +22,11 @@ CREATE TABLE "payment_accounts" (
 	CONSTRAINT "payment_accounts_active_can_charge" CHECK (status <> 'ACTIVE' OR charges_enabled)
 );
 --> statement-breakpoint
+ALTER TABLE "issues" DROP CONSTRAINT "issues_kind";--> statement-breakpoint
 ALTER TABLE "payment_attempts" ADD COLUMN "start_claimed_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "payment_accounts" ADD CONSTRAINT "payment_accounts_profile_id_profiles_id_fk" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "issues" ADD CONSTRAINT "issues_kind" CHECK (kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payout_failed', 'payout_conflict', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported'));
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION tipme_check_status_transition() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   allowed text[];

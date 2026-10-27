@@ -72,10 +72,10 @@ export class WebhookService {
     if (operationReference) {
       if (!z.uuid().safeParse(operationReference).success)
         return this.unmatchedBachs(event);
-      attemptId = await findBachsAttemptByOperationReference(
-        this.database.db,
-        { attemptId: operationReference, accountReference },
-      );
+      attemptId = await findBachsAttemptByOperationReference(this.database.db, {
+        attemptId: operationReference,
+        accountReference,
+      });
     } else {
       attemptId = await findBachsAttemptByReference(this.database.db, {
         providerReference,
@@ -103,10 +103,7 @@ export class WebhookService {
       });
       return result.outcome;
     } catch (error) {
-      if (
-        error instanceof OperationError &&
-        error.code === 'INVALID_INPUT'
-      ) {
+      if (error instanceof OperationError && error.code === 'INVALID_INPUT') {
         return this.unmatchedBachs(event);
       }
       throw error;
@@ -127,7 +124,9 @@ export class WebhookService {
     return 'unmatched';
   }
 
-  private async unmatchedBachs(event: NormalizedProviderEvent): Promise<string> {
+  private async unmatchedBachs(
+    event: NormalizedProviderEvent,
+  ): Promise<string> {
     await recordUnmatchedEvent(this.database.db, {
       provider: 'bachs',
       providerEventId: event.eventId,

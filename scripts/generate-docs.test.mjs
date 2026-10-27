@@ -64,6 +64,11 @@ const PRETEND_PUBLIC_REVIEWED = [
   'POST /v1/mock-provider/checkout/{reference}',
 ];
 
+const SIGNED_PROVIDER_REVIEWED = [
+  'POST /v1/webhooks/bachs',
+  'POST /v1/webhooks/mock',
+];
+
 test('the pretend-only public routes are exactly the reviewed ones', () => {
   assert.deepEqual(
     routes
@@ -72,6 +77,16 @@ test('the pretend-only public routes are exactly the reviewed ones', () => {
       .sort(),
     [...PRETEND_PUBLIC_REVIEWED].sort(),
     'a pretend-only public route was added or removed: review it, then update this list',
+  );
+});
+
+test('payment webhooks require provider signatures', () => {
+  assert.deepEqual(
+    routes
+      .filter((r) => r.access === 'provider-signature')
+      .map((r) => r.key)
+      .sort(),
+    [...SIGNED_PROVIDER_REVIEWED].sort(),
   );
 });
 
@@ -159,8 +174,10 @@ test('state machines: finished states have no way out, every state can be reache
   assert.deepEqual(PAYOUT_TRANSITIONS.PAID, ['REVERSED']);
   // A success can never be taken back by the tip's own machine (a refund is a separate record).
   assert.ok(!TIP_TRANSITIONS.SUCCEEDED.includes('FAILED'));
-  // Unknown attempts resolve only to a verified verdict, never back to pending.
-  assert.deepEqual(ATTEMPT_TRANSITIONS.UNKNOWN.sort(), [
+  // An unknown attempt may resolve to a known pending checkout or a verified verdict,
+  // but it can never return to CREATED and permit another provider write.
+  assert.deepEqual([...ATTEMPT_TRANSITIONS.UNKNOWN].sort(), [
+    'PENDING',
     'VERIFIED_FAILED',
     'VERIFIED_SUCCEEDED',
   ]);

@@ -79,11 +79,11 @@ approval before live operations.
    idempotency cache covers successful writes for 24 hours, but the API has no
    checkout lookup by TipMe reference or idempotency key. A timed-out or
    otherwise ambiguous checkout create must remain unknown and must not be
-   automatically retried; the adapter is not runtime-selectable until the
-   application has a durable unknown-attempt state and a safe operations
-   resolution path. A valid event with a mismatched connected account, amount
-   or currency is retained as a verified mismatch and never credits the
-   recipient.
+   automatically retried. The application now has a durable unknown-attempt
+   state and a guarded operations recovery path, so the sandbox adapter is
+   selectable in tests and password-protected preview only. A valid event with
+   a mismatched connected account, amount or currency is retained as a verified
+   mismatch and never credits the recipient.
 6. **Historical routing.** New operations use the configured default provider.
    Reconciliation and support for existing attempts and payouts always use
    their persisted provider, even after the default changes.
@@ -177,8 +177,10 @@ live funds flow or provider after legal, risk and provider review.
   `@bachs/sdk` checkout surface does not expose the required Connect account
   header and direct-charge fields. Marketplace discovery found no Bachs
   integration.
-- The adapter hard-codes the sandbox API origin, accepts only `sk_sandbox_`
-  credentials, and is not selected by the API or worker.
+- The adapter hard-codes the sandbox API origin and accepts only `sk_sandbox_`
+  credentials. The API and worker allow selection only in tests or
+  password-protected preview; production selection and live payments remain
+  blocked.
 - Provider checkout references include the connected-account reference so
   status reads remain scoped to the same account. The adapter never treats
   checkout redirects as payment proof.

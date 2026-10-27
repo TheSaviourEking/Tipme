@@ -2,7 +2,7 @@
 
 - Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 was already merged; these follow-up changes are separate.
 - Scope includes homepage/dashboard recipient onboarding, business coming-soon and mailto interest form, navbar and test-mode copy, optional structured tip purpose end-to-end, and the centred `/for-businesses` layout.
-- The new optional purpose has contract validation, a database CHECK constraint, and a nullable `tips.purpose` column via `0039_tip_purpose`. The migration has not been applied. Migration `0039` also exists on `.worktrees/provider-integrations-bachs`; resequence/regenerate the journal and snapshot before combining branches.
+- The new optional purpose has contract validation, a database CHECK constraint, and a nullable `tips.purpose` column via `0039_tip_purpose`. The Bachs branch has since been rebased onto this merge and now follows it with `0040_bachs_sandbox_recovery`; the migration-number collision is resolved.
 - PR CI run `40424132431` exposed a stale OpenAPI document, two stale onboarding assertions, and four visual mismatches. Follow-up commit `94ac1ab` fixed the document and assertions, and added failure-only PNG artifacts (3-day retention). CI run `40426539167` passed integration, security, static, Vercel, dashboard and welcome checks; only the four desktop/mobile visual snapshots failed.
 - Reviewed CI expected/actual/diff images at desktop and mobile. The changes are intentional: optional purpose selector and approved navigation/footer/test-mode copy. The profile remains readable with no apparent overlap. Updated all eight Darwin/Linux snapshots; Darwin visual specs pass 4/4 using a temporary config against the built PR web app. Linux baselines match reviewed actuals from CI.
 - Verified in this worktree: `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, Playwright discovery (4 dashboard/welcome tests), and focused visual Playwright (4/4). Full local E2E was not run because port 4100 belongs to the active `.worktrees/physical-interface` API; it was left untouched. The local visual run did not reset or write to a database.
@@ -13,8 +13,10 @@
 # Current handoff — Bachs sandbox integration safety and routing (26 October 2026)
 
 - Dedicated implementation worktree: `.worktrees/provider-integrations-bachs`,
-  branch `feat/provider-integrations-bachs`, base `origin/dev` commit `1738947`
-  with Task 0 at `32fd687`. The companion documentation worktree was not touched.
+  branch `feat/provider-integrations-bachs`, rebased onto `origin/dev` commit
+  `da0c62a`. The rebase completed without remaining conflicts. Commits
+  `0084177` and `788bd28` contain the funds-flow ADR and integration; no PR has
+  been opened yet.
 - The Bachs typed REST adapter, account persistence/onboarding API, one-shot
   checkout-start claim, durable unknown states, raw-body signature verification,
   scoped event correlation, fee-attribution gate, and audited staff recovery
@@ -40,8 +42,17 @@
   settings has a "Test payments" onboarding card (status, setup, continue,
   return re-sync); the tip form maps `PAYMENT_ACCOUNT_REQUIRED`,
   `PROVIDER_OUTCOME_UNKNOWN`, `DEPENDENCY_UNAVAILABLE`; labels say "Test
-  payments". Untested against real Bachs (no sandbox credentials yet) and no
-  browser/e2e run.
+  payments". Untested against real Bachs; no browser/e2e run.
+- Migration `0040_bachs_sandbox_recovery` follows merged `0039_tip_purpose`.
+  It combines the Bachs schema and issue-kind updates and preserves the custom
+  status-transition function. The superseded `0039_bachs_sandbox_payment_accounts`
+  and `0040_gorgeous_beast` migrations were removed; Drizzle generation reports
+  no schema changes.
+- Staging Compose forwards Bachs credentials to both API and worker and now
+  forwards `RELEASE_KIND` to the worker. Staging env/runbook and ADR status
+  match the test/preview-only provider gate. The Bachs webhook is documented
+  as provider-signature protected in OpenAPI/access-control docs, with a
+  regression test.
 - Bachs cannot find checkout creation by TipMe's operation reference. Ambiguous
   writes stay `UNKNOWN` and are never retried. Platform-paid fee preference is
   not proof: connected-account, unknown or missing fee evidence stays pending.
@@ -49,17 +60,17 @@
 - No Bachs credentials, provider API requests, real payment, deployment or
   production configuration change. Tests use fake transport; D-01–D-07 and
   written provider/legal approval remain blockers. Live payments stay disabled.
-- Verified this continuation: API/database/contracts/payments/domain build
-  passed (6/6 tasks); API/database/contracts typechecks passed; API tests 36/36,
-  contracts 10/10, database unit tests 3/3, provider-routing integration 3/3,
-  recovery API tests 4/4, recovery DB integration 2/2, affected lint and
-  `git diff --check` passed. Web route typegen succeeded, but full web
-  typecheck reports implicit-`any` errors in untouched pages; the edited issue
-  page has no reported error. No browser run, external Bachs request, or
-  deployment was made.
-- Next exact step: review the final migration/diff and staff recovery UX. Keep
-  the provider gate closed until explicit sandbox-test approval; live payments
-  remain blocked by D-01–D-07 and written provider/legal approval.
+- Verified after rebase: `pnpm build` (9/9), `pnpm typecheck` (15/15),
+  `pnpm lint` (15/15), `pnpm format:check`, root tooling tests (55/55),
+  staging deployment tests (12/12), API OpenAPI and generated-doc checks,
+  Drizzle generation (“No schema changes”), and `git diff --check` passed.
+  Full `pnpm test` reached the API suite but four Bachs recovery tests failed
+  because the shared local test database already has the old
+  `payment_account_status` enum; no reset was performed. No live-provider or
+  browser test was run.
+- Next exact step: finalize the diff, commit, push without force, and open a
+  draft PR. Keep the provider gate limited to protected preview/test; live
+  payments remain blocked by D-01–D-07 and written provider/legal approval.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 

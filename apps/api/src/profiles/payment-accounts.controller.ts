@@ -166,7 +166,8 @@ export class PaymentAccountsController {
       if (!accountReference)
         throw new CodedHttpException(503, 'PROVIDER_OUTCOME_UNKNOWN');
       try {
-        remoteAccount = await this.provider.getRecipientAccount(accountReference);
+        remoteAccount =
+          await this.provider.getRecipientAccount(accountReference);
       } catch (error) {
         this.logger.warn({
           event: 'payment_account.sync_failed',

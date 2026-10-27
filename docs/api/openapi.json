@@ -1655,6 +1655,108 @@
         ]
       }
     },
+    "/v1/me/payment-account": {
+      "get": {
+        "operationId": "PaymentAccounts.status",
+        "tags": [
+          "PaymentAccounts"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/payment-account/onboarding": {
+      "post": {
+        "operationId": "PaymentAccounts.onboard",
+        "tags": [
+          "PaymentAccounts"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "country": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$"
+                  },
+                  "entityType": {
+                    "type": "string",
+                    "enum": [
+                      "individual",
+                      "company"
+                    ]
+                  }
+                },
+                "required": [
+                  "country",
+                  "entityType"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "intents",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/phone": {
       "put": {
         "operationId": "Notifications.changePhone",
@@ -2652,6 +2754,162 @@
         "x-tipme-permission": "audit.view"
       }
     },
+    "/v1/ops/bachs/account-recovery": {
+      "post": {
+        "operationId": "OpsActions.recoverBachsAccount",
+        "tags": [
+          "OpsActions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "issueId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "accountReference": {
+                    "type": "string",
+                    "pattern": "^acct_[A-Za-z0-9]{1,60}$"
+                  },
+                  "dashboardVerified": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "reason",
+                  "issueId",
+                  "accountReference",
+                  "dashboardVerified"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.recheck"
+      }
+    },
+    "/v1/ops/bachs/checkout-recovery": {
+      "post": {
+        "operationId": "OpsActions.recoverBachsCheckout",
+        "tags": [
+          "OpsActions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "issueId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "attemptId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "checkoutId": {
+                    "type": "string",
+                    "pattern": "^chk_[A-Za-z0-9]{1,60}$"
+                  },
+                  "dashboardVerified": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "reason",
+                  "issueId",
+                  "attemptId",
+                  "checkoutId",
+                  "dashboardVerified"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.recheck"
+      }
+    },
     "/v1/ops/enrol": {
       "post": {
         "operationId": "OpsAccess.enrol",
@@ -2853,6 +3111,8 @@
                 "payment_mismatch",
                 "payment_conflict",
                 "payment_unresolved",
+                "payment_attempt_unresolved",
+                "payment_account_unresolved",
                 "payout_failed",
                 "payout_conflict",
                 "provider_event_conflict",
@@ -4780,6 +5040,38 @@
         "x-tipme-rate-limit": "analytics"
       }
     },
+    "/v1/webhooks/bachs": {
+      "post": {
+        "operationId": "BachsWebhook.receive",
+        "tags": [
+          "BachsWebhook",
+          "pretend only"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "provider-signature"
+      }
+    },
     "/v1/webhooks/mock": {
       "post": {
         "operationId": "MockWebhook.receive",
@@ -4881,6 +5173,9 @@
                   "PROFILE_NOT_FOUND",
                   "RATE_LIMITED",
                   "DEPENDENCY_UNAVAILABLE",
+                  "EMAIL_VERIFICATION_REQUIRED",
+                  "PAYMENT_ACCOUNT_REQUIRED",
+                  "PROVIDER_OUTCOME_UNKNOWN",
                   "INTERNAL_ERROR"
                 ]
               },

@@ -41,6 +41,7 @@ const OTHER_ACCESS: Record<string, string> = {
   StatusController: 'status-token',
   // The payment provider: a signature over the raw body, with a replay window.
   MockWebhookController: 'provider-signature',
+  BachsWebhookController: 'provider-signature',
   // The release check: a bearer token, and only on copies that say RELEASE_KIND=test.
   ReleaseRunsController: 'release-token',
 };

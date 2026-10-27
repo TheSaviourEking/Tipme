@@ -62,7 +62,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
 | `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
-| `payments.recheck` | POST `/v1/ops/recheck` |
+| `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/recheck` |
 | `private.view` | POST `/v1/ops/issues/{id}/reveal` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `search.view` | GET `/v1/ops/search` |
@@ -115,6 +115,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
+| POST | `/v1/webhooks/bachs` | – | – | yes |
 | POST | `/v1/webhooks/mock` | – | – | yes |
 
 #### The release check (bearer token; test copies only)
@@ -145,6 +146,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/me/notifications/read` | yes | – | – |
 | POST | `/v1/me/page` | yes | – | – |
 | PUT | `/v1/me/page/state` | yes | – | – |
+| GET | `/v1/me/payment-account` | n/a (read) | – | – |
+| POST | `/v1/me/payment-account/onboarding` | yes | `intents` | – |
 | PUT | `/v1/me/phone` | yes | `auth_verify` | – |
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
@@ -178,6 +181,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | Method | Path | Permission | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/v1/ops/audit` | `audit.view` | n/a (read) | – | – |
+| POST | `/v1/ops/bachs/account-recovery` | `payments.recheck` | yes | – | – |
+| POST | `/v1/ops/bachs/checkout-recovery` | `payments.recheck` | yes | – | – |
 | GET | `/v1/ops/issues` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/issues/{id}` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/issues/{id}/notes` | `issues.view` | yes | – | – |

@@ -44,11 +44,14 @@ Fill in `/srv/tipme/staging.env`:
 - **Secrets**, using exactly these recipes (`deploy.sh` refuses a password that would break the database address):
   - `POSTGRES_PASSWORD`, `POSTGRES_RUNTIME_PASSWORD`, `POSTGRES_MIGRATOR_PASSWORD` and `POSTGRES_BACKUP_PASSWORD`: four different values from `openssl rand -hex 32`;
   - `OPS_TOTP_KEY` and `BACKUP_KEY`: `openssl rand -base64 32` (exactly 32 bytes);
-  - every other secret: `openssl rand -base64 48`.
+  - other TipMe-managed secrets: `openssl rand -base64 48`.
+- **Bachs sandbox credentials** are provider-issued, not generated: use only an `sk_sandbox_` API key and the webhook signing secret configured for the sandbox endpoint. Keep `BACHS_PREVIOUS_WEBHOOK_SECRET` empty except during signing-secret rotation.
 - Keep the Postgres passwords distinct. The API and worker receive only `POSTGRES_RUNTIME_PASSWORD`; migrations receive `POSTGRES_MIGRATOR_PASSWORD`; scheduled backups receive `POSTGRES_BACKUP_PASSWORD` (read-only plus replication); only the one-shot restore service receives the `POSTGRES_PASSWORD` admin credential.
 - For an existing database volume, the deploy script provisions these roles and moves existing application objects to the migration owner before taking its first backup, then grants the backup role access to newly migrated objects. Do not manually reset the volume or change `POSTGRES_PASSWORD`.
 - **`BACKUP_KEY`:** save a copy off the server, in your password manager. Without it no backup can be read.
 - **`RELEASE_KIND=test`:** this copy runs the full release check.
+
+To test Bachs checkout in this isolated staging copy, set `PAYMENT_PROVIDER=bachs-sandbox` and populate `BACHS_SANDBOX_API_KEY` and `BACHS_WEBHOOK_SECRET` in `/srv/tipme/staging.env`, then redeploy. The staging Compose file forwards these values to both the API and worker. Keep `DEPLOYMENT_MODE=preview`, the shared `PREVIEW_PASSWORD`, and `PAYMENTS_LIVE_ENABLED=false`; never put Bachs credentials in the web app or configure a live key. The default remains `PAYMENT_PROVIDER=mock`.
 
 The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence the `chown` above; `deploy.sh` checks it).
 

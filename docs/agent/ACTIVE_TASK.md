@@ -2,7 +2,7 @@
 
 - Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 already merged and is not being reused.
 - Scope: recipient onboarding guidance on the homepage/dashboard; business coming-soon and voluntary mailto interest path; navbar/copy cleanup; optional structured tip purpose through contract, API, database migration, checkout form and recipient detail; `/for-businesses` layout alignment.
-- Migration `0039_tip_purpose` is additive and has not been applied to any database. The separate Bachs branch also currently contains migration 0039; coordinate/resequence before both branches are merged.
+- Migration `0039_tip_purpose` is additive and was not applied by this work. The Bachs branch has since been rebased onto its merge and now follows it with `0040_bachs_sandbox_recovery`; the migration-number collision is resolved.
 - Earlier local checks passed: `pnpm test` (54 root tests and all 18 package tasks), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), `pnpm format:check`, and `git diff --check`.
 - PR CI run `40424132431` exposed a stale OpenAPI file, two outdated onboarding assertions, and four desktop/mobile screenshot mismatches. Follow-up commit `94ac1ab` regenerated the OpenAPI document, corrected the assertions, and added failure-only PNG diagnostics with three-day retention.
 - CI run `40426539167`: integration, security, static, Vercel, dashboard and welcome checks passed; E2E had only four visual failures. The expected/actual/diff images were reviewed at desktop and mobile. Differences were the intended purpose selector and approved navigation/footer/test-mode copy; the profile composition remained readable with no overlap. All eight Darwin/Linux visual baselines have now been refreshed.
@@ -13,9 +13,10 @@
 # Current task — Bachs sandbox integration safety and routing (26 October 2026)
 
 - Branch/worktree: `feat/provider-integrations-bachs` /
-  `.worktrees/provider-integrations-bachs`, based on `origin/dev` at `1738947`
-  with Task 0 committed as `32fd687`. The separate documentation worktree
-  remains untouched.
+  `.worktrees/provider-integrations-bachs`, rebased onto `origin/dev` at
+  `da0c62a`. The rebase completed without remaining conflicts; commits
+  `0084177` and `788bd28` contain the accepted sandbox-funds-flow ADR and
+  implementation. No PR has been opened yet.
 - The typed Bachs REST adapter, recipient-account persistence, one-shot
   checkout-start claim, durable `UNKNOWN` outcome, signed webhook correlation,
   API account/onboarding/webhook routes, and audited staff recovery workflows
@@ -34,6 +35,14 @@
   Production still rejects it, credentials need `sk_sandbox_`, and
   `PAYMENTS_LIVE_ENABLED` remains literal `false`. Checkout UI and recipient
   onboarding card were updated; see HANDOFF.md.
+- Migration `0040_bachs_sandbox_recovery` now follows merged
+  `0039_tip_purpose`, combining the Bachs schema and issue-kind changes while
+  preserving the custom transition trigger. Superseded Bachs migration files
+  were removed; Drizzle generation reports no schema drift.
+- Staging Compose now forwards Bachs sandbox credentials to both API and
+  worker, and forwards `RELEASE_KIND` to the worker. The staging env example,
+  runbook, ADR, OpenAPI/access-control docs, and webhook-signature regression
+  test were reconciled.
 - Bachs has no checkout lookup by TipMe reference/idempotency key and its
   successful idempotency cache is limited to 24 hours. Unknown writes are never
   retried. Bachs payouts remain unsupported; recipient onboarding UI now exists
@@ -41,23 +50,19 @@
 - Live payments remain blocked by D-01 through D-07, written provider approval,
   legal/risk review, and reconciliation of Bachs direct-charge
   merchant-of-record behavior with the proposed custodial model in ADR-0006.
-- No Bachs credentials, provider requests, real payments, production changes,
-  commits beyond Task 0, or PRs were made. Adapter/recovery tests use fake
-  provider responses. Resend/auth work is outside this task; D-11 remains open.
-- Verified in this continuation:
-  - API/database/contracts/payments/domain build passed (6/6 tasks). API,
-    database and contracts typechecks passed. Web route typegen passed, but the
-    full web typecheck failed on implicit-`any` errors in unrelated pages.
-  - API suite passed (36/36), contracts tests (10/10), database unit tests
-    (3/3), provider-routing DB regression (3/3), Bachs recovery API tests (4/4)
-    and focused recovery DB integration tests (2/2), using local `tipme_test`.
-  - API/database/contracts lint, focused web ESLint, Prettier and
-    `git diff --check` passed.
-  - The edited ops issue page had no reported type error. No browser run,
-    external Bachs call or preview deployment.
-- Next exact step: inspect the final migration/diff and review the recovery UX.
-  Keep provider selection and live payments disabled pending separate explicit
-  approval.
+- No Bachs credentials were read, no provider API call/payment was made, and no
+  deployment or production configuration was changed. Adapter tests use fake
+  transport. Resend/auth work is outside this task; D-11 remains open.
+- Verified after the rebase: `pnpm build` (9/9), `pnpm typecheck` (15/15),
+  `pnpm lint` (15/15), `pnpm format:check`, root tooling tests (55/55),
+  staging deployment tests (12/12), API OpenAPI check, generated-doc check,
+  Drizzle generation (“No schema changes”), and `git diff --check` passed.
+  Full `pnpm test` reached the API suite but four Bachs recovery tests failed
+  while reapplying migrations to the shared local test DB: its old Bachs
+  `payment_account_status` enum already exists. The DB was not reset or changed.
+  No live-provider or browser test was run.
+- Next exact step: finalize the diff, commit, push without force, and open a
+  draft PR. Keep live payments disabled.
 
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
