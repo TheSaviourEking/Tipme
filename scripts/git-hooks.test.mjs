@@ -57,3 +57,15 @@ test('outside a git checkout (an exported tarball), installing is a no-op', () =
     rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('the prepare script succeeds where scripts/ is not copied (the Docker build installs from package.json files alone)', () => {
+  const { scripts } = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+  );
+  const folder = mkdtempSync(join(tmpdir(), 'tipme-docker-'));
+  try {
+    execFileSync('sh', ['-c', scripts.prepare], { cwd: folder, stdio: 'pipe' });
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
