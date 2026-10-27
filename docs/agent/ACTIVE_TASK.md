@@ -1,3 +1,10 @@
+# Current task — faster CI (27 October 2026)
+
+- Branch/worktree: `ci/faster` / `.worktrees/ci-faster`, from `origin/dev` at `c3e5952`.
+- Before: about 7 minutes per push, set by `integration` (70 files one at a time, 303 s) and `e2e` (88 tests on one worker, 3.9 min) on 2-core runners (private repository).
+- Integration files now run in parallel: `prepareTestTemplate` migrates `tipme_it` once, and with `TIPME_TEST_TEMPLATE` set each test process works in its own copy (`openTestDatabase`); `scripts/test-integration.mjs` runs them (`TEST_CONCURRENCY`, `TEST_SHARD`) and drops the copies. CI splits integration and e2e into three shards each, moves the load test and the OpenAPI check into their own jobs, reuses Turborepo results between runs, and skips integration, load and e2e on documentation-only pull requests.
+- Verified locally: the new database and runner tests (seen failing first), script tests 67/67, lint and typecheck; the whole integration suite at 4 files in parallel in 142 s and 126 s (368 pass both times; the 12 backup tests fail only on macOS, where Docker cannot reach 127.0.0.1, as before); no copies left behind.
+
 # Current task — steadier CI (27 October 2026)
 
 - Branch/worktree: `ci/steady-builds` / `.worktrees/steady-builds`, from `origin/dev` at `c7e6612`.
