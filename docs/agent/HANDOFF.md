@@ -6,7 +6,7 @@
 - Validation passed: `pnpm test` (54 root tests; all 18 package tasks, including web 55/API 31/contracts 9/database unit 3), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), `pnpm format:check`, `git diff --check`. `pnpm exec playwright test --list tests/e2e/checkout.spec.ts` discovered 21 tests.
 - Visual check: business page reviewed at desktop and 400px; no horizontal overflow. No production/staging deployment or real payment.
 - Migration coordination: `.worktrees/provider-integrations-bachs` also has a migration numbered 0039. If both PRs are to land, rebase/regenerate one migration and its snapshot/journal after choosing merge order.
-- Next exact step: commit and push this branch, open the PR against `dev`, then monitor CI. Keep the separate Bachs and physical-interface worktrees untouched.
+- PR #23 is open against `dev`; CI run 40423966228 was pending when last checked. Next: monitor CI/preview and coordinate migration numbering with Bachs before merge. Keep the separate Bachs and physical-interface worktrees untouched.
 
 # Current handoff — PR #19 Linux visual baselines (26 October 2026)
 
