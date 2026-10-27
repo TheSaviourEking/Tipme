@@ -1029,3 +1029,22 @@ test('an open or expired checkout is never reported as collected', async () => {
     assert.equal(answer.collected, undefined, status);
   }
 });
+
+test("a Bachs refusal keeps Bachs' error code from either response shape", async () => {
+  for (const body of [
+    {
+      detail: 'success_url must be a publicly accessible URL',
+      error_code: 'VALIDATION_ERROR',
+    },
+    { error: { code: 'VALIDATION_ERROR' } },
+  ]) {
+    const provider = makeProvider(async () => jsonResponse(body, 400));
+    await assert.rejects(
+      provider.getCheckoutUrl('acct_123abc:chk_123abc'),
+      (error) =>
+        error.name === 'BachsApiError' &&
+        error.statusCode === 400 &&
+        error.providerCode === 'VALIDATION_ERROR',
+    );
+  }
+});

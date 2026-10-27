@@ -186,3 +186,27 @@ Bachs refund/dispute events are currently dropped as `ignored`. Until refunds an
 `acct_`/`chk_` prefixes are still assumed in `packages/contracts/src/ops.ts`, `packages/database/src/operations/attempts.ts` and the staff issue page. Bachs documents identifiers as opaque.
 
 - [ ] Write failing tests with identifiers lacking those prefixes; replace the prefix patterns with the adapter's bounded opaque-identifier rule; re-run; commit only Task 9 files.
+
+### Task 10: Keep Bachs' error code
+
+A real sandbox refusal came back as HTTP 400 `{"detail": …, "error_code": "VALIDATION_ERROR"}`; the client read only `error.code`, so logs showed the status alone.
+
+- [ ] Failing test: a 400 with a top-level `error_code` yields `BachsApiError.providerCode`. Implement; commit.
+
+### Task 11: Refuse a localhost web origin with the Bachs sandbox
+
+Bachs rejects localhost success URLs, so every checkout would fail. The API should refuse to start instead.
+
+- [ ] Failing config test; implement; commit.
+
+### Task 12: Confirm a Bachs payment as soon as its webhook arrives
+
+Only the worker confirmed Bachs payments (every 60 s, attempts at least 2 minutes old), so confirmation came 2–3 minutes after paying and the receipt page had already stopped checking. Supersedes the Task 7 ruling on immediate reconciliation.
+
+- [ ] Failing test: a payment webhook for a known attempt triggers an authoritative read (with the expected share) and records the tip as paid at once; a failed read leaves it pending for the worker. Implement; commit.
+
+### Task 13: The receipt page keeps checking
+
+The receipt page gave up after 2 minutes and only "Try again" showed the paid tip.
+
+- [ ] Failing unit test for the check schedule: fast at first, then every 15 s, giving up only after 15 minutes. Implement; commit.

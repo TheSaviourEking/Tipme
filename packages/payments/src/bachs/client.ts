@@ -144,8 +144,12 @@ export class BachsApiClient {
   private getProviderCode(responseText: string): string | undefined {
     try {
       const payload: unknown = JSON.parse(responseText);
-      if (!isRecord(payload) || !isRecord(payload['error'])) return undefined;
-      const code = payload['error']['code'];
+      if (!isRecord(payload)) return undefined;
+      // Bachs answers `{ "detail": …, "error_code": … }`; `{ "error": { "code" } }` is also accepted.
+      // Only the code is kept: the detail text can echo request values.
+      const code = isRecord(payload['error'])
+        ? payload['error']['code']
+        : payload['error_code'];
       return typeof code === 'string' ? code.slice(0, 80) : undefined;
     } catch {
       return undefined;
