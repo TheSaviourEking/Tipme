@@ -49,9 +49,8 @@ async function tip(
   await page.goto(`/@${handle}?src=qr`);
   await expect(page).toHaveURL(new RegExp(`/@${handle}$`));
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(
-    page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
-  ).toBeVisible();
+  // The tip summary shows only what the supporter pays.
+  await expect(page.getByText(/^You pay NGN [\d,]+\.\d\d$/)).toBeVisible();
   if (message)
     await page.getByLabel('Personal message (optional)').fill(message);
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
