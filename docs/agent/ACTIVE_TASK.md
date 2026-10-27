@@ -1,3 +1,10 @@
+# Current task — steadier CI (27 October 2026)
+
+- Branch/worktree: `ci/steady-builds` / `.worktrees/steady-builds`, from `origin/dev` at `c7e6612`.
+- Fonts: Manrope and DM Serif Display now ship in `apps/web/src/fonts/` (OFL, Latin and Latin Extended, WOFF2) via `next/font/local`; CI run `40548134712` had failed when the Google Fonts download failed during the build.
+- Load test: missed budgets (k6 exit 99) get one more run before failing (`withOneRetry` in `scripts/load-test.mjs`); the same run later missed the dashboard and profile budgets on a slow runner while the identical code measured 13 ms elsewhere.
+- Verified: typography test and retry tests seen failing first; Turbopack production build passes with both fonts bundled and no Google URL in the output; the real load test passes, and with budgets scaled to 0.001 it retries once and fails with exit 99.
+
 # Current task — Bachs gap remediation (27 October 2026)
 
 - PR #24 is open and ready for review against `dev`. CI run `40500650198`
