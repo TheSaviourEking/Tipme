@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Fast checks before every push: formatting, lint, types and unit tests (a minute or two once
+# builds are cached). The full e2e suite takes several minutes and needs the local stack, so it
+# runs only on request: TIPME_PREPUSH_E2E=1 git push. Skip everything once: git push --no-verify.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+step() { printf '\npre-push: %s\n' "$1"; }
+
+step 'formatting'
+pnpm format:check
+step 'lint'
+pnpm lint
+step 'types'
+pnpm typecheck
+step 'unit tests'
+node --test scripts/*.test.mjs
+# `pnpm test` would rebuild the web app and break a running `next start`; test it on its own.
+pnpm exec turbo run test --filter='!@tipme/web'
+pnpm --filter @tipme/web test
+
+if [ "${TIPME_PREPUSH_E2E:-}" = "1" ]; then
+  step 'end-to-end (requested)'
+  pnpm test:e2e
+fi
+printf '\npre-push: all checks passed.\n'
