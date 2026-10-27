@@ -5,6 +5,20 @@
 - Load test: missed budgets (k6 exit 99) get one more run before failing (`withOneRetry` in `scripts/load-test.mjs`); the same run later missed the dashboard and profile budgets on a slow runner while the identical code measured 13 ms elsewhere.
 - Verified: typography test and retry tests seen failing first; Turbopack production build passes with both fonts bundled and no Google URL in the output; the real load test passes, and with budgets scaled to 0.001 it retries once and fails with exit 99.
 
+# Current task — public page tip readiness (27 October 2026)
+
+- Branch/worktree: `feat/public-tip-readiness` / `.worktrees/public-readiness`, from `origin/dev` at `c7e6612`. Slice 2 of 3 of the owner-experience work (slice 1 is PR #29).
+- `PublicProfile.acceptingTips` (optional; absent means true): false while new tips need the owner's own Bachs account and it isn't ready, by the same rule checkout applies (`getReadyPaymentAccount`). The profile shows "<Name> can't receive tips just yet." in place of the form.
+- Cache: the owner's own setup refresh revalidates the public page at once; webhook and staff updates rely on the page cache's 30-second backstop.
+- No migration. Verified: database and API readiness tests (seen failing first), web unit 56/56, API unit 36/36, typecheck 15/15, lint 15/15, OpenAPI up to date, full integration on a throwaway PostgreSQL (127.0.0.1:5434), and a browser check at 1440 and 390 px against a stand-in API (panel shown, no form, no overflow).
+
+# Current task — owner attention (27 October 2026)
+
+- Branch/worktree: `feat/owner-attention` / `.worktrees/owner-attention`, from `origin/dev` at `c7e6612`.
+- Scope (slice 1 of 3): a "needs your attention" notice on every dashboard page plus a dot on the tab that leads to the fix (`apps/web/src/lib/owner-attention.ts`); the first-day checklist shows the real Bachs payment step; withdraw says up front when the balance can't be paid out (`DashboardSummary.withdrawalsAvailable`, the same rule `requestWithdrawal` enforces).
+- No migration. Verified: web unit 64/64, API unit 36/36, typecheck 15/15, lint 15/15, OpenAPI up to date, integration 366/366 on a throwaway PostgreSQL (127.0.0.1:5434, database `tipme_oa`), and a browser check at 1440 and 390 px (notice, tab dot, fix link, notice clears, no overflow). The new accounts.spec E2E steps were not run locally; CI runs them.
+- Next slices: the public page tells supporters before they fill the form; "people tried to tip you" count.
+
 # Current task — Bachs gap remediation (27 October 2026)
 
 - PR #24 is open and ready for review against `dev`. CI run `40500650198`

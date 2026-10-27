@@ -362,6 +362,7 @@ test('refreshing onboarding stores what Bachs reports and blocks recipient-paid 
       },
     },
     logger,
+    { revalidate() {} },
   );
   const result = await accounts.onboard(
     { userId: '00000000-0000-7000-8000-000000007b11' },

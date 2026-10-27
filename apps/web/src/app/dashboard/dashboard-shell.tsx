@@ -1,11 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import type { MyProfile } from '@tipme/contracts';
+import { useCallback, useEffect, useState } from 'react';
+import type { BachsPaymentAccountStatus, MyProfile } from '@tipme/contracts';
 import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
+import { ownerAttention } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
 const links = [
@@ -32,6 +33,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     });
   }, [router, pathname]);
 
+  // Read on every page change too, so a finished setup clears its notice on the next click.
+  const [payments, setPayments] = useState<
+    BachsPaymentAccountStatus | null | undefined
+  >(undefined);
+  const refreshAttention = useCallback(() => {
+    void apiFetch<BachsPaymentAccountStatus>('/v1/me/payment-account').then(
+      (result) => setPayments(result.ok ? result.data : null),
+    );
+  }, []);
+  useEffect(refreshAttention, [refreshAttention, pathname]);
+  const attention =
+    profile && payments !== undefined
+      ? ownerAttention({ profile, payments })
+      : null;
+  const needsFix = new Set(attention?.map((item) => item.navHref));
+
   const signOut = async () => {
     await apiFetch('/v1/auth/sign-out', { method: 'POST', body: {} });
     router.replace('/sign-in');
@@ -51,6 +68,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                   aria-current={pathname === link.href ? 'page' : undefined}
                 >
                   {link.label}
+                  {needsFix.has(link.href) && (
+                    <span className="dashboard-nav__dot">
+                      <span className="sr-only"> (needs your attention)</span>
+                    </span>
+                  )}
                 </Link>
               ))}
             </nav>
@@ -77,8 +99,46 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             Questions? Reply to any TipMe email or contact support.
           </Notice>
         )}
+        {/* Not on the welcome, which walks through the same steps itself. */}
+        {attention &&
+          attention.length > 0 &&
+          pathname !== '/dashboard/welcome' && (
+            <section
+              className="owner-attention"
+              aria-labelledby="owner-attention-title"
+            >
+              <h2 id="owner-attention-title" className="sr-only">
+                Needs your attention
+              </h2>
+              {attention.map((item) => (
+                <Notice key={item.id} tone="neutral" title={item.title}>
+                  {item.body}
+                  {item.action && (
+                    <>
+                      {' '}
+                      <Link
+                        className="tm-button tm-button--primary owner-attention__action"
+                        href={item.action.href}
+                      >
+                        {item.action.label}
+                      </Link>
+                    </>
+                  )}
+                </Notice>
+              ))}
+            </section>
+          )}
         {profile ? (
-          <RecipientContext.Provider value={{ profile, setProfile }}>
+          <RecipientContext.Provider
+            value={{
+              profile,
+              setProfile,
+              attention,
+              refreshAttention,
+              paymentsNeedSetup:
+                payments === undefined ? null : Boolean(payments?.enabled),
+            }}
+          >
             {children}
           </RecipientContext.Provider>
         ) : (

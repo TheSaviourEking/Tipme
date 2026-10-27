@@ -36,6 +36,7 @@ import {
   recentActivity,
   reportMessage,
   requestWithdrawal,
+  withdrawalsAvailable,
 } from '@tipme/database';
 import type { MockProvider } from '@tipme/payments';
 import { z } from 'zod';
@@ -72,13 +73,15 @@ export class DashboardController {
   async summary(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<DashboardSummary>> {
-    return {
-      data: await dashboardSummary(
-        this.database.db,
-        await this.profile(auth),
-        new Date(),
-      ),
-    };
+    const profileId = await this.profile(auth);
+    const [summary, available] = await Promise.all([
+      dashboardSummary(this.database.db, profileId, new Date()),
+      withdrawalsAvailable(this.database.db, {
+        profileId,
+        provider: this.provider.name,
+      }),
+    ]);
+    return { data: { ...summary, withdrawalsAvailable: available } };
   }
 
   @Get('tips')

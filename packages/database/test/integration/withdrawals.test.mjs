@@ -12,6 +12,7 @@ import {
   reconcilePayouts,
   recordProviderEvent,
   requestWithdrawal,
+  withdrawalsAvailable,
 } from '../../dist/index.js';
 import { useDatabase } from './helpers.mjs';
 
@@ -19,7 +20,7 @@ const { createMockProvider } = await import('../../../payments/dist/index.js');
 const { Redis } = createRequire(
   new URL('../../../payments/package.json', import.meta.url),
 )('ioredis');
-const [, TOBI] = DEMO_PROFILES;
+const [ADA, TOBI] = DEMO_PROFILES;
 
 test('withdrawals', async (t) => {
   const database = await useDatabase(t);
@@ -316,6 +317,11 @@ test('money collected by a provider without payouts can never be withdrawn throu
   const database = await useDatabase(t);
   const { db } = database;
   await database.fresh();
+  // The dashboard asks the same question before the owner types an amount.
+  assert.equal(
+    await withdrawalsAvailable(db, { profileId: TOBI.id, provider: 'mock' }),
+    true,
+  );
   const quote = await createQuote(db, {
     handle: 'tobi',
     tipMinor: 200000n,
@@ -365,5 +371,14 @@ test('money collected by a provider without payouts can never be withdrawn throu
     (await database.pool.query('SELECT count(*)::int AS n FROM payouts'))
       .rows[0].n,
     0,
+  );
+  assert.equal(
+    await withdrawalsAvailable(db, { profileId: TOBI.id, provider: 'mock' }),
+    false,
+  );
+  // Only the profile that holds such money is affected.
+  assert.equal(
+    await withdrawalsAvailable(db, { profileId: ADA.id, provider: 'mock' }),
+    true,
   );
 });

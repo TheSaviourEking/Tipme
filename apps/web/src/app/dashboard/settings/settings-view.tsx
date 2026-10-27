@@ -37,7 +37,7 @@ function PageState() {
     else setError('We couldn’t change that. Please try again.');
   };
   return (
-    <Card className="settings-section">
+    <Card id="page" className="settings-section">
       <h2>Your page</h2>
       <p
         role="status"
@@ -738,7 +738,7 @@ function ContactDetails() {
   };
 
   return (
-    <Card className="settings-section">
+    <Card id="contact" className="settings-section">
       <h2>Phone and email</h2>
       <p>
         Phone: <strong>{profile.phone}</strong>
