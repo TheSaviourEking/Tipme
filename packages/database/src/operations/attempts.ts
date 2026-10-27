@@ -15,6 +15,10 @@ import { activeTraceId } from './ids.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordTransition } from './transitions.js';
 import { recordAudit } from './audit.js';
+import {
+  isScopedProviderReference,
+  OPAQUE_PROVIDER_ID,
+} from './provider-ids.js';
 
 /** `already`: same reference recorded before; `conflict`: a different reference (nothing changed). */
 export type InitiationResult =
@@ -484,11 +488,9 @@ export function attachUnknownBachsCheckoutForOperations(
 ): Promise<boolean> {
   const now = input.now ?? new Date();
   if (
-    !/^acct_[A-Za-z0-9]{1,60}:chk_[A-Za-z0-9]{1,60}$/.test(
-      input.providerReference,
-    ) ||
+    !isScopedProviderReference(input.providerReference) ||
     !input.providerReference.startsWith(`${input.accountReference}:`) ||
-    !/^acct_[A-Za-z0-9]{1,60}$/.test(input.accountReference) ||
+    !OPAQUE_PROVIDER_ID.test(input.accountReference) ||
     input.amountMinor <= 0n ||
     !/^[A-Z]{3}$/.test(input.currency) ||
     input.reason.trim().length < 10

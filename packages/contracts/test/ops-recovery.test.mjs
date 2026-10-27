@@ -54,3 +54,39 @@ test('operator recovery requests require a dashboard attestation and valid scope
     false,
   );
 });
+
+test('Bachs identifiers are opaque: no prefix is required, separators and spaces are refused', () => {
+  const base = {
+    issueId: randomUUID(),
+    attemptId: randomUUID(),
+    dashboardVerified: true,
+    reason,
+  };
+  for (const checkoutId of ['legacy-checkout-123', 'cs.Opaque_9'])
+    assert.equal(
+      opsBachsCheckoutRecoverySchema.safeParse({ ...base, checkoutId }).success,
+      true,
+      checkoutId,
+    );
+  assert.equal(
+    opsBachsAccountRecoverySchema.safeParse({
+      issueId: base.issueId,
+      accountReference: 'legacy-account-123',
+      dashboardVerified: true,
+      reason,
+    }).success,
+    true,
+  );
+  for (const checkoutId of [
+    '',
+    'acct:chk',
+    'has space',
+    'a/b',
+    'x'.repeat(201),
+  ])
+    assert.equal(
+      opsBachsCheckoutRecoverySchema.safeParse({ ...base, checkoutId }).success,
+      false,
+      JSON.stringify(checkoutId),
+    );
+});

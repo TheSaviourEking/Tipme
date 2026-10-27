@@ -26,6 +26,10 @@ import {
 } from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
+// Bachs IDs are opaque (no fixed prefix); whitespace, ':' and '/' are refused. The browser
+// compiles this with the `v` flag, so '/' is escaped.
+const BACHS_ID_PATTERN = String.raw`[^\s:\/]{1,200}`;
+
 type Evidence = OpsIssueEvidence & { traceUrl: string | null };
 
 const RECHECK: Record<OpsRecheckOutcome, string> = {
@@ -385,7 +389,7 @@ export default function IssuePage() {
             <BachsRecoveryAction
               valueLabel="Bachs checkout ID"
               valueName="checkoutId"
-              pattern="chk_[A-Za-z0-9]{1,60}"
+              pattern={BACHS_ID_PATTERN}
               hint="The ID must be from Bachs Dashboard, not a URL or payment reference."
               confirmation="I found this checkout in Bachs Dashboard and checked that it belongs to this TipMe payment."
               submitLabel="Verify and recover checkout"
@@ -442,7 +446,7 @@ export default function IssuePage() {
               <BachsRecoveryAction
                 valueLabel="Bachs account ID"
                 valueName="accountReference"
-                pattern="acct_[A-Za-z0-9]{1,60}"
+                pattern={BACHS_ID_PATTERN}
                 hint="Use the account ID shown in Bachs Dashboard."
                 confirmation="I confirmed in Bachs Dashboard that this account belongs to the recipient’s verified TipMe email and that platform fees are configured correctly."
                 submitLabel="Verify and recover account"

@@ -4,6 +4,7 @@ import { issues, paymentAccounts, profiles, users } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { recordAudit } from './audit.js';
+import { OPAQUE_PROVIDER_ID } from './provider-ids.js';
 
 export type PaymentAccountStatus =
   (typeof paymentAccounts.$inferSelect)['status'];
@@ -266,7 +267,7 @@ export function recoverUnknownPaymentAccount(
 ): Promise<PaymentAccountSummary> {
   const now = input.now ?? new Date();
   if (
-    !/^acct_[A-Za-z0-9]{1,60}$/.test(input.providerAccountReference) ||
+    !OPAQUE_PROVIDER_ID.test(input.providerAccountReference) ||
     input.requirementsDue.length > 50 ||
     input.requirementsDue.some(
       (requirement) =>

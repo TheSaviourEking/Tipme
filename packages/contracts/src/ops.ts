@@ -255,12 +255,20 @@ export type OpsRecheckRequest = z.infer<typeof opsRecheckSchema>;
 export type OpsRecheckOutcome =
   'applied' | 'unchanged' | 'unresolved' | 'error' | 'not_pending';
 
+/**
+ * A Bachs ID as staff copy it from the dashboard. Bachs documents IDs as opaque, so no prefix is
+ * required; whitespace, `/` and `:` are refused (TipMe scopes checkouts as `<account>:<checkout>`).
+ */
+const providerIdSchema = z
+  .string()
+  .regex(/^[^\s:/\u0000-\u001f\u007f]{1,200}$/);
+
 /** Attach a dashboard-found checkout ID only after the server verifies its scoped status. */
 export const opsBachsCheckoutRecoverySchema = opsReasonSchema
   .extend({
     issueId: z.uuid(),
     attemptId: z.uuid(),
-    checkoutId: z.string().regex(/^chk_[A-Za-z0-9]{1,60}$/),
+    checkoutId: providerIdSchema,
     dashboardVerified: z.literal(true),
   })
   .strict();
@@ -272,7 +280,7 @@ export type OpsBachsCheckoutRecoveryRequest = z.infer<
 export const opsBachsAccountRecoverySchema = opsReasonSchema
   .extend({
     issueId: z.uuid(),
-    accountReference: z.string().regex(/^acct_[A-Za-z0-9]{1,60}$/),
+    accountReference: providerIdSchema,
     dashboardVerified: z.literal(true),
   })
   .strict();

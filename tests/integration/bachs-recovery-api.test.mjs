@@ -31,7 +31,7 @@ async function databaseFor(t) {
   return database;
 }
 
-async function unknownCheckout(database) {
+async function unknownCheckout(database, accountReference = 'acct_ada123') {
   await beginPaymentAccountCreation(database.db, {
     profileId: ADA,
     provider: 'bachs',
@@ -41,7 +41,7 @@ async function unknownCheckout(database) {
     profileId: ADA,
     provider: 'bachs',
     environment: 'sandbox',
-    providerAccountReference: 'acct_ada123',
+    providerAccountReference: accountReference,
     status: 'ACTIVE',
     chargesEnabled: true,
     payoutsEnabled: false,
@@ -379,4 +379,34 @@ test('refreshing onboarding stores what Bachs reports and blocks recipient-paid 
     charges_enabled: false,
     fee_collector: 'connected_account',
   });
+});
+
+test('checkout recovery works with Bachs identifiers that have no acct_ or chk_ prefix', async (t) => {
+  const database = await databaseFor(t);
+  const { attemptId, issueId, quote } = await unknownCheckout(
+    database,
+    'legacy-account-ada',
+  );
+  const result = await controller(database.db, {
+    async verifyTransaction(reference) {
+      assert.equal(reference, 'legacy-account-ada:legacy-checkout-1');
+      return {
+        status: 'succeeded',
+        amountMinor: BigInt(quote.payer_total_minor),
+        currency: quote.currency,
+        feeMinor: 0n,
+        feePaidBy: 'platform',
+      };
+    },
+  }).recoverBachsCheckout(
+    { userId: staffUserId },
+    {
+      issueId,
+      attemptId,
+      checkoutId: 'legacy-checkout-1',
+      dashboardVerified: true,
+      reason: 'Found the checkout and confirmed its account',
+    },
+  );
+  assert.equal(result.data.outcome, 'attached');
 });
