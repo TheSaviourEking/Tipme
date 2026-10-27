@@ -1,4 +1,26 @@
-# Current handoff — recipient onboarding, business page and tip purpose (27 October 2026)
+# Current handoff — PR #24 payer-total E2E correction (27 October 2026)
+
+- Branch/worktree: `feat/provider-integrations-bachs` at
+  `.worktrees/provider-integrations-bachs`; PR #24 is open and ready against
+  `dev`.
+- CI run `40500650198` passed static, security and integration. E2E had 17
+  failures with one root cause: tests still required the intentionally removed
+  “recipient receives … after fees” sentence before continuing through a tip.
+- Updated only the browser-test contract: the shared helper and direct specs
+  wait for the concise server-quoted “You pay …” total. The pricing test still
+  verifies exact 8% and fee-free platform/net amounts from the quote response,
+  without exposing them in the supporter UI.
+- Passed after the correction: `pnpm typecheck` (15/15), `pnpm lint` (15/15),
+  `pnpm test` (55/55 root; 18/18 workspace tasks), Playwright discovery (88
+  tests), targeted Prettier and `git diff --check`.
+- Full local E2E did not run: port 4100 is owned by the active
+  `.worktrees/physical-interface` API and was not stopped. An earlier attempt
+  found shared `tipme_test` partially migrated; it was not reset or modified.
+  A disposable PostgreSQL instance initialized correctly, but Playwright still
+  requires the occupied fixed API port. Next exact step: commit/push these test
+  corrections, then require the clean PR E2E runner to pass before merge.
+
+# Previous handoff — recipient onboarding, business page and tip purpose (27 October 2026)
 
 - Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 was already merged; these follow-up changes are separate.
 - Scope includes homepage/dashboard recipient onboarding, business coming-soon and mailto interest form, navbar and test-mode copy, optional structured tip purpose end-to-end, and the centred `/for-businesses` layout.

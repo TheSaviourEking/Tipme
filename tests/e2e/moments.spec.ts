@@ -71,7 +71,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   ).toHaveAttribute('aria-pressed', 'true');
   await expectAccessible(visitor);
   await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(visitor.getByText(/receives NGN/)).toBeVisible();
+  await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible();
   await visitor.getByRole('button', { name: /^Tip NGN/ }).click();
   await visitor.waitForURL(/\/mock-checkout\//);
 

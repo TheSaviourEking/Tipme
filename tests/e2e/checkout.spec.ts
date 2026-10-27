@@ -209,9 +209,7 @@ test('a double tap on Tip creates one tip', async ({ page }) => {
   });
   await page.goto('/@tobi');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(
-    page.getByText(/^Tobi receives NGN [\d,]+\.\d\d after fees$/),
-  ).toBeVisible();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await page.getByRole('button', { name: /^Tip NGN/ }).dblclick();
   await page.waitForURL(/\/mock-checkout\//);
   expect(keys.size).toBe(1);
@@ -252,7 +250,7 @@ test('status and pretend provider pages reflow at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto('/@tobi');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(page.getByText(/receives NGN/)).toBeVisible();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   expect(await fitsViewport(page)).toBe(true);
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
@@ -297,7 +295,7 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
 }) => {
   await page.goto('/@tobi');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(page.getByText(/receives NGN/)).toBeVisible();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
   const reference = new URL(page.url()).pathname.split('/')[2] ?? '';
@@ -346,7 +344,7 @@ test('fix: going back from the provider page leaves the form usable', async ({
 }) => {
   await page.goto('/@tobi');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(page.getByText(/receives NGN/)).toBeVisible();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await page.getByRole('button', { name: /^Tip NGN/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
   await page.goBack();
@@ -356,7 +354,7 @@ test('fix: going back from the provider page leaves the form usable', async ({
   ).not.toBeChecked();
   await expect(page.getByRole('button', { name: /^Tip$/ })).toBeEnabled();
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(page.getByText(/receives NGN/)).toBeVisible();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await expect(
     page.getByRole('button', { name: /^Tip NGN 2,000\.00/ }),
   ).toBeEnabled();
@@ -365,9 +363,7 @@ test('fix: going back from the provider page leaves the form usable', async ({
 async function chooseTobi2000(page: Page) {
   await page.goto('/@tobi');
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(
-    page.getByText(/^Tobi receives NGN [\d,]+\.\d\d after fees$/),
-  ).toBeVisible();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
 }
 
 test('minor: a failed price refresh is reported as a failure, not as refreshed', async ({

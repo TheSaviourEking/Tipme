@@ -75,9 +75,7 @@ test('profile supports keyboard amount selection, validation and a server quote'
   await page
     .getByLabel('Personal message (optional)')
     .fill('Thank you for making this easier.');
-  await expect(
-    page.getByText(/^Ada receives NGN [\d,]+\.\d\d after fees$/),
-  ).toBeVisible();
+  await expect(page.getByText('You pay NGN 1,234.50')).toBeVisible();
   await expect(
     page.getByRole('button', { name: /^Tip NGN 1,234\.50/ }),
   ).toBeEnabled();

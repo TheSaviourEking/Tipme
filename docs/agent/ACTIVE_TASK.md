@@ -1,5 +1,20 @@
 # Current task — Bachs gap remediation (27 October 2026)
 
+- PR #24 is open and ready for review against `dev`. CI run `40500650198`
+  passed static, security and integration but exposed 17 E2E assertions that
+  still waited for the intentionally removed “receives … after fees” copy.
+  The shared visitor helper and direct checkout, shell, quality, moments and
+  pricing specs now wait for the concise authoritative “You pay …” total.
+  Pricing coverage still checks the exact 8% and fee-free recipient outcomes
+  from the quote response; those details are not restored to the supporter UI.
+- Fresh checks after the E2E correction: `pnpm typecheck` (15/15), `pnpm lint`
+  (15/15), `pnpm test` (55/55 root tests; 18/18 workspace tasks), Playwright
+  discovery (88 tests), targeted Prettier and `git diff --check` passed. A full
+  local E2E run could not start because port 4100 belongs to the active
+  `.worktrees/physical-interface` API and was left untouched. The first local
+  attempt also found a pre-existing partial migration in shared `tipme_test`;
+  no shared database was reset or altered. Final full E2E verification is the
+  clean PR runner after this correction is pushed.
 - Branch `feat/provider-integrations-bachs`, continued from `ddd3f56` at the user's request. Plan: `docs/superpowers/plans/2026-10-27-bachs-gap-remediation.md`; Tasks 1–14 and rulings are recorded in `.superpowers/sdd/2026-10-27-bachs-gap-remediation/progress.md`. Current implementation head before the UI commit: `9132bcc`.
 - Fixed: Bachs payments can be confirmed (callers pass the quoted TipMe share); expiry never cancels a collected-but-unsettled payment; definite 4xx checkout refusals fail cleanly (`PAYMENT_START_REJECTED`); one readiness rule with Bachs' real fee responsibility; account/capability webhooks re-read the account; withdrawals of Bachs-collected money refused (`WITHDRAWAL_UNAVAILABLE`); worker holds no webhook secret; refunds/disputes raise `payment_reversed` money issues (migration 0041); opaque Bachs IDs; `ddd3f56` compile breaks fixed.
 - Verified: integration 364/364 (69 files, throwaway PostgreSQL 16 on 127.0.0.1:5434 and Redis on 6380, no shared database touched); `pnpm test` 18/18 tasks and 55/55 root tests; `pnpm typecheck` 15/15; `pnpm lint` 15/15; `pnpm format:check`; `pnpm api:openapi --check`; generated docs unchanged; `git diff --check`.
