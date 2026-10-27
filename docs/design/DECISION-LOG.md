@@ -1,5 +1,16 @@
 # Design decision log
 
+## 2026-10-27 — Recipient onboarding and tip-purpose baselines
+
+Accepted for PR #23: the public profile gains an optional structured tip-purpose
+selector, while navigation, footer, and preview copy reflect the current
+individual/business and test-mode experience. The selector adds a deliberate
+step before the personal message; desktop remains the portrait-led composition,
+and mobile remains a readable single sequence with no overlap. The Darwin and
+Linux screenshot baselines were refreshed only after reviewing the CI
+expected/actual/diff images at both sizes. This changes presentation only; it
+does not change payment outcomes or provider behavior.
+
 ## 2026-10-26 — Production launch countdown
 
 Approved for the public production hold: one focused TipMe composition with no
