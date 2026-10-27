@@ -28,3 +28,24 @@ test('ambiguous Bachs write remains unknown without leaking its message', () => 
     },
   );
 });
+
+test('an ambiguous Bachs write logs its cause and Bachs status, still unknown', () => {
+  assert.deepEqual(
+    classifyBachsStartError(
+      new UncertainProviderOutcomeError('attempt-1', 'secret detail', {
+        cause: 'http_error',
+        httpStatus: 503,
+        providerCode: 'TEMPORARILY_UNAVAILABLE',
+      }),
+    ),
+    {
+      outcome: 'unknown',
+      diagnostic: {
+        error: 'UncertainProviderOutcomeError',
+        reason: 'http_error',
+        provider_http_status: 503,
+        provider_code: 'TEMPORARILY_UNAVAILABLE',
+      },
+    },
+  );
+});

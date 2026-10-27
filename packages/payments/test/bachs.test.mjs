@@ -1048,3 +1048,59 @@ test("a Bachs refusal keeps Bachs' error code from either response shape", async
     );
   }
 });
+
+test('an ambiguous Bachs outcome says why, without any message text', async () => {
+  const start = (provider) =>
+    provider.initializePayment({
+      attemptId: 'attempt-cause',
+      amountMinor: 100000n,
+      currency: 'NGN',
+      recipientAccountReference: 'acct_123abc',
+      tipmeShareMinor: 10000n,
+      successUrl: 'https://usetipme.xyz/return',
+      cancelUrl: 'https://usetipme.xyz/cancel',
+    });
+  const cases = [
+    [
+      async () =>
+        jsonResponse(
+          { detail: 'busy', error_code: 'TEMPORARILY_UNAVAILABLE' },
+          503,
+        ),
+      {
+        cause: 'http_error',
+        httpStatus: 503,
+        providerCode: 'TEMPORARILY_UNAVAILABLE',
+      },
+    ],
+    [
+      async () => jsonResponse({}, 409),
+      { cause: 'http_error', httpStatus: 409 },
+    ],
+    [
+      async () => {
+        throw new TypeError('socket closed');
+      },
+      { cause: 'no_response' },
+    ],
+    [
+      async () => jsonResponse({ unexpected: true }),
+      { cause: 'unexpected_shape' },
+    ],
+    [
+      async () =>
+        jsonResponse({
+          checkout_id: 'chk_1',
+          checkout_url: 'https://checkout.bachs.io/c/chk_1',
+          status: 'complete',
+        }),
+      { cause: 'unexpected_state' },
+    ],
+  ];
+  for (const [fetchImpl, expected] of cases)
+    await assert.rejects(start(makeProvider(fetchImpl)), (error) => {
+      assert.equal(error.name, 'UncertainProviderOutcomeError');
+      assert.deepEqual(error.diagnostic, expected);
+      return true;
+    });
+});

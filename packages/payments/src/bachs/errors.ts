@@ -26,10 +26,24 @@ export class BachsTransportError extends Error {
   }
 }
 
+/** Why an outcome is unknown, for logs and issues: allowlisted values only, never message text. */
+export interface UncertainOutcomeDiagnostic {
+  cause:
+    | 'no_response'
+    | 'unreadable_response'
+    | 'http_error'
+    | 'unexpected_shape'
+    | 'unexpected_state'
+    | 'unsafe_url';
+  httpStatus?: number;
+  providerCode?: string;
+}
+
 export class UncertainProviderOutcomeError extends Error {
   constructor(
     readonly operationReference: string,
     reason: string,
+    readonly diagnostic?: UncertainOutcomeDiagnostic,
   ) {
     super(
       `Bachs outcome is unknown for operation ${operationReference}: ${reason}`,

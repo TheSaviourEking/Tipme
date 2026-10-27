@@ -386,6 +386,7 @@ export function createBachsProvider(
         throw new UncertainProviderOutcomeError(
           input.attemptId,
           'Bachs created a checkout in an unexpected state',
+          { cause: 'unexpected_state' },
         );
       }
 
@@ -397,6 +398,7 @@ export function createBachsProvider(
           throw new UncertainProviderOutcomeError(
             input.attemptId,
             'Bachs created a checkout but returned an unsafe URL',
+            { cause: 'unsafe_url' },
           );
         }
         throw error;

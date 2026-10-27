@@ -19,6 +19,7 @@ import {
 } from '@tipme/database';
 import {
   BachsApiError,
+  UncertainProviderOutcomeError,
   type BachsProvider,
   type MockProvider,
 } from '@tipme/payments';
@@ -62,9 +63,26 @@ export function classifyBachsStartError(error: unknown): {
       },
     };
   }
+  const cause =
+    error instanceof UncertainProviderOutcomeError
+      ? error.diagnostic
+      : undefined;
   return {
     outcome: 'unknown',
-    diagnostic: { error: error instanceof Error ? error.name : typeof error },
+    diagnostic: {
+      error: error instanceof Error ? error.name : typeof error,
+      ...(cause
+        ? {
+            reason: cause.cause,
+            ...(cause.httpStatus === undefined
+              ? {}
+              : { provider_http_status: cause.httpStatus }),
+            ...(cause.providerCode
+              ? { provider_code: cause.providerCode }
+              : {}),
+          }
+        : {}),
+    },
   };
 }
 

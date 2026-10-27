@@ -79,6 +79,7 @@ export class BachsApiClient {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'the request may have reached Bachs but its response was not received',
+          { cause: 'no_response' },
         );
       }
       throw new BachsTransportError();
@@ -93,6 +94,7 @@ export class BachsApiClient {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'Bachs accepted the request but its response could not be read',
+          { cause: 'unreadable_response' },
         );
       }
       throw new BachsTransportError();
@@ -107,6 +109,11 @@ export class BachsApiClient {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           `Bachs returned HTTP ${response.status}`,
+          {
+            cause: 'http_error',
+            httpStatus: response.status,
+            ...(providerCode ? { providerCode } : {}),
+          },
         );
       }
       throw new BachsApiError(response.status, providerCode);
@@ -120,6 +127,7 @@ export class BachsApiClient {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'Bachs returned a successful response that could not be parsed',
+          { cause: 'unreadable_response' },
         );
       }
       throw new BachsProtocolError('Bachs returned invalid JSON');
@@ -131,6 +139,7 @@ export class BachsApiClient {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'Bachs returned a successful response with an invalid shape',
+          { cause: 'unexpected_shape' },
         );
       }
       throw new BachsProtocolError(

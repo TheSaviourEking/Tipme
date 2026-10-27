@@ -210,3 +210,9 @@ Only the worker confirmed Bachs payments (every 60 s, attempts at least 2 minute
 The receipt page gave up after 2 minutes and only "Try again" showed the paid tip.
 
 - [ ] Failing unit test for the check schedule: fast at first, then every 15 s, giving up only after 15 minutes. Implement; commit.
+
+### Task 14: Say why a Bachs outcome is unknown
+
+A live tip went UNKNOWN 0.6 s after starting and the log said only `UncertainProviderOutcomeError`. Ambiguous outcomes should carry an allowlisted cause (no response, unreadable reply, unexpected format, or Bachs' HTTP status and error code), never message text.
+
+- [ ] Failing tests in the adapter and the checkout classifier; implement; commit.
