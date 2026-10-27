@@ -532,3 +532,30 @@ function summarize(account: typeof paymentAccounts.$inferSelect) {
     lastSyncedAt: account.lastSyncedAt,
   };
 }
+
+/** Which page a provider account belongs to, for refreshing it from the provider. */
+export function findPaymentAccountByReference(
+  db: Database,
+  input: {
+    provider: string;
+    environment: PaymentAccountEnvironment;
+    providerAccountReference: string;
+  },
+): Promise<{ profileId: string } | null> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({ profileId: paymentAccounts.profileId })
+      .from(paymentAccounts)
+      .where(
+        and(
+          eq(paymentAccounts.provider, input.provider),
+          eq(paymentAccounts.environment, input.environment),
+          eq(
+            paymentAccounts.providerAccountReference,
+            input.providerAccountReference,
+          ),
+        ),
+      );
+    return row ?? null;
+  });
+}

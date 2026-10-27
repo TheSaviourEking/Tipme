@@ -1,9 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { MockWebhook } from '@tipme/contracts';
-import type { NormalizedProviderEvent } from '@tipme/payments';
+import {
+  bachsAccountReadiness,
+  type BachsProvider,
+  type NormalizedProviderEvent,
+} from '@tipme/payments';
 import { z } from 'zod';
 import {
   findBachsAttemptByOperationReference,
+  findPaymentAccountByReference,
+  updatePaymentAccountStatus,
   findBachsAttemptByReference,
   findAttemptByReference,
   findPayoutByReference,
@@ -62,9 +68,13 @@ export class WebhookService {
     return result.outcome;
   }
 
-  async applyBachs(event: NormalizedProviderEvent): Promise<string> {
+  async applyBachs(
+    event: NormalizedProviderEvent,
+    accounts?: Pick<BachsProvider, 'getRecipientAccount'>,
+  ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
-    // Account and capability events are reconciled in Task 5; until then they are kept as unmatched.
+    if (event.kind === 'account')
+      return this.refreshBachsAccount(event, accounts);
     if (event.kind !== 'payment') return this.unmatchedBachs(event);
     const { accountReference, operationReference, providerReference } = event;
     if (!accountReference || !providerReference)
@@ -124,6 +134,38 @@ export class WebhookService {
       reason,
     });
     return 'unmatched';
+  }
+
+  /**
+   * An account or capability event is only a trigger: the account is read back from Bachs and
+   * that answer decides readiness, so a later restriction stops new checkouts. Repeats re-read.
+   */
+  private async refreshBachsAccount(
+    event: Extract<NormalizedProviderEvent, { kind: 'account' }>,
+    accounts?: Pick<BachsProvider, 'getRecipientAccount'>,
+  ): Promise<string> {
+    const { db } = this.database;
+    const known = await findPaymentAccountByReference(db, {
+      provider: 'bachs',
+      environment: 'sandbox',
+      providerAccountReference: event.accountReference,
+    });
+    if (!known || !accounts) return this.unmatchedBachs(event);
+    // A failed read throws, so Bachs retries the delivery later.
+    const remote = await accounts.getRecipientAccount(event.accountReference);
+    const { status, chargesEnabled } = bachsAccountReadiness(remote);
+    await updatePaymentAccountStatus(db, {
+      profileId: known.profileId,
+      provider: 'bachs',
+      environment: 'sandbox',
+      providerAccountReference: remote.accountReference,
+      status,
+      chargesEnabled,
+      payoutsEnabled: false,
+      feeCollector: remote.feeCollector,
+      requirementsDue: remote.requirementsDue,
+    });
+    return 'account_refreshed';
   }
 
   private async unmatchedBachs(

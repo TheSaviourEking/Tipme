@@ -50,7 +50,10 @@ export class BachsWebhookController {
     }
 
     try {
-      const outcome = await this.webhooks.applyBachs(verification.event);
+      const outcome = await this.webhooks.applyBachs(
+        verification.event,
+        this.provider,
+      );
       this.logger.info({
         event: 'webhook.processed',
         provider: 'bachs',
