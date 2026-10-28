@@ -269,7 +269,10 @@ export function bachsAccountReadiness(account: BachsRecipientAccount): {
   chargesEnabled: boolean;
 } {
   if (
-    account.active === false ||
+    // Inactive with collection already granted: Bachs switched off a set-up account. A new
+    // account is inactive too, until its form is finished; that one is still onboarding.
+    (account.active === false &&
+      account.ngnCardCollectionStatus === 'active') ||
     account.feeCollector === 'connected_account' ||
     BLOCKED_CAPABILITY.has(account.ngnCardCollectionStatus ?? '')
   )

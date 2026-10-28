@@ -928,6 +928,42 @@ test('an account can take tips only with active NGN card collection and platform
     });
 });
 
+test('an inactive account still onboarding is onboarding, not restricted', async () => {
+  const { bachsAccountReadiness } = await import('../dist/index.js');
+  const fresh = (overrides) => ({
+    accountReference: 'acct_new',
+    active: false,
+    ngnCardCollectionStatus: 'pending',
+    bankTransferStatus: null,
+    feeCollector: 'platform',
+    requirementsDue: ['persons.dob'],
+    ...overrides,
+  });
+  // A new account is inactive until Bachs' form is finished: the owner should continue setup.
+  for (const overrides of [
+    {},
+    {
+      ngnCardCollectionStatus: null,
+      feeCollector: 'unknown',
+      requirementsDue: [],
+    },
+  ])
+    assert.deepEqual(bachsAccountReadiness(fresh(overrides)), {
+      status: 'ONBOARDING',
+      chargesEnabled: false,
+    });
+  // Still blocked whatever `active` says: Bachs restricted collection, or fees fall on the owner.
+  for (const overrides of [
+    { ngnCardCollectionStatus: 'disabled' },
+    { ngnCardCollectionStatus: 'rejected' },
+    { feeCollector: 'connected_account' },
+  ])
+    assert.deepEqual(bachsAccountReadiness(fresh(overrides)), {
+      status: 'RESTRICTED',
+      chargesEnabled: false,
+    });
+});
+
 test('a read-only Bachs adapter needs no webhook secret and refuses every webhook', async () => {
   const { createBachsProvider } = await import('../dist/index.js');
   const provider = createBachsProvider({
