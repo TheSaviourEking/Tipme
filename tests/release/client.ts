@@ -17,6 +17,9 @@ export const env = {
   handle: process.env.RELEASE_HANDLE ?? '',
   expectVersion: process.env.RELEASE_EXPECT_VERSION ?? '',
   insecure: process.env.RELEASE_INSECURE === '1',
+  paymentProvider: process.env.RELEASE_PAYMENT_PROVIDER ?? 'mock',
+  /** On the Bachs sandbox: a standing page whose Bachs account was set up by hand. */
+  bachsHandle: process.env.RELEASE_BACHS_HANDLE ?? '',
 };
 
 /** A new browser context that has passed the staging password (when the copy has one). */
