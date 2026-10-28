@@ -79,9 +79,12 @@ export async function findAttemptsToReconcile(
         input.attemptId ? eq(paymentAttempts.id, input.attemptId) : undefined,
         isNotNull(paymentAttempts.providerReference),
         lte(paymentAttempts.createdAt, input.olderThan),
-        // A finished release check's deliberately misreported tip can never be verified;
-        // asking again forever only costs provider calls.
-        sql`NOT EXISTS (
+        // The background sweep skips a finished release check's deliberately misreported tip:
+        // it can never be verified, and asking forever only costs provider calls. An explicit
+        // check of one attempt (staff re-check, receipt, webhook) always asks.
+        input.attemptId
+          ? undefined
+          : sql`NOT EXISTS (
           SELECT 1 FROM tips t
             JOIN profiles p ON p.id = t.profile_id
             JOIN release_runs r ON r.id = p.rehearsal_run_id

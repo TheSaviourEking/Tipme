@@ -1260,7 +1260,10 @@ test('a checkout TipMe rejects before sending is reported as never sent', async 
   ])
     await assert.rejects(
       provider.initializePayment({ ...valid, ...overrides }),
-      (error) => error.name === 'BachsRequestNotSentError',
+      (error) =>
+        error.name === 'BachsRequestNotSentError' &&
+        // The original check failure stays attached for debugging.
+        (error.cause instanceof TypeError || error.cause instanceof RangeError),
     );
   assert.equal(requests, 0);
 });
