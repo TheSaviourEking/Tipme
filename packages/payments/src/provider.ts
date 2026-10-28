@@ -94,6 +94,8 @@ export interface PaymentProvider<TWebhookEvent = NormalizedProviderEvent> {
      * (fee bearer, platform fee) is not final yet: the payment must never be expired.
      */
     collected?: true;
+    /** Set when the provider settled the money in another currency than it was paid in. */
+    settlementCurrency?: string;
   }>;
   verifyWebhook(
     rawBody: Buffer,

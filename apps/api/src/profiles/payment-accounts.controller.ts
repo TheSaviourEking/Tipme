@@ -182,6 +182,20 @@ export class PaymentAccountsController {
       }
     }
 
+    // A new Bachs account holds only USD, and a naira tip to it is converted and never confirms.
+    // Adding NGN is safe to repeat, so a failure here is retried on the next setup visit.
+    if (remoteAccount.holdsLocalCurrency === false) {
+      try {
+        await this.provider.holdLocalCurrency(remoteAccount.accountReference);
+      } catch (error) {
+        this.logger.warn({
+          event: 'payment_account.local_currency_failed',
+          provider: 'bachs',
+          error: error instanceof Error ? error.name : typeof error,
+        });
+      }
+    }
+
     const { status, chargesEnabled } = bachsAccountReadiness(remoteAccount);
     const account = await updatePaymentAccountStatus(this.database.db, {
       profileId: recipient.profileId,

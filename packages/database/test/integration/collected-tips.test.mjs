@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
+  autoResolveIssues,
   createPaymentIntent,
   createQuote,
   markAttemptInitiated,
@@ -40,7 +41,15 @@ async function startedTip(t) {
     });
   const state = async () =>
     (await tipStatusView(database.db, tipId, new Date())).state;
-  return { check, state };
+  const issues = async () =>
+    (
+      await database.pool.query(
+        `SELECT kind, severity, subject->>'tipId' AS "tipId", subject->>'attemptId' AS "attemptId"
+           FROM issues WHERE kind <> 'stuck_tip' AND status = 'open'`,
+      )
+    ).rows;
+  const resolve = () => autoResolveIssues(database.db, new Date());
+  return { check, state, issues, resolve, tipId, attemptId };
 }
 
 const pending = {
@@ -72,4 +81,40 @@ test('once the provider confirms, the receipt says paid', async (t) => {
   await check({ ...pending, collected: true });
   await check({ ...pending, status: 'succeeded', feePaidBy: 'platform' });
   assert.equal(await state(), 'paid');
+});
+
+test('a tip the provider settled in another currency opens one money issue', async (t) => {
+  const { check, state, issues, tipId, attemptId } = await startedTip(t);
+  const settledInUsd = {
+    ...pending,
+    collected: true,
+    settlementCurrency: 'USD',
+  };
+  await check(settledInUsd);
+  await check(settledInUsd);
+  assert.equal(await state(), 'collected');
+  assert.deepEqual(await issues(), [
+    {
+      kind: 'payment_settlement_currency',
+      severity: 'money',
+      tipId,
+      attemptId,
+    },
+  ]);
+});
+
+test('a collected tip settled in its own currency opens no issue', async (t) => {
+  const { check, issues } = await startedTip(t);
+  await check({ ...pending, collected: true });
+  assert.deepEqual(await issues(), []);
+});
+
+test('the settlement issue closes itself once the tip is confirmed', async (t) => {
+  const { check, issues, resolve } = await startedTip(t);
+  await check({ ...pending, collected: true, settlementCurrency: 'USD' });
+  await resolve();
+  assert.equal((await issues()).length, 1, 'still open while unconfirmed');
+  await check({ ...pending, status: 'succeeded', feePaidBy: 'platform' });
+  await resolve();
+  assert.deepEqual(await issues(), []);
 });
