@@ -95,9 +95,26 @@ test('after a release run finishes, its attempts are no longer re-checked', asyn
     t,
     'rehearsal_done',
   );
+  // A real page's unfinished tip, alongside: it must keep being checked.
+  const quote = await createQuote(database.db, {
+    handle: 'ada',
+    tipMinor: 100000n,
+    currency: 'NGN',
+  });
+  const real = await createPaymentIntent(database.db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  await markAttemptInitiated(database.db, {
+    attemptId: real.attemptId,
+    provider: 'mock',
+    providerReference: `ref-${real.attemptId}`,
+  });
   assert.ok((await checked()).includes(attemptId));
   await finishReleaseRun(database.db, { runId });
-  assert.ok(!(await checked()).includes(attemptId));
+  const after = await checked();
+  assert.ok(!after.includes(attemptId));
+  assert.ok(after.includes(real.attemptId));
 });
 
 test('a rehearsal issue opened after its run finished is closed automatically', async (t) => {
