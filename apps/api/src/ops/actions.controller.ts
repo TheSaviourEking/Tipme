@@ -10,12 +10,14 @@ import {
   opsNoteSchema,
   opsBachsAccountRecoverySchema,
   opsBachsCheckoutRecoverySchema,
+  opsBachsFeeBearerSchema,
   opsReasonSchema,
   opsRecheckSchema,
   type ApiDataResponse,
   type OpsNoteRequest,
   type OpsBachsAccountRecoveryRequest,
   type OpsBachsCheckoutRecoveryRequest,
+  type OpsBachsFeeBearerRequest,
   type OpsReasonRequest,
   type OpsRecheckOutcome,
   type OpsRecheckRequest,
@@ -25,6 +27,7 @@ import {
   attachUnknownBachsCheckoutForOperations,
   cancelRecoveries,
   getBachsAccountRecoveryTarget,
+  getBachsAttemptForFeeConfirmation,
   getUnknownBachsAttemptForOperations,
   issueById,
   recheckSubject,
@@ -301,6 +304,114 @@ export class OpsActionsController {
   }
 
   /** Fetches Bachs state before linking a dashboard-matched account to a verified recipient. */
+  /**
+   * Bachs took the money but never reported who paid its processing fee (`fee_paid_by` empty), so
+   * the tip stays confirming. Staff who see in the Bachs dashboard that the platform paid it
+   * confirm that one fact. The payment is read back from Bachs and booked only when it is still
+   * collected-but-unfinished and its amount, currency and TipMe fee match the quote; Bachs saying
+   * the recipient paid the fee always wins. Every outcome is audited.
+   */
+  @Post('bachs/fee-bearer-confirmation')
+  @HttpCode(200)
+  @OpsPermission('payments.recheck')
+  async confirmBachsFeeBearer(
+    @CurrentOps() ops: OpsContext,
+    @Body(new ZodValidationPipe(opsBachsFeeBearerSchema))
+    body: OpsBachsFeeBearerRequest,
+  ): Promise<
+    ApiDataResponse<{
+      outcome:
+        | 'confirmed'
+        | 'not_pending'
+        | 'not_collected'
+        | 'mismatch'
+        | 'recipient_bore_fee';
+    }>
+  > {
+    const issue = await issueById(this.database.db, body.issueId);
+    const subject = issue?.subject ?? {};
+    if (
+      !issue ||
+      issue.status !== 'open' ||
+      (!subject.attemptId && !subject.tipId)
+    )
+      throw new CodedHttpException(404, 'NOT_FOUND');
+    const target = await getBachsAttemptForFeeConfirmation(this.database.db, {
+      ...(subject.attemptId ? { attemptId: subject.attemptId } : {}),
+      ...(subject.tipId ? { tipId: subject.tipId } : {}),
+    });
+    if (!target) throw new CodedHttpException(404, 'NOT_FOUND');
+    const audit = (action: string) =>
+      this.auditBachsRecovery(
+        ops,
+        `payment_attempt.${action}`,
+        target.attemptId,
+        body.reason,
+      );
+    if (!target.unfinished) {
+      await audit('fee_bearer_not_pending');
+      return { data: { outcome: 'not_pending' } };
+    }
+    if (!target.collected) {
+      await audit('fee_bearer_not_collected');
+      return { data: { outcome: 'not_collected' } };
+    }
+    if (!this.bachsProvider)
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+
+    let answer: Awaited<ReturnType<BachsProvider['verifyTransaction']>>;
+    try {
+      answer = await this.bachsProvider.verifyTransaction(
+        target.providerReference,
+        target.expectation,
+      );
+    } catch (error) {
+      this.logger.warn({
+        event: 'ops.bachs_fee_bearer_failed',
+        error: error instanceof Error ? error.name : typeof error,
+      });
+      await audit('fee_bearer_error');
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+    }
+    if (answer.feePaidBy === 'connected_account') {
+      await audit('fee_bearer_recipient');
+      return { data: { outcome: 'recipient_bore_fee' } };
+    }
+    if (
+      answer.amountMinor !== target.amountMinor ||
+      answer.currency !== target.currency ||
+      answer.platformFeeMinor !== target.expectation.platformFeeMinor
+    ) {
+      await audit('fee_bearer_mismatch');
+      return { data: { outcome: 'mismatch' } };
+    }
+    if (
+      answer.status !== 'succeeded' &&
+      !(answer.status === 'pending' && answer.collected)
+    ) {
+      await audit('fee_bearer_not_collected');
+      return { data: { outcome: 'not_collected' } };
+    }
+    const event = await recordProviderEvent(this.database.db, {
+      provider: 'bachs',
+      providerEventId: `ops.fee-bearer.${target.attemptId}`,
+      eventType: 'payment.succeeded',
+      attemptId: target.attemptId,
+      providerReference: target.providerReference,
+      amountMinor: answer.amountMinor,
+      currency: answer.currency,
+      providerFeeMinor: answer.feeMinor,
+      signatureVerified: true,
+      payload: { source: 'staff_fee_bearer_confirmation' },
+    });
+    if (event.outcome !== 'applied') {
+      await audit('fee_bearer_not_pending');
+      return { data: { outcome: 'not_pending' } };
+    }
+    await audit('fee_bearer_confirmed');
+    return { data: { outcome: 'confirmed' } };
+  }
+
   @Post('bachs/account-recovery')
   @HttpCode(200)
   @OpsPermission('payments.recheck')

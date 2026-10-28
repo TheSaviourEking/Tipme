@@ -62,7 +62,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
 | `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
-| `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/recheck` |
+| `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/recheck` |
 | `private.view` | POST `/v1/ops/issues/{id}/reveal` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `search.view` | GET `/v1/ops/search` |
@@ -183,6 +183,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/audit` | `audit.view` | n/a (read) | – | – |
 | POST | `/v1/ops/bachs/account-recovery` | `payments.recheck` | yes | – | – |
 | POST | `/v1/ops/bachs/checkout-recovery` | `payments.recheck` | yes | – | – |
+| POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.recheck` | yes | – | – |
 | GET | `/v1/ops/issues` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/issues/{id}` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/issues/{id}/notes` | `issues.view` | yes | – | – |

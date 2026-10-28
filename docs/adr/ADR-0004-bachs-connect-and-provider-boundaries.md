@@ -244,6 +244,13 @@ live funds flow or provider after legal, risk and provider review.
   against captured sandbox fixtures; a provider-neutral account/onboarding
   interface. None of these is simulated.
 
+## Addendum — collected payments without fee evidence (28 October 2026)
+
+On staging, Bachs reported a ₦5,000 payment (`ch_808bc138…`) succeeded with the right platform fee, but left `fee_paid_by` empty while every other payment on the account read `platform`. TipMe correctly held the tip pending, because a recipient-borne fee changes what the recipient is owed, but nothing in TipMe could resolve it and the supporter was told the provider "hasn't confirmed" a payment it had taken.
+
+- **Collected state.** When a provider read shows the money taken but the fee evidence is not final, the attempt records `collected_at` (migration 0042). It is not an outcome and nothing is booked; the receipt says the payment went through and that confirmation of the details is pending.
+- **Staff fee-bearer confirmation** (`POST /v1/ops/bachs/fee-bearer-confirmation`, `payments.recheck`). On an open stuck-tip issue, staff who see in the Bachs dashboard that the platform paid the fee attest that one fact (`feePaidBy: 'platform'`, `dashboardVerified: true`, a reason). TipMe then reads the payment back from Bachs and books it only if it is still collected-but-unfinished and its amount, currency and platform fee equal the quote. Bachs reporting `connected_account` always wins and cannot be overridden. Every outcome is audited. This is the only outcome input that rests on a staff attestation, and it is limited to the fee bearer; the payment itself is always read from Bachs.
+
 ## Linked PRD requirements
 
 PRD payment-provider abstraction, guest checkout, truthful payment status and

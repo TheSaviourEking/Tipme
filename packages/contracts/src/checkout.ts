@@ -60,6 +60,8 @@ export const tipStatusStates = [
   'declined',
   'checking',
   'cancelled',
+  // The provider took the money; TipMe is still confirming its details (who bore the fee).
+  'collected',
 ] as const;
 export type TipStatusState = (typeof tipStatusStates)[number];
 
