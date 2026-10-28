@@ -79,6 +79,14 @@ export async function findAttemptsToReconcile(
         input.attemptId ? eq(paymentAttempts.id, input.attemptId) : undefined,
         isNotNull(paymentAttempts.providerReference),
         lte(paymentAttempts.createdAt, input.olderThan),
+        // A finished release check's deliberately misreported tip can never be verified;
+        // asking again forever only costs provider calls.
+        sql`NOT EXISTS (
+          SELECT 1 FROM tips t
+            JOIN profiles p ON p.id = t.profile_id
+            JOIN release_runs r ON r.id = p.rehearsal_run_id
+           WHERE t.intent_id = ${paymentAttempts.intentId}
+             AND r.finished_at IS NOT NULL)`,
       ),
     )
     // Least recently checked first, so attempts that never resolve cannot starve newer ones.
