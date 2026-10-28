@@ -62,5 +62,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   // Framework assets bypass Proxy; countdown assets and operational metadata are explicitly
   // exempted by launchDecision, while all user-facing routes are held until the launch instant.
-  matcher: ['/((?!_next/static|_next/image).*)'],
+  // The Sentry tunnel (next.config.ts) forwards error reports; it is not a page.
+  matcher: ['/((?!_next/static|_next/image|sentry-tunnel).*)'],
 };

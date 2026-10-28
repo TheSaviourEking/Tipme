@@ -65,3 +65,7 @@ Decision: ADOPTED (pinned exact). Upgrades are deliberate: re-pin the digest and
 - **`sharp` 0.35.5** (Apache-2.0, https://sharp.pixelplumbing.com): decodes and re-encodes profile photos in the API (to a 512×512 WebP, no metadata), with a 40-megapixel limit against "pixel bombs". It was already in the lockfile through Next.js; it is now a direct, exactly pinned dependency of the API. The Docker image installs its musl (Alpine) build.
 
 Decision: ADOPTED (pinned exact).
+
+## Error reporting for the web app (28 October 2026)
+
+- **`@sentry/nextjs` 11.7.0** (MIT, https://github.com/getsentry/sentry-javascript), a runtime dependency of `apps/web` only. Errors and 10% of traces from the browser, server and edge runtimes, sent to Sentry (`tipme-fs`, EU region) through the site's own `/sentry-tunnel`, so the Content Security Policy is unchanged. Session replay, Sentry logs and personal data are not enabled; every event is scrubbed by `scrubEvent` before it leaves (`docs/runbooks/sentry.md`). Off without a DSN. Pinned to a release at least two weeks old (12 October 2026). The API and worker keep TipMe's own reporter (no SDK).
