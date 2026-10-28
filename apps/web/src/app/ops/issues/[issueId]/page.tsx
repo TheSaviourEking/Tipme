@@ -457,7 +457,8 @@ export default function IssuePage() {
       </Section>
 
       {open &&
-        issue.kind === 'stuck_tip' &&
+        (issue.kind === 'stuck_tip' ||
+          issue.kind === 'payment_settlement_currency') &&
         issue.subject.tipId &&
         can(access, 'payments.recheck') && (
           <Section title="Bachs took the money but not the fee details">

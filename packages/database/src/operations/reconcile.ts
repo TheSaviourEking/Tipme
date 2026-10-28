@@ -16,6 +16,7 @@ import {
   tipQuotes,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
+import { openIssue } from './issues.js';
 import { guarded, OperationError } from './errors.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordPayoutOutcome } from './payouts.js';
@@ -37,6 +38,8 @@ export interface TransactionVerifier {
     feeMinor: bigint;
     /** Pending, but the provider has already taken the money: never expire it. */
     collected?: true;
+    /** The provider settled the money in another currency than it was paid in. */
+    settlementCurrency?: string;
   }>;
 }
 
@@ -185,6 +188,14 @@ export async function reconcileAttempts(input: {
               isNull(paymentAttempts.collectedAt),
             ),
           );
+        // Converted money comes with no fee bearer, so it never confirms on its own.
+        if (answer.settlementCurrency)
+          await openIssue(input.db, {
+            dedupeKey: `settlement_currency.${attempt.attemptId}`,
+            kind: 'payment_settlement_currency',
+            subject: { attemptId: attempt.attemptId },
+            now: input.now,
+          });
       } else if (
         answer.status === 'not_found' &&
         input.now.getTime() - attempt.createdAt.getTime() > UNRESOLVED_AFTER_MS
