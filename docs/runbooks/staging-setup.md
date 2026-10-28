@@ -53,6 +53,22 @@ Fill in `/srv/tipme/staging.env`:
 
 To test Bachs checkout in this isolated staging copy, set `PAYMENT_PROVIDER=bachs-sandbox` and populate `BACHS_SANDBOX_API_KEY` and `BACHS_WEBHOOK_SECRET` in `/srv/tipme/staging.env`, then redeploy. The staging Compose file forwards the API key to the API and worker, and the webhook secrets to the API only (the worker only reads statuses). Keep `DEPLOYMENT_MODE=preview`, the shared `PREVIEW_PASSWORD`, and `PAYMENTS_LIVE_ENABLED=false`; never put Bachs credentials in the web app or configure a live key. The default remains `PAYMENT_PROVIDER=mock`.
 
+### The release check on the Bachs sandbox
+
+A new page cannot take Bachs tips until its owner completes Bachs' own form, so the release check cannot tip the page it creates. On a Bachs copy it instead:
+
+- checks that its new page says "can't receive tips just yet" and that its owner is told to set up payments;
+- tips a **standing test page, `@release_bachs`**, and passes once Bachs' sandbox checkout opens for that tip. It never pays: that would depend on Bachs' own page. The unpaid checkout expires, and paid totals do not move;
+- skips the pretend-only steps (the misreported amount, covered by the integration tests, and the withdrawal, since Bachs money cannot be withdrawn yet).
+
+Set up `@release_bachs` once, in a browser, with the staging password:
+
+1. Sign up with a phone number kept for this page only (codes arrive in the pretend inbox), and claim the handle `release_bachs`.
+2. Add a name, confirm an email address (payment setup needs one), then go to **Settings → Test payments → Set up test payments** (country `NG`, Individual) and complete Bachs' sandbox form.
+3. Back in Settings, the card should read "Ready to receive test tips". Make the page live.
+
+Without it, the release check stops in seconds and names the page; `RELEASE_BACHS_HANDLE` names a different page.
+
 ### Bachs sandbox webhook endpoint
 
 1. In the Bachs sandbox Dashboard, add a webhook endpoint `https://<api-host>/v1/webhooks/bachs` with `event_source=connect/all`, so events from recipients' connected accounts reach TipMe (direct charges are made on those accounts).

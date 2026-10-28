@@ -1,3 +1,9 @@
+# Current task — release check on the Bachs sandbox (28 October 2026)
+
+- Branch/worktree: `ci/release-check-bachs` / `.worktrees/ci-faster`, from `origin/dev` at `9fc7f23`.
+- Staging runs `PAYMENT_PROVIDER=bachs-sandbox` (the user's decision); every staging release check since 16:12 on 27 October waited 5 minutes for a pretend checkout and failed. `GET /health/release` now names the payment provider. On Bachs the full check verifies the new page's "can't receive tips just yet" and the owner's notice, tips the standing page `@release_bachs` until Bachs' sandbox checkout opens (no payment, by the user's decision), and skips the pretend-only mismatch and withdrawal steps. `scripts/release-check.mjs` refuses in seconds when that page is missing or cannot take tips.
+- Not yet exercised against staging: `@release_bachs` must be created by hand (runbook), and GitHub Actions is blocked by billing.
+
 # Current task — faster CI (27 October 2026)
 
 - Branch/worktree: `ci/faster` / `.worktrees/ci-faster`, from `origin/dev` at `c3e5952`.
