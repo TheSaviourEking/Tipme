@@ -171,13 +171,16 @@ function normalizeEvent(
   const operationReference = nullableString(data['reference']);
 
   if (event.type === 'collection.succeeded') {
-    if (!currency || !accountReference) return undefined;
-    const amountMinor = safeMinor(data['amount'], currency);
-    if (amountMinor === undefined) return undefined;
+    if (!accountReference) return undefined;
+    // The event is only a trigger (the payment is read back from Bachs), so an amount TipMe
+    // cannot parse, such as a crypto collection in USDT_TRC20, is left out rather than refused.
+    const amountMinor = currency
+      ? safeMinor(data['amount'], currency)
+      : undefined;
     const processingFeeCurrency =
       stringValue(data['processing_fee_currency']) ?? currency;
     const feeMinor =
-      processingFeeCurrency === currency
+      amountMinor !== undefined && processingFeeCurrency === currency
         ? safeMinor(data['processing_fee'], currency)
         : undefined;
     const hasCheckout = checkoutId !== null;
@@ -192,8 +195,7 @@ function normalizeEvent(
       accountReference,
       // A collection event does not prove who ultimately bore Bachs' processing fee.
       status: hasCheckout ? 'pending' : 'review',
-      amountMinor,
-      currency,
+      ...(amountMinor === undefined ? {} : { amountMinor, currency }),
       feeMinor,
       feePaidBy: 'unknown',
     };

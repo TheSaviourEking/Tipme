@@ -40,13 +40,14 @@ const paymentSchema = z.object({
   status: z.string().min(1),
   amount: z.string(),
   amount_paid: z.string().nullable().optional(),
-  currency: z.string().length(3),
+  // Any asset code: Bachs reports crypto collections as e.g. USDT_TRC20.
+  currency: z.string().min(1).max(32),
   platform_fee: z.string().nullable().optional(),
   fee_paid_by: z.enum(['merchant', 'platform']).nullable().optional(),
   fees: z
     .object({
       amount: z.string(),
-      currency: z.string().length(3),
+      currency: z.string().min(1).max(32),
     })
     .nullable()
     .optional(),
@@ -365,6 +366,8 @@ export function createBachsProvider(
         success_url: successUrl,
         cancel_url: cancelUrl,
         customer_creation: 'if_required',
+        // TipMe quotes and books naira only: Bachs must not offer crypto or other currencies.
+        payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
       };
       if (input.tipmeShareMinor > 0n) {
         body['platform_fee'] = minorToDecimal(
@@ -497,6 +500,19 @@ export function createBachsProvider(
         accountReference: scopedReference.accountReference,
         schema: paymentSchema,
       });
+      if (payment.currency !== checkout.currency) {
+        // Taken in another currency (e.g. crypto) although the quote is naira. Report the
+        // definite outcome with its real currency: it can never match the quote, so TipMe holds
+        // it as a mismatch and raises a money issue instead of booking it.
+        const outcome = statusValue(payment.status);
+        return {
+          status: outcome,
+          amountMinor: 0n,
+          currency: payment.currency,
+          feeMinor: 0n,
+          feePaidBy: feePaidBy(payment.fee_paid_by),
+        };
+      }
       const amount = payment.amount_paid ?? payment.amount;
       const amountMinor = providerAmountToMinor(amount, payment.currency);
       const providerStatus = statusValue(payment.status);
