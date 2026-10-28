@@ -464,6 +464,7 @@ test('account creation requests NGN methods and trusts returned fee responsibili
     bankTransferStatus: 'active',
     feeCollector: 'connected_account',
     requirementsDue: ['individual.address'],
+    holdsLocalCurrency: null,
   });
 });
 
@@ -1266,4 +1267,128 @@ test('a checkout TipMe rejects before sending is reported as never sent', async 
         (error.cause instanceof TypeError || error.cause instanceof RangeError),
     );
   assert.equal(requests, 0);
+});
+
+// A new Bachs account holds only USD, and holding a currency decides what the account settles
+// in. A naira tip to an account that does not hold NGN is converted to USD, and Bachs never
+// records who paid the fee, so TipMe cannot book it.
+test('an account that does not hold its local currency is set to hold it', async () => {
+  const calls = [];
+  const provider = makeProvider(async (url, init) => {
+    calls.push({
+      method: init.method,
+      path: new URL(url).pathname,
+      body: init.body ? JSON.parse(init.body) : undefined,
+    });
+    return jsonResponse({
+      id: 'acct_ng123',
+      country: 'NG',
+      is_active: true,
+      balance_currencies: init.method === 'POST' ? ['NGN'] : [],
+    });
+  });
+  const account = await provider.holdLocalCurrency('acct_ng123');
+  assert.deepEqual(calls, [
+    { method: 'GET', path: '/v1/accounts/acct_ng123', body: undefined },
+    {
+      method: 'POST',
+      path: '/v1/accounts/acct_ng123',
+      body: { balance_currencies: { NGN: true } },
+    },
+  ]);
+  assert.equal(account.holdsLocalCurrency, true);
+});
+
+test('an account already holding its local currency is left alone', async () => {
+  const methods = [];
+  const provider = makeProvider(async (_url, init) => {
+    methods.push(init.method);
+    return jsonResponse({
+      id: 'acct_ng123',
+      country: 'NG',
+      balance_currencies: ['NGN'],
+    });
+  });
+  const account = await provider.holdLocalCurrency('acct_ng123');
+  assert.deepEqual(methods, ['GET']);
+  assert.equal(account.holdsLocalCurrency, true);
+});
+
+test('an account in a country without a known local currency is left alone', async () => {
+  const methods = [];
+  const provider = makeProvider(async (_url, init) => {
+    methods.push(init.method);
+    return jsonResponse({
+      id: 'acct_gh123',
+      country: 'GH',
+      balance_currencies: [],
+    });
+  });
+  const account = await provider.holdLocalCurrency('acct_gh123');
+  assert.deepEqual(methods, ['GET']);
+  assert.equal(account.holdsLocalCurrency, null);
+});
+
+test('a naira payment Bachs settled in USD is collected, and says where it settled', async () => {
+  const responses = [
+    jsonResponse({
+      checkout_id: 'chk_123abc',
+      status: 'completed',
+      amount: '5000.00',
+      currency: 'NGN',
+      payment_status: 'paid',
+      charge: { payment_id: 'ch_123abc' },
+    }),
+    // As Bachs reported it on staging: converted, with no settled amount and no fee bearer.
+    jsonResponse({
+      payment_id: 'ch_123abc',
+      status: 'succeeded',
+      amount: '5000.00',
+      currency: 'NGN',
+      platform_fee: '500.00',
+      fees: { amount: '75.00', currency: 'NGN' },
+      fee_paid_by: null,
+      settlement_currency: 'USD',
+      settlement_amount: null,
+    }),
+  ];
+  let index = 0;
+  const provider = makeProvider(async () => responses[index++]);
+  const answer = await provider.verifyTransaction('acct_123abc:chk_123abc', {
+    platformFeeMinor: 50000n,
+  });
+  assert.equal(answer.status, 'pending');
+  assert.equal(answer.collected, true);
+  assert.equal(answer.settlementCurrency, 'USD');
+});
+
+test('a payment settled in its own currency does not report a settlement currency', async () => {
+  const responses = [
+    jsonResponse({
+      checkout_id: 'chk_123abc',
+      status: 'completed',
+      amount: '5000.00',
+      currency: 'NGN',
+      payment_status: 'paid',
+      charge: { payment_id: 'ch_123abc' },
+    }),
+    jsonResponse({
+      payment_id: 'ch_123abc',
+      status: 'succeeded',
+      amount: '5000.00',
+      currency: 'NGN',
+      platform_fee: '500.00',
+      fees: { amount: '75.00', currency: 'NGN' },
+      fee_paid_by: 'platform',
+      settlement_currency: 'NGN',
+      settlement_amount: '5000.00',
+    }),
+  ];
+  let index = 0;
+  const provider = makeProvider(async () => responses[index++]);
+  const answer = await provider.verifyTransaction('acct_123abc:chk_123abc', {
+    platformFeeMinor: 50000n,
+  });
+  assert.equal(answer.status, 'succeeded');
+  assert.equal(answer.settlementCurrency, undefined);
 });

@@ -48,6 +48,7 @@ const paymentSchema = z.object({
   currency: z.string().min(1).max(32),
   platform_fee: z.string().nullable().optional(),
   fee_paid_by: z.enum(['merchant', 'platform']).nullable().optional(),
+  settlement_currency: z.string().min(1).max(32).nullable().optional(),
   fees: z
     .object({
       amount: z.string(),
@@ -59,6 +60,8 @@ const paymentSchema = z.object({
 
 const accountSchema = z.object({
   id: z.string().trim().min(1).max(200),
+  country: z.string().nullable().optional(),
+  balance_currencies: z.array(z.string()).nullable().optional(),
   is_active: z.boolean().optional(),
   capabilities: z.record(z.string(), z.unknown()).nullable().optional(),
   responsibilities: z
@@ -113,7 +116,15 @@ export interface BachsRecipientAccount {
   bankTransferStatus: string | null;
   feeCollector: 'platform' | 'connected_account' | 'unknown';
   requirementsDue: string[];
+  /**
+   * Whether the account holds its country's currency, which is what Bachs settles it in. Null
+   * when TipMe knows no local currency for the country, or Bachs did not say.
+   */
+  holdsLocalCurrency: boolean | null;
 }
+
+/** The currency a recipient is paid in, by Bachs account country. TipMe takes naira only. */
+const LOCAL_CURRENCY: Readonly<Record<string, string>> = { NG: 'NGN' };
 
 export interface BachsProvider extends PaymentProvider<NormalizedProviderEvent> {
   createRecipientAccount(input: {
@@ -129,6 +140,11 @@ export interface BachsProvider extends PaymentProvider<NormalizedProviderEvent> 
     returnUrl: string;
   }): Promise<string>;
   getRecipientAccount(accountReference: string): Promise<BachsRecipientAccount>;
+  /**
+   * Makes the account hold its local currency. A new Bachs account holds only USD, and Bachs
+   * converts a naira tip to an account without NGN, leaving its fee bearer unknown.
+   */
+  holdLocalCurrency(accountReference: string): Promise<BachsRecipientAccount>;
   getCheckoutUrl(providerReference: string): Promise<string>;
 }
 
@@ -240,6 +256,9 @@ function normalizedAccount(
       : null;
   };
   const collector = account.responsibilities?.fees?.collector;
+  const localCurrency = account.country
+    ? LOCAL_CURRENCY[account.country]
+    : undefined;
 
   return {
     accountReference: account.id,
@@ -253,6 +272,10 @@ function normalizedAccount(
           ? 'connected_account'
           : 'unknown',
     requirementsDue: account.requirements?.currently_due ?? [],
+    holdsLocalCurrency:
+      localCurrency && account.balance_currencies
+        ? account.balance_currencies.includes(localCurrency)
+        : null,
   };
 }
 
@@ -328,6 +351,30 @@ export function createBachsProvider(
       schema: accountSchema,
     });
     return normalizedAccount(account);
+  }
+
+  async function holdLocalCurrency(accountReference: string) {
+    providerIdentifier(accountReference, 'account reference');
+    const path = `/v1/accounts/${encodeURIComponent(accountReference)}`;
+    const account = await client.request({
+      method: 'GET',
+      path,
+      schema: accountSchema,
+    });
+    const localCurrency = account.country
+      ? LOCAL_CURRENCY[account.country]
+      : undefined;
+    if (!localCurrency || account.balance_currencies?.includes(localCurrency))
+      return normalizedAccount(account);
+    const updated = await client.request({
+      method: 'POST',
+      path,
+      // Adds the currency and leaves the others held: USD always stays.
+      body: { balance_currencies: { [localCurrency]: true } },
+      operationReference: accountReference,
+      schema: accountSchema,
+    });
+    return normalizedAccount(updated);
   }
 
   return {
@@ -562,6 +609,12 @@ export function createBachsProvider(
       const unverifiedSuccess =
         providerStatus === 'succeeded' &&
         (!verifiedPlatformFee || !verifiedProcessingFee);
+      // Bachs converted it to a currency the account holds; it then never says who paid the fee.
+      const settledElsewhere =
+        payment.settlement_currency &&
+        payment.settlement_currency !== payment.currency
+          ? payment.settlement_currency
+          : undefined;
 
       return {
         status: unverifiedSuccess ? 'pending' : providerStatus,
@@ -571,6 +624,7 @@ export function createBachsProvider(
         feePaidBy: actualFeeBearer,
         platformFeeMinor,
         ...(unverifiedSuccess ? { collected: true as const } : {}),
+        ...(settledElsewhere ? { settlementCurrency: settledElsewhere } : {}),
       };
     },
 
@@ -631,6 +685,7 @@ export function createBachsProvider(
     },
 
     getRecipientAccount: getAccount,
+    holdLocalCurrency,
 
     async initiatePayout() {
       throw new UnsupportedProviderCapabilityError('payouts');

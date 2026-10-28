@@ -42,6 +42,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_attempt_unresolved: 'money',
   payment_account_unresolved: 'account',
   payment_reversed: 'money',
+  payment_settlement_currency: 'money',
   payout_failed: 'money',
   payout_conflict: 'money',
   provider_event_conflict: 'money',
@@ -68,6 +69,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `Bachs account setup for ${page} has an unknown outcome. Confirm the recipient account in Bachs Dashboard before linking it.`;
     case 'payment_reversed':
       return `Bachs reported a refund or dispute on a paid tip to ${page}. TipMe changed no balance: review it in Bachs Dashboard.`;
+    case 'payment_settlement_currency':
+      return `Bachs took a tip to ${page} but settled it in another currency, so it cannot confirm the fee. Turn on NGN under Currencies held for their Bachs account, then confirm the fee below.`;
     case 'payout_failed':
       return `A withdrawal for ${page} failed. The money is back in their balance.`;
     case 'payout_conflict':
@@ -389,7 +392,8 @@ export function autoResolveIssues(
         FROM issues i
         JOIN payment_attempts a
           ON a.id = (i.subject->>'attemptId')::uuid
-       WHERE i.status = 'open' AND i.kind = 'payment_attempt_unresolved'
+       WHERE i.status = 'open'
+         AND i.kind IN ('payment_attempt_unresolved', 'payment_settlement_currency')
          AND a.status IN ('VERIFIED_SUCCEEDED', 'VERIFIED_FAILED', 'EXPIRED')
       UNION ALL
       SELECT i.id, 'The Bachs recipient account was found and its status was synchronized.'

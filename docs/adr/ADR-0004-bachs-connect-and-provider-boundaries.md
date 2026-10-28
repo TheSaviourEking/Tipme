@@ -251,6 +251,13 @@ On staging, Bachs reported a ₦5,000 payment (`ch_808bc138…`) succeeded with 
 - **Collected state.** When a provider read shows the money taken but the fee evidence is not final, the attempt records `collected_at` (migration 0042). It is not an outcome and nothing is booked; the receipt says the payment went through and that confirmation of the details is pending.
 - **Staff fee-bearer confirmation** (`POST /v1/ops/bachs/fee-bearer-confirmation`, `payments.recheck`). On an open stuck-tip issue, staff who see in the Bachs dashboard that the platform paid the fee attest that one fact (`feePaidBy: 'platform'`, `dashboardVerified: true`, a reason). TipMe then reads the payment back from Bachs and books it only if it is still collected-but-unfinished and its amount, currency and platform fee equal the quote. Bachs reporting `connected_account` always wins and cannot be overridden. Every outcome is audited. This is the only outcome input that rests on a staff attestation, and it is limited to the fee bearer; the payment itself is always read from Bachs.
 
+### Cause found: the account did not hold naira
+
+Bachs documents that a new account holds only USD and that holding a currency decides what the account settles in. The staging accounts held no NGN, and from 05:18 Bachs converted naira tips on one of them to USD: those payments read `settlement_currency: USD` with no `settlement_amount` and no `fee_paid_by`. Tips to an account holding NGN settled in naira and confirmed at once, and the stuck account confirmed at once after NGN was turned on.
+
+- **Hold the local currency.** Bachs' create call takes no currencies, so payment setup reads the account and, when it does not hold its country's currency (NG → NGN; TipMe takes naira only), adds it with the account update (`balance_currencies: { NGN: true }`). Adding is safe to repeat; a failure is logged and retried on the next setup visit and never blocks setup.
+- **Report a converted payment.** The provider read returns `settlementCurrency` when Bachs settled the money in another currency. Reconciliation then opens one `payment_settlement_currency` money issue (migration 0043) that tells staff to turn NGN on and confirm the fee bearer; it closes itself when the attempt is final. Nothing is booked in another currency.
+
 ## Linked PRD requirements
 
 PRD payment-provider abstraction, guest checkout, truthful payment status and

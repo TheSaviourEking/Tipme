@@ -302,6 +302,13 @@
       "when": 1793178974187,
       "tag": "0042_payment_attempt_collected",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793182739216,
+      "tag": "0043_settlement_currency_issues",
+      "breakpoints": true
     }
   ]
 }

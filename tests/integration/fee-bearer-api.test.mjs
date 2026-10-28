@@ -24,7 +24,7 @@ const staffUserId = '00000000-0000-7000-8000-00000000a0a1';
 const logger = { info() {}, warn() {}, error() {} };
 const REFERENCE = 'acct_ada123:chk_collected';
 
-async function collectedTip(t, { collected = true } = {}) {
+async function collectedTip(t, { collected = true, settlementCurrency } = {}) {
   const database = await openTestDatabase();
   t.after(() => database.close());
   await database.reset();
@@ -80,6 +80,7 @@ async function collectedTip(t, { collected = true } = {}) {
           currency: 'NGN',
           feeMinor: 7500n,
           collected: true,
+          ...(settlementCurrency ? { settlementCurrency } : {}),
         }),
       },
       now: new Date(),
@@ -185,4 +186,17 @@ test('a tip whose money was never seen collected cannot be confirmed this way', 
   assert.equal(result.data.outcome, 'not_collected');
   assert.equal(provider.asked, 0);
   assert.notEqual(await tipStatus(), 'SUCCEEDED');
+});
+
+test('a tip Bachs settled in USD can be confirmed from its settlement issue', async (t) => {
+  const { db, q, tipStatus } = await collectedTip(t, {
+    settlementCurrency: 'USD',
+  });
+  const [issue] = await q(
+    `SELECT id FROM issues WHERE kind = 'payment_settlement_currency' AND status = 'open'`,
+  );
+  assert.ok(issue, 'a settlement-currency issue');
+  const result = await confirm(db, bachs(), issue.id);
+  assert.equal(result.data.outcome, 'confirmed');
+  assert.equal(await tipStatus(), 'SUCCEEDED');
 });
