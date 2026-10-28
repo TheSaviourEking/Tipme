@@ -185,6 +185,32 @@ export async function reconcileAttempts(input: {
   return { checked: attempts.length, applied, unresolved, errors, errorKinds };
 }
 
+/**
+ * A supporter is watching this tip's receipt: claims its unfinished attempt with `provider` for a
+ * check now, unless one ran in the last `minGapMs`. The claim is one UPDATE, so tabs polling at
+ * the same moment ask the provider once. Returns the attempt to check, or null.
+ */
+export function claimReceiptCheck(
+  db: Database,
+  input: { tipId: string; provider: string; now: Date; minGapMs: number },
+): Promise<string | null> {
+  const since = new Date(input.now.getTime() - input.minGapMs);
+  return guarded(async () => {
+    const claimed = await db.execute<{ id: string }>(sql`
+      UPDATE payment_attempts a
+         SET last_reconciled_at = ${input.now.toISOString()}::timestamptz
+        FROM tips t
+       WHERE t.id = ${input.tipId} AND a.intent_id = t.intent_id
+         AND a.provider = ${input.provider}
+         AND a.status IN ('INITIATED', 'PENDING', 'UNKNOWN')
+         AND a.provider_reference IS NOT NULL
+         AND (a.last_reconciled_at IS NULL
+              OR a.last_reconciled_at <= ${since.toISOString()}::timestamptz)
+      RETURNING a.id`);
+    return claimed.rows[0]?.id ?? null;
+  });
+}
+
 /** What payout reconciliation needs from a provider. */
 export interface PayoutVerifier {
   fetchPayoutStatus(

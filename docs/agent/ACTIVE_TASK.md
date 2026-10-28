@@ -1,3 +1,9 @@
+# Current task — faster Bachs confirmation (28 October 2026)
+
+- Branch/worktree: `feat/confirm-on-return` / `.worktrees/confirm-on-return`, from `origin/dev`.
+- Found: Bachs never delivered staging's payment events (`GET /v1/webhooks/events`: `attempts: 0`); the only deliveries were six hand redeliveries of one crypto event, answered 400 (#36). The webhook subscription is a Bachs dashboard setting for the user.
+- Added: the receipt's status request asks Bachs directly (`claimReceiptCheck`, at most every 4 s per tip, one UPDATE claim so parallel tabs ask once); staging's worker checks every 20 s from 45 s old (was 60 s from 120 s). Runbook: the three confirmation paths and the webhook subscriptions Bachs needs.
+
 # Current task — staging worker cannot reach Bachs (28 October 2026)
 
 - Branch: `fix/staging-worker-egress`, from `origin/dev`.

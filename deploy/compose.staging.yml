@@ -130,8 +130,11 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       GIT_SHA: ${TIPME_VERSION}
-      RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-60000}
-      RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-120000}
+      # The safety net when neither a webhook nor the open receipt confirmed a tip: a paid tip is
+      # found within about 65 s. The minimum age also marks starts and account creations still in
+      # progress as uncertain, so it stays above a few 10-second Bachs requests in a row.
+      RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-20000}
+      RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-45000}
       REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-25000000}
     depends_on:
       postgres: { condition: service_healthy }

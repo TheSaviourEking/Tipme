@@ -53,6 +53,14 @@ Fill in `/srv/tipme/staging.env`:
 
 To test Bachs checkout in this isolated staging copy, set `PAYMENT_PROVIDER=bachs-sandbox` and populate `BACHS_SANDBOX_API_KEY` and `BACHS_WEBHOOK_SECRET` in `/srv/tipme/staging.env`, then redeploy. The staging Compose file forwards the API key to the API and worker, and the webhook secrets to the API only (the worker only reads statuses). Keep `DEPLOYMENT_MODE=preview`, the shared `PREVIEW_PASSWORD`, and `PAYMENTS_LIVE_ENABLED=false`; never put Bachs credentials in the web app or configure a live key. The default remains `PAYMENT_PROVIDER=mock`.
 
+### How a Bachs tip gets confirmed
+
+Three paths, fastest first; any one of them is enough, and each reads the payment back from Bachs with the same checks:
+
+1. **Webhook** (instant). In Bachs' dashboard the staging endpoint (`https://api.staging.usetipme.xyz/v1/webhooks/bachs`) must be enabled and subscribed to payment events on **connected accounts**: at least `collection.succeeded`, `collection.failed`, `checkout.completed` and `checkout.expired`, plus `account.updated` and `capability.updated`. Bachs' `GET /v1/webhooks/events` lists each event with its delivery attempts; `attempts: 0` means Bachs never sent it.
+2. **The open receipt** (seconds). When the supporter comes back from Bachs, the receipt's status request asks Bachs directly, at most once every 4 seconds per tip.
+3. **The worker** (about a minute). It checks unfinished tips every 20 seconds once they are 45 seconds old, in case the supporter closed the page.
+
 ### The release check on the Bachs sandbox
 
 A new page cannot take Bachs tips until its owner completes Bachs' own form, so the release check cannot tip the page it creates. On a Bachs copy it instead:
