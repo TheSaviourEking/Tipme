@@ -19,6 +19,7 @@ import {
 } from '@tipme/database';
 import {
   BachsApiError,
+  BachsRequestNotSentError,
   UncertainProviderOutcomeError,
   type BachsProvider,
   type MockProvider,
@@ -46,6 +47,9 @@ export function classifyBachsStartError(error: unknown): {
   outcome: 'failed' | 'unknown';
   diagnostic: Record<string, string | number>;
 } {
+  // Refused before it was sent: Bachs never saw it, so nothing can have started.
+  if (error instanceof BachsRequestNotSentError)
+    return { outcome: 'failed', diagnostic: { error: error.name } };
   // A 4xx is a refusal; 408 (timeout) and 409 (conflict) may hide an accepted request.
   if (
     error instanceof BachsApiError &&

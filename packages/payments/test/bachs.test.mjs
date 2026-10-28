@@ -140,7 +140,7 @@ test('fee-free checkout omits platform_fee and invalid checkout input never reac
       successUrl: 'https://usetipme.xyz/return',
       cancelUrl: 'https://usetipme.xyz/cancel',
     }),
-    RangeError,
+    (error) => error.name === 'BachsRequestNotSentError',
   );
   assert.equal(requestCount, 1);
 });
@@ -1236,4 +1236,31 @@ test('a collection webhook in a currency TipMe cannot parse is still a trigger, 
   assert.equal(result.event.kind, 'payment');
   assert.equal(result.event.providerReference, 'acct_123abc:chk_crypto');
   assert.equal(result.event.amountMinor, undefined);
+});
+
+test('a checkout TipMe rejects before sending is reported as never sent', async () => {
+  let requests = 0;
+  const provider = makeProvider(async () => {
+    requests += 1;
+    return new Response('{}', { status: 500 });
+  });
+  const valid = {
+    attemptId: 'attempt-unsent',
+    amountMinor: 100000n,
+    currency: 'NGN',
+    recipientAccountReference: 'acct_123abc',
+    tipmeShareMinor: 10000n,
+    successUrl: 'https://usetipme.xyz/checkout/return',
+    cancelUrl: 'https://usetipme.xyz/checkout/cancel',
+  };
+  for (const overrides of [
+    { successUrl: 'http://example.com/return' },
+    { recipientAccountReference: 'acct:bad' },
+    { tipmeShareMinor: 100000n },
+  ])
+    await assert.rejects(
+      provider.initializePayment({ ...valid, ...overrides }),
+      (error) => error.name === 'BachsRequestNotSentError',
+    );
+  assert.equal(requests, 0);
 });
