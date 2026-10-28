@@ -1,11 +1,22 @@
 'use client';
+import * as Sentry from '@sentry/nextjs';
+import { useEffect } from 'react';
 import '@tipme/ui/tokens.css';
 import '@tipme/ui/components.css';
 import './globals.css';
 import { Wordmark } from '@/components/brand';
 
 /** When the site's own frame fails, this replaces it entirely: the brand, one sentence, a retry. */
-export default function GlobalError({ reset }: { reset: () => void }) {
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
   return (
     <html lang="en">
       <body>
