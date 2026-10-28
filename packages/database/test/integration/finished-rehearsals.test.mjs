@@ -138,3 +138,17 @@ test('a run that never finished keeps its issues and checks (Review Focus 1 and 
   assert.equal(await issueStatus(issue.id), 'open');
   assert.ok((await checked()).includes(attemptId));
 });
+
+test('an explicit check of one attempt (staff re-check) still asks, even after the run finished', async (t) => {
+  const { database, runId, attemptId } = await rehearsal(t, 'rehearsal_ask');
+  await finishReleaseRun(database.db, { runId });
+  const found = await findAttemptsToReconcile(database.db, {
+    olderThan: new Date(Date.now() + 60_000),
+    limit: 1,
+    attemptId,
+  });
+  assert.deepEqual(
+    found.map((attempt) => attempt.attemptId),
+    [attemptId],
+  );
+});

@@ -375,6 +375,7 @@ export function createBachsProvider(
       } catch (error) {
         throw new BachsRequestNotSentError(
           error instanceof Error ? error.message : 'Invalid Bachs checkout',
+          { cause: error },
         );
       }
       const body: Record<string, unknown> = {
