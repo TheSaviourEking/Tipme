@@ -929,7 +929,8 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 }
 
 /* No portrait shared (or it failed to load): a matted editorial monogram, never a blank frame.
-   Sized here as well: the generic .avatar--initials (120px) comes later in this file. */
+   Sized here because the portrait's 100% (.profile-portrait__media) and the generic 120px
+   (.avatar--initials) have equal specificity, and the later one won. */
 .profile-portrait__media.avatar--initials {
   width: 100%;
   height: 100%;

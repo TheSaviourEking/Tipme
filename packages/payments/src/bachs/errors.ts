@@ -21,8 +21,8 @@ export class BachsProtocolError extends Error {
 
 /** TipMe refused the request before sending it, so Bachs never saw it: safe to call refused. */
 export class BachsRequestNotSentError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'BachsRequestNotSentError';
   }
 }
