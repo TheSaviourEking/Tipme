@@ -1,3 +1,9 @@
+# Current task — staging worker cannot reach Bachs (28 October 2026)
+
+- Branch: `fix/staging-worker-egress`, from `origin/dev`.
+- Staging tips paid through Bachs stayed "Still checking": the worker sat only on Compose's `internal` network (no internet route), so every status check failed with `BachsTransportError` ("response was not received"), counted as `errors: 4` per run and never logged. Found on the server (read-only): the same check succeeds from the API container and from a laptop with staging's exact build `b9701fe`.
+- Fix: the worker joins `edge` as well; reconcile reports failed checks by kind (`error_kinds`). Once deployed, the three paid ₦1,000 tips confirm on the next run; the ₦2,000 checkout was never paid.
+
 # Current task — release check on the Bachs sandbox (28 October 2026)
 
 - Branch/worktree: `ci/release-check-bachs` / `.worktrees/ci-faster`, from `origin/dev` at `9fc7f23`.

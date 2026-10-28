@@ -119,6 +119,8 @@ export async function reconcileAttempts(input: {
   applied: number;
   unresolved: number;
   errors: number;
+  /** Failed checks by error kind (e.g. BachsTransportError), so the log says why. */
+  errorKinds: Record<string, number>;
 }> {
   const attempts = await findAttemptsToReconcile(input.db, {
     olderThan: new Date(input.now.getTime() - input.minAgeMs),
@@ -128,6 +130,7 @@ export async function reconcileAttempts(input: {
   let applied = 0;
   let unresolved = 0;
   let errors = 0;
+  const errorKinds: Record<string, number> = {};
   for (const attempt of attempts) {
     try {
       const answer = await providerFor(
@@ -166,9 +169,11 @@ export async function reconcileAttempts(input: {
         );
         if (raised) unresolved += 1;
       }
-    } catch {
+    } catch (error) {
       // One failing check (provider timeout, bad answer) must not stop the rest of the batch.
       errors += 1;
+      const kind = error instanceof Error ? error.name : 'unknown';
+      errorKinds[kind] = (errorKinds[kind] ?? 0) + 1;
     } finally {
       await input.db
         .update(paymentAttempts)
@@ -177,7 +182,7 @@ export async function reconcileAttempts(input: {
         .catch(() => undefined);
     }
   }
-  return { checked: attempts.length, applied, unresolved, errors };
+  return { checked: attempts.length, applied, unresolved, errors, errorKinds };
 }
 
 /** What payout reconciliation needs from a provider. */

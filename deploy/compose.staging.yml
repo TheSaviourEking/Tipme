@@ -101,6 +101,9 @@ services:
 
   worker:
     <<: *app
+    # The worker asks the payment provider (Bachs) whether tips were paid, so it needs a route
+    # out; it still publishes nothing and is reachable only from the internal network.
+    networks: [edge, internal]
     command:
       [
         'node',
