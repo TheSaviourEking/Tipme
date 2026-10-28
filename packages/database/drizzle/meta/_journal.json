@@ -295,6 +295,13 @@
       "when": 1793093152968,
       "tag": "0041_payment_reversed_issues",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793178974187,
+      "tag": "0042_payment_attempt_collected",
+      "breakpoints": true
     }
   ]
 }

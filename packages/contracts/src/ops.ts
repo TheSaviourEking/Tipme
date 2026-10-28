@@ -276,6 +276,19 @@ export type OpsBachsCheckoutRecoveryRequest = z.infer<
   typeof opsBachsCheckoutRecoverySchema
 >;
 
+/**
+ * Bachs took a tip's money but never reported who paid its processing fee. Staff who see in the
+ * Bachs dashboard that the platform paid it confirm that one fact; everything else is read back.
+ */
+export const opsBachsFeeBearerSchema = opsReasonSchema
+  .extend({
+    issueId: z.uuid(),
+    feePaidBy: z.literal('platform'),
+    dashboardVerified: z.literal(true),
+  })
+  .strict();
+export type OpsBachsFeeBearerRequest = z.infer<typeof opsBachsFeeBearerSchema>;
+
 /** Recover an ambiguous sandbox account after staff match it in the provider dashboard. */
 export const opsBachsAccountRecoverySchema = opsReasonSchema
   .extend({

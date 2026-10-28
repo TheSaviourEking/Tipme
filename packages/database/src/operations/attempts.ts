@@ -15,6 +15,7 @@ import { activeTraceId } from './ids.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordTransition } from './transitions.js';
 import { recordAudit } from './audit.js';
+import { quotedShare } from './reconcile.js';
 import {
   isScopedProviderReference,
   OPAQUE_PROVIDER_ID,
@@ -706,5 +707,63 @@ export function findAttemptStart(
       .from(paymentAttempts)
       .where(eq(paymentAttempts.id, attemptId));
     return row ?? null;
+  });
+}
+
+/**
+ * The Bachs attempt behind a tip or attempt, for staff fee-bearer confirmation: whether it is
+ * still unfinished, and whether a provider read showed its money taken. Null when there is none.
+ */
+export function getBachsAttemptForFeeConfirmation(
+  db: Database,
+  input: { attemptId?: string; tipId?: string },
+): Promise<{
+  attemptId: string;
+  providerReference: string;
+  /** INITIATED, PENDING or UNKNOWN: no final outcome yet. */
+  unfinished: boolean;
+  collected: boolean;
+  amountMinor: bigint;
+  currency: string;
+  /** TipMe's whole quoted share: the platform fee Bachs must report. */
+  expectation: { platformFeeMinor: bigint };
+} | null> {
+  if (!input.attemptId && !input.tipId) return Promise.resolve(null);
+  return guarded(async () => {
+    const [row] = await db
+      .select({
+        attemptId: paymentAttempts.id,
+        providerReference: paymentAttempts.providerReference,
+        status: paymentAttempts.status,
+        collectedAt: paymentAttempts.collectedAt,
+        amountMinor: tipQuotes.payerTotalMinor,
+        currency: tipQuotes.currency,
+        platformFeeMinor: tipQuotes.platformFeeMinor,
+        providerFeeMinor: tipQuotes.providerFeeMinor,
+      })
+      .from(paymentAttempts)
+      .innerJoin(
+        paymentIntents,
+        eq(paymentIntents.id, paymentAttempts.intentId),
+      )
+      .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
+      .innerJoin(tips, eq(tips.intentId, paymentAttempts.intentId))
+      .where(
+        and(
+          input.attemptId ? eq(paymentAttempts.id, input.attemptId) : undefined,
+          input.tipId ? eq(tips.id, input.tipId) : undefined,
+          eq(paymentAttempts.provider, 'bachs'),
+        ),
+      );
+    if (!row?.providerReference) return null;
+    return {
+      attemptId: row.attemptId,
+      providerReference: row.providerReference,
+      unfinished: ['INITIATED', 'PENDING', 'UNKNOWN'].includes(row.status),
+      collected: row.collectedAt !== null,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
+      expectation: quotedShare(row),
+    };
   });
 }

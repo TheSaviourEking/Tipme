@@ -215,6 +215,20 @@ export function StatusView() {
             </p>
           </>
         )}
+        {tip.state === 'collected' && (
+          <>
+            {/* Not the paid styling: the tip is not confirmed until the details are final. */}
+            <span className="tip-status-icon" aria-hidden="true">
+              ◌
+            </span>
+            <h1>Your payment went through</h1>
+            <p>
+              The payment provider has taken your {amount}. We’re confirming the
+              final details with them, and this receipt will show the tip as
+              complete once that’s done. You don’t need to pay again.
+            </p>
+          </>
+        )}
         {tip.state === 'paid' && (
           <>
             <span

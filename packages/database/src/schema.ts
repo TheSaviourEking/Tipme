@@ -582,6 +582,9 @@ export const paymentAttempts = pgTable(
     lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
     // Set before an external create call so concurrent requests cannot start a second checkout.
     startClaimedAt: timestamp('start_claimed_at', { withTimezone: true }),
+    // When a provider read first showed the money taken while its details (who bore the fee)
+    // were not final: the receipt says the payment went through. Not an outcome; nothing is booked.
+    collectedAt: timestamp('collected_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (table) => [

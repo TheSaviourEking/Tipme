@@ -1,4 +1,13 @@
-import { and, asc, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  sql,
+} from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   paymentAttempts,
@@ -166,6 +175,16 @@ export async function reconcileAttempts(input: {
           now: input.now,
         });
         if (result.outcome === 'applied') applied += 1;
+      } else if (answer.status === 'pending' && answer.collected) {
+        await input.db
+          .update(paymentAttempts)
+          .set({ collectedAt: input.now })
+          .where(
+            and(
+              eq(paymentAttempts.id, attempt.attemptId),
+              isNull(paymentAttempts.collectedAt),
+            ),
+          );
       } else if (
         answer.status === 'not_found' &&
         input.now.getTime() - attempt.createdAt.getTime() > UNRESOLVED_AFTER_MS

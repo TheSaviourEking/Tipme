@@ -207,6 +207,87 @@ function BachsRecoveryAction({
   );
 }
 
+type FeeBearerResult = {
+  outcome:
+    | 'confirmed'
+    | 'not_pending'
+    | 'not_collected'
+    | 'mismatch'
+    | 'recipient_bore_fee';
+};
+
+const FEE_BEARER: Record<FeeBearerResult['outcome'], string> = {
+  confirmed:
+    'Bachs’ payment matched the quote. With the fee confirmed as paid by the platform, the tip is now paid.',
+  not_pending: 'This tip already has a final outcome. Nothing changed.',
+  not_collected:
+    'Bachs has not taken this payment (or TipMe never saw it taken). Nothing changed.',
+  mismatch:
+    'Bachs reports a different amount, currency or TipMe fee than the quote. Nothing changed; look into it in Bachs.',
+  recipient_bore_fee:
+    'Bachs says the recipient paid the processing fee. That cannot be overridden here. Nothing changed.',
+};
+
+/** Confirms one fact Bachs left out (the platform paid the fee); TipMe re-reads the rest. */
+function BachsFeeBearerAction({
+  onSubmit,
+}: {
+  onSubmit: (reason: string) => Promise<string | null>;
+}) {
+  const id = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const reason = String(data.get('reason') ?? '').trim();
+    if (reason.length < 10 || data.get('dashboardVerified') !== 'on') return;
+    setBusy(true);
+    setError('');
+    const problem = await onSubmit(reason);
+    setBusy(false);
+    if (problem) setError(problem);
+    else form.reset();
+  };
+  return (
+    <form
+      className="settings-form ops-recovery"
+      onSubmit={(e) => void submit(e)}
+    >
+      <TextareaField
+        id={`${id}-reason`}
+        name="reason"
+        label="What did you see in Bachs Dashboard?"
+        hint="Recorded in the audit log with your name and time."
+        minLength={10}
+        maxLength={500}
+        required
+      />
+      <label className="ops-recovery__confirm" htmlFor={`${id}-verified`}>
+        <input
+          id={`${id}-verified`}
+          name="dashboardVerified"
+          type="checkbox"
+          required
+        />
+        <span>
+          I found this payment in Bachs Dashboard, and it shows the processing
+          fee was paid by the platform.
+        </span>
+      </label>
+      {error && (
+        <Notice tone="error" title="Not confirmed">
+          {error}
+        </Notice>
+      )}
+      <Button type="submit" disabled={busy} aria-busy={busy}>
+        {busy ? 'Checking with Bachs…' : 'Confirm the fee and check the tip'}
+      </Button>
+    </form>
+  );
+}
+
 /** One issue with every data point needed to resolve it or decide, and the actions allowed. */
 export default function IssuePage() {
   const { issueId } = useParams<{ issueId: string }>();
@@ -374,6 +455,41 @@ export default function IssuePage() {
           holds.
         </p>
       </Section>
+
+      {open &&
+        issue.kind === 'stuck_tip' &&
+        issue.subject.tipId &&
+        can(access, 'payments.recheck') && (
+          <Section title="Bachs took the money but not the fee details">
+            <p>
+              Use this only when Bachs shows the payment succeeded but never
+              said who paid its processing fee. You confirm that one fact; TipMe
+              then reads the payment from Bachs again and marks the tip paid
+              only if the amount, currency and TipMe fee match the quote. If
+              Bachs says the recipient paid the fee, nothing changes.
+            </p>
+            <BachsFeeBearerAction
+              onSubmit={async (reason) => {
+                const result = await apiFetch<FeeBearerResult>(
+                  '/v1/ops/bachs/fee-bearer-confirmation',
+                  {
+                    method: 'POST',
+                    body: {
+                      issueId: issue.id,
+                      feePaidBy: 'platform',
+                      dashboardVerified: true,
+                      reason,
+                    },
+                  },
+                );
+                if (!result.ok) return failure(result.code);
+                setMessage(FEE_BEARER[result.data.outcome]);
+                await load();
+                return null;
+              }}
+            />
+          </Section>
+        )}
 
       {open &&
         issue.kind === 'payment_attempt_unresolved' &&
