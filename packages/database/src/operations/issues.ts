@@ -402,6 +402,13 @@ export function autoResolveIssues(
          AND a.status <> 'UNKNOWN'
          AND a.provider_account_reference IS NOT NULL
       UNION ALL
+      -- Raised after its release check finished (the misreported tip never confirms).
+      SELECT i.id, 'The release check that raised it has finished.'
+        FROM issues i
+        JOIN profiles p ON p.id = (i.subject->>'profileId')::uuid
+        JOIN release_runs r ON r.id = p.rehearsal_run_id
+       WHERE i.status = 'open' AND i.rehearsal AND r.finished_at IS NOT NULL
+      UNION ALL
       SELECT i.id, 'The recovery was completed or cancelled.'
         FROM issues i JOIN phone_recoveries r ON r.id = (i.subject->>'recoveryId')::uuid
        WHERE i.status = 'open' AND i.kind = 'pending_recovery'

@@ -9,7 +9,11 @@ import type {
 } from '../provider.js';
 import { UnsupportedProviderCapabilityError } from '../provider.js';
 import { BachsApiClient, SANDBOX_API_ORIGIN } from './client.js';
-import { BachsProtocolError, UncertainProviderOutcomeError } from './errors.js';
+import {
+  BachsProtocolError,
+  BachsRequestNotSentError,
+  UncertainProviderOutcomeError,
+} from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
@@ -269,7 +273,10 @@ export function bachsAccountReadiness(account: BachsRecipientAccount): {
   chargesEnabled: boolean;
 } {
   if (
-    account.active === false ||
+    // Inactive with collection already granted: Bachs switched off a set-up account. A new
+    // account is inactive too, until its form is finished; that one is still onboarding.
+    (account.active === false &&
+      account.ngnCardCollectionStatus === 'active') ||
     account.feeCollector === 'connected_account' ||
     BLOCKED_CAPABILITY.has(account.ngnCardCollectionStatus ?? '')
   )
@@ -328,35 +335,48 @@ export function createBachsProvider(
     capabilities,
 
     async initializePayment(input) {
-      if (
-        !input.recipientAccountReference ||
-        input.tipmeShareMinor === undefined ||
-        !input.successUrl ||
-        !input.cancelUrl
-      ) {
-        throw new TypeError(
-          'Bachs checkout requires an account, complete TipMe share, success URL, and cancel URL',
+      // Checked before anything is sent: a refusal here means Bachs never saw the request.
+      let idempotencyKey: string;
+      let successUrl: string;
+      let cancelUrl: string;
+      try {
+        if (
+          !input.recipientAccountReference ||
+          input.tipmeShareMinor === undefined ||
+          !input.successUrl ||
+          !input.cancelUrl
+        ) {
+          throw new TypeError(
+            'Bachs checkout requires an account, complete TipMe share, success URL, and cancel URL',
+          );
+        }
+        providerIdentifier(
+          input.recipientAccountReference,
+          'account reference',
+        );
+        if (input.amountMinor <= 0n)
+          throw new RangeError('Checkout amount must be positive');
+        if (
+          input.tipmeShareMinor < 0n ||
+          input.tipmeShareMinor >= input.amountMinor
+        ) {
+          throw new RangeError(
+            'TipMe share must be non-negative and less than the tip',
+          );
+        }
+
+        idempotencyKey =
+          input.idempotencyKey ?? `tipme-checkout-${input.attemptId}`;
+        if (!/^[\w.:-]{1,255}$/.test(idempotencyKey))
+          throw new TypeError('Invalid Bachs idempotency key');
+
+        successUrl = validateHttpsOrLocalUrl(input.successUrl);
+        cancelUrl = validateHttpsOrLocalUrl(input.cancelUrl);
+      } catch (error) {
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid Bachs checkout',
         );
       }
-      providerIdentifier(input.recipientAccountReference, 'account reference');
-      if (input.amountMinor <= 0n)
-        throw new RangeError('Checkout amount must be positive');
-      if (
-        input.tipmeShareMinor < 0n ||
-        input.tipmeShareMinor >= input.amountMinor
-      ) {
-        throw new RangeError(
-          'TipMe share must be non-negative and less than the tip',
-        );
-      }
-
-      const idempotencyKey =
-        input.idempotencyKey ?? `tipme-checkout-${input.attemptId}`;
-      if (!/^[\w.:-]{1,255}$/.test(idempotencyKey))
-        throw new TypeError('Invalid Bachs idempotency key');
-
-      const successUrl = validateHttpsOrLocalUrl(input.successUrl);
-      const cancelUrl = validateHttpsOrLocalUrl(input.cancelUrl);
       const body: Record<string, unknown> = {
         pricing: {
           amount: minorToDecimal(input.amountMinor, input.currency),

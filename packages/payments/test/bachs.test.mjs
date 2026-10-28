@@ -140,7 +140,7 @@ test('fee-free checkout omits platform_fee and invalid checkout input never reac
       successUrl: 'https://usetipme.xyz/return',
       cancelUrl: 'https://usetipme.xyz/cancel',
     }),
-    RangeError,
+    (error) => error.name === 'BachsRequestNotSentError',
   );
   assert.equal(requestCount, 1);
 });
@@ -928,6 +928,42 @@ test('an account can take tips only with active NGN card collection and platform
     });
 });
 
+test('an inactive account still onboarding is onboarding, not restricted', async () => {
+  const { bachsAccountReadiness } = await import('../dist/index.js');
+  const fresh = (overrides) => ({
+    accountReference: 'acct_new',
+    active: false,
+    ngnCardCollectionStatus: 'pending',
+    bankTransferStatus: null,
+    feeCollector: 'platform',
+    requirementsDue: ['persons.dob'],
+    ...overrides,
+  });
+  // A new account is inactive until Bachs' form is finished: the owner should continue setup.
+  for (const overrides of [
+    {},
+    {
+      ngnCardCollectionStatus: null,
+      feeCollector: 'unknown',
+      requirementsDue: [],
+    },
+  ])
+    assert.deepEqual(bachsAccountReadiness(fresh(overrides)), {
+      status: 'ONBOARDING',
+      chargesEnabled: false,
+    });
+  // Still blocked whatever `active` says: Bachs restricted collection, or fees fall on the owner.
+  for (const overrides of [
+    { ngnCardCollectionStatus: 'disabled' },
+    { ngnCardCollectionStatus: 'rejected' },
+    { feeCollector: 'connected_account' },
+  ])
+    assert.deepEqual(bachsAccountReadiness(fresh(overrides)), {
+      status: 'RESTRICTED',
+      chargesEnabled: false,
+    });
+});
+
 test('a read-only Bachs adapter needs no webhook secret and refuses every webhook', async () => {
   const { createBachsProvider } = await import('../dist/index.js');
   const provider = createBachsProvider({
@@ -1200,4 +1236,31 @@ test('a collection webhook in a currency TipMe cannot parse is still a trigger, 
   assert.equal(result.event.kind, 'payment');
   assert.equal(result.event.providerReference, 'acct_123abc:chk_crypto');
   assert.equal(result.event.amountMinor, undefined);
+});
+
+test('a checkout TipMe rejects before sending is reported as never sent', async () => {
+  let requests = 0;
+  const provider = makeProvider(async () => {
+    requests += 1;
+    return new Response('{}', { status: 500 });
+  });
+  const valid = {
+    attemptId: 'attempt-unsent',
+    amountMinor: 100000n,
+    currency: 'NGN',
+    recipientAccountReference: 'acct_123abc',
+    tipmeShareMinor: 10000n,
+    successUrl: 'https://usetipme.xyz/checkout/return',
+    cancelUrl: 'https://usetipme.xyz/checkout/cancel',
+  };
+  for (const overrides of [
+    { successUrl: 'http://example.com/return' },
+    { recipientAccountReference: 'acct:bad' },
+    { tipmeShareMinor: 100000n },
+  ])
+    await assert.rejects(
+      provider.initializePayment({ ...valid, ...overrides }),
+      (error) => error.name === 'BachsRequestNotSentError',
+    );
+  assert.equal(requests, 0);
 });
