@@ -116,6 +116,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
 | POST | `/v1/webhooks/bachs` | – | – | yes |
+| POST | `/v1/webhooks/mail/{provider}` | – | – | – |
 | POST | `/v1/webhooks/mock` | – | – | yes |
 
 #### The release check (bearer token; test copies only)

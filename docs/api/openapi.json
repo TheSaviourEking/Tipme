@@ -5149,6 +5149,47 @@
         "x-tipme-access": "provider-signature"
       }
     },
+    "/v1/webhooks/mail/{provider}": {
+      "post": {
+        "operationId": "MailWebhook.receive",
+        "tags": [
+          "MailWebhook"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "provider-signature"
+      }
+    },
     "/v1/webhooks/mock": {
       "post": {
         "operationId": "MockWebhook.receive",
