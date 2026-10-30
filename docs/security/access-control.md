@@ -58,12 +58,13 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `audit.view` | GET `/v1/ops/audit` |
 | `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
 | `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
-| `issues.view` | GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes` |
+| `issues.view` | GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
 | `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/recheck` |
-| `private.view` | POST `/v1/ops/issues/{id}/reveal` |
+| `private.view` | POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
+| `providers.manage` | POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `search.view` | GET `/v1/ops/search` |
 
@@ -204,6 +205,14 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
+| GET | `/v1/ops/providers/mail` | `issues.view` | n/a (read) | – | – |
+| POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/overrides` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/overrides/remove` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/suppressions/lookup` | `private.view` | yes | – | – |
+| POST | `/v1/ops/providers/suppressions/remove` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/tests/confirm` | `issues.view` | yes | – | – |
 | POST | `/v1/ops/recheck` | `payments.recheck` | yes | – | – |
 | GET | `/v1/ops/search` | `search.view` | n/a (read) | – | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
