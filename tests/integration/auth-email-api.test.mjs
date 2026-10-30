@@ -165,37 +165,62 @@ test('an email already proven on another account cannot be taken, and says so on
   assert.equal((await response.json()).error.code, 'EMAIL_TAKEN');
 });
 
-test('phone sign-in is refused once real mail is the provider', async (t) => {
+test('phone and link routes are refused once real mail is the active provider', async () => {
   const { AuthController } =
     await import('../../apps/api/dist/auth/auth.controller.js');
-  const api = new AuthController(
-    {
-      MAIL_DEFAULT_PROVIDER: 'zeptomail',
-      AUTH_CODE_SECRET: 'x'.repeat(32),
-      MAIL_SEAL_KEY: Buffer.alloc(32, 7).toString('base64'),
-    },
-    { db: database.db },
-    {},
-  );
-  await assert.rejects(api.code({ phone: '+2348030000000' }), {
-    code: 'NOT_FOUND',
-  });
-  void t;
   const { NotificationsController } =
     await import('../../apps/api/dist/notifications/notifications.controller.js');
-  const legacy = new NotificationsController(
-    {
-      MAIL_DEFAULT_PROVIDER: 'zeptomail',
-      MAIL_SEAL_KEY: Buffer.alloc(32, 7).toString('base64'),
-    },
-    { db: database.db },
-    { revalidate() {} },
-  );
-  await assert.rejects(legacy.recover({ email: 'a@example.com' }), {
-    code: 'NOT_FOUND',
+  const key = Buffer.alloc(32, 7).toString('base64');
+  const build = (MAIL_DEFAULT_PROVIDER) => ({
+    auth: new AuthController(
+      {
+        MAIL_DEFAULT_PROVIDER,
+        AUTH_CODE_SECRET: 'x'.repeat(32),
+        MAIL_SEAL_KEY: key,
+      },
+      { db: database.db },
+    ),
+    legacy: new NotificationsController(
+      {
+        MAIL_DEFAULT_PROVIDER,
+        MAIL_SEAL_KEY: key,
+        AUTH_CODE_SECRET: 'x'.repeat(32),
+      },
+      { db: database.db },
+      { revalidate() {} },
+    ),
   });
-  await assert.rejects(
-    legacy.addEmail({ userId: 'x' }, { email: 'a@example.com' }),
-    { code: 'NOT_FOUND' },
+  const refusals = ({ auth, legacy }) => [
+    () => auth.code({ phone: '+2348030000000' }),
+    () =>
+      auth.verify(
+        { phone: '+2348030000000', code: '000000' },
+        { headers: {} },
+        {},
+      ),
+    () => legacy.addEmail({ userId: 'x' }, { email: 'a@example.com' }),
+    () => legacy.confirm({ token: 'x'.repeat(43) }),
+    () => legacy.phoneCode({ userId: 'x' }, { phone: '+2348030000000' }),
+    () =>
+      legacy.changePhone(
+        { userId: 'x', sessionId: 'y' },
+        { phone: '+2348030000000', code: '000000' },
+      ),
+    () => legacy.recover({ email: 'a@example.com' }),
+  ];
+  for (const call of refusals(build('zeptomail')))
+    await assert.rejects(call(), { code: 'NOT_FOUND' }, call.toString());
+  // The default is still pretend, but staff made a real provider active in ops.
+  await database.pool.query(
+    `INSERT INTO provider_settings (kind, active_provider, changed_at, reason)
+     VALUES ('mail', 'zeptomail', now(), 'smoke test')`,
   );
+  try {
+    for (const call of refusals(build('mock')))
+      await assert.rejects(call(), { code: 'NOT_FOUND' }, call.toString());
+  } finally {
+    await database.pool.query(
+      `DELETE FROM provider_settings WHERE kind = 'mail'`,
+    );
+  }
 });

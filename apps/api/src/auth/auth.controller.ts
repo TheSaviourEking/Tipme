@@ -25,6 +25,7 @@ import {
   createSession,
   hasProfile,
   listSessions,
+  activeMailProvider,
   mailSealing,
   requestEmailSignInCode,
   requestSignInCode,
@@ -70,9 +71,12 @@ export class AuthController {
   private readonly sealing: MailSealing;
 
   /** Phone codes aren't built yet: phone sign-in exists only while messaging is pretend. */
-  private assertPhoneAllowed(): void {
-    if (this.config.MAIL_DEFAULT_PROVIDER !== 'mock')
-      throw new CodedHttpException(404, 'NOT_FOUND');
+  private async assertPhoneAllowed(): Promise<void> {
+    const active = await activeMailProvider(
+      this.database.db,
+      this.config.MAIL_DEFAULT_PROVIDER,
+    );
+    if (active !== 'mock') throw new CodedHttpException(404, 'NOT_FOUND');
   }
 
   /** Always 202: the answer never reveals whether the address has an account. */
@@ -91,7 +95,7 @@ export class AuthController {
       });
       return { data: { sent: true } };
     }
-    this.assertPhoneAllowed();
+    await this.assertPhoneAllowed();
     await requestSignInCode(this.database.db, {
       phone: body.phone,
       secret: this.config.AUTH_CODE_SECRET,
@@ -114,7 +118,7 @@ export class AuthController {
       readCookie(request, DEVICE_COOKIE) ??
       randomBytes(32).toString('base64url');
     const deviceHash = createHash('sha256').update(device).digest('hex');
-    if (!('email' in body)) this.assertPhoneAllowed();
+    if (!('email' in body)) await this.assertPhoneAllowed();
     const result =
       'email' in body
         ? await verifyEmailSignInCode(db, this.sealing, {

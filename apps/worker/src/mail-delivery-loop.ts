@@ -1,6 +1,7 @@
 import {
   completeDueRecoveries,
   deliverDueMail,
+  purgeEmailCodes,
   requeueStuckMail,
   wipeExpiredMailContent,
   type MailDeliveryDeps,
@@ -39,6 +40,7 @@ export function startMailDelivery(options: {
         await requeueStuckMail(deps.db, now);
         await wipeExpiredMailContent(deps.db, now);
         await completeDueRecoveries(deps.db, deps.sealing, now);
+        await purgeEmailCodes(deps.db, now);
       }
       await deliverDueMail(
         { ...deps, log: (entry) => logger.info(entry) },
