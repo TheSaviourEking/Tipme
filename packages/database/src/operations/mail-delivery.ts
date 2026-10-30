@@ -43,6 +43,8 @@ export interface ClaimedMail {
   pinnedProvider: MailProviderName | null;
   expiresAt: Date | null;
   attempts: number;
+  /** This claim's time: every later write must match it, so a stalled worker can't overwrite. */
+  claimedAt: Date;
 }
 
 /**
@@ -79,20 +81,53 @@ export async function claimDueMail(
         );
     return due;
   });
-  return rows.map((row) => ({
-    id: row.id,
-    type: row.type,
-    category: row.category as MailCategory,
-    userId: row.userId,
-    to: row.toSealed ? openSecret(sealing.key, row.toSealed) : '',
-    data: row.dataSealed
-      ? (JSON.parse(openSecret(sealing.key, row.dataSealed)) as unknown)
-      : null,
-    pinnedProvider: row.pinnedProvider as MailProviderName | null,
-    expiresAt: row.expiresAt,
-    attempts: row.attempts,
-  }));
+  const claimed: ClaimedMail[] = [];
+  for (const row of rows) {
+    let to: string;
+    let data: unknown;
+    try {
+      to = row.toSealed ? openSecret(sealing.key, row.toSealed) : '';
+      data = row.dataSealed
+        ? (JSON.parse(openSecret(sealing.key, row.dataSealed)) as unknown)
+        : null;
+    } catch {
+      // One unreadable row fails on its own; it never holds back the rest of the batch.
+      await recordMailFailure(db, {
+        id: row.id,
+        type: row.type,
+        category: row.category as MailCategory,
+        provider: null,
+        code: 'unreadable',
+        permanent: true,
+        attempts: row.attempts,
+        claimedAt: input.now,
+        now: input.now,
+      });
+      continue;
+    }
+    claimed.push({
+      id: row.id,
+      type: row.type,
+      category: row.category as MailCategory,
+      userId: row.userId,
+      to,
+      data,
+      pinnedProvider: row.pinnedProvider as MailProviderName | null,
+      expiresAt: row.expiresAt,
+      attempts: row.attempts,
+      claimedAt: input.now,
+    });
+  }
+  return claimed;
 }
+
+/** Only the worker holding this exact claim may record its outcome. */
+const ownsClaim = (id: string, claimedAt: Date) =>
+  and(
+    eq(mailMessages.id, id),
+    eq(mailMessages.status, 'sending'),
+    eq(mailMessages.claimedAt, claimedAt),
+  );
 
 /** Checks made at send time, so a change after queueing still counts. */
 export async function mailGate(
@@ -147,10 +182,12 @@ async function finishWithoutSending(
   now: Date,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx
+    const updated = await tx
       .update(mailMessages)
       .set({ status: STATUS_FOR_GATE[outcome], finalAt: now, claimedAt: null })
-      .where(eq(mailMessages.id, mail.id));
+      .where(ownsClaim(mail.id, mail.claimedAt))
+      .returning({ id: mailMessages.id });
+    if (updated.length === 0) return;
     await recordMailEvent(tx, {
       messageId: mail.id,
       kind: outcome,
@@ -171,11 +208,12 @@ export async function recordMailSent(
     providerMessageId: string;
     snapshot: object | null;
     sealing: MailSealing;
+    claimedAt: Date;
     now: Date;
   },
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx
+): Promise<'sent' | 'stale'> {
+  return db.transaction(async (tx) => {
+    const updated = await tx
       .update(mailMessages)
       .set({
         status: 'sent',
@@ -190,7 +228,9 @@ export async function recordMailSent(
         claimedAt: null,
         lastError: null,
       })
-      .where(eq(mailMessages.id, input.id));
+      .where(ownsClaim(input.id, input.claimedAt))
+      .returning({ id: mailMessages.id });
+    if (updated.length === 0) return 'stale' as const;
     await recordMailEvent(tx, {
       messageId: input.id,
       kind: 'sent',
@@ -199,6 +239,7 @@ export async function recordMailSent(
       type: input.type,
       category: input.category,
     });
+    return 'sent' as const;
   });
 }
 
@@ -209,21 +250,22 @@ export async function recordMailFailure(
     id: string;
     type: string;
     category: MailCategory;
-    provider: MailProviderName;
+    provider: MailProviderName | null;
     code: string;
     permanent: boolean;
     attempts: number;
+    claimedAt: Date;
     now: Date;
   },
-): Promise<'retry' | 'failed'> {
+): Promise<'retry' | 'failed' | 'stale'> {
   const attempts = input.attempts + 1;
   const failed = input.permanent || attempts >= MAX_ATTEMPTS;
-  await db.transaction(async (tx) => {
-    await tx
+  return db.transaction(async (tx) => {
+    const updated = await tx
       .update(mailMessages)
       .set({
         status: failed ? 'failed' : 'queued',
-        provider: input.provider,
+        ...(input.provider ? { provider: input.provider } : {}),
         attempts,
         lastError: input.code.slice(0, 80),
         claimedAt: null,
@@ -235,7 +277,9 @@ export async function recordMailFailure(
               ),
             }),
       })
-      .where(eq(mailMessages.id, input.id));
+      .where(ownsClaim(input.id, input.claimedAt))
+      .returning({ id: mailMessages.id });
+    if (updated.length === 0) return 'stale' as const;
     // Every attempt is in the timeline; the day's "failed" count only counts final failures.
     await recordMailEvent(tx, {
       messageId: input.id,
@@ -244,8 +288,8 @@ export async function recordMailFailure(
       occurredAt: input.now,
       ...(failed ? { type: input.type, category: input.category } : {}),
     });
+    return failed ? ('failed' as const) : ('retry' as const);
   });
-  return failed ? 'failed' : 'retry';
 }
 
 /** Mail left `sending` by a worker that died goes back to the queue after two minutes. */
@@ -322,6 +366,14 @@ export async function deliverDueMail(
     suppressed: 0,
     skipped: 0,
   };
+  // Logging never changes what happens to a mail.
+  const log = (entry: Record<string, string | number | null>) => {
+    try {
+      deps.log?.(entry);
+    } catch {
+      /* ignored */
+    }
+  };
   const claimed = await claimDueMail(deps.db, deps.sealing, input);
   if (claimed.length === 0) return result;
   const active = await deps.activeProvider();
@@ -333,7 +385,7 @@ export async function deliverDueMail(
       if (gate === 'expired') result.expired += 1;
       else if (gate === 'suppressed') result.suppressed += 1;
       else result.skipped += 1;
-      deps.log?.({
+      log({
         event: `mail.${gate}`,
         message_id: mail.id,
         type: mail.type,
@@ -356,11 +408,13 @@ export async function deliverDueMail(
         code,
         permanent,
         attempts: mail.attempts,
+        claimedAt: mail.claimedAt,
         now: input.now,
       });
+      if (outcome === 'stale') return;
       if (outcome === 'failed') result.failed += 1;
       else result.retried += 1;
-      deps.log?.({
+      log({
         event: outcome === 'failed' ? 'mail.failed' : 'mail.retry',
         message_id: mail.id,
         type: mail.type,
@@ -382,8 +436,11 @@ export async function deliverDueMail(
       await fail('render_failed', true);
       continue;
     }
+    // Only the provider call is inside this try: a failure after the provider accepted the mail
+    // must never be mistaken for a send failure (that would send it again).
+    let providerMessageId: string;
     try {
-      const { providerMessageId } = await provider.send({
+      ({ providerMessageId } = await provider.send({
         reference: mail.id,
         to: mail.to,
         from: deps.from,
@@ -393,30 +450,32 @@ export async function deliverDueMail(
         html: rendered.html,
         headers: {},
         tracking: MAIL_TYPES[mail.type]?.tracking ?? false,
-      });
-      await recordMailSent(deps.db, {
-        id: mail.id,
-        type: mail.type,
-        category: mail.category,
-        provider: providerName,
-        providerMessageId,
-        snapshot: rendered.snapshot,
-        sealing: deps.sealing,
-        now: input.now,
-      });
-      result.sent += 1;
-      deps.log?.({
-        event: 'mail.sent',
-        message_id: mail.id,
-        type: mail.type,
-        provider: providerName,
-      });
+      }));
     } catch (error) {
       if (error instanceof MailRejectedError) await fail(error.code, true);
       else if (error instanceof MailTemporaryError)
         await fail(error.code, false);
       else await fail('send_error', false);
+      continue;
     }
+    const recorded = await recordMailSent(deps.db, {
+      id: mail.id,
+      type: mail.type,
+      category: mail.category,
+      provider: providerName,
+      providerMessageId,
+      snapshot: rendered.snapshot,
+      sealing: deps.sealing,
+      claimedAt: mail.claimedAt,
+      now: input.now,
+    });
+    if (recorded === 'sent') result.sent += 1;
+    log({
+      event: recorded === 'sent' ? 'mail.sent' : 'mail.sent_stale_claim',
+      message_id: mail.id,
+      type: mail.type,
+      provider: providerName,
+    });
   }
   return result;
 }

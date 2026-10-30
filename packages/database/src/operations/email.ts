@@ -58,6 +58,8 @@ export function startEmailVerification(
         data: { token },
         dedupeKey: `email_verification_link.${sha256(token)}`,
         now,
+        // The link dies after 24 hours; the email must never arrive later.
+        expiresAt: new Date(now.getTime() + VERIFY_TTL_MS),
       });
     }),
   );
@@ -156,6 +158,7 @@ export function startRecovery(
         data: { token },
         dedupeKey: `recovery_link.${sha256(token)}`,
         now,
+        expiresAt: new Date(now.getTime() + RECOVER_TTL_MS),
       });
     });
     return 'sent';
