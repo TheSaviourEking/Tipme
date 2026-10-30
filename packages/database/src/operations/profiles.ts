@@ -24,6 +24,7 @@ import {
   handleAliases,
   handleHolds,
   profileAvatars,
+  emailRecoveries,
   phoneRecoveries,
   profiles,
   sessions,
@@ -257,6 +258,7 @@ export function opsPageByHandle(
 
 const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   profileId: row.id,
+  userId: row.userId,
   handle: row.handle,
   displayName: row.displayName,
   plan: row.plan as PagePlan,
@@ -699,10 +701,16 @@ export function deleteAccount(
             isNull(phoneRecoveries.completedAt),
           ),
         );
+      // Deleted, not cancelled: each row holds an address, and it must not move back later.
+      await tx
+        .delete(emailRecoveries)
+        .where(eq(emailRecoveries.userId, input.userId));
       await tx
         .update(users)
         .set({
           phoneE164: null,
+          recoveryEmail: null,
+          recoveryEmailVerifiedAt: null,
           email: null,
           emailVerifiedAt: null,
           deletedAt: now,

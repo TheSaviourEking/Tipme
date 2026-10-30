@@ -66,6 +66,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `providers.manage` | POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
+| `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery` |
 | `search.view` | GET `/v1/ops/search` |
 
 <!-- /generated:permissions -->
@@ -86,6 +87,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/health/ready` | n/a (read) | – | – |
 | GET | `/health/release` | n/a (read) | – | – |
 | POST | `/v1/auth/code` | yes | `auth_code` | – |
+| POST | `/v1/auth/email-recovery/confirm` | yes | `auth_verify` | – |
+| POST | `/v1/auth/email-recovery/propose` | yes | `auth_verify` | – |
+| POST | `/v1/auth/email-recovery/start` | yes | `auth_code` | – |
 | POST | `/v1/auth/email/confirm` | yes | `auth_verify` | – |
 | POST | `/v1/auth/recover` | yes | `auth_code` | – |
 | POST | `/v1/auth/recover/code` | yes | `auth_code` | – |
@@ -138,6 +142,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
+| GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
 | POST | `/v1/me/email/code` | yes | `auth_code` | – |
 | POST | `/v1/me/email/confirm` | yes | `auth_verify` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
@@ -157,6 +162,11 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/me/profile` | n/a (read) | – | – |
 | PATCH | `/v1/me/profile` | yes | – | – |
 | GET | `/v1/me/recovery` | n/a (read) | – | – |
+| GET | `/v1/me/recovery-email` | n/a (read) | – | – |
+| POST | `/v1/me/recovery-email` | yes | `auth_verify` | – |
+| POST | `/v1/me/recovery-email/change-code` | yes | `auth_code` | – |
+| POST | `/v1/me/recovery-email/code` | yes | `auth_code` | – |
+| POST | `/v1/me/recovery-email/remove` | yes | `auth_verify` | – |
 | POST | `/v1/me/recovery/cancel` | yes | – | – |
 | GET | `/v1/me/reports` | n/a (read) | – | – |
 | GET | `/v1/me/reports/{week}` | n/a (read) | – | – |
@@ -184,6 +194,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 
 | Method | Path | Permission | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- | --- |
+| POST | `/v1/ops/accounts/{userId}/email-recovery` | `recoveries.manage` | yes | – | – |
 | GET | `/v1/ops/audit` | `audit.view` | n/a (read) | – | – |
 | POST | `/v1/ops/bachs/account-recovery` | `payments.recheck` | yes | – | – |
 | POST | `/v1/ops/bachs/checkout-recovery` | `payments.recheck` | yes | – | – |

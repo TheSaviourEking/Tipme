@@ -6,7 +6,8 @@ export type AttentionItem = {
     | 'set_up_payments'
     | 'finish_payments'
     | 'payments_checking'
-    | 'page_offline';
+    | 'page_offline'
+    | 'add_recovery_email';
   title: string;
   body: string;
   /** The one step that fixes it; absent while TipMe is the one checking. */
@@ -24,12 +25,14 @@ const SETTINGS = '/dashboard/settings';
 export function ownerAttention({
   profile,
   payments,
+  needsRecoveryEmail = false,
 }: {
   profile: Pick<MyProfile, 'emailVerified' | 'pageState' | 'suspended'>;
   payments: Pick<
     BachsPaymentAccountStatus,
     'enabled' | 'status' | 'chargesEnabled' | 'requirementsDue'
   > | null;
+  needsRecoveryEmail?: boolean;
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
   // Without a payment provider that needs setup (test payments), or when the account could
@@ -86,5 +89,21 @@ export function ownerAttention({
       action: { href: `${SETTINGS}#page`, label: 'Make my page live' },
       navHref: SETTINGS,
     });
+  // Last: it protects the account, but nothing is stopping tips.
+  if (needsRecoveryEmail)
+    items.push({
+      id: 'add_recovery_email',
+      title: 'Add a recovery email',
+      body: 'So you can get back in if you lose access to your email.',
+      action: { href: `${SETTINGS}#recovery`, label: 'Add recovery email' },
+      navHref: SETTINGS,
+    });
   return items;
 }
+
+/** Whether this notice is about taking payments, not the page or the account. */
+export const isPaymentAttention = (item: AttentionItem) =>
+  item.id !== 'page_offline' && item.id !== 'add_recovery_email';
+
+/** Fired after the recovery email changes, so the reminders update without navigating. */
+export const RECOVERY_EMAIL_CHANGED = 'tipme:recovery-email-changed';

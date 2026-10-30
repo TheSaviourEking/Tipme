@@ -1,4 +1,5 @@
 import {
+  completeDueRecoveries,
   deliverDueMail,
   purgeEmailCodes,
   requeueStuckMail,
@@ -15,7 +16,8 @@ export interface MailDelivery {
 
 /**
  * Sends queued mail every `intervalMs` (20 at a time, security first). Once a minute it also
- * requeues mail a dead worker left `sending` and wipes sealed content past its 7 days. A failed
+ * requeues mail a dead worker left `sending`, wipes sealed content past its 7 days and finishes
+ * email recoveries whose 24-hour hold has ended. A failed
  * pass is logged by name and tried again next tick; mail waits safely in Postgres.
  */
 export function startMailDelivery(options: {
@@ -37,6 +39,7 @@ export function startMailDelivery(options: {
         lastHousekeeping = now.getTime();
         await requeueStuckMail(deps.db, now);
         await wipeExpiredMailContent(deps.db, now);
+        await completeDueRecoveries(deps.db, deps.sealing, now);
         await purgeEmailCodes(deps.db, now);
       }
       await deliverDueMail(

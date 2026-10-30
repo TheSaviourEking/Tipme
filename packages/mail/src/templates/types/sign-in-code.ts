@@ -56,3 +56,40 @@ export const emailChangeCode = codeMail({
   reason:
     'You get this email because someone asked to use this address for a TipMe account. If it wasn’t you, ignore it.',
 });
+
+export const recoveryEmailCode = codeMail({
+  id: 'recovery_email_code',
+  subject: 'Confirm your TipMe recovery email',
+  heading: 'Confirm your recovery email',
+  intro:
+    'Enter this code to use this address to get back into TipMe if you lose your sign-in email.',
+  reason:
+    'You get this email because someone added this address as a TipMe recovery email. If it wasn’t you, ignore it.',
+});
+
+export const recoveryChangeCode = codeMail({
+  id: 'recovery_change_code',
+  subject: 'Confirm a change to your TipMe recovery email',
+  heading: 'Confirm this change',
+  intro: 'Enter this code to change or remove your recovery email.',
+  reason:
+    'You get this email because someone is changing the recovery email of your TipMe account. If it wasn’t you, sign in and end your other sessions in Settings.',
+});
+
+export const recoveryCode = codeMail({
+  id: 'recovery_code',
+  subject: 'Your TipMe recovery code',
+  heading: 'Get back into TipMe',
+  intro: 'Enter this code to move your TipMe account to a new sign-in email.',
+  reason:
+    'You get this email because this is the recovery email of a TipMe account and someone asked to recover it. If it wasn’t you, ignore it.',
+});
+
+export const recoveryNewEmailCode = codeMail({
+  id: 'recovery_new_email_code',
+  subject: 'Confirm your new TipMe sign-in email',
+  heading: 'Confirm your new sign-in email',
+  intro: 'Enter this code to move a TipMe account to this address.',
+  reason:
+    'You get this email because someone asked to move a TipMe account to this address. If it wasn’t you, ignore it.',
+});

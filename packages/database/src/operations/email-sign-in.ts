@@ -120,6 +120,8 @@ export async function checkEmailCode(
     code: string;
     secret: string;
     now: Date;
+    /** Leave a right code unspent: for checking it alongside another code. */
+    keep?: boolean;
   },
 ): Promise<'ok' | 'invalid' | 'expired' | 'locked'> {
   if (!/^\d{6}$/.test(input.code)) return 'invalid';
@@ -162,10 +164,11 @@ export async function checkEmailCode(
     return 'locked';
   }
   if (latest.expiresAt <= input.now) return 'expired';
-  await tx
-    .update(emailCodes)
-    .set({ consumedAt: input.now })
-    .where(eq(emailCodes.id, latest.id));
+  if (!input.keep)
+    await tx
+      .update(emailCodes)
+      .set({ consumedAt: input.now })
+      .where(eq(emailCodes.id, latest.id));
   await tx
     .insert(emailCodeLockouts)
     .values({ email: input.email, failures: 0 })
@@ -214,7 +217,7 @@ export function requestEmailSignInCode(
   );
 }
 
-const verifiedOwner = (email: string) =>
+export const verifiedOwner = (email: string) =>
   and(
     sql`lower(${users.email}) = ${email}`,
     isNotNull(users.emailVerifiedAt),
@@ -379,7 +382,11 @@ export function changeEmail(
         .where(verifiedOwner(email));
       if (owner && owner.id !== input.userId) return { status: 'taken' };
       const [me] = await tx
-        .select({ email: users.email, verifiedAt: users.emailVerifiedAt })
+        .select({
+          email: users.email,
+          verifiedAt: users.emailVerifiedAt,
+          recoveryEmail: users.recoveryEmail,
+        })
         .from(users)
         .where(eq(users.id, input.userId))
         .for('update');
@@ -395,7 +402,14 @@ export function changeEmail(
         );
       await tx
         .update(users)
-        .set({ email, emailVerifiedAt: now })
+        .set({
+          email,
+          emailVerifiedAt: now,
+          // The sign-in address can't also be its own way back in.
+          ...(me?.recoveryEmail?.toLowerCase() === email
+            ? { recoveryEmail: null, recoveryEmailVerifiedAt: null }
+            : {}),
+        })
         .where(eq(users.id, input.userId));
       if (me?.email && me.verifiedAt && me.email !== email)
         await enqueueMail(tx, sealing, {

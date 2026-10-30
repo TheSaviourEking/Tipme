@@ -447,6 +447,8 @@ export interface MarketEntry {
 /** A page as staff see it when changing its plan (PR-012). */
 export interface OpsPage {
   profileId: string;
+  /** The account behind the page; null once it has none. */
+  userId: string | null;
   handle: string;
   displayName: string;
   plan: 'free' | 'pro';
@@ -735,3 +737,14 @@ export interface OpsMailTimelineEvent {
 export type OpsMailContent =
   | { status: 'ok'; subject: string; html: string; text: string }
   | { status: 'withheld' };
+
+// ---- Staff email recovery (mail platform spec §8.5) ----
+
+export const opsEmailRecoverySchema = opsReasonSchema
+  .extend({
+    newEmail: z.email().max(254),
+    // What was checked to be sure who this is; goes in the audit log.
+    checks: z.string().trim().min(10).max(500),
+  })
+  .strict();
+export type OpsEmailRecoveryRequest = z.infer<typeof opsEmailRecoverySchema>;

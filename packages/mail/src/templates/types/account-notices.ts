@@ -84,3 +84,63 @@ export const emailChangedNotice = defineMailType({
       ctx,
     ),
 });
+
+export const recoveryStartedNotice = defineMailType({
+  id: 'recovery_started_notice',
+  category: 'security',
+  preference: null,
+  schema: z.object({ newEmailHint: z.string().max(260) }).strict(),
+  sample: { newEmailHint: 'a•••@example.com' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'Your TipMe account is being moved to a new email',
+        heading: 'Someone is moving your account',
+        blocks: [
+          {
+            kind: 'text',
+            text: `A recovery was started to move your TipMe account to ${data.newEmailHint}. It happens in 24 hours.`,
+          },
+          {
+            kind: 'text',
+            text: 'If this wasn’t you, sign in now and cancel it in Settings.',
+          },
+          {
+            kind: 'button',
+            label: 'Sign in and cancel',
+            href: mailLink(ctx, '/dashboard/settings', 'cancel_recovery'),
+          },
+        ],
+        reason: 'You get this email to help keep your account safe.',
+      },
+      ctx,
+    ),
+});
+
+export const recoveryCompletedNotice = defineMailType({
+  id: 'recovery_completed_notice',
+  category: 'security',
+  preference: null,
+  schema: z.object({ newEmailHint: z.string().max(260) }).strict(),
+  sample: { newEmailHint: 'a•••@example.com' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'Your TipMe account moved to a new email',
+        heading: 'Your account moved',
+        blocks: [
+          {
+            kind: 'text',
+            text: `Your TipMe account now signs in with ${data.newEmailHint}. Every device was signed out.`,
+          },
+          {
+            kind: 'text',
+            text: 'If this wasn’t you, contact support@usetipme.xyz straight away.',
+          },
+        ],
+        reason:
+          'You get this email because a recovery of this TipMe account just finished.',
+      },
+      ctx,
+    ),
+});
