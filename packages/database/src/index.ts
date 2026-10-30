@@ -31,6 +31,7 @@ export * from './operations/mail-queue.js';
 export * from './operations/mail-delivery.js';
 export * from './operations/mail-events.js';
 export * from './operations/provider-admin.js';
+export * from './operations/mail-analytics.js';
 export * from './operations/reports.js';
 export * from './operations/moments.js';
 export * from './operations/secret-box.js';

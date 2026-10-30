@@ -22,6 +22,7 @@ const links = [
   { href: '/ops/pages', label: 'Pages' },
   { href: '/ops/search', label: 'Search' },
   { href: '/ops/providers', label: 'Providers' },
+  { href: '/ops/email', label: 'Email' },
   { href: '/ops/audit', label: 'Audit log' },
   { href: '/ops/staff', label: 'Staff & roles' },
 ] as const;
