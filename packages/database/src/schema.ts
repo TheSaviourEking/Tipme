@@ -262,6 +262,7 @@ export const mailMessageEvents = pgTable(
       .on(table.provider, table.providerEventId)
       .where(sql`provider_event_id IS NOT NULL`),
     index('mail_message_events_message').on(table.messageId, table.occurredAt),
+    index('mail_message_events_occurred').on(table.occurredAt),
     index('mail_message_events_address')
       .on(table.addressHmac, table.kind, table.occurredAt)
       .where(sql`address_hmac IS NOT NULL`),

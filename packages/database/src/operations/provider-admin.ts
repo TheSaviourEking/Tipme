@@ -1,12 +1,16 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { MailProviderName } from '@tipme/mail';
-import { and, desc, eq, gt, gte, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
+  mailMessageEvents,
+  mailMessages,
   mailSuppressions,
+  profiles,
   providerOverrides,
   providerSettings,
   providerTests,
+  users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { maskEmail, normaliseEmail } from './email-address.js';
@@ -322,4 +326,188 @@ export function removeSuppression(
     });
     return 'removed';
   });
+}
+
+export interface MailProviderOverview {
+  active: MailProviderName;
+  changedAt: string | null;
+  reason: string | null;
+  providers: Array<{
+    name: MailProviderName;
+    label: string;
+    active: boolean;
+    canActivate: boolean;
+    lastTest: {
+      status: 'pending' | 'confirmed' | 'failed' | 'expired';
+      startedAt: string;
+      confirmedAt: string | null;
+      targetHint: string | null;
+      messageStatus: string | null;
+      failureCode: string | null;
+    } | null;
+    last24h: {
+      sent: number;
+      failed: number;
+      bounced: number;
+      complained: number;
+    };
+  }>;
+  overrides: Array<{
+    userId: string;
+    handle: string | null;
+    provider: string;
+    reason: string;
+    createdAt: string;
+  }>;
+}
+
+/** What the Providers page shows, for the configured providers. Never a key or an address. */
+export async function mailProviderOverview(
+  db: Database,
+  input: {
+    configured: readonly MailProviderName[];
+    fallback: MailProviderName;
+    now?: Date;
+  },
+): Promise<MailProviderOverview> {
+  const now = input.now ?? new Date();
+  const [settings] = await db
+    .select()
+    .from(providerSettings)
+    .where(eq(providerSettings.kind, 'mail'));
+  const active =
+    (settings?.activeProvider as MailProviderName | undefined) ??
+    input.fallback;
+  const counts = await db
+    .select({
+      provider: mailMessageEvents.provider,
+      kind: mailMessageEvents.kind,
+      n: sql<number>`count(*)::int`,
+    })
+    .from(mailMessageEvents)
+    .where(
+      and(
+        gte(
+          mailMessageEvents.occurredAt,
+          new Date(now.getTime() - 24 * 3_600_000),
+        ),
+        isNotNull(mailMessageEvents.provider),
+      ),
+    )
+    .groupBy(mailMessageEvents.provider, mailMessageEvents.kind);
+  const count = (provider: string, kind: string) =>
+    counts.find((c) => c.provider === provider && c.kind === kind)?.n ?? 0;
+  const providers = await Promise.all(
+    input.configured.map(async (name) => {
+      const [test] = await db
+        .select({
+          test: providerTests,
+          messageStatus: mailMessages.status,
+          lastError: mailMessages.lastError,
+        })
+        .from(providerTests)
+        .leftJoin(mailMessages, eq(mailMessages.id, providerTests.messageId))
+        .where(
+          and(eq(providerTests.kind, 'mail'), eq(providerTests.provider, name)),
+        )
+        .orderBy(desc(providerTests.startedAt))
+        .limit(1);
+      const [valid] = await db
+        .select({ id: providerTests.id })
+        .from(providerTests)
+        .where(
+          and(
+            eq(providerTests.kind, 'mail'),
+            eq(providerTests.provider, name),
+            eq(providerTests.status, 'confirmed'),
+            gte(
+              providerTests.confirmedAt,
+              new Date(now.getTime() - PROVIDER_TEST_VALID_MS),
+            ),
+          ),
+        )
+        .limit(1);
+      return {
+        name,
+        label: MAIL_PROVIDER_LABELS[name],
+        active: name === active,
+        canActivate: Boolean(valid),
+        lastTest: test
+          ? {
+              status: test.test.status as
+                'pending' | 'confirmed' | 'failed' | 'expired',
+              startedAt: test.test.startedAt.toISOString(),
+              confirmedAt: test.test.confirmedAt?.toISOString() ?? null,
+              targetHint: test.test.targetHint,
+              messageStatus: test.messageStatus,
+              failureCode: test.test.failureCode ?? test.lastError,
+            }
+          : null,
+        last24h: {
+          sent: count(name, 'sent'),
+          failed: count(name, 'send_failed'),
+          bounced: count(name, 'hard_bounce'),
+          complained: count(name, 'complaint'),
+        },
+      };
+    }),
+  );
+  const overrides = await db
+    .select({
+      userId: providerOverrides.userId,
+      handle: profiles.handle,
+      provider: providerOverrides.provider,
+      reason: providerOverrides.reason,
+      createdAt: providerOverrides.createdAt,
+    })
+    .from(providerOverrides)
+    .leftJoin(profiles, eq(profiles.userId, providerOverrides.userId))
+    .where(eq(providerOverrides.kind, 'mail'))
+    .orderBy(desc(providerOverrides.createdAt));
+  return {
+    active,
+    changedAt: settings?.changedAt.toISOString() ?? null,
+    reason: settings?.reason ?? null,
+    providers,
+    overrides: overrides.map((o) => ({
+      ...o,
+      createdAt: o.createdAt.toISOString(),
+    })),
+  };
+}
+
+/** The account behind a handle or user id, for staff forms. */
+export async function findAccountByHandleOrId(
+  db: Database,
+  account: string,
+): Promise<string | null> {
+  const value = account.trim().replace(/^@/, '').toLowerCase();
+  const [row] = await db
+    .select({ userId: profiles.userId })
+    .from(profiles)
+    .where(eq(profiles.handleLower, value));
+  if (row?.userId) return row.userId;
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      value,
+    )
+  )
+    return null;
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, value), isNull(users.deletedAt)));
+  return user?.id ?? null;
+}
+
+/** The staff member's own confirmed address: where a test goes by default. */
+export async function verifiedEmailOf(
+  db: Database,
+  userId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(and(eq(users.id, userId), isNotNull(users.emailVerifiedAt)));
+  return row?.email ?? null;
 }
