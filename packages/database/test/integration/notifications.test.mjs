@@ -117,6 +117,20 @@ test('notifications, email, phone change and recovery', async (t) => {
       assert.equal(mail.type, 'email_verification_link');
       assert.equal(mail.toHint, 't•••@example.com');
       const token = mail.data.token;
+      // The link dies after 24 hours, so the email must never arrive later than that.
+      const [queued] = (
+        await database.pool.query(
+          `SELECT m.expires_at, t.expires_at AS token_expires_at
+             FROM mail_messages m, email_tokens t
+            WHERE m.id = $1 AND t.purpose = 'verify'`,
+          [mail.id],
+        )
+      ).rows;
+      assert.ok(queued.expires_at, 'the verification email expires');
+      assert.equal(
+        queued.expires_at.getTime(),
+        queued.token_expires_at.getTime(),
+      );
       assert.equal(await confirmEmail(db, { token }), 'confirmed');
       assert.equal(await confirmEmail(db, { token }), 'invalid');
       const second = await tip();
@@ -229,7 +243,21 @@ test('notifications, email, phone change and recovery', async (t) => {
         }),
         'sent',
       );
-      const token = (await latestMail()).data.token;
+      const recoveryMail = await latestMail();
+      const token = recoveryMail.data.token;
+      const [recoveryRow] = (
+        await database.pool.query(
+          `SELECT m.expires_at, t.expires_at AS token_expires_at
+             FROM mail_messages m, email_tokens t
+            WHERE m.id = $1 AND t.purpose = 'recover'`,
+          [recoveryMail.id],
+        )
+      ).rows;
+      assert.equal(
+        recoveryRow.expires_at?.getTime(),
+        recoveryRow.token_expires_at.getTime(),
+        'the recovery email expires with its 30-minute link',
+      );
       assert.equal(
         await errorCode(
           completeRecovery(db, {

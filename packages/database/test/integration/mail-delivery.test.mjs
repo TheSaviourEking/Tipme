@@ -363,3 +363,97 @@ test('security mail is sent without tracking and with no snapshot', async (t) =>
   );
   assert.equal(row.rendered_sealed, null);
 });
+
+// Review fixes (PR #45).
+
+test('a mail the provider accepted is never sent again when what follows the send fails', async (t) => {
+  const { db, rows } = await fresh(t);
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip_received.log-throws',
+  });
+  const { provider, sent } = scripted([]);
+  const failingLog = {
+    ...deps(db, provider),
+    log() {
+      throw new Error('log sink down');
+    },
+  };
+  await deliverDueMail(failingLog, { now: new Date(), limit: 20 }).catch(
+    () => undefined,
+  );
+  const [row] = await rows('SELECT status FROM mail_messages WHERE id = $1', [
+    id,
+  ]);
+  assert.equal(row.status, 'sent');
+  assert.equal(sent.length, 1);
+});
+
+test('a worker whose claim was taken over cannot overwrite the new outcome', async (t) => {
+  const { db, rows } = await fresh(t);
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip_received.stale-claim',
+  });
+  const start = new Date();
+  // Worker A claims, then stalls past the two-minute limit.
+  const [stale] = await claimDueMail(db, sealing, { now: start, limit: 1 });
+  const later = new Date(start.getTime() + 3 * 60_000);
+  assert.equal(await requeueStuckMail(db, later), 1);
+  // Worker B claims and sends it.
+  await deliverDueMail(deps(db, mockProvider(db)), { now: later, limit: 20 });
+  // A finally reports a temporary failure for its old claim: nothing changes.
+  const { recordMailFailure } = await import('../../dist/index.js');
+  assert.equal(
+    await recordMailFailure(db, {
+      ...stale,
+      provider: 'zeptomail',
+      code: 'late',
+      permanent: false,
+      now: new Date(later.getTime() + 1000),
+    }),
+    'stale',
+  );
+  const [row] = await rows(
+    'SELECT status, attempts FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.deepEqual(row, { status: 'sent', attempts: 1 });
+});
+
+test('one unreadable mail fails on its own and does not hold back the rest', async (t) => {
+  const { db, rows } = await fresh(t);
+  const broken = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip_received.broken',
+  });
+  const code = await enqueueMail(db, sealing, {
+    type: 'email_verification_link',
+    to: 'ada@example.com',
+    data: verify,
+    dedupeKey: 'email_verification_link.after-broken',
+  });
+  await db.execute(
+    `UPDATE mail_messages SET data_sealed = 'v1.AAAA.AAAA.AAAA', priority = 0 WHERE id = '${broken.id}'`,
+  );
+  const { provider, sent } = scripted([]);
+  await deliverDueMail(deps(db, provider), { now: new Date(), limit: 20 });
+  const status = async (id) =>
+    (
+      await rows('SELECT status, last_error FROM mail_messages WHERE id = $1', [
+        id,
+      ])
+    )[0];
+  assert.deepEqual(await status(broken.id), {
+    status: 'failed',
+    last_error: 'unreadable',
+  });
+  assert.equal((await status(code.id)).status, 'sent');
+  assert.equal(sent.length, 1);
+});
