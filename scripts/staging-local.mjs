@@ -42,7 +42,7 @@ function ensureEnv() {
     TRUST_PROXY_HOPS: '1',
     PAYMENT_PROVIDER: 'mock',
     PAYMENTS_LIVE_ENABLED: 'false',
-    MESSAGING_PROVIDER: 'mock',
+    MAIL_DEFAULT_PROVIDER: 'mock',
     ANALYTICS_ENABLED: 'true',
     // The release check and e2e send many requests from one address.
     RATE_LIMIT_AUTH_PER_HOUR: '10000',
@@ -62,6 +62,7 @@ function ensureEnv() {
     AUTH_CODE_SECRET: secret(),
     WEB_REVALIDATE_SECRET: secret(),
     OPS_TOTP_KEY: randomBytes(32).toString('base64'),
+    MAIL_SEAL_KEY: randomBytes(32).toString('base64'),
     RELEASE_CHECK_TOKEN: secret(),
     BACKUP_KEY: randomBytes(32).toString('base64'),
     BACKUP_RETAIN: '14',

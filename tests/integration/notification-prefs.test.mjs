@@ -94,10 +94,10 @@ const kinds = async (userId) =>
 const emails = async (userId) =>
   (
     await database.pool.query(
-      `SELECT subject FROM pretend_outbox WHERE user_id = $1 AND channel = 'email' ORDER BY subject`,
+      `SELECT type FROM mail_messages WHERE user_id = $1 ORDER BY type`,
       [userId],
     )
-  ).rows.map((r) => r.subject);
+  ).rows.map((r) => r.type);
 
 async function settle(userId, wanted) {
   for (let i = 0; i < 80; i++) {

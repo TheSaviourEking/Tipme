@@ -1,4 +1,4 @@
-import type { Database } from '@tipme/database';
+import type { Database, MailSealing } from '@tipme/database';
 import {
   evaluateTipMoments,
   ISSUE_EVENT_NAMES,
@@ -39,6 +39,9 @@ export async function handleDomainEvent(
     dedupeKey?: string;
     /** Record anonymous server-side outcomes (off in production until D-07). */
     analyticsEnabled?: boolean;
+    sealing: MailSealing;
+    /** Payments are pretend (mock provider): the tip email says so. */
+    pretendPayment: boolean;
   },
 ): Promise<'logged' | 'notified' | 'duplicate' | 'skipped' | 'issue_opened'> {
   deps.logger.info({ event: 'domain_event.received', name });
@@ -98,7 +101,12 @@ export async function handleDomainEvent(
     !UUID.test(profileId)
   )
     return 'skipped';
-  const outcome = await notifyTipSucceeded(deps.db, { tipId, profileId });
+  const outcome = await notifyTipSucceeded(deps.db, {
+    sealing: deps.sealing,
+    tipId,
+    profileId,
+    pretendPayment: deps.pretendPayment,
+  });
   if (deps.analyticsEnabled) {
     await recordServerEvent(deps.db, {
       name: 'tip_completed',

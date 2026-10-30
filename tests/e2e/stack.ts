@@ -24,3 +24,4 @@ export const E2E_REVALIDATE_SECRET =
   'e2e-only-revalidate-secret-32-characters!';
 // Seals staff authenticator secrets in end-to-end runs only (ADR-0010).
 export const E2E_OPS_TOTP_KEY = Buffer.alloc(32, 9).toString('base64');
+export const E2E_MAIL_SEAL_KEY = Buffer.alloc(32, 8).toString('base64');

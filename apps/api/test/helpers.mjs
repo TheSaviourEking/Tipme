@@ -14,6 +14,7 @@ export function testConfig(overrides = {}) {
     AUTH_CODE_SECRET: 'unit-test-auth-code-secret-32-characters',
     WEB_REVALIDATE_SECRET: 'unit-test-revalidate-secret-32-characters',
     OPS_TOTP_KEY: Buffer.alloc(32, 3).toString('base64'),
+    MAIL_SEAL_KEY: Buffer.alloc(32, 4).toString('base64'),
     ...overrides,
   });
 }

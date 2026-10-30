@@ -7,6 +7,7 @@ import {
   withExtractedContext,
   type DestinationStream,
 } from '@tipme/observability';
+import { createMockMailProvider } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   autoResolveIssues,
@@ -16,6 +17,8 @@ import {
   evaluatePeriodMoments,
   expireStaleTips,
   previousIsoWeek,
+  mailSealing,
+  pretendMailSink,
   runWeeklyReports,
   reconcileAttempts,
   reconcilePayouts,
@@ -40,6 +43,7 @@ import {
   handleDomainEvent,
 } from './handlers/domain-events.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
+import { startMailDelivery } from './mail-delivery-loop.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
@@ -112,6 +116,7 @@ export async function startJobWorker(
     prefix: config.QUEUE_PREFIX,
   });
   const database = createDatabase(config.DATABASE_URL, { max: 4 });
+  const sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
   const reporter = createErrorReporter({
     dsn: config.SENTRY_DSN,
     service: 'worker',
@@ -278,6 +283,7 @@ export async function startJobWorker(
               budgetPerMonthMinor: config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
             });
             const { created } = await runWeeklyReports(database.db, {
+              sealing,
               isoWeek,
             });
             logger.info({
@@ -327,6 +333,8 @@ export async function startJobWorker(
                 config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
               dedupeKey: job.id,
               analyticsEnabled,
+              sealing,
+              pretendPayment: config.PAYMENT_PROVIDER === 'mock',
             });
             processed.add(1, { outcome });
             return outcome;
@@ -386,6 +394,21 @@ export async function startJobWorker(
     logger.warn({ event: 'worker.error', error: error.name }),
   );
   const relay = startOutboxRelay({ db: database.db, queue, logger });
+  // The pretend provider's "inbox" is the development-only pretend_outbox, shown on /dev/inbox.
+  const pretendMail = createMockMailProvider(pretendMailSink(database.db));
+  const mailDelivery = startMailDelivery({
+    deps: {
+      db: database.db,
+      sealing,
+      providers: new Map([['mock', pretendMail]]),
+      activeProvider: async () => config.MAIL_DEFAULT_PROVIDER,
+      overrideFor: async () => null,
+      from: { address: config.MAIL_FROM_ADDRESS, name: config.MAIL_FROM_NAME },
+      ...(config.MAIL_REPLY_TO ? { replyTo: config.MAIL_REPLY_TO } : {}),
+      webOrigin: config.WEB_ORIGIN,
+    },
+    logger,
+  });
 
   return {
     async close() {
@@ -394,6 +417,7 @@ export async function startJobWorker(
       await monthlySchedule.stop();
       await analyticsSchedule.stop();
       await relay.stop();
+      await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.
       await closeWithin(
         DRAIN_TIMEOUT_MS,

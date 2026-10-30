@@ -1,7 +1,11 @@
+import { desc } from 'drizzle-orm';
 import pg from 'pg';
 import { createDatabase, type Database } from './client.js';
 import { assertLocalDatabaseUrl } from './local-only.js';
 import { runMigrations } from './migrations.js';
+import type { MailSealing } from './operations/mail-queue.js';
+import { openSecret } from './operations/secret-box.js';
+import { mailMessages } from './schema.js';
 
 const TEST_DATABASE = 'tipme_test';
 const DEFAULT_URL =
@@ -127,4 +131,44 @@ export async function openTestDatabase(): Promise<TestDatabase> {
     },
     close: handle.close,
   };
+}
+
+/**
+ * Queued mail, newest first, with the sealed address and data opened: tests read codes and links
+ * from here, as a person would from their inbox.
+ */
+export async function queuedMail(
+  db: Database,
+  sealing: MailSealing,
+  input: { limit: number },
+): Promise<
+  Array<{
+    id: string;
+    type: string;
+    status: string;
+    toHint: string;
+    userId: string | null;
+    to: string | null;
+    data: Record<string, unknown> | null;
+  }>
+> {
+  const rows = await db
+    .select()
+    .from(mailMessages)
+    .orderBy(desc(mailMessages.createdAt), desc(mailMessages.id))
+    .limit(input.limit);
+  return rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    toHint: row.toHint,
+    userId: row.userId,
+    to: row.toSealed ? openSecret(sealing.key, row.toSealed) : null,
+    data: row.dataSealed
+      ? (JSON.parse(openSecret(sealing.key, row.dataSealed)) as Record<
+          string,
+          unknown
+        >)
+      : null,
+  }));
 }

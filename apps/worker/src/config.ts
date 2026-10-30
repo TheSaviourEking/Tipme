@@ -28,6 +28,21 @@ export const workerConfigSchema = z
       .string()
       .regex(/^[a-z0-9-]{1,32}$/)
       .default('tipme'),
+    // Seals queued email (addresses, codes, links) at rest: 32 bytes, base64. Never logged.
+    MAIL_SEAL_KEY: z
+      .string()
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'must be 32 bytes, base64',
+      }),
+    // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
+    MAIL_DEFAULT_PROVIDER: z.enum(['mock', 'zeptomail', 'ses']).default('mock'),
+    MAIL_FROM_ADDRESS: z.email().default('hello@mail.usetipme.xyz'),
+    MAIL_FROM_NAME: z.string().min(1).max(60).default('TipMe'),
+    MAIL_REPLY_TO: z.email().optional(),
+    // Links in emails point here.
+    WEB_ORIGIN: z
+      .url({ protocol: /^https?$/ })
+      .default('http://localhost:3000'),
     // Sandbox only: selectable in test and password-protected preview, never production.
     PAYMENT_PROVIDER: z.enum(['mock', 'bachs-sandbox']).default('mock'),
     PAYMENTS_LIVE_ENABLED: z.literal('false').default('false'),
@@ -84,6 +99,25 @@ export const workerConfigSchema = z
         code: 'custom',
         path: ['TRACE_PROBE_TEST_DELAY_MS'],
         message: 'test only',
+      });
+    }
+    if (
+      config.MAIL_DEFAULT_PROVIDER === 'mock' &&
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MAIL_DEFAULT_PROVIDER'],
+        message: 'mock not allowed in production',
+      });
+    }
+    // Real providers are configured with their keys (Part 2); until then only the pretend one.
+    if (config.MAIL_DEFAULT_PROVIDER !== 'mock') {
+      context.addIssue({
+        code: 'custom',
+        path: ['MAIL_DEFAULT_PROVIDER'],
+        message: 'provider not configured',
       });
     }
     if (

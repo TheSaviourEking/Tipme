@@ -5,6 +5,7 @@ import {
   type OpsIssueSubject as IssueSubject,
 } from '@tipme/contracts';
 import { ATTEMPT_STATUSES, PAYOUT_STATUSES, TIP_STATUSES } from '@tipme/domain';
+import { MAIL_CATEGORIES } from '@tipme/mail';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -153,6 +154,169 @@ export const pretendOutbox = pgTable(
     ),
   ],
 );
+
+// ---- Mail (mail platform spec, 30 Oct 2026) ----
+
+const inList = (column: string, values: readonly string[]) =>
+  sql.raw(`${column} IN (${values.map((v) => `'${v}'`).join(', ')})`);
+
+export const MAIL_MESSAGE_STATUSES = [
+  'queued',
+  'sending',
+  'sent',
+  'failed',
+  'suppressed',
+  'skipped',
+  'expired',
+  'bounced',
+  'complained',
+] as const;
+export type MailMessageStatus = (typeof MAIL_MESSAGE_STATUSES)[number];
+
+export const MAIL_EVENT_KINDS = [
+  'queued',
+  'sent',
+  'send_failed',
+  'delivered',
+  'opened',
+  'clicked',
+  'soft_bounce',
+  'hard_bounce',
+  'complaint',
+  'suppressed',
+  'skipped_preference',
+  'expired',
+] as const;
+export type MailEventKindRecorded = (typeof MAIL_EVENT_KINDS)[number];
+
+/**
+ * Every email TipMe sends, queued in the transaction that causes it and sent by the worker.
+ * The address, template data and snapshot are sealed (AES-256-GCM); only `to_hint` is readable.
+ * Sealed address and data are wiped 7 days after a final status; the rest is kept 2 years.
+ */
+export const mailMessages = pgTable(
+  'mail_messages',
+  {
+    id: uuid('id').primaryKey(),
+    type: text('type').notNull(),
+    category: text('category').notNull(),
+    userId: uuid('user_id').references(() => users.id),
+    dedupeKey: text('dedupe_key').notNull().unique(),
+    toSealed: text('to_sealed'),
+    toHint: text('to_hint').notNull(),
+    dataSealed: text('data_sealed'),
+    renderedSealed: text('rendered_sealed'),
+    status: text('status').notNull().default('queued'),
+    // 0 security, 1 account, 2 everything else: codes never wait behind a broadcast.
+    priority: integer('priority').notNull(),
+    pinnedProvider: text('pinned_provider'),
+    provider: text('provider'),
+    providerMessageId: text('provider_message_id'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', {
+      withTimezone: true,
+    }).notNull(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    finalAt: timestamp('final_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('mail_messages_category', inList('category', MAIL_CATEGORIES)),
+    check('mail_messages_status', inList('status', MAIL_MESSAGE_STATUSES)),
+    index('mail_messages_due').on(
+      table.status,
+      table.priority,
+      table.nextAttemptAt,
+    ),
+    index('mail_messages_created').on(table.createdAt),
+    index('mail_messages_type_created').on(table.type, table.createdAt),
+    index('mail_messages_user_created').on(table.userId, table.createdAt),
+    index('mail_messages_provider_id').on(
+      table.provider,
+      table.providerMessageId,
+    ),
+  ],
+);
+
+/** Append-only history of each email (tracking and audit). Normalised fields only. */
+export const mailMessageEvents = pgTable(
+  'mail_message_events',
+  {
+    id: uuid('id').primaryKey(),
+    messageId: uuid('message_id').references(() => mailMessages.id),
+    kind: text('kind').notNull(),
+    provider: text('provider'),
+    providerEventId: text('provider_event_id'),
+    linkKey: text('link_key'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    receivedAt: createdAt(),
+  },
+  (table) => [
+    check('mail_message_events_kind', inList('kind', MAIL_EVENT_KINDS)),
+    uniqueIndex('mail_message_events_provider_event')
+      .on(table.provider, table.providerEventId)
+      .where(sql`provider_event_id IS NOT NULL`),
+    index('mail_message_events_message').on(table.messageId, table.occurredAt),
+  ],
+);
+
+/** Counts per Lagos day, type and provider, so month views stay fast at volume. Rebuildable. */
+export const mailDailyStats = pgTable(
+  'mail_daily_stats',
+  {
+    lagosDate: date('lagos_date').notNull(),
+    type: text('type').notNull(),
+    category: text('category').notNull(),
+    // '' before a provider was chosen (queued).
+    provider: text('provider').notNull(),
+    kind: text('kind').notNull(),
+    count: integer('count').notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.lagosDate,
+        table.type,
+        table.category,
+        table.provider,
+        table.kind,
+      ],
+    }),
+  ],
+);
+
+/** Addresses TipMe no longer emails, keyed by an HMAC so the list holds no plain addresses. */
+export const mailSuppressions = pgTable(
+  'mail_suppressions',
+  {
+    addressHmac: text('address_hmac').primaryKey(),
+    reason: text('reason').notNull(),
+    provider: text('provider'),
+    note: text('note'),
+    createdAt: createdAt(),
+  },
+  () => [
+    check(
+      'mail_suppressions_reason',
+      sql`reason IN ('hard_bounce', 'complaint', 'repeated_soft_bounce', 'manual')`,
+    ),
+  ],
+);
+
+/** Category switches (engagement on by default; marketing opt-in only). */
+export const mailPreferences = pgTable('mail_preferences', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id),
+  engagement: boolean('engagement').notNull().default(true),
+  marketing: boolean('marketing').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 export const profiles = pgTable(
   'profiles',

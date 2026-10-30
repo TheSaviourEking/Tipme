@@ -27,6 +27,8 @@ export * from './operations/dashboard.js';
 export * from './operations/rewards.js';
 export * from './operations/notifications.js';
 export * from './operations/email.js';
+export * from './operations/mail-queue.js';
+export * from './operations/mail-delivery.js';
 export * from './operations/reports.js';
 export * from './operations/moments.js';
 export * from './operations/secret-box.js';

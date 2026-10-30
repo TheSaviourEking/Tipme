@@ -91,13 +91,19 @@ export const apiConfigSchema = z
       .default(3),
     // Keys sign-in codes (HMAC); never logged.
     AUTH_CODE_SECRET: z.string().min(32),
-    // Only the pretend messenger exists until a messaging provider is approved (D-11).
-    MESSAGING_PROVIDER: z.enum(['mock']).default('mock'),
+    // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
+    MAIL_DEFAULT_PROVIDER: z.enum(['mock', 'zeptomail', 'ses']).default('mock'),
     // Lets the API ask the web app to refresh a cached public profile.
     WEB_REVALIDATE_SECRET: z.string().min(32),
     // Defaults to `${WEB_ORIGIN}/api/revalidate`.
     WEB_REVALIDATE_URL: z.url({ protocol: /^https?$/ }).optional(),
     // Seals staff authenticator secrets (AES-256-GCM): 32 bytes, base64. Never logged (ADR-0010).
+    // Seals queued email (addresses, codes, links) at rest: 32 bytes, base64. Never logged.
+    MAIL_SEAL_KEY: z
+      .string()
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'must be 32 bytes, base64',
+      }),
     OPS_TOTP_KEY: z
       .string()
       .refine((value) => Buffer.from(value, 'base64').length === 32, {
@@ -216,14 +222,22 @@ export const apiConfigSchema = z
       });
     }
     if (
-      config.MESSAGING_PROVIDER === 'mock' &&
+      config.MAIL_DEFAULT_PROVIDER === 'mock' &&
       config.NODE_ENV === 'production' &&
       config.DEPLOYMENT_MODE !== 'preview'
     ) {
       context.addIssue({
         code: 'custom',
-        path: ['MESSAGING_PROVIDER'],
+        path: ['MAIL_DEFAULT_PROVIDER'],
         message: 'mock not allowed in production',
+      });
+    }
+    // Real providers are configured with their keys (Part 2); until then only the pretend one.
+    if (config.MAIL_DEFAULT_PROVIDER !== 'mock') {
+      context.addIssue({
+        code: 'custom',
+        path: ['MAIL_DEFAULT_PROVIDER'],
+        message: 'provider not configured',
       });
     }
     if (

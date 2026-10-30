@@ -3,9 +3,8 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { notifications, profiles, users, weeklyReports } from '../schema.js';
 import { guarded } from './errors.js';
-import { maskEmail } from './email.js';
 import { newId } from './ids.js';
-import { writePretendMessage } from './pretend-outbox.js';
+import { enqueueMail, type MailSealing } from './mail-queue.js';
 
 const ZONE = 'Africa/Lagos';
 const DAY_MS = 86_400_000;
@@ -130,7 +129,7 @@ const ngn = (minor: bigint) =>
  */
 export function runWeeklyReports(
   db: Database,
-  input: { isoWeek: string; onlyHandle?: string },
+  input: { sealing: MailSealing; isoWeek: string; onlyHandle?: string },
 ): Promise<{ created: number }> {
   const monday = mondayOf(input.isoWeek);
   return guarded(async () => {
@@ -172,12 +171,16 @@ export function runWeeklyReports(
           body,
         });
         if (owner.email && owner.verified)
-          await writePretendMessage(tx, {
-            channel: 'email',
-            recipientHint: maskEmail(owner.email),
+          await enqueueMail(tx, input.sealing, {
+            type: 'weekly_report',
+            to: owner.email,
             userId: owner.userId,
-            subject: 'Your week on TipMe',
-            body: `Your week (${input.isoWeek}): ${body}. Open your dashboard to see the whole week.`,
+            data: {
+              isoWeek: input.isoWeek,
+              totalNetMinor: String(data.totalNetMinor),
+              tipCount: data.tipCount,
+            },
+            dedupeKey: `weekly_report.${profileId}.${input.isoWeek}`,
           });
         return true;
       });
