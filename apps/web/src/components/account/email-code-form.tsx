@@ -6,22 +6,22 @@ import { Button, InputField } from '@tipme/ui';
 import { apiFetch, deviceLabel } from '@/lib/session-client';
 
 /**
- * Phone number, then a 6-digit code sent by WhatsApp (SMS if WhatsApp fails). Used for both
- * signing in and signing up: the first successful code creates the account.
+ * Email address, then a 6-digit code sent to it. Used for both signing in and signing up: the
+ * first successful code creates the account.
  */
-export function PhoneCodeForm({
+export function EmailCodeForm({
   onSignedIn,
   onStepChange,
 }: {
   onSignedIn: (result: SignInVerified) => void;
   /** Lets a surrounding progress indicator follow the number → code steps. */
-  onStepChange?: (step: 'phone' | 'code') => void;
+  onStepChange?: (step: 'email' | 'code') => void;
 }) {
   const id = useId();
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [step, setStepState] = useState<'phone' | 'code'>('phone');
-  const setStep = (next: 'phone' | 'code') => {
+  const [step, setStepState] = useState<'email' | 'code'>('email');
+  const setStep = (next: 'email' | 'code') => {
     setStepState(next);
     onStepChange?.(next);
   };
@@ -31,15 +31,15 @@ export function PhoneCodeForm({
 
   const sendCode = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (phone.replace(/\D/g, '').length < 7) {
-      setError('Enter your phone number, for example 0803 123 4567.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) {
+      setError('Enter your email address, for example ada@example.com.');
       return;
     }
     setBusy(true);
     setError('');
     const result = await apiFetch('/v1/auth/code', {
       method: 'POST',
-      body: { phone },
+      body: { email: email.trim() },
     });
     setBusy(false);
     if (!result.ok) {
@@ -57,14 +57,14 @@ export function PhoneCodeForm({
   const verify = async (event: FormEvent) => {
     event.preventDefault();
     if (!/^\d{6}$/.test(code)) {
-      setError('Enter the 6 digits from the message.');
+      setError('Enter the 6 digits from the email.');
       return;
     }
     setBusy(true);
     setError('');
     const result = await apiFetch<SignInVerified>('/v1/auth/verify', {
       method: 'POST',
-      body: { phone, code, deviceLabel: deviceLabel() },
+      body: { email: email.trim(), code, deviceLabel: deviceLabel() },
     });
     setBusy(false);
     if (result.ok) {
@@ -74,27 +74,25 @@ export function PhoneCodeForm({
     setError(
       result.code === 'SIGN_IN_LOCKED'
         ? 'Too many wrong codes. Please wait 15 minutes and try again.'
-        : result.code === 'RECOVERY_PENDING'
-          ? 'This number is waiting to be moved to an account. Try again when the 24 hours are up.'
-          : result.code === 'CODE_INVALID'
-            ? 'That code isn’t right or has expired. Check it, or send a new one.'
-            : 'We couldn’t check the code. Please try again.',
+        : result.code === 'CODE_INVALID'
+          ? 'That code isn’t right or has expired. Check it, or send a new one.'
+          : 'We couldn’t check the code. Please try again.',
     );
   };
 
-  return step === 'phone' ? (
+  return step === 'email' ? (
     <form className="auth-form" onSubmit={sendCode} noValidate>
       <InputField
-        id={`${id}-phone`}
-        label="Phone number"
-        type="tel"
-        inputMode="tel"
-        autoComplete="tel"
-        placeholder="0803 123 4567"
-        value={phone}
-        onChange={(event) => setPhone(event.target.value)}
+        id={`${id}-email`}
+        label="Email address"
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        placeholder="ada@example.com"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
         error={error || undefined}
-        hint="We’ll send a 6-digit code by WhatsApp, or by SMS if WhatsApp doesn’t work."
+        hint="We’ll email you a 6-digit code. Signing in with a phone number is coming soon."
       />
       <Button type="submit" disabled={busy} aria-busy={busy}>
         {busy ? 'Sending…' : 'Send code'}
@@ -102,7 +100,10 @@ export function PhoneCodeForm({
     </form>
   ) : (
     <form className="auth-form" onSubmit={verify} noValidate>
-      <p role="status">We sent a code to {phone}. It expires in 10 minutes.</p>
+      <p role="status">
+        We sent a code to {email.trim()}. It expires in 10 minutes. Check your
+        spam folder if it doesn’t arrive.
+      </p>
       <InputField
         id={`${id}-code`}
         ref={codeField}
@@ -124,7 +125,7 @@ export function PhoneCodeForm({
         <Button
           variant="quiet"
           onClick={() => {
-            setStep('phone');
+            setStep('email');
             setCode('');
             setError('');
           }}

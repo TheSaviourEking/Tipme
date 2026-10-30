@@ -204,3 +204,13 @@ test('deleting an account erases its email codes and lockouts', async (t) => {
   assert.equal(await count('email_codes'), 0);
   assert.equal(await count('email_code_lockouts'), 0);
 });
+
+test('staff can be granted by email, and sign in to that same account', async (t) => {
+  const { signIn, db } = await fresh(t);
+  const { grantOwner } = await import('../../dist/index.js');
+  const { userId } = await grantOwner(db, { email: 'Owner@Example.com' });
+  const result = await signIn('owner@example.com');
+  assert.equal(result.userId, userId);
+  const again = await grantOwner(db, { email: 'owner@example.com' });
+  assert.equal(again.userId, userId, 'an existing account is reused');
+});

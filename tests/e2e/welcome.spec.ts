@@ -3,7 +3,7 @@ import {
   expectAccessible,
   fitsViewport,
   identity,
-  signInWithPhone,
+  signInWithEmail,
 } from './helpers';
 
 async function claimNewPage(
@@ -11,7 +11,7 @@ async function claimNewPage(
   testInfo: import('@playwright/test').TestInfo,
 ) {
   const who = identity(testInfo);
-  await signInWithPhone(page, who.phone, '/sign-up');
+  await signInWithEmail(page, who.email, '/sign-up');
   await expect(
     page
       .getByRole('list', { name: 'Creating your page' })
