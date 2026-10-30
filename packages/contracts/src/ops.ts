@@ -604,3 +604,115 @@ export const opsSuppressionRemoveSchema = opsReasonSchema
 export type OpsSuppressionRemoveRequest = z.infer<
   typeof opsSuppressionRemoveSchema
 >;
+
+// ---- Email console (mail platform spec §5.1) ----
+
+export const opsMailPeriodQuerySchema = z
+  .object({
+    period: z
+      .enum([
+        'today',
+        'yesterday',
+        'this_week',
+        'last_week',
+        'this_month',
+        'last_month',
+        'range',
+      ])
+      .default('this_month'),
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional(),
+  })
+  .refine((q) => q.period !== 'range' || (q.from && q.to && q.from <= q.to), {
+    message: 'a range needs from and to, in order',
+  });
+
+export const opsMailListQuerySchema = z.object({
+  period: z
+    .enum([
+      'today',
+      'yesterday',
+      'this_week',
+      'last_week',
+      'this_month',
+      'last_month',
+      'range',
+    ])
+    .default('this_month'),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  type: z
+    .string()
+    .regex(/^[a-z0-9_]{1,60}$/)
+    .optional(),
+  status: z
+    .string()
+    .regex(/^[a-z_]{1,20}$/)
+    .optional(),
+  provider: mailProviderNameSchema.optional(),
+  account: z.string().trim().min(1).max(64).optional(),
+  cursor: z.string().max(100).optional(),
+});
+
+export interface OpsMailTotal {
+  count: number;
+  previous: number;
+  /** Null when the previous period was zero. */
+  changePct: number | null;
+}
+
+export interface OpsMailSummary {
+  range: { from: string; to: string };
+  previous: { from: string; to: string };
+  totals: Record<
+    | 'sent'
+    | 'delivered'
+    | 'bounced'
+    | 'complained'
+    | 'opened'
+    | 'clicked'
+    | 'failed',
+    OpsMailTotal
+  >;
+  rates: {
+    delivery: number | null;
+    open: number | null;
+    click: number | null;
+  };
+  byType: { type: string; sent: number; previous: number }[];
+  byProvider: { provider: string; sent: number; previous: number }[];
+}
+
+export interface OpsMailSeriesPoint {
+  date: string;
+  sent: number;
+  delivered: number;
+  bounced: number;
+  opened: number;
+  clicked: number;
+  failed: number;
+  previousSent: number;
+}
+
+export interface OpsMailRow {
+  id: string;
+  createdAt: string;
+  type: string;
+  category: string;
+  toHint: string;
+  userId: string | null;
+  provider: string | null;
+  status: string;
+  lastEvent: string | null;
+}
+
+export interface OpsMailTimelineEvent {
+  kind: string;
+  provider: string | null;
+  linkKey: string | null;
+  occurredAt: string;
+}
+
+export type OpsMailContent =
+  | { status: 'ok'; subject: string; html: string; text: string }
+  | { status: 'withheld' };
