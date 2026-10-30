@@ -1,4 +1,5 @@
 import { parseConfig } from '@tipme/observability';
+import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { z } from 'zod';
 
 export const workerConfigSchema = z
@@ -35,7 +36,7 @@ export const workerConfigSchema = z
         message: 'must be 32 bytes, base64',
       }),
     // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
-    MAIL_DEFAULT_PROVIDER: z.enum(['mock', 'zeptomail', 'ses']).default('mock'),
+    ...mailSettingsShape,
     MAIL_FROM_ADDRESS: z.email().default('hello@mail.usetipme.xyz'),
     MAIL_FROM_NAME: z.string().min(1).max(60).default('TipMe'),
     MAIL_REPLY_TO: z.email().optional(),
@@ -101,25 +102,7 @@ export const workerConfigSchema = z
         message: 'test only',
       });
     }
-    if (
-      config.MAIL_DEFAULT_PROVIDER === 'mock' &&
-      config.NODE_ENV === 'production' &&
-      config.DEPLOYMENT_MODE !== 'preview'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['MAIL_DEFAULT_PROVIDER'],
-        message: 'mock not allowed in production',
-      });
-    }
-    // Real providers are configured with their keys (Part 2); until then only the pretend one.
-    if (config.MAIL_DEFAULT_PROVIDER !== 'mock') {
-      context.addIssue({
-        code: 'custom',
-        path: ['MAIL_DEFAULT_PROVIDER'],
-        message: 'provider not configured',
-      });
-    }
+    checkMailSettings(config, context);
     if (
       config.PAYMENT_PROVIDER === 'mock' &&
       config.NODE_ENV === 'production' &&

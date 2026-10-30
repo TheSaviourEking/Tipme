@@ -105,6 +105,7 @@ export async function recordMailEvent(
     provider?: string | null;
     providerEventId?: string | null;
     linkKey?: string | null;
+    addressHmac?: string | null;
     occurredAt: Date;
     type?: string;
     category?: string;
@@ -119,6 +120,7 @@ export async function recordMailEvent(
       provider: event.provider ?? null,
       providerEventId: event.providerEventId ?? null,
       linkKey: event.linkKey ?? null,
+      addressHmac: event.addressHmac ?? null,
       occurredAt: event.occurredAt,
     })
     .onConflictDoNothing()

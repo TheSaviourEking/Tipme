@@ -251,6 +251,8 @@ export const mailMessageEvents = pgTable(
     provider: text('provider'),
     providerEventId: text('provider_event_id'),
     linkKey: text('link_key'),
+    // Set on bounces, so repeated soft bounces to one address can be counted (no plain address).
+    addressHmac: text('address_hmac'),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     receivedAt: createdAt(),
   },
@@ -260,6 +262,9 @@ export const mailMessageEvents = pgTable(
       .on(table.provider, table.providerEventId)
       .where(sql`provider_event_id IS NOT NULL`),
     index('mail_message_events_message').on(table.messageId, table.occurredAt),
+    index('mail_message_events_address')
+      .on(table.addressHmac, table.kind, table.occurredAt)
+      .where(sql`address_hmac IS NOT NULL`),
   ],
 );
 

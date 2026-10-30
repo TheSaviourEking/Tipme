@@ -66,6 +66,7 @@ const PRETEND_PUBLIC_REVIEWED = [
 
 const SIGNED_PROVIDER_REVIEWED = [
   'POST /v1/webhooks/bachs',
+  'POST /v1/webhooks/mail/{provider}',
   'POST /v1/webhooks/mock',
 ];
 
@@ -80,7 +81,7 @@ test('the pretend-only public routes are exactly the reviewed ones', () => {
   );
 });
 
-test('payment webhooks require provider signatures', () => {
+test('payment and mail webhooks require provider signatures', () => {
   assert.deepEqual(
     routes
       .filter((r) => r.access === 'provider-signature')

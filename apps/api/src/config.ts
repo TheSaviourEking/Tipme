@@ -1,4 +1,5 @@
 import { parseConfig } from '@tipme/observability';
+import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { z } from 'zod';
 
 const flag = z
@@ -92,7 +93,7 @@ export const apiConfigSchema = z
     // Keys sign-in codes (HMAC); never logged.
     AUTH_CODE_SECRET: z.string().min(32),
     // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
-    MAIL_DEFAULT_PROVIDER: z.enum(['mock', 'zeptomail', 'ses']).default('mock'),
+    ...mailSettingsShape,
     // Lets the API ask the web app to refresh a cached public profile.
     WEB_REVALIDATE_SECRET: z.string().min(32),
     // Defaults to `${WEB_ORIGIN}/api/revalidate`.
@@ -221,25 +222,7 @@ export const apiConfigSchema = z
         message: 'Bachs sandbox credentials are restricted to test or preview',
       });
     }
-    if (
-      config.MAIL_DEFAULT_PROVIDER === 'mock' &&
-      config.NODE_ENV === 'production' &&
-      config.DEPLOYMENT_MODE !== 'preview'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['MAIL_DEFAULT_PROVIDER'],
-        message: 'mock not allowed in production',
-      });
-    }
-    // Real providers are configured with their keys (Part 2); until then only the pretend one.
-    if (config.MAIL_DEFAULT_PROVIDER !== 'mock') {
-      context.addIssue({
-        code: 'custom',
-        path: ['MAIL_DEFAULT_PROVIDER'],
-        message: 'provider not configured',
-      });
-    }
+    checkMailSettings(config, context);
     if (
       config.PAYMENT_PROVIDER === 'mock' &&
       !config.MOCK_PROVIDER_WEBHOOK_SECRET
