@@ -9,6 +9,7 @@ import {
   grantOwner,
   listAudit,
   listPretendOutbox,
+  mailSealing,
   openOpsGrant,
   openSecret,
   recordAudit,
@@ -21,6 +22,7 @@ import {
   startTotpEnrolment,
   verifySignInCode,
 } from '../../dist/index.js';
+import { queuedMail } from '../../dist/test-support.js';
 import { useDatabase } from './helpers.mjs';
 
 const key = randomBytes(32);
@@ -364,18 +366,19 @@ test('staff access', async (t) => {
       `UPDATE users SET email = 'owner@example.com', email_verified_at = now() WHERE id = $1`,
       [userId],
     );
-    const before = (await listPretendOutbox(database.db, { limit: 50 })).length;
+    const sealing = mailSealing(Buffer.alloc(32, 7));
+    const mailCount = async () =>
+      (await queuedMail(database.db, sealing, { limit: 50 })).length;
+    const before = await mailCount();
     assert.equal(
       await startRecovery(database.db, {
+        sealing,
         email: 'owner@example.com',
         webOrigin: 'http://127.0.0.1:3100',
       }),
       'sent',
     );
-    assert.equal(
-      (await listPretendOutbox(database.db, { limit: 50 })).length,
-      before,
-    );
+    assert.equal(await mailCount(), before);
   });
 
   await t.test(

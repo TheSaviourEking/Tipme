@@ -12,11 +12,13 @@ import {
   markAttemptInitiated,
   previousIsoWeek,
   recordProviderEvent,
+  mailSealing,
   runWeeklyReports,
 } from '../../dist/index.js';
 import { useDatabase } from './helpers.mjs';
 
 const [ADA, TOBI] = DEMO_PROFILES;
+const sealing = mailSealing(Buffer.alloc(32, 7));
 const lagos = (iso) => new Date(`${iso}+01:00`);
 
 test('weekly reports', async (t) => {
@@ -104,10 +106,17 @@ test('weekly reports', async (t) => {
   await t.test(
     'running the week twice creates each report once, only for people who were tipped',
     async () => {
-      const first = await runWeeklyReports(db, { isoWeek: '2026-W41' });
+      await database.pool.query(
+        `UPDATE users SET email = 'tobi@example.com', email_verified_at = now() WHERE id = $1`,
+        [TOBI.userId],
+      );
+      const first = await runWeeklyReports(db, {
+        sealing,
+        isoWeek: '2026-W41',
+      });
       assert.equal(first.created, 1);
       assert.equal(
-        (await runWeeklyReports(db, { isoWeek: '2026-W41' })).created,
+        (await runWeeklyReports(db, { sealing, isoWeek: '2026-W41' })).created,
         0,
       );
       assert.equal((await listWeeklyReports(db, ADA.id)).length, 0);
@@ -118,6 +127,13 @@ test('weekly reports', async (t) => {
       );
       const notes = await listNotifications(db, TOBI.userId, {});
       assert.equal(notes.filter((n) => n.kind === 'weekly_report').length, 1);
+      // A verified email gets the report by email too, queued once.
+      const mail = await database.pool.query(
+        `SELECT type, user_id FROM mail_messages WHERE type = 'weekly_report'`,
+      );
+      assert.deepEqual(mail.rows, [
+        { type: 'weekly_report', user_id: TOBI.userId },
+      ]);
     },
   );
 });

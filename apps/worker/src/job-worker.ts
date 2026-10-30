@@ -16,6 +16,7 @@ import {
   evaluatePeriodMoments,
   expireStaleTips,
   previousIsoWeek,
+  mailSealing,
   runWeeklyReports,
   reconcileAttempts,
   reconcilePayouts,
@@ -112,6 +113,7 @@ export async function startJobWorker(
     prefix: config.QUEUE_PREFIX,
   });
   const database = createDatabase(config.DATABASE_URL, { max: 4 });
+  const sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
   const reporter = createErrorReporter({
     dsn: config.SENTRY_DSN,
     service: 'worker',
@@ -278,6 +280,7 @@ export async function startJobWorker(
               budgetPerMonthMinor: config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
             });
             const { created } = await runWeeklyReports(database.db, {
+              sealing,
               isoWeek,
             });
             logger.info({
@@ -327,6 +330,8 @@ export async function startJobWorker(
                 config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
               dedupeKey: job.id,
               analyticsEnabled,
+              sealing,
+              pretendPayment: config.PAYMENT_PROVIDER === 'mock',
             });
             processed.add(1, { outcome });
             return outcome;

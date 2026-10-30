@@ -10,6 +10,7 @@ const base = {
   AUTH_CODE_SECRET: 'a'.repeat(32),
   WEB_REVALIDATE_SECRET: 'r'.repeat(32),
   OPS_TOTP_KEY: Buffer.alloc(32, 1).toString('base64'),
+  MAIL_SEAL_KEY: Buffer.alloc(32, 2).toString('base64'),
 };
 
 test('the mock provider can never run in production', () => {

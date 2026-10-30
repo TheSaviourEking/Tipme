@@ -11,6 +11,7 @@ import {
   DEMO_PROFILES,
   listNotifications,
   listPretendOutbox,
+  mailSealing,
   markAttemptInitiated,
   markRead,
   notifyTipSucceeded,
@@ -20,16 +21,21 @@ import {
   startEmailVerification,
   startRecovery,
 } from '../../dist/index.js';
+import { queuedMail } from '../../dist/test-support.js';
+import { renderMail } from '@tipme/mail';
 import { useDatabase } from './helpers.mjs';
 
 const secret = 'test-auth-code-secret-at-least-32-chars!';
 const WEB = 'http://localhost:3000';
+const sealing = mailSealing(Buffer.alloc(32, 7));
 const [ADA, TOBI] = DEMO_PROFILES;
 
 test('notifications, email, phone change and recovery', async (t) => {
   const database = await useDatabase(t);
   const { db } = database;
   const latest = async () => (await listPretendOutbox(db, { limit: 1 }))[0];
+  const latestMail = async () =>
+    (await queuedMail(db, sealing, { limit: 1 }))[0];
   const codeFor = async (phone, purpose) => {
     await requestSignInCode(db, { phone, secret, purpose });
     return /\b(\d{6})\b/.exec((await latest()).body)[1];
@@ -80,11 +86,11 @@ test('notifications, email, phone change and recovery', async (t) => {
       await database.fresh();
       const tipId = await tip();
       assert.equal(
-        await notifyTipSucceeded(db, { tipId, profileId: TOBI.id }),
+        await notifyTipSucceeded(db, { sealing, tipId, profileId: TOBI.id }),
         'created',
       );
       assert.equal(
-        await notifyTipSucceeded(db, { tipId, profileId: TOBI.id }),
+        await notifyTipSucceeded(db, { sealing, tipId, profileId: TOBI.id }),
         'duplicate',
       );
       const list = await listNotifications(db, TOBI.userId, {});
@@ -95,27 +101,39 @@ test('notifications, email, phone change and recovery', async (t) => {
       assert.equal(
         (
           await database.pool.query(
-            "SELECT count(*)::int AS n FROM pretend_outbox WHERE channel = 'email'",
+            'SELECT count(*)::int AS n FROM mail_messages',
           )
         ).rows[0].n,
         0,
       );
 
       await startEmailVerification(db, {
+        sealing,
         userId: TOBI.userId,
         email: 'tobi@example.com',
         webOrigin: WEB,
       });
-      const mail = await latest();
-      assert.equal(mail.channel, 'email');
-      assert.equal(mail.recipientHint, 't•••@example.com');
-      const token = /#v=([A-Za-z0-9_-]+)/.exec(mail.body)[1];
+      const mail = await latestMail();
+      assert.equal(mail.type, 'email_verification_link');
+      assert.equal(mail.toHint, 't•••@example.com');
+      const token = mail.data.token;
       assert.equal(await confirmEmail(db, { token }), 'confirmed');
       assert.equal(await confirmEmail(db, { token }), 'invalid');
       const second = await tip();
-      await notifyTipSucceeded(db, { tipId: second, profileId: TOBI.id });
-      const email = await latest();
-      assert.equal(email.subject, 'You got a ₦1,800 tip on TipMe');
+      await notifyTipSucceeded(db, {
+        sealing,
+        tipId: second,
+        profileId: TOBI.id,
+      });
+      const email = await latestMail();
+      assert.equal(email.type, 'tip_received');
+      assert.equal(
+        renderMail(email.type, email.data, {
+          webOrigin: WEB,
+          unsubscribeUrl: null,
+        }).subject,
+        'You got a ₦1,800 tip on TipMe',
+      );
       await markRead(
         db,
         TOBI.userId,
@@ -183,32 +201,39 @@ test('notifications, email, phone change and recovery', async (t) => {
         deviceLabel: 'Lost phone',
       });
       // An unverified email gets the same answer and no mail.
-      const before = (await listPretendOutbox(db, { limit: 1 }))[0]?.id;
+      const before = (await latestMail())?.id;
       assert.equal(
         await startRecovery(db, {
+          sealing,
           email: 'nobody@example.com',
           webOrigin: WEB,
         }),
         'sent',
       );
-      assert.equal((await listPretendOutbox(db, { limit: 1 }))[0]?.id, before);
+      assert.equal((await latestMail())?.id, before);
 
       await startEmailVerification(db, {
+        sealing,
         userId: TOBI.userId,
         email: 'tobi@example.com',
         webOrigin: WEB,
       });
       await confirmEmail(db, {
-        token: /#v=([A-Za-z0-9_-]+)/.exec((await latest()).body)[1],
+        token: (await latestMail()).data.token,
       });
       assert.equal(
-        await startRecovery(db, { email: 'TOBI@example.com', webOrigin: WEB }),
+        await startRecovery(db, {
+          sealing,
+          email: 'TOBI@example.com',
+          webOrigin: WEB,
+        }),
         'sent',
       );
-      const token = /#r=([A-Za-z0-9_-]+)/.exec((await latest()).body)[1];
+      const token = (await latestMail()).data.token;
       assert.equal(
         await errorCode(
           completeRecovery(db, {
+            sealing,
             token,
             newPhone: '+2348039990002',
             code: '123456',
@@ -219,6 +244,7 @@ test('notifications, email, phone change and recovery', async (t) => {
       );
       const code = await codeFor('+2348039990002', 'change_phone');
       const { userId } = await completeRecovery(db, {
+        sealing,
         token,
         newPhone: '+2348039990002',
         code,
@@ -230,6 +256,7 @@ test('notifications, email, phone change and recovery', async (t) => {
       assert.equal(
         await errorCode(
           completeRecovery(db, {
+            sealing,
             token,
             newPhone: '+2348039990002',
             code,
@@ -247,6 +274,8 @@ test('review fixes: recovery hold and erasure', async (t) => {
   const { db } = database;
   const { verifySignInCode: verify } = await import('../../dist/index.js');
   const latest = async () => (await listPretendOutbox(db, { limit: 1 }))[0];
+  const latestMail = async () =>
+    (await queuedMail(db, sealing, { limit: 1 }))[0];
   const codeFor = async (phone, purpose, now) => {
     await requestSignInCode(db, {
       phone,
@@ -258,15 +287,20 @@ test('review fixes: recovery hold and erasure', async (t) => {
   };
   const recoveryToken = async () => {
     await startEmailVerification(db, {
+      sealing,
       userId: TOBI.userId,
       email: 'tobi@example.com',
       webOrigin: WEB,
     });
     await confirmEmail(db, {
-      token: /#v=([A-Za-z0-9_-]+)/.exec((await latest()).body)[1],
+      token: (await latestMail()).data.token,
     });
-    await startRecovery(db, { email: 'tobi@example.com', webOrigin: WEB });
-    return /#r=([A-Za-z0-9_-]+)/.exec((await latest()).body)[1];
+    await startRecovery(db, {
+      sealing,
+      email: 'tobi@example.com',
+      webOrigin: WEB,
+    });
+    return (await latestMail()).data.token;
   };
 
   await t.test(
@@ -280,6 +314,7 @@ test('review fixes: recovery hold and erasure', async (t) => {
       const token = await recoveryToken();
       const code = await codeFor('+2348039990031', 'change_phone');
       const result = await completeRecovery(db, {
+        sealing,
         token,
         newPhone: '+2348039990031',
         code,
@@ -321,6 +356,7 @@ test('review fixes: recovery hold and erasure', async (t) => {
       const token = await recoveryToken();
       const code = await codeFor('+2348039990032', 'change_phone');
       await completeRecovery(db, {
+        sealing,
         token,
         newPhone: '+2348039990032',
         code,
@@ -346,11 +382,12 @@ test('review fixes: recovery hold and erasure', async (t) => {
       const { deleteAccount } = await import('../../dist/index.js');
       await codeFor('+2348000000002');
       await startEmailVerification(db, {
+        sealing,
         userId: TOBI.userId,
         email: 'late@example.com',
         webOrigin: WEB,
       });
-      const lateToken = /#v=([A-Za-z0-9_-]+)/.exec((await latest()).body)[1];
+      const lateToken = (await latestMail()).data.token;
       await deleteAccount(db, { userId: TOBI.userId });
       assert.equal(
         (

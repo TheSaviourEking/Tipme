@@ -11,6 +11,7 @@ const valid = {
   AUTH_CODE_SECRET: 'a'.repeat(32),
   WEB_REVALIDATE_SECRET: 'r'.repeat(32),
   OPS_TOTP_KEY: Buffer.alloc(32, 1).toString('base64'),
+  MAIL_SEAL_KEY: Buffer.alloc(32, 2).toString('base64'),
 };
 
 test('missing connection settings are named', () => {
@@ -20,7 +21,7 @@ test('missing connection settings are named', () => {
       assert.ok(error instanceof ConfigError);
       assert.equal(
         error.message,
-        'Invalid configuration: AUTH_CODE_SECRET, DATABASE_URL, OPS_TOTP_KEY, REDIS_URL, STATUS_TOKEN_SECRET, WEB_REVALIDATE_SECRET',
+        'Invalid configuration: AUTH_CODE_SECRET, DATABASE_URL, MAIL_SEAL_KEY, OPS_TOTP_KEY, REDIS_URL, STATUS_TOKEN_SECRET, WEB_REVALIDATE_SECRET',
       );
       return true;
     },

@@ -62,6 +62,7 @@ function ensureEnv() {
     AUTH_CODE_SECRET: secret(),
     WEB_REVALIDATE_SECRET: secret(),
     OPS_TOTP_KEY: randomBytes(32).toString('base64'),
+    MAIL_SEAL_KEY: randomBytes(32).toString('base64'),
     RELEASE_CHECK_TOKEN: secret(),
     BACKUP_KEY: randomBytes(32).toString('base64'),
     BACKUP_RETAIN: '14',

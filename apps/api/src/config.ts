@@ -98,6 +98,12 @@ export const apiConfigSchema = z
     // Defaults to `${WEB_ORIGIN}/api/revalidate`.
     WEB_REVALIDATE_URL: z.url({ protocol: /^https?$/ }).optional(),
     // Seals staff authenticator secrets (AES-256-GCM): 32 bytes, base64. Never logged (ADR-0010).
+    // Seals queued email (addresses, codes, links) at rest: 32 bytes, base64. Never logged.
+    MAIL_SEAL_KEY: z
+      .string()
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'must be 32 bytes, base64',
+      }),
     OPS_TOTP_KEY: z
       .string()
       .refine((value) => Buffer.from(value, 'base64').length === 32, {

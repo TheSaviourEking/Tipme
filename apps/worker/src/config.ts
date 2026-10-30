@@ -28,6 +28,12 @@ export const workerConfigSchema = z
       .string()
       .regex(/^[a-z0-9-]{1,32}$/)
       .default('tipme'),
+    // Seals queued email (addresses, codes, links) at rest: 32 bytes, base64. Never logged.
+    MAIL_SEAL_KEY: z
+      .string()
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'must be 32 bytes, base64',
+      }),
     // Sandbox only: selectable in test and password-protected preview, never production.
     PAYMENT_PROVIDER: z.enum(['mock', 'bachs-sandbox']).default('mock'),
     PAYMENTS_LIVE_ENABLED: z.literal('false').default('false'),

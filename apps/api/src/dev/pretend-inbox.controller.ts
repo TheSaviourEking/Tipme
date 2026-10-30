@@ -14,6 +14,7 @@ import {
   listPretendOutbox,
   previousIsoWeek,
   runWeeklyReports,
+  mailSealing,
 } from '@tipme/database';
 import { z } from 'zod';
 import { API_CONFIG, type ApiConfig } from '../config.js';
@@ -77,6 +78,7 @@ const weekSchema = z
 @Controller('v1/dev/jobs')
 export class DevJobsController {
   constructor(
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
   ) {}
 
@@ -87,6 +89,7 @@ export class DevJobsController {
   ): Promise<ApiDataResponse<{ isoWeek: string; created: number }>> {
     const isoWeek = body.isoWeek ?? previousIsoWeek(new Date());
     const { created } = await runWeeklyReports(this.database.db, {
+      sealing: mailSealing(Buffer.from(this.config.MAIL_SEAL_KEY, 'base64')),
       isoWeek,
       ...(body.handle ? { onlyHandle: body.handle } : {}),
     });

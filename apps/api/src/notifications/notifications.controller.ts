@@ -26,6 +26,8 @@ import {
   markRead,
   pendingRecoveries,
   requestSignInCode,
+  mailSealing,
+  type MailSealing,
   startEmailVerification,
   startRecovery,
 } from '@tipme/database';
@@ -71,7 +73,11 @@ export class NotificationsController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
-  ) {}
+  ) {
+    this.sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
+  }
+
+  private readonly sealing: MailSealing;
 
   @Get('me/notifications')
   @UseGuards(SessionGuard)
@@ -106,6 +112,7 @@ export class NotificationsController {
     @Body(new ZodValidationPipe(emailSchema)) body: z.infer<typeof emailSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
     await startEmailVerification(this.database.db, {
+      sealing: this.sealing,
       userId: auth.userId,
       email: body.email,
       webOrigin: this.config.WEB_ORIGIN,
@@ -196,6 +203,7 @@ export class NotificationsController {
     @Body(new ZodValidationPipe(emailSchema)) body: z.infer<typeof emailSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
     await startRecovery(this.database.db, {
+      sealing: this.sealing,
       email: body.email,
       webOrigin: this.config.WEB_ORIGIN,
     });
@@ -231,6 +239,7 @@ export class NotificationsController {
     body: z.infer<typeof recoverCompleteSchema>,
   ): Promise<ApiDataResponse<{ pendingUntil: string }>> {
     const { pendingUntil } = await completeRecovery(this.database.db, {
+      sealing: this.sealing,
       token: body.token,
       newPhone: body.phone,
       code: body.code,
