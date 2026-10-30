@@ -447,6 +447,8 @@ export interface MarketEntry {
 /** A page as staff see it when changing its plan (PR-012). */
 export interface OpsPage {
   profileId: string;
+  /** The account behind the page; null once it has none. */
+  userId: string | null;
   handle: string;
   displayName: string;
   plan: 'free' | 'pro';

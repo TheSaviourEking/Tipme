@@ -19,6 +19,8 @@ export function SignInView() {
       />
       <p className="auth-switch">
         New to TipMe? <Link href="/sign-up">Create your page</Link>
+        <br />
+        <Link href="/recover">Can’t get into your email?</Link>
       </p>
     </>
   );

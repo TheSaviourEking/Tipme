@@ -1,131 +1,187 @@
 'use client';
-import { useId, useState, useSyncExternalStore } from 'react';
+import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
+import Link from 'next/link';
 import { Button, InputField, Notice } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
 
-/**
- * Without a link: ask for one by email. With a link (#r=…): attach a new number, confirmed by a
- * code sent to that number. Recovery never signs anyone in by email alone.
- */
-const noSubscription = () => () => undefined;
+type Step = 'email' | 'code' | 'new' | 'confirm' | 'scheduled';
 
+/**
+ * Lost the sign-in email: a code to the recovery email, then a code to the new address, then a
+ * 24-hour wait in which the old address is told. Someone staff are helping joins at "confirm".
+ */
 export function RecoverFlow() {
   const id = useId();
-  // The link's token stays in the fragment (never sent to a server) until recovery is done.
-  const token = useSyncExternalStore(
-    noSubscription,
-    () => new URLSearchParams(location.hash.slice(1)).get('r'),
-    () => null,
-  );
+  const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [chosen, setChosen] = useState<
-    'email' | 'sent' | 'phone' | 'code' | 'scheduled'
-  >('email');
-  const step = token && chosen === 'email' ? 'phone' : chosen;
-  const setStep = setChosen;
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newCode, setNewCode] = useState('');
   const [error, setError] = useState('');
+  // Sent here by staff: this form hasn't collected the addresses yet.
+  const [fromStaff, setFromStaff] = useState(false);
+  const [effectiveAt, setEffectiveAt] = useState('');
 
-  const ask = async (event: FormEvent) => {
+  const wrongCode =
+    'That code isn’t right or has expired. Check it and try again.';
+  const start = async (event: FormEvent) => {
     event.preventDefault();
-    await apiFetch('/v1/auth/recover', { method: 'POST', body: { email } });
-    setStep('sent');
-  };
-  const sendCode = async (event: FormEvent) => {
-    event.preventDefault();
-    const result = await apiFetch('/v1/auth/recover/code', {
+    setError('');
+    const result = await apiFetch('/v1/auth/email-recovery/start', {
       method: 'POST',
-      body: { token, phone },
+      body: { email: email.trim() },
     });
     if (result.ok) setStep('code');
-    else setError('This link has expired. Ask for a new one.');
+    else setError('We couldn’t send that. Please try again in a while.');
   };
-  const finish = async (event: FormEvent) => {
+  const propose = async (event: FormEvent) => {
     event.preventDefault();
-    const result = await apiFetch('/v1/auth/recover/complete', {
+    setError('');
+    const result = await apiFetch('/v1/auth/email-recovery/propose', {
       method: 'POST',
-      body: { token, phone, code },
+      body: {
+        email: email.trim(),
+        code: recoveryCode,
+        newEmail: newEmail.trim(),
+      },
     });
+    if (result.ok) setStep('confirm');
+    else setError(wrongCode);
+  };
+  const confirm = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    const result = await apiFetch<{ effectiveAt: string }>(
+      '/v1/auth/email-recovery/confirm',
+      {
+        method: 'POST',
+        body: { email: email.trim(), newEmail: newEmail.trim(), code: newCode },
+      },
+    );
     if (result.ok) {
-      history.replaceState(null, '', location.pathname);
+      setEffectiveAt(result.data.effectiveAt);
       setStep('scheduled');
-    } else
-      setError(
-        result.code === 'PHONE_TAKEN'
-          ? 'That number belongs to another account.'
-          : 'That code isn’t right, or the link has expired.',
-      );
+    } else setError(wrongCode);
   };
 
   if (step === 'scheduled')
     return (
-      <p role="status">
-        Done. Your account moves to {phone} in 24 hours; after that, sign in
-        with that number. We told your old number and email, so the owner can
-        stop it if this wasn’t them.
-      </p>
+      <Notice tone="success" title="Your account will move in 24 hours">
+        It moves on{' '}
+        {new Date(effectiveAt).toLocaleString('en-NG', {
+          timeZone: 'Africa/Lagos',
+        })}
+        . We told your old address, in case this wasn’t you. After that, sign in
+        with your new email.
+      </Notice>
     );
-  if (step === 'sent')
-    return (
-      <p role="status">
-        If that email is verified on a TipMe account, we sent it a link. It
-        works for 30 minutes.
-      </p>
-    );
+  const digits = (value: string) => value.replace(/\D/g, '');
   if (step === 'email')
     return (
-      <form className="auth-form" onSubmit={ask} noValidate>
-        <p>
-          We’ll email a link to your verified address so you can add a new
-          number.
-        </p>
+      <form className="auth-form" onSubmit={(e) => void start(e)} noValidate>
         <InputField
           id={`${id}-email`}
-          label="Email address"
+          label="Your sign-in email"
           type="email"
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          error={error || undefined}
+          hint="The one you can’t get into. If it has a recovery email, we’ll send a code there."
         />
-        <Button type="submit">Email me a link</Button>
+        <Button type="submit">Send recovery code</Button>
+        <p className="auth-switch">
+          No recovery email? Contact{' '}
+          <a href="mailto:support@usetipme.xyz">support@usetipme.xyz</a> and
+          we’ll check it’s you. Already spoke to us?{' '}
+          <Button
+            variant="quiet"
+            onClick={() => {
+              setFromStaff(true);
+              setStep('confirm');
+            }}
+          >
+            Enter the code we sent to your new email
+          </Button>
+        </p>
+        <p className="auth-switch">
+          <Link href="/sign-in">Back to sign in</Link>
+        </p>
       </form>
     );
-  return (
-    <form
-      className="auth-form"
-      onSubmit={step === 'phone' ? sendCode : finish}
-      noValidate
-    >
-      {error && (
-        <Notice tone="error" title="Not done yet">
-          {error}
-        </Notice>
-      )}
-      <InputField
-        id={`${id}-phone`}
-        label="Your new phone number"
-        type="tel"
-        autoComplete="tel"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        disabled={step === 'code'}
-      />
-      {step === 'code' && (
+  if (step === 'code')
+    return (
+      <form
+        className="auth-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setStep('new');
+        }}
+        noValidate
+      >
+        <p role="status">
+          If that account has a recovery email, we sent a code to it. It expires
+          in 10 minutes.
+        </p>
         <InputField
-          id={`${id}-code`}
-          label="6-digit code"
+          id={`${id}-recovery-code`}
+          label="Code sent to your recovery email"
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={6}
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+          value={recoveryCode}
+          onChange={(e) => setRecoveryCode(digits(e.target.value))}
         />
+        <Button type="submit">Continue</Button>
+      </form>
+    );
+  if (step === 'new')
+    return (
+      <form className="auth-form" onSubmit={(e) => void propose(e)} noValidate>
+        <InputField
+          id={`${id}-new-email`}
+          label="New sign-in email"
+          type="email"
+          autoComplete="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          error={error || undefined}
+        />
+        <Button type="submit">Send code to new email</Button>
+      </form>
+    );
+  return (
+    <form className="auth-form" onSubmit={(e) => void confirm(e)} noValidate>
+      {fromStaff && (
+        <>
+          <InputField
+            id={`${id}-old`}
+            label="Your old sign-in email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <InputField
+            id={`${id}-new`}
+            label="New sign-in email"
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+          />
+        </>
       )}
-      <Button type="submit">
-        {step === 'phone' ? 'Send code' : 'Use this number'}
-      </Button>
+      <InputField
+        id={`${id}-new-code`}
+        label="Code sent to your new email"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={6}
+        value={newCode}
+        onChange={(e) => setNewCode(digits(e.target.value))}
+        error={error || undefined}
+      />
+      <Button type="submit">Move my account</Button>
     </form>
   );
 }

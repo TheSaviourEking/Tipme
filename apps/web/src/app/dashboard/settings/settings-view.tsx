@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
+  PendingEmailRecovery,
+  RecoveryEmailStatus,
   MyProfile,
   NotificationPrefs,
   SessionView,
@@ -679,6 +681,230 @@ function PendingRecovery() {
   );
 }
 
+/** A recovery of this account is waiting out its 24 hours: the owner can stop it. */
+function EmailMoveNotice() {
+  const [pending, setPending] = useState<PendingEmailRecovery[]>([]);
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    void apiFetch<PendingEmailRecovery[]>('/v1/me/email-recoveries').then(
+      (result) => {
+        if (result.ok) setPending(result.data);
+      },
+    );
+  }, [round]);
+  const first = pending[0];
+  if (!first) return null;
+  const cancel = async () => {
+    await apiFetch('/v1/me/recovery/cancel', { method: 'POST', body: {} });
+    setRound((n) => n + 1);
+  };
+  return (
+    <Notice tone="error" title="Your account is being moved">
+      Your account is being moved to {first.newEmailHint} on{' '}
+      {new Date(first.effectiveAt).toLocaleString('en-NG', {
+        timeZone: 'Africa/Lagos',
+      })}
+      . If this wasn’t you, cancel it now.{' '}
+      <Button variant="secondary" onClick={() => void cancel()}>
+        Cancel the move
+      </Button>
+    </Notice>
+  );
+}
+
+/** Taking the way back in away needs the sign-in email too, not just a session. */
+function RemoveRecoveryEmail({ onRemoved }: { onRemoved: () => void }) {
+  const id = useId();
+  const [asked, setAsked] = useState(false);
+  const [signInCode, setSignInCode] = useState('');
+  const [note, setNote] = useState('');
+  const ask = async () => {
+    const result = await apiFetch('/v1/me/recovery-email/change-code', {
+      method: 'POST',
+      body: {},
+    });
+    if (result.ok) setAsked(true);
+    else setNote('We couldn’t send a code. Try again in a while.');
+  };
+  const remove = async () => {
+    const result = await apiFetch('/v1/me/recovery-email/remove', {
+      method: 'POST',
+      body: { signInCode },
+    });
+    if (result.ok) onRemoved();
+    else setNote('That code isn’t right or has expired.');
+  };
+  return (
+    <div className="settings-form">
+      {asked && (
+        <InputField
+          id={`${id}-code`}
+          label="Code sent to your sign-in email"
+          inputMode="numeric"
+          maxLength={6}
+          value={signInCode}
+          onChange={(e) => setSignInCode(e.target.value.replace(/\D/g, ''))}
+        />
+      )}
+      <Button variant="quiet" onClick={() => void (asked ? remove() : ask())}>
+        {asked ? 'Confirm removal' : 'Remove recovery email'}
+      </Button>
+      <p role="status" className="tm-hint">
+        {note}
+      </p>
+    </div>
+  );
+}
+
+/** The way back in if the sign-in email is lost. */
+function RecoveryEmailCard() {
+  const id = useId();
+  const [status, setStatus] = useState<RecoveryEmailStatus | null>(null);
+  const [round, setRound] = useState(0);
+  const [address, setAddress] = useState('');
+  const [code, setCode] = useState('');
+  const [signInCode, setSignInCode] = useState('');
+  const [step, setStep] = useState<'idle' | 'code'>('idle');
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then(
+      (result) => {
+        if (result.ok) setStatus(result.data);
+      },
+    );
+  }, [round]);
+  const replacing = Boolean(status?.confirmed);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (step === 'idle') {
+      const result = await apiFetch('/v1/me/recovery-email/code', {
+        method: 'POST',
+        body: { email: address.trim() },
+      });
+      if (!result.ok) {
+        setNote(
+          result.code === 'SAME_AS_SIGN_IN_EMAIL'
+            ? 'Use a different address from your sign-in email.'
+            : 'Check the address and try again.',
+        );
+        return;
+      }
+      if (replacing)
+        await apiFetch('/v1/me/recovery-email/change-code', {
+          method: 'POST',
+          body: {},
+        });
+      setStep('code');
+      setNote(
+        replacing
+          ? 'We sent a code to each address.'
+          : `We sent a code to ${address.trim()}.`,
+      );
+      return;
+    }
+    const result = await apiFetch('/v1/me/recovery-email', {
+      method: 'POST',
+      body: {
+        email: address.trim(),
+        code,
+        ...(replacing ? { signInCode } : {}),
+      },
+    });
+    if (result.ok) {
+      setStep('idle');
+      setAddress('');
+      setCode('');
+      setSignInCode('');
+      setNote('Your recovery email is confirmed.');
+      setRound((n) => n + 1);
+    } else {
+      if (result.code === 'EMAIL_TAKEN') {
+        setStep('idle');
+        setCode('');
+      }
+      setNote(
+        result.code === 'EMAIL_TAKEN'
+          ? 'That address is used by another account. Try a different one.'
+          : 'That code isn’t right or has expired.',
+      );
+    }
+  };
+  return (
+    <Card id="recovery" className="settings-section">
+      <h2>Recovery email</h2>
+      <p>
+        {status?.confirmed
+          ? `Recovery email: ${status.hint}`
+          : 'Add a second address, so you can get back in if you lose access to your email.'}
+      </p>
+      <form
+        className="settings-form"
+        onSubmit={(e) => void submit(e)}
+        noValidate
+      >
+        <InputField
+          id={`${id}-address`}
+          label="Recovery email address"
+          type="email"
+          autoComplete="off"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          disabled={step === 'code'}
+        />
+        {step === 'code' && (
+          <InputField
+            id={`${id}-code`}
+            label="Code sent to your recovery email"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+          />
+        )}
+        {step === 'code' && replacing && (
+          <InputField
+            id={`${id}-sign-in-code`}
+            label="Code sent to your sign-in email"
+            inputMode="numeric"
+            maxLength={6}
+            value={signInCode}
+            onChange={(e) => setSignInCode(e.target.value.replace(/\D/g, ''))}
+          />
+        )}
+        <Button type="submit" variant="secondary">
+          {step === 'idle'
+            ? 'Send code to recovery email'
+            : 'Confirm recovery email'}
+        </Button>
+        {step === 'code' && (
+          <Button
+            variant="quiet"
+            onClick={() => {
+              setStep('idle');
+              setCode('');
+              setNote('');
+            }}
+          >
+            Use a different address
+          </Button>
+        )}
+        <p role="status" className="tm-hint">
+          {note}
+        </p>
+      </form>
+      {status?.confirmed && step === 'idle' && (
+        <RemoveRecoveryEmail
+          onRemoved={() => {
+            setNote('Your recovery email was removed.');
+            setRound((n) => n + 1);
+          }}
+        />
+      )}
+    </Card>
+  );
+}
+
 function ContactDetails() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
@@ -922,8 +1148,10 @@ export function SettingsView() {
       <PhotoSettings />
       <TipAmountsSettings />
       <AboutYou />
+      <EmailMoveNotice />
       <ContactDetails />
       <NotificationSettings />
+      <RecoveryEmailCard />
       <Devices />
       <DeletePage />
     </div>

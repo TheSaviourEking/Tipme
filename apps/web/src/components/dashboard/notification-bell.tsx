@@ -3,6 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NotificationView } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
+import type { RecoveryEmailStatus } from '@tipme/contracts';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 const POLL_MS = 10_000;
 
@@ -11,6 +14,13 @@ const POLL_MS = 10_000;
  * visible; a notification seen for the first time after the page opened pops up once.
  */
 export function NotificationBell() {
+  const pathname = usePathname();
+  const [needsRecoveryEmail, setNeedsRecoveryEmail] = useState(false);
+  useEffect(() => {
+    void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then((result) =>
+      setNeedsRecoveryEmail(result.ok && !result.data.confirmed),
+    );
+  }, [pathname]);
   const [unread, setUnread] = useState<NotificationView[]>([]);
   const [all, setAll] = useState<NotificationView[] | null>(null);
   const [open, setOpen] = useState(false);
@@ -107,6 +117,14 @@ export function NotificationBell() {
       {open && (
         <div id="notification-list" className="bell__panel">
           <h2>Notifications</h2>
+          {needsRecoveryEmail && (
+            <p className="tm-hint">
+              <Link href="/dashboard/settings#recovery">
+                Add a recovery email
+              </Link>{' '}
+              so you can get back in if you lose access to your email.
+            </p>
+          )}
           {all === null ? (
             <p>Loading…</p>
           ) : all.length === 0 ? (

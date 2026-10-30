@@ -257,6 +257,7 @@ export function opsPageByHandle(
 
 const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   profileId: row.id,
+  userId: row.userId,
   handle: row.handle,
   displayName: row.displayName,
   plan: row.plan as PagePlan,

@@ -109,3 +109,23 @@ test('payments come before the page, so the most urgent fix is first', () => {
     ['set_up_payments', 'page_offline'],
   );
 });
+
+test('no recovery email asks for one, after anything stopping tips', () => {
+  const items = ownerAttention({
+    profile: ready,
+    payments: payments(null),
+    needsRecoveryEmail: true,
+  });
+  assert.deepEqual(ids(items), ['set_up_payments', 'add_recovery_email']);
+  assert.equal(items[1].action.href, '/dashboard/settings#recovery');
+  assert.deepEqual(
+    ids(
+      ownerAttention({
+        profile: ready,
+        payments: payments('ACTIVE'),
+        needsRecoveryEmail: false,
+      }),
+    ),
+    [],
+  );
+});

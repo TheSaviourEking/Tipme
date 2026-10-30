@@ -6,7 +6,8 @@ export type AttentionItem = {
     | 'set_up_payments'
     | 'finish_payments'
     | 'payments_checking'
-    | 'page_offline';
+    | 'page_offline'
+    | 'add_recovery_email';
   title: string;
   body: string;
   /** The one step that fixes it; absent while TipMe is the one checking. */
@@ -24,12 +25,14 @@ const SETTINGS = '/dashboard/settings';
 export function ownerAttention({
   profile,
   payments,
+  needsRecoveryEmail = false,
 }: {
   profile: Pick<MyProfile, 'emailVerified' | 'pageState' | 'suspended'>;
   payments: Pick<
     BachsPaymentAccountStatus,
     'enabled' | 'status' | 'chargesEnabled' | 'requirementsDue'
   > | null;
+  needsRecoveryEmail?: boolean;
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
   // Without a payment provider that needs setup (test payments), or when the account could
@@ -84,6 +87,15 @@ export function ownerAttention({
       title: 'Your page is offline',
       body: 'Supporters can’t find you or tip you until you make it live.',
       action: { href: `${SETTINGS}#page`, label: 'Make my page live' },
+      navHref: SETTINGS,
+    });
+  // Last: it protects the account, but nothing is stopping tips.
+  if (needsRecoveryEmail)
+    items.push({
+      id: 'add_recovery_email',
+      title: 'Add a recovery email',
+      body: 'So you can get back in if you lose access to your email.',
+      action: { href: `${SETTINGS}#recovery`, label: 'Add recovery email' },
       navHref: SETTINGS,
     });
   return items;
