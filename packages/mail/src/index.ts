@@ -19,3 +19,10 @@ export {
   type ZeptoMailConfig,
 } from './zeptomail/provider.js';
 export { createSesProvider, type SesConfig } from './ses/provider.js';
+export {
+  checkMailSettings,
+  configuredMailProviderNames,
+  configuredMailProviders,
+  mailSettingsShape,
+  type MailSettings,
+} from './settings.js';

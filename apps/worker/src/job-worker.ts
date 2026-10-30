@@ -7,7 +7,7 @@ import {
   withExtractedContext,
   type DestinationStream,
 } from '@tipme/observability';
-import { createMockMailProvider } from '@tipme/mail';
+import { configuredMailProviders } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   autoResolveIssues,
@@ -394,13 +394,16 @@ export async function startJobWorker(
     logger.warn({ event: 'worker.error', error: error.name }),
   );
   const relay = startOutboxRelay({ db: database.db, queue, logger });
-  // The pretend provider's "inbox" is the development-only pretend_outbox, shown on /dev/inbox.
-  const pretendMail = createMockMailProvider(pretendMailSink(database.db));
+  // Configured providers; the pretend one "delivers" to the development-only pretend inbox.
+  const mailProviders = configuredMailProviders(
+    config,
+    pretendMailSink(database.db),
+  );
   const mailDelivery = startMailDelivery({
     deps: {
       db: database.db,
       sealing,
-      providers: new Map([['mock', pretendMail]]),
+      providers: mailProviders,
       activeProvider: async () => config.MAIL_DEFAULT_PROVIDER,
       overrideFor: async () => null,
       from: { address: config.MAIL_FROM_ADDRESS, name: config.MAIL_FROM_NAME },

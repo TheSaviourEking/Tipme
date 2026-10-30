@@ -1,6 +1,10 @@
 import type { Provider } from '@nestjs/common';
 import { mailSealing, type MailSealing } from '@tipme/database';
-import type { MailProvider, MailProviderName } from '@tipme/mail';
+import {
+  configuredMailProviders,
+  type MailProvider,
+  type MailProviderName,
+} from '@tipme/mail';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 
 /** Every configured mail provider (keys present), active or not: webhooks need them all. */
@@ -15,8 +19,10 @@ export type ConfirmSubscription = (url: string) => Promise<void>;
 export const mailProvidersProvider: Provider<MailProviders> = {
   provide: MAIL_PROVIDERS,
   inject: [API_CONFIG],
-  // Real providers are configured from their keys (Task 9).
-  useFactory: (): MailProviders => new Map(),
+  // The API never sends through the pretend provider; it only needs real providers' webhooks,
+  // status and tests (tests are sent by the worker).
+  useFactory: (config: ApiConfig): MailProviders =>
+    configuredMailProviders(config, async () => {}),
 };
 
 export const mailSealingProvider: Provider<MailSealing> = {
