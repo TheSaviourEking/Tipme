@@ -96,13 +96,13 @@ test('a new recipient signs up, claims a handle and controls whether the page is
 test('a session survives a reload and signing out ends it', async ({
   page,
 }, testInfo) => {
-  await signInWithEmail(page, identity(testInfo).email, '/sign-up');
+  // One identity: each call makes a new one from the clock.
+  const who = identity(testInfo);
+  await signInWithEmail(page, who.email, '/sign-up');
   await page.waitForURL(/\/sign-up|\/dashboard/);
   await page.getByLabel('Handle').waitFor();
-  await page.getByLabel('Handle').fill(identity(testInfo).handle);
-  await page
-    .getByRole('button', { name: `Claim @${identity(testInfo).handle}` })
-    .click();
+  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard/);
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
