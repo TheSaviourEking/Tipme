@@ -232,6 +232,9 @@ importers:
       '@tipme/domain':
         specifier: workspace:*
         version: link:../domain
+      '@tipme/mail':
+        specifier: workspace:*
+        version: link:../mail
       '@tipme/observability':
         specifier: workspace:*
         version: link:../observability

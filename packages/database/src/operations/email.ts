@@ -10,6 +10,7 @@ import {
 } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { maskEmail, normaliseEmail } from './email-address.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { writePretendMessage } from './pretend-outbox.js';
 import { dropOpsAccess, isActiveStaff } from './staff.js';
@@ -17,23 +18,13 @@ import { verifySignInCode } from './sign-in.js';
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 const RECOVER_TTL_MS = 30 * 60 * 1000;
+export { maskEmail, normaliseEmail } from './email-address.js';
+
 /** A recovery takes effect only after this, so the owner can still stop it. */
 export const RECOVERY_HOLD_MS = 24 * 60 * 60 * 1000;
-const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
-
-/** "t•••@example.com": enough to recognise, never the whole address. */
-export const maskEmail = (email: string) => {
-  const [local = '', domain = ''] = email.split('@');
-  return `${local.slice(0, 1)}•••@${domain}`;
-};
-
-export const normaliseEmail = (raw: string): string | null => {
-  const email = raw.trim().toLowerCase();
-  return email.length <= 254 && EMAIL.test(email) ? email : null;
-};
 
 /** Sends a link (pretend mailbox) that proves the user owns the address. */
 export function startEmailVerification(
