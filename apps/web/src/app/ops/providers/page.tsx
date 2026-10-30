@@ -16,8 +16,8 @@ import { apiFetch } from '@/lib/session-client';
 const TEST_STATUS: Record<string, string> = {
   pending: 'Waiting for the link in the email to be opened',
   confirmed: 'Confirmed',
-  failed: 'Failed',
-  expired: 'Expired',
+  failed: 'The test email didn’t get through',
+  expired: 'Not confirmed within 24 hours. Send a new test',
 };
 
 function ProviderCard({
@@ -61,12 +61,18 @@ function ProviderCard({
           <strong>Active</strong>
         </p>
       )}
-      {card.sandbox === true && (
+      {card.sandbox === true ? (
         <Notice tone="neutral" title="Sandbox">
           This provider only delivers to verified recipients
           {card.statusDetail ? ` (${card.statusDetail})` : ''}. It can’t be made
           active in production.
         </Notice>
+      ) : (
+        <p>
+          {card.sandbox === false
+            ? `Status: live${card.statusDetail ? `, ${card.statusDetail}` : ''}.`
+            : 'Status: unknown until a test is confirmed.'}
+        </p>
       )}
       <p>
         Last 24 hours: {card.last24h.sent} sent, {card.last24h.failed} failed
@@ -75,13 +81,15 @@ function ProviderCard({
       </p>
       {test ? (
         <p>
-          {test.status === 'pending'
-            ? `Test sent to ${test.targetHint ?? 'staff'} ${when(test.startedAt)}. `
-            : ''}
-          {TEST_STATUS[test.status]}
-          {test.confirmedAt ? ` ${when(test.confirmedAt)}` : ''}.
-          {test.messageStatus === 'failed' &&
-            ` The email failed${test.failureCode ? `: ${test.failureCode}` : ''}.`}
+          {test.status === 'pending' &&
+            `Test sent to ${test.targetHint ?? 'staff'} ${when(test.startedAt)}. `}
+          {test.status === 'pending' && test.failureCode
+            ? `Retrying: ${test.failureCode}.`
+            : `${TEST_STATUS[test.status]}${test.confirmedAt ? ` ${when(test.confirmedAt)}` : ''}${
+                test.status === 'failed' && test.failureCode
+                  ? `: ${test.failureCode}`
+                  : ''
+              }.`}
         </p>
       ) : (
         <p>Not tested yet.</p>
@@ -371,6 +379,13 @@ export default function ProvidersPage() {
     });
   }, [version]);
   const refresh = () => setVersion((v) => v + 1);
+  // A test moves on its own (sent, retried, failed): follow it while one is waiting.
+  const waiting = data?.providers.some((p) => p.lastTest?.status === 'pending');
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => setVersion((v) => v + 1), 5000);
+    return () => clearInterval(timer);
+  }, [waiting]);
   const canManage = can(access, 'providers.manage');
   return (
     <>

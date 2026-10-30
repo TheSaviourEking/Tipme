@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { MailProviderName } from '@tipme/mail';
 import { and, desc, eq, gt, gte, isNotNull, isNull, sql } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { Database, Tx } from '../client.js';
 import {
   mailMessageEvents,
   mailMessages,
@@ -70,6 +70,7 @@ export function startMailProviderTest(
     provider: MailProviderName;
     to: string;
     webOrigin: string;
+    reason: string;
     now?: Date;
   },
 ): Promise<{ testId: string }> {
@@ -103,6 +104,7 @@ export function startMailProviderTest(
       permission: 'providers.manage',
       subjectType: 'mail_provider',
       subjectId: input.provider,
+      reason: input.reason,
       now,
     });
     return { testId };
@@ -142,6 +144,30 @@ export function confirmProviderTest(
   });
 }
 
+/** A confirmed test still stands for this provider. */
+export async function hasConfirmedMailTest(
+  db: Database | Tx,
+  provider: MailProviderName,
+  now: Date,
+): Promise<boolean> {
+  const [test] = await db
+    .select({ id: providerTests.id })
+    .from(providerTests)
+    .where(
+      and(
+        eq(providerTests.kind, 'mail'),
+        eq(providerTests.provider, provider),
+        eq(providerTests.status, 'confirmed'),
+        gte(
+          providerTests.confirmedAt,
+          new Date(now.getTime() - PROVIDER_TEST_VALID_MS),
+        ),
+      ),
+    )
+    .limit(1);
+  return Boolean(test);
+}
+
 export type MailSwitchOutcome =
   'switched' | 'no_confirmed_test' | 'not_configured' | 'refused_in_production';
 
@@ -155,6 +181,8 @@ export function switchMailProvider(
     /** The provider's own status: true while it only delivers to verified recipients. */
     sandbox: boolean | null;
     configured: ReadonlySet<MailProviderName>;
+    /** What was active before anyone chose, for the audit trail. */
+    fallback: MailProviderName;
     now?: Date;
   },
 ): Promise<MailSwitchOutcome> {
@@ -164,23 +192,13 @@ export function switchMailProvider(
   if (input.production && (input.provider === 'mock' || input.sandbox === true))
     return Promise.resolve('refused_in_production');
   return db.transaction(async (tx) => {
-    const [test] = await tx
-      .select({ id: providerTests.id })
-      .from(providerTests)
-      .where(
-        and(
-          eq(providerTests.kind, 'mail'),
-          eq(providerTests.provider, input.provider),
-          eq(providerTests.status, 'confirmed'),
-          gte(
-            providerTests.confirmedAt,
-            new Date(now.getTime() - PROVIDER_TEST_VALID_MS),
-          ),
-        ),
-      )
-      .orderBy(desc(providerTests.confirmedAt))
-      .limit(1);
-    if (!test) return 'no_confirmed_test';
+    if (!(await hasConfirmedMailTest(tx, input.provider, now)))
+      return 'no_confirmed_test';
+    const [previous] = await tx
+      .select({ provider: providerSettings.activeProvider })
+      .from(providerSettings)
+      .where(eq(providerSettings.kind, 'mail'))
+      .for('update');
     const values = {
       activeProvider: input.provider,
       changedBy: input.staffUserId,
@@ -197,7 +215,7 @@ export function switchMailProvider(
       permission: 'providers.manage',
       subjectType: 'mail_provider',
       subjectId: input.provider,
-      reason: input.reason,
+      reason: `From ${previous?.provider ?? input.fallback} to ${input.provider}: ${input.reason}`,
       now,
     });
     return 'switched';
@@ -233,7 +251,7 @@ export function setProviderOverride(
       permission: 'providers.manage',
       subjectType: 'user',
       subjectId: input.userId,
-      reason: input.reason,
+      reason: `${input.provider}: ${input.reason}`,
     });
   });
 }
@@ -328,6 +346,28 @@ export function removeSuppression(
   });
 }
 
+/** The test email ended without reaching anyone, so the test can't be confirmed. */
+const ENDED_UNSENT = new Set([
+  'failed',
+  'bounced',
+  'complained',
+  'suppressed',
+  'expired',
+]);
+
+/** What a test amounts to now: its row says little until it is confirmed, so read its email. */
+function testStatus(
+  test: { status: string; startedAt: Date },
+  messageStatus: string | null,
+  now: Date,
+): 'pending' | 'confirmed' | 'failed' | 'expired' {
+  if (test.status === 'confirmed') return 'confirmed';
+  if (ENDED_UNSENT.has(messageStatus ?? '')) return 'failed';
+  return now.getTime() - test.startedAt.getTime() > PROVIDER_TEST_VALID_MS
+    ? 'expired'
+    : 'pending';
+}
+
 export interface MailProviderOverview {
   active: MailProviderName;
   changedAt: string | null;
@@ -412,35 +452,25 @@ export async function mailProviderOverview(
         )
         .orderBy(desc(providerTests.startedAt))
         .limit(1);
-      const [valid] = await db
-        .select({ id: providerTests.id })
-        .from(providerTests)
-        .where(
-          and(
-            eq(providerTests.kind, 'mail'),
-            eq(providerTests.provider, name),
-            eq(providerTests.status, 'confirmed'),
-            gte(
-              providerTests.confirmedAt,
-              new Date(now.getTime() - PROVIDER_TEST_VALID_MS),
-            ),
-          ),
-        )
-        .limit(1);
+      const canActivate = await hasConfirmedMailTest(db, name, now);
       return {
         name,
         label: MAIL_PROVIDER_LABELS[name],
         active: name === active,
-        canActivate: Boolean(valid),
+        canActivate,
         lastTest: test
           ? {
-              status: test.test.status as
-                'pending' | 'confirmed' | 'failed' | 'expired',
+              status: testStatus(test.test, test.messageStatus, now),
               startedAt: test.test.startedAt.toISOString(),
               confirmedAt: test.test.confirmedAt?.toISOString() ?? null,
               targetHint: test.test.targetHint,
               messageStatus: test.messageStatus,
-              failureCode: test.test.failureCode ?? test.lastError,
+              failureCode:
+                test.test.failureCode ??
+                test.lastError ??
+                (ENDED_UNSENT.has(test.messageStatus ?? '')
+                  ? test.messageStatus
+                  : null),
             }
           : null,
         last24h: {
@@ -474,6 +504,21 @@ export async function mailProviderOverview(
       createdAt: o.createdAt.toISOString(),
     })),
   };
+}
+
+/** Staff looking up whether an address is blocked leaves a trail, without the address. */
+export async function auditSuppressionLookup(
+  db: Database,
+  sealing: MailSealing,
+  input: { address: string; staffUserId: string },
+): Promise<void> {
+  await recordAudit(db, {
+    staffUserId: input.staffUserId,
+    action: 'mail.suppression_looked_up',
+    permission: 'private.view',
+    subjectType: 'mail_suppression',
+    subjectId: addressHmac(sealing, input.address).slice(0, 16),
+  });
 }
 
 /** The account behind a handle or user id, for staff forms. */

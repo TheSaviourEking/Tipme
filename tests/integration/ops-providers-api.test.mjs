@@ -173,8 +173,15 @@ test('production refuses the pretend provider and SES in sandbox', async (t) => 
   );
 });
 
+const confirm = async (api, db, provider = 'ses') => {
+  await api.startTest(ops, provider, { to: 'staff@example.com', reason });
+  const [mail] = await queuedMail(db, sealing, { limit: 1 });
+  await api.confirmTest(ops, { token: mail.data.token });
+};
+
 test('an override can be set by handle and removed, and shows in the overview', async (t) => {
-  const { api } = await setup(t);
+  const { api, db } = await setup(t);
+  await confirm(api, db);
   await api.setOverride(ops, { account: 'ada', provider: 'ses', reason });
   const { data } = await api.overview();
   assert.deepEqual(
@@ -209,8 +216,8 @@ test('suppression lookup and removal by address', async (t) => {
     [addressHmac(sealing, 'a@example.com')],
   );
   assert.equal(
-    (await api.lookupSuppression({ address: 'a@example.com' })).data.suppression
-      .reason,
+    (await api.lookupSuppression(ops, { address: 'a@example.com' })).data
+      .suppression.reason,
     'complaint',
   );
   const body = { address: 'a@example.com', reason };
@@ -233,8 +240,62 @@ test('suppression lookup and removal by address', async (t) => {
     'removed',
   );
   assert.equal(
-    (await api.lookupSuppression({ address: 'a@example.com' })).data
+    (await api.lookupSuppression(ops, { address: 'a@example.com' })).data
       .suppression,
     null,
   );
+});
+
+test('an override follows the same safeguards as a switch', async (t) => {
+  const { api, db } = await setup(t);
+  assert.equal(
+    await code(
+      api.setOverride(ops, { account: 'ada', provider: 'ses', reason }),
+    ),
+    'NO_CONFIRMED_TEST',
+  );
+  const live = await setup(t, { NODE_ENV: 'production' });
+  await confirm(live.api, live.db);
+  assert.equal(
+    await code(
+      live.api.setOverride(ops, { account: 'ada', provider: 'ses', reason }),
+    ),
+    'PROVIDER_NOT_ALLOWED',
+  );
+  void db;
+});
+
+test('a suppression lookup is audited, without the address', async (t) => {
+  const { api, pool } = await setup(t);
+  await api.lookupSuppression(ops, { address: 'someone@example.com' });
+  const { rows } = await pool.query(
+    `SELECT subject_id, staff_user_id FROM audit_events WHERE action = 'mail.suppression_looked_up'`,
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].staff_user_id, ops.userId);
+  assert.ok(!rows[0].subject_id.includes('someone'));
+});
+
+test('a provider that hangs cannot hang the page, and status is not fetched on every load', async (t) => {
+  const { api } = await setup(t);
+  let calls = 0;
+  api.providers.get('ses').status = () => {
+    calls += 1;
+    return new Promise(() => {});
+  };
+  const started = Date.now();
+  const { data } = await api.overview();
+  assert.ok(Date.now() - started < 4000);
+  assert.equal(data.providers.find((p) => p.name === 'ses').sandbox, null);
+  api.providers.get('mock').status = async () => {
+    calls += 100;
+    return { sandbox: null, detail: null };
+  };
+  api.providers.get('ses').status = async () => {
+    calls += 1;
+    return { sandbox: true, detail: 'x' };
+  };
+  await api.overview();
+  await api.overview();
+  assert.ok(calls <= 2, `status fetched ${calls} times`);
 });
