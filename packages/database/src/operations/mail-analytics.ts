@@ -366,7 +366,7 @@ export async function listMail(
       status: mailMessages.status,
       lastEvent: sql<string | null>`(
         SELECT e.kind FROM ${mailMessageEvents} e
-         WHERE e.message_id = ${mailMessages.id}
+         WHERE e.message_id = "mail_messages"."id"
          ORDER BY e.occurred_at DESC, e.created_at DESC, e.id DESC LIMIT 1)`,
     })
     .from(mailMessages)
@@ -388,9 +388,16 @@ export async function listMail(
   const page = rows.slice(0, filter.limit);
   const last = page[page.length - 1];
   return {
-    rows: page.map(({ cursorAt: _cursor, createdAt, ...row }) => ({
-      ...row,
-      createdAt: createdAt.toISOString(),
+    rows: page.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+      type: row.type,
+      category: row.category,
+      toHint: row.toHint,
+      userId: row.userId,
+      provider: row.provider,
+      status: row.status,
+      lastEvent: row.lastEvent,
     })),
     nextCursor:
       rows.length > filter.limit && last ? `${last.cursorAt}|${last.id}` : null,
