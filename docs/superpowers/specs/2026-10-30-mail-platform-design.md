@@ -1,6 +1,6 @@
 # Mail platform: pluggable providers, real delivery, email sign-in
 
-**Status:** design, awaiting the product owner's approval (30 October 2026)
+**Status:** design, revised with the product owner's answers (30 October 2026), awaiting approval
 **Companion:** `2026-10-30-payment-provider-switching-design.md` (shares the admin provider pattern in §7)
 **Decision records to write:** ADR-0017 (mail platform and email identity). ADR-0015/0016 stay reserved for Phase 3 (payouts, reversals).
 
@@ -16,6 +16,9 @@ TipMe writes emails today but sends none: every message lands in the development
 - **Comprehensive (owner).** Welcome, onboarding guide, security notices, tip notifications, important-action notices, privacy notices and more, with preferences.
 - **Email sign-in codes now (owner).** Recipient sign-in moves from phone codes to email codes until phone codes are built. Phone codes go on the TODO list.
 - **Admin chooses the active provider (owner),** and a provider must pass a test send before it can become active (owner).
+- **Per-account overrides (owner).** Admins can set particular accounts to a different provider from the system one. The owner said this applies to payments and to email; this document reads that as mail-provider overrides per account, e.g. for a recipient whose mailbox rejects one provider.
+- **Lost email: recovery email plus staff (owner).** Recipients can add a recovery email in settings. Those without one are told in the notifications and attention area, the same way they're told payments aren't set up. Staff can also recover an account.
+- **Tracking (owner).** "We need to track for audits, and to know how our users are doing." Every email's lifecycle is recorded (queued, sent, delivered, opened, clicked, bounced, complained) and visible in an ops email console.
 
 ## 2. Goals, non-goals, anti-goals
 
@@ -28,6 +31,9 @@ TipMe writes emails today but sends none: every message lands in the development
 5. Bounce and complaint handling for every configured provider, feeding one suppression list.
 6. An ops "Providers" page: see configured providers, send a test, confirm it arrived, switch the active provider, and watch failures and bounces.
 7. Email-code sign-in for recipients, with the current protections (expiry, single use, lockouts, rate limits, no account enumeration).
+8. A recovery email per account, self-service recovery through it, staff-assisted recovery, and an attention notice for accounts without one.
+9. Tracking: a per-message event history, per-user email history and per-type delivery, open and click rates in an ops email console, kept for audit.
+10. Per-account mail provider overrides, set by admins and audited.
 
 **Non-goals (this project)**
 
@@ -35,7 +41,7 @@ TipMe writes emails today but sends none: every message lands in the development
 - Marketing or newsletter email. ZeptoMail's terms forbid promotional mail (verified in its docs on 30 October 2026). The catalogue has a `marketing` category and consent field so it can come later through a provider that allows it, but no marketing email ships now **(design call)**.
 - Email to supporters (guests). Checkout collects no supporter email today, so supporter receipts are a separate product decision.
 - A Resend adapter. The interface is shaped so it fits, but it isn't built until wanted **(design call)**.
-- Open and click tracking. It is off in every adapter: it adds tracking pixels and rewritten links, which privacy review hasn't covered **(design call)**.
+- Open and click tracking on `security` email. Codes, sign-in notices and recovery mail are never tracked, so no tracking pixel or rewritten link ever sits next to a credential **(design call)**. All other categories are tracked (owner).
 
 **Anti-goals (would make this a failure even if it "works")**
 
@@ -79,7 +85,8 @@ provider webhooks ─► /v1/webhooks/mail/:provider ─► verify ─► mail_p
   - `name: 'zeptomail' | 'ses' | 'mock'`.
   - `capabilities: { marketing: boolean }`.
   - `send(message: OutgoingMail): Promise<{ providerMessageId: string }>`, which throws `MailRejectedError` (permanent: bad address, unverified sender, suspended account) or `MailTemporaryError` (network, 5xx, rate or quota limits).
-  - `verifyWebhook(rawBody, headers, now): MailWebhookVerification`, returning normalised events: `{ kind: 'hard_bounce' | 'soft_bounce' | 'complaint' | 'delivered', address, providerMessageId?, providerEventId, occurredAt }`.
+  - `verifyWebhook(rawBody, headers, now): MailWebhookVerification`, returning normalised events: `{ kind: 'hard_bounce' | 'soft_bounce' | 'complaint' | 'delivered' | 'opened' | 'clicked', address, providerMessageId?, reference?, providerEventId, occurredAt }`. Our `reference` travels with the message (ZeptoMail `client_reference`, SES message tag), so events match messages without relying on provider ids alone.
+  - `OutgoingMail.tracking: boolean` turns opens and clicks on or off per message: ZeptoMail `track_opens`/`track_clicks`; SES uses two configuration sets, one with open and click tracking and one without.
   - `status(): Promise<{ sandbox: boolean | null; detail: string | null }>`.
 - **`OutgoingMail`**: `{ to, from, replyTo, subject, text, html, headers (List-Unsubscribe and others), reference (our message id) }`. Adapters never see the template data, only rendered content.
 - **Adapters:**
@@ -98,7 +105,9 @@ provider webhooks ─► /v1/webhooks/mail/:provider ─► verify ─► mail_p
   - Timestamps: `created_at`, `sent_at`.
   - Sealing uses the existing `secret-box` with a new `MAIL_SEAL_KEY`. Sealed fields are wiped 7 days after a final status, keeping metadata for ops **(design call)**.
 - **`mail_suppressions`**: `address_hmac` (the primary key: an HMAC of the normalised address, so the list holds no plain addresses), `reason` (`hard_bounce | complaint | repeated_soft_bounce | manual`), `provider`, `created_at`, `note` (manual only). Three soft bounces in 7 days for the same address count as a suppression **(design call)**.
-- **`mail_provider_events`**: `(provider, provider_event_id)` unique, `kind`, `message_id` (nullable), `received_at`. Stored for dedupe and the admin counts. No payload is stored beyond the normalised fields.
+- **`mail_message_events`** (the tracking and audit trail): an append-only `id`, `message_id` (nullable for an event that matches no message), `kind` (`queued | sent | send_failed | delivered | opened | clicked | soft_bounce | hard_bounce | complaint | suppressed | skipped_preference | expired`), `provider`, `provider_event_id` (`(provider, provider_event_id)` unique when present, for dedupe), `link_key` (for clicks: which named link in the template, never the URL with its token), `occurred_at` and `received_at`. Only normalised fields are kept. Retained for 2 years **(design call)**. Opens are reported as "opened at least once"; Apple Mail Privacy Protection and image proxies make open counts approximate, and the console says so.
+- **`provider_overrides`** (shared with payments): `kind` (`mail | payment`), `user_id`, `provider`, `set_by`, `reason` and `created_at`, unique on `(kind, user_id)`.
+- **Recovery email:** `users.recovery_email` and `users.recovery_email_verified_at` (unique among verified recovery addresses of live accounts, and never the same as the account's sign-in email).
 - **`mail_preferences`**: per user, `engagement` and `marketing` booleans (engagement on by default; marketing off by default and opt-in only). The existing per-type toggles on `profiles` (`notify_tip_emails`, `notify_weekly_reports`, `notify_milestones`) stay and keep their meaning.
 - **`provider_settings`** (shared with the payment project): `kind` (`mail | payment`, primary key), `active_provider`, `changed_by`, `changed_at`, `reason`. No row means the server default.
 - **`provider_tests`** (shared): `id`, `kind`, `provider`, `started_by`, `started_at`, `target_hint`, `token_sha256`, `status` (`pending | confirmed | failed | expired`), `confirmed_at`, `failure_code`, plus `message_id` for mail (or `tip_id` for payments).
@@ -109,7 +118,7 @@ provider webhooks ─► /v1/webhooks/mail/:provider ─► verify ─► mail_p
 - **The worker's mail loop:**
   1. Poll about every 500 ms. Claim due rows with `FOR UPDATE SKIP LOCKED` and mark them `sending` in a short transaction.
   2. Before sending, re-check suppression and preferences, so a change after enqueue still counts. Expired rows become `expired` and are never sent. A sign-in code isn't sent after its code has expired.
-  3. Pick the provider: `pinned_provider`, otherwise the active mail provider (read from `provider_settings`, cached for a few seconds).
+  3. Pick the provider: `pinned_provider` (tests), otherwise the user's mail override (`provider_overrides`), otherwise the active mail provider (read from `provider_settings`, cached for a few seconds). An override to a provider that's no longer configured falls back to the active provider and is flagged on the console.
   4. Render the email and send it outside any transaction.
   5. Record `sent` (with the provider message id), or a temporary failure with backoff (30 s, 2 min, 10 min, 1 h, 6 h; give up after 6 attempts as `failed`), or `failed` straight away on a permanent rejection.
 - **Duplicates.** Neither provider offers idempotency keys, so a crash between "provider accepted" and "row marked sent" can send twice. A duplicate notice or code email is acceptable; a lost one isn't. Rows stuck in `sending` for more than 2 minutes return to `queued` **(design call)**.
@@ -120,7 +129,8 @@ provider webhooks ─► /v1/webhooks/mail/:provider ─► verify ─► mail_p
 - `POST /v1/webhooks/mail/zeptomail` and `POST /v1/webhooks/mail/ses` (raw body). Both are verified before anything else and stored once.
   - A hard bounce or complaint adds a suppression and marks the message `bounced` or `complained`.
   - A soft bounce is counted.
-  - `delivered` (SES only) updates the counts.
+  - `delivered`, `opened` and `clicked` are appended to `mail_message_events` (ZeptoMail sends opens and clicks; SES sends deliveries, opens and clicks through the configuration set).
+  - Every event, including bounces and complaints, is appended to `mail_message_events`.
 - Webhooks are accepted for **every configured provider, active or not**, so bounces for mail sent before a switch still count.
 - Unknown or unverifiable requests get a 4xx and are logged by name only.
 
@@ -131,11 +141,12 @@ provider webhooks ─► /v1/webhooks/mail/:provider ─► verify ─► mail_p
 - **SES:** `SES_REGION` (default `eu-north-1`), `SES_ACCESS_KEY_ID` and `SES_SECRET_ACCESS_KEY` (or the machine's role), `SES_CONFIGURATION_SET` and `SES_SNS_TOPIC_ARN`.
 - **Where credentials live:** the API needs webhook secrets and the provider list; the worker needs the send credentials. A provider is "configured" only when all of its keys are present. Partial configuration fails startup with a clear message, as Bachs does.
 - **Production:** `mock` is refused, and `MESSAGING_PROVIDER` is retired.
-- **Suggested addresses** (from the 29 October recommendation): `TipMe <hello@mail.usetipme.xyz>` with Reply-To `support@usetipme.xyz`, and `TipMe Staging <hello@staging-mail.usetipme.xyz>` for staging.
+- **Addresses (owner approved, 30 October):** `TipMe <hello@mail.usetipme.xyz>` with Reply-To `support@usetipme.xyz`, and `TipMe Staging <hello@staging-mail.usetipme.xyz>` for staging.
+- **SES:** two configuration sets, `SES_CONFIGURATION_SET` (opens and clicks tracked) and `SES_CONFIGURATION_SET_UNTRACKED` (security mail), both publishing to the SNS topic.
 
 ## 5. Ops "Providers" page — mail section
 
-Route `/ops/providers`, added to the ops navigation. A new permission, `providers.manage`, is required to test or switch; `issues.view` is enough to view. The Owner role gets it automatically.
+Route `/ops/providers`, added to the ops navigation. A new permission, `providers.manage`, is required to test, switch or set overrides; `issues.view` is enough to view. New permissions (`providers.manage`, `recoveries.manage`) go to the Owner role automatically.
 
 - **Configured providers.** Each shows its name, whether it's active, its status (for example "SES: sandbox, only verified recipients", "ZeptoMail: account status unknown until a test"), its last test result and time, and its counts for the last 24 hours (sent, failed, bounced, complained).
 - **Send a test.**
@@ -150,6 +161,21 @@ Route `/ops/providers`, added to the ops navigation. A new permission, `provider
   - Switching back is a normal switch; a previously confirmed test still counts if it's within 24 hours.
 - **Recent failures.** Type, masked recipient, provider, error code and time. Never the content.
 - **Suppressions.** Look up an address (it's hashed for the lookup), see why it's suppressed, and remove it with a reason (audited). A complaint suppression asks for extra confirmation before removal.
+- **Overrides.** Pin an account to a mail provider with a reason, or remove the pin. Audited (`mail_provider.override_set` and `mail_provider.override_removed`). Pinned accounts are listed with their provider.
+
+### 5.1 Email console (tracking and audit)
+
+Route `/ops/email`. It needs `issues.view` to view and `private.view` to see a full address (revealing is audited, like other private-data reveals).
+
+- **Overview** for 24 hours, 7 days or 30 days, by type and by provider:
+  - queued, sent, delivered, bounced, complained, opened at least once and clicked;
+  - queue age;
+  - failure reasons.
+    Open rates carry a note that privacy proxies make them approximate.
+- **Message search** by type, status, provider, date or account (handle or user id). Each message shows its timeline from `mail_message_events`: queued, sent through X, delivered, opened, which link was clicked, bounced. It also shows the masked recipient and the provider message id. **Never the body, a code or a link with its token.**
+- **Account view:** every email sent to an account, newest first, linked from the ops search and the issue pages. "Did they get the email?" is answered here.
+- **Export** of the aggregate numbers (CSV) for reporting. No addresses in the export.
+- **Audit:** console views of private data are audited, and switches, overrides and suppression removals already are.
 
 ## 6. The email catalogue
 
@@ -173,6 +199,10 @@ Each email type has: an id, a category, a trigger, a data schema, a subject, a t
 | `new_sign_in_notice`                                       | security      | A sign-in from a device not seen before                                                                               | Device label and approximate time, no IP shown                                |
 | `staff_access_notice`                                      | security      | Ops access granted, changed or removed                                                                                | ADR-0010                                                                      |
 | `account_deleted_notice`                                   | security      | The account is deleted                                                                                                | Last email ever sent to the account                                           |
+| `recovery_email_code`                                      | security      | A recipient adds or changes their recovery email                                                                      | Sent to the recovery address                                                  |
+| `recovery_code`                                            | security      | "Can't get into your email?" recovery started                                                                         | Sent to the recovery address                                                  |
+| `recovery_started_notice`                                  | security      | A recovery was started for the account                                                                                | Sent to the sign-in address, with how to cancel                               |
+| `recovery_completed_notice`                                | security      | The sign-in email was changed by recovery (self-service or staff)                                                     | Sent to both old and new addresses                                            |
 | `welcome`                                                  | account       | First sign-in that creates an account                                                                                 | What TipMe is, the next step (create a page)                                  |
 | `payment_setup_needed`                                     | account       | A page exists but can't take tips (no ready payment account), 24 h after creation                                     | The "very visible notice" from 26 October, in email form                      |
 | `payment_account_ready`                                    | account       | Payment account becomes ready                                                                                         | "You can receive tips now"                                                    |
@@ -223,9 +253,31 @@ A signed-in recipient enters a new address and gets an `email_change_code` there
 
 An unverified address on account A must never let anyone sign in to A. When someone proves an address with a code, any **unverified** claim of the same address on other accounts is cleared in the same transaction, and they sign in to (or create) the account where it's verified.
 
-### 8.5 Lost access to the email
+### 8.5 Recovery email and lost access (owner)
 
-There's no self-service recovery while phone codes are TODO. "Can't get in?" explains how to contact support, and staff use the existing recovery-issue flow to move an account to a new address after checking identity, audited. **This is question Q1 for the owner.** The phone-number recovery screens (`/recover`) are hidden while phone codes are TODO.
+**Adding a recovery email.** Settings has a "Recovery email" section. The recipient enters a second address and confirms it with a `recovery_email_code` sent there. It must differ from the sign-in email. Changing or removing it needs a fresh code to the sign-in email, so someone with a stolen session can't quietly swap it **(design call)**.
+
+**Nudging people to add one (owner).** An account with no confirmed recovery email gets:
+
+- an item in the notifications tab ("Add a recovery email so you can get back in if you lose access to your email");
+- an attention item in the dashboard checklist and badge, the same pattern as "payments aren't set up" (PR #29).
+  Both disappear once a recovery email is confirmed. The nudge is in-app only, with no email **(design call)**: an email asking someone to protect their email adds little.
+
+**Self-service recovery.**
+
+1. "Can't get into your email?" on the sign-in page asks for the sign-in address. The answer is the same whether or not an account or recovery email exists.
+2. If the account has a confirmed recovery email, a `recovery_code` goes there.
+3. With that code, the recipient enters a **new sign-in address** and confirms it with a code sent to the new address.
+4. The change waits **24 hours** (the existing `RECOVERY_HOLD_MS` rule), during which the old address gets `recovery_started_notice` and any signed-in session can cancel it. Both addresses get `recovery_completed_notice` when it happens, and every session ends.
+   Staff accounts are never recovered this way (ADR-0010, unchanged).
+
+**Staff-assisted recovery (owner).** For accounts without a recovery email, or when it's also lost:
+
+- From the account's ops view, staff with `recoveries.manage` (a new permission) start "Move sign-in email". They record the identity checks done and a reason, and enter the new address.
+- The new address must confirm with a code, and the same 24-hour hold, notices and cancellation apply.
+- Every step is audited. Staff can't sign in as the user or see codes.
+
+The old phone-number recovery screens (`/recover`) are replaced by this flow. Phone recovery returns with phone codes (TODO).
 
 ### 8.6 Existing accounts
 
@@ -237,6 +289,7 @@ Production has no users. Staging test accounts that only have a phone get an ema
 - **Sentry:** unexpected adapter errors, with the same scrubbing as today.
 - **Metrics (counters):** queued, sent, failed, bounced and complained, by provider and category. Queue age is shown on the ops page.
 - **Privacy documentation:** Zoho (ZeptoMail) and AWS (SES) are added as processors, and retention (§4.2) is recorded. This doesn't close D-11's privacy review.
+- **Tracking disclosure:** the privacy notice says TipMe records whether emails are delivered, opened and clicked, and that security emails aren't tracked. Event history is kept 2 years; sealed message contents 7 days **(design call)**.
 
 ## 10. Testing
 
@@ -249,7 +302,22 @@ Production has no users. Staging test accounts that only have a phone get an ema
   - stuck `sending` rows are recovered;
   - a pinned test goes to the pinned provider;
   - data is sealed in storage and wiped after retention.
-- **Webhooks:** a hard bounce suppresses, three soft bounces suppress, a complaint suppresses, and a duplicate event changes nothing. A bounce for a previously active provider still counts.
+- **Webhooks:** a hard bounce suppresses, three soft bounces suppress, a complaint suppresses, and a duplicate event changes nothing. A bounce for a previously active provider still counts. Opens, clicks and deliveries are recorded against the right message through our reference.
+- **Tracking:**
+  - security email is sent with tracking off (ZeptoMail flags off; SES untracked configuration set);
+  - other email is sent with tracking on;
+  - the console never shows a body, code or tokenised link;
+  - address reveals are audited.
+- **Overrides:** an overridden account's mail goes through its pinned provider; an override to an unconfigured provider falls back and is flagged; setting and removing overrides is audited.
+- **Recovery:**
+  - a recovery email can't equal the sign-in email;
+  - changing it needs a sign-in-email code;
+  - self-service recovery answers identically for unknown addresses;
+  - the 24-hour hold applies, and a cancel from any session works;
+  - the notices go to both addresses;
+  - staff-assisted recovery needs the permission and is audited;
+  - staff accounts are refused;
+  - the notification and attention item appears without a recovery email and clears once one is confirmed.
 - **Ops:**
   - a switch without a confirmed test is refused;
   - an expired test is refused;
@@ -270,21 +338,31 @@ Production has no users. Staging test accounts that only have a phone get an ema
 
 1. `packages/mail` (interface, pretend adapter, conformance kit, layout), the `mail_messages` queue and worker loop, and the existing ★ emails moved onto it. Behaviour is unchanged with `mock`.
 2. ZeptoMail and SES adapters, webhooks, suppressions and configuration.
-3. `provider_settings` and `provider_tests`, the ops Providers page (mail), test sends and switching.
-4. Email sign-in (§8), with the sign-in page, settings email change, and the takeover protection.
-5. The rest of the catalogue, preferences, unsubscribe, onboarding series and policy-notice action.
-6. Docs: ADR-0017, decision-log update, `docs/runbooks/mail.md` (DNS: SPF, DKIM and DMARC per provider; ZeptoMail agent and webhook setup; SES identity, configuration set, SNS topic and subscription; switching and rollback), the privacy and processor list, and the third-party register. Plus the staging enablement checklist.
+3. `provider_settings`, `provider_tests` and `provider_overrides`, the ops Providers page (mail), test sends, switching and overrides.
+4. Tracking: `mail_message_events`, open and click handling, and the ops email console (§5.1).
+5. Email sign-in (§8.1–8.4, 8.6), with the sign-in page, settings email change, and the takeover protection.
+6. Recovery email, self-service and staff recovery, and the notification and attention item (§8.5).
+7. The rest of the catalogue, preferences, unsubscribe, onboarding series and policy-notice action.
+8. Docs: ADR-0017, decision-log update, `docs/runbooks/mail.md` (DNS: SPF, DKIM and DMARC per provider; ZeptoMail agent and webhook setup; SES identity, configuration set, SNS topic and subscription; switching and rollback), the privacy and processor list, and the third-party register. Plus the staging enablement checklist.
 
 Phone codes are added to the TODO list in `docs/superpowers/plans/2026-10-28-audit-fixes.md` (phase table) and `docs/agent/ACTIVE_TASK.md`.
 
-## 12. Open questions for the owner
+## 12. Answers and what's still open
 
-1. **Q1 — lost email access:** staff-assisted recovery (§8.5) until phone codes return, or no recovery at all until then?
-2. **Q2 — credentials and DNS:**
-   - a ZeptoMail account, agent and API key, with its data-centre region, the sending domain verified, and a webhook authentication key;
-   - for SES on the staging server, an IAM user (or role) with `ses:SendEmail` and `ses:GetAccount` only. The new AWS project experience may restrict IAM users.
-3. **Q3 — addresses:** confirm `hello@mail.usetipme.xyz` (Reply-To `support@usetipme.xyz`) and `hello@staging-mail.usetipme.xyz`.
-4. **Q4 — marketing:** confirm no marketing or newsletter email at launch (ZeptoMail forbids it).
+**Answered by the owner (30 October):**
+
+- Lost email: recovery email plus staff recovery (§8.5).
+- Addresses approved (§4.5).
+- Tracking wanted (§5.1).
+- Per-account overrides (§5).
+- Credentials and DNS: the builder sets up with the access available.
+
+**Still needed to finish setup (not to build):**
+
+- **AWS:** the `tipme` profile's session expired. Signing in again (`aws login`) lets the builder create the SES identities, DKIM, configuration sets and SNS topic in `eu-north-1`, and the send-only access for the staging server.
+- **Cloudflare DNS for `usetipme.xyz`:** the builder has no access. It needs an API token with DNS edit for that zone (or the owner adds the records the runbook lists). Found 30 October: `_dmarc.usetipme.xyz` has **two** DMARC records, which makes receivers ignore both. They need merging into one.
+- **ZeptoMail:** no account access. Someone has to create the account and agent, verify `mail.usetipme.xyz`, and generate the Send Mail API key and webhook authentication key. Then note the account's region for `ZEPTOMAIL_API_BASE`.
+- **Marketing (unanswered):** no marketing email at launch stays the design call, since ZeptoMail forbids it.
 
 ## 13. Left to the builder
 
