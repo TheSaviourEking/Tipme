@@ -13,7 +13,10 @@ import {
   runIssueDetectors,
   seedDemoProfiles,
   updatePaymentAccountStatus,
+  mailSealing,
 } from '../../packages/database/dist/index.js';
+
+const sealing = mailSealing(Buffer.alloc(32, 7));
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
   ADA,
@@ -38,6 +41,7 @@ async function unknownCheckout(database, accountReference = 'acct_ada123') {
     environment: 'sandbox',
   });
   await updatePaymentAccountStatus(database.db, {
+    sealing,
     profileId: ADA,
     provider: 'bachs',
     environment: 'sandbox',
@@ -333,6 +337,7 @@ test('refreshing onboarding stores what Bachs reports and blocks recipient-paid 
     environment: 'sandbox',
   });
   await updatePaymentAccountStatus(database.db, {
+    sealing,
     profileId: TOBI,
     provider: 'bachs',
     environment: 'sandbox',
@@ -363,6 +368,7 @@ test('refreshing onboarding stores what Bachs reports and blocks recipient-paid 
     },
     logger,
     { revalidate() {} },
+    sealing,
   );
   const result = await accounts.onboard(
     { userId: '00000000-0000-7000-8000-000000007b11' },

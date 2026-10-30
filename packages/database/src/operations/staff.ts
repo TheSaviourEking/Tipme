@@ -16,6 +16,8 @@ import {
 import { recordAudit } from './audit.js';
 import { normaliseEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
+import { mailOwner } from './account-mail.js';
+import type { MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { openSecret, sealSecret } from './secret-box.js';
@@ -137,6 +139,8 @@ export function grantOwner(
     phone?: string;
     now?: Date;
     role?: StaffRole;
+    /** Absent only where the operator's command has no mail key: the email is then skipped. */
+    sealing?: MailSealing;
   },
 ): Promise<{ userId: string; enrolmentCode: string }> {
   const email = input.email ? normaliseEmail(input.email) : null;
@@ -209,6 +213,14 @@ export function grantOwner(
         subjectId: userId,
         now,
       });
+      if (input.sealing)
+        await mailOwner(tx, input.sealing, {
+          userId,
+          type: 'staff_access_notice',
+          data: { change: 'granted' },
+          dedupeKey: `staff_access_notice.${userId}.${now.getTime()}`,
+          now,
+        });
       return { userId, enrolmentCode };
     }),
   );

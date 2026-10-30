@@ -2,6 +2,8 @@ import { and, eq, isNull, lte, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { issues, paymentAccounts, profiles, users } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
+import { mailOwner } from './account-mail.js';
+import type { MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { recordAudit } from './audit.js';
 import { OPAQUE_PROVIDER_ID } from './provider-ids.js';
@@ -186,6 +188,7 @@ export function updatePaymentAccountStatus(
     payoutsEnabled: boolean;
     feeCollector: 'platform' | 'connected_account' | 'unknown';
     requirementsDue: string[];
+    sealing: MailSealing;
     now?: Date;
   },
 ): Promise<PaymentAccountSummary> {
@@ -246,6 +249,27 @@ export function updatePaymentAccountStatus(
         .where(eq(paymentAccounts.id, account.id))
         .returning();
       if (!updated) throw new OperationError('NO_PAGE');
+      const day = now.toISOString().slice(0, 10);
+      const mail = (type: string) =>
+        mailOwner(tx, input.sealing, {
+          profileId: input.profileId,
+          type,
+          data: {},
+          dedupeKey: `${type}.${account.id}.${input.status}.${day}`,
+          now,
+        });
+      if (input.status === 'ACTIVE' && account.status !== 'ACTIVE')
+        await mail('payment_account_ready');
+      // Setting up always needs information, so only a change after that is news.
+      const newlyRestricted =
+        input.status === 'RESTRICTED' && account.status !== 'RESTRICTED';
+      const readyNeedsMore =
+        input.status === 'ACTIVE' &&
+        account.status === 'ACTIVE' &&
+        input.requirementsDue.length > 0 &&
+        account.requirementsDue.length === 0;
+      if (newlyRestricted || readyNeedsMore)
+        await mail('payment_account_action_needed');
       return summarize(updated);
     }),
   );

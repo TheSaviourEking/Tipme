@@ -174,7 +174,11 @@ test('turned off: no tip email, no milestone notice, no weekly-report notice or 
     'tip',
     'weekly_report',
   ]);
-  assert.equal((await emails(loud.userId)).length, 2, 'tip and weekly emails');
+  assert.equal(
+    (await emails(loud.userId)).length,
+    3,
+    'tip, milestone and weekly emails',
+  );
   assert.deepEqual(
     await kinds(quiet.userId),
     ['tip'],

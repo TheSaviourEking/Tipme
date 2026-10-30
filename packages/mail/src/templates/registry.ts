@@ -15,6 +15,18 @@ import {
   recoveryNewEmailCode,
   signInCode,
 } from './types/sign-in-code.js';
+import {
+  accountDeletedNotice,
+  milestone,
+  pagePaused,
+  pageRestored,
+  paymentAccountActionNeeded,
+  paymentAccountReady,
+  staffAccessNotice,
+  tipReversed,
+  withdrawalFailed,
+  withdrawalPaid,
+} from './types/account-events.js';
 import { emailVerificationLink } from './types/email-verification-link.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
 import { providerTest } from './types/provider-test.js';
@@ -43,6 +55,16 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     recoveryNewEmailCode,
     recoveryStartedNotice,
     recoveryCompletedNotice,
+    staffAccessNotice,
+    accountDeletedNotice,
+    paymentAccountReady,
+    paymentAccountActionNeeded,
+    pagePaused,
+    pageRestored,
+    withdrawalPaid,
+    withdrawalFailed,
+    tipReversed,
+    milestone,
   ].map((type) => [type.id, type]),
 );
 

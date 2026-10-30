@@ -9,9 +9,10 @@ import { AvatarController } from './avatar.controller.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { PaymentAccountsController } from './payment-accounts.controller.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
+import { MailModule } from '../mail/mail.module.js';
 
 @Module({
-  imports: [CheckoutModule],
+  imports: [CheckoutModule, MailModule],
   controllers: [
     MeProfileController,
     PublicProfileController,

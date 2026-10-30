@@ -51,6 +51,8 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ServerEvents } from '../analytics/server-events.js';
 import { ProfileRevalidator } from './revalidate.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
+import type { MailSealing } from '@tipme/database';
 
 /** The signed-in recipient's own page. Every route acts only on the caller's account. */
 @Controller('v1/me')
@@ -62,6 +64,7 @@ export class MeProfileController {
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
     @Inject(ServerEvents) private readonly events: ServerEvents,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {}
 
   @Post('page')
@@ -185,6 +188,7 @@ export class MeProfileController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
     const { handle } = await deleteAccount(this.database.db, {
+      sealing: this.sealing,
       userId: auth.userId,
     });
     this.revalidator.revalidate(handle);

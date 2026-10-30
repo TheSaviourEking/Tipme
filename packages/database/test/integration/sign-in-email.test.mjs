@@ -200,7 +200,7 @@ test('deleting an account erases its email codes and lockouts', async (t) => {
   const { deleteAccount } = await import('../../dist/index.js');
   const { userId } = await signIn('gone@example.com');
   await request('gone@example.com');
-  await deleteAccount(db, { userId });
+  await deleteAccount(db, { userId, sealing });
   assert.equal(await count('email_codes'), 0);
   assert.equal(await count('email_code_lockouts'), 0);
 });

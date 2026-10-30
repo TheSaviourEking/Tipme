@@ -283,6 +283,7 @@ export async function startJobWorker(
               periodKey: isoWeek,
               now: new Date(),
               budgetPerMonthMinor: config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
+              sealing,
             });
             const { created } = await runWeeklyReports(database.db, {
               sealing,
@@ -303,6 +304,7 @@ export async function startJobWorker(
               periodKey: previousMonth(now),
               now,
               budgetPerMonthMinor: config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
+              sealing,
             });
             logger.info({ event: 'moments.monthly.completed', created });
             processed.add(1, { outcome: 'celebrated' });

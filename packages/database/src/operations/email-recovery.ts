@@ -524,7 +524,17 @@ export function completeDueRecoveries(
           .where(
             and(eq(sessions.userId, row.userId), isNull(sessions.revokedAt)),
           );
+        const wasStaff = await isActiveStaff(tx, row.userId);
         await dropOpsAccess(tx, row.userId, now);
+        if (wasStaff)
+          await enqueueMail(tx, sealing, {
+            type: 'staff_access_notice',
+            to: row.newEmail,
+            userId: row.userId,
+            data: { change: 'removed' },
+            dedupeKey: `staff_access_notice.${row.userId}.${now.getTime()}`,
+            now,
+          });
         const data = { newEmailHint: maskEmail(row.newEmail) };
         await enqueueMail(tx, sealing, {
           type: 'recovery_completed_notice',

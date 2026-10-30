@@ -26,7 +26,7 @@ import { maskEmail, normaliseEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
-import { dropOpsAccess } from './staff.js';
+import { dropOpsAccess, isActiveStaff } from './staff.js';
 
 export const EMAIL_CODE_TTL_MS = 10 * 60_000;
 export const EMAIL_CODES_PER_HOUR = 3;
@@ -441,7 +441,17 @@ export function changeEmail(
             ne(sessions.id, input.keepSessionId),
           ),
         );
+      const wasStaff = await isActiveStaff(tx, input.userId);
       await dropOpsAccess(tx, input.userId, now);
+      if (wasStaff)
+        await enqueueMail(tx, sealing, {
+          type: 'staff_access_notice',
+          to: email,
+          userId: input.userId,
+          data: { change: 'removed' },
+          dedupeKey: `staff_access_notice.${input.userId}.${now.getTime()}`,
+          now,
+        });
       const [page] = await tx
         .select({ handle: profiles.handleLower })
         .from(profiles)

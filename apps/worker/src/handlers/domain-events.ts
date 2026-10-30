@@ -2,6 +2,7 @@ import type { Database, MailSealing } from '@tipme/database';
 import {
   evaluateTipMoments,
   ISSUE_EVENT_NAMES,
+  mailForDomainEvent,
   notifyTipSucceeded,
   openIssueFromEvent,
   recordServerEvent,
@@ -45,6 +46,8 @@ export async function handleDomainEvent(
   },
 ): Promise<'logged' | 'notified' | 'duplicate' | 'skipped' | 'issue_opened'> {
   deps.logger.info({ event: 'domain_event.received', name });
+  // Before the issue below, whose repeat is a no-op: a failed send retries the whole event.
+  await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
   // Alerts that need a person become issues in the admin inbox, once per alert (PR-009).
   if (ISSUE_EVENT_NAMES.has(name) && deps.dedupeKey) {
     const outcome = await openIssueFromEvent(deps.db, {
@@ -126,6 +129,7 @@ export async function handleDomainEvent(
     tipId,
     now: new Date(),
     budgetPerMonthMinor: deps.rewardBudgetPerMonthMinor ?? 25_000_000n,
+    sealing: deps.sealing,
   });
   return outcome === 'created' ? 'notified' : outcome;
 }
