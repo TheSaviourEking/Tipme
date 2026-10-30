@@ -607,27 +607,7 @@ export type OpsSuppressionRemoveRequest = z.infer<
 
 // ---- Email console (mail platform spec §5.1) ----
 
-export const opsMailPeriodQuerySchema = z
-  .object({
-    period: z
-      .enum([
-        'today',
-        'yesterday',
-        'this_week',
-        'last_week',
-        'this_month',
-        'last_month',
-        'range',
-      ])
-      .default('this_month'),
-    from: z.iso.date().optional(),
-    to: z.iso.date().optional(),
-  })
-  .refine((q) => q.period !== 'range' || (q.from && q.to && q.from <= q.to), {
-    message: 'a range needs from and to, in order',
-  });
-
-export const opsMailListQuerySchema = z.object({
+const mailPeriodFields = {
   period: z
     .enum([
       'today',
@@ -641,6 +621,31 @@ export const opsMailListQuerySchema = z.object({
     .default('this_month'),
   from: z.iso.date().optional(),
   to: z.iso.date().optional(),
+};
+const MAIL_RANGE_MAX_DAYS = 366;
+/** A range needs both dates, in order, and at most a year. */
+const validMailRange = (q: {
+  period: string;
+  from?: string | undefined;
+  to?: string | undefined;
+}) =>
+  q.period !== 'range' ||
+  Boolean(
+    q.from &&
+    q.to &&
+    q.from <= q.to &&
+    Date.parse(q.to) - Date.parse(q.from) <= MAIL_RANGE_MAX_DAYS * 86_400_000,
+  );
+const mailRangeMessage = {
+  message: 'a range needs from and to, in order, within a year',
+};
+
+export const opsMailPeriodQuerySchema = z
+  .object(mailPeriodFields)
+  .refine(validMailRange, mailRangeMessage);
+
+const mailListFields = {
+  ...mailPeriodFields,
   type: z
     .string()
     .regex(/^[a-z0-9_]{1,60}$/)
@@ -651,8 +656,15 @@ export const opsMailListQuerySchema = z.object({
     .optional(),
   provider: mailProviderNameSchema.optional(),
   account: z.string().trim().min(1).max(64).optional(),
-  cursor: z.string().max(100).optional(),
-});
+};
+
+export const opsMailListQuerySchema = z
+  .object({ ...mailListFields, cursor: z.string().max(100).optional() })
+  .refine(validMailRange, mailRangeMessage);
+
+export const opsMailExportQuerySchema = z
+  .object({ ...mailListFields, kind: z.enum(['summary', 'messages']) })
+  .refine(validMailRange, mailRangeMessage);
 
 export interface OpsMailTotal {
   count: number;
@@ -681,6 +693,11 @@ export interface OpsMailSummary {
   };
   byType: { type: string; sent: number; previous: number }[];
   byProvider: { provider: string; sent: number; previous: number }[];
+  byCategory: { category: string; sent: number; previous: number }[];
+  /** Every type with any activity in the period, including ones that only failed. */
+  types: string[];
+  /** How long the oldest waiting email has been queued, in seconds. */
+  queueAgeSeconds: number;
 }
 
 export interface OpsMailSeriesPoint {
@@ -701,7 +718,9 @@ export interface OpsMailRow {
   category: string;
   toHint: string;
   userId: string | null;
+  handle: string | null;
   provider: string | null;
+  providerMessageId: string | null;
   status: string;
   lastEvent: string | null;
 }

@@ -10,6 +10,7 @@ import {
   Res,
 } from '@nestjs/common';
 import {
+  opsMailExportQuerySchema,
   opsMailListQuerySchema,
   opsMailPeriodQuerySchema,
   opsReasonSchema,
@@ -44,14 +45,7 @@ import { OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PAGE = 50;
-const EXPORT_LIMIT = 50_000;
-
-const exportQuerySchema = z.object({
-  period: opsMailListQuerySchema.shape.period,
-  from: z.iso.date().optional(),
-  to: z.iso.date().optional(),
-  kind: z.enum(['summary', 'messages']),
-});
+const EXPORT_LIMIT = 250_000;
 
 const periodOf = (query: {
   period: string;
@@ -189,8 +183,8 @@ export class OpsEmailConsoleController {
   @OpsPermission('issues.view')
   async exportCsv(
     @CurrentOps() ops: OpsContext,
-    @Query(new ZodValidationPipe(exportQuerySchema))
-    query: z.infer<typeof exportQuerySchema>,
+    @Query(new ZodValidationPipe(opsMailExportQuerySchema))
+    query: z.infer<typeof opsMailExportQuerySchema>,
     @Res({ passthrough: true }) response: Pick<Response, 'setHeader'>,
   ): Promise<string> {
     const { db } = this.database;
@@ -226,16 +220,29 @@ export class OpsEmailConsoleController {
         'type',
         'category',
         'recipient',
+        'account',
         'provider',
         'status',
         'last_event',
       ],
     ];
+    const userId = query.account
+      ? await findAccountByHandleOrId(db, query.account)
+      : undefined;
+    if (query.account && !userId) return csv(rows);
     let cursor: string | null = null;
     do {
       const page: Awaited<ReturnType<typeof listMail>> = await listMail(
         db,
-        { period, limit: 1000, ...(cursor ? { cursor } : {}) },
+        {
+          period,
+          limit: 1000,
+          ...(query.type ? { type: query.type } : {}),
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.provider ? { provider: query.provider } : {}),
+          ...(userId ? { userId } : {}),
+          ...(cursor ? { cursor } : {}),
+        },
         now,
       );
       for (const row of page.rows)
@@ -244,12 +251,16 @@ export class OpsEmailConsoleController {
           row.type,
           row.category,
           row.toHint,
+          row.handle,
           row.provider,
           row.status,
           row.lastEvent,
         ]);
       cursor = page.nextCursor;
-    } while (cursor && rows.length <= EXPORT_LIMIT);
+      // An audit file that silently stops is worse than none: ask for a narrower period.
+      if (cursor && rows.length > EXPORT_LIMIT)
+        throw new CodedHttpException(400, 'VALIDATION_FAILED');
+    } while (cursor);
     return csv(rows);
   }
 }

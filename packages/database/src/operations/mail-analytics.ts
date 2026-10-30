@@ -1,7 +1,13 @@
 import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { mailDailyStats, mailMessageEvents, mailMessages } from '../schema.js';
+import {
+  mailDailyStats,
+  mailMessageEvents,
+  mailMessages,
+  profiles,
+} from '../schema.js';
 import { recordAudit } from './audit.js';
+import { OperationError } from './errors.js';
 import { openSecret } from './secret-box.js';
 import type { MailSealing } from './mail-queue.js';
 
@@ -32,6 +38,8 @@ interface DayRange {
 }
 
 const DAY_MS = 86_400_000;
+const RANGE_MAX_DAYS = 367;
+const CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{1,6}Z\|[0-9a-f-]{36}$/;
 const KIND_EVENT: Record<Exclude<MailKind, 'opened' | 'clicked'>, string> = {
   sent: 'sent',
   delivered: 'delivered',
@@ -80,10 +88,11 @@ export function mailPeriodRanges(
     case 'yesterday':
       return single(addDays(today, -1));
     case 'this_week': {
+      // So far this week against the same days of last week.
       const monday = mondayOf(today);
       return {
         range: { from: monday, to: today },
-        previous: { from: addDays(monday, -7), to: addDays(monday, -1) },
+        previous: { from: addDays(monday, -7), to: addDays(today, -7) },
       };
     }
     case 'last_week': {
@@ -93,17 +102,24 @@ export function mailPeriodRanges(
         previous: { from: addDays(monday, -7), to: addDays(monday, -1) },
       };
     }
-    case 'this_month':
+    case 'this_month': {
+      // So far this month against the same days of last month, as far as it has them.
+      const last = lastMonth(today);
+      const days = dayNumber(today) - dayNumber(monthStart(today));
+      const to = addDays(last.from, days);
       return {
         range: { from: monthStart(today), to: today },
-        previous: lastMonth(today),
+        previous: { from: last.from, to: to < last.to ? to : last.to },
       };
+    }
     case 'last_month': {
       const range = lastMonth(today);
       return { range, previous: lastMonth(range.from) };
     }
     case 'range': {
       const length = dayNumber(period.to) - dayNumber(period.from) + 1;
+      if (!(length >= 1 && length <= RANGE_MAX_DAYS))
+        throw new OperationError('INVALID_INPUT');
       return {
         range: { from: period.from, to: period.to },
         previous: {
@@ -124,6 +140,7 @@ async function statTotals(db: Database, range: DayRange) {
     .select({
       kind: mailDailyStats.kind,
       type: mailDailyStats.type,
+      category: mailDailyStats.category,
       provider: mailDailyStats.provider,
       n: sql<number>`sum(${mailDailyStats.count})::int`,
     })
@@ -131,7 +148,12 @@ async function statTotals(db: Database, range: DayRange) {
     .where(
       sql`${mailDailyStats.lagosDate} BETWEEN ${range.from}::date AND ${range.to}::date`,
     )
-    .groupBy(mailDailyStats.kind, mailDailyStats.type, mailDailyStats.provider);
+    .groupBy(
+      mailDailyStats.kind,
+      mailDailyStats.type,
+      mailDailyStats.category,
+      mailDailyStats.provider,
+    );
   return rows;
 }
 
@@ -186,9 +208,19 @@ export async function mailPeriodSummary(
     await uniqueMessages(db, 'clicked', range),
     await uniqueMessages(db, 'clicked', previous),
   );
+  const [oldest] = await db
+    .select({
+      at: sql<Date | null>`min(${mailMessages.nextAttemptAt})`.mapWith(
+        mailMessages.nextAttemptAt,
+      ),
+    })
+    .from(mailMessages)
+    .where(eq(mailMessages.status, 'queued'));
   const sent = totals.sent.count;
-  const rate = (count: number) => (sent === 0 ? null : count / sent);
-  const breakdown = <K extends 'type' | 'provider'>(key: K) => {
+  // Mail sent earlier can be delivered in this period, so a share never goes past everything.
+  const rate = (count: number) =>
+    sent === 0 ? null : Math.min(1, count / sent);
+  const breakdown = <K extends 'type' | 'provider' | 'category'>(key: K) => {
     const names = [
       ...new Set(
         [...current, ...before]
@@ -225,6 +257,14 @@ export async function mailPeriodSummary(
       provider: name,
       ...rest,
     })),
+    byCategory: breakdown('category').map(({ name, ...rest }) => ({
+      category: name,
+      ...rest,
+    })),
+    types: [...new Set(current.map((r) => r.type))],
+    queueAgeSeconds: oldest?.at
+      ? Math.max(0, Math.floor((now.getTime() - oldest.at.getTime()) / 1000))
+      : 0,
   };
 }
 
@@ -328,7 +368,9 @@ export interface MailListRow {
   category: string;
   toHint: string;
   userId: string | null;
+  handle: string | null;
   provider: string | null;
+  providerMessageId: string | null;
   status: string;
   lastEvent: string | null;
 }
@@ -348,6 +390,8 @@ export async function listMail(
   now: Date,
 ): Promise<{ rows: MailListRow[]; nextCursor: string | null }> {
   const { range } = mailPeriodRanges(filter.period, now);
+  if (filter.cursor && !CURSOR.test(filter.cursor))
+    throw new OperationError('INVALID_INPUT');
   const [cursorAt, cursorId] = filter.cursor?.split('|') ?? [];
   const after =
     cursorAt && cursorId
@@ -362,7 +406,9 @@ export async function listMail(
       category: mailMessages.category,
       toHint: mailMessages.toHint,
       userId: mailMessages.userId,
+      handle: profiles.handle,
       provider: mailMessages.provider,
+      providerMessageId: mailMessages.providerMessageId,
       status: mailMessages.status,
       lastEvent: sql<string | null>`(
         SELECT e.kind FROM ${mailMessageEvents} e
@@ -370,6 +416,7 @@ export async function listMail(
          ORDER BY e.occurred_at DESC, e.created_at DESC, e.id DESC LIMIT 1)`,
     })
     .from(mailMessages)
+    .leftJoin(profiles, eq(profiles.userId, mailMessages.userId))
     .where(
       and(
         gte(mailMessages.createdAt, lagosStart(range.from)),
@@ -395,7 +442,9 @@ export async function listMail(
       category: row.category,
       toHint: row.toHint,
       userId: row.userId,
+      handle: row.handle,
       provider: row.provider,
+      providerMessageId: row.providerMessageId,
       status: row.status,
       lastEvent: row.lastEvent,
     })),
