@@ -63,16 +63,16 @@ export class AuthController {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
-  ) {}
+  ) {
+    this.sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
+  }
+
+  private readonly sealing: MailSealing;
 
   /** Phone codes aren't built yet: phone sign-in exists only while messaging is pretend. */
   private assertPhoneAllowed(): void {
     if (this.config.MAIL_DEFAULT_PROVIDER !== 'mock')
       throw new CodedHttpException(404, 'NOT_FOUND');
-  }
-
-  private get sealing(): MailSealing {
-    return mailSealing(Buffer.from(this.config.MAIL_SEAL_KEY, 'base64'));
   }
 
   /** Always 202: the answer never reveals whether the address has an account. */

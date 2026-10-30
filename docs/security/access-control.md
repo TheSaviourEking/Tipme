@@ -138,6 +138,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
+| POST | `/v1/me/email/code` | yes | `auth_code` | – |
+| POST | `/v1/me/email/confirm` | yes | `auth_verify` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
 | GET | `/v1/me/moments` | n/a (read) | – | – |

@@ -169,7 +169,11 @@ test('phone sign-in is refused once real mail is the provider', async (t) => {
   const { AuthController } =
     await import('../../apps/api/dist/auth/auth.controller.js');
   const api = new AuthController(
-    { MAIL_DEFAULT_PROVIDER: 'zeptomail', AUTH_CODE_SECRET: 'x'.repeat(32) },
+    {
+      MAIL_DEFAULT_PROVIDER: 'zeptomail',
+      AUTH_CODE_SECRET: 'x'.repeat(32),
+      MAIL_SEAL_KEY: Buffer.alloc(32, 7).toString('base64'),
+    },
     { db: database.db },
     {},
   );
