@@ -13,7 +13,13 @@ import {
 import type {
   ApiDataResponse,
   MyProfile,
+  EmailChangeCodeRequest,
+  EmailChangeConfirmRequest,
   NotificationView,
+} from '@tipme/contracts';
+import {
+  emailChangeCodeSchema,
+  emailChangeConfirmSchema,
 } from '@tipme/contracts';
 import {
   cancelRecoveries,
@@ -26,7 +32,9 @@ import {
   markRead,
   pendingRecoveries,
   requestSignInCode,
+  changeEmail,
   mailSealing,
+  requestEmailChangeCode,
   type MailSealing,
   startEmailVerification,
   startRecovery,
@@ -79,6 +87,15 @@ export class NotificationsController {
 
   private readonly sealing: MailSealing;
 
+  /**
+   * Links and phone codes from before email sign-in. They only exist while messaging is pretend;
+   * with real mail, email codes replace them and phone codes aren't built yet.
+   */
+  private assertLegacyAllowed(): void {
+    if (this.config.MAIL_DEFAULT_PROVIDER !== 'mock')
+      throw new CodedHttpException(404, 'NOT_FOUND');
+  }
+
   @Get('me/notifications')
   @UseGuards(SessionGuard)
   @Header('Cache-Control', 'private, no-store')
@@ -103,6 +120,50 @@ export class NotificationsController {
     await markRead(this.database.db, auth.userId, body.ids);
   }
 
+  /** A code to the new address. Always 202: says nothing about whether it is in use. */
+  @Post('me/email/code')
+  @HttpCode(202)
+  @UseGuards(SessionGuard)
+  @RateLimit('auth_code')
+  async requestEmailChange(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(emailChangeCodeSchema))
+    body: EmailChangeCodeRequest,
+  ): Promise<ApiDataResponse<{ sent: true }>> {
+    await requestEmailChangeCode(this.database.db, this.sealing, {
+      userId: auth.userId,
+      email: body.email,
+      secret: this.config.AUTH_CODE_SECRET,
+    });
+    return { data: { sent: true } };
+  }
+
+  @Post('me/email/confirm')
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  @RateLimit('auth_verify')
+  async confirmEmailChange(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(emailChangeConfirmSchema))
+    body: EmailChangeConfirmRequest,
+  ): Promise<ApiDataResponse<{ email: string }>> {
+    const result = await changeEmail(this.database.db, this.sealing, {
+      userId: auth.userId,
+      email: body.email,
+      code: body.code,
+      secret: this.config.AUTH_CODE_SECRET,
+      keepSessionId: auth.sessionId,
+    });
+    if (result.status === 'locked')
+      throw new CodedHttpException(429, 'SIGN_IN_LOCKED');
+    if (result.status === 'taken')
+      throw new CodedHttpException(409, 'EMAIL_TAKEN');
+    if (result.status !== 'ok')
+      throw new CodedHttpException(400, 'CODE_INVALID');
+    if (result.handle) this.revalidator.revalidate(result.handle);
+    return { data: { email: result.email } };
+  }
+
   @Post('me/email')
   @HttpCode(202)
   @UseGuards(SessionGuard)
@@ -111,6 +172,7 @@ export class NotificationsController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(emailSchema)) body: z.infer<typeof emailSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
+    this.assertLegacyAllowed();
     await startEmailVerification(this.database.db, {
       sealing: this.sealing,
       userId: auth.userId,
@@ -143,6 +205,7 @@ export class NotificationsController {
   async phoneCode(
     @Body(new ZodValidationPipe(phoneSchema)) body: z.infer<typeof phoneSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
+    this.assertLegacyAllowed();
     await requestSignInCode(this.database.db, {
       phone: body.phone,
       purpose: 'change_phone',
@@ -202,6 +265,7 @@ export class NotificationsController {
   async recover(
     @Body(new ZodValidationPipe(emailSchema)) body: z.infer<typeof emailSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
+    this.assertLegacyAllowed();
     await startRecovery(this.database.db, {
       sealing: this.sealing,
       email: body.email,
@@ -217,6 +281,7 @@ export class NotificationsController {
     @Body(new ZodValidationPipe(recoverCodeSchema))
     body: z.infer<typeof recoverCodeSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
+    this.assertLegacyAllowed();
     if (!(await checkRecoveryToken(this.database.db, body.token)))
       throw new CodedHttpException(400, 'CODE_INVALID');
     await requestSignInCode(this.database.db, {
@@ -238,6 +303,7 @@ export class NotificationsController {
     @Body(new ZodValidationPipe(recoverCompleteSchema))
     body: z.infer<typeof recoverCompleteSchema>,
   ): Promise<ApiDataResponse<{ pendingUntil: string }>> {
+    this.assertLegacyAllowed();
     const { pendingUntil } = await completeRecovery(this.database.db, {
       sealing: this.sealing,
       token: body.token,

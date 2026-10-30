@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import {
   Body,
   Controller,
@@ -24,7 +25,11 @@ import {
   createSession,
   hasProfile,
   listSessions,
+  mailSealing,
+  requestEmailSignInCode,
   requestSignInCode,
+  type MailSealing,
+  verifyEmailSignInCode,
   resolveSession,
   revokeAllSessions,
   revokeSession,
@@ -38,8 +43,10 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import {
   clearSessionCookie,
+  DEVICE_COOKIE,
   readCookie,
   SESSION_COOKIE,
+  setDeviceCookie,
   setSessionCookie,
 } from './cookies.js';
 import { CsrfGuard } from './csrf.guard.js';
@@ -49,7 +56,7 @@ import {
   type AuthContext,
 } from './session.guard.js';
 
-/** Recipient sign-in with a phone number and a one-time code (ADR-0003). */
+/** Recipient sign-in with an email and a one-time code (ADR-0003, ADR-0017). */
 @Controller('v1')
 @UseGuards(CsrfGuard)
 export class AuthController {
@@ -58,7 +65,17 @@ export class AuthController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
   ) {}
 
-  /** Always 202: the answer never reveals whether the number has an account. */
+  /** Phone codes aren't built yet: phone sign-in exists only while messaging is pretend. */
+  private assertPhoneAllowed(): void {
+    if (this.config.MAIL_DEFAULT_PROVIDER !== 'mock')
+      throw new CodedHttpException(404, 'NOT_FOUND');
+  }
+
+  private get sealing(): MailSealing {
+    return mailSealing(Buffer.from(this.config.MAIL_SEAL_KEY, 'base64'));
+  }
+
+  /** Always 202: the answer never reveals whether the address has an account. */
   @Post('auth/code')
   @HttpCode(202)
   @RateLimit('auth_code')
@@ -66,6 +83,15 @@ export class AuthController {
     @Body(new ZodValidationPipe(signInCodeRequestSchema))
     body: SignInCodeRequest,
   ): Promise<ApiDataResponse<{ sent: true }>> {
+    if ('email' in body) {
+      await requestEmailSignInCode(this.database.db, this.sealing, {
+        email: body.email,
+        secret: this.config.AUTH_CODE_SECRET,
+        codesPerHour: this.config.RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR,
+      });
+      return { data: { sent: true } };
+    }
+    this.assertPhoneAllowed();
     await requestSignInCode(this.database.db, {
       phone: body.phone,
       secret: this.config.AUTH_CODE_SECRET,
@@ -83,11 +109,27 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<ApiDataResponse<SignInVerified>> {
     const { db } = this.database;
-    const result = await verifySignInCode(db, {
-      phone: body.phone,
-      code: body.code,
-      secret: this.config.AUTH_CODE_SECRET,
-    });
+    // Set on the first sign-in from this browser; only its hash is stored.
+    const device =
+      readCookie(request, DEVICE_COOKIE) ??
+      randomBytes(32).toString('base64url');
+    const deviceHash = createHash('sha256').update(device).digest('hex');
+    if (!('email' in body)) this.assertPhoneAllowed();
+    const result =
+      'email' in body
+        ? await verifyEmailSignInCode(db, this.sealing, {
+            email: body.email,
+            code: body.code,
+            secret: this.config.AUTH_CODE_SECRET,
+            deviceHash,
+            ...(body.deviceLabel ? { deviceLabel: body.deviceLabel } : {}),
+            webOrigin: this.config.WEB_ORIGIN,
+          })
+        : await verifySignInCode(db, {
+            phone: body.phone,
+            code: body.code,
+            secret: this.config.AUTH_CODE_SECRET,
+          });
     if (result.status === 'locked')
       throw new CodedHttpException(429, 'SIGN_IN_LOCKED');
     if (result.status === 'pending_recovery')
@@ -104,8 +146,10 @@ export class AuthController {
     const session = await createSession(db, {
       userId: result.userId,
       deviceLabel: body.deviceLabel ?? 'Browser',
+      deviceHash,
     });
     setSessionCookie(response, this.config, session.token, session.expiresAt);
+    setDeviceCookie(response, this.config, device);
     return {
       data: {
         userId: result.userId,

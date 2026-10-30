@@ -37,6 +37,7 @@ export const apiErrorCodes = [
   'PROVIDER_OUTCOME_UNKNOWN',
   'PAYMENT_START_REJECTED',
   'NO_CONFIRMED_TEST',
+  'EMAIL_TAKEN',
   'PROVIDER_NOT_ALLOWED',
   'INTERNAL_ERROR',
 ] as const;

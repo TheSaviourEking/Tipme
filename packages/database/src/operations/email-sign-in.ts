@@ -1,17 +1,29 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
-import { and, count, desc, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  isNotNull,
+  isNull,
+  ne,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   emailCodeLockouts,
   emailCodes,
   emailTokens,
+  profiles,
   sessions,
   users,
 } from '../schema.js';
-import { normaliseEmail } from './email-address.js';
+import { maskEmail, normaliseEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
+import { dropOpsAccess } from './staff.js';
 
 export const EMAIL_CODE_TTL_MS = 10 * 60_000;
 export const EMAIL_CODES_PER_HOUR = 3;
@@ -297,6 +309,115 @@ export function verifyEmailSignInCode(
         now,
       });
       return { status: 'ok', userId: id, created: true };
+    }),
+  );
+}
+
+/** A code to the new address. The caller answers the same whether or not it is in use. */
+export function requestEmailChangeCode(
+  db: Database,
+  sealing: MailSealing,
+  input: { userId: string; email: string; secret: string; now?: Date },
+): Promise<{ status: 'sent' | 'rate_limited' | 'locked' }> {
+  const email = normaliseEmail(input.email);
+  if (!email) return Promise.resolve({ status: 'sent' });
+  const now = input.now ?? new Date();
+  return guarded(() =>
+    db.transaction(async (tx) => ({
+      status: await issueEmailCode(tx, sealing, {
+        email,
+        purpose: 'email_change',
+        mailType: 'email_change_code',
+        secret: input.secret,
+        userId: input.userId,
+        now,
+      }),
+    })),
+  );
+}
+
+export type EmailChangeResult =
+  | { status: 'ok'; email: string; handle: string | null }
+  | { status: 'invalid' | 'expired' | 'locked' | 'taken' };
+
+/**
+ * Moves the account to a proven new address: the old address is told, every other session ends,
+ * and staff access must be set up again, as when a phone number changes.
+ */
+export function changeEmail(
+  db: Database,
+  sealing: MailSealing,
+  input: {
+    userId: string;
+    email: string;
+    code: string;
+    secret: string;
+    keepSessionId: string;
+    now?: Date;
+  },
+): Promise<EmailChangeResult> {
+  const email = normaliseEmail(input.email);
+  if (!email) return Promise.resolve({ status: 'invalid' });
+  const now = input.now ?? new Date();
+  return guarded(() =>
+    db.transaction(async (tx): Promise<EmailChangeResult> => {
+      const checked = await checkEmailCode(tx, {
+        email,
+        purpose: 'email_change',
+        code: input.code,
+        secret: input.secret,
+        now,
+      });
+      if (checked !== 'ok') return { status: checked };
+      const [owner] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(verifiedOwner(email));
+      if (owner && owner.id !== input.userId) return { status: 'taken' };
+      const [me] = await tx
+        .select({ email: users.email, verifiedAt: users.emailVerifiedAt })
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .for('update');
+      await tx
+        .update(users)
+        .set({ email: null })
+        .where(
+          and(
+            sql`lower(${users.email}) = ${email}`,
+            isNull(users.emailVerifiedAt),
+            ne(users.id, input.userId),
+          ),
+        );
+      await tx
+        .update(users)
+        .set({ email, emailVerifiedAt: now })
+        .where(eq(users.id, input.userId));
+      if (me?.email && me.verifiedAt && me.email !== email)
+        await enqueueMail(tx, sealing, {
+          type: 'email_changed_notice',
+          to: me.email,
+          userId: input.userId,
+          data: { newEmailHint: maskEmail(email) },
+          dedupeKey: `email_changed_notice.${input.userId}.${newId()}`,
+          now,
+        });
+      await tx
+        .update(sessions)
+        .set({ revokedAt: now })
+        .where(
+          and(
+            eq(sessions.userId, input.userId),
+            isNull(sessions.revokedAt),
+            ne(sessions.id, input.keepSessionId),
+          ),
+        );
+      await dropOpsAccess(tx, input.userId, now);
+      const [page] = await tx
+        .select({ handle: profiles.handleLower })
+        .from(profiles)
+        .where(eq(profiles.userId, input.userId));
+      return { status: 'ok', email, handle: page?.handle ?? null };
     }),
   );
 }
