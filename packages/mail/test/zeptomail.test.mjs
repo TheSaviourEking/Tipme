@@ -240,3 +240,37 @@ test('a complaint is reported as a complaint for the recipient', () => {
   assert.equal(result.events[0].kind, 'complaint');
   assert.equal(result.events[0].address, 'ada@example.com');
 });
+
+test('a body form-encoded the standard way (spaces as +) verifies', () => {
+  const { provider } = harness();
+  const now = new Date();
+  const json = JSON.stringify(
+    event('softbounce', 'msg-5', { reason: 'mailbox full' }),
+  );
+  const s = createHmac('sha256', KEY).update(json).digest('base64');
+  const body = Buffer.from(new URLSearchParams({ payload: json }).toString());
+  assert.ok(body.toString().includes('mailbox+full'));
+  const result = provider.verifyWebhook(
+    body,
+    {
+      'producer-signature': `ts=${now.getTime()};s=${encodeURIComponent(s)};s-algorithm=HmacSHA256`,
+    },
+    now,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.events[0].kind, 'soft_bounce');
+});
+
+test('without a webhook id, different events still get different ids', () => {
+  const { provider } = harness();
+  const now = new Date();
+  const ids = ['a@example.com', 'b@example.com'].map((address) => {
+    const data = event('hardbounce', 'r');
+    delete data.webhook_request_id;
+    data.event_message[0].email_info.to[0].email_address.address = address;
+    const { body, headers } = signed(data, now);
+    return provider.verifyWebhook(body, headers, now).events[0].providerEventId;
+  });
+  assert.notEqual(ids[0], ids[1]);
+  assert.ok(!ids[0].startsWith('unknown'));
+});

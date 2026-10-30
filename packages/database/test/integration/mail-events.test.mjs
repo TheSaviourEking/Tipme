@@ -6,6 +6,7 @@ import {
   claimDueMail,
   enqueueMail,
   mailSealing,
+  recordMailSent,
 } from '../../dist/index.js';
 import { useDatabase } from './helpers.mjs';
 
@@ -222,4 +223,85 @@ test('an unmatched bounce still suppresses its address', async (t) => {
     'unmatched',
   );
   assert.equal(await suppression(rows, 'ghost@example.com'), 'hard_bounce');
+});
+
+test('a bounce that arrives while sending does not lose the send record', async (t) => {
+  const { db, rows } = await fresh(t);
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip.race',
+  });
+  const now = new Date();
+  const [claim] = await claimDueMail(db, sealing, { now, limit: 1 });
+  await applyMailProviderEvent(
+    db,
+    sealing,
+    'ses',
+    event('hard_bounce', { reference: id }),
+    now,
+  );
+  assert.equal(
+    await recordMailSent(db, {
+      id,
+      type: claim.type,
+      category: claim.category,
+      provider: 'ses',
+      providerMessageId: 'ses-1',
+      snapshot: { subject: 's' },
+      sealing,
+      claimedAt: claim.claimedAt,
+      now,
+    }),
+    'sent',
+  );
+  const [row] = await rows(
+    'SELECT status, provider, provider_message_id, sent_at IS NOT NULL AS sent, final_at IS NOT NULL AS final, rendered_sealed IS NOT NULL AS snapshot FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.deepEqual(row, {
+    status: 'bounced',
+    provider: 'ses',
+    provider_message_id: 'ses-1',
+    sent: true,
+    final: true,
+    snapshot: true,
+  });
+});
+
+test('a bounce on a mail that had already failed leaves it failed, and final', async (t) => {
+  const { db, rows } = await fresh(t);
+  const id = await sentMail(db, 'tip.failed-then-bounce');
+  await db.execute(
+    `UPDATE mail_messages SET status = 'failed' WHERE id = '${id}'`,
+  );
+  await applyMailProviderEvent(
+    db,
+    sealing,
+    'ses',
+    event('hard_bounce', { reference: id }),
+    new Date(),
+  );
+  const [row] = await rows('SELECT status FROM mail_messages WHERE id = $1', [
+    id,
+  ]);
+  assert.equal(row.status, 'failed');
+});
+
+test('a bounce finishes a mail, so its sealed contents are still wiped on time', async (t) => {
+  const { db, rows } = await fresh(t);
+  const id = await sentMail(db, 'tip.final');
+  await applyMailProviderEvent(
+    db,
+    sealing,
+    'ses',
+    event('complaint', { reference: id }),
+    new Date(),
+  );
+  const [row] = await rows(
+    'SELECT final_at IS NOT NULL AS final FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.equal(row.final, true);
 });

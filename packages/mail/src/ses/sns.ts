@@ -48,6 +48,20 @@ export function isSnsUrl(value: string | undefined, region: string): boolean {
   }
 }
 
+/** AWS's signing certificates, and nothing else on that host: no query, port or other path. */
+export function isSnsCertUrl(value: string, region: string): boolean {
+  if (!isSnsUrl(value, region)) return false;
+  const url = new URL(value);
+  return (
+    !url.search &&
+    !url.hash &&
+    !url.port &&
+    !url.username &&
+    !url.password &&
+    /^\/SimpleNotificationService-[0-9a-f]+\.pem$/.test(url.pathname)
+  );
+}
+
 export function parseEnvelope(rawBody: Buffer): SnsEnvelope | null {
   try {
     const value: unknown = JSON.parse(rawBody.toString('utf8'));

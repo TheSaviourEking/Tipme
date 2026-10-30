@@ -6,7 +6,7 @@ import {
 import { MailRejectedError, MailTemporaryError } from '../errors.js';
 import type { MailProvider } from '../provider.js';
 import { sesEvents } from './events.js';
-import { checkEnvelope, isSnsUrl, parseEnvelope } from './sns.js';
+import { checkEnvelope, isSnsCertUrl, isSnsUrl, parseEnvelope } from './sns.js';
 
 export interface SesConfig {
   region: string;
@@ -21,6 +21,9 @@ export interface SesConfig {
   client?: Pick<SESv2Client, 'send'>;
   fetchCert?: (url: string) => Promise<string>;
 }
+
+const MAX_CERTS = 16;
+const MAX_CERT_CHARS = 16 * 1024;
 
 const PERMANENT = new Set([
   'MessageRejected',
@@ -50,9 +53,14 @@ export function createSesProvider(config: SesConfig): MailProvider {
   const fetchCert =
     config.fetchCert ??
     (async (url: string) => {
-      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(5000),
+        redirect: 'error',
+      });
       if (!response.ok) throw new Error(`certificate ${response.status}`);
-      return response.text();
+      const pem = await response.text();
+      if (pem.length > MAX_CERT_CHARS) throw new Error('certificate too large');
+      return pem;
     });
   const certs = new Map<string, string>();
 
@@ -94,19 +102,18 @@ export function createSesProvider(config: SesConfig): MailProvider {
     },
     async prepareWebhook(rawBody) {
       const envelope = parseEnvelope(rawBody);
-      if (!envelope || !isSnsUrl(envelope.SigningCertURL, config.region))
+      if (!envelope || !isSnsCertUrl(envelope.SigningCertURL, config.region))
         return;
-      if (!envelope.SigningCertURL.endsWith('.pem')) return;
-      if (!certs.has(envelope.SigningCertURL))
-        certs.set(
-          envelope.SigningCertURL,
-          await fetchCert(envelope.SigningCertURL),
-        );
+      if (certs.has(envelope.SigningCertURL)) return;
+      const pem = await fetchCert(envelope.SigningCertURL);
+      // AWS rotates these rarely; a small bound keeps the unauthenticated route from growing it.
+      if (certs.size >= MAX_CERTS) certs.clear();
+      certs.set(envelope.SigningCertURL, pem);
     },
     verifyWebhook(rawBody, _headers, now) {
       const envelope = parseEnvelope(rawBody);
       if (!envelope) return { ok: false, reason: 'malformed' };
-      if (!isSnsUrl(envelope.SigningCertURL, config.region))
+      if (!isSnsCertUrl(envelope.SigningCertURL, config.region))
         return { ok: false, reason: 'signature' };
       const check = checkEnvelope(
         envelope,

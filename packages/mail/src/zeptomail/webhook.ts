@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type {
   MailEventKind,
   MailProviderEvent,
@@ -37,17 +37,22 @@ function parseSignature(raw: string | undefined) {
 }
 
 /**
- * The signed text is the URL-decoded value of the body's single form parameter. Only the part
- * after the first "=" is decoded: decoding the whole body would turn "+" into spaces.
+ * The signed text is the URL-decoded value of the body's single form parameter. ZeptoMail's
+ * sample decodes it as a form ("+" is a space) while its note warns about a literal "+", and
+ * nothing published settles which it sends, so both readings are tried. Either way a match
+ * proves the sender holds the key, and the matching text is the one that gets parsed.
  */
-function signedPayload(rawBody: Buffer): string | null {
+function signedPayloads(rawBody: Buffer): string[] {
   const raw = rawBody.toString('utf8');
   const at = raw.indexOf('=');
-  if (at < 0) return null;
+  if (at < 0) return [];
+  const value = raw.slice(at + 1);
   try {
-    return decodeURIComponent(raw.slice(at + 1));
+    const asForm = decodeURIComponent(value.replace(/\+/g, ' '));
+    const literal = decodeURIComponent(value);
+    return asForm === literal ? [asForm] : [asForm, literal];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -66,10 +71,14 @@ function linkKeyOf(details: Record<string, unknown>): string | null {
 }
 
 /** Normalised events from a verified ZeptoMail webhook; unknown event kinds are ignored. */
-function eventsOf(payload: unknown, now: Date): MailProviderEvent[] | null {
+function eventsOf(
+  payload: unknown,
+  now: Date,
+  fallbackId: string,
+): MailProviderEvent[] | null {
   if (!payload || typeof payload !== 'object') return null;
   const body = payload as Record<string, unknown>;
-  const webhookId = str(body['webhook_request_id']) ?? 'unknown';
+  const webhookId = str(body['webhook_request_id']) ?? fallbackId;
   const names = Array.isArray(body['event_name']) ? body['event_name'] : [];
   const messages = Array.isArray(body['event_message'])
     ? body['event_message']
@@ -124,20 +133,23 @@ export function verifyZeptoWebhook(
   // The header names its algorithm; anything else is refused, never passed to crypto.
   if (!signature || signature.algorithm !== 'HmacSHA256')
     return { ok: false, reason: 'signature' };
-  const payload = signedPayload(rawBody);
-  if (payload === null) return { ok: false, reason: 'malformed' };
+  const payloads = signedPayloads(rawBody);
+  if (payloads.length === 0) return { ok: false, reason: 'malformed' };
   let received: Buffer;
   try {
     received = Buffer.from(decodeURIComponent(signature.s), 'base64');
   } catch {
     return { ok: false, reason: 'signature' };
   }
-  const expected = createHmac('sha256', key).update(payload, 'utf8').digest();
-  if (
-    received.length !== expected.length ||
-    !timingSafeEqual(received, expected)
-  )
-    return { ok: false, reason: 'signature' };
+  const payload = payloads.find((candidate) => {
+    const expected = createHmac('sha256', key)
+      .update(candidate, 'utf8')
+      .digest();
+    return (
+      received.length === expected.length && timingSafeEqual(received, expected)
+    );
+  });
+  if (payload === undefined) return { ok: false, reason: 'signature' };
   if (Math.abs(now.getTime() - signature.ts) > STALE_AFTER_MS)
     return { ok: false, reason: 'stale' };
   let parsed: unknown;
@@ -146,6 +158,12 @@ export function verifyZeptoWebhook(
   } catch {
     return { ok: false, reason: 'malformed' };
   }
-  const events = eventsOf(parsed, now);
+  // No webhook id: the signed text itself identifies this delivery, so distinct events stay
+  // distinct and a redelivery still dedupes.
+  const fallbackId = createHash('sha256')
+    .update(payload)
+    .digest('hex')
+    .slice(0, 32);
+  const events = eventsOf(parsed, now, fallbackId);
   return events ? { ok: true, events } : { ok: false, reason: 'malformed' };
 }

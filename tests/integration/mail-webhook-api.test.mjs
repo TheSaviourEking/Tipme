@@ -176,7 +176,8 @@ test('a SubscriptionConfirmation is confirmed only for the configured topic', as
         'https://sns.eu-north-1.amazonaws.com/?Action=ConfirmSubscription&Token=tok',
       Timestamp: new Date().toISOString(),
       SignatureVersion: '2',
-      SigningCertURL: 'https://sns.eu-north-1.amazonaws.com/cert.pem',
+      SigningCertURL:
+        'https://sns.eu-north-1.amazonaws.com/SimpleNotificationService-0123abcdef.pem',
     };
     const canonical = [
       'Message',
@@ -209,4 +210,19 @@ test('a SubscriptionConfirmation is confirmed only for the configured topic', as
     401,
   );
   assert.equal(confirmed.length, 1);
+});
+
+test('a certificate fetch that fails is 503, so SNS retries instead of the event being lost', async (t) => {
+  const db = await database(t);
+  const api = controller(db);
+  const ses = api.providers.get('ses');
+  ses.prepareWebhook = async () => {
+    throw new Error('network');
+  };
+  assert.equal(
+    await status(
+      api.receive('ses', { rawBody: Buffer.from('{}'), headers: {} }),
+    ),
+    503,
+  );
 });

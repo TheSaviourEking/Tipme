@@ -1,5 +1,5 @@
 import type { MailProviderEvent, MailProviderName } from '@tipme/mail';
-import { and, count, eq, gte, notInArray } from 'drizzle-orm';
+import { and, count, eq, gte, notInArray, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   mailMessageEvents,
@@ -85,12 +85,21 @@ export function applyMailProviderEvent(
           .update(mailMessages)
           .set({
             status: event.kind === 'complaint' ? 'complained' : 'bounced',
+            // A bounce can arrive before the send is recorded; the mail is still finished,
+            // so its sealed contents are wiped on time.
+            finalAt: sql`coalesce(${mailMessages.finalAt}, ${now.toISOString()}::timestamptz)`,
           })
-          // A complaint is never downgraded to a bounce.
+          // A complaint is never downgraded, and a mail that ended without sending stays so.
           .where(
             and(
               eq(mailMessages.id, message.id),
-              notInArray(mailMessages.status, ['complained']),
+              notInArray(mailMessages.status, [
+                'complained',
+                'failed',
+                'expired',
+                'suppressed',
+                'skipped',
+              ]),
             ),
           );
     }
