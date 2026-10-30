@@ -24,6 +24,7 @@ import {
 } from './mail-queue.js';
 import { writePretendMessage } from './pretend-outbox.js';
 import { openSecret, sealSecret } from './secret-box.js';
+import { canUnsubscribe, unsubscribeToken } from './mail-preferences.js';
 
 /** Waits before each retry; the sixth temporary failure fails the mail. */
 export const MAIL_BACKOFF_MS = [
@@ -161,7 +162,11 @@ export async function mailGate(
       .where(eq(profiles.userId, mail.userId));
     if (profile && !profile.wants) return 'skipped_preference';
   }
-  if (mail.category === 'engagement' || mail.category === 'marketing') {
+  // The guides switch covers engagement mail with no switch of its own.
+  if (
+    (mail.category === 'engagement' && !type?.preference) ||
+    mail.category === 'marketing'
+  ) {
     const [prefs] = await db
       .select()
       .from(mailPreferences)
@@ -349,6 +354,8 @@ export interface MailDeliveryDeps {
   from: { address: string; name: string };
   replyTo?: string;
   webOrigin: string;
+  /** Where one-click unsubscribe is answered (the API). */
+  apiOrigin: string;
   /** Structured log of each outcome: ids, type, provider and codes only. */
   log?(entry: Record<string, string | number | null>): void;
 }
@@ -438,11 +445,16 @@ export async function deliverDueMail(
       await fail('provider_not_configured', false);
       continue;
     }
+    // Security, account and money mail always go, so they carry no way to turn them off.
+    const unsubscribeUrl =
+      mail.userId && canUnsubscribe(mail.type)
+        ? `${deps.apiOrigin}/v1/mail/unsubscribe?t=${unsubscribeToken(deps.sealing, { userId: mail.userId, type: mail.type })}`
+        : null;
     let rendered: ReturnType<typeof renderMail>;
     try {
       rendered = renderMail(mail.type, mail.data, {
         webOrigin: deps.webOrigin,
-        unsubscribeUrl: null,
+        unsubscribeUrl,
       });
     } catch {
       await fail('render_failed', true);
@@ -460,7 +472,12 @@ export async function deliverDueMail(
         subject: rendered.subject,
         text: rendered.text,
         html: rendered.html,
-        headers: {},
+        headers: unsubscribeUrl
+          ? {
+              'List-Unsubscribe': `<${unsubscribeUrl}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+            }
+          : {},
         tracking: MAIL_TYPES[mail.type]?.tracking ?? false,
       }));
     } catch (error) {

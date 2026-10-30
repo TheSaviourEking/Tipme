@@ -106,7 +106,7 @@ async function settle(userId, wanted) {
   }
 }
 
-test('preferences default to on, and only true/false for the three known ones are accepted', async () => {
+test('preferences default to on, and only true/false for the four known ones are accepted', async () => {
   const { cookie } = await recipient('+2348031290001', 'prefs_read');
   const prefs = await (
     await call('GET', '/v1/me/notification-preferences', cookie)
@@ -115,13 +115,20 @@ test('preferences default to on, and only true/false for the three known ones ar
     tipEmails: true,
     weeklyReports: true,
     milestones: true,
+    guideEmails: true,
   });
   for (const body of [
-    { tipEmails: 'no', weeklyReports: true, milestones: true },
+    {
+      tipEmails: 'no',
+      weeklyReports: true,
+      milestones: true,
+      guideEmails: true,
+    },
     {
       tipEmails: true,
       weeklyReports: true,
       milestones: true,
+      guideEmails: true,
       signInCodes: false,
     },
     { tipEmails: true },
@@ -141,13 +148,19 @@ test('turned off: no tip email, no milestone notice, no weekly-report notice or 
     'PUT',
     '/v1/me/notification-preferences',
     quiet.cookie,
-    { tipEmails: false, weeklyReports: false, milestones: false },
+    {
+      tipEmails: false,
+      weeklyReports: false,
+      milestones: false,
+      guideEmails: false,
+    },
   );
   assert.equal(saved.status, 200);
   assert.deepEqual((await saved.json()).data, {
     tipEmails: false,
     weeklyReports: false,
     milestones: false,
+    guideEmails: false,
   });
 
   await tip('prefs_quiet');

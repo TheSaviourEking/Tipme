@@ -306,6 +306,7 @@ const deliver = (db, provider) =>
       overrideFor: async () => null,
       from: { address: 'h@example.com', name: 'T' },
       webOrigin: 'https://usetipme.xyz',
+      apiOrigin: 'https://api.usetipme.xyz',
     },
     { now: new Date(), limit: 5 },
   );

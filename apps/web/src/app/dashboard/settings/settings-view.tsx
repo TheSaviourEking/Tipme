@@ -81,6 +81,7 @@ const PREF_LABELS = {
   tipEmails: 'Email me about each tip (when my email is verified)',
   weeklyReports: 'Tell me when my weekly report is ready',
   milestones: 'Tell me about milestones and rewards',
+  guideEmails: 'Send me guides and suggestions for getting started',
 } as const;
 
 /** Notification preferences (PR-013). Sign-in codes and security warnings always go. */
@@ -115,11 +116,12 @@ function NotificationSettings() {
     } else setError('We couldn’t save that. Please try again.');
   };
   return (
-    <Card className="settings-section">
+    <Card id="emails" className="settings-section">
       <h2>Notifications</h2>
       <p className="tm-hint">
-        You always see your tips in TipMe, and sign-in codes and security
-        warnings always reach you.
+        You always see your tips in TipMe. These emails always reach you:
+        sign-in codes, security warnings, changes to your account and payment
+        account, and withdrawals.
       </p>
       <form className="settings-form" onSubmit={save} noValidate>
         {(Object.keys(PREF_LABELS) as (keyof NotificationPrefs)[]).map(

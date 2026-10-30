@@ -25,6 +25,7 @@ import {
   handleHolds,
   profileAvatars,
   emailRecoveries,
+  mailPreferences,
   phoneRecoveries,
   profiles,
   sessions,
@@ -789,12 +790,14 @@ export function setPageSuspension(
   );
 }
 
-/** The recipient's notification preferences (PR-013). */
+/** The recipient's notification preferences (PR-013), and the guides email switch. */
 export function getNotificationPrefs(
   db: Database,
   userId: string,
 ): Promise<NotificationPrefs> {
-  return guarded(async () => prefsOf((await myRow(db, userId)).profile));
+  return guarded(async () =>
+    prefsOf((await myRow(db, userId)).profile, await guidesOn(db, userId)),
+  );
 }
 
 export function setNotificationPrefs(
@@ -813,16 +816,35 @@ export function setNotificationPrefs(
       })
       .where(eq(profiles.id, row.profile.id))
       .returning();
-    return prefsOf(updated!);
+    await db
+      .insert(mailPreferences)
+      .values({ userId, engagement: prefs.guideEmails })
+      .onConflictDoUpdate({
+        target: mailPreferences.userId,
+        set: { engagement: prefs.guideEmails, updatedAt: new Date() },
+      });
+    return prefsOf(updated!, prefs.guideEmails);
   });
 }
 
-const prefsOf = (profile: {
-  notifyTipEmails: boolean;
-  notifyWeeklyReports: boolean;
-  notifyMilestones: boolean;
-}): NotificationPrefs => ({
+async function guidesOn(db: Database, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ on: mailPreferences.engagement })
+    .from(mailPreferences)
+    .where(eq(mailPreferences.userId, userId));
+  return row?.on ?? true;
+}
+
+const prefsOf = (
+  profile: {
+    notifyTipEmails: boolean;
+    notifyWeeklyReports: boolean;
+    notifyMilestones: boolean;
+  },
+  guideEmails: boolean,
+): NotificationPrefs => ({
   tipEmails: profile.notifyTipEmails,
   weeklyReports: profile.notifyWeeklyReports,
   milestones: profile.notifyMilestones,
+  guideEmails,
 });

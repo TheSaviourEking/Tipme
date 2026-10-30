@@ -75,6 +75,7 @@ function deps(db, provider, name = provider.name) {
     from: { address: 'hello@mail.usetipme.xyz', name: 'TipMe' },
     replyTo: 'support@usetipme.xyz',
     webOrigin: WEB,
+    apiOrigin: 'http://localhost:4000',
   };
 }
 

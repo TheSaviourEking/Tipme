@@ -40,6 +40,10 @@ export const workerConfigSchema = z
     MAIL_FROM_ADDRESS: z.email().default('hello@mail.usetipme.xyz'),
     MAIL_FROM_NAME: z.string().min(1).max(60).default('TipMe'),
     MAIL_REPLY_TO: z.email().optional(),
+    // One-click unsubscribe links in optional emails point here (the API's public address).
+    API_ORIGIN: z
+      .url({ protocol: /^https?$/ })
+      .default('http://localhost:4000'),
     // Links in emails point here.
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })
