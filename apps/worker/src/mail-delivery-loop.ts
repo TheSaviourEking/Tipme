@@ -1,5 +1,6 @@
 import {
   deliverDueMail,
+  purgeEmailCodes,
   requeueStuckMail,
   wipeExpiredMailContent,
   type MailDeliveryDeps,
@@ -36,6 +37,7 @@ export function startMailDelivery(options: {
         lastHousekeeping = now.getTime();
         await requeueStuckMail(deps.db, now);
         await wipeExpiredMailContent(deps.db, now);
+        await purgeEmailCodes(deps.db, now);
       }
       await deliverDueMail(
         { ...deps, log: (entry) => logger.info(entry) },

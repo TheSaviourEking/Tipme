@@ -3,7 +3,7 @@ import {
   expectAccessible,
   fitsViewport,
   identity,
-  signInWithPhone,
+  signInWithEmail,
   signUpRecipient,
 } from './helpers';
 
@@ -11,8 +11,8 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   page,
   browser,
 }, testInfo) => {
-  const { phone, handle } = identity(testInfo);
-  await signInWithPhone(page, phone, '/sign-up');
+  const { email, handle } = identity(testInfo);
+  await signInWithEmail(page, email, '/sign-up');
   await expect(
     page.getByRole('heading', { name: 'Choose your handle' }),
   ).toBeVisible();
@@ -51,7 +51,6 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   await page.getByLabel('What you do').fill('Hairdresser at Glow Studio');
   await page.getByLabel('Bio', { exact: true }).fill('Braids and kindness.');
   await page.getByLabel('Instagram link').fill('https://instagram.com/kemi');
-  await page.getByLabel('Show my phone number on my page').check();
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
   await expect(async () => {
@@ -65,15 +64,6 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   await expect(
     visitor.getByRole('link', { name: 'Instagram' }),
   ).toHaveAttribute('href', 'https://instagram.com/kemi');
-  await expect(visitor.getByText(/\+234/)).toBeVisible();
-
-  await page.getByLabel('Show my phone number on my page').uncheck();
-  await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.getByText('Saved')).toBeVisible();
-  await expect(async () => {
-    await visitor.reload();
-    await expect(visitor.getByText(/\+234/)).toHaveCount(0, { timeout: 1000 });
-  }).toPass({ timeout: 5000 });
 
   await page.getByRole('button', { name: 'Take my page offline' }).click();
   await expect(page.getByText('Your page is not live')).toBeVisible();
@@ -105,9 +95,17 @@ test('a new recipient signs up, claims a handle and controls whether the page is
 
 test('a session survives a reload and signing out ends it', async ({
   page,
-}) => {
-  await signInWithPhone(page, '0800 000 0002');
-  await page.waitForURL(/\/dashboard/);
+}, testInfo) => {
+  // One identity: each call makes a new one from the clock.
+  const who = identity(testInfo);
+  await signInWithEmail(page, who.email, '/sign-up');
+  await page.waitForURL(/\/sign-up|\/dashboard/);
+  await page.getByLabel('Handle').waitFor();
+  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
+  // A new page lands on the welcome, which has no toolbar.
+  await page.waitForURL(/\/dashboard\/welcome$/);
+  await page.goto('/dashboard');
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out' }).click();

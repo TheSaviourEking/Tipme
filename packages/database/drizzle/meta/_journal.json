@@ -337,6 +337,13 @@
       "when": 1793347055510,
       "tag": "0047_mail_event_time",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793349865876,
+      "tag": "0048_email_sign_in",
+      "breakpoints": true
     }
   ]
 }

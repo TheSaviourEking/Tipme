@@ -77,15 +77,55 @@ export const operationType = pgEnum('operation_type', [
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey(),
-  status: text('status').notNull().default('active'),
-  // E.164 phone number: the identity. Nulled when the account is deleted (PR-008).
-  phoneE164: text('phone_e164').unique(),
-  email: text('email'),
-  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  createdAt: createdAt(),
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey(),
+    status: text('status').notNull().default('active'),
+    // E.164 phone number: the identity. Nulled when the account is deleted (PR-008).
+    phoneE164: text('phone_e164').unique(),
+    email: text('email'),
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // A proven address belongs to one live account; it is the sign-in identity.
+    uniqueIndex('users_verified_email')
+      .on(sql`lower(${table.email})`)
+      .where(sql`email_verified_at IS NOT NULL AND deleted_at IS NULL`),
+  ],
+);
+
+/**
+ * One-time codes sent by email, stored only as an HMAC. Only the latest unused code for an
+ * address and purpose counts. Kept apart from phone codes, which return with phone sign-in.
+ */
+export const emailCodes = pgTable(
+  'email_codes',
+  {
+    id: uuid('id').primaryKey(),
+    email: text('email').notNull(),
+    codeHmac: text('code_hmac').notNull(),
+    purpose: text('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      'email_codes_purpose',
+      sql`purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email')`,
+    ),
+    index('email_codes_email_created').on(table.email, table.createdAt),
+  ],
+);
+
+/** Wrong-code counting and lockouts, per address. */
+export const emailCodeLockouts = pgTable('email_code_lockouts', {
+  email: text('email').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
 });
 
 /** One-time sign-in codes, stored only as an HMAC. Only the latest unused code for a number counts. */
@@ -123,6 +163,8 @@ export const sessions = pgTable(
       .references(() => users.id),
     tokenSha256: text('token_sha256').notNull().unique(),
     deviceLabel: text('device_label').notNull().default(''),
+    // SHA-256 of a long-lived browser cookie, to notice sign-ins from a new device.
+    deviceHash: text('device_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

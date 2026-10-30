@@ -624,10 +624,12 @@ function AboutYou() {
           error={errors['socials.x']}
         />
         {check('socialsPublic', 'Show my social links on my page')}
-        <p className="tm-hint">
-          Your phone number: {profile.phone ?? 'not set'}
-        </p>
-        {check('phonePublic', 'Show my phone number on my page')}
+        {profile.phone && (
+          <>
+            <p className="tm-hint">Your phone number: {profile.phone}</p>
+            {check('phonePublic', 'Show my phone number on my page')}
+          </>
+        )}
         {errors.form && (
           <Notice tone="error" title="Not saved">
             {errors.form}
@@ -682,22 +684,51 @@ function ContactDetails() {
   const { profile, setProfile } = useRecipient();
   const [email, setEmail] = useState('');
   const [emailNote, setEmailNote] = useState('');
-  const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [phoneStep, setPhoneStep] = useState<'idle' | 'code'>('idle');
-  const [phoneNote, setPhoneNote] = useState('');
+  const [emailStep, setEmailStep] = useState<'idle' | 'code'>('idle');
 
-  const sendLink = async (event: FormEvent) => {
+  const changeEmail = async (event: FormEvent) => {
     event.preventDefault();
-    const result = await apiFetch('/v1/me/email', {
+    if (emailStep === 'idle') {
+      const result = await apiFetch('/v1/me/email/code', {
+        method: 'POST',
+        body: { email: email.trim() },
+      });
+      if (result.ok) {
+        setEmailStep('code');
+        setEmailNote(`We sent a code to ${email.trim()}.`);
+      } else setEmailNote('Check the email address and try again.');
+      return;
+    }
+    const result = await apiFetch<{ email: string }>('/v1/me/email/confirm', {
       method: 'POST',
-      body: { email },
+      body: { email: email.trim(), code },
     });
-    setEmailNote(
-      result.ok
-        ? `We sent a link to ${email}. Open it to confirm the address.`
-        : 'Check the email address and try again.',
-    );
+    if (result.ok) {
+      setProfile({
+        ...profile,
+        email: result.data.email,
+        emailVerified: true,
+      });
+      setEmailStep('idle');
+      setEmail('');
+      setCode('');
+      setEmailNote(
+        'Your email was changed. We told the old address, and other devices were signed out.',
+      );
+    } else {
+      if (result.code === 'EMAIL_TAKEN') {
+        setEmailStep('idle');
+        setCode('');
+      }
+      setEmailNote(
+        result.code === 'EMAIL_TAKEN'
+          ? 'That email belongs to another account. Try a different one.'
+          : result.code === 'SIGN_IN_LOCKED'
+            ? 'Too many wrong codes. Please wait 15 minutes and try again.'
+            : 'That code isn’t right or has expired.',
+      );
+    }
   };
   const toggleEmailPublic = async (emailPublic: boolean) => {
     const result = await apiFetch<MyProfile>('/v1/me/profile', {
@@ -706,57 +737,36 @@ function ContactDetails() {
     });
     if (result.ok) setProfile(result.data);
   };
-  const sendPhoneCode = async (event: FormEvent) => {
-    event.preventDefault();
-    if (phoneStep === 'idle') {
-      const result = await apiFetch('/v1/me/phone/code', {
-        method: 'POST',
-        body: { phone },
-      });
-      if (result.ok) {
-        setPhoneStep('code');
-        setPhoneNote(`We sent a code to ${phone}.`);
-      } else setPhoneNote('We couldn’t send a code. Please try again.');
-      return;
-    }
-    const result = await apiFetch<MyProfile>('/v1/me/phone', {
-      method: 'PUT',
-      body: { phone, code },
-    });
-    if (result.ok) {
-      setProfile(result.data);
-      setPhoneStep('idle');
-      setPhone('');
-      setCode('');
-      setPhoneNote('Your number was changed. Other devices were signed out.');
-    } else
-      setPhoneNote(
-        result.code === 'PHONE_TAKEN'
-          ? 'That number belongs to another account.'
-          : 'That code isn’t right or has expired.',
-      );
-  };
 
   return (
     <Card id="contact" className="settings-section">
-      <h2>Phone and email</h2>
+      <h2>Your email</h2>
       <p>
-        Phone: <strong>{profile.phone}</strong>
+        You sign in with:{' '}
+        <strong>
+          {profile.email
+            ? `${profile.email}${profile.emailVerified ? '' : ' (not confirmed)'}`
+            : 'no email yet'}
+        </strong>
       </p>
-      <form className="settings-form" onSubmit={sendPhoneCode} noValidate>
+      <form
+        className="settings-form"
+        onSubmit={(e) => void changeEmail(e)}
+        noValidate
+      >
         <InputField
-          id={`${id}-phone`}
-          label="New phone number"
-          type="tel"
-          autoComplete="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          disabled={phoneStep === 'code'}
+          id={`${id}-email`}
+          label="New email address"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={emailStep === 'code'}
         />
-        {phoneStep === 'code' && (
+        {emailStep === 'code' && (
           <InputField
-            id={`${id}-code`}
-            label="Code sent to the new number"
+            id={`${id}-email-code`}
+            label="Code sent to the new address"
             inputMode="numeric"
             autoComplete="one-time-code"
             maxLength={6}
@@ -765,40 +775,28 @@ function ContactDetails() {
           />
         )}
         <Button type="submit" variant="secondary">
-          {phoneStep === 'idle' ? 'Send code to new number' : 'Change number'}
+          {emailStep === 'idle' ? 'Send code to new address' : 'Change email'}
         </Button>
-        <p role="status" className="tm-hint">
-          {phoneNote}
-        </p>
-      </form>
-      <p>
-        Email:{' '}
-        <strong>
-          {profile.email
-            ? `${profile.email} · ${profile.emailVerified ? 'Verified' : 'Not verified'}`
-            : 'not added'}
-        </strong>
-      </p>
-      <p className="tm-hint">
-        A verified email gets tip notifications and can recover your account if
-        you lose your number.
-      </p>
-      <form className="settings-form" onSubmit={sendLink} noValidate>
-        <InputField
-          id={`${id}-email`}
-          label="Email address"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Button type="submit" variant="secondary">
-          Send confirmation link
-        </Button>
+        {emailStep === 'code' && (
+          <Button
+            variant="quiet"
+            onClick={() => {
+              setEmailStep('idle');
+              setCode('');
+              setEmailNote('');
+            }}
+          >
+            Use a different address
+          </Button>
+        )}
         <p role="status" className="tm-hint">
           {emailNote}
         </p>
       </form>
+      <p className="tm-hint">
+        Phone numbers are coming soon.{' '}
+        {profile.phone ? `Yours on file: ${profile.phone}.` : ''}
+      </p>
       {profile.emailVerified && (
         <label className="tip-remember" htmlFor={`${id}-email-public`}>
           <input

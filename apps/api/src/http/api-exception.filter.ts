@@ -72,6 +72,7 @@ const messages: Record<ApiErrorCode, string> = {
     'Verify your email address before connecting a payment account.',
   PAYMENT_ACCOUNT_REQUIRED:
     'Connect and activate a payment account before accepting tips.',
+  EMAIL_TAKEN: 'That email is already used by another TipMe account.',
   NO_CONFIRMED_TEST:
     'Send a test through this provider and confirm it arrived before making it active.',
   PROVIDER_NOT_ALLOWED: 'This provider can’t be made active in production.',

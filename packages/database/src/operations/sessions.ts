@@ -14,7 +14,12 @@ const hashToken = (token: string) =>
 /** A new session. The token goes into the cookie; only its SHA-256 is stored. */
 export function createSession(
   db: Database,
-  input: { userId: string; deviceLabel: string; now?: Date },
+  input: {
+    userId: string;
+    deviceLabel: string;
+    deviceHash?: string | null;
+    now?: Date;
+  },
 ): Promise<{ token: string; sessionId: string; expiresAt: Date }> {
   const now = input.now ?? new Date();
   const token = randomBytes(32).toString('base64url');
@@ -26,6 +31,7 @@ export function createSession(
       userId: input.userId,
       tokenSha256: hashToken(token),
       deviceLabel: input.deviceLabel.slice(0, 80),
+      deviceHash: input.deviceHash ?? null,
       createdAt: now,
       lastSeenAt: now,
       expiresAt,

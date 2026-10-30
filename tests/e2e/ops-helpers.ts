@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
-import { expectAccessible, identity, signInWithPhone } from './helpers';
+import { expectAccessible, identity, signInWithEmail } from './helpers';
 import { API_ORIGIN, E2E_DATABASE_URL } from './stack';
 
 // Admin-area helpers (PR-009): staff are granted through the database, as the command does.
@@ -26,18 +26,18 @@ export const totpNow = async (secret: string, offset = 0n) => {
 };
 
 /** As `pnpm ops:grant-owner` would: Owner role and a one-time enrolment code. */
-export async function grantOwner(phone: string): Promise<string> {
+export async function grantOwner(email: string): Promise<string> {
   return withDatabase(
     async (db, ops) =>
-      (await ops.grantOwner(db, { phone })).enrolmentCode as string,
+      (await ops.grantOwner(db, { email })).enrolmentCode as string,
   );
 }
 
 /** Signs in at /ops, enrols the authenticator and lands in the admin area. */
 export async function enrolOwner(page: Page, testInfo: TestInfo) {
-  const { phone } = identity(testInfo);
-  const enrolmentCode = await grantOwner(phone);
-  await signInWithPhone(page, phone, '/sign-in?next=/ops');
+  const { email } = identity(testInfo);
+  const enrolmentCode = await grantOwner(email);
+  await signInWithEmail(page, email, '/sign-in?next=/ops');
   await page.waitForURL(/\/ops$/);
   await expect(
     page.getByRole('heading', { name: 'Set up your authenticator' }),
@@ -59,7 +59,7 @@ export async function enrolOwner(page: Page, testInfo: TestInfo) {
       name: 'Issues',
     }),
   ).toBeVisible();
-  return { phone, secret };
+  return { email, secret };
 }
 
 /** A tip whose provider reports the wrong amount: a money issue in the inbox. */

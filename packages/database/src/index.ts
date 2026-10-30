@@ -30,6 +30,7 @@ export * from './operations/email.js';
 export * from './operations/mail-queue.js';
 export * from './operations/mail-delivery.js';
 export * from './operations/mail-events.js';
+export * from './operations/email-sign-in.js';
 export * from './operations/provider-admin.js';
 export * from './operations/mail-analytics.js';
 export * from './operations/reports.js';

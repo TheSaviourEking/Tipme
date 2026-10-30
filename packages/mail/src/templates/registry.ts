@@ -1,5 +1,11 @@
 import { ZodError } from 'zod';
 import type { MailContext, MailType, RenderedMail } from './define.js';
+import {
+  emailChangedNotice,
+  newSignInNotice,
+  welcome,
+} from './types/account-notices.js';
+import { emailChangeCode, signInCode } from './types/sign-in-code.js';
 import { emailVerificationLink } from './types/email-verification-link.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
 import { providerTest } from './types/provider-test.js';
@@ -17,6 +23,11 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     recoveryLink,
     phoneChangeWarning,
     providerTest,
+    signInCode,
+    emailChangeCode,
+    welcome,
+    newSignInNotice,
+    emailChangedNotice,
   ].map((type) => [type.id, type]),
 );
 

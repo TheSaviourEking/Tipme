@@ -5,21 +5,21 @@ import { useEffect, useState } from 'react';
 import { Skeleton } from '@tipme/ui';
 import { AuthProgress } from '@/components/account/auth-stage';
 import { HandleClaim } from '@/components/account/handle-claim';
-import { PhoneCodeForm } from '@/components/account/phone-code-form';
+import { EmailCodeForm } from '@/components/account/email-code-form';
 import { apiFetch } from '@/lib/session-client';
 
-const steps = ['Your number', 'The code', 'Your handle'] as const;
+const steps = ['Your email', 'The code', 'Your handle'] as const;
 
 /** Signed out: phone and code. Signed in without a page: choose a handle. With a page: dashboard. */
 export function SignUpFlow() {
   const router = useRouter();
-  const [step, setStep] = useState<'checking' | 'phone' | 'handle'>('checking');
+  const [step, setStep] = useState<'checking' | 'email' | 'handle'>('checking');
   const [codeSent, setCodeSent] = useState(false);
 
   useEffect(() => {
     void apiFetch('/v1/me/profile').then((result) => {
       if (result.ok) router.replace('/dashboard');
-      else setStep(result.status === 404 ? 'handle' : 'phone');
+      else setStep(result.status === 404 ? 'handle' : 'email');
     });
   }, [router]);
 
@@ -37,7 +37,7 @@ export function SignUpFlow() {
         <HandleClaim onClaimed={() => router.replace('/dashboard/welcome')} />
       ) : (
         <>
-          <PhoneCodeForm
+          <EmailCodeForm
             onStepChange={(next) => setCodeSent(next === 'code')}
             onSignedIn={(result) =>
               result.hasProfile
