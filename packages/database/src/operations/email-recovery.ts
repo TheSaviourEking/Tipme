@@ -584,3 +584,18 @@ export async function needsRecoveryEmail(
     .where(eq(users.id, userId));
   return !me?.confirmed;
 }
+
+/** The confirmed recovery email, or null. */
+export async function recoveryEmailOf(
+  db: Database,
+  userId: string,
+): Promise<string | null> {
+  const [me] = await db
+    .select({
+      email: users.recoveryEmail,
+      confirmed: users.recoveryEmailVerifiedAt,
+    })
+    .from(users)
+    .where(eq(users.id, userId));
+  return me?.confirmed ? me.email : null;
+}

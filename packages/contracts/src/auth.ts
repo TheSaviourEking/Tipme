@@ -52,3 +52,33 @@ export interface PretendMessage {
   body: string;
   sentAt: string;
 }
+
+const sixDigits = z.string().regex(/^\d{6}$/);
+const address = z.string().min(3).max(254);
+
+export const recoveryEmailCodeSchema = z.object({ email: address }).strict();
+export const recoveryEmailConfirmSchema = z
+  .object({ email: address, code: sixDigits, signInCode: sixDigits.optional() })
+  .strict();
+export const recoveryEmailRemoveSchema = z
+  .object({ signInCode: sixDigits })
+  .strict();
+export const emailRecoveryStartSchema = z.object({ email: address }).strict();
+export const emailRecoveryProposeSchema = z
+  .object({ email: address, code: sixDigits, newEmail: address })
+  .strict();
+export const emailRecoveryConfirmSchema = z
+  .object({ email: address, newEmail: address, code: sixDigits })
+  .strict();
+
+export interface RecoveryEmailStatus {
+  confirmed: boolean;
+  /** Masked, once one is confirmed. */
+  hint: string | null;
+}
+
+export interface PendingEmailRecovery {
+  id: string;
+  newEmailHint: string;
+  effectiveAt: string;
+}

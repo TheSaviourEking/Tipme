@@ -22,6 +22,7 @@ import {
   emailChangeConfirmSchema,
 } from '@tipme/contracts';
 import {
+  cancelEmailRecoveries,
   cancelRecoveries,
   changePhone,
   checkRecoveryToken,
@@ -253,7 +254,9 @@ export class NotificationsController {
   ): Promise<ApiDataResponse<{ cancelled: number }>> {
     return {
       data: {
-        cancelled: await cancelRecoveries(this.database.db, auth.userId),
+        cancelled:
+          (await cancelRecoveries(this.database.db, auth.userId)) +
+          (await cancelEmailRecoveries(this.database.db, auth.userId)),
       },
     };
   }
