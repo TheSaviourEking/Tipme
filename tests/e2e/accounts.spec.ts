@@ -100,7 +100,9 @@ test('a session survives a reload and signing out ends it', async ({
   await page.getByLabel('Handle').waitFor();
   await page.getByLabel('Handle').fill(who.handle);
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
-  await page.waitForURL(/\/dashboard/);
+  // A new page lands on the welcome, which has no toolbar.
+  await page.waitForURL(/\/dashboard\/welcome$/);
+  await page.goto('/dashboard');
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out' }).click();
