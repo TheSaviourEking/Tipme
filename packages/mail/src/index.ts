@@ -18,3 +18,4 @@ export {
   createZeptoMailProvider,
   type ZeptoMailConfig,
 } from './zeptomail/provider.js';
+export { createSesProvider, type SesConfig } from './ses/provider.js';
