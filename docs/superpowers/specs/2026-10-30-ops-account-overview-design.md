@@ -11,7 +11,12 @@ From a profile's main screen, staff should "see every single thing about them, a
 
 Today the ops page lookup (`GET /v1/ops/pages/:handle`) returns only handle, display name, plan, page state and suspension. Staff piece the rest together from search, issues and the audit log.
 
-**Reading of "their main screen" (design call):** this is the staff view of a person, reached from ops search, issues and the email console. Owners already see their own numbers on their dashboard. If the owner also wants these growth numbers on the recipient's own dashboard, that's a small follow-up using the same queries.
+**Two audiences (owner, 30 October):**
+
+- **Staff** see everything in this document, on the account page reached from ops search, issues and the email console.
+- **Recipients** see their own growth figures (§3.10) on their dashboard.
+
+An admin who searches for a user sees, on that user's page, the emails TipMe sent them, and can open each one (§3.6) **(owner)**.
 
 ## 2. Goals and non-goals
 
@@ -81,7 +86,13 @@ A paginated list: date, amount (gross and net), status, provider, supporter labe
 
 ### 3.6 Emails
 
-From the email console (mail design §5.1): emails sent to this account in the period with their status and last event, counts by type, and suppressions affecting the account's addresses.
+**On the user's page when an admin searches for them (owner):** every email TipMe sent them, newest first, with date, type, subject, provider, status and last event (delivered, opened, clicked, bounced), filterable by period and type. Also shown: counts by type and any suppression affecting the account's addresses.
+
+**Opening an email** shows it as the user received it (subject, the HTML view and the text view), from the snapshot the mail platform keeps (mail design §4.2, `rendered_sealed`), plus its full timeline.
+
+- **Security emails are never shown.** Their content holds codes and recovery links, so the page says "Content withheld: this email contains a sign-in or recovery code" and shows only the type, time and timeline.
+- **Personal links are redacted.** In other emails, links that carry a personal token (unsubscribe, one-time links) are replaced with "[personal link]" before the snapshot is stored, so opening an email can never be used to act as the user.
+- **Every open is audited** (`email.viewed`, recording staff, message and account). It needs `accounts.view`, without a reason prompt, so support can answer "what did we send them?" quickly **(design call)**.
 
 ### 3.7 Notifications and preferences
 
@@ -94,6 +105,16 @@ Reports against the page (reason and date; reporter identity never shown), flagg
 ### 3.9 Staff actions
 
 The audit log filtered to this account (`subject_id` = user, profile or attempt ids belonging to it): who did what and why, newest first.
+
+### 3.10 Growth on the recipient's own dashboard (owner)
+
+Recipients see their own growth figures on the dashboard home, from the same queries and rollup as §3.1, without TipMe's share:
+
+- received in the last 24 hours, this week, last week, this month and last month, each with its change from the period before ("₦12,000 this week · +20% vs last week");
+- tip count and average tip for each period;
+- a 30-day chart of what they received per day.
+
+Reversed tips are shown as their own line. The figures follow the design constitution: plain numbers first, change shown in words and colour with a text equivalent. When the previous period was zero, it says "Your first tips this month" rather than a percentage. The existing dashboard summary stays; this sits above or replaces its totals, decided when building the screen with the owner.
 
 ## 4. Data and server
 
@@ -131,7 +152,9 @@ The audit log filtered to this account (`subject_id` = user, profile or attempt 
 2. `profile_daily_stats`, the growth API and the growth section.
 3. The account page with header, account, payments, tips and staff actions (from existing data).
 4. The emails, moderation and preferences sections (emails after the mail console exists).
+5. The recipient dashboard growth section (§3.10).
 
-## 7. Open question for the owner
+## 7. Answered
 
-1. Should recipients also see the growth figures (24 hours, this week, last week, this month, with comparisons) on their own dashboard? The same queries would serve it.
+- Recipients see growth figures on their dashboard: yes (§3.10).
+- Admins see each user's emails on their page: yes (§3.6).
