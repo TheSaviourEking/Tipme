@@ -214,3 +214,82 @@ test('staff can be granted by email, and sign in to that same account', async (t
   const again = await grantOwner(db, { email: 'owner@example.com' });
   assert.equal(again.userId, userId, 'an existing account is reused');
 });
+
+test('guesses when no code is live don’t lock anyone out', async (t) => {
+  const { verify } = await fresh(t);
+  for (let i = 0; i < 8; i++)
+    assert.equal(
+      (await verify('victim@example.com', '000000')).status,
+      'invalid',
+    );
+});
+
+test('codes for changing an email don’t use up the sign-in allowance', async (t) => {
+  const { db, signIn, request } = await fresh(t);
+  const { requestEmailChangeCode } = await import('../../dist/index.js');
+  const { userId } = await signIn('attacker@example.com');
+  for (let i = 0; i < 3; i++)
+    await requestEmailChangeCode(db, sealing, {
+      userId,
+      email: 'victim@example.com',
+      secret,
+    });
+  assert.equal((await request('victim@example.com')).status, 'sent');
+});
+
+test('old codes and quiet lockout rows are purged; a live lock stays', async (t) => {
+  const { db, request, count, pool } = await fresh(t);
+  const { purgeEmailCodes } = await import('../../dist/index.js');
+  await request('a@example.com');
+  await pool.query(
+    `INSERT INTO email_code_lockouts (email, failures, locked_until)
+     VALUES ('old@example.com', 2, NULL),
+            ('locked@example.com', 0, now() + interval '10 minutes')`,
+  );
+  assert.equal(await purgeEmailCodes(db, new Date()), 1, 'the stale counter');
+  assert.equal(await count('email_codes'), 1, 'a fresh code stays');
+  await purgeEmailCodes(db, new Date(Date.now() + 2 * 86_400_000));
+  assert.equal(await count('email_codes'), 0);
+  const { rows } = await pool.query(`SELECT email FROM email_code_lockouts`);
+  assert.deepEqual(rows, []);
+});
+
+test('changing email ends any pending confirmation link, so it can’t move the account back', async (t) => {
+  const { db, signIn, mails, pool } = await fresh(t);
+  const {
+    changeEmail,
+    requestEmailChangeCode,
+    startEmailVerification,
+    confirmEmail,
+  } = await import('../../dist/index.js');
+  const { userId } = await signIn('me@example.com');
+  await startEmailVerification(db, {
+    sealing,
+    userId,
+    email: 'attacker@example.com',
+    webOrigin: 'https://usetipme.xyz',
+  });
+  const token = (await mails(50)).find(
+    (m) => m.type === 'email_verification_link',
+  ).data.token;
+  await requestEmailChangeCode(db, sealing, {
+    userId,
+    email: 'safe@example.com',
+    secret,
+  });
+  const code = (await mails(50)).find((m) => m.type === 'email_change_code')
+    .data.code;
+  const changed = await changeEmail(db, sealing, {
+    userId,
+    email: 'safe@example.com',
+    code,
+    secret,
+    keepSessionId: '00000000-0000-7000-8000-000000000000',
+  });
+  assert.equal(changed.status, 'ok');
+  assert.equal(await confirmEmail(db, { token }), 'invalid');
+  const { rows } = await pool.query('SELECT email FROM users WHERE id = $1', [
+    userId,
+  ]);
+  assert.equal(rows[0].email, 'safe@example.com');
+});

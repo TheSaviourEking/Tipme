@@ -7,7 +7,9 @@ import {
   gte,
   isNotNull,
   isNull,
+  lt,
   ne,
+  or,
   sql,
 } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
@@ -75,6 +77,8 @@ export async function issueEmailCode(
     .where(
       and(
         eq(emailCodes.email, input.email),
+        // Per purpose: someone's email change can't use up the owner's sign-in codes.
+        eq(emailCodes.purpose, input.purpose),
         gte(emailCodes.createdAt, new Date(input.now.getTime() - 3_600_000)),
       ),
     );
@@ -132,13 +136,12 @@ export async function checkEmailCode(
     .orderBy(desc(emailCodes.createdAt))
     .limit(1)
     .for('update');
-  const matches =
-    latest !== undefined &&
-    latest.consumedAt === null &&
-    sameHex(
-      latest.codeHmac,
-      hmacOf(input.secret, input.email, input.purpose, input.code),
-    );
+  // With no code waiting there is nothing to guess: counting it would let anyone lock an address.
+  if (!latest || latest.consumedAt !== null) return 'invalid';
+  const matches = sameHex(
+    latest.codeHmac,
+    hmacOf(input.secret, input.email, input.purpose, input.code),
+  );
   if (!matches) {
     const [row] = await tx
       .insert(emailCodeLockouts)
@@ -403,6 +406,17 @@ export function changeEmail(
           dedupeKey: `email_changed_notice.${input.userId}.${newId()}`,
           now,
         });
+      // A confirmation link from before this change can't move the account back.
+      await tx
+        .update(emailTokens)
+        .set({ usedAt: now })
+        .where(
+          and(
+            eq(emailTokens.userId, input.userId),
+            eq(emailTokens.purpose, 'verify'),
+            isNull(emailTokens.usedAt),
+          ),
+        );
       await tx
         .update(sessions)
         .set({ revokedAt: now })
@@ -458,4 +472,30 @@ export function setAccountEmail(
       return 'set';
     }),
   );
+}
+
+/**
+ * These hold addresses anyone can type, so they don't stay: codes go a day after expiring, and a
+ * failure count goes once no code remains and no lock is running. Returns lockout rows removed.
+ */
+export async function purgeEmailCodes(
+  db: Database,
+  now: Date,
+): Promise<number> {
+  await db
+    .delete(emailCodes)
+    .where(lt(emailCodes.expiresAt, new Date(now.getTime() - 86_400_000)));
+  const removed = await db
+    .delete(emailCodeLockouts)
+    .where(
+      and(
+        or(
+          isNull(emailCodeLockouts.lockedUntil),
+          lt(emailCodeLockouts.lockedUntil, now),
+        ),
+        sql`NOT EXISTS (SELECT 1 FROM ${emailCodes} c WHERE c.email = ${emailCodeLockouts.email})`,
+      ),
+    )
+    .returning({ email: emailCodeLockouts.email });
+  return removed.length;
 }

@@ -716,14 +716,19 @@ function ContactDetails() {
       setEmailNote(
         'Your email was changed. We told the old address, and other devices were signed out.',
       );
-    } else
+    } else {
+      if (result.code === 'EMAIL_TAKEN') {
+        setEmailStep('idle');
+        setCode('');
+      }
       setEmailNote(
         result.code === 'EMAIL_TAKEN'
-          ? 'That email belongs to another account.'
+          ? 'That email belongs to another account. Try a different one.'
           : result.code === 'SIGN_IN_LOCKED'
             ? 'Too many wrong codes. Please wait 15 minutes and try again.'
             : 'That code isn’t right or has expired.',
       );
+    }
   };
   const toggleEmailPublic = async (emailPublic: boolean) => {
     const result = await apiFetch<MyProfile>('/v1/me/profile', {
@@ -772,6 +777,18 @@ function ContactDetails() {
         <Button type="submit" variant="secondary">
           {emailStep === 'idle' ? 'Send code to new address' : 'Change email'}
         </Button>
+        {emailStep === 'code' && (
+          <Button
+            variant="quiet"
+            onClick={() => {
+              setEmailStep('idle');
+              setCode('');
+              setEmailNote('');
+            }}
+          >
+            Use a different address
+          </Button>
+        )}
         <p role="status" className="tm-hint">
           {emailNote}
         </p>
