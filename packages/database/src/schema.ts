@@ -323,6 +323,74 @@ export const mailPreferences = pgTable('mail_preferences', {
     .defaultNow(),
 });
 
+/**
+ * The provider staff chose for a kind of traffic; no row means the server default. Shared with
+ * payment provider switching, which adds its state to `state` and `detail`.
+ */
+export const providerSettings = pgTable(
+  'provider_settings',
+  {
+    kind: text('kind').primaryKey(),
+    activeProvider: text('active_provider').notNull(),
+    state: text('state').notNull().default('stable'),
+    changedBy: uuid('changed_by'),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+    detail: jsonb('detail').notNull().default({}),
+  },
+  () => [check('provider_settings_kind', sql`kind IN ('mail', 'payment')`)],
+);
+
+/** A staff test of a provider. Only a hash of the confirmation token is kept. */
+export const providerTests = pgTable(
+  'provider_tests',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    provider: text('provider').notNull(),
+    startedBy: uuid('started_by').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    targetHint: text('target_hint'),
+    tokenSha256: text('token_sha256').unique(),
+    status: text('status').notNull().default('pending'),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    failureCode: text('failure_code'),
+    messageId: uuid('message_id').references(() => mailMessages.id),
+    tipId: uuid('tip_id'),
+  },
+  (table) => [
+    check('provider_tests_kind', sql`kind IN ('mail', 'payment')`),
+    check(
+      'provider_tests_status',
+      sql`status IN ('pending', 'confirmed', 'failed', 'expired')`,
+    ),
+    index('provider_tests_recent').on(
+      table.kind,
+      table.provider,
+      table.startedAt,
+    ),
+  ],
+);
+
+/** An account pinned to a provider other than the system one. Set by staff, always audited. */
+export const providerOverrides = pgTable(
+  'provider_overrides',
+  {
+    kind: text('kind').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    provider: text('provider').notNull(),
+    setBy: uuid('set_by').notNull(),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.kind, table.userId] }),
+    check('provider_overrides_kind', sql`kind IN ('mail', 'payment')`),
+  ],
+);
+
 export const profiles = pgTable(
   'profiles',
   {
@@ -1004,6 +1072,8 @@ export const OPS_PERMISSIONS = [
   'pages.plan',
   'search.view',
   'fees.manage',
+  'providers.manage',
+  'recoveries.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
