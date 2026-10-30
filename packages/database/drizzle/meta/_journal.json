@@ -344,6 +344,13 @@
       "when": 1793349865876,
       "tag": "0048_email_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793351314001,
+      "tag": "0049_email_recovery",
+      "breakpoints": true
     }
   ]
 }

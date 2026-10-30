@@ -703,6 +703,8 @@ export function deleteAccount(
         .update(users)
         .set({
           phoneE164: null,
+          recoveryEmail: null,
+          recoveryEmailVerifiedAt: null,
           email: null,
           emailVerifiedAt: null,
           deletedAt: now,

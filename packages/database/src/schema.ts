@@ -86,6 +86,11 @@ export const users = pgTable(
     phoneE164: text('phone_e164').unique(),
     email: text('email'),
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+    // A second address, for getting back in if the sign-in email is lost.
+    recoveryEmail: text('recovery_email'),
+    recoveryEmailVerifiedAt: timestamp('recovery_email_verified_at', {
+      withTimezone: true,
+    }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
@@ -94,6 +99,41 @@ export const users = pgTable(
     uniqueIndex('users_verified_email')
       .on(sql`lower(${table.email})`)
       .where(sql`email_verified_at IS NOT NULL AND deleted_at IS NULL`),
+    uniqueIndex('users_verified_recovery_email')
+      .on(sql`lower(${table.recoveryEmail})`)
+      .where(
+        sql`recovery_email_verified_at IS NOT NULL AND deleted_at IS NULL`,
+      ),
+  ],
+);
+
+/**
+ * Moving an account to a new sign-in email when the old one is lost. It takes effect 24 hours
+ * after the new address is proven, so the owner can still stop it.
+ */
+export const emailRecoveries = pgTable(
+  'email_recoveries',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    newEmail: text('new_email').notNull(),
+    startedBy: text('started_by').notNull(),
+    staffUserId: uuid('staff_user_id'),
+    // Filled when the new address is proven; the hold runs from here.
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('email_recoveries_started_by', sql`started_by IN ('self', 'staff')`),
+    index('email_recoveries_user').on(table.userId),
+    index('email_recoveries_due')
+      .on(table.effectiveAt)
+      .where(sql`completed_at IS NULL AND cancelled_at IS NULL`),
   ],
 );
 

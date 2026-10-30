@@ -211,7 +211,7 @@ export function requestEmailSignInCode(
   );
 }
 
-const verifiedOwner = (email: string) =>
+export const verifiedOwner = (email: string) =>
   and(
     sql`lower(${users.email}) = ${email}`,
     isNotNull(users.emailVerifiedAt),
@@ -376,7 +376,11 @@ export function changeEmail(
         .where(verifiedOwner(email));
       if (owner && owner.id !== input.userId) return { status: 'taken' };
       const [me] = await tx
-        .select({ email: users.email, verifiedAt: users.emailVerifiedAt })
+        .select({
+          email: users.email,
+          verifiedAt: users.emailVerifiedAt,
+          recoveryEmail: users.recoveryEmail,
+        })
         .from(users)
         .where(eq(users.id, input.userId))
         .for('update');
@@ -392,7 +396,14 @@ export function changeEmail(
         );
       await tx
         .update(users)
-        .set({ email, emailVerifiedAt: now })
+        .set({
+          email,
+          emailVerifiedAt: now,
+          // The sign-in address can't also be its own way back in.
+          ...(me?.recoveryEmail?.toLowerCase() === email
+            ? { recoveryEmail: null, recoveryEmailVerifiedAt: null }
+            : {}),
+        })
         .where(eq(users.id, input.userId));
       if (me?.email && me.verifiedAt && me.email !== email)
         await enqueueMail(tx, sealing, {
