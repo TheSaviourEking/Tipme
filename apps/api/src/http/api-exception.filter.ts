@@ -72,6 +72,9 @@ const messages: Record<ApiErrorCode, string> = {
     'Verify your email address before connecting a payment account.',
   PAYMENT_ACCOUNT_REQUIRED:
     'Connect and activate a payment account before accepting tips.',
+  NO_CONFIRMED_TEST:
+    'Send a test through this provider and confirm it arrived before making it active.',
+  PROVIDER_NOT_ALLOWED: 'This provider can’t be made active in production.',
   PAYMENT_START_REJECTED:
     'The payment provider refused to start this payment. Nothing was charged.',
   PROVIDER_OUTCOME_UNKNOWN:

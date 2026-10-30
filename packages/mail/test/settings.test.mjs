@@ -86,3 +86,14 @@ test('the pretend provider exists only outside production', () => {
   );
   assert.deepEqual([...live.keys()], ['zeptomail']);
 });
+
+test('a person’s override wins, unless that provider is not configured', async () => {
+  const { resolveMailProvider } = await import('../dist/index.js');
+  const configured = new Set(['zeptomail', 'ses']);
+  const route = (override, pinned = null) =>
+    resolveMailProvider({ pinned, override, active: 'zeptomail', configured });
+  assert.equal(route(null), 'zeptomail');
+  assert.equal(route('ses'), 'ses');
+  assert.equal(route('mock'), 'zeptomail');
+  assert.equal(route('ses', 'mock'), 'mock', 'a test stays on its provider');
+});

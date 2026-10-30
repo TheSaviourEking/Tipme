@@ -508,3 +508,99 @@ export interface OpsSearchResult {
     at: string;
   }[];
 }
+
+// ---- Mail providers (mail platform spec §5) ----
+
+export const mailProviderNameSchema = z.enum(['mock', 'zeptomail', 'ses']);
+
+export interface OpsMailProviderCard {
+  name: z.infer<typeof mailProviderNameSchema>;
+  label: string;
+  active: boolean;
+  /** True while it only delivers to verified recipients; null when the provider can't say. */
+  sandbox: boolean | null;
+  statusDetail: string | null;
+  lastTest: {
+    status: 'pending' | 'confirmed' | 'failed' | 'expired';
+    startedAt: string;
+    confirmedAt: string | null;
+    targetHint: string | null;
+    /** How the test email itself is doing: queued, sent, failed… */
+    messageStatus: string | null;
+    failureCode: string | null;
+  } | null;
+  /** A confirmed test is still valid, so this provider can be made active. */
+  canActivate: boolean;
+  last24h: {
+    sent: number;
+    failed: number;
+    bounced: number;
+    complained: number;
+  };
+}
+
+export interface OpsMailProviderOverride {
+  userId: string;
+  handle: string | null;
+  provider: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface OpsMailProviders {
+  providers: OpsMailProviderCard[];
+  overrides: OpsMailProviderOverride[];
+  changedAt: string | null;
+  reason: string | null;
+}
+
+export const opsMailTestSchema = opsReasonSchema
+  .extend({ to: z.email().max(254).optional() })
+  .strict();
+export type OpsMailTestRequest = z.infer<typeof opsMailTestSchema>;
+
+export const opsProviderTestConfirmSchema = z
+  .object({ token: z.string().min(16).max(128) })
+  .strict();
+export type OpsProviderTestConfirmRequest = z.infer<
+  typeof opsProviderTestConfirmSchema
+>;
+
+export const opsMailSwitchSchema = opsReasonSchema
+  .extend({ provider: mailProviderNameSchema })
+  .strict();
+export type OpsMailSwitchRequest = z.infer<typeof opsMailSwitchSchema>;
+
+/** `account` is a handle or a user id. */
+export const opsMailOverrideSchema = opsReasonSchema
+  .extend({
+    account: z.string().trim().min(1).max(64),
+    provider: mailProviderNameSchema,
+  })
+  .strict();
+export type OpsMailOverrideRequest = z.infer<typeof opsMailOverrideSchema>;
+
+export const opsMailOverrideRemoveSchema = opsReasonSchema
+  .extend({ userId: z.uuid() })
+  .strict();
+export type OpsMailOverrideRemoveRequest = z.infer<
+  typeof opsMailOverrideRemoveSchema
+>;
+
+// Addresses travel in the body, never the URL, so they stay out of access logs.
+export const opsSuppressionLookupSchema = z
+  .object({ address: z.email().max(254) })
+  .strict();
+export type OpsSuppressionLookupRequest = z.infer<
+  typeof opsSuppressionLookupSchema
+>;
+
+export const opsSuppressionRemoveSchema = opsReasonSchema
+  .extend({
+    address: z.email().max(254),
+    confirmComplaint: z.boolean().default(false),
+  })
+  .strict();
+export type OpsSuppressionRemoveRequest = z.infer<
+  typeof opsSuppressionRemoveSchema
+>;

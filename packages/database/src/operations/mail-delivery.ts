@@ -141,7 +141,12 @@ export async function mailGate(
     .select({ reason: mailSuppressions.reason })
     .from(mailSuppressions)
     .where(eq(mailSuppressions.addressHmac, addressHmac(sealing, mail.to)));
-  if (suppressed) return 'suppressed';
+  // A provider test is about the provider, so only an address that doesn't exist blocks it.
+  if (
+    suppressed &&
+    (mail.type !== 'provider_test' || suppressed.reason === 'hard_bounce')
+  )
+    return 'suppressed';
   if (!mail.userId) return 'send';
   const type = MAIL_TYPES[mail.type];
   if (type?.preference) {
