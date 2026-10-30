@@ -153,7 +153,7 @@ test('the export contains no full address and is audited', async (t) => {
   assert.ok(!messages.includes('secret-address'));
   assert.match(
     messages,
-    /^created_at,type,category,recipient,provider,status,last_event\n/,
+    /^created_at,type,category,recipient,account,provider,status,last_event\n/,
   );
   assert.match(messages, /s•••@example\.com/);
   assert.match(sent['content-type'], /text\/csv/);
@@ -200,4 +200,37 @@ test('period parameters are validated', async () => {
     true,
   );
   assert.equal(ok({ period: 'forever' }), false);
+});
+
+test('the export follows the list’s filters, and refuses rather than truncates', async (t) => {
+  const { api, mail, db } = await setup(t);
+  await mail('tip_received', tip);
+  await mail('email_verification_link', {
+    token: 'sample-token-sample-token-sample-token-0001',
+  });
+  const out = await api.exportCsv(
+    ops,
+    { period: 'today', kind: 'messages', type: 'tip_received' },
+    { setHeader() {} },
+  );
+  assert.ok(out.includes('tip_received'));
+  assert.ok(!out.includes('email_verification_link'));
+  const none = await api.exportCsv(
+    ops,
+    { period: 'today', kind: 'messages', account: 'no_such_one' },
+    { setHeader() {} },
+  );
+  assert.equal(none.trim().split('\n').length, 1, 'header only');
+  void db;
+});
+
+test('the list and export reject a range with missing dates', async () => {
+  const { opsMailListQuerySchema } =
+    await import('../../packages/contracts/dist/index.js');
+  const ok = (q) => opsMailListQuerySchema.safeParse(q).success;
+  assert.equal(ok({ period: 'range' }), false);
+  assert.equal(
+    ok({ period: 'range', from: '2026-10-01', to: '2026-10-05' }),
+    true,
+  );
 });

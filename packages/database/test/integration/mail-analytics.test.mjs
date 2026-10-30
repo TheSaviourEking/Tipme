@@ -74,21 +74,115 @@ const event = (db, id, kind, at, extra = {}) =>
     ...extra,
   });
 
-test('this month is compared with last month in Lagos time', async (t) => {
+test('months are split in Lagos time, and a month so far is compared like for like', async (t) => {
   const { db } = await fresh(t);
   // 23:30 in Lagos on 30 September is still last month, though close to the boundary.
   await sent(db, new Date('2026-09-30T22:30:00Z'));
   // 00:30 in Lagos on 1 October is this month, though still 30 September in UTC.
   await sent(db, new Date('2026-09-30T23:30:00Z'));
+  await sent(db, new Date('2026-09-10T10:00:00Z'));
   await sent(db, new Date('2026-10-14T10:00:00Z'));
   const summary = await mailPeriodSummary(db, { kind: 'this_month' }, NOW);
   assert.deepEqual(summary.range, { from: '2026-10-01', to: '2026-10-15' });
-  assert.deepEqual(summary.previous, { from: '2026-09-01', to: '2026-09-30' });
+  // The first 15 days of last month, not all 30.
+  assert.deepEqual(summary.previous, { from: '2026-09-01', to: '2026-09-15' });
   assert.deepEqual(summary.totals.sent, {
     count: 2,
     previous: 1,
     changePct: 100,
   });
+  const last = await mailPeriodSummary(db, { kind: 'last_month' }, NOW);
+  assert.equal(last.totals.sent.count, 2, 'the 23:30 one counts in September');
+});
+
+test('a month so far never reaches past the end of a shorter month', async (t) => {
+  const { db } = await fresh(t);
+  const { previous } = await mailPeriodSummary(
+    db,
+    { kind: 'this_month' },
+    new Date('2026-03-31T12:00:00Z'),
+  );
+  assert.deepEqual(previous, { from: '2026-02-01', to: '2026-02-28' });
+});
+
+test('rates never pass 100%, even when deliveries of earlier mail land in this period', async (t) => {
+  const { db } = await fresh(t);
+  const at = new Date('2026-10-14T10:00:00Z');
+  const a = await sent(db, at);
+  for (let i = 0; i < 5; i++) await event(db, a, 'delivered', at);
+  const { rates } = await mailPeriodSummary(db, { kind: 'this_month' }, NOW);
+  assert.equal(rates.delivery, 1);
+});
+
+test('the summary lists every type seen, by category, and how long the queue has waited', async (t) => {
+  const { db } = await fresh(t);
+  const at = new Date('2026-10-14T10:00:00Z');
+  await sent(db, at);
+  await recordMailEvent(db, {
+    messageId: null,
+    kind: 'send_failed',
+    provider: 'ses',
+    occurredAt: at,
+    type: 'weekly_report',
+    category: 'engagement',
+  });
+  await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'waiting@example.com',
+    data: tip,
+    dedupeKey: 'tip.waiting',
+    now: new Date(NOW.getTime() - 90_000),
+  });
+  const summary = await mailPeriodSummary(db, { kind: 'this_month' }, NOW);
+  assert.deepEqual([...summary.types].sort(), [
+    'tip_received',
+    'weekly_report',
+  ]);
+  assert.deepEqual(summary.byCategory, [
+    { category: 'transactional', sent: 1, previous: 0 },
+  ]);
+  assert.ok(summary.queueAgeSeconds >= 90);
+});
+
+test('a range longer than a year, or a malformed cursor, is refused', async (t) => {
+  const { db } = await fresh(t);
+  await assert.rejects(
+    mailPeriodSummary(
+      db,
+      { kind: 'range', from: '2020-01-01', to: '2026-01-01' },
+      NOW,
+    ),
+    { code: 'INVALID_INPUT' },
+  );
+  await assert.rejects(
+    listMail(db, { period: { kind: 'today' }, limit: 5, cursor: 'x|y' }, NOW),
+    { code: 'INVALID_INPUT' },
+  );
+});
+
+test('the list shows the account’s handle and the provider’s message id', async (t) => {
+  const { db, rows } = await fresh(t);
+  const [tobi] = await rows(
+    `SELECT user_id FROM profiles WHERE handle_lower = 'tobi'`,
+  );
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    userId: tobi.user_id,
+    data: tip,
+    dedupeKey: 'tip.handle',
+    now: new Date('2026-10-14T10:00:00Z'),
+  });
+  await db.execute(
+    `UPDATE mail_messages SET provider_message_id = 'ses-9' WHERE id = '${id}'`,
+  );
+  const { rows: list } = await listMail(
+    db,
+    { period: { kind: 'this_month' }, limit: 5 },
+    NOW,
+  );
+  assert.equal(list[0].handle, 'tobi');
+  assert.equal(list[0].providerMessageId, 'ses-9');
 });
 
 test('a zero previous period gives no percentage', async (t) => {
@@ -140,7 +234,7 @@ test('every kind of period has the right range and the one before it', async (t)
     '2026-10-12',
     '2026-10-15',
     '2026-10-05',
-    '2026-10-11',
+    '2026-10-08',
   ]);
   assert.deepEqual(await range({ kind: 'last_week' }), [
     '2026-10-05',

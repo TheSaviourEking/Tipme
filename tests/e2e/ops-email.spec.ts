@@ -8,24 +8,29 @@ const seal = Buffer.alloc(32, 8);
 async function seedMail(type: string, data: unknown, at: Date, n: string) {
   await withDatabase(async (db, ops) => {
     const sealing = ops.mailSealing(seal);
-    const { id } = await ops.enqueueMail(db, sealing, {
-      type,
-      to: `console-${n}@console.example`,
-      data,
-      dedupeKey: `e2e.console.${n}.${Date.now()}`,
-      now: at,
+    // In one transaction, so the worker never sees it queued and sends it a second time.
+    await (
+      db as { transaction<T>(run: (tx: unknown) => Promise<T>): Promise<T> }
+    ).transaction(async (tx) => {
+      const { id } = await ops.enqueueMail(tx, sealing, {
+        type,
+        to: `console-${n}@console.example`,
+        data,
+        dedupeKey: `e2e.console.${n}.${Date.now()}`,
+        now: at,
+      });
+      await ops.recordMailEvent(tx, {
+        messageId: id,
+        kind: 'sent',
+        provider: 'mock',
+        occurredAt: at,
+        type,
+        category: type === 'tip_received' ? 'transactional' : 'security',
+      });
+      await (tx as { execute(sql: string): Promise<unknown> }).execute(
+        `UPDATE mail_messages SET status = 'sent', provider = 'mock' WHERE id = '${id}'`,
+      );
     });
-    await ops.recordMailEvent(db, {
-      messageId: id,
-      kind: 'sent',
-      provider: 'mock',
-      occurredAt: at,
-      type,
-      category: type === 'tip_received' ? 'transactional' : 'security',
-    });
-    await (db as { execute(sql: string): Promise<unknown> }).execute(
-      `UPDATE mail_messages SET status = 'sent', provider = 'mock' WHERE id = '${id}'`,
-    );
   });
 }
 
@@ -42,6 +47,13 @@ test('the console shows today’s emails, a message’s timeline, and compares w
   await enrolOwner(page, testInfo);
   const stamp = `${testInfo.workerIndex}${Date.now() % 100000}`;
   await seedMail('tip_received', tip, new Date(), `tip${stamp}`);
+  // Yesterday's mail, so today has something to compare with.
+  await seedMail(
+    'tip_received',
+    tip,
+    new Date(Date.now() - 86_400_000),
+    `old${stamp}`,
+  );
   await seedMail(
     'email_verification_link',
     { token: 'sample-token-sample-token-sample-token-0001' },
@@ -54,7 +66,7 @@ test('the console shows today’s emails, a message’s timeline, and compares w
     page.getByRole('heading', { name: 'Email', level: 1 }),
   ).toBeVisible();
   await page.getByLabel('Period').selectOption('today');
-  await expect(page.getByText(/vs yesterday/).first()).toBeVisible();
+  await expect(page.getByText(/vs all of yesterday/).first()).toBeVisible();
   await expectAccessible(page);
   expect(await fitsViewport(page)).toBe(true);
 
