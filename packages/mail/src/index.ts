@@ -13,3 +13,4 @@ export {
 } from './templates/define.js';
 export { escapeHtml } from './templates/escape.js';
 export { MAIL_TYPES, renderMail } from './templates/registry.js';
+export { resolveMailProvider } from './routing.js';

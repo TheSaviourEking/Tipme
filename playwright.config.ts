@@ -79,7 +79,7 @@ export default defineConfig({
         WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
         OPS_TOTP_KEY: E2E_OPS_TOTP_KEY,
         MAIL_SEAL_KEY: E2E_MAIL_SEAL_KEY,
-        MESSAGING_PROVIDER: 'mock',
+        MAIL_DEFAULT_PROVIDER: 'mock',
         RATE_LIMIT_AUTH_PER_HOUR: '10000',
         RATE_LIMIT_HANDLES_PER_MIN: '10000',
         // Every test tips from 127.0.0.1; the limiter itself is covered by integration tests.

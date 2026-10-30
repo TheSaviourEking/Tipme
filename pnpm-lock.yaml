@@ -179,6 +179,9 @@ importers:
       '@tipme/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@tipme/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@tipme/observability':
         specifier: workspace:*
         version: link:../../packages/observability

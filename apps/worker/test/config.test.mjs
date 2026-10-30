@@ -156,3 +156,31 @@ test('the mail seal key must be 32 bytes', () => {
     /MAIL_SEAL_KEY/,
   );
 });
+
+test('the pretend mail provider is refused in production', () => {
+  const production = {
+    NODE_ENV: 'production',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+  };
+  assert.throws(
+    () => loadWorkerConfig({ ...production, MAIL_DEFAULT_PROVIDER: 'mock' }),
+    /MAIL_DEFAULT_PROVIDER/,
+  );
+});
+
+test('mail defaults: pretend provider, TipMe sender, no reply-to', () => {
+  const config = loadWorkerConfig({
+    NODE_ENV: 'test',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+  });
+  assert.equal(config.MAIL_DEFAULT_PROVIDER, 'mock');
+  assert.equal(config.MAIL_FROM_ADDRESS, 'hello@mail.usetipme.xyz');
+  assert.equal(config.MAIL_FROM_NAME, 'TipMe');
+  assert.equal(config.MAIL_REPLY_TO, undefined);
+});

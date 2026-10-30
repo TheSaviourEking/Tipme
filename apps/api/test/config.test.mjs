@@ -194,3 +194,27 @@ test('sign-in codes stay at 3 per number per hour unless a copy raises it (PR-01
     }),
   );
 });
+
+test('the pretend mail provider is refused in production, allowed in preview', () => {
+  const production = {
+    ...valid,
+    NODE_ENV: 'production',
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+    WEB_ORIGIN: 'https://staging.usetipme.xyz',
+    MAIL_DEFAULT_PROVIDER: 'mock',
+  };
+  assert.equal(loadApiConfig(production).MAIL_DEFAULT_PROVIDER, 'mock');
+  assert.throws(
+    () =>
+      loadApiConfig({
+        ...production,
+        DEPLOYMENT_MODE: 'production',
+        PAYMENT_PROVIDER: 'mock',
+      }),
+    /MAIL_DEFAULT_PROVIDER/,
+  );
+});

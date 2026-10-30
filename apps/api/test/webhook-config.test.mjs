@@ -55,8 +55,8 @@ test('the pretend messenger can never run in production', () => {
         ...base,
         NODE_ENV: 'production',
         PAYMENT_PROVIDER: undefined,
-        MESSAGING_PROVIDER: 'mock',
+        MAIL_DEFAULT_PROVIDER: 'mock',
       }),
-    /MESSAGING_PROVIDER/,
+    /MAIL_DEFAULT_PROVIDER/,
   );
 });

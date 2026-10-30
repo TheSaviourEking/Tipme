@@ -43,7 +43,9 @@ export class AppModule {
         AnalyticsModule,
         WebhooksModule,
         ...(config.PAYMENT_PROVIDER === 'mock' ? [MockCheckoutModule] : []),
-        ...(config.MESSAGING_PROVIDER === 'mock' ? [PretendInboxModule] : []),
+        ...(config.MAIL_DEFAULT_PROVIDER === 'mock'
+          ? [PretendInboxModule]
+          : []),
         ...(config.DIAGNOSTICS_ENABLED ? [DiagnosticsModule] : []),
       ],
       controllers: [

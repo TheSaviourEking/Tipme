@@ -25,7 +25,7 @@ import { DatabaseProvider } from '../infra/database.js';
 
 /**
  * What the pretend messenger and mailbox "sent", newest first, so codes and links can be used
- * locally and in tests. Registered only with MESSAGING_PROVIDER=mock (refused in production).
+ * locally and in tests. Registered only with MAIL_DEFAULT_PROVIDER=mock (refused in production).
  * On a preview copy (staging) everyone with the shared preview password could read every
  * sign-in code, so there it also needs the release token; anyone else gets 404.
  */

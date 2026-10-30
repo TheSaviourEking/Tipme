@@ -42,7 +42,7 @@ function ensureEnv() {
     TRUST_PROXY_HOPS: '1',
     PAYMENT_PROVIDER: 'mock',
     PAYMENTS_LIVE_ENABLED: 'false',
-    MESSAGING_PROVIDER: 'mock',
+    MAIL_DEFAULT_PROVIDER: 'mock',
     ANALYTICS_ENABLED: 'true',
     // The release check and e2e send many requests from one address.
     RATE_LIMIT_AUTH_PER_HOUR: '10000',
