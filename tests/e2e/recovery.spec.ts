@@ -18,7 +18,8 @@ async function mailCode(page: Page, hint: string, subject: string) {
   return code;
 }
 
-const suffix = () => `${Date.now() % 100000000}`;
+// Letters around the digits: the code is the only 6-digit word in the inbox line.
+const suffix = () => `x${Date.now() % 100000000}x`;
 
 async function addRecovery(page: Page, address: string, hint: string) {
   await page.goto('/dashboard/settings');
@@ -52,7 +53,13 @@ test('a recipient is reminded, adds a recovery email and the reminder disappears
   await expectAccessible(page);
   await page.goto('/dashboard');
   await expect(
-    page.getByRole('heading', { name: 'Add a recovery email' }),
+    page
+      .getByRole('region', { name: 'Needs your attention' })
+      .getByText('Add a recovery email'),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: /Notifications/ }).click();
+  await expect(
+    page.locator('#notification-list').getByText(/recovery email/),
   ).toHaveCount(0);
 });
 

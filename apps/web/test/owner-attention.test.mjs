@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ownerAttention } from '../src/lib/owner-attention.ts';
+import {
+  isPaymentAttention,
+  ownerAttention,
+} from '../src/lib/owner-attention.ts';
 
 const ready = { emailVerified: true, pageState: 'live', suspended: false };
 const payments = (status, extra = {}) => ({
@@ -127,5 +130,19 @@ test('no recovery email asks for one, after anything stopping tips', () => {
       }),
     ),
     [],
+  );
+});
+
+test('fix: the recovery email reminder is not a payment problem', () => {
+  const items = ownerAttention({
+    profile: ready,
+    payments: payments('ACTIVE'),
+    needsRecoveryEmail: true,
+  });
+  assert.equal(items.find(isPaymentAttention), undefined);
+  assert.ok(
+    ownerAttention({ profile: ready, payments: payments(null) }).find(
+      isPaymentAttention,
+    ),
   );
 });

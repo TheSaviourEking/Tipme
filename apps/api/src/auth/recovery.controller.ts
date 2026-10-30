@@ -105,6 +105,9 @@ export class RecoveryController {
     );
     if (outcome === 'same_as_sign_in')
       throw new CodedHttpException(409, 'SAME_AS_SIGN_IN_EMAIL');
+    if (outcome === 'bad_address')
+      throw new CodedHttpException(400, 'EMAIL_INVALID');
+    if (outcome !== 'sent') throw new CodedHttpException(429, 'TOO_MANY_CODES');
     return { data: { sent: true } };
   }
 
@@ -116,10 +119,14 @@ export class RecoveryController {
   async requestChangeCode(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<{ sent: true }>> {
-    await requestRecoveryChangeCode(this.database.db, this.sealing, {
-      userId: auth.userId,
-      secret: this.config.AUTH_CODE_SECRET,
-    });
+    const outcome = await requestRecoveryChangeCode(
+      this.database.db,
+      this.sealing,
+      { userId: auth.userId, secret: this.config.AUTH_CODE_SECRET },
+    );
+    if (outcome === 'no_email')
+      throw new CodedHttpException(409, 'NO_SIGN_IN_EMAIL');
+    if (outcome !== 'sent') throw new CodedHttpException(429, 'TOO_MANY_CODES');
     return { data: { sent: true } };
   }
 
@@ -200,6 +207,10 @@ export class RecoveryController {
         secret: this.config.AUTH_CODE_SECRET,
       },
     );
+    if (outcome === 'bad_new_email')
+      throw new CodedHttpException(400, 'EMAIL_INVALID');
+    if (outcome === 'new_email_busy')
+      throw new CodedHttpException(429, 'TOO_MANY_CODES');
     if (outcome !== 'code_sent')
       throw new CodedHttpException(400, 'CODE_INVALID');
     return { data: { sent: true } };
@@ -218,6 +229,8 @@ export class RecoveryController {
       code: body.code,
       secret: this.config.AUTH_CODE_SECRET,
     });
+    if (result.status === 'taken')
+      throw new CodedHttpException(409, 'EMAIL_TAKEN');
     if (result.status !== 'pending')
       throw new CodedHttpException(400, 'CODE_INVALID');
     return { data: { effectiveAt: result.effectiveAt.toISOString() } };

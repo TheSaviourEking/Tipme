@@ -21,7 +21,6 @@ const STATE_LABELS: Record<OpsPage['pageState'], string> = {
   deleted: 'Deleted',
 };
 
-/** Free and Pro (PR-012): find a page by handle and change its plan. No billing; audited. */
 /** Someone lost their email and proved who they are to staff; the new address must prove itself. */
 function MoveSignInEmail({ userId }: { userId: string }) {
   const id = useId();
@@ -102,6 +101,7 @@ function MoveSignInEmail({ userId }: { userId: string }) {
   );
 }
 
+/** Free and Pro (PR-012): find a page by handle and change its plan. No billing; audited. */
 export default function OpsPagesPage() {
   const id = useId();
   const access = useOpsAccess();

@@ -56,9 +56,11 @@ export function requestRecoveryEmailCode(
   db: Database,
   sealing: MailSealing,
   input: { userId: string; recoveryEmail: string; secret: string; now?: Date },
-): Promise<'sent' | 'same_as_sign_in' | 'rate_limited' | 'locked'> {
+): Promise<
+  'sent' | 'same_as_sign_in' | 'rate_limited' | 'locked' | 'bad_address'
+> {
   const email = normaliseEmail(input.recoveryEmail);
-  if (!email) return Promise.resolve('sent');
+  if (!email) return Promise.resolve('bad_address');
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -137,26 +139,30 @@ export function confirmRecoveryEmail(
         .for('update');
       if (!me) return 'invalid';
       if (me.email?.toLowerCase() === email) return 'same_as_sign_in';
+      // Neither code is spent until both are right, so a typo in one doesn't kill the other.
+      const checks = [{ email, code: input.code }];
       if (me.confirmed) {
         if (!input.signInCode || !me.email) return 'needs_sign_in_code';
-        const owner = await checkEmailCode(tx, {
-          email: me.email.toLowerCase(),
+        checks.push({ email: me.email.toLowerCase(), code: input.signInCode });
+      }
+      for (const check of checks) {
+        const result = await checkEmailCode(tx, {
+          ...check,
           purpose: 'recovery_email',
-          code: input.signInCode,
+          secret: input.secret,
+          now,
+          keep: true,
+        });
+        if (result !== 'ok') return 'invalid';
+      }
+      if (await addressInUse(tx, email, input.userId)) return 'taken';
+      for (const check of checks)
+        await checkEmailCode(tx, {
+          ...check,
+          purpose: 'recovery_email',
           secret: input.secret,
           now,
         });
-        if (owner !== 'ok') return 'invalid';
-      }
-      const proven = await checkEmailCode(tx, {
-        email,
-        purpose: 'recovery_email',
-        code: input.code,
-        secret: input.secret,
-        now,
-      });
-      if (proven !== 'ok') return 'invalid';
-      if (await addressInUse(tx, email, input.userId)) return 'taken';
       await tx
         .update(users)
         .set({ recoveryEmail: email, recoveryEmailVerifiedAt: now })
@@ -272,6 +278,8 @@ async function openProposal(
   });
 }
 
+const NEW_EMAIL_BUSY = new Error('new address cannot take a code');
+
 /** The recovery code identifies the owner; next, a code proves the new address. */
 export function proposeRecoveredEmail(
   db: Database,
@@ -283,35 +291,43 @@ export function proposeRecoveredEmail(
     secret: string;
     now?: Date;
   },
-): Promise<'code_sent' | 'invalid'> {
+): Promise<'code_sent' | 'invalid' | 'bad_new_email' | 'new_email_busy'> {
   const email = normaliseEmail(input.signInEmail);
   const newEmail = normaliseEmail(input.newEmail);
-  if (!email || !newEmail) return Promise.resolve('invalid');
+  if (!email) return Promise.resolve('invalid');
+  if (!newEmail) return Promise.resolve('bad_new_email');
   const now = input.now ?? new Date();
   return guarded(() =>
-    db.transaction(async (tx) => {
-      const [owner] = await tx
-        .select({ id: users.id, recovery: users.recoveryEmail })
-        .from(users)
-        .where(verifiedOwner(email));
-      if (!owner?.recovery) return 'invalid';
-      const checked = await checkEmailCode(tx, {
-        email: owner.recovery.toLowerCase(),
-        purpose: 'recovery',
-        code: input.recoveryCode,
-        secret: input.secret,
-        now,
-      });
-      if (checked !== 'ok') return 'invalid';
-      const sent = await openProposal(tx, sealing, {
-        userId: owner.id,
-        newEmail,
-        startedBy: 'self',
-        secret: input.secret,
-        now,
-      });
-      return sent === 'sent' ? 'code_sent' : 'invalid';
-    }),
+    db
+      .transaction(async (tx) => {
+        const [owner] = await tx
+          .select({ id: users.id, recovery: users.recoveryEmail })
+          .from(users)
+          .where(verifiedOwner(email));
+        if (!owner?.recovery) return 'invalid';
+        const checked = await checkEmailCode(tx, {
+          email: owner.recovery.toLowerCase(),
+          purpose: 'recovery',
+          code: input.recoveryCode,
+          secret: input.secret,
+          now,
+        });
+        if (checked !== 'ok') return 'invalid';
+        const sent = await openProposal(tx, sealing, {
+          userId: owner.id,
+          newEmail,
+          startedBy: 'self',
+          secret: input.secret,
+          now,
+        });
+        // Rolls back: the recovery code still works, with a different address.
+        if (sent !== 'sent') throw NEW_EMAIL_BUSY;
+        return 'code_sent' as const;
+      })
+      .catch((error: unknown) => {
+        if (error === NEW_EMAIL_BUSY) return 'new_email_busy' as const;
+        throw error;
+      }),
   );
 }
 
@@ -326,13 +342,19 @@ export function confirmRecoveredEmail(
     secret: string;
     now?: Date;
   },
-): Promise<{ status: 'pending'; effectiveAt: Date } | { status: 'invalid' }> {
+): Promise<
+  | { status: 'pending'; effectiveAt: Date }
+  | { status: 'invalid' }
+  | { status: 'taken' }
+> {
   const email = normaliseEmail(input.signInEmail);
   const newEmail = normaliseEmail(input.newEmail);
   if (!email || !newEmail) return Promise.resolve({ status: 'invalid' });
   const now = input.now ?? new Date();
   type Result =
-    { status: 'pending'; effectiveAt: Date } | { status: 'invalid' };
+    | { status: 'pending'; effectiveAt: Date }
+    | { status: 'invalid' }
+    | { status: 'taken' };
   return guarded(() =>
     db.transaction(async (tx): Promise<Result> => {
       const invalid: Result = { status: 'invalid' };
@@ -368,7 +390,9 @@ export function confirmRecoveredEmail(
         now,
       });
       if (checked !== 'ok') return invalid;
-      if (await addressInUse(tx, newEmail, owner.id)) return invalid;
+      // The code has just proven the address is theirs, so this tells them nothing new.
+      if (await addressInUse(tx, newEmail, owner.id))
+        return { status: 'taken' };
       const effectiveAt = new Date(now.getTime() + RECOVERY_HOLD_MS);
       await tx
         .update(emailRecoveries)

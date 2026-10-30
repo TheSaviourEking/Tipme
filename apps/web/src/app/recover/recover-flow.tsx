@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button, InputField, Notice } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
 
-type Step = 'email' | 'code' | 'new' | 'confirm' | 'scheduled';
+type Step = 'email' | 'code' | 'confirm' | 'scheduled';
 
 /**
  * Lost the sign-in email: a code to the recovery email, then a code to the new address, then a
@@ -19,25 +19,37 @@ export function RecoverFlow() {
   const [newEmail, setNewEmail] = useState('');
   const [newCode, setNewCode] = useState('');
   const [error, setError] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [busy, setBusy] = useState(false);
   // Sent here by staff: this form hasn't collected the addresses yet.
   const [fromStaff, setFromStaff] = useState(false);
   const [effectiveAt, setEffectiveAt] = useState('');
 
+  // Codes run out after 10 minutes, and 5 wrong tries pause an address for 15.
   const wrongCode =
-    'That code isn’t right or has expired. Check it and try again.';
-  const start = async (event: FormEvent) => {
+    'That code isn’t right or has expired. Check it, or wait 15 minutes and send a new one.';
+  /** One request at a time: a double tap would use up codes or the code just sent. */
+  const once = (work: () => Promise<void>) => async (event: FormEvent) => {
     event.preventDefault();
+    if (busy) return;
+    setBusy(true);
     setError('');
+    setCodeError('');
+    try {
+      await work();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const start = once(async () => {
     const result = await apiFetch('/v1/auth/email-recovery/start', {
       method: 'POST',
       body: { email: email.trim() },
     });
     if (result.ok) setStep('code');
     else setError('We couldn’t send that. Please try again in a while.');
-  };
-  const propose = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
+  });
+  const propose = once(async () => {
     const result = await apiFetch('/v1/auth/email-recovery/propose', {
       method: 'POST',
       body: {
@@ -47,11 +59,15 @@ export function RecoverFlow() {
       },
     });
     if (result.ok) setStep('confirm');
-    else setError(wrongCode);
-  };
-  const confirm = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
+    else if (result.code === 'EMAIL_INVALID')
+      setError('Check this address and try again.');
+    else if (result.code === 'TOO_MANY_CODES')
+      setError(
+        'That address can’t get a code right now. Try another, or wait an hour.',
+      );
+    else setCodeError(wrongCode);
+  });
+  const confirm = once(async () => {
     const result = await apiFetch<{ effectiveAt: string }>(
       '/v1/auth/email-recovery/confirm',
       {
@@ -62,8 +78,12 @@ export function RecoverFlow() {
     if (result.ok) {
       setEffectiveAt(result.data.effectiveAt);
       setStep('scheduled');
-    } else setError(wrongCode);
-  };
+    } else if (result.code === 'EMAIL_TAKEN')
+      setError(
+        'That address is already on another TipMe account. Start again with a different one.',
+      );
+    else setError(wrongCode);
+  });
 
   if (step === 'scheduled')
     return (
@@ -90,7 +110,9 @@ export function RecoverFlow() {
           error={error || undefined}
           hint="The one you can’t get into. If it has a recovery email, we’ll send a code there."
         />
-        <Button type="submit">Send recovery code</Button>
+        <Button type="submit" disabled={busy}>
+          Send recovery code
+        </Button>
         <p className="auth-switch">
           No recovery email? Contact{' '}
           <a href="mailto:support@usetipme.xyz">support@usetipme.xyz</a> and
@@ -112,17 +134,11 @@ export function RecoverFlow() {
     );
   if (step === 'code')
     return (
-      <form
-        className="auth-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setStep('new');
-        }}
-        noValidate
-      >
+      <form className="auth-form" onSubmit={(e) => void propose(e)} noValidate>
         <p role="status">
           If that account has a recovery email, we sent a code to it. It expires
-          in 10 minutes.
+          in 10 minutes. If nothing arrives, you may have asked too many times:
+          try again in an hour.
         </p>
         <InputField
           id={`${id}-recovery-code`}
@@ -132,13 +148,8 @@ export function RecoverFlow() {
           maxLength={6}
           value={recoveryCode}
           onChange={(e) => setRecoveryCode(digits(e.target.value))}
+          error={codeError || undefined}
         />
-        <Button type="submit">Continue</Button>
-      </form>
-    );
-  if (step === 'new')
-    return (
-      <form className="auth-form" onSubmit={(e) => void propose(e)} noValidate>
         <InputField
           id={`${id}-new-email`}
           label="New sign-in email"
@@ -148,7 +159,9 @@ export function RecoverFlow() {
           onChange={(e) => setNewEmail(e.target.value)}
           error={error || undefined}
         />
-        <Button type="submit">Send code to new email</Button>
+        <Button type="submit" disabled={busy}>
+          Send code to new email
+        </Button>
       </form>
     );
   return (
@@ -181,7 +194,15 @@ export function RecoverFlow() {
         onChange={(e) => setNewCode(digits(e.target.value))}
         error={error || undefined}
       />
-      <Button type="submit">Move my account</Button>
+      <Button type="submit" disabled={busy}>
+        Move my account
+      </Button>
+      {fromStaff && (
+        <p className="auth-switch">
+          Codes last 10 minutes. If yours has run out, ask support to send a new
+          one.
+        </p>
+      )}
     </form>
   );
 }

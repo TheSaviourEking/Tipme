@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NotificationView } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
+import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 import type { RecoveryEmailStatus } from '@tipme/contracts';
 import Link from 'next/link';
@@ -17,9 +18,13 @@ export function NotificationBell() {
   const pathname = usePathname();
   const [needsRecoveryEmail, setNeedsRecoveryEmail] = useState(false);
   useEffect(() => {
-    void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then((result) =>
-      setNeedsRecoveryEmail(result.ok && !result.data.confirmed),
-    );
+    const refresh = () =>
+      void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then(
+        (result) => setNeedsRecoveryEmail(result.ok && !result.data.confirmed),
+      );
+    refresh();
+    window.addEventListener(RECOVERY_EMAIL_CHANGED, refresh);
+    return () => window.removeEventListener(RECOVERY_EMAIL_CHANGED, refresh);
   }, [pathname]);
   const [unread, setUnread] = useState<NotificationView[]>([]);
   const [all, setAll] = useState<NotificationView[] | null>(null);

@@ -100,3 +100,10 @@ export function ownerAttention({
     });
   return items;
 }
+
+/** Whether this notice is about taking payments, not the page or the account. */
+export const isPaymentAttention = (item: AttentionItem) =>
+  item.id !== 'page_offline' && item.id !== 'add_recovery_email';
+
+/** Fired after the recovery email changes, so the reminders update without navigating. */
+export const RECOVERY_EMAIL_CHANGED = 'tipme:recovery-email-changed';

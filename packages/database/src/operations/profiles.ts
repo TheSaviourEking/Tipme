@@ -24,6 +24,7 @@ import {
   handleAliases,
   handleHolds,
   profileAvatars,
+  emailRecoveries,
   phoneRecoveries,
   profiles,
   sessions,
@@ -700,6 +701,10 @@ export function deleteAccount(
             isNull(phoneRecoveries.completedAt),
           ),
         );
+      // Deleted, not cancelled: each row holds an address, and it must not move back later.
+      await tx
+        .delete(emailRecoveries)
+        .where(eq(emailRecoveries.userId, input.userId));
       await tx
         .update(users)
         .set({

@@ -6,6 +6,7 @@ import {
   confirmRecoveredEmail,
   confirmRecoveryEmail,
   createSession,
+  deleteAccount,
   grantOwner,
   mailSealing,
   needsRecoveryEmail,
@@ -307,7 +308,7 @@ test('recovery to an address already on another account is refused', async (t) =
         secret,
       })
     ).status,
-    'invalid',
+    'taken',
   );
 });
 
@@ -371,4 +372,177 @@ test('the reminder shows until a recovery email is confirmed', async (t) => {
   assert.equal(await needsRecoveryEmail(db, userId), true);
   await addRecovery(userId, 'safe@example.com');
   assert.equal(await needsRecoveryEmail(db, userId), false);
+});
+
+test('fix: a mistyped code while replacing a recovery email leaves the other code usable', async (t) => {
+  const { db, account, addRecovery, codeTo, rows } = await fresh(t);
+  const userId = await account('me@example.com');
+  await addRecovery(userId, 'safe@example.com');
+  await requestRecoveryEmailCode(db, sealing, {
+    userId,
+    recoveryEmail: 'new@example.com',
+    secret,
+  });
+  await requestRecoveryChangeCode(db, sealing, { userId, secret });
+  const signInCode = await codeTo('me@example.com', 'recovery_change_code');
+  const code = await codeTo('new@example.com', 'recovery_email_code');
+  const wrong = code === '000000' ? '000001' : '000000';
+  const attempt = (typed) =>
+    confirmRecoveryEmail(db, {
+      userId,
+      recoveryEmail: 'new@example.com',
+      code: typed,
+      signInCode,
+      secret,
+    });
+  assert.equal(await attempt(wrong), 'invalid');
+  assert.equal(await attempt(code), 'confirmed');
+  const [row] = await rows('SELECT recovery_email FROM users WHERE id = $1', [
+    userId,
+  ]);
+  assert.equal(row.recovery_email, 'new@example.com');
+});
+
+test('fix: a code proving an address that is in use is not spent on it, and says so', async (t) => {
+  const { db, account, addRecovery, codeTo } = await fresh(t);
+  await account('taken@example.com');
+  const userId = await account('me@example.com');
+  await addRecovery(userId, 'safe@example.com');
+  await requestRecoveryEmailCode(db, sealing, {
+    userId,
+    recoveryEmail: 'taken@example.com',
+    secret,
+  });
+  await requestRecoveryChangeCode(db, sealing, { userId, secret });
+  const signInCode = await codeTo('me@example.com', 'recovery_change_code');
+  assert.equal(
+    await confirmRecoveryEmail(db, {
+      userId,
+      recoveryEmail: 'taken@example.com',
+      code: await codeTo('taken@example.com', 'recovery_email_code'),
+      signInCode,
+      secret,
+    }),
+    'taken',
+  );
+  await requestRecoveryEmailCode(db, sealing, {
+    userId,
+    recoveryEmail: 'other@example.com',
+    secret,
+  });
+  assert.equal(
+    await confirmRecoveryEmail(db, {
+      userId,
+      recoveryEmail: 'other@example.com',
+      code: await codeTo('other@example.com', 'recovery_email_code'),
+      signInCode,
+      secret,
+    }),
+    'confirmed',
+  );
+});
+
+test('fix: wrong codes while replacing still count towards the lockout', async (t) => {
+  const { db, account, addRecovery, codeTo } = await fresh(t);
+  const userId = await account('me@example.com');
+  await addRecovery(userId, 'safe@example.com');
+  await requestRecoveryEmailCode(db, sealing, {
+    userId,
+    recoveryEmail: 'new@example.com',
+    secret,
+  });
+  await requestRecoveryChangeCode(db, sealing, { userId, secret });
+  const signInCode = await codeTo('me@example.com', 'recovery_change_code');
+  const code = await codeTo('new@example.com', 'recovery_email_code');
+  const wrong = code === '000000' ? '000001' : '000000';
+  for (let i = 0; i < 5; i += 1)
+    await confirmRecoveryEmail(db, {
+      userId,
+      recoveryEmail: 'new@example.com',
+      code: wrong,
+      signInCode,
+      secret,
+    });
+  assert.equal(
+    await confirmRecoveryEmail(db, {
+      userId,
+      recoveryEmail: 'new@example.com',
+      code,
+      signInCode,
+      secret,
+    }),
+    'invalid',
+  );
+});
+
+test('fix: a recovery code survives a new address that is malformed or can’t take a code', async (t) => {
+  const { db, account, addRecovery, codeTo, rows } = await fresh(t);
+  const userId = await account('me@example.com');
+  await addRecovery(userId, 'safe@example.com');
+  await startEmailRecovery(db, sealing, {
+    signInEmail: 'me@example.com',
+    secret,
+  });
+  const recoveryCode = await codeTo('safe@example.com', 'recovery_code');
+  const propose = (newEmail) =>
+    proposeRecoveredEmail(db, sealing, {
+      signInEmail: 'me@example.com',
+      recoveryCode,
+      newEmail,
+      secret,
+    });
+  assert.equal(await propose('not-an-email'), 'bad_new_email');
+  // Too many wrong guesses at this address: it can't take a code for now.
+  await rows(
+    `INSERT INTO email_code_lockouts (email, failures, locked_until)
+     VALUES ($1, 0, now() + interval '15 minutes')`,
+    ['busy@example.com'],
+  );
+  assert.equal(await propose('busy@example.com'), 'new_email_busy');
+  const proposals = await rows(
+    'SELECT id FROM email_recoveries WHERE user_id = $1',
+    [userId],
+  );
+  assert.equal(proposals.length, 0, 'no orphan proposal');
+  assert.equal(await propose('new@example.com'), 'code_sent');
+});
+
+test('fix: confirming a recovery to an address now in use says so', async (t) => {
+  const { db, account, addRecovery, recover } = await fresh(t);
+  await account('taken@example.com');
+  const userId = await account('me@example.com');
+  await addRecovery(userId, 'safe@example.com');
+  const result = await recover(
+    'me@example.com',
+    'safe@example.com',
+    'taken@example.com',
+  );
+  assert.equal(result.status, 'taken');
+  assert.equal((await pendingEmailRecoveries(db, userId)).length, 0);
+});
+
+test('fix: deleting an account stops its recovery and leaves no address behind', async (t) => {
+  const { db, account, addRecovery, recover, rows, mails } = await fresh(t);
+  const userId = await account('me@example.com');
+  await addRecovery(userId, 'safe@example.com');
+  const started = new Date();
+  await recover('me@example.com', 'safe@example.com', 'new@example.com');
+  await deleteAccount(db, { userId });
+  await completeDueRecoveries(
+    db,
+    sealing,
+    new Date(started.getTime() + 25 * 60 * 60 * 1000),
+  );
+  const [user] = await rows('SELECT email FROM users WHERE id = $1', [userId]);
+  assert.equal(user.email, null);
+  assert.equal(
+    (await rows('SELECT id FROM email_recoveries WHERE user_id = $1', [userId]))
+      .length,
+    0,
+  );
+  assert.equal(
+    (await mails()).filter((m) => m.type === 'recovery_completed_notice')
+      .length,
+    0,
+  );
 });

@@ -87,10 +87,7 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   ).toBeVisible();
   await attention.getByRole('link', { name: 'Make my page live' }).click();
   await page.getByRole('button', { name: 'Make my page live' }).click();
-  await expect(attention).toHaveCount(0);
-  await expect(
-    page.getByRole('link', { name: 'Settings', exact: true }),
-  ).toBeVisible();
+  await expect(attention.getByText('Your page is offline')).toHaveCount(0);
 });
 
 test('a session survives a reload and signing out ends it', async ({

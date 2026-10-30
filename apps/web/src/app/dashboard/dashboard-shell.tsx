@@ -10,7 +10,7 @@ import type {
 import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
-import { ownerAttention } from '@/lib/owner-attention';
+import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
 const links = [
@@ -49,9 +49,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   useEffect(refreshAttention, [refreshAttention, pathname]);
   const [needsRecoveryEmail, setNeedsRecoveryEmail] = useState(false);
   useEffect(() => {
-    void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then((result) =>
-      setNeedsRecoveryEmail(result.ok && !result.data.confirmed),
-    );
+    const refresh = () =>
+      void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then(
+        (result) => setNeedsRecoveryEmail(result.ok && !result.data.confirmed),
+      );
+    refresh();
+    window.addEventListener(RECOVERY_EMAIL_CHANGED, refresh);
+    return () => window.removeEventListener(RECOVERY_EMAIL_CHANGED, refresh);
   }, [pathname]);
   const attention =
     profile && payments !== undefined

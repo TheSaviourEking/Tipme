@@ -151,6 +151,21 @@ test('the account’s reminder state and pending recoveries are readable by its 
   assert.deepEqual(status.data, { confirmed: false, hint: null });
 });
 
+test('fix: a code that won’t be sent is reported, not claimed', async () => {
+  const session = await signIn(unique());
+  const ask = (email) =>
+    post('/v1/me/recovery-email/code', { email }, session.cookie);
+  assert.equal(
+    (await (await ask('not-an-email')).json()).error.code,
+    'EMAIL_INVALID',
+  );
+  const busy = unique();
+  for (let i = 0; i < 3; i += 1) assert.equal((await ask(busy)).status, 202);
+  const fourth = await ask(busy);
+  assert.equal(fourth.status, 429);
+  assert.equal((await fourth.json()).error.code, 'TOO_MANY_CODES');
+});
+
 test('recovery routes are rate limited, and staff recovery names its permission', () => {
   const method = OpsAccountRecoveryController.prototype.startEmailRecovery;
   assert.equal(

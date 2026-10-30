@@ -120,6 +120,8 @@ export async function checkEmailCode(
     code: string;
     secret: string;
     now: Date;
+    /** Leave a right code unspent: for checking it alongside another code. */
+    keep?: boolean;
   },
 ): Promise<'ok' | 'invalid' | 'expired' | 'locked'> {
   if (!/^\d{6}$/.test(input.code)) return 'invalid';
@@ -162,10 +164,11 @@ export async function checkEmailCode(
     return 'locked';
   }
   if (latest.expiresAt <= input.now) return 'expired';
-  await tx
-    .update(emailCodes)
-    .set({ consumedAt: input.now })
-    .where(eq(emailCodes.id, latest.id));
+  if (!input.keep)
+    await tx
+      .update(emailCodes)
+      .set({ consumedAt: input.now })
+      .where(eq(emailCodes.id, latest.id));
   await tx
     .insert(emailCodeLockouts)
     .values({ email: input.email, failures: 0 })

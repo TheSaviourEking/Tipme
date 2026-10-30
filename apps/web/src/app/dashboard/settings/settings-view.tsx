@@ -14,6 +14,7 @@ import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Avatar } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
+import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 import { PaymentAccountCard } from './payment-account-card';
 import { shrinkPhoto } from '@/lib/shrink-photo';
@@ -684,6 +685,7 @@ function PendingRecovery() {
 /** A recovery of this account is waiting out its 24 hours: the owner can stop it. */
 function EmailMoveNotice() {
   const [pending, setPending] = useState<PendingEmailRecovery[]>([]);
+  const [failed, setFailed] = useState(false);
   const [round, setRound] = useState(0);
   useEffect(() => {
     void apiFetch<PendingEmailRecovery[]>('/v1/me/email-recoveries').then(
@@ -695,8 +697,12 @@ function EmailMoveNotice() {
   const first = pending[0];
   if (!first) return null;
   const cancel = async () => {
-    await apiFetch('/v1/me/recovery/cancel', { method: 'POST', body: {} });
-    setRound((n) => n + 1);
+    const result = await apiFetch('/v1/me/recovery/cancel', {
+      method: 'POST',
+      body: {},
+    });
+    if (result.ok) setRound((n) => n + 1);
+    else setFailed(true);
   };
   return (
     <Notice tone="error" title="Your account is being moved">
@@ -708,6 +714,7 @@ function EmailMoveNotice() {
       <Button variant="secondary" onClick={() => void cancel()}>
         Cancel the move
       </Button>
+      {failed && <p role="alert">That didn’t go through. Try again now.</p>}
     </Notice>
   );
 }
@@ -724,7 +731,7 @@ function RemoveRecoveryEmail({ onRemoved }: { onRemoved: () => void }) {
       body: {},
     });
     if (result.ok) setAsked(true);
-    else setNote('We couldn’t send a code. Try again in a while.');
+    else setNote(codeRequestProblem(result.code));
   };
   const remove = async () => {
     const result = await apiFetch('/v1/me/recovery-email/remove', {
@@ -756,6 +763,15 @@ function RemoveRecoveryEmail({ onRemoved }: { onRemoved: () => void }) {
   );
 }
 
+const codeRequestProblem = (code: string | undefined) =>
+  code === 'SAME_AS_SIGN_IN_EMAIL'
+    ? 'Use a different address from your sign-in email.'
+    : code === 'TOO_MANY_CODES'
+      ? 'Too many codes for that address. Try again in an hour.'
+      : code === 'EMAIL_INVALID'
+        ? 'Check the address and try again.'
+        : 'We couldn’t send a code. Try again in a while.';
+
 /** The way back in if the sign-in email is lost. */
 function RecoveryEmailCard() {
   const id = useId();
@@ -766,6 +782,7 @@ function RecoveryEmailCard() {
   const [signInCode, setSignInCode] = useState('');
   const [step, setStep] = useState<'idle' | 'code'>('idle');
   const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then(
       (result) => {
@@ -776,57 +793,72 @@ function RecoveryEmailCard() {
   const replacing = Boolean(status?.confirmed);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (step === 'idle') {
-      const result = await apiFetch('/v1/me/recovery-email/code', {
-        method: 'POST',
-        body: { email: address.trim() },
-      });
-      if (!result.ok) {
+    if (busy || !status) return;
+    setBusy(true);
+    setNote('');
+    try {
+      if (step === 'idle') {
+        const result = await apiFetch('/v1/me/recovery-email/code', {
+          method: 'POST',
+          body: { email: address.trim() },
+        });
+        if (!result.ok) {
+          setNote(codeRequestProblem(result.code));
+          return;
+        }
+        if (replacing) {
+          const owner = await apiFetch('/v1/me/recovery-email/change-code', {
+            method: 'POST',
+            body: {},
+          });
+          if (!owner.ok) {
+            setNote(codeRequestProblem(owner.code));
+            return;
+          }
+        }
+        setStep('code');
         setNote(
-          result.code === 'SAME_AS_SIGN_IN_EMAIL'
-            ? 'Use a different address from your sign-in email.'
-            : 'Check the address and try again.',
+          replacing
+            ? 'We sent a code to each address.'
+            : `We sent a code to ${address.trim()}.`,
         );
         return;
       }
-      if (replacing)
-        await apiFetch('/v1/me/recovery-email/change-code', {
-          method: 'POST',
-          body: {},
-        });
-      setStep('code');
-      setNote(
-        replacing
-          ? 'We sent a code to each address.'
-          : `We sent a code to ${address.trim()}.`,
-      );
-      return;
-    }
-    const result = await apiFetch('/v1/me/recovery-email', {
-      method: 'POST',
-      body: {
-        email: address.trim(),
-        code,
-        ...(replacing ? { signInCode } : {}),
-      },
-    });
-    if (result.ok) {
-      setStep('idle');
-      setAddress('');
-      setCode('');
-      setSignInCode('');
-      setNote('Your recovery email is confirmed.');
-      setRound((n) => n + 1);
-    } else {
-      if (result.code === 'EMAIL_TAKEN') {
+      const result = await apiFetch('/v1/me/recovery-email', {
+        method: 'POST',
+        body: {
+          email: address.trim(),
+          code,
+          ...(replacing ? { signInCode } : {}),
+        },
+      });
+      if (result.ok) {
+        setStep('idle');
+        setAddress('');
+        setCode('');
+        setSignInCode('');
+        setNote('Your recovery email is confirmed.');
+        setRound((n) => n + 1);
+        window.dispatchEvent(new Event(RECOVERY_EMAIL_CHANGED));
+      } else if (result.code === 'EMAIL_TAKEN') {
         setStep('idle');
         setCode('');
+        setSignInCode('');
+        setNote(
+          'That address is used by another account. Try a different one.',
+        );
+      } else if (result.code === 'SAME_AS_SIGN_IN_EMAIL') {
+        setStep('idle');
+        setNote('Use a different address from your sign-in email.');
+      } else {
+        setNote(
+          replacing
+            ? 'One of those codes isn’t right or has expired. After 5 wrong tries, wait 15 minutes.'
+            : 'That code isn’t right or has expired. After 5 wrong tries, wait 15 minutes.',
+        );
       }
-      setNote(
-        result.code === 'EMAIL_TAKEN'
-          ? 'That address is used by another account. Try a different one.'
-          : 'That code isn’t right or has expired.',
-      );
+    } finally {
+      setBusy(false);
     }
   };
   return (
@@ -872,7 +904,7 @@ function RecoveryEmailCard() {
             onChange={(e) => setSignInCode(e.target.value.replace(/\D/g, ''))}
           />
         )}
-        <Button type="submit" variant="secondary">
+        <Button type="submit" variant="secondary" disabled={busy || !status}>
           {step === 'idle'
             ? 'Send code to recovery email'
             : 'Confirm recovery email'}
@@ -898,6 +930,7 @@ function RecoveryEmailCard() {
           onRemoved={() => {
             setNote('Your recovery email was removed.');
             setRound((n) => n + 1);
+            window.dispatchEvent(new Event(RECOVERY_EMAIL_CHANGED));
           }}
         />
       )}
