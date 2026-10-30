@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Notice, Skeleton } from '@tipme/ui';
+import { PROVIDER_TEST_TOKEN_KEY } from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
 /** Opened from a provider test email. The token is in the fragment, so it never reaches logs. */
@@ -9,8 +10,18 @@ export default function ConfirmProviderTestPage() {
   const [state, setState] = useState<'working' | 'confirmed' | 'invalid'>(
     'working',
   );
+  const started = useRef(false);
   useEffect(() => {
-    const token = new URLSearchParams(location.hash.slice(1)).get('t') ?? '';
+    if (started.current) return;
+    started.current = true;
+    let hash = location.hash;
+    try {
+      hash ||= sessionStorage.getItem(PROVIDER_TEST_TOKEN_KEY) ?? '';
+      sessionStorage.removeItem(PROVIDER_TEST_TOKEN_KEY);
+    } catch {
+      // Storage blocked: only a token in the address can be used.
+    }
+    const token = new URLSearchParams(hash.slice(1)).get('t') ?? '';
     history.replaceState(null, '', location.pathname);
     void apiFetch<{ outcome: 'confirmed' | 'invalid' }>(
       '/v1/ops/providers/tests/confirm',

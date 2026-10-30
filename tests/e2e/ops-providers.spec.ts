@@ -1,6 +1,28 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, fitsViewport } from './helpers';
-import { enrolOwner } from './ops-helpers';
+import { enrolOwner, withDatabase } from './ops-helpers';
+
+// Only the pretend provider is configured in e2e, and it is the default. Choosing a provider
+// without keys here means no card is active, so the pretend one can be switched to.
+test.describe.configure({ mode: 'serial' });
+test.beforeAll(async () => {
+  await withDatabase(async (db) => {
+    const run = db as { execute(sql: string): Promise<unknown> };
+    await run.execute('DELETE FROM provider_tests');
+    await run.execute(
+      `INSERT INTO provider_settings (kind, active_provider, changed_at, reason)
+       VALUES ('mail', 'zeptomail', now(), 'e2e setup')
+       ON CONFLICT (kind) DO UPDATE SET active_provider = 'zeptomail'`,
+    );
+  });
+});
+test.afterAll(async () => {
+  await withDatabase(async (db) => {
+    await (db as { execute(sql: string): Promise<unknown> }).execute(
+      "DELETE FROM provider_settings WHERE kind = 'mail'",
+    );
+  });
+});
 
 /** The newest test email's link, from the pretend inbox (reloading until it arrives). */
 async function testEmailLink(page: import('@playwright/test').Page) {
@@ -28,15 +50,19 @@ test('staff send a test, confirm it from the inbox, and make the provider active
   expect(await fitsViewport(page)).toBe(true);
 
   const card = page.getByTestId('provider-mock');
-  // Nothing confirmed yet (each run uses a fresh test, so look for the explanation).
-  await card.getByLabel('Send the test to').fill('staff@example.com');
+  // Make active is unavailable until a test is confirmed.
+  await expect(card.getByRole('button', { name: 'Make active' })).toHaveCount(
+    0,
+  );
   await card.getByRole('button', { name: 'Send test' }).click();
+  await card.getByLabel('Send the test to').fill('staff@example.com');
   await card
     .getByLabel('Why are you testing this provider?')
     .fill('Checking mail before launch');
   await card.getByRole('button', { name: 'Send the test email' }).click();
   await expect(card.getByText(/Test sent to s•••@example\.com/)).toBeVisible();
 
+  // A signed-out staff member opening the link comes back to it after signing in.
   const link = await testEmailLink(page);
   await page.goto(link);
   await expect(page.getByText(/Test confirmed/)).toBeVisible();
@@ -58,6 +84,7 @@ test('an override can be set and removed with a reason', async ({
 }, testInfo) => {
   await enrolOwner(page, testInfo);
   await page.goto('/ops/providers');
+  await page.getByLabel('Provider', { exact: true }).selectOption('mock');
   await page.getByLabel('Account (handle or user id)').fill('tobi');
   await page
     .getByLabel('Why does this account need its own provider?')

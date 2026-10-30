@@ -6,7 +6,12 @@ import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Skeleton } from '@tipme/ui';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
 import { PageUnavailable } from '@/components/page-unavailable';
-import { OpsAccessContext, type OpsAccess } from '@/lib/ops-client';
+import {
+  OpsAccessContext,
+  PROVIDER_TEST_CONFIRM_PATH,
+  PROVIDER_TEST_TOKEN_KEY,
+  type OpsAccess,
+} from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
 const links = [
@@ -50,9 +55,18 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
 
   const apply = useCallback(
     (next: State | 'signed_out') => {
-      if (next === 'signed_out')
+      if (next === 'signed_out') {
+        // A fragment doesn't survive sign-in, and a token must never go in `next` (it reaches
+        // logs), so a provider test link keeps its token in this tab until it comes back.
+        if (pathname === PROVIDER_TEST_CONFIRM_PATH && location.hash) {
+          try {
+            sessionStorage.setItem(PROVIDER_TEST_TOKEN_KEY, location.hash);
+          } catch {
+            // Storage blocked: the link can simply be opened again once signed in.
+          }
+        }
         router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
-      else setState(next);
+      } else setState(next);
     },
     [router, pathname],
   );
