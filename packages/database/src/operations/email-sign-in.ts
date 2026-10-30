@@ -19,6 +19,7 @@ import {
   sessions,
   users,
 } from '../schema.js';
+import { recordAudit } from './audit.js';
 import { maskEmail, normaliseEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
@@ -418,6 +419,43 @@ export function changeEmail(
         .from(profiles)
         .where(eq(profiles.userId, input.userId));
       return { status: 'ok', email, handle: page?.handle ?? null };
+    }),
+  );
+}
+
+/** For `pnpm ops:set-email`: gives an existing account a proven address, on someone's say-so. */
+export function setAccountEmail(
+  db: Database,
+  input: { handle: string; email: string; reason: string; now?: Date },
+): Promise<'set' | 'taken' | 'not_found' | 'invalid'> {
+  const email = normaliseEmail(input.email);
+  if (!email) return Promise.resolve('invalid');
+  const now = input.now ?? new Date();
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const [page] = await tx
+        .select({ userId: profiles.userId })
+        .from(profiles)
+        .where(eq(profiles.handleLower, input.handle.toLowerCase()));
+      if (!page?.userId) return 'not_found';
+      const [owner] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(verifiedOwner(email));
+      if (owner && owner.id !== page.userId) return 'taken';
+      await tx
+        .update(users)
+        .set({ email, emailVerifiedAt: now })
+        .where(eq(users.id, page.userId));
+      await recordAudit(tx, {
+        staffUserId: null,
+        action: 'account.email_set_by_script',
+        subjectType: 'user',
+        subjectId: page.userId,
+        reason: input.reason,
+        now,
+      });
+      return 'set';
     }),
   );
 }
