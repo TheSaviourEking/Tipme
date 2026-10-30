@@ -12,6 +12,7 @@ import { ApiExceptionFilter } from './http/api-exception.filter.js';
 import { requestContext } from './http/request-context.middleware.js';
 import { previewGate } from './http/preview-gate.middleware.js';
 import { SERVICE_NAME, type ApiConfig } from './config.js';
+import { mailWebhookBody } from './mail/raw-body.middleware.js';
 
 const CROSS_ORIGIN_PATHS = [
   '/v1/tip-quotes',
@@ -89,6 +90,7 @@ export async function createApp(
       credentials: credentialed,
     });
   });
+  app.use(mailWebhookBody);
   app.useBodyParser('json', { limit: '16kb' });
   app.useGlobalFilters(
     new ApiExceptionFilter(

@@ -6,7 +6,7 @@ import { runMailProviderConformance } from '../dist/conformance.js';
 
 const REGION = 'eu-north-1';
 const TOPIC = 'arn:aws:sns:eu-north-1:185678361212:tipme-staging-mail-events';
-const CERT_URL = `https://sns.${REGION}.amazonaws.com/SimpleNotificationService-test.pem`;
+const CERT_URL = `https://sns.${REGION}.amazonaws.com/SimpleNotificationService-0123abcdef.pem`;
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
 });
@@ -275,4 +275,52 @@ test('status reports sandbox from GetAccount', async () => {
     sandbox: true,
     detail: '200 emails a day',
   });
+});
+
+test('only AWS’s certificate path is ever fetched: no queries, other names or other hosts', async () => {
+  for (const url of [
+    `https://sns.${REGION}.amazonaws.com/SimpleNotificationService-0123abcdef.pem?n=1.pem`,
+    `https://sns.${REGION}.amazonaws.com/other.pem`,
+    `https://sns.${REGION}.amazonaws.com:8443/SimpleNotificationService-0123abcdef.pem`,
+    `https://user@sns.${REGION}.amazonaws.com/SimpleNotificationService-0123abcdef.pem`,
+    `http://sns.${REGION}.amazonaws.com/SimpleNotificationService-0123abcdef.pem`,
+  ]) {
+    let fetched = 0;
+    const provider = createSesProvider({
+      region: REGION,
+      configurationSet: 'a',
+      configurationSetUntracked: 'b',
+      topicArn: TOPIC,
+      client: { send: async () => ({}) },
+      fetchCert: async () => {
+        fetched += 1;
+        return PEM;
+      },
+    });
+    const signed = snsEnvelope(sesEvent('Bounce', 'r'), new Date(), {
+      SigningCertURL: url,
+    });
+    await provider.prepareWebhook(signed.body);
+    assert.equal(fetched, 0, url);
+    assert.deepEqual(
+      provider.verifyWebhook(signed.body, signed.headers, new Date()),
+      { ok: false, reason: 'signature' },
+      url,
+    );
+  }
+});
+
+test('a certificate that cannot be fetched is an error the caller can retry', async () => {
+  const provider = createSesProvider({
+    region: REGION,
+    configurationSet: 'a',
+    configurationSetUntracked: 'b',
+    topicArn: TOPIC,
+    client: { send: async () => ({}) },
+    fetchCert: async () => {
+      throw new Error('network');
+    },
+  });
+  const signed = snsEnvelope(sesEvent('Bounce', 'r'), new Date());
+  await assert.rejects(provider.prepareWebhook(signed.body));
 });

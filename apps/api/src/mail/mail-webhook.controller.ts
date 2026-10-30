@@ -15,6 +15,7 @@ import { applyMailProviderEvent, type MailSealing } from '@tipme/database';
 import { MAIL_PROVIDER_NAMES, type MailProviderName } from '@tipme/mail';
 import type { Logger } from '@tipme/observability';
 import type { Request } from 'express';
+import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { LOGGER } from '../tokens.js';
 import {
@@ -55,7 +56,13 @@ export class MailWebhookController {
     try {
       await provider.prepareWebhook?.(rawBody);
     } catch {
-      // A certificate that can't be fetched fails verification below.
+      // Only a valid certificate URL gets this far. Answer so the provider retries: SNS drops
+      // events on a 4xx, and a network blip must not lose a bounce.
+      this.logger.warn({
+        event: 'mail_webhook.prepare_failed',
+        provider: provider.name,
+      });
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
     }
     const result = provider.verifyWebhook(rawBody, request.headers, new Date());
     if (!result.ok) {
