@@ -167,14 +167,22 @@ Route `/ops/providers`, added to the ops navigation. A new permission, `provider
 
 Route `/ops/email`. It needs `issues.view` to view and `private.view` to see a full address (revealing is audited, like other private-data reveals).
 
-- **Overview** for 24 hours, 7 days or 30 days, by type and by provider:
-  - queued, sent, delivered, bounced, complained, opened at least once and clicked;
-  - queue age;
-  - failure reasons.
+The owner wants to audit every email TipMe has sent without going to the provider: "all the mails that went out that day, that week, that month", with the trend, e.g. "about 85,000 this month, 82% more than last month" **(owner)**.
+
+- **Periods.** Today, yesterday, this week, last week, this month, last month and a custom range, as calendar periods in Lagos time (like the weekly report).
+- **Headline numbers** for the period, each compared with the period before as a count and a percentage change ("85,214 sent this month · +82% vs October"):
+  - sent, delivered, bounced, complained, opened at least once, clicked and failed;
+  - delivery, open and click rates;
+  - queue age.
     Open rates carry a note that privacy proxies make them approximate.
+- **Charts:** emails per day (or per hour for "today") over the period, broken down by status, with the previous period shown faintly for comparison.
+- **Breakdowns** by type, category and provider, each with its own count and change.
+- **Every email in the period:** a paginated list of all messages that went out in the chosen period, with time, type, masked recipient, account, provider, status and last event. It can be filtered by type, status, provider or account, and opens the message timeline.
+- **Kept long enough to audit:** message metadata (type, category, account, masked recipient, provider, status, times) and its events are kept **2 years**. Only the sealed address and template data are wiped after 7 days (§4.2) **(design call)**.
+- **Fast at volume:** at tens of thousands of emails a month, monthly views read from a `mail_daily_stats` rollup (date in Lagos, type, category, provider, event kind, count). It's updated in the same transaction as each event and can be rebuilt from `mail_message_events`. The message list uses indexes on `(created_at)`, `(type, created_at)` and `(user_id, created_at)` **(design call)**.
 - **Message search** by type, status, provider, date or account (handle or user id). Each message shows its timeline from `mail_message_events`: queued, sent through X, delivered, opened, which link was clicked, bounced. It also shows the masked recipient and the provider message id. **Never the body, a code or a link with its token.**
 - **Account view:** every email sent to an account, newest first, linked from the ops search and the issue pages. "Did they get the email?" is answered here.
-- **Export** of the aggregate numbers (CSV) for reporting. No addresses in the export.
+- **Export** (CSV) of the aggregate numbers and of the period's message list (masked recipients only) for reporting and audit. Exports are audited.
 - **Audit:** console views of private data are audited, and switches, overrides and suppression removals already are.
 
 ## 6. The email catalogue
