@@ -56,8 +56,35 @@ function record() {
   console.log(`Recorded full staging pass for tree ${tree} on ${sha}.`);
 }
 
+/** The commit (full sha) carrying a passing status for `sha`'s tree, if any. */
+export function findStagingPass({ repo, sha, stagingVersion, api = gh }) {
+  const get = (path) => JSON.parse(api(`repos/${repo}/${path}`));
+  const commit = get(`commits/${sha}`);
+  const tree = commit.commit.tree.sha;
+  const parents = commit.parents.map((p) => p.sha);
+  const pullHeads = get(`commits/${commit.sha}/pulls`).map((p) => p.head.sha);
+  for (const candidate of checkCandidates({
+    sha: commit.sha,
+    parents,
+    pullHeads,
+    stagingVersion,
+  })) {
+    // The staging version is a short sha; resolve it rather than trust the statuses endpoint to.
+    const full = SHA.test(candidate)
+      ? candidate
+      : get(`commits/${candidate}`).sha;
+    if (stagingPassed(tree, get(`commits/${full}/statuses`)))
+      return { tree, head: full };
+  }
+  return { tree, head: undefined };
+}
+
 function check(args) {
   const repo = process.env.GITHUB_REPOSITORY;
+  if (!repo) {
+    console.error('GITHUB_REPOSITORY is not set (expected owner/name).');
+    process.exit(2);
+  }
   const sha = args[0];
   const flag = args.indexOf('--staging-version');
   const stagingVersion = flag === -1 ? undefined : args[flag + 1];
@@ -70,23 +97,10 @@ function check(args) {
     );
     process.exit(2);
   }
-  const commit = JSON.parse(gh(`repos/${repo}/commits/${sha}`));
-  const tree = commit.commit.tree.sha;
-  const parents = commit.parents.map((p) => p.sha);
-  const pullHeads = JSON.parse(gh(`repos/${repo}/commits/${sha}/pulls`)).map(
-    (p) => p.head.sha,
-  );
-  for (const head of checkCandidates({
-    sha,
-    parents,
-    pullHeads,
-    stagingVersion,
-  })) {
-    const statuses = JSON.parse(gh(`repos/${repo}/commits/${head}/statuses`));
-    if (stagingPassed(tree, statuses)) {
-      console.log(`Tree ${tree} passed the full staging check on ${head}.`);
-      return;
-    }
+  const { tree, head } = findStagingPass({ repo, sha, stagingVersion });
+  if (head) {
+    console.log(`Tree ${tree} passed the full staging check on ${head}.`);
+    return;
   }
   console.error(`Tree ${tree} has no full staging pass.`);
   process.exit(1);
