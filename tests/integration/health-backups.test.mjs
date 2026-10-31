@@ -58,6 +58,7 @@ test('backup health is public (for alerts), shows only times and counts, and wor
     false,
     'no file names',
   );
+  assert.equal(body.pointInTime, true, 'expected unless switched off');
   assert.deepEqual(body.retention, {
     lastRunAgeMinutes: body.retention.lastRunAgeMinutes,
     mode: 'dry-run',

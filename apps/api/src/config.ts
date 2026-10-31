@@ -1,4 +1,5 @@
 import { parseConfig } from '@tipme/observability';
+import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { z } from 'zod';
 
@@ -44,6 +45,12 @@ export const apiConfigSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug'])
       .default('info'),
     DIAGNOSTICS_ENABLED: flag,
+    // Whether this copy keeps base backups and archived WAL. Staging switched it off (31 Oct
+    // 2026): its nightly dump is the backup, and /health/backups says so to the watcher.
+    POINT_IN_TIME_RECOVERY: z
+      .enum(['on', 'off'])
+      .default('on')
+      .transform((value) => value === 'on'),
     // Namespaces BullMQ and idempotency keys; lets tests isolate their queues.
     QUEUE_PREFIX: z
       .string()
@@ -246,6 +253,18 @@ export const apiConfigSchema = z
           path: [name],
           message: 'required with the other R2 settings',
         });
+    if (
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
+    ) {
+      const problem = productionDatabaseUrlProblem(config.DATABASE_URL);
+      if (problem)
+        context.addIssue({
+          code: 'custom',
+          path: ['DATABASE_URL'],
+          message: problem,
+        });
+    }
     if (
       config.PAYMENT_PROVIDER === 'mock' &&
       !config.MOCK_PROVIDER_WEBHOOK_SECRET

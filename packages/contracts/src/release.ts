@@ -15,6 +15,8 @@ export interface ReleaseInfo {
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */
 export interface BackupHealth {
+  /** Base backups and archived WAL are expected; false when switched off on purpose. */
+  pointInTime: boolean;
   logical: { ageMinutes: number } | null;
   base: { ageMinutes: number } | null;
   wal: {
