@@ -80,6 +80,8 @@ services:
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       RATE_LIMIT_AUTH_PER_HOUR: ${RATE_LIMIT_AUTH_PER_HOUR:-10}
       RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: ${RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR:-3}
+      # The release check's staff address: lifted code limit on this test copy (as .example).
+      MAIL_PRETEND_DOMAINS: ${MAIL_PRETEND_DOMAINS:-release-check.usetipme.xyz}
       AUTH_CODE_SECRET: ${AUTH_CODE_SECRET:?}
       MAIL_DEFAULT_PROVIDER: ${MAIL_DEFAULT_PROVIDER:-mock}
       ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
