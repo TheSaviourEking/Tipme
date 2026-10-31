@@ -1,0 +1,171 @@
+# Builds the API/worker image once, ships it to the production server over SSH, deploys it
+# (blue/green, see deploy/scripts/deploy-production.sh) and runs the read-only release check
+# against production. The server never builds. Hand-run only (Actions → Deploy production →
+# Run workflow), and only from main: any other ref stops at once.
+#
+# Two guards before anything is built:
+#   - `gate` refuses a commit whose file tree has no full staging pass (scripts/staging-pass.mjs).
+#     A non-empty `override_reason` lets it continue; the reason and the fact that the gate was
+#     overridden go to the job summary.
+#   - `deploy` runs in the `production` environment, so it waits for the environment's required
+#     reviewer (the owner) before it starts.
+#
+# The same run ships the edge Caddy (deploy/edge) first, and stops if its Caddyfile is invalid.
+# The release check is never `--full` here: production takes real payments.
+# Every run that deploys, fails its checks or is stopped posts to Slack when SLACK_WEBHOOK_URL is
+# set.
+#
+# Repository settings → Environments → "production" (required reviewer: the owner; deployment
+# branch: main):
+#   secrets:   PRODUCTION_SSH_KEY (private key of the server's deploy user),
+#              PRODUCTION_SSH_KNOWN_HOSTS (`ssh-keyscan <server>` output, checked by hand),
+#              SLACK_WEBHOOK_URL (optional; posts deploy status to Slack)
+#   variables: PRODUCTION_SSH (deploy@<server>), PRODUCTION_WEB_URL, PRODUCTION_API_URL
+# Also read, as a repository/staging variable already used by Deploy staging: STAGING_API_URL
+# (the gate asks it which version staging runs).
+name: Deploy production
+on:
+  workflow_dispatch:
+    inputs:
+      override_reason:
+        description: >-
+          Leave empty. Only to deploy a commit with no full staging pass: say why (it is recorded
+          in the run summary).
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # statuses: reads staging's pass; pull-requests: lets the check list the commit's pull
+    # requests (their heads can carry the pass).
+    permissions:
+      contents: read
+      statuses: read
+      pull-requests: read
+    steps:
+      - name: Only from main
+        if: github.ref != 'refs/heads/main'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          echo "::error::Production deploys run from main only (this run is on $REF)."
+          exit 1
+
+      - uses: actions/checkout@v5
+
+      - name: Staging pass for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
+        run: |
+          staging=$(curl -fsS --max-time 10 "$STAGING_API_URL/health/release" | jq -r '.data.version // empty' || true)
+          args=("$GITHUB_SHA")
+          if [[ "$staging" =~ ^[0-9a-f]{7,40}$ ]]; then args+=(--staging-version "$staging");
+          else echo "::warning::Could not read staging's version; checking the commit and its parents only."; fi
+          if node scripts/staging-pass.mjs check "${args[@]}"; then
+            echo "Staging's full check passed for this commit's file tree." >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -n "${OVERRIDE_REASON//[[:space:]]/}" ]]; then
+            echo "::warning::No full staging pass for this commit; continuing on an override."
+            {
+              echo "### Staging gate overridden"
+              echo
+              echo "No full staging pass was found for this commit's file tree. Deploying anyway, by ${GITHUB_ACTOR}."
+              echo
+              echo "Reason:"
+              echo
+              printf '> %s\n' "$OVERRIDE_REASON"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::No full staging pass for this commit's file tree. Deploy it to staging first, or run again with override_reason."
+            exit 1
+          fi
+
+  deploy:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Full history, so the Slack summary can list everything since the deployed version.
+          fetch-depth: 0
+
+      - name: Version
+        run: echo "VERSION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
+
+      # What production runs now (public, no secrets), read before it changes.
+      - name: Deployed version
+        run: |
+          previous=$(curl -fsS --max-time 10 "${{ vars.PRODUCTION_API_URL }}/health/release" | jq -r '.data.version // empty' || true)
+          if [[ "$previous" =~ ^[0-9a-f]{7,40}$ ]] && git cat-file -e "$previous^{commit}" 2>/dev/null; then
+            echo "PREVIOUS_VERSION=$previous" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build the image (once, here)
+        run: docker build -f deploy/Dockerfile -t "tipme-app:$VERSION" .
+
+      - name: SSH to the server
+        env:
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/production
+          chmod 600 ~/.ssh/production
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Ship and deploy
+        env:
+          PRODUCTION_SSH: ${{ vars.PRODUCTION_SSH }}
+          PRODUCTION_SSH_KEY_FILE: /home/runner/.ssh/production
+        run: scripts/ship-production.sh "$VERSION"
+
+      # The release check runs from here, against the deployed copy. Read-only: it refuses
+      # --full on a copy that takes real payments, and nothing here asks for it.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Release check (read-only)
+        env:
+          WEB: ${{ vars.PRODUCTION_WEB_URL }}
+          API: ${{ vars.PRODUCTION_API_URL }}
+        run: pnpm release:check --web "$WEB" --api "$API" --expect-version "$VERSION" --expect-provider bachs-live
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-check
+          path: test-results/
+          retention-days: 7
+
+      - name: Forget the key
+        if: always()
+        run: rm -f ~/.ssh/production
+
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          node scripts/notify-slack.mjs \
+            --status "${{ job.status }}" \
+            --environment "production" \
+            --version "$VERSION" \
+            ${PREVIOUS_VERSION:+--commit-range "$PREVIOUS_VERSION..HEAD"} \
+            --web-url "${{ vars.PRODUCTION_WEB_URL }}" \
+            --api-url "${{ vars.PRODUCTION_API_URL }}" \
+            --repo "${{ github.repository }}" \
+            --actor "${{ github.actor }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

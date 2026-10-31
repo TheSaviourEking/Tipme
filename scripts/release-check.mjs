@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The release check (PR-010): `pnpm release:check --web <url> --api <url> [--full]`.
 //
-// Read-only by default: safe on any copy, it creates nothing. `--full` plays the whole story
+// Read-only by default: safe on any copy (including one taking real payments), it creates
+// nothing. `--full` plays the whole story
 // (tip → dashboard → withdrawal → admin issue) as a tagged rehearsal and cleans up after itself,
 // and only on a copy that declares RELEASE_KIND=test. Secrets come from the environment, never
 // the command line: RELEASE_PREVIEW_PASSWORD, RELEASE_CHECK_TOKEN, RELEASE_OPS_EMAIL,
@@ -18,6 +19,8 @@ const { values } = parseArgs({
     full: { type: 'boolean', default: false },
     handle: { type: 'string' },
     'expect-version': { type: 'string' },
+    // Fails the check when the copy reports another payment provider (production: bachs-live).
+    'expect-provider': { type: 'string' },
     // Local copies only: accept a self-signed certificate.
     insecure: { type: 'boolean', default: false },
   },
@@ -57,8 +60,9 @@ try {
 console.log(
   `Release check against ${web} (API ${api}): version ${info.version}, kind ${info.kind}, mode ${info.deploymentMode}, payments ${info.paymentProvider ?? 'mock'}.`,
 );
-if (info.paymentsLive)
-  stop('this copy reports LIVE payments; stopping before anything else.', 1);
+// A copy that takes real payments runs the read-only check only: --full would create tips.
+if (info.paymentsLive && values.full)
+  stop('--full refused: this copy takes real payments.', 1);
 if (values.full && info.kind !== 'test')
   stop(
     `--full refused: this copy says RELEASE_KIND=${info.kind}. Run the read-only check instead.`,
@@ -72,6 +76,11 @@ if (values.full)
     if (!process.env[name]) stop(`--full needs ${name} in the environment.`);
 // Copies from before the field existed only had pretend payments.
 const paymentProvider = info.paymentProvider ?? 'mock';
+if (values['expect-provider'] && paymentProvider !== values['expect-provider'])
+  stop(
+    `this copy takes payments through ${paymentProvider}, expected ${values['expect-provider']}.`,
+    1,
+  );
 const bachsHandle = process.env.RELEASE_BACHS_HANDLE || 'release_bachs';
 if (values.full && paymentProvider === 'bachs-sandbox') {
   // Checked before any browser starts, so a missing setup fails in seconds and says what to do.
@@ -96,6 +105,24 @@ if (values.full && paymentProvider === 'bachs-sandbox') {
   if (!page.ok) stop(`could not read @${bachsHandle} (HTTP ${page.status})`);
   if ((await page.json()).data?.acceptingTips === false)
     stop(`@${bachsHandle} can’t take tips yet: ${setup}`);
+}
+// The Bachs webhook must be there and must authenticate before it does anything: an unsigned
+// call answers 401. (The mock provider's endpoint differs, so it is not asked.) Read-only: the
+// call carries no signature and creates nothing.
+if (!values.full && paymentProvider !== 'mock') {
+  const webhook = await fetch(`${api}/v1/webhooks/bachs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+    signal: AbortSignal.timeout(15_000),
+  }).catch((error) =>
+    stop(`could not reach the Bachs webhook (${error.message})`, 1),
+  );
+  if (webhook.status !== 401)
+    stop(
+      `the Bachs webhook answered ${webhook.status} to an unsigned call, expected 401.`,
+      1,
+    );
 }
 if (info.deploymentMode === 'preview' && !process.env.RELEASE_PREVIEW_PASSWORD)
   stop('this is a preview copy: set RELEASE_PREVIEW_PASSWORD.');
