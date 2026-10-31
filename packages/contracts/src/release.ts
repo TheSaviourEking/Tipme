@@ -23,4 +23,23 @@ export interface BackupHealth {
     lastFailedAgeMinutes: number | null;
     failedCount: number;
   };
+  /** The newest backup retention run (staging's local Postgres); null before the first. */
+  retention: {
+    lastRunAgeMinutes: number;
+    mode: 'dry-run' | 'apply';
+    outcome: 'planned' | 'applied' | 'blocked' | 'failed';
+    /** Why pruning is blocked, as codes: no file or segment names on this public route. */
+    blocked: RetentionBlock[];
+    archiveBytes: number;
+    candidateBytes: number;
+    diskFreePercent: number;
+  } | null;
 }
+
+export type RetentionBlock =
+  | 'backup-running'
+  | 'no-verified-backup'
+  | 'no-drill'
+  | 'wal-gap'
+  | 'archive-missing'
+  | 'other';

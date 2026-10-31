@@ -15,15 +15,20 @@ sync "$dir/$name.tmp"
 mv "$dir/$name.tmp" "$dir/$name"
 sync "$dir"
 
-# Retention follows the base backups, not the calendar: every base backup leaves a
-# <segment>.<offset>.backup file here. WAL older than the start of the Nth newest one (N = base
-# backups kept, plus one spare) is no longer needed by any restore. With fewer than N, nothing is
-# pruned. Timeline .history files are always kept. Positions compare without the timeline.
-keep=${WAL_KEEP_BASE_BACKUPS:-8}
-cutoff=$(ls "$dir" | grep -E '^[0-9A-F]{24}\.[0-9A-F]{8}\.backup$' |
-  awk '{ print substr($0, 9, 16) }' | sort -r | sed -n "${keep}p")
-if [ -n "$cutoff" ]; then
-  ls "$dir" | grep -E '^[0-9A-F]{24}(\.partial|\.[0-9A-F]{8}\.backup)?$' |
-    awk -v cutoff="$cutoff" 'substr($0, 9, 16) < cutoff' |
-    while read -r old; do rm -f "$dir/$old"; done
+# Retention is the coordinator's job (backup-retention.js, the `retention` service), which only
+# prunes WAL that no verified backup needs. Nothing is deleted here unless WAL_LEGACY_PRUNE=on:
+# the old marker-count rule, kept only so the archive can't fill the disk while the coordinator
+# runs in dry-run mode. Turn it off when the coordinator is switched to apply.
+if [ "${WAL_LEGACY_PRUNE:-off}" = on ]; then
+  # Old rule: WAL older than the start of the Nth newest .backup marker (N = base backups kept,
+  # plus one spare). Timeline .history files are always kept. Positions compare without the
+  # timeline.
+  keep=${WAL_KEEP_BASE_BACKUPS:-8}
+  cutoff=$(ls "$dir" | grep -E '^[0-9A-F]{24}\.[0-9A-F]{8}\.backup$' |
+    awk '{ print substr($0, 9, 16) }' | sort -r | sed -n "${keep}p")
+  if [ -n "$cutoff" ]; then
+    ls "$dir" | grep -E '^[0-9A-F]{24}(\.partial|\.[0-9A-F]{8}\.backup)?$' |
+      awk -v cutoff="$cutoff" 'substr($0, 9, 16) < cutoff' |
+      while read -r old; do rm -f "$dir/$old"; done
+  fi
 fi

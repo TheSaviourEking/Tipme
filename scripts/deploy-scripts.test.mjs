@@ -38,6 +38,11 @@ function stage({ password = 'hexpassword0123456789abcdef' } = {}) {
 if [[ "$1 $2" == "image inspect" ]]; then grep -qx "$3" "$FAKE_IMAGES" 2>/dev/null; exit $?; fi
 if [[ "$1 $2" == "image rm" ]]; then grep -vx "$3" "$FAKE_IMAGES" > "$FAKE_IMAGES.tmp"; mv "$FAKE_IMAGES.tmp" "$FAKE_IMAGES"; exit 0; fi
 if [[ " $* " == *" up "* && " $* " == *" api "* ]]; then echo "$TIPME_VERSION" > "$FAKE_RUNNING"; fi
+# config --services: what the version's compose file defines (versions marked new add retention).
+if [[ " $* " == *" config --services "* ]]; then
+  printf 'api\nworker\ncaddy\nbackup\npostgres\n'
+  if [[ " $FAKE_NEW_VERSIONS " == *" $TIPME_VERSION "* ]]; then echo retention; fi
+fi
 exit 0`,
   );
   fake('git', 'echo "git $*" >> "$FAKE_LOG"; exit 1');
@@ -217,6 +222,31 @@ test('only the last five versions are kept (images and files), so rollback targe
   );
   assert.equal(exists(`releases/${versions[0]}`), false);
   assert.equal(exists(`releases/${versions[2]}`), true);
+});
+
+test('a version with the retention service starts it; rolling back to one without it still works', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  ship('bbbbbbb2');
+  const extra = { FAKE_NEW_VERSIONS: 'bbbbbbb2' };
+  assert.equal(run('deploy.sh', ['aaaaaaa1'], extra).status, 0);
+  assert.equal(run('deploy.sh', ['bbbbbbb2'], extra).status, 0);
+  const ups = read('calls.log')
+    .split('\n')
+    .filter((l) => / up -d --remove-orphans /.test(l));
+  assert.match(
+    ups.at(-1),
+    /api worker caddy backup retention .*version=bbbbbbb2/,
+  );
+  assert.doesNotMatch(ups[0], /retention/);
+  const back = run('rollback.sh', [], extra);
+  assert.equal(back.status, 0, back.stderr);
+  const last = read('calls.log')
+    .split('\n')
+    .filter((l) => / up -d --remove-orphans /.test(l))
+    .at(-1);
+  assert.match(last, /version=aaaaaaa1/);
+  assert.doesNotMatch(last, /retention/, 'the old version has no such service');
 });
 
 test('/srv/tipme/live always points at the running version’s files, and compose.sh runs compose for it', () => {

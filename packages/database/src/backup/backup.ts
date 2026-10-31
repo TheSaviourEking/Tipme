@@ -521,22 +521,9 @@ export async function createBaseBackup(input: {
   cipher.pipe(out, { end: false });
   const encrypted = new Promise<void>((resolve) => cipher.once('end', resolve));
   try {
-    await run(
-      [
-        ...(input.pgExec ?? []),
-        'pg_basebackup',
-        '-d',
-        input.url,
-        '-D',
-        '-',
-        '-Ft',
-        '-X',
-        'fetch',
-        '--checkpoint=fast',
-        '--no-password',
-      ],
-      { stdout: cipher },
-    );
+    await run([...(input.pgExec ?? []), ...baseBackupArgs(input.url, file)], {
+      stdout: cipher,
+    });
     await encrypted;
     out.end(cipher.getAuthTag());
     await written;
@@ -567,11 +554,33 @@ export async function createBaseBackup(input: {
   return { file };
 }
 
-/** Keeps the newest `retain` base backups. */
+/**
+ * `pg_basebackup` to a tar on stdout, with the WAL it needs. The label is the backup's file name,
+ * so the marker Postgres archives (`<segment>.<offset>.backup`) names the file it belongs to.
+ */
+export function baseBackupArgs(url: string, label: string): string[] {
+  return [
+    'pg_basebackup',
+    '-d',
+    url,
+    '-D',
+    '-',
+    '-Ft',
+    '-X',
+    'fetch',
+    '-l',
+    label,
+    '--checkpoint=fast',
+    '--no-password',
+  ];
+}
+
+/** Keeps the newest `retain` base backups; 0 keeps every one (the retention coordinator prunes). */
 export async function pruneBaseBackups(
   dir: string,
   retain: number,
 ): Promise<void> {
+  if (retain <= 0) return;
   const bases = (await readdir(dir))
     .filter((f) => /^tipme-base-.*\.tar\.enc$/.test(f))
     .sort();
@@ -588,6 +597,34 @@ export interface BackupStatus {
     lastFailedAt: string | null;
     failedCount: number;
   };
+  retention: {
+    at: string;
+    mode: 'dry-run' | 'apply';
+    outcome: 'planned' | 'applied' | 'blocked' | 'failed';
+    blocked: string[];
+    archiveBytes: number;
+    candidateBytes: number;
+    diskFreePercent: number;
+  } | null;
+}
+
+/** A recorded blocking reason as a short code (the public health route shows no file names). */
+export function retentionBlockCode(
+  reason: string,
+):
+  | 'backup-running'
+  | 'no-verified-backup'
+  | 'no-drill'
+  | 'wal-gap'
+  | 'archive-missing'
+  | 'other' {
+  if (/base backup is running/.test(reason)) return 'backup-running';
+  if (/no verified backup/.test(reason)) return 'no-verified-backup';
+  if (/recovery drill/.test(reason)) return 'no-drill';
+  if (/WAL gap/.test(reason)) return 'wal-gap';
+  if (/newest archived segment|has not archived/.test(reason))
+    return 'archive-missing';
+  return 'other';
 }
 
 /** The newest backups and the WAL archiver's state, timestamps only (no secrets, no data). */
@@ -613,7 +650,44 @@ export async function backupStatus(db: Database): Promise<BackupStatus> {
     ).rows[0];
     const iso = (value: string | null | undefined) =>
       value ? new Date(String(value)).toISOString() : null;
+    const hasRetention = (
+      await db.execute<{ t: string | null }>(
+        sql`SELECT to_regclass('public.backup_retention_runs') AS t`,
+      )
+    ).rows[0]?.t;
+    const run = hasRetention
+      ? (
+          await db.execute<{
+            ran_at: string;
+            mode: 'dry-run' | 'apply';
+            outcome: 'planned' | 'applied' | 'blocked' | 'failed';
+            blocked: string;
+            archive_bytes: string;
+            candidate_bytes: string;
+            disk_free_bytes: string;
+            disk_total_bytes: string;
+          }>(
+            sql`SELECT ran_at, mode, outcome, blocked, archive_bytes, candidate_bytes,
+                       disk_free_bytes, disk_total_bytes
+                  FROM backup_retention_runs ORDER BY ran_at DESC LIMIT 1`,
+          )
+        ).rows[0]
+      : undefined;
     return {
+      retention: run
+        ? {
+            at: new Date(String(run.ran_at)).toISOString(),
+            mode: run.mode,
+            outcome: run.outcome,
+            blocked: run.blocked ? run.blocked.split('\n') : [],
+            archiveBytes: Number(run.archive_bytes),
+            candidateBytes: Number(run.candidate_bytes),
+            diskFreePercent: Math.round(
+              (Number(run.disk_free_bytes) * 100) /
+                Math.max(1, Number(run.disk_total_bytes)),
+            ),
+          }
+        : null,
       logical: await latest('logical'),
       base: await latest('base'),
       wal: {

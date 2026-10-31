@@ -26,8 +26,9 @@ RUN apk add --no-cache postgresql16-client=~16 tini
 ENV NODE_ENV=production
 WORKDIR /repo
 COPY --from=build --chown=node:node /repo ./
-# The backup loop lives outside the pruned workspace.
+# The backup and retention loops live outside the pruned workspace.
 COPY --chown=node:node deploy/backup-loop.sh ./deploy/backup-loop.sh
+COPY --chown=node:node deploy/retention-loop.sh ./deploy/retention-loop.sh
 USER node
 ENTRYPOINT ["/sbin/tini", "--"]
 # The compose file chooses the command per service.

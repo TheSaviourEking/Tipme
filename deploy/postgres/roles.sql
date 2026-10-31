@@ -127,6 +127,9 @@ BEGIN
   IF to_regclass('public.backup_runs') IS NOT NULL THEN
     EXECUTE 'GRANT INSERT ON TABLE public.backup_runs TO tipme_backup';
   END IF;
+  IF to_regclass('public.backup_retention_runs') IS NOT NULL THEN
+    EXECUTE 'GRANT INSERT ON TABLE public.backup_retention_runs TO tipme_backup';
+  END IF;
 END
 $$;
 
