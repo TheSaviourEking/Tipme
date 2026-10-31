@@ -753,6 +753,11 @@ export function setPageSuspension(
 ): Promise<{ handle: string }> {
   return guarded(() =>
     db.transaction(async (tx) => {
+      const [before] = await tx
+        .select({ status: profiles.status })
+        .from(profiles)
+        .where(eq(profiles.id, input.profileId))
+        .for('update');
       const [row] = await tx
         .update(profiles)
         .set(
@@ -776,15 +781,18 @@ export function setPageSuspension(
         subjectId: input.profileId,
         reason: input.reason,
       });
-      // Staff notes stay private: the email says what happened, not why.
+      // Staff notes stay private: the email says what happened, not why. Only a real change is
+      // news: restoring a page that was never paused, or pausing twice, sends nothing.
       const type = input.suspend ? 'page_paused' : 'page_restored';
-      await mailOwner(tx, input.sealing, {
-        profileId: input.profileId,
-        type,
-        data: {},
-        // Each action is news, even back and forth in the same minute.
-        dedupeKey: `${type}.${input.profileId}.${newId()}`,
-      });
+      const changed = (before?.status === 'suspended') !== input.suspend;
+      if (changed)
+        await mailOwner(tx, input.sealing, {
+          profileId: input.profileId,
+          type,
+          data: {},
+          // Each action is news, even back and forth in the same minute.
+          dedupeKey: `${type}.${input.profileId}.${newId()}`,
+        });
       return { handle: row.handle };
     }),
   );
