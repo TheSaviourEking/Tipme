@@ -218,3 +218,50 @@ test('the pretend mail provider is refused in production, allowed in preview', (
     /MAIL_DEFAULT_PROVIDER/,
   );
 });
+
+const production = (DATABASE_URL) => {
+  try {
+    loadApiConfig({ ...valid, NODE_ENV: 'production', DATABASE_URL });
+    return '';
+  } catch (error) {
+    return error.message;
+  }
+};
+
+test('in production, a database across the network needs TLS with its certificate checked', () => {
+  // Production refuses the pretend payment provider here too; only the database part is checked.
+  const remote =
+    'postgres://tipme_runtime:p@tipme-db-project.aivencloud.com:23456/tipme';
+  assert.match(production(remote), /DATABASE_URL/);
+  assert.match(production(`${remote}?sslmode=require`), /DATABASE_URL/);
+  assert.doesNotMatch(
+    production(
+      `${remote}?sslmode=verify-full&sslrootcert=/run/secrets/db-ca.pem`,
+    ),
+    /DATABASE_URL/,
+  );
+  assert.doesNotMatch(
+    production(`${remote}?sslmode=verify-ca`),
+    /DATABASE_URL/,
+  );
+  // A database on the same host or Docker network may connect without TLS.
+  assert.doesNotMatch(
+    production('postgres://u:p@postgres:5432/tipme'),
+    /DATABASE_URL/,
+  );
+  assert.doesNotMatch(
+    production('postgres://u:p@127.0.0.1:5432/tipme'),
+    /DATABASE_URL/,
+  );
+});
+
+test('outside production, a remote database without TLS is allowed (tests and staging)', () => {
+  assert.equal(
+    loadApiConfig({
+      ...valid,
+      NODE_ENV: 'test',
+      DATABASE_URL: 'postgres://u:p@db.example.com:5432/tipme',
+    }).DATABASE_URL,
+    'postgres://u:p@db.example.com:5432/tipme',
+  );
+});
