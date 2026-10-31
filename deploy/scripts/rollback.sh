@@ -6,6 +6,7 @@
 #   deploy/scripts/rollback.sh            # to the version deployed before the current one
 #   deploy/scripts/rollback.sh <version>  # to a specific earlier version (its image must exist)
 set -euo pipefail
+TIPME_STACK=staging # never production's files, whatever the environment says
 source "$(dirname "$0")/lib.sh"
 
 current=$(current_version)

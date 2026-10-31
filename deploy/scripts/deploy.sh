@@ -7,6 +7,7 @@
 #
 #   deploy/scripts/deploy.sh <version>     # version = 12-character git sha
 set -euo pipefail
+TIPME_STACK=staging # never production's files, whatever the environment says
 source "$(dirname "$0")/lib.sh"
 
 version=${1:?usage: deploy.sh <version>}

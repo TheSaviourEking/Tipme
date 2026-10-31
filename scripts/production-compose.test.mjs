@@ -277,6 +277,9 @@ test('production.env.example gives the non-secret production values', () => {
   assert.equal(value('MAIL_FROM_NAME'), 'TipMe');
   assert.equal(value('MAIL_REPLY_TO'), 'support@usetipme.xyz');
   assert.equal(value('PAYMENT_PROVIDER'), 'bachs-live');
+  assert.equal(value('API_HOST'), 'api.usetipme.xyz');
+  // The deploy's health wait checks the public host unless a rehearsal overrides it.
+  assert.equal(value('HEALTH_BASE_URL'), '');
   assert.match(
     example,
     /^# .*payments plan.*bachs-live|^# .*bachs-live.*payments plan/im,
