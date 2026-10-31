@@ -263,7 +263,9 @@ test('outside production, a remote database without TLS is allowed (tests and st
       DATABASE_URL: 'postgres://u:p@db.example.com:5432/tipme',
     }).DATABASE_URL,
     'postgres://u:p@db.example.com:5432/tipme',
-=======
+  );
+});
+
 test('point-in-time recovery is expected unless switched off (staging keeps only nightly dumps)', () => {
   assert.equal(
     loadApiConfig({ ...valid, NODE_ENV: 'test' }).POINT_IN_TIME_RECOVERY,
