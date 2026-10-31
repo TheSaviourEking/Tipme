@@ -220,3 +220,22 @@ test('pretend domains are a lowercase list, empty by default', () => {
     ['release-check.usetipme.xyz', 'qa.example'],
   );
 });
+
+test('in production, the worker too needs TLS with a checked certificate for a remote database', () => {
+  const load = (DATABASE_URL) => {
+    try {
+      loadWorkerConfig({
+        NODE_ENV: 'production',
+        REDIS_URL: 'redis://127.0.0.1:6379',
+        DATABASE_URL,
+        MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+      });
+      return '';
+    } catch (error) {
+      return error.message;
+    }
+  };
+  const remote = 'postgres://u:p@tipme-db.aivencloud.com:23456/tipme';
+  assert.match(load(remote), /DATABASE_URL/);
+  assert.doesNotMatch(load(`${remote}?sslmode=verify-full`), /DATABASE_URL/);
+});

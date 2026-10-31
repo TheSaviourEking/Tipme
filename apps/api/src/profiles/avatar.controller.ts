@@ -4,6 +4,7 @@ import {
   Get,
   Header,
   Inject,
+  Optional,
   Param,
   Put,
   Req,
@@ -23,6 +24,8 @@ import {
 } from '../auth/session.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
+import type { PhotoStore } from '@tipme/database';
+import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 
 // Profile photos (PR-013). An upload is never stored as sent: it is decoded and re-encoded here
@@ -98,6 +101,9 @@ export class AvatarController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Optional()
+    @Inject(PHOTO_STORE)
+    private readonly photos: PhotoStore | null = null,
   ) {}
 
   @Put('me/avatar')
@@ -111,7 +117,12 @@ export class AvatarController {
     if (!ACCEPTED.has(type)) throw new CodedHttpException(415, 'INVALID_IMAGE');
     const upload = await readUpload(request);
     const webp = await withSlot(() => reencode(upload));
-    const updated = await setAvatar(this.database.db, auth.userId, webp);
+    const updated = await setAvatar(
+      this.database.db,
+      auth.userId,
+      webp,
+      this.photos ?? undefined,
+    );
     this.revalidator.revalidate(updated.handle);
     return { data: updated };
   }
@@ -121,7 +132,11 @@ export class AvatarController {
   async remove(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<MyProfile>> {
-    const updated = await removeAvatar(this.database.db, auth.userId);
+    const updated = await removeAvatar(
+      this.database.db,
+      auth.userId,
+      this.photos ?? undefined,
+    );
     this.revalidator.revalidate(updated.handle);
     return { data: updated };
   }
@@ -140,10 +155,11 @@ export class AvatarController {
     const version = /^(\d{1,9})\.webp$/.exec(file)?.[1];
     const bytes =
       UUID.test(profileId) && version
-        ? await avatarFor(this.database.db, {
-            profileId,
-            version: Number(version),
-          })
+        ? await avatarFor(
+            this.database.db,
+            { profileId, version: Number(version) },
+            this.photos ?? undefined,
+          )
         : null;
     if (!bytes) throw new CodedHttpException(404, 'NOT_FOUND');
     response

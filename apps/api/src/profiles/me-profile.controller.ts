@@ -6,6 +6,7 @@ import {
   Headers,
   HttpCode,
   Inject,
+  Optional,
   Patch,
   Post,
   Put,
@@ -50,6 +51,8 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ServerEvents } from '../analytics/server-events.js';
+import type { PhotoStore } from '@tipme/database';
+import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { MailSealing } from '@tipme/database';
@@ -65,6 +68,9 @@ export class MeProfileController {
     private readonly revalidator: ProfileRevalidator,
     @Inject(ServerEvents) private readonly events: ServerEvents,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Optional()
+    @Inject(PHOTO_STORE)
+    private readonly photos: PhotoStore | null = null,
   ) {}
 
   @Post('page')
@@ -190,6 +196,7 @@ export class MeProfileController {
     const { handle } = await deleteAccount(this.database.db, {
       sealing: this.sealing,
       userId: auth.userId,
+      ...(this.photos ? { photos: this.photos } : {}),
     });
     this.revalidator.revalidate(handle);
     clearSessionCookie(response, this.config);
