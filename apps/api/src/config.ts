@@ -98,6 +98,17 @@ export const apiConfigSchema = z
       .min(1)
       .max(100)
       .default(3),
+    // A test copy's own never-deliverable domains (as the worker's): their sign-in codes only reach
+    // the pretend inbox, so the per-address limit is lifted for them (release check, test sign-ups).
+    MAIL_PRETEND_DOMAINS: z
+      .string()
+      .default('')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((d) => d.trim().toLowerCase())
+          .filter(Boolean),
+      ),
     // Keys sign-in codes (HMAC); never logged.
     AUTH_CODE_SECRET: z.string().min(32),
     // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
