@@ -221,9 +221,10 @@ services:
       DATABASE_URL: postgres://tipme_backup:${POSTGRES_BACKUP_PASSWORD:?}@postgres:5432/tipme
       BACKUP_KEY: ${BACKUP_KEY:?}
       RETENTION_MODE: ${RETENTION_MODE:-dry-run}
-      RETENTION_KEEP_DAYS: ${RETENTION_KEEP_DAYS:-3}
-      RETENTION_MIN_KEEP: ${RETENTION_MIN_KEEP:-2}
-      RETENTION_DRILL_MAX_AGE_DAYS: ${RETENTION_DRILL_MAX_AGE_DAYS:-7}
+      # Staging is a test copy (owner, 31 Oct): a day of backups is enough.
+      RETENTION_KEEP_DAYS: ${RETENTION_KEEP_DAYS:-1}
+      RETENTION_MIN_KEEP: ${RETENTION_MIN_KEEP:-1}
+      RETENTION_DRILL_MAX_AGE_DAYS: ${RETENTION_DRILL_MAX_AGE_DAYS:-30}
     mem_limit: 256m
 
   # Rare restore drills/incidents need database-creation privileges; never run continuously.
@@ -274,7 +275,8 @@ services:
       # coordinator is switched to RETENTION_MODE=apply (then set this to off).
       WAL_LEGACY_PRUNE: ${WAL_LEGACY_PRUNE:-on}
     # Point-in-time recovery (PR-011): every finished WAL segment is archived to /wal, at least
-    # every 5 minutes while anything changes, so at most about 5 minutes of data can be lost.
+    # every 30 minutes (PG_ARCHIVE_TIMEOUT). Staging is a test copy (owner, 31 Oct): up to
+    # 30 minutes of data can be lost, for a sixth of the WAL (16 MB per segment, idle or not).
     entrypoint:
       - sh
       - -c
@@ -289,7 +291,7 @@ services:
       - -c
       - archive_mode=on
       - -c
-      - archive_timeout=300
+      - archive_timeout=${PG_ARCHIVE_TIMEOUT:-1800}
       - -c
       - archive_command=/bin/sh /etc/postgresql/archive-wal.sh %p %f
     volumes:

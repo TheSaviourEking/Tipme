@@ -8,9 +8,9 @@
   - a `.manifest.json` with row counts, ledger totals and the latest migration, read from the same database snapshot as the dump.
 - **Encryption:** AES-256-GCM with `BACKUP_KEY`. Keep a copy of that key off the server; without it backups cannot be read.
 - **Point-in-time recovery (PR-011), staging only:**
-  - Postgres archives its write-ahead log (WAL) to the `walarchive` volume at least every 5 minutes (`archive_timeout=300`). Idle or not, that is a 16 MB segment every 5 minutes: about 4.6 GB a day.
+  - Postgres archives its write-ahead log (WAL) to the `walarchive` volume at least every 30 minutes (`archive_timeout=1800`, setting `PG_ARCHIVE_TIMEOUT`). Idle or not, that is a 16 MB segment each time: about 0.8 GB a day. It was every 5 minutes (4.6 GB a day) until 31 October; staging is a test copy, so the owner chose a lighter setting.
   - A physical base backup (`tipme-base-<time>-<version>.tar.enc`) is taken daily, labelled with its own file name, so the `.backup` marker Postgres archives names the file it belongs to.
-  - Together they restore the database to any moment the kept backups cover. At most about 5 minutes of data can be lost (PRD target ≤ 15).
+  - Together they restore the database to any moment the kept backups cover. At most about 30 minutes of data can be lost on staging. The PRD target of ≤ 15 minutes applies to production, which is on Aiven.
   - A base backup is written as `.partial` and renamed only when complete.
   - Production's database is on Aiven, which provides its backups and point-in-time recovery. None of this runs against it.
 - **Retention (31 Oct 2026):** the `retention` service decides what can be deleted. `archive_command` only copies. See [Backup retention](#backup-retention).
@@ -19,7 +19,8 @@
   - the disk is under 20% free;
   - the WAL has a gap;
   - there's no verified base backup;
-  - pruning is switched on but paused for lack of a recovery drill.
+  - pruning is switched on but paused for lack of a recovery drill;
+  - no WAL has been archived for 45 minutes.
 - **Optional off-server copy:** set `BACKUP_RCLONE_REMOTE` and the `RCLONE_CONFIG_*` settings, then start `--profile offsite`. Every 15 minutes it copies the backups to `<remote>/backups` and the WAL archive to `<remote>/wal`, separately (a failure in one never stops the other), skipping files still being written and never overwriting. When restoring from the bucket, fetch both folders: `<remote>/backups` for the dump or base backup and `<remote>/wal` for point-in-time recovery.
 
 ## Backup retention
@@ -35,8 +36,8 @@ The `retention` service (`deploy/retention-loop.sh`, hourly) runs `backup-retent
    A marker alone never counts as a backup.
 
 3. **Keeps the backups the policy covers.**
-   - Staging keeps `RETENTION_KEEP_DAYS=3`: every verified backup from the last 3 days, plus the newest one from before them, so the whole window is restorable.
-   - Never fewer than `RETENTION_MIN_KEEP=2`, and never the only verified backup.
+   - Staging keeps `RETENTION_KEEP_DAYS=1`: every verified backup from the last day, plus the newest one from before it, so the whole day is restorable.
+   - Never fewer than `RETENTION_MIN_KEEP=1`, and never the only verified backup.
    - Without a window, the newest 7, as before.
 4. **Sets the recovery boundary**: the oldest kept backup's first WAL segment.
 5. **Checks the WAL is unbroken** from the boundary to the newest archived segment, following timeline switches through the `.history` files.
@@ -46,7 +47,7 @@ The `retention` service (`deploy/retention-loop.sh`, hourly) runs `backup-retent
    - there is no verified backup;
    - the WAL has a gap;
    - the newest archived segment is missing;
-   - there was no passing recovery drill in `RETENTION_DRILL_MAX_AGE_DAYS=7`.
+   - there was no passing recovery drill in `RETENTION_DRILL_MAX_AGE_DAYS=30`.
 8. **Deletes only with `RETENTION_MODE=apply`** and nothing blocking it, oldest first. The default is `dry-run`, which deletes nothing.
 9. **Records the run** in `backup_retention_runs` and prints the report.
 
@@ -104,7 +105,7 @@ It prints `Restore drill PASSED` or the list of problems, then drops the scratch
 /srv/tipme/live/scripts/pitr-drill.sh
 ```
 
-It takes a base backup, writes a marker row **after** it, forces that WAL into the archive, then restores base backup + archived WAL into a throwaway Postgres container. It prints `PITR drill PASSED` only if the marker came back and every ledger transaction balances, then removes the container and its volume. The live database only gains the marker row. Each run is recorded in `recovery_drills`, pass or fail. Retention prunes only after a pass in the last 7 days.
+It takes a base backup, writes a marker row **after** it, forces that WAL into the archive, then restores base backup + archived WAL into a throwaway Postgres container. It prints `PITR drill PASSED` only if the marker came back and every ledger transaction balances, then removes the container and its volume. The live database only gains the marker row. Each run is recorded in `recovery_drills`, pass or fail. Retention prunes only after a pass in the last 30 days.
 
 **A drill to a moment** (monthly, alternating with the one above): run the steps in [Restoring to a moment](#restoring-to-a-moment-point-in-time) up to step 3, on a scratch container only, with the WAL archive mounted **read-only** and archiving **off**. Choose a target time inside the retention window, before a row you just wrote. The drill passes when the restored server stops at that time: rows written before it are there, and the row written after it is not.
 

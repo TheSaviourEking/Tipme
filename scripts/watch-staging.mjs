@@ -42,9 +42,10 @@ export function evaluateHealth(snapshot) {
       'WAL archiving is off: point-in-time recovery is not possible.',
     );
   else {
-    if (wal.lastArchivedAgeMinutes === null || wal.lastArchivedAgeMinutes > 15)
+    // Staging archives at least every 30 minutes (archive_timeout=1800): it's a test copy.
+    if (wal.lastArchivedAgeMinutes === null || wal.lastArchivedAgeMinutes > 45)
       problems.push(
-        'No WAL has been archived in the last 15 minutes: recent data is not protected.',
+        'No WAL has been archived in the last 45 minutes: recent data is not protected.',
       );
     if (wal.lastFailedAgeMinutes !== null && wal.lastFailedAgeMinutes < 60)
       problems.push(
