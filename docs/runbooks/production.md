@@ -41,9 +41,10 @@ The `deploy-production` workflow (hand-run, from `main` only) and `watch-product
 - `PRODUCTION_SSH` = `tipme-prod@<server>`;
 - `PRODUCTION_WEB_URL` = `https://usetipme.xyz`;
 - `PRODUCTION_API_URL` = `https://api.usetipme.xyz` (the watcher stays off while this is empty);
-- `PRODUCTION_PAYMENTS_LIVE` = `false`, changed to `true` only at launch day step 5 (the watcher alerts when `/health/release` disagrees).
+- `PRODUCTION_PAYMENTS_LIVE` = `false`, changed to `true` only at launch day step 5 (the watcher alerts when `/health/release` disagrees);
+- `STAGING_API_URL` (already set for Deploy staging): the deploy gate reads staging's version from it. It must stay a variable; as a secret the gate cannot read it.
 
-**Repository secret:** `ALERT_WEBHOOK_URL` (Slack incoming webhook) for the watcher's alerts. The deploy gate also reads `STAGING_API_URL`, which Deploy staging already uses.
+**Repository secret:** `ALERT_WEBHOOK_URL` (Slack incoming webhook) for the watcher's alerts.
 
 ## 3. The edge (once, then only through deploys)
 

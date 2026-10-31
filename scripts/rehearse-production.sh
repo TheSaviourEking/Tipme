@@ -19,8 +19,9 @@
 #      and deploys A with the real deploy-production.sh (db-roles, migrate, blue/green).
 #   5. Starts k6 (REHEARSAL_RATE requests/s for REHEARSAL_DURATION) through the edge, deploys B
 #      during the run, then rolls back to A during the run.
-# Passes only if k6 reports no failed request and /health/release shows B after the deploy and
-# A after the rollback (every answer, not just one).
+# Passes only if k6 made (nearly) every request it was asked to, no served read failed, readiness
+# answered nothing but 503 `draining` (the drain's signal to Caddy), and /health/release shows B
+# after the deploy and A after the rollback (every answer, not just one).
 #
 # NOT proven here: production-mode boot. Production's config refuses every payment provider
 # until the payments plan adds bachs-live, so the API and workers run in password-protected
@@ -50,6 +51,8 @@ for version in "$A" "$B"; do
   [[ "$version" =~ ^[0-9a-f]{7,40}$ ]] || { echo "Not a version (7-40 hex): $version" >&2; exit 2; }
 done
 [[ "$A" != "$B" ]] || { echo "The two versions must differ." >&2; exit 2; }
+[[ "$RATE" =~ ^[1-9][0-9]*$ && "$DURATION" =~ ^[1-9][0-9]*s$ ]] ||
+  { echo "REHEARSAL_RATE must be a whole number and REHEARSAL_DURATION whole seconds (e.g. 90s)." >&2; exit 2; }
 commit=$(git -C "$here" rev-parse --verify "$REV^{commit}")
 
 # --- Nothing of ours may exist yet: we remove only what we create ---
@@ -273,6 +276,14 @@ draining=$(grep -c 'FAILED .* ready status=503 .*draining' "$LOGS/k6.log" || tru
 unexpected=$(grep 'FAILED ' "$LOGS/k6.log" | grep -vc 'ready status=503 .*draining' || true)
 echo "    readiness answered 503 draining $draining times; other failed requests: $unexpected"
 ((unexpected == 0)) || switches=failed
+# No FAILED lines also means nothing if k6 never ran its load: require its request count.
+made=$(sed -nE 's/^ *http_reqs\.+: *([0-9]+).*/\1/p' "$LOGS/k6.log" | head -n 1)
+seconds=${DURATION%s}
+expected=$((RATE * ${seconds:-0} * 9 / 10))
+if [[ ! "$made" =~ ^[0-9]+$ ]] || ((made < expected)); then
+  echo "!! k6 made ${made:-no} requests; expected at least $expected (90% of $RATE/s for $DURATION)." >&2
+  switches=failed
+fi
 
 echo "==> Database connections (pg_stat_ssl)"
 compose exec -T rehearsal-db psql -U rehearsal_admin -d tipme -c \
