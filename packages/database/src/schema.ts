@@ -1362,17 +1362,28 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
 
 /**
  * A page's photo (PR-013): one per page, already re-encoded on the server (512×512 WebP, no
- * metadata). In Postgres so it is backed up and recovered with everything else; about 30 KB.
- * `version` changes with each upload, so the URL can be cached for ever.
+ * metadata), about 30 KB. Either in Postgres (`bytes`) or, when R2 is configured, in a private
+ * R2 bucket (`object_key`); exactly one of the two. `version` changes with each upload, so the
+ * URL can be cached for ever.
  */
-export const profileAvatars = pgTable('profile_avatars', {
-  profileId: uuid('profile_id')
-    .primaryKey()
-    .references(() => profiles.id),
-  version: integer('version').notNull(),
-  bytes: bytea('bytes').notNull(),
-  createdAt: createdAt(),
-});
+export const profileAvatars = pgTable(
+  'profile_avatars',
+  {
+    profileId: uuid('profile_id')
+      .primaryKey()
+      .references(() => profiles.id),
+    version: integer('version').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdAt: createdAt(),
+  },
+  () => [
+    check(
+      'profile_avatars_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+  ],
+);
 
 /**
  * Visitors' reports of a page (PR-013): the page, a reason from a fixed list and the minute.

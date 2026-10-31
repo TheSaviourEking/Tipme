@@ -219,6 +219,22 @@ test('the pretend mail provider is refused in production, allowed in preview', (
   );
 });
 
+test('R2 photo storage needs all four settings or none', () => {
+  const test = { ...valid, NODE_ENV: 'test' };
+  assert.equal(loadApiConfig(test).R2_BUCKET, undefined);
+  const r2 = {
+    R2_ACCOUNT_ID: 'acct',
+    R2_ACCESS_KEY_ID: 'id',
+    R2_SECRET_ACCESS_KEY: 'secret',
+    R2_BUCKET: 'tipme-photos',
+  };
+  assert.equal(loadApiConfig({ ...test, ...r2 }).R2_BUCKET, 'tipme-photos');
+  assert.throws(
+    () => loadApiConfig({ ...test, R2_ACCOUNT_ID: 'acct', R2_BUCKET: 'b' }),
+    /R2_ACCESS_KEY_ID/,
+  );
+});
+
 const production = (DATABASE_URL) => {
   try {
     loadApiConfig({ ...valid, NODE_ENV: 'production', DATABASE_URL });

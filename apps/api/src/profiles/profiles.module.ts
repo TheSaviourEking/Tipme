@@ -6,6 +6,7 @@ import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { MeProfileController } from './me-profile.controller.js';
 import { PublicProfileController } from './public-profile.controller.js';
 import { AvatarController } from './avatar.controller.js';
+import { photoStoreProvider } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { PaymentAccountsController } from './payment-accounts.controller.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
@@ -25,6 +26,7 @@ import { MailModule } from '../mail/mail.module.js';
     CsrfGuard,
     RateLimitGuard,
     ServerEvents,
+    photoStoreProvider,
   ],
   exports: [ProfileRevalidator],
 })

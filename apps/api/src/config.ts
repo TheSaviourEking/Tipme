@@ -102,6 +102,14 @@ export const apiConfigSchema = z
     AUTH_CODE_SECRET: z.string().min(32),
     // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
     ...mailSettingsShape,
+    // Page photos in a private Cloudflare R2 bucket (31 Oct 2026): all four, or none (Postgres).
+    R2_ACCOUNT_ID: z.string().min(1).optional(),
+    R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    R2_BUCKET: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/)
+      .optional(),
     // Lets the API ask the web app to refresh a cached public profile.
     WEB_REVALIDATE_SECRET: z.string().min(32),
     // Defaults to `${WEB_ORIGIN}/api/revalidate`.
@@ -231,6 +239,20 @@ export const apiConfigSchema = z
       });
     }
     checkMailSettings(config, context);
+    const r2 = [
+      'R2_ACCOUNT_ID',
+      'R2_ACCESS_KEY_ID',
+      'R2_SECRET_ACCESS_KEY',
+      'R2_BUCKET',
+    ] as const;
+    const missingR2 = r2.filter((name) => !config[name]);
+    if (missingR2.length && missingR2.length < r2.length)
+      for (const name of missingR2)
+        context.addIssue({
+          code: 'custom',
+          path: [name],
+          message: 'required with the other R2 settings',
+        });
     if (
       config.NODE_ENV === 'production' &&
       config.DEPLOYMENT_MODE !== 'preview'
