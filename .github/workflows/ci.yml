@@ -274,8 +274,7 @@ jobs:
   # tested on the PR's head commit, so the merge into dev or main can reuse this run.
   # Documentation-only runs (slow suites skipped) record nothing.
   record-tested-tree:
-    needs:
-      [changes, static, unit, security, integration, load, e2e]
+    needs: [changes, static, unit, security, integration, load, e2e]
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
