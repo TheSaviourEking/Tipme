@@ -1,5 +1,21 @@
 # Current handoff — mail platform, staging backups and the live pilot (31 October 2026)
 
+**Update, 31 Oct, about 06:30 UTC:**
+
+- **Staging backups (2A):**
+  - #60 is deployed, and the coordinator runs in dry run.
+  - The PITR drill passed at 06:05 and is recorded.
+  - Nothing blocks pruning. The candidates are 817 files, 12.8 GB, of a 27.4 GB archive.
+  - **#62** makes staging light: WAL every 30 minutes, 1 day kept, a drill needed every 30 days, and the WAL alarm at 45 minutes.
+  - **Switching to apply was blocked for the agent** as irreversible. The owner runs it: append `RETENTION_MODE=apply`, `WAL_LEGACY_PRUNE=off` and `BASE_BACKUP_RETAIN=0` to `/srv/tipme/staging.env` (back it up first), then `compose.sh up -d postgres backup retention`.
+- **Remote database for production:** **#63**:
+  - `roles.sql` works as a non-superuser `CREATEROLE` admin (Aiven's avnadmin);
+  - `db-roles.js` applies it over a connection;
+  - production refuses a remote `DATABASE_URL` without `sslmode=verify-full`;
+  - the setup is in `docs/runbooks/remote-database.md`.
+
+  Still needed for production: its Compose project, sharing ports 80/443 with staging's Caddy, a deploy workflow, and Aiven's IP allow-list.
+
 Read this first. It is written for an agent taking over with no memory of the previous session. Its state was checked at about 05:00 UTC on 31 October 2026.
 
 ## Ground rules that still apply
