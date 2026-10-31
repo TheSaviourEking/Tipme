@@ -14,7 +14,16 @@ export class ReadinessService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
+  private draining = false;
+
+  /** One-way: once shutdown begins this instance must never report ready again. */
+  startDraining(): void {
+    this.draining = true;
+  }
+
   async check(): Promise<ReadinessResponse> {
+    // Answered without touching Postgres or Redis: the load balancer polls every 2 s.
+    if (this.draining) return { status: 'draining' };
     const [postgres, redis] = await Promise.all([
       this.probe(() => this.pool.query('SELECT 1')),
       this.probe(() => this.redis.ping()),
