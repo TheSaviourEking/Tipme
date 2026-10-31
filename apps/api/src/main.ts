@@ -15,8 +15,19 @@ try {
     app.get(ReadinessService),
     config.SHUTDOWN_DRAIN_MS,
   );
-  process.once('SIGTERM', () => void stop());
-  process.once('SIGINT', () => void stop());
+  const stopAndReport = (): void => {
+    stop().catch((error: unknown) => {
+      // Name and message only: never config values.
+      console.error(
+        error instanceof Error
+          ? `shutdown failed: ${error.name}: ${error.message}`
+          : 'shutdown failed',
+      );
+      process.exitCode = 1;
+    });
+  };
+  process.once('SIGTERM', stopAndReport);
+  process.once('SIGINT', stopAndReport);
 } catch (error) {
   if (!(error instanceof ConfigError)) throw error;
   // Names only: values may be credentials.
