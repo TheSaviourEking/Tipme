@@ -21,6 +21,7 @@ import {
   BachsApiError,
   BachsRequestNotSentError,
   UncertainProviderOutcomeError,
+  recordedProviderName,
   type BachsProvider,
   type MockProvider,
 } from '@tipme/payments';
@@ -146,7 +147,9 @@ export class CheckoutService {
     });
     const start = await findAttemptStart(db, intent.attemptId);
     if (!start) throw new OperationError('ATTEMPT_NOT_FOUND');
-    const providerName = start.provider ?? this.defaultProvider.name;
+    // Rows record 'bachs' for either environment; this copy's adapter is the one configured.
+    const providerName =
+      start.provider ?? recordedProviderName(this.defaultProvider.name);
 
     if (start.reference)
       return this.intentResponse(
@@ -169,7 +172,7 @@ export class CheckoutService {
       const accountReference = await getReadyPaymentAccount(db, {
         profileId: quote.profileId,
         provider: 'bachs',
-        environment: 'sandbox',
+        environment: this.bachsProvider.environment,
       });
       if (!accountReference)
         throw new CodedHttpException(409, 'PAYMENT_ACCOUNT_REQUIRED');

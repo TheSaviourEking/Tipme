@@ -66,6 +66,15 @@ export function bachsEnvironment(name: string): 'sandbox' | 'live' | null {
 }
 
 /**
+ * The provider name recorded on payment attempts and accounts. Both Bachs environments record
+ * 'bachs', as rows did before live payments (ADR-0004); payment_accounts.environment and each
+ * copy's own database keep sandbox and live apart.
+ */
+export function recordedProviderName(name: string): string {
+  return bachsEnvironment(name) ? 'bachs' : name;
+}
+
+/**
  * Validation shared by both configs (use inside their superRefine). `webhooks` is true where
  * the webhook secrets are read (the API); the worker needs the Bachs API key alone.
  */
@@ -123,19 +132,18 @@ export function checkPaymentSettings(
 }
 
 /**
- * The provider a process can actually run today. Exhaustive on purpose: a new provider name
- * cannot be added without a branch here, and an unwired one stops startup rather than quietly
+ * The provider a process runs. Exhaustive on purpose: a new provider name cannot be added
+ * without a branch here, and an unknown one (untyped config) stops startup rather than quietly
  * falling back to the pretend provider.
  */
 export function wiredPaymentProvider(
   name: PaymentProviderName,
-): 'mock' | 'bachs-sandbox' {
+): PaymentProviderName {
   switch (name) {
     case 'mock':
     case 'bachs-sandbox':
-      return name;
     case 'bachs-live':
-      throw new Error('PAYMENT_PROVIDER=bachs-live is not wired yet');
+      return name;
     default: {
       const unreachable: never = name;
       throw new Error(`PAYMENT_PROVIDER=${String(unreachable)} is not wired`);

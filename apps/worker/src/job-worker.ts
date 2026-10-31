@@ -83,6 +83,48 @@ const knownReasons = new Set([
   'unknown_job',
 ]);
 
+/**
+ * The worker's Bachs reader for the configured provider: that environment's key only, and no
+ * webhook secret, so it can ask for statuses but never accept a webhook. Fails startup for a
+ * provider this build cannot run (never a silent mock).
+ */
+export function workerBachsProvider(
+  config: Pick<
+    WorkerConfig,
+    'PAYMENT_PROVIDER' | 'BACHS_SANDBOX_API_KEY' | 'BACHS_LIVE_API_KEY'
+  >,
+): BachsProvider | null {
+  const name = wiredPaymentProvider(config.PAYMENT_PROVIDER);
+  switch (name) {
+    case 'bachs-live':
+      if (!config.BACHS_LIVE_API_KEY)
+        throw new Error('BACHS_LIVE_API_KEY is required for Bachs live');
+      return createBachsProvider({
+        apiKey: config.BACHS_LIVE_API_KEY,
+        environment: 'live',
+      });
+    case 'bachs-sandbox':
+      if (!config.BACHS_SANDBOX_API_KEY)
+        throw new Error('BACHS_SANDBOX_API_KEY is required for Bachs sandbox');
+      return createBachsProvider({
+        apiKey: config.BACHS_SANDBOX_API_KEY,
+        environment: 'sandbox',
+      });
+    case 'mock':
+      // A test or preview copy back on mock still checks the sandbox tips it took earlier.
+      return config.BACHS_SANDBOX_API_KEY
+        ? createBachsProvider({
+            apiKey: config.BACHS_SANDBOX_API_KEY,
+            environment: 'sandbox',
+          })
+        : null;
+    default: {
+      const unreachable: never = name;
+      throw new Error(`PAYMENT_PROVIDER=${String(unreachable)} is not wired`);
+    }
+  }
+}
+
 export interface JobWorker {
   close(): Promise<void>;
 }
@@ -140,13 +182,8 @@ export async function startJobWorker(
     redis: markers,
     prefix: config.QUEUE_PREFIX,
   });
-  // Fails startup for a provider this build cannot run (never a silent mock).
-  wiredPaymentProvider(config.PAYMENT_PROVIDER);
-  const bachsProvider: BachsProvider | null =
-    // Read-only: the worker only asks Bachs for statuses, so it never holds a webhook secret.
-    config.BACHS_SANDBOX_API_KEY
-      ? createBachsProvider({ apiKey: config.BACHS_SANDBOX_API_KEY })
-      : null;
+  // Read-only: the worker only asks Bachs for statuses, so it never holds a webhook secret.
+  const bachsProvider = workerBachsProvider(config);
   const defaultProvider = mockProvider;
   const providerFor = (name: string): BachsProvider | MockProvider => {
     if (name === 'mock') return mockProvider;

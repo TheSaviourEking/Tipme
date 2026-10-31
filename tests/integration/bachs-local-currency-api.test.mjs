@@ -64,7 +64,7 @@ function onboard(db, provider, warnings = []) {
   return new PaymentAccountsController(
     bachsConfig,
     { db },
-    provider,
+    { environment: 'sandbox', ...provider },
     { info() {}, warn: (entry) => warnings.push(entry), error() {} },
     { revalidate() {} },
     sealing,

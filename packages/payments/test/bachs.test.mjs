@@ -18,6 +18,7 @@ const NOW = new Date('2026-10-26T12:00:00.000Z');
 function makeProvider(fetchImpl, config = {}) {
   return createBachsProvider({
     apiKey: API_KEY,
+    environment: 'sandbox',
     webhookSecrets: [CURRENT_SECRET],
     fetchImpl,
     ...config,
@@ -145,20 +146,118 @@ test('fee-free checkout omits platform_fee and invalid checkout input never reac
   assert.equal(requestCount, 1);
 });
 
-test('Bachs adapter rejects live keys and malformed webhook secrets', () => {
+test('a sandbox key is refused for live and a live key for sandbox', () => {
+  for (const [apiKey, environment] of [
+    ['sk_live_not-for-tests', 'sandbox'],
+    ['sk_sandbox_test', 'live'],
+    ['sk_test_other', 'live'],
+    ['sk_test_other', 'sandbox'],
+  ]) {
+    assert.throws(
+      () =>
+        createBachsProvider({
+          apiKey,
+          environment,
+          webhookSecrets: [CURRENT_SECRET],
+        }),
+      (error) =>
+        error instanceof TypeError &&
+        error.message.includes(`${environment} API keys only`) &&
+        // The refusal names the setting's kind, never any key material.
+        !error.message.includes(apiKey) &&
+        !error.message.includes('not-for-tests'),
+    );
+  }
+  // No environment is no Bachs at all: never a quiet default to either.
   assert.throws(
-    () =>
-      createBachsProvider({
-        apiKey: 'sk_live_not-for-tests',
-        webhookSecrets: [CURRENT_SECRET],
-      }),
-    /sandbox API keys only/,
+    () => createBachsProvider({ apiKey: API_KEY, webhookSecrets: [] }),
+    TypeError,
   );
   // The API requires a secret in its config; a read-only adapter (the worker) has none.
   assert.throws(
-    () => createBachsProvider({ apiKey: API_KEY, webhookSecrets: ['short'] }),
+    () =>
+      createBachsProvider({
+        apiKey: API_KEY,
+        environment: 'sandbox',
+        webhookSecrets: ['short'],
+      }),
     /webhook secret/,
   );
+});
+
+test('live requests go to api.bachs.io with the live key', async () => {
+  const requests = [];
+  const provider = createBachsProvider({
+    apiKey: 'sk_live_fake_for_tests',
+    environment: 'live',
+    // A fake: nothing in this test may reach Bachs.
+    fetchImpl: async (url, init) => {
+      requests.push({ url, init });
+      return jsonResponse({
+        id: 'acct_live123',
+        country: 'NG',
+        balance_currencies: ['USD', 'NGN'],
+        is_active: true,
+      });
+    },
+  });
+  await provider.getRecipientAccount('acct_live123');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url.origin, 'https://api.bachs.io');
+  assert.equal(requests[0].url.pathname, '/v1/accounts/acct_live123');
+  assert.equal(
+    requests[0].init.headers.authorization,
+    'Bearer sk_live_fake_for_tests',
+  );
+
+  // And the sandbox stays on the sandbox origin.
+  const sandboxRequests = [];
+  await makeProvider(async (url) => {
+    sandboxRequests.push(url);
+    return jsonResponse({ id: 'acct_sbx123' });
+  }).getRecipientAccount('acct_sbx123');
+  assert.equal(sandboxRequests[0].origin, 'https://sandbox-api.bachs.io');
+});
+
+test('a path that would leave the environment origin is refused', async () => {
+  const { BachsApiClient, LIVE_API_ORIGIN, SANDBOX_API_ORIGIN } =
+    await import('../dist/bachs/client.js');
+  assert.equal(LIVE_API_ORIGIN, 'https://api.bachs.io');
+  assert.equal(SANDBOX_API_ORIGIN, 'https://sandbox-api.bachs.io');
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return jsonResponse({});
+  };
+  const schema = { safeParse: (data) => ({ success: true, data }) };
+  for (const [apiKey, environment, path] of [
+    ['sk_live_fake_for_tests', 'live', '//sandbox-api.bachs.io/v1/accounts'],
+    ['sk_live_fake_for_tests', 'live', 'https://evil.example/v1/accounts'],
+    ['sk_sandbox_test', 'sandbox', 'https://api.bachs.io/v1/accounts'],
+    ['sk_sandbox_test', 'sandbox', '//api.bachs.io/v1/accounts'],
+  ]) {
+    const client = new BachsApiClient({ apiKey, environment, fetchImpl });
+    await assert.rejects(
+      client.request({ method: 'GET', path, schema }),
+      (error) =>
+        error instanceof TypeError &&
+        error.message.includes(`${environment} origin`),
+    );
+  }
+  assert.equal(calls, 0);
+});
+
+test('a live provider names itself bachs-live', () => {
+  const live = createBachsProvider({
+    apiKey: 'sk_live_fake_for_tests',
+    environment: 'live',
+    webhookSecrets: [CURRENT_SECRET],
+  });
+  assert.equal(live.name, 'bachs-live');
+  assert.equal(live.environment, 'live');
+  const sandbox = makeProvider(async () => jsonResponse({}));
+  assert.equal(sandbox.name, 'bachs-sandbox');
+  assert.equal(sandbox.environment, 'sandbox');
 });
 
 test('uncertain checkout writes are not retried or mistaken for definite failures', async () => {
@@ -969,6 +1068,7 @@ test('a read-only Bachs adapter needs no webhook secret and refuses every webhoo
   const { createBachsProvider } = await import('../dist/index.js');
   const provider = createBachsProvider({
     apiKey: 'sk_sandbox_read_only',
+    environment: 'sandbox',
     fetchImpl: async () => {
       throw new Error('no network in this test');
     },

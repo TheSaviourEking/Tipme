@@ -68,6 +68,7 @@ test('checkout recovery only links a dashboard-verified unknown attempt and fina
   const target = await getUnknownBachsAttemptForOperations(
     database.db,
     attemptId,
+    'sandbox',
   );
   assert.ok(target);
   assert.equal(target.accountReference, 'acct_ada123');
@@ -75,6 +76,7 @@ test('checkout recovery only links a dashboard-verified unknown attempt and fina
     await attachUnknownBachsCheckoutForOperations(database.db, {
       issueId,
       attemptId,
+      environment: 'sandbox',
       providerReference: 'acct_ada123:chk_test123',
       accountReference: target.accountReference,
       amountMinor: target.amountMinor + 1n,
@@ -89,6 +91,7 @@ test('checkout recovery only links a dashboard-verified unknown attempt and fina
     await attachUnknownBachsCheckoutForOperations(database.db, {
       issueId,
       attemptId,
+      environment: 'sandbox',
       providerReference: 'acct_ada123:chk_test123',
       accountReference: target.accountReference,
       amountMinor: target.amountMinor,
@@ -142,11 +145,14 @@ test('account recovery requires a verified email, fetches no status itself, and 
   );
   const issueId = issueResult.rows[0]?.id;
   assert.ok(issueId);
-  assert.deepEqual(await getBachsAccountRecoveryTarget(database.db, TOBI), {
-    status: 'UNKNOWN',
-    providerAccountReference: null,
-    emailVerified: true,
-  });
+  assert.deepEqual(
+    await getBachsAccountRecoveryTarget(database.db, TOBI, 'sandbox'),
+    {
+      status: 'UNKNOWN',
+      providerAccountReference: null,
+      emailVerified: true,
+    },
+  );
 
   await database.pool.query(
     `UPDATE users SET email_verified_at = NULL WHERE id = $1`,
@@ -156,6 +162,7 @@ test('account recovery requires a verified email, fetches no status itself, and 
     recoverUnknownPaymentAccount(database.db, {
       issueId,
       profileId: TOBI,
+      environment: 'sandbox',
       providerAccountReference: 'acct_tobi123',
       status: 'ACTIVE',
       chargesEnabled: true,
@@ -176,6 +183,7 @@ test('account recovery requires a verified email, fetches no status itself, and 
   const recovered = await recoverUnknownPaymentAccount(database.db, {
     issueId,
     profileId: TOBI,
+    environment: 'sandbox',
     providerAccountReference: 'acct_tobi123',
     status: 'ACTIVE',
     chargesEnabled: true,

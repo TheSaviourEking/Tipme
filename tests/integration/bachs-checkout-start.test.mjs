@@ -42,6 +42,7 @@ async function serviceThatFailsWith(t, error) {
     requirementsDue: [],
   });
   const bachs = {
+    environment: 'sandbox',
     name: 'bachs',
     async initializePayment() {
       throw error;

@@ -186,6 +186,7 @@ test('recipient account creation is unique, ambiguous creation is not retryable,
     await findBachsAttemptByOperationReference(database.db, {
       attemptId,
       accountReference: 'acct_wrong456',
+      environment: 'sandbox',
     }),
     null,
   );
@@ -193,8 +194,26 @@ test('recipient account creation is unique, ambiguous creation is not retryable,
     await findBachsAttemptByOperationReference(database.db, {
       attemptId,
       accountReference: 'acct_123abc',
+      environment: 'sandbox',
     }),
     attemptId,
+  );
+  // The same account reference in the other Bachs environment is a different account.
+  assert.equal(
+    await findBachsAttemptByOperationReference(database.db, {
+      attemptId,
+      accountReference: 'acct_123abc',
+      environment: 'live',
+    }),
+    null,
+  );
+  // A missing environment fails closed rather than matching either one.
+  await assert.rejects(
+    findBachsAttemptByOperationReference(database.db, {
+      attemptId,
+      accountReference: 'acct_123abc',
+    }),
+    (error) => error.code === 'INVALID_INPUT',
   );
   const pending = await recordProviderEvent(database.db, {
     provider: 'bachs',

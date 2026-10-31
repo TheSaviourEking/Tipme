@@ -12,7 +12,7 @@ export type BachsOnboardingRequest = z.infer<
 
 export type BachsPaymentAccountStatus = {
   enabled: boolean;
-  environment: 'sandbox' | null;
+  environment: 'sandbox' | 'live' | null;
   status:
     | 'CREATING'
     | 'UNKNOWN'

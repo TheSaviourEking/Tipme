@@ -73,18 +73,22 @@ export class WebhookService {
     return result.outcome;
   }
 
+  /**
+   * `bachs` is the adapter that verified the event: its environment decides which accounts the
+   * event can match, so a live event never touches a sandbox row or the reverse.
+   */
   async applyBachs(
     event: NormalizedProviderEvent,
-    accounts?: Partial<
-      Pick<BachsProvider, 'getRecipientAccount' | 'verifyTransaction'>
-    >,
+    bachs: Pick<BachsProvider, 'environment'> &
+      Partial<Pick<BachsProvider, 'getRecipientAccount' | 'verifyTransaction'>>,
   ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
-    if (event.kind === 'account')
-      return this.refreshBachsAccount(event, accounts);
-    if (event.kind === 'reversal') return this.flagBachsReversal(event);
+    const { environment } = bachs;
+    if (event.kind === 'account') return this.refreshBachsAccount(event, bachs);
+    if (event.kind === 'reversal')
+      return this.flagBachsReversal(event, environment);
     const { providerReference } = event;
-    const attemptId = await this.matchBachsAttempt(event);
+    const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId || !providerReference) return this.unmatchedBachs(event);
 
     try {
@@ -107,8 +111,8 @@ export class WebhookService {
       // The webhook only proves something happened; read the payment back from Bachs now, with
       // the worker's own checks (quoted share, fee bearer), so the receipt turns paid at once.
       // A failed read changes nothing: the worker keeps checking.
-      if (accounts?.verifyTransaction) {
-        const { verifyTransaction } = accounts;
+      if (bachs.verifyTransaction) {
+        const { verifyTransaction } = bachs;
         const checked = await reconcileAttempts({
           db: this.database.db,
           provider: {
@@ -145,11 +149,14 @@ export class WebhookService {
   }
 
   /** The attempt a Bachs event is about, matched only through the persisted account mapping. */
-  private async matchBachsAttempt(event: {
-    accountReference: string | null;
-    operationReference: string | null;
-    providerReference: string | null;
-  }): Promise<string | null> {
+  private async matchBachsAttempt(
+    event: {
+      accountReference: string | null;
+      operationReference: string | null;
+      providerReference: string | null;
+    },
+    environment: BachsProvider['environment'],
+  ): Promise<string | null> {
     const { accountReference, operationReference, providerReference } = event;
     if (!accountReference || !providerReference) return null;
     if (operationReference) {
@@ -157,11 +164,13 @@ export class WebhookService {
       return findBachsAttemptByOperationReference(this.database.db, {
         attemptId: operationReference,
         accountReference,
+        environment,
       });
     }
     return findBachsAttemptByReference(this.database.db, {
       providerReference,
       accountReference,
+      environment,
     });
   }
 
@@ -171,8 +180,9 @@ export class WebhookService {
    */
   private async flagBachsReversal(
     event: Extract<NormalizedProviderEvent, { kind: 'reversal' }>,
+    environment: BachsProvider['environment'],
   ): Promise<string> {
-    const attemptId = await this.matchBachsAttempt(event);
+    const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId) return this.unmatchedBachs(event);
     await this.database.db.transaction((tx) =>
       enqueueOutbox(tx, {
@@ -192,15 +202,17 @@ export class WebhookService {
    */
   private async refreshBachsAccount(
     event: Extract<NormalizedProviderEvent, { kind: 'account' }>,
-    accounts?: Partial<Pick<BachsProvider, 'getRecipientAccount'>>,
+    accounts: Pick<BachsProvider, 'environment'> &
+      Partial<Pick<BachsProvider, 'getRecipientAccount'>>,
   ): Promise<string> {
     const { db } = this.database;
+    const { environment } = accounts;
     const known = await findPaymentAccountByReference(db, {
       provider: 'bachs',
-      environment: 'sandbox',
+      environment,
       providerAccountReference: event.accountReference,
     });
-    if (!known || !accounts?.getRecipientAccount)
+    if (!known || !accounts.getRecipientAccount)
       return this.unmatchedBachs(event);
     // A failed read throws, so Bachs retries the delivery later.
     const remote = await accounts.getRecipientAccount(event.accountReference);
@@ -209,7 +221,7 @@ export class WebhookService {
       sealing: this.sealing,
       profileId: known.profileId,
       provider: 'bachs',
-      environment: 'sandbox',
+      environment,
       providerAccountReference: remote.accountReference,
       status,
       chargesEnabled,

@@ -26,6 +26,7 @@ import type { Logger } from '@tipme/observability';
 import {
   BachsApiError,
   bachsAccountReadiness,
+  bachsEnvironment,
   type BachsRecipientAccount,
   type BachsProvider,
 } from '@tipme/payments';
@@ -64,7 +65,8 @@ export class PaymentAccountsController {
   async status(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<BachsPaymentAccountStatus>> {
-    if (!this.isEnabled())
+    const bachs = this.bachs();
+    if (!bachs)
       return {
         data: {
           enabled: false,
@@ -82,7 +84,7 @@ export class PaymentAccountsController {
     const account = await getPaymentAccountForProfile(this.database.db, {
       profileId: recipient.profileId,
       provider: 'bachs',
-      environment: 'sandbox',
+      environment: bachs.environment,
     });
     const feeCollector =
       account?.feeCollector === 'platform' ||
@@ -93,7 +95,7 @@ export class PaymentAccountsController {
     return {
       data: {
         enabled: true,
-        environment: 'sandbox',
+        environment: bachs.environment,
         status: account?.status ?? null,
         chargesEnabled: account?.chargesEnabled ?? false,
         payoutsEnabled: account?.payoutsEnabled ?? false,
@@ -112,8 +114,9 @@ export class PaymentAccountsController {
     @Body(new ZodValidationPipe(bachsOnboardingRequestSchema))
     body: BachsOnboardingRequest,
   ): Promise<ApiDataResponse<BachsOnboardingResponse>> {
-    if (!this.isEnabled() || !this.provider)
-      throw new CodedHttpException(404, 'NOT_FOUND');
+    const bachs = this.bachs();
+    if (!bachs) throw new CodedHttpException(404, 'NOT_FOUND');
+    const { provider, environment } = bachs;
 
     const recipient = await this.recipient(auth.userId);
     if (!recipient.verifiedEmail)
@@ -122,7 +125,7 @@ export class PaymentAccountsController {
     const claim = await beginPaymentAccountCreation(this.database.db, {
       profileId: recipient.profileId,
       provider: 'bachs',
-      environment: 'sandbox',
+      environment,
     });
     if (!claim.created && !claim.account.providerAccountReference) {
       if (claim.account.status === 'UNKNOWN')
@@ -135,7 +138,7 @@ export class PaymentAccountsController {
     let remoteAccount: BachsRecipientAccount;
     if (claim.created) {
       try {
-        remoteAccount = await this.provider.createRecipientAccount({
+        remoteAccount = await provider.createRecipientAccount({
           contactEmail: recipient.verifiedEmail,
           country: body.country,
           displayName: recipient.displayName,
@@ -147,7 +150,7 @@ export class PaymentAccountsController {
           await markPaymentAccountCreationFailed(this.database.db, {
             profileId: recipient.profileId,
             provider: 'bachs',
-            environment: 'sandbox',
+            environment,
           });
           this.logger.warn({
             event: 'payment_account.creation_rejected',
@@ -159,7 +162,7 @@ export class PaymentAccountsController {
         await markPaymentAccountCreationUnknown(this.database.db, {
           profileId: recipient.profileId,
           provider: 'bachs',
-          environment: 'sandbox',
+          environment,
         });
         this.logger.warn({
           event: 'payment_account.creation_unknown',
@@ -173,8 +176,7 @@ export class PaymentAccountsController {
       if (!accountReference)
         throw new CodedHttpException(503, 'PROVIDER_OUTCOME_UNKNOWN');
       try {
-        remoteAccount =
-          await this.provider.getRecipientAccount(accountReference);
+        remoteAccount = await provider.getRecipientAccount(accountReference);
       } catch (error) {
         this.logger.warn({
           event: 'payment_account.sync_failed',
@@ -189,7 +191,7 @@ export class PaymentAccountsController {
     // Adding NGN is safe to repeat, so a failure here is retried on the next setup visit.
     if (remoteAccount.holdsLocalCurrency === false) {
       try {
-        await this.provider.holdLocalCurrency(remoteAccount.accountReference);
+        await provider.holdLocalCurrency(remoteAccount.accountReference);
       } catch (error) {
         this.logger.warn({
           event: 'payment_account.local_currency_failed',
@@ -204,7 +206,7 @@ export class PaymentAccountsController {
       sealing: this.sealing,
       profileId: recipient.profileId,
       provider: 'bachs',
-      environment: 'sandbox',
+      environment,
       providerAccountReference: remoteAccount.accountReference,
       status,
       chargesEnabled,
@@ -226,7 +228,7 @@ export class PaymentAccountsController {
     );
     let onboardingUrl: string;
     try {
-      onboardingUrl = await this.provider.createOnboardingLink({
+      onboardingUrl = await provider.createOnboardingLink({
         accountReference: remoteAccount.accountReference,
         refreshUrl: page.toString(),
         returnUrl: page.toString(),
@@ -248,8 +250,19 @@ export class PaymentAccountsController {
     };
   }
 
-  private isEnabled(): boolean {
-    return this.config.PAYMENT_PROVIDER === 'bachs-sandbox';
+  /** The configured Bachs (sandbox or live) and its environment; null when payments are mock. */
+  private bachs(): {
+    provider: BachsProvider;
+    environment: 'sandbox' | 'live';
+  } | null {
+    const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
+    if (!environment || !this.provider) return null;
+    // Wiring builds the adapter from the same setting; a mismatch would mix sandbox and live rows.
+    if (this.provider.environment !== environment)
+      throw new Error(
+        'Bachs adapter environment does not match PAYMENT_PROVIDER',
+      );
+    return { provider: this.provider, environment };
   }
 
   private async recipient(userId: string) {

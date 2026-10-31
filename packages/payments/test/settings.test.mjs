@@ -191,12 +191,20 @@ test('bachs-live and a live key only name the live Bachs', () => {
   assert.equal(bachsEnvironment('mock'), null);
 });
 
-test('only providers this build can run are wired; bachs-live fails closed', async () => {
+test('every provider name is wired, and an unknown one fails closed', async () => {
   const { wiredPaymentProvider } = await import('../dist/index.js');
   assert.equal(wiredPaymentProvider('mock'), 'mock');
   assert.equal(wiredPaymentProvider('bachs-sandbox'), 'bachs-sandbox');
+  assert.equal(wiredPaymentProvider('bachs-live'), 'bachs-live');
   assert.throws(
-    () => wiredPaymentProvider('bachs-live'),
-    /PAYMENT_PROVIDER=bachs-live is not wired yet/,
+    () => wiredPaymentProvider('bachs'),
+    /PAYMENT_PROVIDER=bachs is not wired/,
   );
+});
+
+test('both Bachs environments record their rows as provider bachs', async () => {
+  const { recordedProviderName } = await import('../dist/index.js');
+  assert.equal(recordedProviderName('bachs-live'), 'bachs');
+  assert.equal(recordedProviderName('bachs-sandbox'), 'bachs');
+  assert.equal(recordedProviderName('mock'), 'mock');
 });

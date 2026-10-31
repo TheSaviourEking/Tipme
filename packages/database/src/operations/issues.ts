@@ -256,13 +256,14 @@ export function runIssueDetectors(
         })
       )
         opened += 1;
+    // Either Bachs environment: a copy holds only its own environment's accounts, and the
+    // dedupe key is per account row.
     const unknownAccounts = await db
       .select({ id: paymentAccounts.id, profileId: paymentAccounts.profileId })
       .from(paymentAccounts)
       .where(
         and(
           eq(paymentAccounts.provider, 'bachs'),
-          eq(paymentAccounts.environment, 'sandbox'),
           eq(paymentAccounts.status, 'UNKNOWN'),
           isNull(paymentAccounts.providerAccountReference),
           sql`NOT EXISTS (
@@ -398,13 +399,21 @@ export function autoResolveIssues(
       UNION ALL
       SELECT i.id, 'The Bachs recipient account was found and its status was synchronized.'
         FROM issues i
-        JOIN payment_accounts a
-          ON a.profile_id = (i.subject->>'profileId')::uuid
-         AND a.provider = 'bachs'
-         AND a.environment = 'sandbox'
        WHERE i.status = 'open' AND i.kind = 'payment_account_unresolved'
-         AND a.status <> 'UNKNOWN'
-         AND a.provider_account_reference IS NOT NULL
+         -- Either Bachs environment; cleared only once none of the profile's accounts is still the
+         -- unknown creation the detector raised it for.
+         AND EXISTS (
+           SELECT 1 FROM payment_accounts a
+            WHERE a.profile_id = (i.subject->>'profileId')::uuid
+              AND a.provider = 'bachs'
+              AND a.status <> 'UNKNOWN'
+              AND a.provider_account_reference IS NOT NULL)
+         AND NOT EXISTS (
+           SELECT 1 FROM payment_accounts a
+            WHERE a.profile_id = (i.subject->>'profileId')::uuid
+              AND a.provider = 'bachs'
+              AND a.status = 'UNKNOWN'
+              AND a.provider_account_reference IS NULL)
       UNION ALL
       -- Raised after its release check finished (the misreported tip never confirms).
       SELECT i.id, 'The release check that raised it has finished.'

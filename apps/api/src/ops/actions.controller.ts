@@ -184,9 +184,14 @@ export class OpsActionsController {
       throw new CodedHttpException(404, 'NOT_FOUND');
     }
 
+    // The lookup is scoped to this copy's Bachs environment, so it needs the adapter first.
+    if (!this.bachsProvider)
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+    const { environment } = this.bachsProvider;
     const target = await getUnknownBachsAttemptForOperations(
       this.database.db,
       body.attemptId,
+      environment,
     );
     if (!target) {
       await this.auditBachsRecovery(
@@ -197,8 +202,6 @@ export class OpsActionsController {
       );
       return { data: { outcome: 'not_pending' } };
     }
-    if (!this.bachsProvider)
-      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
 
     let answer: Awaited<ReturnType<BachsProvider['verifyTransaction']>>;
     try {
@@ -257,6 +260,7 @@ export class OpsActionsController {
       {
         issueId: body.issueId,
         attemptId: body.attemptId,
+        environment,
         providerReference,
         accountReference: target.accountReference,
         amountMinor: target.amountMinor,
@@ -438,9 +442,14 @@ export class OpsActionsController {
       throw new CodedHttpException(404, 'NOT_FOUND');
     }
     const profileId = issue.subject.profileId;
+    // The lookup is scoped to this copy's Bachs environment, so it needs the adapter first.
+    if (!this.bachsProvider)
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+    const { environment } = this.bachsProvider;
     const target = await getBachsAccountRecoveryTarget(
       this.database.db,
       profileId,
+      environment,
     );
     if (
       !target ||
@@ -457,8 +466,6 @@ export class OpsActionsController {
     }
     if (!target.emailVerified)
       throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
-    if (!this.bachsProvider)
-      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
 
     let remoteAccount: Awaited<
       ReturnType<BachsProvider['getRecipientAccount']>
@@ -503,6 +510,7 @@ export class OpsActionsController {
     await recoverUnknownPaymentAccount(this.database.db, {
       issueId: body.issueId,
       profileId,
+      environment,
       providerAccountReference: body.accountReference,
       status,
       chargesEnabled,
