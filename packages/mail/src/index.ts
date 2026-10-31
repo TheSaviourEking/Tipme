@@ -18,7 +18,7 @@ export {
   senderAddress,
   type MailSender,
 } from './templates/define.js';
-export { resolveMailProvider } from './routing.js';
+export { isPretendRecipient, resolveMailProvider } from './routing.js';
 export {
   createZeptoMailProvider,
   type ZeptoMailConfig,
