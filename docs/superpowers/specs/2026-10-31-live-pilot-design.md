@@ -159,7 +159,7 @@ Until then, the withdrawable amount must leave room for the fee in the recipient
   - Backups and point-in-time recovery, as on staging.
   - An off-site copy is **required** before live activation.
   - A restore drill must pass on production backups.
-- **Email:** ZeptoMail production agent, `mail.usetipme.xyz` verified (DKIM and bounce), DMARC fixed to one record. Senders as in the mail design.
+- **Email:** ZeptoMail production agent, `usetipme.xyz` verified (owner, 31 Oct; see the production launch design), DMARC fixed to one record. Senders as in the mail design.
 - **Monitoring:** Sentry (separate environment), `ALERT_WEBHOOK_URL` to Slack for money issues and failed jobs, uptime checks on `/health/live` and the web.
 - **Staff:** the owner is enrolled with an authenticator in production. Admin access is the owner only during the pilot.
 - **Secrets:**
