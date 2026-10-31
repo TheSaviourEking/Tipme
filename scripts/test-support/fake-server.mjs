@@ -107,7 +107,9 @@ case "$*" in *release*) echo "{\\"data\\":{\\"version\\":\\"$running\\"}}" ;; es
 exit 0`,
   );
   fake('sleep', 'exit 0');
-  const { fake: _fake, ...rest } = s;
+  // The fake-binary writer is internal to this module.
+  const rest = { ...s };
+  delete rest.fake;
   return rest;
 }
 
@@ -213,6 +215,8 @@ exit 0`,
         .filter(Boolean)
         .map((line) => line.split('=')),
     );
-  const { fake: _fake, ...rest } = s;
+  // The fake-binary writer is internal to this module.
+  const rest = { ...s };
+  delete rest.fake;
   return { ...rest, running, colours };
 }
