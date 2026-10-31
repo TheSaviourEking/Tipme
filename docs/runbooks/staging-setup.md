@@ -26,7 +26,7 @@ Secrets are typed on the server or into Vercel, never into chat or the repositor
 4. **Updates:** `apt install unattended-upgrades fail2ban` and enable security updates.
 5. **Docker:** install Docker Engine and the Compose plugin from Docker's apt repository, then `usermod -aG docker deploy`. Nothing else is needed: no git, no Node, no build tools.
 
-   Note: Docker publishes ports past ufw. Only Caddy publishes any (80/443), by design.
+   Note: Docker publishes ports past ufw. Only the edge Caddy (step 3a) publishes any (80/443), by design.
 
 ## 3. Lay out the files (as `deploy`)
 
@@ -90,6 +90,20 @@ The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence t
 
 Off-site copies are optional. If enabling rclone, create `/srv/tipme/offsite.env` with mode 600 and put only `BACKUP_RCLONE_REMOTE` and the relevant `RCLONE_CONFIG_<NAME>_*` settings there. The offsite container reads this file only; do not add bucket credentials to `staging.env`.
 
+## 3a. The edge Caddy (once, as `deploy`)
+
+One Caddy, in its own Compose project `tipme-edge`, owns ports 80 and 443 for staging and production. Deploying or stopping either environment never touches it. Do this before the first deploy (`deploy.sh` refuses to run without the `edge-staging` network).
+
+```sh
+sudo mkdir -p /srv/tipme-edge && sudo chown deploy: /srv/tipme-edge
+# From your machine: scp deploy/edge/{Caddyfile,compose.edge.yml,setup-networks.sh,edge.env.example} deploy@<server>:/srv/tipme-edge/
+cd /srv/tipme-edge && cp edge.env.example edge.env && chmod 600 edge.env   # fill in the three names
+bash setup-networks.sh                                                       # creates edge-staging and edge-production
+docker compose -p tipme-edge -f compose.edge.yml up -d
+```
+
+`edge.env` holds `ACME_EMAIL`, `STAGING_API_HOST` and `PRODUCTION_API_HOST`. Until production exists, nothing answers on `prod-api`, so the production host returns 502; that is expected.
+
 ## 4. Vercel (web app)
 
 1. **New Project** → import the GitHub repo → **Root Directory** `apps/web`. `apps/web/vercel.json` sets the install and build commands.
@@ -141,7 +155,7 @@ Off-site copies are optional. If enabling rclone, create `/srv/tipme/offsite.env
 
 **First-run checks:**
 
-- Caddy obtains a certificate: `/srv/tipme/live/scripts/compose.sh logs caddy`.
+- The edge Caddy has a certificate for the API host: `docker compose -p tipme-edge logs caddy`.
 - `https://api.staging.<domain>/health/release` shows the version.
 - `docker stats` stays well under the server's memory. Locally the stack idles at about 310 MB. With no builds on the server, 2 GB of memory is workable; 4 GB leaves headroom.
 
@@ -171,3 +185,35 @@ pnpm release:check --web https://staging.<domain> --api https://api.staging.<dom
 ```
 
 Then run the restore drill ([backup-and-restore](backup-and-restore.md)) and one rollback ([deploy-and-rollback](deploy-and-rollback.md)).
+
+## Move an existing staging server to the edge Caddy (one-off)
+
+**When:** once, on a server whose staging project still runs its own Caddy (any version before the edge). Plan about a minute of staging downtime: only one Caddy can hold ports 80/443, so there is a short gap while one stops and the other starts. Postgres, Redis, the worker and the API keep running.
+
+1. **Ship the edge files** as in step 3a (copy, fill `edge.env` with the same API host and ACME email staging already uses, run `setup-networks.sh`). Do not start the edge yet.
+2. **Copy the certificates once**, so Let's Encrypt is not asked again (it rate-limits). The edge owns its own volumes; this only seeds them:
+
+   ```sh
+   docker volume create tipme-edge_caddy_data
+   docker run --rm -v tipme-staging_caddy_data:/from -v tipme-edge_caddy_data:/to alpine cp -a /from/. /to/
+   ```
+
+3. **Put the running API on the edge network** under its new name, so the edge can reach it before any new deploy:
+
+   ```sh
+   docker network connect --alias staging-api edge-staging tipme-staging-api-1
+   ```
+
+   (`docker ps --format '{{.Names}}' | grep api` if the container is named differently.)
+
+4. **Swap the Caddys** (the gap lasts the few seconds this takes):
+
+   ```sh
+   docker compose -p tipme-staging stop caddy && docker compose -p tipme-edge -f /srv/tipme-edge/compose.edge.yml up -d
+   ```
+
+5. **Check:** `curl -sf https://api.staging.<domain>/health/ready`, and `docker compose -p tipme-edge logs caddy` shows no certificate request (it found the copied one).
+6. **Deploy the next staging version** from GitHub as usual. It defines no Caddy, so it never starts one and `--remove-orphans` clears the stopped old container; its API joins `edge-staging` itself. Do not deploy a new version before step 4: with the old Caddy gone and the edge not yet up, the deploy's health wait fails and it rolls back.
+7. **Clean up** once it works: `docker volume rm tipme-staging_caddy_data tipme-staging_caddy_config`.
+
+**Rolling back across the move:** versions from before the move put the API on the old `edge` network, so the edge cannot reach them. To go back that far, stop the edge and start the old Caddy from that version's files (`docker compose -p tipme-edge stop caddy`, then `up -d caddy` in `tipme-staging`).

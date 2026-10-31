@@ -1,5 +1,7 @@
-# TipMe staging (PR-010): API, worker, Postgres, Redis and Caddy on one server.
-# The web app runs on Vercel. Only Caddy is published (80/443); everything else is internal.
+# TipMe staging (PR-010): API, worker, Postgres and Redis on one server.
+# The web app runs on Vercel. Nothing here is published: the one edge Caddy (deploy/edge, its own
+# Compose project) owns 80/443 and reaches the API as staging-api on the external network
+# edge-staging. Everything else is internal.
 #
 #   TIPME_VERSION=<git sha> docker compose -f deploy/compose.staging.yml --env-file /srv/tipme/staging.env up -d
 name: tipme-staging
@@ -13,21 +15,6 @@ x-app: &app
   networks: [internal]
 
 services:
-  caddy:
-    image: caddy:2.10.2-alpine
-    restart: unless-stopped
-    ports: ['80:80', '443:443', '443:443/udp']
-    environment:
-      API_HOST: ${API_HOST:?set API_HOST, e.g. api.staging.example.com}
-      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for certificate notices}
-    volumes:
-      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks: [edge, internal]
-    depends_on: [api]
-    mem_limit: 128m
-
   api:
     <<: *app
     command:
@@ -39,6 +26,7 @@ services:
       ]
     environment:
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-production}
+      SHUTDOWN_DRAIN_MS: ${SHUTDOWN_DRAIN_MS:-5000}
       PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:-}
       NODE_ENV: ${NODE_ENV:-production}
       HOST: ${HOST:-0.0.0.0}
@@ -117,14 +105,17 @@ services:
       timeout: 5s
       retries: 12
     mem_limit: 768m
-    # Needs the internet only to tell the web app (Vercel) that a public page changed.
-    networks: [edge, internal]
+    # Needs the internet only to tell the web app (Vercel) that a public page changed; edge-staging
+    # is a normal bridge, so it also gives that route out.
+    networks:
+      edge-staging: { aliases: [staging-api] }
+      internal:
 
   worker:
     <<: *app
     # The worker asks the payment provider (Bachs) whether tips were paid, so it needs a route
     # out; it still publishes nothing and is reachable only from the internal network.
-    networks: [edge, internal]
+    networks: [egress, internal]
     command:
       [
         'node',
@@ -245,7 +236,7 @@ services:
       - '${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups:ro'
       - walarchive:/wal:ro
       - ./scripts/offsite-loop.sh:/offsite-loop.sh:ro
-    networks: [edge]
+    networks: [egress]
     mem_limit: 128m
 
   postgres:
@@ -316,7 +307,10 @@ services:
     mem_limit: 256m
 
 networks:
-  edge: {}
+  # The edge Caddy's network, created once by deploy/edge/setup-networks.sh (deploy.sh checks it).
+  edge-staging: { external: true }
+  # Internet route for the worker and the off-server copy, without joining the edge's network.
+  egress: {}
   # No internet route at all: Postgres, Redis and the worker are reachable only from here.
   internal: { internal: true }
 
@@ -324,5 +318,3 @@ volumes:
   pgdata:
   walarchive:
   redisdata:
-  caddy_data:
-  caddy_config:

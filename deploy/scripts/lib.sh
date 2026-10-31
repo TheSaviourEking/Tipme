@@ -75,6 +75,11 @@ preflight() {
     echo "$TIPME_HOME/backups must belong to uid 1000 (the image's user): sudo chown 1000:1000 $TIPME_HOME/backups" >&2
     exit 2
   fi
+  # The edge Caddy reaches the API over this network; without it `up` would fail halfway through.
+  if ! docker network inspect edge-staging >/dev/null 2>&1; then
+    echo "The edge-staging network does not exist: do the one-off edge move first (docs/runbooks/staging-setup.md, 'Move Caddy to the edge')." >&2
+    exit 2
+  fi
 }
 
 # Waits until the public API answers ready and reports the expected version.
@@ -106,10 +111,11 @@ version_before() {
 
 # The long-running services a version defines (newer versions add some, e.g. retention), so a
 # rollback to an older version never asks Compose for a service its file doesn't have.
+# Never caddy: older versions' files still define it, but the edge (deploy/edge) owns 80/443 now.
 app_services() {
   local defined
   defined=$(compose_for "$1" config --services)
-  for service in api worker caddy backup retention; do
+  for service in api worker backup retention; do
     grep -qx "$service" <<<"$defined" && printf '%s ' "$service"
   done
 }

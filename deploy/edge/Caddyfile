@@ -1,0 +1,43 @@
+# The only public entry on the server: HTTPS for the staging and production API hosts,
+# certificates automatic. Hosts and the certificate contact come from /srv/tipme-edge/edge.env.
+# Each project's API answers on its own network (edge-staging, edge-production) under a fixed
+# name, so a project can be redeployed or rolled back without touching this file.
+{
+	email {$ACME_EMAIL}
+}
+
+{$STAGING_API_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	reverse_proxy staging-api:4000 {
+		health_uri /health/live
+	}
+}
+
+# Production runs two copies of the API under one name (prod-api). Caddy re-resolves the name
+# every 2 s, spreads requests over the copies it finds, and retries a request that meets a
+# dead copy on another for up to 5 s. A copy draining after SIGTERM keeps serving until it
+# closes, so a stop costs no request.
+# Not here on purpose: health_uri /health/ready. Caddy runs active health checks only for
+# static upstreams and ignores them for dynamic ones (verified on 2.10.2 by
+# scripts/edge-caddy.test.mjs), so such lines would look protective and do nothing.
+{$PRODUCTION_API_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	reverse_proxy {
+		dynamic a prod-api 4000 {
+			refresh 2s
+		}
+		lb_policy round_robin
+		lb_try_duration 5s
+		lb_try_interval 250ms
+	}
+}

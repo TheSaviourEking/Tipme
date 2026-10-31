@@ -35,6 +35,7 @@ function stage({ password = 'hexpassword0123456789abcdef' } = {}) {
   fake(
     'docker',
     `echo "docker $* | version=$TIPME_VERSION confirm=$MIGRATE_CONFIRM_DATABASE backup=$MIGRATE_BACKUP_DONE" >> "$FAKE_LOG"
+if [[ "$1 $2" == "network inspect" ]]; then [[ -z "$FAKE_NO_EDGE" ]]; exit $?; fi
 if [[ "$1 $2" == "image inspect" ]]; then grep -qx "$3" "$FAKE_IMAGES" 2>/dev/null; exit $?; fi
 if [[ "$1 $2" == "image rm" ]]; then grep -vx "$3" "$FAKE_IMAGES" > "$FAKE_IMAGES.tmp"; mv "$FAKE_IMAGES.tmp" "$FAKE_IMAGES"; exit 0; fi
 if [[ " $* " == *" up "* && " $* " == *" api "* ]]; then echo "$TIPME_VERSION" > "$FAKE_RUNNING"; fi
@@ -126,6 +127,40 @@ test('a deploy of a shipped image backs up, migrates with the database named, sw
   assert.equal(at(/^git /), -1, 'the server never fetches code');
   assert.equal(read('releases/current').trim(), 'aaaaaaa1');
   assert.equal(read('running').trim(), 'aaaaaaa1');
+});
+
+test('a staging version whose files still define caddy never starts it', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  const result = run('deploy.sh', ['aaaaaaa1']);
+  assert.equal(result.status, 0, result.stderr);
+  const ups = read('calls.log')
+    .split('\n')
+    .filter((line) => / up /.test(line));
+  assert.ok(
+    ups.some((line) => /\bapi\b/.test(line)),
+    'the app services start',
+  );
+  assert.ok(
+    ups.every((line) => !/\bcaddy\b/.test(line)),
+    ups.join('\n'),
+  );
+});
+
+test('a missing edge network is refused before anything runs, pointing to the runbook', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  const result = run('deploy.sh', ['aaaaaaa1'], { FAKE_NO_EDGE: '1' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /edge-staging/);
+  assert.match(result.stderr, /staging-setup\.md/);
+  assert.equal(
+    read('calls.log')
+      .split('\n')
+      .filter((line) => line && !/network inspect/.test(line)).length,
+    0,
+    'nothing was backed up, migrated or started',
+  );
 });
 
 test('a version that was never shipped is refused before anything runs', () => {
@@ -234,10 +269,7 @@ test('a version with the retention service starts it; rolling back to one withou
   const ups = read('calls.log')
     .split('\n')
     .filter((l) => / up -d --remove-orphans /.test(l));
-  assert.match(
-    ups.at(-1),
-    /api worker caddy backup retention .*version=bbbbbbb2/,
-  );
+  assert.match(ups.at(-1), /api worker backup retention .*version=bbbbbbb2/);
   assert.doesNotMatch(ups[0], /retention/);
   const back = run('rollback.sh', [], extra);
   assert.equal(back.status, 0, back.stderr);
@@ -324,9 +356,9 @@ test('the staging worker can reach the payment provider (it asks Bachs whether t
   );
   const worker =
     compose.split(/^ {2}worker:\n/m)[1]?.split(/^ {2}[a-z]/m)[0] ?? '';
-  // `internal` has no internet route. Without `edge` every status check times out, the error is
+  // `internal` has no internet route. Without `egress` every status check times out, the error is
   // only counted, and paid tips stay "Still checking" until someone looks.
   const networks = /^ {4}networks: \[([^\]]*)\]/m.exec(worker)?.[1] ?? '';
-  assert.match(networks, /\bedge\b/);
+  assert.match(networks, /\begress\b/);
   assert.match(networks, /\binternal\b/);
 });
