@@ -72,6 +72,7 @@ export const apiConfigSchema = z
     // Anonymous analytics events per client per minute (PR-009).
     RATE_LIMIT_ANALYTICS_PER_MIN: z.coerce.number().int().min(1).default(120),
     RATE_LIMIT_REPORTS_PER_HOUR: z.coerce.number().int().min(1).default(10),
+    RATE_LIMIT_UNSUBSCRIBE_PER_MIN: z.coerce.number().int().min(1).default(600),
     RATE_LIMIT_AVATARS_PER_HOUR: z.coerce.number().int().min(1).default(20),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.

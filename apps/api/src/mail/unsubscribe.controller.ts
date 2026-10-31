@@ -16,6 +16,7 @@ import {
 } from '@tipme/database';
 import type { Response } from 'express';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from './mail-providers.provider.js';
@@ -45,6 +46,7 @@ export class UnsubscribeController {
 
   @Post()
   @HttpCode(200)
+  @RateLimit('unsubscribe')
   async unsubscribe(
     @Query('t') token: string | undefined,
   ): Promise<ApiDataResponse<{ type: string }>> {
