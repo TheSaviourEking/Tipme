@@ -180,7 +180,7 @@ test('mail defaults: pretend provider, TipMe sender, no reply-to', () => {
     MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
   });
   assert.equal(config.MAIL_DEFAULT_PROVIDER, 'mock');
-  assert.equal(config.MAIL_FROM_ADDRESS, 'hello@mail.usetipme.xyz');
+  assert.equal(config.MAIL_FROM_DOMAIN, 'mail.usetipme.xyz');
   assert.equal(config.MAIL_FROM_NAME, 'TipMe');
   assert.equal(config.MAIL_REPLY_TO, undefined);
 });

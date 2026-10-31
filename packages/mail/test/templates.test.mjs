@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MAIL_TYPES, mailLink, renderMail } from '../dist/index.js';
+import {
+  MAIL_TYPES,
+  mailLink,
+  renderMail,
+  MAIL_SENDERS,
+  senderAddress,
+} from '../dist/index.js';
 
 const ctx = { webOrigin: 'https://usetipme.xyz', unsubscribeUrl: null };
 
@@ -70,4 +76,39 @@ test('security mail is never tracked; other mail is, unless the type says not', 
   assert.equal(MAIL_TYPES.email_verification_link.tracking, false);
   assert.equal(MAIL_TYPES.tip_received.tracking, true);
   assert.equal(MAIL_TYPES.provider_test.tracking, false);
+});
+
+test('every email type names a sender, and security mail always comes from security@', () => {
+  for (const type of Object.values(MAIL_TYPES)) {
+    assert.ok(MAIL_SENDERS[type.sender], `${type.id} has a known sender`);
+    if (type.category === 'security')
+      assert.equal(type.sender, 'security', type.id);
+  }
+  const at = (id) => MAIL_TYPES[id].sender;
+  assert.equal(at('tip_received'), 'notifications');
+  assert.equal(at('milestone'), 'notifications');
+  assert.equal(at('withdrawal_paid'), 'payments');
+  assert.equal(at('payment_account_ready'), 'payments');
+  assert.equal(at('weekly_report'), 'reports');
+  assert.equal(at('welcome'), 'hello');
+  assert.equal(at('provider_test'), 'system');
+});
+
+test('a sender is an address on the mail domain with a branded name', () => {
+  const brand = { domain: 'staging-mail.usetipme.xyz', name: 'TipMe Staging' };
+  assert.deepEqual(senderAddress('security', brand), {
+    address: 'security@staging-mail.usetipme.xyz',
+    name: 'TipMe Staging Security',
+  });
+  assert.deepEqual(senderAddress('hello', brand), {
+    address: 'hello@staging-mail.usetipme.xyz',
+    name: 'TipMe Staging',
+  });
+  assert.deepEqual(
+    senderAddress('notifications', {
+      domain: 'mail.usetipme.xyz',
+      name: 'TipMe',
+    }),
+    { address: 'notifications@mail.usetipme.xyz', name: 'TipMe Notifications' },
+  );
 });

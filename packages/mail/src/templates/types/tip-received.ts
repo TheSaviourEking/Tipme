@@ -8,6 +8,7 @@ const minor = z.string().regex(/^\d+$/);
 export const tipReceived = defineMailType({
   id: 'tip_received',
   category: 'transactional',
+  sender: 'notifications',
   preference: 'notify_tip_emails',
   schema: z
     .object({

@@ -8,6 +8,7 @@ const minor = z.string().regex(/^\d+$/);
 export const staffAccessNotice = defineMailType({
   id: 'staff_access_notice',
   category: 'security',
+  sender: 'security',
   preference: null,
   schema: z.object({ change: z.enum(['granted', 'removed']) }).strict(),
   sample: { change: 'granted' },
@@ -41,6 +42,7 @@ export const staffAccessNotice = defineMailType({
 export const accountDeletedNotice = defineMailType({
   id: 'account_deleted_notice',
   category: 'security',
+  sender: 'security',
   preference: null,
   schema: z.object({}).strict(),
   sample: {},
@@ -64,6 +66,7 @@ export const accountDeletedNotice = defineMailType({
 export const paymentAccountReady = defineMailType({
   id: 'payment_account_ready',
   category: 'account',
+  sender: 'payments',
   preference: null,
   schema: z.object({}).strict(),
   sample: {},
@@ -92,6 +95,7 @@ export const paymentAccountReady = defineMailType({
 export const paymentAccountActionNeeded = defineMailType({
   id: 'payment_account_action_needed',
   category: 'account',
+  sender: 'payments',
   preference: null,
   schema: z.object({}).strict(),
   sample: {},
@@ -121,6 +125,7 @@ export const paymentAccountActionNeeded = defineMailType({
 export const pagePaused = defineMailType({
   id: 'page_paused',
   category: 'account',
+  sender: 'notifications',
   preference: null,
   schema: z.object({}).strict(),
   sample: {},
@@ -144,6 +149,7 @@ export const pagePaused = defineMailType({
 export const pageRestored = defineMailType({
   id: 'page_restored',
   category: 'account',
+  sender: 'notifications',
   preference: null,
   schema: z.object({}).strict(),
   sample: {},
@@ -172,6 +178,7 @@ export const pageRestored = defineMailType({
 export const withdrawalPaid = defineMailType({
   id: 'withdrawal_paid',
   category: 'transactional',
+  sender: 'payments',
   preference: null,
   schema: z.object({ amountMinor: minor }).strict(),
   sample: { amountMinor: '250000' },
@@ -195,6 +202,7 @@ export const withdrawalPaid = defineMailType({
 export const withdrawalFailed = defineMailType({
   id: 'withdrawal_failed',
   category: 'transactional',
+  sender: 'payments',
   preference: null,
   schema: z.object({ amountMinor: minor }).strict(),
   sample: { amountMinor: '250000' },
@@ -223,6 +231,7 @@ export const withdrawalFailed = defineMailType({
 export const tipReversed = defineMailType({
   id: 'tip_reversed',
   category: 'transactional',
+  sender: 'payments',
   preference: null,
   schema: z.object({}).strict(),
   sample: {},
@@ -247,6 +256,7 @@ export const tipReversed = defineMailType({
 export const milestone = defineMailType({
   id: 'milestone',
   category: 'engagement',
+  sender: 'notifications',
   preference: 'notify_milestones',
   schema: z.object({ copy: z.string().min(1).max(200) }).strict(),
   sample: { copy: '10 tips! People keep coming back to thank you.' },

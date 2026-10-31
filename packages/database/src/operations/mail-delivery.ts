@@ -8,6 +8,7 @@ import {
   type MailProvider,
   type MailProviderName,
   type OutgoingMail,
+  senderAddress,
 } from '@tipme/mail';
 import { and, eq, inArray, isNotNull, lt, lte, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
@@ -351,7 +352,8 @@ export interface MailDeliveryDeps {
   providers: ReadonlyMap<MailProviderName, MailProvider>;
   activeProvider(): Promise<MailProviderName>;
   overrideFor(userId: string): Promise<MailProviderName | null>;
-  from: { address: string; name: string };
+  /** The mail domain and brand name; each type's sender is an address on it. */
+  sender: { domain: string; name: string };
   replyTo?: string;
   webOrigin: string;
   /** Where one-click unsubscribe is answered (the API). */
@@ -467,7 +469,10 @@ export async function deliverDueMail(
       ({ providerMessageId } = await provider.send({
         reference: mail.id,
         to: mail.to,
-        from: deps.from,
+        from: senderAddress(
+          MAIL_TYPES[mail.type]?.sender ?? 'hello',
+          deps.sender,
+        ),
         ...(deps.replyTo ? { replyTo: deps.replyTo } : {}),
         subject: rendered.subject,
         text: rendered.text,

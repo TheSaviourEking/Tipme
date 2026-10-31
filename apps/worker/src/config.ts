@@ -37,8 +37,13 @@ export const workerConfigSchema = z
       }),
     // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
     ...mailSettingsShape,
-    MAIL_FROM_ADDRESS: z.email().default('hello@mail.usetipme.xyz'),
-    MAIL_FROM_NAME: z.string().min(1).max(60).default('TipMe'),
+    // Each kind of email has its own sender on this domain (security@, notifications@, …).
+    MAIL_FROM_DOMAIN: z
+      .string()
+      .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)
+      .default('mail.usetipme.xyz'),
+    // The brand in each sender's name: "TipMe Security", "TipMe Notifications", …
+    MAIL_FROM_NAME: z.string().min(1).max(40).default('TipMe'),
     MAIL_REPLY_TO: z.email().optional(),
     // One-click unsubscribe links in optional emails point here (the API's public address).
     API_ORIGIN: z

@@ -6,6 +6,7 @@ import { letter } from '../layout.js';
 export const phoneChangeWarning = defineMailType({
   id: 'phone_change_warning',
   category: 'security',
+  sender: 'security',
   preference: null,
   schema: z.object({ newPhoneHint: z.string().min(1).max(32) }).strict(),
   sample: { newPhoneHint: '•••4821' },

@@ -137,13 +137,23 @@ test('security and account mail carry no unsubscribe header; optional mail does'
       providers: new Map([['mock', provider]]),
       activeProvider: async () => 'mock',
       overrideFor: async () => null,
-      from: { address: 'hello@mail.usetipme.xyz', name: 'TipMe' },
+      sender: { domain: 'mail.usetipme.xyz', name: 'TipMe' },
       webOrigin: 'http://localhost:3000',
       apiOrigin: API,
     },
     { now: new Date() },
   );
   const bySubject = (part) => sent.find((m) => m.subject.includes(part));
+  // Each kind of email has its own sender on the mail domain.
+  assert.deepEqual(bySubject('sign-in code').from, {
+    address: 'security@mail.usetipme.xyz',
+    name: 'TipMe Security',
+  });
+  assert.equal(
+    bySubject('tip').from.address,
+    'notifications@mail.usetipme.xyz',
+  );
+  assert.equal(bySubject('Welcome').from.address, 'hello@mail.usetipme.xyz');
   assert.deepEqual(bySubject('sign-in code').headers, {});
   assert.deepEqual(bySubject('Welcome').headers, {});
   const tip = bySubject('tip');

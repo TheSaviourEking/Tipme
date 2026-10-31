@@ -30,9 +30,41 @@ export interface RenderedMail {
 export type MailPreference =
   'notify_tip_emails' | 'notify_weekly_reports' | 'notify_milestones';
 
+/**
+ * Who an email comes from: a name on the mail domain (no inbox; replies go to support). New
+ * senders are added here; receipts, business and news are reserved for what comes next.
+ */
+export const MAIL_SENDERS = {
+  security: { local: 'security', label: 'Security' },
+  notifications: { local: 'notifications', label: 'Notifications' },
+  payments: { local: 'payments', label: 'Payments' },
+  reports: { local: 'reports', label: 'Reports' },
+  hello: { local: 'hello', label: null },
+  legal: { local: 'legal', label: 'Legal' },
+  system: { local: 'system', label: null },
+  receipts: { local: 'receipts', label: 'Receipts' },
+  business: { local: 'business', label: 'Business' },
+  news: { local: 'news', label: 'News' },
+} as const;
+
+export type MailSender = keyof typeof MAIL_SENDERS;
+
+/** `security` on staging-mail.usetipme.xyz → "TipMe Staging Security <security@…>". */
+export function senderAddress(
+  sender: MailSender,
+  brand: { domain: string; name: string },
+): { address: string; name: string } {
+  const { local, label } = MAIL_SENDERS[sender];
+  return {
+    address: `${local}@${brand.domain}`,
+    name: label ? `${brand.name} ${label}` : brand.name,
+  };
+}
+
 export interface MailType<T> {
   id: string;
   category: MailCategory;
+  sender: MailSender;
   schema: z.ZodType<T>;
   preference: MailPreference | null;
   /** Opens and clicks are tracked; always false for security mail. */
