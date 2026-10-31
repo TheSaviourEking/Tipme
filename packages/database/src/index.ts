@@ -55,3 +55,4 @@ export * from './operations/avatars.js';
 export * from './operations/ops-search.js';
 export * from './operations/fees.js';
 export * from './operations/export.js';
+export * from './operations/rehearsal-sweep.js';

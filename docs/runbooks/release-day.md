@@ -28,6 +28,10 @@
 - [ ] Vercel Instant Rollback → the web app serves the previous deployment.
 - [ ] Redeploy the new version → the full check passes again.
 
+## What a failed check leaves behind
+
+The full check deletes its own account and finishes its run, even when a step fails. A check that crashed before that leaves a live, tagged page (`rc_…`). On test copies, the worker sweeps every hour (`rehearsals.sweep`). Two hours after a rehearsal page was created, it erases the account through the normal deletion, without the balance block or the goodbye email, and finishes any run still open, which resolves its issues. Real pages are never touched, and ledger, history and audit stay as written. The log line is `rehearsals.swept` with `erased` and `runsFinished`.
+
 ## Stop and do not release if
 
 - any check fails, or reports **live payments** (real money is not approved: D-03 to D-08);

@@ -601,7 +601,16 @@ export function publicProfile(
  */
 export function deleteAccount(
   db: Database,
-  input: { userId: string; sealing: MailSealing; now?: Date },
+  input: {
+    userId: string;
+    sealing: MailSealing;
+    now?: Date;
+    /**
+     * The release-check sweep only: the account must be a tagged rehearsal. Its test money
+     * doesn't block deletion (nothing is unbooked), and nobody is emailed.
+     */
+    rehearsalCleanup?: boolean;
+  },
 ): Promise<{ handle: string }> {
   const now = input.now ?? new Date();
   return guarded(() =>
@@ -611,13 +620,19 @@ export function deleteAccount(
           id: profiles.id,
           handleLower: profiles.handleLower,
           pageState: profiles.pageState,
+          rehearsalRunId: profiles.rehearsalRunId,
         })
         .from(profiles)
         .where(eq(profiles.userId, input.userId))
         .for('update');
+      if (input.rehearsalCleanup && !row?.rehearsalRunId)
+        throw new OperationError('INVALID_INPUT');
       if (row && row.pageState !== 'deleted') {
         const balance = await balanceIn(tx, row.id);
-        if (balance.availableMinor > 0n || balance.confirmingMinor > 0n)
+        if (
+          !input.rehearsalCleanup &&
+          (balance.availableMinor > 0n || balance.confirmingMinor > 0n)
+        )
           throw new OperationError('HAS_BALANCE');
         await tx
           .update(profiles)
@@ -704,14 +719,15 @@ export function deleteAccount(
             isNull(phoneRecoveries.completedAt),
           ),
         );
-      // Before the address goes: this is the last email the account gets.
-      await mailOwner(tx, input.sealing, {
-        userId: input.userId,
-        type: 'account_deleted_notice',
-        data: {},
-        dedupeKey: `account_deleted_notice.${input.userId}`,
-        now,
-      });
+      // Before the address goes: this is the last email the account gets (rehearsals get none).
+      if (!input.rehearsalCleanup)
+        await mailOwner(tx, input.sealing, {
+          userId: input.userId,
+          type: 'account_deleted_notice',
+          data: {},
+          dedupeKey: `account_deleted_notice.${input.userId}`,
+          now,
+        });
       // Deleted, not cancelled: each row holds an address, and it must not move back later.
       await tx
         .delete(emailRecoveries)
