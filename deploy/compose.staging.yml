@@ -54,6 +54,11 @@ services:
       API_METRICS_PORT: ${API_METRICS_PORT:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-false}
+      # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
       QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}

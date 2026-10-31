@@ -41,6 +41,7 @@ import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { mailOwner } from './account-mail.js';
 import type { MailSealing } from './mail-queue.js';
+import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
 import { publicCelebration } from './moments.js';
 import {
@@ -601,11 +602,18 @@ export function publicProfile(
  */
 export function deleteAccount(
   db: Database,
-  input: { userId: string; sealing: MailSealing; now?: Date },
+  input: {
+    userId: string;
+    sealing: MailSealing;
+    /** Where photos live when not in Postgres: their objects go with the account. */
+    photos?: PhotoStore;
+    now?: Date;
+  },
 ): Promise<{ handle: string }> {
   const now = input.now ?? new Date();
-  return guarded(() =>
-    db.transaction(async (tx) => {
+  const photoKeys: string[] = [];
+  return guarded(async () => {
+    const result = await db.transaction(async (tx) => {
       const [row] = await tx
         .select({
           id: profiles.id,
@@ -639,7 +647,12 @@ export function deleteAccount(
         // The photo is personal data too: its bytes go with the page (PR-013).
         await tx
           .delete(profileAvatars)
-          .where(eq(profileAvatars.profileId, row.id));
+          .where(eq(profileAvatars.profileId, row.id))
+          .returning({ objectKey: profileAvatars.objectKey })
+          .then((removed) => {
+            for (const r of removed)
+              if (r.objectKey) photoKeys.push(r.objectKey);
+          });
         await tx
           .insert(handleHolds)
           .values({
@@ -732,8 +745,12 @@ export function deleteAccount(
         .set({ revokedAt: now })
         .where(eq(sessions.userId, input.userId));
       return { handle: row?.handleLower ?? '' };
-    }),
-  );
+    });
+    // After the commit: an account's photos must not outlive it in the bucket.
+    for (const key of photoKeys)
+      await input.photos?.remove(key).catch(() => undefined);
+    return result;
+  });
 }
 export { normaliseHandle } from '@tipme/domain';
 

@@ -69,3 +69,7 @@ Decision: ADOPTED (pinned exact).
 ## Error reporting for the web app (28 October 2026)
 
 - **`@sentry/nextjs` 11.7.0** (MIT, https://github.com/getsentry/sentry-javascript), a runtime dependency of `apps/web` only. Errors and 10% of traces from the browser, server and edge runtimes, sent to Sentry (`tipme-fs`, EU region) through the site's own `/sentry-tunnel`, so the Content Security Policy is unchanged. Session replay, Sentry logs and personal data are not enabled; every event is scrubbed by `scrubEvent` before it leaves (`docs/runbooks/sentry.md`). Off without a DSN. Pinned to a release at least two weeks old (12 October 2026). The API and worker keep TipMe's own reporter (no SDK).
+
+## Photo storage (31 October 2026)
+
+`@aws-sdk/client-s3` 3.1152.0 (Apache-2.0, https://github.com/aws/aws-sdk-js-v3), a dependency of `@tipme/database`, server-side only. It stores page photos in a private Cloudflare R2 bucket through R2's S3-compatible API (`packages/database/src/photo-store.ts`). Same SDK family and version as `@aws-sdk/client-sesv2`. No browser code, no UI.

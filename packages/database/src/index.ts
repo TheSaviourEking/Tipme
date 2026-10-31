@@ -1,4 +1,5 @@
 export * from './client.js';
+export * from './photo-store.js';
 export * from './local-only.js';
 export * from './migrations.js';
 export * from './seed.js';
