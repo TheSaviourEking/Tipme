@@ -1,6 +1,6 @@
 # Production launch: TipMe live on usetipme.xyz, with real tips
 
-Status: DRAFT for owner approval, 31 October 2026.
+Status: APPROVED by the owner, 31 October 2026 ("Sure, let's proceed", accepting the recommendations below).
 Builds on: `2026-10-31-live-pilot-design.md` (Bachs live mode, payouts, bank setup, reversals, reserve, activation). That design still holds for payments; this one adds the production infrastructure and replaces its §6.6.
 Related: `docs/runbooks/remote-database.md` (#63), `docs/runbooks/photos.md` (#64), ADR-0004, ADR-0011, ADR-0013, `docs/00-DECISIONS.md`.
 
@@ -230,22 +230,31 @@ The owner, 31 Oct: "We're launching prod with payments on." Nobody outside sees 
 - **Staging** stays on the server's Postgres, behind the shared edge.
 - **Launch is complete:** tipping is on at launch, after the activation steps.
 
-## 9. Questions only the owner can answer
+## 9. Owner decisions (31 October 2026)
 
-From the live-pilot design, still open:
+**Answered from Bachs's docs:**
 
-- **Q2 (ask Bachs):** can a payout fee be billed to TipMe's platform balance? If not, how do we make the recipient whole?
-- **Q3 (ask Bachs):** can recipients take money out of their Bachs account themselves? Can automatic payouts be turned off?
-- **Q4:** is Bachs's written confirmation of TipMe's use case needed before activation?
-- **Q5:** may the owner alone settle money issues, with an audit trail?
-- **Q6:** will the owner fund the reserve before activation?
+- **Q2, payout fees:** Bachs charges a payout's fee on top of the amount, to the account paid out (₦50 flat for NGN bank payouts, per its fee page). TipMe covers it:
+  - before each payout, TipMe moves the fee from its own balance to the recipient's account (`POST /v1/transfers`: instant, irreversible, no fee listed, idempotency key `payout-fee.<payoutId>`);
+  - then it pays out the full amount the recipient asked for;
+  - the fee is booked as a TipMe cost.
+  - **To confirm with Bachs:** NGN transfers, and any account-specific fee. The payout's reported `fee` decides the top-up.
+- **Q3, can recipients move money themselves?** No:
+  - accounts are created and run by TipMe ("does not sign up for Bachs"), with no API key per account;
+  - account setup sets every account's NGN payout schedule to `interval: "manual"` (`POST /v1/balance_settings` with `X-Account-Id`);
+  - the "money left outside TipMe" safeguard in the live-pilot design §6.2 stays as defence in depth.
 
-New:
+**The owner's decisions:**
 
-- **Q7:** is launch public (open sign-up, search indexing on, no pilot notice), or the closed pilot with its notice first?
-- **Q8:** which Aiven plan: Startup (2 days of point-in-time restore) or Business (14 days)?
-- **Q9:** should production deploy only by hand (recommended), or automatically after staging passes?
-- **Q10:** staging and production would share the server's `deploy` user and its SSH key. Anyone who can deploy staging (any merge to `dev`, or running the staging workflow) could then read production's env file and control its Docker, which on one machine is effectively root. Do you accept that for now, or should production get its own deploy user and SSH key? The second is better, but even then Docker on one machine is never a full separation.
+|     | Decision                                                                                                                           |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Q4  | Ask Bachs for written confirmation, but launch doesn't wait for it. "Live Connect is active" is recorded as the owner's decision.  |
+| Q5  | During launch, the owner alone settles money issues, each one audited. A second approver comes when there's a second staff member. |
+| Q6  | The owner funds the live reserve before activation, ₦20,000 to start. The alert fires below ₦1,000.                                |
+| Q7  | Not yet decided. The pilot notice and search indexing are settings (`PILOT_NOTICE`, `SITE_INDEXING`), set on launch day.           |
+| Q8  | Aiven Business (14 days of point-in-time restore) for real money. Startup is acceptable for the first weeks.                       |
+| Q9  | Production deploys by hand only, with the owner's approval.                                                                        |
+| Q10 | Production gets its own deploy user and SSH key on the server, separate from staging's.                                            |
 
 ## 10. Left to the builder
 

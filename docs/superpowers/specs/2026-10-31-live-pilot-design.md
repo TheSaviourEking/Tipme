@@ -1,6 +1,6 @@
 # Live pilot: real tips and real payouts through Bachs, for a closed circle
 
-Status: DRAFT for owner approval, 31 October 2026.
+Status: APPROVED by the owner, 31 October 2026. The production launch design records the last answers (its §9).
 Related: ADR-0004 (Bachs sandbox and the live gate), ADR-0006 (custody-neutral ledger), ADR-0014 (fee), `docs/00-DECISIONS.md` (D-01 to D-08), `2026-10-30-payment-provider-switching-design.md`, `2026-10-30-mail-platform-design.md`.
 
 ## 1. Intent
@@ -29,7 +29,7 @@ Facts this rests on:
 
 - A public launch: no search indexing, no open sign-up, no marketing.
 - A second live provider, or switching providers during the pilot. The provider-switching design ships later.
-- Moving money between TipMe and recipients (transfers, a custodial model, a TipMe platform balance used for tips). The pilot uses Bachs direct charges, as built.
+- Moving money between TipMe and recipients (a custodial model, a TipMe platform balance used for tips). The one exception is the payout-fee top-up (production launch design §9 Q2). The pilot uses Bachs direct charges, as built.
 - Automatic refunds or chargeback handling in the ledger (Phase 3). The pilot handles reversals by hand; see §6.5.
 - Cash rewards and fee-free tips with real money. They stay pretend, or off, in production.
 - Phone sign-in, and supporter accounts.
