@@ -70,12 +70,13 @@ test('the whole story works together, and leaves nothing visible behind', async 
   const recipient = await (await newVisitor(browser)).newPage();
   const visitor = await (await newVisitor(browser)).newPage();
   const handle = `rc_${randomUUID().replace(/-/g, '').slice(0, 10)}`;
-  const phone = `+234809${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
+  // Its own domain each run: the pretend inbox shows only the first letter and the domain.
+  const email = `r@rc-${randomUUID().slice(0, 8)}.example`;
   let accountCreated = false;
 
   try {
     // Staff first, so the admin numbers can be compared before and after.
-    await signIn(staff, env.opsPhone, '/sign-in?next=/ops');
+    await signIn(staff, env.opsEmail, '/sign-in?next=/ops');
     await staff.waitForURL(/\/ops/);
     await openAdmin(staff);
     const health = async () =>
@@ -87,7 +88,7 @@ test('the whole story works together, and leaves nothing visible behind', async 
     const before = await health();
 
     // A new recipient signs up, claims a (tagged) handle and goes live.
-    await signIn(recipient, phone, '/sign-up');
+    await signIn(recipient, email, '/sign-up');
     await expect(recipient.getByLabel('Handle')).toBeVisible();
     accountCreated = true;
     const claim = await apiCall(
