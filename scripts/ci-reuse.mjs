@@ -27,7 +27,7 @@ export function candidateHeads({ parents, pullHeads }) {
   return [...new Set([...parents.slice(1), ...pullHeads])];
 }
 
-function gh(path, query) {
+export function gh(path, query) {
   const out = execFileSync(
     'gh',
     ['api', path, ...(query ? ['-q', query] : [])],

@@ -63,6 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 40
+    # statuses: records the full staging pass on the deployed commit (scripts/staging-pass.mjs).
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -111,6 +115,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       # Full once the release-check staff account exists (runbook step 6); read-only before that.
       - name: Release check
+        id: release
         env:
           RELEASE_PREVIEW_PASSWORD: ${{ secrets.RELEASE_PREVIEW_PASSWORD }}
           RELEASE_CHECK_TOKEN: ${{ secrets.RELEASE_CHECK_TOKEN }}
@@ -119,10 +124,19 @@ jobs:
           WEB: ${{ vars.STAGING_WEB_URL }}
           API: ${{ vars.STAGING_API_URL }}
         run: |
-          mode=()
-          if [[ -n "$RELEASE_OPS_TOTP_SECRET" && -n "$RELEASE_CHECK_TOKEN" ]]; then mode=(--full);
+          mode=(); full=false
+          if [[ -n "$RELEASE_OPS_TOTP_SECRET" && -n "$RELEASE_CHECK_TOKEN" ]]; then mode=(--full); full=true;
           else echo "::warning::Release-check staff not set up yet: running the read-only check only."; fi
           pnpm release:check --web "$WEB" --api "$API" --expect-version "$VERSION" "${mode[@]}"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+      # Only a passed --full check counts; the read-only fallback records nothing. Production
+      # refuses a main commit whose tree has no such pass. The deployed commit is the checked-out
+      # one (dev), not GITHUB_SHA, so it is passed explicitly.
+      - name: Record the full staging pass
+        if: success() && steps.release.outputs.full == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: RECORD_SHA=$(git rev-parse HEAD) node scripts/staging-pass.mjs record
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
