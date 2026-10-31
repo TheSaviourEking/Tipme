@@ -197,9 +197,34 @@ services:
       BACKUP_KEY: ${BACKUP_KEY:?}
       GIT_SHA: ${TIPME_VERSION}
       BACKUP_RETAIN: ${BACKUP_RETAIN:-14}
+      # 0 leaves base backups to the retention coordinator; 7 until it is switched to apply.
       BASE_BACKUP_RETAIN: ${BASE_BACKUP_RETAIN:-7}
     read_only: false
     mem_limit: 384m
+
+  # Backup retention coordinator (31 Oct 2026), hourly: checks every base backup decrypts, ties it
+  # to its WAL start, and reports (or, with RETENTION_MODE=apply, deletes) only what no kept
+  # recovery point needs. Root only to read and remove Postgres's archived files: every other
+  # capability is dropped. Staging only: production's database is Aiven's.
+  retention:
+    <<: *app
+    command: ['sh', 'deploy/retention-loop.sh']
+    user: '0:0'
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes:
+      - '${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups'
+      - walarchive:/wal
+    environment:
+      DATABASE_URL: postgres://tipme_backup:${POSTGRES_BACKUP_PASSWORD:?}@postgres:5432/tipme
+      BACKUP_KEY: ${BACKUP_KEY:?}
+      RETENTION_MODE: ${RETENTION_MODE:-dry-run}
+      RETENTION_KEEP_DAYS: ${RETENTION_KEEP_DAYS:-3}
+      RETENTION_MIN_KEEP: ${RETENTION_MIN_KEEP:-2}
+      RETENTION_DRILL_MAX_AGE_DAYS: ${RETENTION_DRILL_MAX_AGE_DAYS:-7}
+    mem_limit: 256m
 
   # Rare restore drills/incidents need database-creation privileges; never run continuously.
   restore:
@@ -245,6 +270,9 @@ services:
       POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?}
       POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?}
       POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:?}
+      # Temporary: archive_command's old marker-count pruning, only until the retention
+      # coordinator is switched to RETENTION_MODE=apply (then set this to off).
+      WAL_LEGACY_PRUNE: ${WAL_LEGACY_PRUNE:-on}
     # Point-in-time recovery (PR-011): every finished WAL segment is archived to /wal, at least
     # every 5 minutes while anything changes, so at most about 5 minutes of data can be lost.
     entrypoint:

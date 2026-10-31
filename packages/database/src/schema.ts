@@ -1497,6 +1497,53 @@ export const backupRuns = pgTable(
   ],
 );
 
+/**
+ * Each run of the backup retention coordinator (staging's local Postgres): what it found, what it
+ * would delete or deleted, and why it was blocked. Read by /health/backups and the watcher.
+ */
+export const backupRetentionRuns = pgTable(
+  'backup_retention_runs',
+  {
+    id: uuid('id').primaryKey(),
+    ranAt: timestamp('ran_at', { withTimezone: true }).notNull(),
+    mode: text('mode').notNull(),
+    outcome: text('outcome').notNull(),
+    /** Why pruning was blocked, one reason per line; empty when nothing blocked it. */
+    blocked: text('blocked').notNull().default(''),
+    retainedBackups: integer('retained_backups').notNull(),
+    boundary: text('boundary'),
+    archiveBytes: bigint('archive_bytes', { mode: 'bigint' }).notNull(),
+    candidateBytes: bigint('candidate_bytes', { mode: 'bigint' }).notNull(),
+    deletedBytes: bigint('deleted_bytes', { mode: 'bigint' }).notNull(),
+    diskFreeBytes: bigint('disk_free_bytes', { mode: 'bigint' }).notNull(),
+    diskTotalBytes: bigint('disk_total_bytes', { mode: 'bigint' }).notNull(),
+  },
+  (table) => [
+    check('backup_retention_runs_mode', sql`mode IN ('dry-run', 'apply')`),
+    check(
+      'backup_retention_runs_outcome',
+      sql`outcome IN ('planned', 'applied', 'blocked', 'failed')`,
+    ),
+    index('backup_retention_runs_ran_at').on(table.ranAt),
+  ],
+);
+
+/** Each recovery drill (pitr-drill.sh): pruning needs a recent pass. */
+export const recoveryDrills = pgTable(
+  'recovery_drills',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    baseFile: text('base_file'),
+    passed: boolean('passed').notNull(),
+    ranAt: timestamp('ran_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('recovery_drills_kind', sql`kind IN ('pitr')`),
+    index('recovery_drills_ran_at').on(table.ranAt),
+  ],
+);
+
 /** Written by the point-in-time-recovery drill just before it restores: proof nothing was lost. */
 export const recoveryMarkers = pgTable('recovery_markers', {
   id: uuid('id').primaryKey(),

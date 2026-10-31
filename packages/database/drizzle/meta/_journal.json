@@ -351,6 +351,13 @@
       "when": 1793351314001,
       "tag": "0049_email_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793421303675,
+      "tag": "0050_backup_retention",
+      "breakpoints": true
     }
   ]
 }

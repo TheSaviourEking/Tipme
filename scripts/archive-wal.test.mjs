@@ -95,54 +95,60 @@ test('a different segment under an archived name is refused and never overwrites
 const seg = (timeline, position) =>
   `${timeline}${position}`.toUpperCase().padStart(24, '0');
 
-test('archived WAL is kept back to the base backup the restore would need, not by age', () => {
+test('archiving never deletes anything: retention is the coordinator’s job, not archive_command’s', () => {
   const { wal, segment, archive } = stage();
-  // Three base backups (their .backup files), at positions …10, …20 and …30; keep the last 2.
+  // Plenty of base backup markers and old WAL: the old script would have pruned here.
   const files = {
     [seg('00000001', '0000000000000005')]: 'old',
     [`${seg('00000001', '0000000000000010')}.00000028.backup`]: 'b1',
     [seg('00000001', '0000000000000015')]: 'old',
     [`${seg('00000001', '0000000000000020')}.00000028.backup`]: 'b2',
-    [seg('00000001', '0000000000000020')]: 'keep',
-    [seg('00000001', '0000000000000025')]: 'keep',
     [`${seg('00000001', '0000000000000030')}.00000028.backup`]: 'b3',
+    '00000002.history': 'timeline',
+  };
+  for (const [name, body] of Object.entries(files)) {
+    writeFileSync(join(wal, name), body);
+    utimesSync(join(wal, name), 0, 0);
+  }
+  const result = archive(
+    segment('new', 'n'),
+    seg('00000002', '0000000000000031'),
+    { WAL_KEEP_BASE_BACKUPS: '1' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    readdirSync(wal).sort(),
+    [...Object.keys(files), seg('00000002', '0000000000000031')].sort(),
+  );
+});
+
+test('the temporary legacy rule still prunes by marker count, only when switched on', () => {
+  const { wal, segment, archive } = stage();
+  const files = {
+    [seg('00000001', '0000000000000005')]: 'old',
+    [`${seg('00000001', '0000000000000010')}.00000028.backup`]: 'b1',
+    [`${seg('00000001', '0000000000000020')}.00000028.backup`]: 'b2',
+    [seg('00000001', '0000000000000025')]: 'keep',
     '00000002.history': 'timeline',
   };
   for (const [name, body] of Object.entries(files))
     writeFileSync(join(wal, name), body);
   const result = archive(
-    segment('new', 'n'),
-    seg('00000002', '0000000000000031'),
-    { WAL_KEEP_BASE_BACKUPS: '2' },
+    segment('n', 'n'),
+    seg('00000001', '0000000000000026'),
+    {
+      WAL_LEGACY_PRUNE: 'on',
+      WAL_KEEP_BASE_BACKUPS: '1',
+    },
   );
   assert.equal(result.status, 0, result.stderr);
-  const left = readdirSync(wal).sort();
   assert.deepEqual(
-    left,
+    readdirSync(wal).sort(),
     [
       '00000002.history',
-      seg('00000001', '0000000000000020'),
       `${seg('00000001', '0000000000000020')}.00000028.backup`,
       seg('00000001', '0000000000000025'),
-      `${seg('00000001', '0000000000000030')}.00000028.backup`,
-      seg('00000002', '0000000000000031'),
+      seg('00000001', '0000000000000026'),
     ].sort(),
   );
-});
-
-test('with fewer base backups than are kept, no WAL is pruned however old it is', () => {
-  const { wal, segment, archive } = stage();
-  writeFileSync(join(wal, seg('00000001', '0000000000000001')), 'x');
-  utimesSync(join(wal, seg('00000001', '0000000000000001')), 0, 0);
-  writeFileSync(
-    join(wal, `${seg('00000001', '0000000000000002')}.00000028.backup`),
-    'b',
-  );
-  assert.equal(
-    archive(segment('n', 'n'), seg('00000001', '0000000000000003'), {
-      WAL_KEEP_BASE_BACKUPS: '2',
-    }).status,
-    0,
-  );
-  assert.equal(readdirSync(wal).length, 3);
 });

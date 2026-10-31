@@ -103,3 +103,13 @@ version_before() {
   local current=$1
   awk -v cur="$current" '{ v[NR] = $0; if ($0 == cur) last = NR } END { if (last > 1) print v[last - 1] }' "$DEPLOYED"
 }
+
+# The long-running services a version defines (newer versions add some, e.g. retention), so a
+# rollback to an older version never asks Compose for a service its file doesn't have.
+app_services() {
+  local defined
+  defined=$(compose_for "$1" config --services)
+  for service in api worker caddy backup retention; do
+    grep -qx "$service" <<<"$defined" && printf '%s ' "$service"
+  done
+}

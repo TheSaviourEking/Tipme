@@ -32,7 +32,7 @@ MIGRATE_CONFIRM_DATABASE=tipme MIGRATE_BACKUP_DONE=1 compose_for "$version" run 
 compose_for "$version" exec -T postgres sh /opt/tipme/bootstrap-roles.sh
 
 echo "==> Switching to $version"
-compose_for "$version" up -d --remove-orphans api worker caddy backup
+compose_for "$version" up -d --remove-orphans $(app_services "$version")
 
 if wait_healthy "$version"; then
   echo "$version" >>"$DEPLOYED"
@@ -43,7 +43,7 @@ else
   echo "!! $version did not become healthy." >&2
   if [[ -n "$previous" ]]; then
     echo "!! Putting $previous back." >&2
-    compose_for "$previous" up -d --remove-orphans api worker caddy backup
+    compose_for "$previous" up -d --remove-orphans $(app_services "$previous")
     wait_healthy "$previous" && echo "!! Back on $previous." >&2
   fi
   exit 1

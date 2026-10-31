@@ -51,6 +51,36 @@ export function evaluateHealth(snapshot) {
         `WAL archiving is failing (${wal.failedCount} failures, the last ${wal.lastFailedAgeMinutes} minutes ago).`,
       );
   }
+  const retention = backups.retention;
+  if (!retention) {
+    problems.push(
+      'Backup retention has never run: WAL growth is not being checked.',
+    );
+    return problems;
+  }
+  if (retention.lastRunAgeMinutes > 180)
+    problems.push(
+      `Backup retention has not run for over 3 hours (${retention.lastRunAgeMinutes} minutes).`,
+    );
+  if (retention.diskFreePercent < 20)
+    problems.push(
+      `The server disk is filling up: ${retention.diskFreePercent}% free. Check the WAL archive (${(retention.archiveBytes / 1024 ** 3).toFixed(1)} GB).`,
+    );
+  const blocked = new Set(retention.blocked);
+  if (blocked.has('wal-gap'))
+    problems.push(
+      'There is a gap in the WAL archive: recent backups cannot be restored past it.',
+    );
+  if (blocked.has('no-verified-backup'))
+    problems.push('There is no verified base backup to recover from.');
+  if (blocked.has('archive-missing'))
+    problems.push(
+      'The newest WAL segment Postgres reports archived is missing from the archive.',
+    );
+  if (retention.mode === 'apply' && blocked.has('no-drill'))
+    problems.push(
+      'WAL pruning is paused: no passing recovery drill in the last 7 days. Run pitr-drill.sh.',
+    );
   return problems;
 }
 

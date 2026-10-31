@@ -84,9 +84,19 @@ unbalanced=$(docker exec "$scratch" psql -U tipme -d tipme -Atq -c "SELECT count
   SELECT 1 FROM ledger_entries GROUP BY transaction_id, currency
   HAVING sum(CASE side WHEN 'debit' THEN amount_minor ELSE -amount_minor END) <> 0) x")
 
+# Recorded either way: the retention coordinator prunes only after a recent pass.
+record() {
+  sql "DO \$\$ BEGIN IF to_regclass('public.recovery_drills') IS NOT NULL THEN
+         INSERT INTO recovery_drills (id, kind, base_file, passed, ran_at)
+         VALUES (gen_random_uuid(), 'pitr', '$(basename "$base")', $1, now());
+       END IF; END \$\$" >/dev/null
+}
+
 if [[ "$found" == "1" && "$unbalanced" == "0" ]]; then
+  record true
   echo "PITR drill PASSED: the row written after $(basename "$base") was recovered from archived WAL; the books balance."
 else
+  record false
   echo "PITR drill FAILED: marker found=$found, unbalanced ledger transactions=$unbalanced." >&2
   exit 1
 fi
