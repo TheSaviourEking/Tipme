@@ -5,6 +5,7 @@ import {
   type OpsIssueSubject as IssueSubject,
 } from '@tipme/contracts';
 import { ATTEMPT_STATUSES, PAYOUT_STATUSES, TIP_STATUSES } from '@tipme/domain';
+import { MAIL_CATEGORIES } from '@tipme/mail';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -38,6 +39,18 @@ const currencyCheck = (table: string) =>
 
 export const tipStatus = pgEnum('tip_status', TIP_STATUSES);
 export const attemptStatus = pgEnum('attempt_status', ATTEMPT_STATUSES);
+export const providerEnvironment = pgEnum('provider_environment', [
+  'sandbox',
+  'live',
+]);
+export const paymentAccountStatus = pgEnum('payment_account_status', [
+  'CREATING',
+  'UNKNOWN',
+  'ONBOARDING',
+  'ACTIVE',
+  'RESTRICTED',
+  'FAILED',
+]);
 export const payoutStatus = pgEnum('payout_status', PAYOUT_STATUSES);
 export const profileVisibility = pgEnum('profile_visibility', [
   'public',
@@ -64,15 +77,95 @@ export const operationType = pgEnum('operation_type', [
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey(),
-  status: text('status').notNull().default('active'),
-  // E.164 phone number: the identity. Nulled when the account is deleted (PR-008).
-  phoneE164: text('phone_e164').unique(),
-  email: text('email'),
-  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  createdAt: createdAt(),
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey(),
+    status: text('status').notNull().default('active'),
+    // E.164 phone number: the identity. Nulled when the account is deleted (PR-008).
+    phoneE164: text('phone_e164').unique(),
+    email: text('email'),
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+    // A second address, for getting back in if the sign-in email is lost.
+    recoveryEmail: text('recovery_email'),
+    recoveryEmailVerifiedAt: timestamp('recovery_email_verified_at', {
+      withTimezone: true,
+    }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // A proven address belongs to one live account; it is the sign-in identity.
+    uniqueIndex('users_verified_email')
+      .on(sql`lower(${table.email})`)
+      .where(sql`email_verified_at IS NOT NULL AND deleted_at IS NULL`),
+    uniqueIndex('users_verified_recovery_email')
+      .on(sql`lower(${table.recoveryEmail})`)
+      .where(
+        sql`recovery_email_verified_at IS NOT NULL AND deleted_at IS NULL`,
+      ),
+  ],
+);
+
+/**
+ * Moving an account to a new sign-in email when the old one is lost. It takes effect 24 hours
+ * after the new address is proven, so the owner can still stop it.
+ */
+export const emailRecoveries = pgTable(
+  'email_recoveries',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    newEmail: text('new_email').notNull(),
+    startedBy: text('started_by').notNull(),
+    staffUserId: uuid('staff_user_id'),
+    // Filled when the new address is proven; the hold runs from here.
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('email_recoveries_started_by', sql`started_by IN ('self', 'staff')`),
+    index('email_recoveries_user').on(table.userId),
+    index('email_recoveries_due')
+      .on(table.effectiveAt)
+      .where(sql`completed_at IS NULL AND cancelled_at IS NULL`),
+  ],
+);
+
+/**
+ * One-time codes sent by email, stored only as an HMAC. Only the latest unused code for an
+ * address and purpose counts. Kept apart from phone codes, which return with phone sign-in.
+ */
+export const emailCodes = pgTable(
+  'email_codes',
+  {
+    id: uuid('id').primaryKey(),
+    email: text('email').notNull(),
+    codeHmac: text('code_hmac').notNull(),
+    purpose: text('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      'email_codes_purpose',
+      sql`purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email')`,
+    ),
+    index('email_codes_email_created').on(table.email, table.createdAt),
+  ],
+);
+
+/** Wrong-code counting and lockouts, per address. */
+export const emailCodeLockouts = pgTable('email_code_lockouts', {
+  email: text('email').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
 });
 
 /** One-time sign-in codes, stored only as an HMAC. Only the latest unused code for a number counts. */
@@ -110,6 +203,8 @@ export const sessions = pgTable(
       .references(() => users.id),
     tokenSha256: text('token_sha256').notNull().unique(),
     deviceLabel: text('device_label').notNull().default(''),
+    // SHA-256 of a long-lived browser cookie, to notice sign-ins from a new device.
+    deviceHash: text('device_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -139,6 +234,243 @@ export const pretendOutbox = pgTable(
       'pretend_outbox_channel',
       sql`channel IN ('whatsapp', 'sms', 'email')`,
     ),
+  ],
+);
+
+// ---- Mail (mail platform spec, 30 Oct 2026) ----
+
+const inList = (column: string, values: readonly string[]) =>
+  sql.raw(`${column} IN (${values.map((v) => `'${v}'`).join(', ')})`);
+
+export const MAIL_MESSAGE_STATUSES = [
+  'queued',
+  'sending',
+  'sent',
+  'failed',
+  'suppressed',
+  'skipped',
+  'expired',
+  'bounced',
+  'complained',
+] as const;
+export type MailMessageStatus = (typeof MAIL_MESSAGE_STATUSES)[number];
+
+export const MAIL_EVENT_KINDS = [
+  'queued',
+  'sent',
+  'send_failed',
+  'delivered',
+  'opened',
+  'clicked',
+  'soft_bounce',
+  'hard_bounce',
+  'complaint',
+  'suppressed',
+  'skipped_preference',
+  'expired',
+] as const;
+export type MailEventKindRecorded = (typeof MAIL_EVENT_KINDS)[number];
+
+/**
+ * Every email TipMe sends, queued in the transaction that causes it and sent by the worker.
+ * The address, template data and snapshot are sealed (AES-256-GCM); only `to_hint` is readable.
+ * Sealed address and data are wiped 7 days after a final status; the rest is kept 2 years.
+ */
+export const mailMessages = pgTable(
+  'mail_messages',
+  {
+    id: uuid('id').primaryKey(),
+    type: text('type').notNull(),
+    category: text('category').notNull(),
+    userId: uuid('user_id').references(() => users.id),
+    dedupeKey: text('dedupe_key').notNull().unique(),
+    toSealed: text('to_sealed'),
+    toHint: text('to_hint').notNull(),
+    dataSealed: text('data_sealed'),
+    renderedSealed: text('rendered_sealed'),
+    status: text('status').notNull().default('queued'),
+    // 0 security, 1 account, 2 everything else: codes never wait behind a broadcast.
+    priority: integer('priority').notNull(),
+    pinnedProvider: text('pinned_provider'),
+    provider: text('provider'),
+    providerMessageId: text('provider_message_id'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', {
+      withTimezone: true,
+    }).notNull(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    finalAt: timestamp('final_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('mail_messages_category', inList('category', MAIL_CATEGORIES)),
+    check('mail_messages_status', inList('status', MAIL_MESSAGE_STATUSES)),
+    index('mail_messages_due').on(
+      table.status,
+      table.priority,
+      table.nextAttemptAt,
+    ),
+    index('mail_messages_created').on(table.createdAt),
+    index('mail_messages_type_created').on(table.type, table.createdAt),
+    index('mail_messages_user_created').on(table.userId, table.createdAt),
+    index('mail_messages_provider_id').on(
+      table.provider,
+      table.providerMessageId,
+    ),
+  ],
+);
+
+/** Append-only history of each email (tracking and audit). Normalised fields only. */
+export const mailMessageEvents = pgTable(
+  'mail_message_events',
+  {
+    id: uuid('id').primaryKey(),
+    messageId: uuid('message_id').references(() => mailMessages.id),
+    kind: text('kind').notNull(),
+    provider: text('provider'),
+    providerEventId: text('provider_event_id'),
+    linkKey: text('link_key'),
+    // Set on bounces, so repeated soft bounces to one address can be counted (no plain address).
+    addressHmac: text('address_hmac'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    receivedAt: createdAt(),
+  },
+  (table) => [
+    check('mail_message_events_kind', inList('kind', MAIL_EVENT_KINDS)),
+    uniqueIndex('mail_message_events_provider_event')
+      .on(table.provider, table.providerEventId)
+      .where(sql`provider_event_id IS NOT NULL`),
+    index('mail_message_events_message').on(table.messageId, table.occurredAt),
+    index('mail_message_events_occurred').on(table.occurredAt),
+    index('mail_message_events_address')
+      .on(table.addressHmac, table.kind, table.occurredAt)
+      .where(sql`address_hmac IS NOT NULL`),
+  ],
+);
+
+/** Counts per Lagos day, type and provider, so month views stay fast at volume. Rebuildable. */
+export const mailDailyStats = pgTable(
+  'mail_daily_stats',
+  {
+    lagosDate: date('lagos_date').notNull(),
+    type: text('type').notNull(),
+    category: text('category').notNull(),
+    // '' before a provider was chosen (queued).
+    provider: text('provider').notNull(),
+    kind: text('kind').notNull(),
+    count: integer('count').notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.lagosDate,
+        table.type,
+        table.category,
+        table.provider,
+        table.kind,
+      ],
+    }),
+  ],
+);
+
+/** Addresses TipMe no longer emails, keyed by an HMAC so the list holds no plain addresses. */
+export const mailSuppressions = pgTable(
+  'mail_suppressions',
+  {
+    addressHmac: text('address_hmac').primaryKey(),
+    reason: text('reason').notNull(),
+    provider: text('provider'),
+    note: text('note'),
+    createdAt: createdAt(),
+  },
+  () => [
+    check(
+      'mail_suppressions_reason',
+      sql`reason IN ('hard_bounce', 'complaint', 'repeated_soft_bounce', 'manual')`,
+    ),
+  ],
+);
+
+/** Category switches (engagement on by default; marketing opt-in only). */
+export const mailPreferences = pgTable('mail_preferences', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id),
+  engagement: boolean('engagement').notNull().default(true),
+  marketing: boolean('marketing').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * The provider staff chose for a kind of traffic; no row means the server default. Shared with
+ * payment provider switching, which adds its state to `state` and `detail`.
+ */
+export const providerSettings = pgTable(
+  'provider_settings',
+  {
+    kind: text('kind').primaryKey(),
+    activeProvider: text('active_provider').notNull(),
+    state: text('state').notNull().default('stable'),
+    changedBy: uuid('changed_by'),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+    detail: jsonb('detail').notNull().default({}),
+  },
+  () => [check('provider_settings_kind', sql`kind IN ('mail', 'payment')`)],
+);
+
+/** A staff test of a provider. Only a hash of the confirmation token is kept. */
+export const providerTests = pgTable(
+  'provider_tests',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    provider: text('provider').notNull(),
+    startedBy: uuid('started_by').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    targetHint: text('target_hint'),
+    tokenSha256: text('token_sha256').unique(),
+    status: text('status').notNull().default('pending'),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    failureCode: text('failure_code'),
+    messageId: uuid('message_id').references(() => mailMessages.id),
+    tipId: uuid('tip_id'),
+  },
+  (table) => [
+    check('provider_tests_kind', sql`kind IN ('mail', 'payment')`),
+    check(
+      'provider_tests_status',
+      sql`status IN ('pending', 'confirmed', 'failed', 'expired')`,
+    ),
+    index('provider_tests_recent').on(
+      table.kind,
+      table.provider,
+      table.startedAt,
+    ),
+  ],
+);
+
+/** An account pinned to a provider other than the system one. Set by staff, always audited. */
+export const providerOverrides = pgTable(
+  'provider_overrides',
+  {
+    kind: text('kind').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    provider: text('provider').notNull(),
+    setBy: uuid('set_by').notNull(),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.kind, table.userId] }),
+    check('provider_overrides_kind', sql`kind IN ('mail', 'payment')`),
   ],
 );
 
@@ -226,6 +558,57 @@ export const profiles = pgTable(
     check(
       'profiles_tip_presets_range',
       sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
+    ),
+  ],
+);
+
+/** Provider-owned recipient account references and normalized readiness only; no KYC payloads. */
+export const paymentAccounts = pgTable(
+  'payment_accounts',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    provider: text('provider').notNull(),
+    environment: providerEnvironment('environment').notNull(),
+    providerAccountReference: text('provider_account_reference'),
+    status: paymentAccountStatus('status').notNull(),
+    chargesEnabled: boolean('charges_enabled').notNull().default(false),
+    payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
+    feeCollector: text('fee_collector').notNull().default('unknown'),
+    requirementsDue: text('requirements_due')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique('payment_accounts_profile_provider_environment').on(
+      table.profileId,
+      table.provider,
+      table.environment,
+    ),
+    unique('payment_accounts_provider_environment_reference').on(
+      table.provider,
+      table.environment,
+      table.providerAccountReference,
+    ),
+    check(
+      'payment_accounts_fee_collector',
+      sql`fee_collector IN ('platform', 'connected_account', 'unknown')`,
+    ),
+    check(
+      'payment_accounts_requirements_bound',
+      sql`cardinality(requirements_due) <= 50`,
+    ),
+    check(
+      'payment_accounts_active_can_charge',
+      sql`status <> 'ACTIVE' OR charges_enabled`,
     ),
   ],
 );
@@ -468,6 +851,7 @@ export const tips = pgTable(
     grossMinor: minor('gross_minor').notNull(),
     status: tipStatus('status').notNull(),
     payerDisplayLabel: text('payer_display_label'),
+    purpose: text('purpose'),
     // Started from a recipient's shared celebration ("add to the celebration").
     celebrationMomentId: uuid('celebration_moment_id'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
@@ -479,6 +863,10 @@ export const tips = pgTable(
     check(
       'tips_label_length',
       sql`payer_display_label IS NULL OR char_length(payer_display_label) <= 60`,
+    ),
+    check(
+      'tips_purpose_known',
+      sql`purpose IS NULL OR purpose IN ('thank_you', 'great_service', 'helped_me', 'celebration', 'gift', 'other')`,
     ),
     index('tips_profile_created').on(table.profileId, table.createdAt),
   ],
@@ -512,6 +900,11 @@ export const paymentAttempts = pgTable(
     status: attemptStatus('status').notNull(),
     // When reconciliation last asked the provider; least-recently-checked goes first (no starvation).
     lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
+    // Set before an external create call so concurrent requests cannot start a second checkout.
+    startClaimedAt: timestamp('start_claimed_at', { withTimezone: true }),
+    // When a provider read first showed the money taken while its details (who bore the fee)
+    // were not final: the receipt says the payment went through. Not an outcome; nothing is booked.
+    collectedAt: timestamp('collected_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (table) => [
@@ -762,6 +1155,8 @@ export const OPS_PERMISSIONS = [
   'pages.plan',
   'search.view',
   'fees.manage',
+  'providers.manage',
+  'recoveries.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 

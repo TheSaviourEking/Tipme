@@ -274,6 +274,83 @@
       "when": 1792979127096,
       "tag": "0038_staff_set_fees",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793057352985,
+      "tag": "0039_tip_purpose",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793073986384,
+      "tag": "0040_bachs_sandbox_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793093152968,
+      "tag": "0041_payment_reversed_issues",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793178974187,
+      "tag": "0042_payment_attempt_collected",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793182739216,
+      "tag": "0043_settlement_currency_issues",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793343227555,
+      "tag": "0044_mail_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1793345571444,
+      "tag": "0045_mail_event_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793346861019,
+      "tag": "0046_provider_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793347055510,
+      "tag": "0047_mail_event_time",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793349865876,
+      "tag": "0048_email_sign_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793351314001,
+      "tag": "0049_email_recovery",
+      "breakpoints": true
     }
   ]
 }

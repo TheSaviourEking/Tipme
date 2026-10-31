@@ -19,6 +19,7 @@ import {
 } from './release/release.controller.js';
 import { ReadinessService } from './health/readiness.service.js';
 import { InfraModule } from './infra/infra.module.js';
+import { MailModule } from './mail/mail.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 
 import { LOGGER } from './tokens.js';
@@ -41,11 +42,13 @@ export class AppModule {
         MomentsModule,
         OpsModule,
         AnalyticsModule,
-        ...(config.MESSAGING_PROVIDER === 'mock' ? [PretendInboxModule] : []),
-        ...(config.DIAGNOSTICS_ENABLED ? [DiagnosticsModule] : []),
-        ...(config.PAYMENT_PROVIDER === 'mock'
-          ? [WebhooksModule, MockCheckoutModule]
+        WebhooksModule,
+        MailModule,
+        ...(config.PAYMENT_PROVIDER === 'mock' ? [MockCheckoutModule] : []),
+        ...(config.MAIL_DEFAULT_PROVIDER === 'mock'
+          ? [PretendInboxModule]
           : []),
+        ...(config.DIAGNOSTICS_ENABLED ? [DiagnosticsModule] : []),
       ],
       controllers: [
         HealthController,

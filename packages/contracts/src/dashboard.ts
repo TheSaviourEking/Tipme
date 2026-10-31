@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TipPurpose } from './checkout.js';
 
 /** What a recipient's dashboard shows. Amounts are decimal strings of minor units. */
 export interface DashboardSummary {
@@ -10,6 +11,8 @@ export interface DashboardSummary {
   thisWeek: string;
   lastWeek: string;
   last7Days: { date: string; netMinor: string }[];
+  /** False when part of the balance was collected by a provider TipMe cannot pay out through yet. */
+  withdrawalsAvailable: boolean;
 }
 
 export type TipState = 'paid' | 'confirming' | 'failed' | 'cancelled';
@@ -29,6 +32,8 @@ export interface MyTipDetail {
   state: TipState;
   at: string;
   supporterLabel: string | null;
+  /** Why the supporter tipped; shown with a paid tip only. */
+  purpose: TipPurpose | null;
   message: string | null;
   /** The recipient hid this message (PR-011); its text is no longer returned. */
   messageHidden: boolean;

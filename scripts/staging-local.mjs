@@ -42,7 +42,7 @@ function ensureEnv() {
     TRUST_PROXY_HOPS: '1',
     PAYMENT_PROVIDER: 'mock',
     PAYMENTS_LIVE_ENABLED: 'false',
-    MESSAGING_PROVIDER: 'mock',
+    MAIL_DEFAULT_PROVIDER: 'mock',
     ANALYTICS_ENABLED: 'true',
     // The release check and e2e send many requests from one address.
     RATE_LIMIT_AUTH_PER_HOUR: '10000',
@@ -62,6 +62,7 @@ function ensureEnv() {
     AUTH_CODE_SECRET: secret(),
     WEB_REVALIDATE_SECRET: secret(),
     OPS_TOTP_KEY: randomBytes(32).toString('base64'),
+    MAIL_SEAL_KEY: randomBytes(32).toString('base64'),
     RELEASE_CHECK_TOKEN: secret(),
     BACKUP_KEY: randomBytes(32).toString('base64'),
     BACKUP_RETAIN: '14',
@@ -243,10 +244,10 @@ if (command === 'up') {
   await deploy(arg);
   console.log(`Deployed ${arg}.`);
 } else if (command === 'release-staff') {
-  // Grants the release-check role in the container and enrols its authenticator; the phone and
+  // Grants the release-check role in the container and enrols its authenticator; the address and
   // secret go into the local env file only.
   const env = readEnv();
-  const phone = '+2348090000101';
+  const email = 'release@release-check.example';
   const output = execFileSync(
     'docker',
     [
@@ -264,8 +265,8 @@ if (command === 'up') {
       'migrate',
       'node',
       'packages/database/dist/scripts/grant-owner.js',
-      '--phone',
-      phone,
+      '--email',
+      email,
       '--role',
       'release_check',
     ],
@@ -291,13 +292,13 @@ if (command === 'up') {
     api: LOCAL.api,
     password: env.PREVIEW_PASSWORD,
     token: env.RELEASE_CHECK_TOKEN,
-    phone,
+    email,
     enrolmentCode,
   });
   const lines = readFileSync(ENV_FILE, 'utf8')
     .split('\n')
     .filter((l) => l && !l.startsWith('RELEASE_OPS_'));
-  lines.push(`RELEASE_OPS_PHONE=${phone}`, `RELEASE_OPS_TOTP_SECRET=${secret}`);
+  lines.push(`RELEASE_OPS_EMAIL=${email}`, `RELEASE_OPS_TOTP_SECRET=${secret}`);
   writeFileSync(ENV_FILE, `${lines.join('\n')}\n`, { mode: 0o600 });
   console.log(
     'Release-check staff enrolled (secret stored in the local env file only).',
@@ -323,7 +324,7 @@ if (command === 'up') {
         ...process.env,
         RELEASE_PREVIEW_PASSWORD: env.PREVIEW_PASSWORD,
         RELEASE_CHECK_TOKEN: env.RELEASE_CHECK_TOKEN,
-        RELEASE_OPS_PHONE: env.RELEASE_OPS_PHONE ?? '',
+        RELEASE_OPS_EMAIL: env.RELEASE_OPS_EMAIL ?? '',
         RELEASE_OPS_TOTP_SECRET: env.RELEASE_OPS_TOTP_SECRET ?? '',
       },
     },

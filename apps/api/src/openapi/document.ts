@@ -41,6 +41,8 @@ const OTHER_ACCESS: Record<string, string> = {
   StatusController: 'status-token',
   // The payment provider: a signature over the raw body, with a replay window.
   MockWebhookController: 'provider-signature',
+  BachsWebhookController: 'provider-signature',
+  MailWebhookController: 'provider-signature',
   // The release check: a bearer token, and only on copies that say RELEASE_KIND=test.
   ReleaseRunsController: 'release-token',
 };
@@ -294,6 +296,7 @@ export async function createOpenApiApp(): Promise<INestApplication> {
       AUTH_CODE_SECRET: 'openapi-placeholder-secret-32-characters',
       WEB_REVALIDATE_SECRET: 'openapi-placeholder-secret-32-characters',
       OPS_TOTP_KEY: Buffer.alloc(32, 7).toString('base64'),
+      MAIL_SEAL_KEY: Buffer.alloc(32, 7).toString('base64'),
     }),
   );
   await app.init();

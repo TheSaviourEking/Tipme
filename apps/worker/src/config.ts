@@ -1,4 +1,5 @@
 import { parseConfig } from '@tipme/observability';
+import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { z } from 'zod';
 
 export const workerConfigSchema = z
@@ -10,6 +11,7 @@ export const workerConfigSchema = z
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('production'),
+    RELEASE_KIND: z.enum(['test', 'live']).default('live'),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
@@ -27,9 +29,37 @@ export const workerConfigSchema = z
       .string()
       .regex(/^[a-z0-9-]{1,32}$/)
       .default('tipme'),
-    // Only the mock provider exists until a real one is approved (D-03); live payments stay off.
-    PAYMENT_PROVIDER: z.enum(['mock']).default('mock'),
+    // Seals queued email (addresses, codes, links) at rest: 32 bytes, base64. Never logged.
+    MAIL_SEAL_KEY: z
+      .string()
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'must be 32 bytes, base64',
+      }),
+    // Mail (mail platform spec §4.5). The default sends until staff choose a provider in ops.
+    ...mailSettingsShape,
+    // Each kind of email has its own sender on this domain (security@, notifications@, …).
+    MAIL_FROM_DOMAIN: z
+      .string()
+      .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)
+      .default('mail.usetipme.xyz'),
+    // The brand in each sender's name: "TipMe Security", "TipMe Notifications", …
+    MAIL_FROM_NAME: z.string().min(1).max(40).default('TipMe'),
+    MAIL_REPLY_TO: z.email().optional(),
+    // One-click unsubscribe links in optional emails point here (the API's public address).
+    API_ORIGIN: z
+      .url({ protocol: /^https?$/ })
+      .default('http://localhost:4000'),
+    // Links in emails point here.
+    WEB_ORIGIN: z
+      .url({ protocol: /^https?$/ })
+      .default('http://localhost:3000'),
+    // Sandbox only: selectable in test and password-protected preview, never production.
+    PAYMENT_PROVIDER: z.enum(['mock', 'bachs-sandbox']).default('mock'),
     PAYMENTS_LIVE_ENABLED: z.literal('false').default('false'),
+    BACHS_SANDBOX_API_KEY: z
+      .string()
+      .regex(/^sk_sandbox_.+$/)
+      .optional(),
     // Anonymous analytics (PR-009). Unset: on in development and test, off in production (D-07).
     ANALYTICS_ENABLED: z
       .enum(['true', 'false'])
@@ -81,6 +111,7 @@ export const workerConfigSchema = z
         message: 'test only',
       });
     }
+    checkMailSettings(config, context);
     if (
       config.PAYMENT_PROVIDER === 'mock' &&
       config.NODE_ENV === 'production' &&
@@ -90,6 +121,37 @@ export const workerConfigSchema = z
         code: 'custom',
         path: ['PAYMENT_PROVIDER'],
         message: 'mock not allowed in production',
+      });
+    }
+    if (config.PAYMENT_PROVIDER === 'bachs-sandbox') {
+      if (
+        config.NODE_ENV === 'production' &&
+        config.DEPLOYMENT_MODE !== 'preview'
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['PAYMENT_PROVIDER'],
+          message:
+            'Bachs sandbox is allowed only in test or password-protected preview',
+        });
+      }
+      if (!config.BACHS_SANDBOX_API_KEY) {
+        context.addIssue({
+          code: 'custom',
+          path: ['BACHS_SANDBOX_API_KEY'],
+          message: 'required for Bachs sandbox',
+        });
+      }
+    }
+    if (
+      config.BACHS_SANDBOX_API_KEY &&
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['BACHS_SANDBOX_API_KEY'],
+        message: 'Bachs sandbox credentials are restricted to test or preview',
       });
     }
   });

@@ -39,14 +39,19 @@ export function tipStatusView(
     else if (tip.status === 'CANCELLED') state = 'cancelled';
     else {
       const [attempt] = await db
-        .select({ status: paymentAttempts.status })
+        .select({
+          status: paymentAttempts.status,
+          collectedAt: paymentAttempts.collectedAt,
+        })
         .from(paymentAttempts)
         .where(eq(paymentAttempts.intentId, tip.intentId))
         .orderBy(desc(paymentAttempts.attemptNumber))
         .limit(1);
-      state =
-        attempt?.status === 'UNKNOWN' ||
-        now.getTime() - tip.createdAt.getTime() > CHECKING_AFTER_MS
+      // The provider took the money; only its details are pending.
+      state = attempt?.collectedAt
+        ? 'collected'
+        : attempt?.status === 'UNKNOWN' ||
+            now.getTime() - tip.createdAt.getTime() > CHECKING_AFTER_MS
           ? 'checking'
           : 'waiting';
     }

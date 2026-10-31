@@ -11,13 +11,10 @@ import {
 } from '../schema.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
-import { writePretendMessage } from './pretend-outbox.js';
-import { maskEmail } from './email.js';
+import { enqueueMail, type MailSealing } from './mail-queue.js';
 
 const ngn = (minor: bigint) =>
   `NGN ${new Intl.NumberFormat('en').format(Number(minor / 100n))}.${String(minor % 100n).padStart(2, '0')}`;
-const nairaWhole = (minor: bigint) =>
-  `₦${new Intl.NumberFormat('en').format(Number(minor / 100n))}`;
 
 /**
  * Tells the recipient about a confirmed tip: an in-app notification, and an email in the pretend
@@ -26,7 +23,14 @@ const nairaWhole = (minor: bigint) =>
  */
 export function notifyTipSucceeded(
   db: Database,
-  input: { tipId: string; profileId: string; now?: Date },
+  input: {
+    sealing: MailSealing;
+    tipId: string;
+    profileId: string;
+    now?: Date;
+    /** True while payments are pretend (the mock provider), so the email says so. */
+    pretendPayment?: boolean;
+  },
 ): Promise<'created' | 'duplicate' | 'skipped'> {
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -67,13 +71,18 @@ export function notifyTipSucceeded(
       if (inserted.length === 0) return 'duplicate' as const;
       // The in-app notice always goes; the email only if the recipient wants tip emails (PR-013).
       if (row.email && row.emailVerifiedAt && row.wantsEmail) {
-        const first = row.displayName.split(/\s+/)[0];
-        await writePretendMessage(tx, {
-          channel: 'email',
-          recipientHint: maskEmail(row.email),
+        await enqueueMail(tx, input.sealing, {
+          type: 'tip_received',
+          to: row.email,
           userId: row.userId,
-          subject: `You got a ${nairaWhole(row.net)} tip on TipMe`,
-          body: `${first}, you got a tip of ${ngn(row.net)} from ${row.label ?? 'a guest'}. It is confirmed by the payment provider. (Pretend payment: no real money moved.)`,
+          data: {
+            firstName: row.displayName.split(/\s+/)[0] || row.displayName,
+            netMinor: row.net.toString(),
+            supporterLabel: row.label,
+            pretendPayment: input.pretendPayment ?? false,
+          },
+          dedupeKey: `tip_received.${input.tipId}`,
+          ...(input.now ? { now: input.now } : {}),
         });
       }
       return 'created' as const;

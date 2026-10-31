@@ -79,7 +79,7 @@ test('reconciliation', async (t) => {
           now: later(3),
           minAgeMs: 120_000,
         }),
-        { checked: 1, applied: 1, unresolved: 0, errors: 0 },
+        { checked: 1, applied: 1, unresolved: 0, errors: 0, errorKinds: {} },
       );
       assert.equal(await tipStatus(tipId), 'SUCCEEDED');
       assert.deepEqual(
@@ -89,7 +89,7 @@ test('reconciliation', async (t) => {
           now: later(4),
           minAgeMs: 120_000,
         }),
-        { checked: 0, applied: 0, unresolved: 0, errors: 0 },
+        { checked: 0, applied: 0, unresolved: 0, errors: 0, errorKinds: {} },
       );
       assert.equal(
         mock.initialisedCount(),
@@ -170,7 +170,9 @@ test('reconciliation', async (t) => {
       const flaky = {
         verifyTransaction: async (reference) => {
           if (reference === broken.providerReference)
-            throw new Error('provider timeout');
+            throw Object.assign(new Error('no response'), {
+              name: 'BachsTransportError',
+            });
           return mock.verifyTransaction(reference);
         },
       };
@@ -181,6 +183,8 @@ test('reconciliation', async (t) => {
         minAgeMs: 120_000,
       });
       assert.equal(result.errors, 1);
+      // Counted by kind, so the worker's log says why (never which attempt or how much).
+      assert.deepEqual(result.errorKinds, { BachsTransportError: 1 });
       assert.equal(result.applied, 1);
       assert.equal(await tipStatus(tipId), 'SUCCEEDED');
     },

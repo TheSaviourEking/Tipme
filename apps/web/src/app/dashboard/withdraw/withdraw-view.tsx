@@ -50,7 +50,9 @@ export default function WithdrawPage() {
         ? 'That is more than your available balance.'
         : result.code === 'WITHDRAWAL_TOO_SMALL'
           ? 'The smallest withdrawal is NGN 1,000.'
-          : 'We couldn’t request the withdrawal. Please try again.',
+          : result.code === 'WITHDRAWAL_UNAVAILABLE'
+            ? 'Withdrawals aren’t available yet for tips paid through this payment provider. Your tips are safe; nothing was sent.'
+            : 'We couldn’t request the withdrawal. Please try again.',
     );
   };
 
@@ -61,39 +63,49 @@ export default function WithdrawPage() {
       <p>
         Available: <strong>{naira(summary.availableMinor)}</strong>
       </p>
-      <Notice title="Pretend withdrawal">
-        No real money moves during the preview. The pretend bank pays straight
-        away.
-      </Notice>
+      {summary.withdrawalsAvailable ? (
+        <Notice title="Test withdrawal">
+          No real money moves in test mode. The test bank pays straight away.
+        </Notice>
+      ) : (
+        // Said before an amount is typed, not after the owner presses Withdraw.
+        <Notice title="Withdrawals aren’t available yet">
+          Some of your tips were paid through a payment provider TipMe can’t pay
+          out from yet. Your tips are safe, and your balance stays here until
+          withdrawals open.
+        </Notice>
+      )}
       {done && (
         <Notice tone="success" title="Withdrawal requested">
-          {done} is on its way to your pretend bank.{' '}
+          {done} is on its way to your test bank.{' '}
           <Link href="/dashboard">Back to your dashboard</Link>
         </Notice>
       )}
-      <form className="settings-form" onSubmit={submit} noValidate>
-        <InputField
-          id={`${id}-amount`}
-          label="Amount (NGN)"
-          inputMode="decimal"
-          autoComplete="off"
-          value={raw}
-          onChange={(event) => {
-            setRaw(event.target.value);
-            setError('');
-            key.current = null;
-          }}
-          hint="The smallest withdrawal is NGN 1,000."
-          error={error || undefined}
-        />
-        <Button
-          type="submit"
-          disabled={busy || summary.availableMinor === '0'}
-          aria-busy={busy}
-        >
-          {amount ? `Withdraw ${naira(amount)}` : 'Withdraw'}
-        </Button>
-      </form>
+      {summary.withdrawalsAvailable && (
+        <form className="settings-form" onSubmit={submit} noValidate>
+          <InputField
+            id={`${id}-amount`}
+            label="Amount (NGN)"
+            inputMode="decimal"
+            autoComplete="off"
+            value={raw}
+            onChange={(event) => {
+              setRaw(event.target.value);
+              setError('');
+              key.current = null;
+            }}
+            hint="The smallest withdrawal is NGN 1,000."
+            error={error || undefined}
+          />
+          <Button
+            type="submit"
+            disabled={busy || summary.availableMinor === '0'}
+            aria-busy={busy}
+          >
+            {amount ? `Withdraw ${naira(amount)}` : 'Withdraw'}
+          </Button>
+        </form>
+      )}
     </div>
   );
 }

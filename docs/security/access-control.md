@@ -58,13 +58,15 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `audit.view` | GET `/v1/ops/audit` |
 | `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
 | `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
-| `issues.view` | GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes` |
+| `issues.view` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
 | `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
-| `payments.recheck` | POST `/v1/ops/recheck` |
-| `private.view` | POST `/v1/ops/issues/{id}/reveal` |
+| `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/recheck` |
+| `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
+| `providers.manage` | POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
+| `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery` |
 | `search.view` | GET `/v1/ops/search` |
 
 <!-- /generated:permissions -->
@@ -85,6 +87,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/health/ready` | n/a (read) | – | – |
 | GET | `/health/release` | n/a (read) | – | – |
 | POST | `/v1/auth/code` | yes | `auth_code` | – |
+| POST | `/v1/auth/email-recovery/confirm` | yes | `auth_verify` | – |
+| POST | `/v1/auth/email-recovery/propose` | yes | `auth_verify` | – |
+| POST | `/v1/auth/email-recovery/start` | yes | `auth_code` | – |
 | POST | `/v1/auth/email/confirm` | yes | `auth_verify` | – |
 | POST | `/v1/auth/recover` | yes | `auth_code` | – |
 | POST | `/v1/auth/recover/code` | yes | `auth_code` | – |
@@ -97,6 +102,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/diagnostics/trace-probe/{jobId}` | n/a (read) | – | yes |
 | POST | `/v1/events` | – | `analytics` | – |
 | GET | `/v1/handles/{handle}/availability` | n/a (read) | `handles` | – |
+| GET | `/v1/mail/unsubscribe` | n/a (read) | – | – |
+| POST | `/v1/mail/unsubscribe` | – | `unsubscribe` | – |
 | GET | `/v1/mock-provider/checkout/{reference}` | n/a (read) | – | yes |
 | POST | `/v1/mock-provider/checkout/{reference}` | – | – | yes |
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
@@ -115,6 +122,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
+| POST | `/v1/webhooks/bachs` | – | – | yes |
+| POST | `/v1/webhooks/mail/{provider}` | – | – | – |
 | POST | `/v1/webhooks/mock` | – | – | yes |
 
 #### The release check (bearer token; test copies only)
@@ -135,6 +144,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
+| GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
+| POST | `/v1/me/email/code` | yes | `auth_code` | – |
+| POST | `/v1/me/email/confirm` | yes | `auth_verify` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
 | GET | `/v1/me/moments` | n/a (read) | – | – |
@@ -145,11 +157,18 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/me/notifications/read` | yes | – | – |
 | POST | `/v1/me/page` | yes | – | – |
 | PUT | `/v1/me/page/state` | yes | – | – |
+| GET | `/v1/me/payment-account` | n/a (read) | – | – |
+| POST | `/v1/me/payment-account/onboarding` | yes | `intents` | – |
 | PUT | `/v1/me/phone` | yes | `auth_verify` | – |
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
 | PATCH | `/v1/me/profile` | yes | – | – |
 | GET | `/v1/me/recovery` | n/a (read) | – | – |
+| GET | `/v1/me/recovery-email` | n/a (read) | – | – |
+| POST | `/v1/me/recovery-email` | yes | `auth_verify` | – |
+| POST | `/v1/me/recovery-email/change-code` | yes | `auth_code` | – |
+| POST | `/v1/me/recovery-email/code` | yes | `auth_code` | – |
+| POST | `/v1/me/recovery-email/remove` | yes | `auth_verify` | – |
 | POST | `/v1/me/recovery/cancel` | yes | – | – |
 | GET | `/v1/me/reports` | n/a (read) | – | – |
 | GET | `/v1/me/reports/{week}` | n/a (read) | – | – |
@@ -177,7 +196,18 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 
 | Method | Path | Permission | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- | --- |
+| POST | `/v1/ops/accounts/{userId}/email-recovery` | `recoveries.manage` | yes | – | – |
 | GET | `/v1/ops/audit` | `audit.view` | n/a (read) | – | – |
+| POST | `/v1/ops/bachs/account-recovery` | `payments.recheck` | yes | – | – |
+| POST | `/v1/ops/bachs/checkout-recovery` | `payments.recheck` | yes | – | – |
+| POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.recheck` | yes | – | – |
+| GET | `/v1/ops/email/export.csv` | `issues.view` | n/a (read) | – | – |
+| GET | `/v1/ops/email/messages` | `issues.view` | n/a (read) | – | – |
+| GET | `/v1/ops/email/messages/{id}/content` | `issues.view` | n/a (read) | – | – |
+| POST | `/v1/ops/email/messages/{id}/reveal-recipient` | `private.view` | yes | – | – |
+| GET | `/v1/ops/email/messages/{id}/timeline` | `issues.view` | n/a (read) | – | – |
+| GET | `/v1/ops/email/series` | `issues.view` | n/a (read) | – | – |
+| GET | `/v1/ops/email/summary` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/issues` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/issues/{id}` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/issues/{id}/notes` | `issues.view` | yes | – | – |
@@ -197,6 +227,14 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
+| GET | `/v1/ops/providers/mail` | `issues.view` | n/a (read) | – | – |
+| POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/overrides` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/overrides/remove` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/suppressions/lookup` | `private.view` | yes | – | – |
+| POST | `/v1/ops/providers/suppressions/remove` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/tests/confirm` | `issues.view` | yes | – | – |
 | POST | `/v1/ops/recheck` | `payments.recheck` | yes | – | – |
 | GET | `/v1/ops/search` | `search.view` | n/a (read) | – | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
@@ -220,6 +258,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |
 | `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                        | Only the current photo of a live, active page                                                                      |
 | `POST /v1/tip-quotes`, `POST /v1/tip-intents`                                          | A supporter tips without an account                                   | Rate-limited; amounts and fees computed on the server; idempotency key                                             |
+| `GET`, `POST /v1/mail/unsubscribe`                                                     | One-click unsubscribe from a mail app, with no session                | A signed token naming one person and one optional email type; GET only shows a page; rate-limited                  |
 | `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                    | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07 |
 | `POST /v1/auth/code`, `/v1/auth/verify`, `/v1/auth/recover*`, `/v1/auth/email/confirm` | Signing in and recovering an account happen before there is a session | Per-address and per-number limits; lockouts; codes expire                                                          |
 

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { MockWebhook } from '@tipme/contracts';
-import type { Scenario } from '../provider.js';
 import { SIGNATURE_HEADER, signWebhook } from '../signing.js';
+import type { Scenario } from './scenario.js';
 
 export interface PlannedDelivery {
   body: MockWebhook;

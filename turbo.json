@@ -10,7 +10,10 @@
         "PRODUCTION_LAUNCH_AT",
         "SITE_URL",
         "API_INTERNAL_ORIGIN",
-        "NEXT_PUBLIC_PREVIEW_GATE"
+        "NEXT_PUBLIC_PREVIEW_GATE",
+        "NEXT_PUBLIC_SENTRY_DSN",
+        "NEXT_PUBLIC_SENTRY_ENVIRONMENT",
+        "SENTRY_AUTH_TOKEN"
       ]
     },
     "lint": {

@@ -3,10 +3,10 @@
 //
 // 1. On the server, grant the role (prints a one-time enrolment code):
 //      docker compose ... run --rm -e TIPME_CONFIRM_DATABASE=tipme migrate \
-//        node packages/database/dist/scripts/grant-owner.js --phone <number> --role release_check
+//        node packages/database/dist/scripts/grant-owner.js --email <address> --role release_check
 // 2. From your machine:
 //      RELEASE_PREVIEW_PASSWORD=... RELEASE_CHECK_TOKEN=... node scripts/release-enrol.mjs \
-//        --web <url> --api <url> --phone <number> --code <enrolment code> [--out <file>]
+//        --web <url> --api <url> --email <address> --code <enrolment code> [--out <file>]
 //    It signs in through the pretend inbox (which needs the release token on a preview copy),
 //    registers an authenticator and prints its secret once, or writes it to --out (mode 600)
 //    so it never reaches the terminal. Store it as RELEASE_OPS_TOTP_SECRET wherever you run
@@ -26,7 +26,7 @@ export async function enrolReleaseStaff({
   api,
   password,
   token,
-  phone,
+  email,
   enrolmentCode,
 }) {
   const { issuePreviewTicket, totpAt } =
@@ -54,9 +54,11 @@ export async function enrolReleaseStaff({
     return response;
   };
   await json(
-    await call('POST', '/v1/auth/code', { phone }),
+    await call('POST', '/v1/auth/code', { email }),
     'sending the sign-in code',
   );
+  // The code is queued and the worker sends it within a few seconds.
+  await new Promise((resolve) => setTimeout(resolve, 8_000));
   const inbox = await json(
     await call(
       'GET',
@@ -66,15 +68,20 @@ export async function enrolReleaseStaff({
     ),
     'reading the pretend inbox',
   );
-  const last4 = phone.replace(/\D/g, '').slice(-4);
+  const [local = '', domain = ''] = email.toLowerCase().split('@');
+  const hint = `${local.slice(0, 1)}•••@${domain}`;
   const code = /\b(\d{6})\b/.exec(
-    inbox.find((m) => m.to.endsWith(last4) && /Your TipMe code is/.test(m.body))
-      ?.body ?? '',
+    inbox.find(
+      (m) => m.to === hint && /Your TipMe sign-in code/.test(m.subject ?? ''),
+    )?.body ?? '',
   )?.[1];
-  if (!code) throw new Error('no sign-in code in the pretend inbox');
+  if (!code)
+    throw new Error(
+      'no sign-in code in the pretend inbox yet (the worker sends every few seconds: try again)',
+    );
   await json(
     await call('POST', '/v1/auth/verify', {
-      phone,
+      email,
       code,
       deviceLabel: 'Release check',
     }),
@@ -97,15 +104,15 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     options: {
       web: { type: 'string' },
       api: { type: 'string' },
-      phone: { type: 'string' },
+      email: { type: 'string' },
       code: { type: 'string' },
       out: { type: 'string' },
       insecure: { type: 'boolean', default: false },
     },
   });
-  if (!values.web || !values.api || !values.phone || !values.code) {
+  if (!values.web || !values.api || !values.email || !values.code) {
     console.error(
-      'usage: node scripts/release-enrol.mjs --web <url> --api <url> --phone <n> --code <enrolment code>',
+      'usage: node scripts/release-enrol.mjs --web <url> --api <url> --email <address> --code <enrolment code>',
     );
     process.exit(2);
   }
@@ -116,7 +123,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       api: new URL(values.api).origin,
       password: process.env.RELEASE_PREVIEW_PASSWORD ?? '',
       token: process.env.RELEASE_CHECK_TOKEN ?? '',
-      phone: values.phone,
+      email: values.email,
       enrolmentCode: values.code,
     });
     if (values.out) {

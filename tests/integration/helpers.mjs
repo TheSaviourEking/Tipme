@@ -24,6 +24,8 @@ export const AUTH_CODE_SECRET = 'integration-auth-code-secret-32-characters';
 export const WEB = 'http://localhost:3000';
 // 32 zero-ish bytes for tests only; production keys come from the environment (ADR-0010).
 export const OPS_TOTP_KEY = Buffer.alloc(32, 7).toString('base64');
+/** Seals queued mail in the integration stack; tests open it with the same key. */
+export const MAIL_SEAL_KEY = Buffer.alloc(32, 7).toString('base64');
 
 export const uniquePrefix = () => `it-${randomUUID().slice(0, 8)}`;
 
@@ -55,6 +57,7 @@ export async function startStack({
     REDIS_URL,
     QUEUE_PREFIX: prefix,
     LOG_LEVEL: 'info',
+    MAIL_SEAL_KEY,
   };
   const app = await createApp(
     loadApiConfig({

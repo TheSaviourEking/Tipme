@@ -7,9 +7,18 @@ import { MeProfileController } from './me-profile.controller.js';
 import { PublicProfileController } from './public-profile.controller.js';
 import { AvatarController } from './avatar.controller.js';
 import { ProfileRevalidator } from './revalidate.js';
+import { PaymentAccountsController } from './payment-accounts.controller.js';
+import { CheckoutModule } from '../checkout/checkout.module.js';
+import { MailModule } from '../mail/mail.module.js';
 
 @Module({
-  controllers: [MeProfileController, PublicProfileController, AvatarController],
+  imports: [CheckoutModule, MailModule],
+  controllers: [
+    MeProfileController,
+    PublicProfileController,
+    AvatarController,
+    PaymentAccountsController,
+  ],
   providers: [
     ProfileRevalidator,
     SessionGuard,

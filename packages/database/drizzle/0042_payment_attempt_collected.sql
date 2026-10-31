@@ -1,0 +1,1 @@
+ALTER TABLE "payment_attempts" ADD COLUMN "collected_at" timestamp with time zone;

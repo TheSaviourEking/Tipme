@@ -128,7 +128,7 @@ export function QrStudio() {
     <div className="qr-studio">
       <h1>My QR code</h1>
       <p className="tm-hint">
-        Anyone who scans it lands on your page. Pretend payments only.
+        Anyone who scans it lands on your page. Test mode.
       </p>
       <div className="qr-studio__layout">
         <canvas

@@ -24,9 +24,13 @@ import {
   handleAliases,
   handleHolds,
   profileAvatars,
+  emailRecoveries,
+  mailPreferences,
   phoneRecoveries,
   profiles,
   sessions,
+  emailCodeLockouts,
+  emailCodes,
   signInCodes,
   signInLockouts,
   users,
@@ -35,8 +39,14 @@ import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
+import { mailOwner } from './account-mail.js';
+import type { MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { publicCelebration } from './moments.js';
+import {
+  getReadyPaymentAccount,
+  type PaymentAccountEnvironment,
+} from './payment-accounts.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
 /** Old handles a page keeps pointing at itself (PR-011). */
@@ -251,6 +261,7 @@ export function opsPageByHandle(
 
 const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   profileId: row.id,
+  userId: row.userId,
   handle: row.handle,
   displayName: row.displayName,
   plan: row.plan as PagePlan,
@@ -524,6 +535,13 @@ export function handleAliasTarget(
 export function publicProfile(
   db: Database,
   raw: string,
+  options: {
+    /** Set when new tips need the owner's own account with this provider (the same rule checkout applies). */
+    requiredAccount?: {
+      provider: string;
+      environment: PaymentAccountEnvironment;
+    };
+  } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
   if (!handle) return Promise.resolve(null);
@@ -548,6 +566,12 @@ export function publicProfile(
     const { profile } = row;
     const socials = profile.socials as Socials;
     const celebration = await publicCelebration(db, profile.id);
+    const acceptingTips = options.requiredAccount
+      ? (await getReadyPaymentAccount(db, {
+          profileId: profile.id,
+          ...options.requiredAccount,
+        })) !== null
+      : true;
     return {
       handle: profile.handle,
       displayName: profile.displayName,
@@ -565,6 +589,7 @@ export function publicProfile(
         : {}),
       ...(celebration ? { celebration } : {}),
       tipAmounts: tipAmountsOf(profile),
+      acceptingTips,
     };
   });
 }
@@ -576,7 +601,7 @@ export function publicProfile(
  */
 export function deleteAccount(
   db: Database,
-  input: { userId: string; now?: Date },
+  input: { userId: string; sealing: MailSealing; now?: Date },
 ): Promise<{ handle: string }> {
   const now = input.now ?? new Date();
   return guarded(() =>
@@ -646,7 +671,7 @@ export function deleteAccount(
       }
       // Erase what identifies the person, including codes, lockouts and pending links or recoveries.
       const [person] = await tx
-        .select({ phone: users.phoneE164 })
+        .select({ phone: users.phoneE164, email: users.email })
         .from(users)
         .where(eq(users.id, input.userId));
       if (person?.phone) {
@@ -656,6 +681,12 @@ export function deleteAccount(
         await tx
           .delete(signInLockouts)
           .where(eq(signInLockouts.phoneE164, person.phone));
+      }
+      if (person?.email) {
+        await tx.delete(emailCodes).where(eq(emailCodes.email, person.email));
+        await tx
+          .delete(emailCodeLockouts)
+          .where(eq(emailCodeLockouts.email, person.email));
       }
       await tx
         .update(emailTokens)
@@ -673,10 +704,24 @@ export function deleteAccount(
             isNull(phoneRecoveries.completedAt),
           ),
         );
+      // Before the address goes: this is the last email the account gets.
+      await mailOwner(tx, input.sealing, {
+        userId: input.userId,
+        type: 'account_deleted_notice',
+        data: {},
+        dedupeKey: `account_deleted_notice.${input.userId}`,
+        now,
+      });
+      // Deleted, not cancelled: each row holds an address, and it must not move back later.
+      await tx
+        .delete(emailRecoveries)
+        .where(eq(emailRecoveries.userId, input.userId));
       await tx
         .update(users)
         .set({
           phoneE164: null,
+          recoveryEmail: null,
+          recoveryEmailVerifiedAt: null,
           email: null,
           emailVerifiedAt: null,
           deletedAt: now,
@@ -703,6 +748,7 @@ export function setPageSuspension(
     staffUserId: string;
     suspend: boolean;
     reason: string;
+    sealing: MailSealing;
   },
 ): Promise<{ handle: string }> {
   return guarded(() =>
@@ -730,17 +776,28 @@ export function setPageSuspension(
         subjectId: input.profileId,
         reason: input.reason,
       });
+      // Staff notes stay private: the email says what happened, not why.
+      const type = input.suspend ? 'page_paused' : 'page_restored';
+      await mailOwner(tx, input.sealing, {
+        profileId: input.profileId,
+        type,
+        data: {},
+        // Each action is news, even back and forth in the same minute.
+        dedupeKey: `${type}.${input.profileId}.${newId()}`,
+      });
       return { handle: row.handle };
     }),
   );
 }
 
-/** The recipient's notification preferences (PR-013). */
+/** The recipient's notification preferences (PR-013), and the guides email switch. */
 export function getNotificationPrefs(
   db: Database,
   userId: string,
 ): Promise<NotificationPrefs> {
-  return guarded(async () => prefsOf((await myRow(db, userId)).profile));
+  return guarded(async () =>
+    prefsOf((await myRow(db, userId)).profile, await guidesOn(db, userId)),
+  );
 }
 
 export function setNotificationPrefs(
@@ -759,16 +816,35 @@ export function setNotificationPrefs(
       })
       .where(eq(profiles.id, row.profile.id))
       .returning();
-    return prefsOf(updated!);
+    await db
+      .insert(mailPreferences)
+      .values({ userId, engagement: prefs.guideEmails })
+      .onConflictDoUpdate({
+        target: mailPreferences.userId,
+        set: { engagement: prefs.guideEmails, updatedAt: new Date() },
+      });
+    return prefsOf(updated!, prefs.guideEmails);
   });
 }
 
-const prefsOf = (profile: {
-  notifyTipEmails: boolean;
-  notifyWeeklyReports: boolean;
-  notifyMilestones: boolean;
-}): NotificationPrefs => ({
+async function guidesOn(db: Database, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ on: mailPreferences.engagement })
+    .from(mailPreferences)
+    .where(eq(mailPreferences.userId, userId));
+  return row?.on ?? true;
+}
+
+const prefsOf = (
+  profile: {
+    notifyTipEmails: boolean;
+    notifyWeeklyReports: boolean;
+    notifyMilestones: boolean;
+  },
+  guideEmails: boolean,
+): NotificationPrefs => ({
   tipEmails: profile.notifyTipEmails,
   weeklyReports: profile.notifyWeeklyReports,
   milestones: profile.notifyMilestones,
+  guideEmails,
 });

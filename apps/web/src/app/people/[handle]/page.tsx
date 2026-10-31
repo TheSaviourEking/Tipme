@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
+import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import {
   RecipientIdentity,
   RecipientPortrait,
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: Props) {
   return profile && !('movedTo' in profile)
     ? previewMetadata(
         `${profile.displayName} on TipMe`,
-        `${profile.role ?? 'A TipMe recipient'}. Pretend payments only.`,
+        `${profile.role ?? 'A TipMe recipient'}. Test mode.`,
         `/@${profile.handle}`,
       )
     : { title: 'Page unavailable', robots: { index: false, follow: false } };
@@ -103,17 +104,21 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             aria-label={`Tip ${firstName}`}
             data-tip-panel
           >
-            <AppreciationForm
-              recipient={firstName}
-              handle={profile.handle}
-              collapseExtras
-              {...(profile.tipAmounts
-                ? { tipAmounts: profile.tipAmounts }
-                : {})}
-              {...(profile.celebration
-                ? { celebration: profile.celebration }
-                : {})}
-            />
+            {profile.acceptingTips === false ? (
+              <TipsNotReady recipient={firstName} />
+            ) : (
+              <AppreciationForm
+                recipient={firstName}
+                handle={profile.handle}
+                collapseExtras
+                {...(profile.tipAmounts
+                  ? { tipAmounts: profile.tipAmounts }
+                  : {})}
+                {...(profile.celebration
+                  ? { celebration: profile.celebration }
+                  : {})}
+              />
+            )}
           </aside>
         </div>
         <section className="profile-more" aria-label={`More from ${firstName}`}>
@@ -133,8 +138,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           </div>
           <div className="profile-safety">
             <p>
-              No account needed. Payments on TipMe are pretend during the
-              preview: no real money moves.
+              No account needed. TipMe is in test mode: no real money moves yet.
             </p>
             <Link href="/about-preview">Learn about this preview</Link>
             <ReportPage handle={profile.handle} />

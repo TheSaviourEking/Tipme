@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { mockWebhookSchema } from '@tipme/contracts';
+import { mockWebhookSchema, type MockWebhook } from '@tipme/contracts';
 import type { Redis } from 'ioredis';
 import type {
   PaymentProvider,
-  Scenario,
   TransactionStatus,
   WebhookVerification,
 } from '../provider.js';
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
 import { attemptKey, paymentKey, payoutKey } from './keys.js';
+import type { Scenario } from './scenario.js';
 
 /** Same rounding as FEE_POLICY_V1's estimated processing fee (150 bps, half up). */
 export const mockProviderFee = (amountMinor: bigint): bigint =>
@@ -32,7 +32,20 @@ const PAYOUT_STATUSES: ReadonlySet<string> = new Set([
   'pending',
 ]);
 
-export interface MockProvider extends PaymentProvider {
+export interface MockProvider extends PaymentProvider<MockWebhook> {
+  initializePayment(input: {
+    attemptId: string;
+    amountMinor: bigint;
+    currency: string;
+    scenario?: Scenario;
+  }): Promise<{ providerReference: string }>;
+  initiatePayout(input: {
+    payoutId: string;
+    idempotencyKey: string;
+    amountMinor: bigint;
+    currency: string;
+    scenario?: Scenario;
+  }): Promise<{ providerReference: string }>;
   markStatus(reference: string, status: TransactionStatus): Promise<void>;
   /**
    * Sets the scenario the pretend checkout page chose. Only the first choice counts (false after
@@ -115,7 +128,11 @@ export function createMockProvider(options: {
       };
     },
 
-    verifyWebhook(rawBody, headers, now = new Date()): WebhookVerification {
+    verifyWebhook(
+      rawBody,
+      headers,
+      now = new Date(),
+    ): WebhookVerification<MockWebhook> {
       if (secret.length < 32) return { ok: false, reason: 'bad_signature' };
       const header = headers[SIGNATURE_HEADER];
       const result = verifySignature(

@@ -2,6 +2,9 @@ import type { Request, Response } from 'express';
 import type { ApiConfig } from '../config.js';
 
 export const SESSION_COOKIE = 'tipme_session';
+/** A long-lived random id per browser, to notice sign-ins from a new device. */
+export const DEVICE_COOKIE = 'tipme_device';
+const DEVICE_COOKIE_MS = 400 * 86_400_000;
 
 /** Reads one cookie from the request header (no cookie-parser dependency). */
 export function readCookie(request: Request, name: string): string | null {
@@ -29,6 +32,20 @@ export function setSessionCookie(
     path: '/',
     secure: !isLocalHttp(config),
     expires: expiresAt,
+  });
+}
+
+export function setDeviceCookie(
+  response: Response,
+  config: ApiConfig,
+  value: string,
+): void {
+  response.cookie(DEVICE_COOKIE, value, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: !isLocalHttp(config),
+    maxAge: DEVICE_COOKIE_MS,
   });
 }
 

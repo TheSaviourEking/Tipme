@@ -5,12 +5,13 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
-  WEBHOOK_SECRET,
-  DATABASE_URL,
-  REDIS_URL,
   bullmq,
+  DATABASE_URL,
+  MAIL_SEAL_KEY,
+  REDIS_URL,
   uniquePrefix,
   waitForJob,
+  WEBHOOK_SECRET,
 } from './helpers.mjs';
 
 const main = fileURLToPath(
@@ -26,6 +27,7 @@ async function spawnWorker(t, env = {}) {
       REDIS_URL,
       DATABASE_URL,
       MOCK_PROVIDER_WEBHOOK_SECRET: WEBHOOK_SECRET,
+      MAIL_SEAL_KEY,
       ...env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],

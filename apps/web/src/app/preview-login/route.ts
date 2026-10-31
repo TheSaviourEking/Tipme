@@ -27,7 +27,7 @@ input{width:100%;min-height:50px;padding:12px 14px;border:1px solid rgb(20 18 16
 button{width:100%;min-height:50px;margin-top:16px;border:1px solid #000;border-radius:12px;background:#000;color:#fff;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 1px 1px rgb(20 18 16/24%),0 8px 16px -8px rgb(20 18 16/45%)}
 input:focus,button:focus{outline:3px solid #7a32f9;outline-offset:3px}
 .error{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:#fdecea;color:#9b2820;font-weight:700}
-</style></head><body><main>${logo}<h1>TipMe staging</h1><p>Private test copy. All payments and messages are pretend.</p>${error ? `<p class="error" role="alert">${escape(error)}</p>` : ''}<form method="post" action="/preview-login"><input type="hidden" name="next" value="${escape(next)}"><label for="password">Staging password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"><button type="submit">Open staging</button></form></main></body></html>`;
+</style></head><body><main>${logo}<h1>TipMe staging</h1><p>Private test copy. All payments and messages are in test mode.</p>${error ? `<p class="error" role="alert">${escape(error)}</p>` : ''}<form method="post" action="/preview-login"><input type="hidden" name="next" value="${escape(next)}"><label for="password">Staging password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"><button type="submit">Open staging</button></form></main></body></html>`;
   return new Response(html, {
     status,
     headers: {

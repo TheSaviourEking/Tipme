@@ -44,11 +44,47 @@ Fill in `/srv/tipme/staging.env`:
 - **Secrets**, using exactly these recipes (`deploy.sh` refuses a password that would break the database address):
   - `POSTGRES_PASSWORD`, `POSTGRES_RUNTIME_PASSWORD`, `POSTGRES_MIGRATOR_PASSWORD` and `POSTGRES_BACKUP_PASSWORD`: four different values from `openssl rand -hex 32`;
   - `OPS_TOTP_KEY` and `BACKUP_KEY`: `openssl rand -base64 32` (exactly 32 bytes);
-  - every other secret: `openssl rand -base64 48`.
+  - other TipMe-managed secrets: `openssl rand -base64 48`.
+- **Bachs sandbox credentials** are provider-issued, not generated: use only an `sk_sandbox_` API key and the webhook signing secret configured for the sandbox endpoint. Keep `BACHS_PREVIOUS_WEBHOOK_SECRET` empty except during signing-secret rotation.
 - Keep the Postgres passwords distinct. The API and worker receive only `POSTGRES_RUNTIME_PASSWORD`; migrations receive `POSTGRES_MIGRATOR_PASSWORD`; scheduled backups receive `POSTGRES_BACKUP_PASSWORD` (read-only plus replication); only the one-shot restore service receives the `POSTGRES_PASSWORD` admin credential.
 - For an existing database volume, the deploy script provisions these roles and moves existing application objects to the migration owner before taking its first backup, then grants the backup role access to newly migrated objects. Do not manually reset the volume or change `POSTGRES_PASSWORD`.
 - **`BACKUP_KEY`:** save a copy off the server, in your password manager. Without it no backup can be read.
 - **`RELEASE_KIND=test`:** this copy runs the full release check.
+
+To test Bachs checkout in this isolated staging copy, set `PAYMENT_PROVIDER=bachs-sandbox` and populate `BACHS_SANDBOX_API_KEY` and `BACHS_WEBHOOK_SECRET` in `/srv/tipme/staging.env`, then redeploy. The staging Compose file forwards the API key to the API and worker, and the webhook secrets to the API only (the worker only reads statuses). Keep `DEPLOYMENT_MODE=preview`, the shared `PREVIEW_PASSWORD`, and `PAYMENTS_LIVE_ENABLED=false`; never put Bachs credentials in the web app or configure a live key. The default remains `PAYMENT_PROVIDER=mock`.
+
+### How a Bachs tip gets confirmed
+
+Three paths, fastest first; any one of them is enough, and each reads the payment back from Bachs with the same checks:
+
+1. **Webhook** (instant). In Bachs' dashboard the staging endpoint (`https://api.staging.usetipme.xyz/v1/webhooks/bachs`) must be enabled and subscribed to payment events on **connected accounts**: at least `collection.succeeded`, `collection.failed`, `checkout.completed` and `checkout.expired`, plus `account.updated` and `capability.updated`. Bachs' `GET /v1/webhooks/events` lists each event with its delivery attempts; `attempts: 0` means Bachs never sent it.
+2. **The open receipt** (seconds). When the supporter comes back from Bachs, the receipt's status request asks Bachs directly, at most once every 4 seconds per tip.
+3. **The worker** (about a minute). It checks unfinished tips every 20 seconds once they are 45 seconds old, in case the supporter closed the page.
+
+### The release check on the Bachs sandbox
+
+A new page cannot take Bachs tips until its owner completes Bachs' own form, so the release check cannot tip the page it creates. On a Bachs copy it instead:
+
+- checks that its new page says "can't receive tips just yet" and that its owner is told to set up payments;
+- tips a **standing test page, `@release_bachs`**, and passes once Bachs' sandbox checkout opens for that tip. It never pays: that would depend on Bachs' own page. The unpaid checkout expires, and paid totals do not move;
+- skips the pretend-only steps (the misreported amount, covered by the integration tests, and the withdrawal, since Bachs money cannot be withdrawn yet).
+
+Set up `@release_bachs` once, in a browser, with the staging password:
+
+1. Sign up with a phone number kept for this page only (codes arrive in the pretend inbox), and claim the handle `release_bachs`.
+2. Add a name, confirm an email address (payment setup needs one), then go to **Settings → Test payments → Set up test payments** (country `NG`, Individual) and complete Bachs' sandbox form.
+3. Back in Settings, the card should read "Ready to receive test tips". Make the page live.
+
+Without it, the release check stops in seconds and names the page; `RELEASE_BACHS_HANDLE` names a different page.
+
+### Bachs sandbox webhook endpoint
+
+1. In the Bachs sandbox Dashboard, add a webhook endpoint `https://<api-host>/v1/webhooks/bachs` with `event_source=connect/all`, so events from recipients' connected accounts reach TipMe (direct charges are made on those accounts).
+2. Subscribe to `checkout.completed`, `collection.succeeded`, `collection.failed`, `collection.underpaid`, `account.updated`, `capability.updated`, and every refund, dispute and chargeback event Bachs offers. Refunds and disputes are not modelled yet: each one opens a "Refund or dispute reported" money issue and changes no balance.
+3. Copy the endpoint's signing secret into `BACHS_WEBHOOK_SECRET` and redeploy the API.
+4. Send a test event from the Dashboard and confirm the API logs `webhook.processed` (a test event for an unknown account is stored as unmatched, which is expected). A `webhook.rejected` log means the secret or clock is wrong.
+5. Failed deliveries can be replayed from the Dashboard: delivery is idempotent, and account events simply re-read the account from Bachs.
+6. Before each test session, check the platform balance in the Dashboard. TipMe pays Bachs' processing fee; if the balance cannot cover it, Bachs silently charges the recipient. Those payments stay pending in TipMe and surface as issues, but there is no automated reserve alert yet.
 
 The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence the `chown` above; `deploy.sh` checks it).
 
@@ -113,7 +149,7 @@ Off-site copies are optional. If enabling rclone, create `/srv/tipme/offsite.env
 
 ```sh
 /srv/tipme/live/scripts/compose.sh run --rm -e TIPME_CONFIRM_DATABASE=tipme migrate \
-  node packages/database/dist/scripts/grant-owner.js --phone <a number you keep for this> --role release_check
+  node packages/database/dist/scripts/grant-owner.js --email <an address you keep for this> --role release_check
 ```
 
 Then, on your machine within 30 minutes:
@@ -121,12 +157,12 @@ Then, on your machine within 30 minutes:
 ```sh
 RELEASE_PREVIEW_PASSWORD=... RELEASE_CHECK_TOKEN=... node scripts/release-enrol.mjs \
   --web https://staging.<domain> --api https://api.staging.<domain> \
-  --phone <same number> --code <the enrolment code> --out ./release-totp.txt
+  --email <same address> --code <the enrolment code> --out ./release-totp.txt
 ```
 
 (The pretend inbox on staging needs the release token as well as the password. Testers open `/dev/inbox` and enter the same token as the "Inbox key".)
 
-Add the secret from `release-totp.txt` as `RELEASE_OPS_TOTP_SECRET` (then delete the file), and the number as `RELEASE_OPS_PHONE`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
+Add the secret from `release-totp.txt` as `RELEASE_OPS_TOTP_SECRET` (then delete the file), and the address as `RELEASE_OPS_EMAIL`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
 
 ## 8. Prove it
 

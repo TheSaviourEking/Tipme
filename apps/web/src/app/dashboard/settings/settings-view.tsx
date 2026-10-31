@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
+  PendingEmailRecovery,
+  RecoveryEmailStatus,
   MyProfile,
   NotificationPrefs,
   SessionView,
@@ -12,7 +14,9 @@ import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Avatar } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
+import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { PaymentAccountCard } from './payment-account-card';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 
@@ -36,7 +40,7 @@ function PageState() {
     else setError('We couldn’t change that. Please try again.');
   };
   return (
-    <Card className="settings-section">
+    <Card id="page" className="settings-section">
       <h2>Your page</h2>
       <p
         role="status"
@@ -77,6 +81,7 @@ const PREF_LABELS = {
   tipEmails: 'Email me about each tip (when my email is verified)',
   weeklyReports: 'Tell me when my weekly report is ready',
   milestones: 'Tell me about milestones and rewards',
+  guideEmails: 'Send me guides and suggestions for getting started',
 } as const;
 
 /** Notification preferences (PR-013). Sign-in codes and security warnings always go. */
@@ -111,11 +116,12 @@ function NotificationSettings() {
     } else setError('We couldn’t save that. Please try again.');
   };
   return (
-    <Card className="settings-section">
+    <Card id="emails" className="settings-section">
       <h2>Notifications</h2>
       <p className="tm-hint">
-        You always see your tips in TipMe, and sign-in codes and security
-        warnings always reach you.
+        You always see your tips in TipMe. These emails always reach you:
+        sign-in codes, security warnings, changes to your account and payment
+        account, and withdrawals.
       </p>
       <form className="settings-form" onSubmit={save} noValidate>
         {(Object.keys(PREF_LABELS) as (keyof NotificationPrefs)[]).map(
@@ -623,10 +629,12 @@ function AboutYou() {
           error={errors['socials.x']}
         />
         {check('socialsPublic', 'Show my social links on my page')}
-        <p className="tm-hint">
-          Your phone number: {profile.phone ?? 'not set'}
-        </p>
-        {check('phonePublic', 'Show my phone number on my page')}
+        {profile.phone && (
+          <>
+            <p className="tm-hint">Your phone number: {profile.phone}</p>
+            {check('phonePublic', 'Show my phone number on my page')}
+          </>
+        )}
         {errors.form && (
           <Notice tone="error" title="Not saved">
             {errors.form}
@@ -676,27 +684,312 @@ function PendingRecovery() {
   );
 }
 
+/** A recovery of this account is waiting out its 24 hours: the owner can stop it. */
+function EmailMoveNotice() {
+  const [pending, setPending] = useState<PendingEmailRecovery[]>([]);
+  const [failed, setFailed] = useState(false);
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    void apiFetch<PendingEmailRecovery[]>('/v1/me/email-recoveries').then(
+      (result) => {
+        if (result.ok) setPending(result.data);
+      },
+    );
+  }, [round]);
+  const first = pending[0];
+  if (!first) return null;
+  const cancel = async () => {
+    const result = await apiFetch('/v1/me/recovery/cancel', {
+      method: 'POST',
+      body: {},
+    });
+    if (result.ok) setRound((n) => n + 1);
+    else setFailed(true);
+  };
+  return (
+    <Notice tone="error" title="Your account is being moved">
+      Your account is being moved to {first.newEmailHint} on{' '}
+      {new Date(first.effectiveAt).toLocaleString('en-NG', {
+        timeZone: 'Africa/Lagos',
+      })}
+      . If this wasn’t you, cancel it now.{' '}
+      <Button variant="secondary" onClick={() => void cancel()}>
+        Cancel the move
+      </Button>
+      {failed && <p role="alert">That didn’t go through. Try again now.</p>}
+    </Notice>
+  );
+}
+
+/** Taking the way back in away needs the sign-in email too, not just a session. */
+function RemoveRecoveryEmail({ onRemoved }: { onRemoved: () => void }) {
+  const id = useId();
+  const [asked, setAsked] = useState(false);
+  const [signInCode, setSignInCode] = useState('');
+  const [note, setNote] = useState('');
+  const ask = async () => {
+    const result = await apiFetch('/v1/me/recovery-email/change-code', {
+      method: 'POST',
+      body: {},
+    });
+    if (result.ok) setAsked(true);
+    else setNote(codeRequestProblem(result.code));
+  };
+  const remove = async () => {
+    const result = await apiFetch('/v1/me/recovery-email/remove', {
+      method: 'POST',
+      body: { signInCode },
+    });
+    if (result.ok) onRemoved();
+    else setNote('That code isn’t right or has expired.');
+  };
+  return (
+    <div className="settings-form">
+      {asked && (
+        <InputField
+          id={`${id}-code`}
+          label="Code sent to your sign-in email"
+          inputMode="numeric"
+          maxLength={6}
+          value={signInCode}
+          onChange={(e) => setSignInCode(e.target.value.replace(/\D/g, ''))}
+        />
+      )}
+      <Button variant="quiet" onClick={() => void (asked ? remove() : ask())}>
+        {asked ? 'Confirm removal' : 'Remove recovery email'}
+      </Button>
+      <p role="status" className="tm-hint">
+        {note}
+      </p>
+    </div>
+  );
+}
+
+const codeRequestProblem = (code: string | undefined) =>
+  code === 'SAME_AS_SIGN_IN_EMAIL'
+    ? 'Use a different address from your sign-in email.'
+    : code === 'TOO_MANY_CODES'
+      ? 'Too many codes for that address. Try again in an hour.'
+      : code === 'EMAIL_INVALID'
+        ? 'Check the address and try again.'
+        : 'We couldn’t send a code. Try again in a while.';
+
+/** The way back in if the sign-in email is lost. */
+function RecoveryEmailCard() {
+  const id = useId();
+  const [status, setStatus] = useState<RecoveryEmailStatus | null>(null);
+  const [round, setRound] = useState(0);
+  const [address, setAddress] = useState('');
+  const [code, setCode] = useState('');
+  const [signInCode, setSignInCode] = useState('');
+  const [step, setStep] = useState<'idle' | 'code'>('idle');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then(
+      (result) => {
+        if (result.ok) setStatus(result.data);
+      },
+    );
+  }, [round]);
+  const replacing = Boolean(status?.confirmed);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy || !status) return;
+    setBusy(true);
+    setNote('');
+    try {
+      if (step === 'idle') {
+        const result = await apiFetch('/v1/me/recovery-email/code', {
+          method: 'POST',
+          body: { email: address.trim() },
+        });
+        if (!result.ok) {
+          setNote(codeRequestProblem(result.code));
+          return;
+        }
+        if (replacing) {
+          const owner = await apiFetch('/v1/me/recovery-email/change-code', {
+            method: 'POST',
+            body: {},
+          });
+          if (!owner.ok) {
+            setNote(codeRequestProblem(owner.code));
+            return;
+          }
+        }
+        setStep('code');
+        setNote(
+          replacing
+            ? 'We sent a code to each address.'
+            : `We sent a code to ${address.trim()}.`,
+        );
+        return;
+      }
+      const result = await apiFetch('/v1/me/recovery-email', {
+        method: 'POST',
+        body: {
+          email: address.trim(),
+          code,
+          ...(replacing ? { signInCode } : {}),
+        },
+      });
+      if (result.ok) {
+        setStep('idle');
+        setAddress('');
+        setCode('');
+        setSignInCode('');
+        setNote('Your recovery email is confirmed.');
+        setRound((n) => n + 1);
+        window.dispatchEvent(new Event(RECOVERY_EMAIL_CHANGED));
+      } else if (result.code === 'EMAIL_TAKEN') {
+        setStep('idle');
+        setCode('');
+        setSignInCode('');
+        setNote(
+          'That address is used by another account. Try a different one.',
+        );
+      } else if (result.code === 'SAME_AS_SIGN_IN_EMAIL') {
+        setStep('idle');
+        setNote('Use a different address from your sign-in email.');
+      } else {
+        setNote(
+          replacing
+            ? 'One of those codes isn’t right or has expired. After 5 wrong tries, wait 15 minutes.'
+            : 'That code isn’t right or has expired. After 5 wrong tries, wait 15 minutes.',
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card id="recovery" className="settings-section">
+      <h2>Recovery email</h2>
+      <p>
+        {status?.confirmed
+          ? `Recovery email: ${status.hint}`
+          : 'Add a second address, so you can get back in if you lose access to your email.'}
+      </p>
+      <form
+        className="settings-form"
+        onSubmit={(e) => void submit(e)}
+        noValidate
+      >
+        <InputField
+          id={`${id}-address`}
+          label="Recovery email address"
+          type="email"
+          autoComplete="off"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          disabled={step === 'code'}
+        />
+        {step === 'code' && (
+          <InputField
+            id={`${id}-code`}
+            label="Code sent to your recovery email"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+          />
+        )}
+        {step === 'code' && replacing && (
+          <InputField
+            id={`${id}-sign-in-code`}
+            label="Code sent to your sign-in email"
+            inputMode="numeric"
+            maxLength={6}
+            value={signInCode}
+            onChange={(e) => setSignInCode(e.target.value.replace(/\D/g, ''))}
+          />
+        )}
+        <Button type="submit" variant="secondary" disabled={busy || !status}>
+          {step === 'idle'
+            ? 'Send code to recovery email'
+            : 'Confirm recovery email'}
+        </Button>
+        {step === 'code' && (
+          <Button
+            variant="quiet"
+            onClick={() => {
+              setStep('idle');
+              setCode('');
+              setNote('');
+            }}
+          >
+            Use a different address
+          </Button>
+        )}
+        <p role="status" className="tm-hint">
+          {note}
+        </p>
+      </form>
+      {status?.confirmed && step === 'idle' && (
+        <RemoveRecoveryEmail
+          onRemoved={() => {
+            setNote('Your recovery email was removed.');
+            setRound((n) => n + 1);
+            window.dispatchEvent(new Event(RECOVERY_EMAIL_CHANGED));
+          }}
+        />
+      )}
+    </Card>
+  );
+}
+
 function ContactDetails() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
   const [email, setEmail] = useState('');
   const [emailNote, setEmailNote] = useState('');
-  const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [phoneStep, setPhoneStep] = useState<'idle' | 'code'>('idle');
-  const [phoneNote, setPhoneNote] = useState('');
+  const [emailStep, setEmailStep] = useState<'idle' | 'code'>('idle');
 
-  const sendLink = async (event: FormEvent) => {
+  const changeEmail = async (event: FormEvent) => {
     event.preventDefault();
-    const result = await apiFetch('/v1/me/email', {
+    if (emailStep === 'idle') {
+      const result = await apiFetch('/v1/me/email/code', {
+        method: 'POST',
+        body: { email: email.trim() },
+      });
+      if (result.ok) {
+        setEmailStep('code');
+        setEmailNote(`We sent a code to ${email.trim()}.`);
+      } else setEmailNote('Check the email address and try again.');
+      return;
+    }
+    const result = await apiFetch<{ email: string }>('/v1/me/email/confirm', {
       method: 'POST',
-      body: { email },
+      body: { email: email.trim(), code },
     });
-    setEmailNote(
-      result.ok
-        ? `We sent a link to ${email}. Open it to confirm the address.`
-        : 'Check the email address and try again.',
-    );
+    if (result.ok) {
+      setProfile({
+        ...profile,
+        email: result.data.email,
+        emailVerified: true,
+      });
+      setEmailStep('idle');
+      setEmail('');
+      setCode('');
+      setEmailNote(
+        'Your email was changed. We told the old address, and other devices were signed out.',
+      );
+    } else {
+      if (result.code === 'EMAIL_TAKEN') {
+        setEmailStep('idle');
+        setCode('');
+      }
+      setEmailNote(
+        result.code === 'EMAIL_TAKEN'
+          ? 'That email belongs to another account. Try a different one.'
+          : result.code === 'SIGN_IN_LOCKED'
+            ? 'Too many wrong codes. Please wait 15 minutes and try again.'
+            : 'That code isn’t right or has expired.',
+      );
+    }
   };
   const toggleEmailPublic = async (emailPublic: boolean) => {
     const result = await apiFetch<MyProfile>('/v1/me/profile', {
@@ -705,57 +998,36 @@ function ContactDetails() {
     });
     if (result.ok) setProfile(result.data);
   };
-  const sendPhoneCode = async (event: FormEvent) => {
-    event.preventDefault();
-    if (phoneStep === 'idle') {
-      const result = await apiFetch('/v1/me/phone/code', {
-        method: 'POST',
-        body: { phone },
-      });
-      if (result.ok) {
-        setPhoneStep('code');
-        setPhoneNote(`We sent a code to ${phone}.`);
-      } else setPhoneNote('We couldn’t send a code. Please try again.');
-      return;
-    }
-    const result = await apiFetch<MyProfile>('/v1/me/phone', {
-      method: 'PUT',
-      body: { phone, code },
-    });
-    if (result.ok) {
-      setProfile(result.data);
-      setPhoneStep('idle');
-      setPhone('');
-      setCode('');
-      setPhoneNote('Your number was changed. Other devices were signed out.');
-    } else
-      setPhoneNote(
-        result.code === 'PHONE_TAKEN'
-          ? 'That number belongs to another account.'
-          : 'That code isn’t right or has expired.',
-      );
-  };
 
   return (
-    <Card className="settings-section">
-      <h2>Phone and email</h2>
+    <Card id="contact" className="settings-section">
+      <h2>Your email</h2>
       <p>
-        Phone: <strong>{profile.phone}</strong>
+        You sign in with:{' '}
+        <strong>
+          {profile.email
+            ? `${profile.email}${profile.emailVerified ? '' : ' (not confirmed)'}`
+            : 'no email yet'}
+        </strong>
       </p>
-      <form className="settings-form" onSubmit={sendPhoneCode} noValidate>
+      <form
+        className="settings-form"
+        onSubmit={(e) => void changeEmail(e)}
+        noValidate
+      >
         <InputField
-          id={`${id}-phone`}
-          label="New phone number"
-          type="tel"
-          autoComplete="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          disabled={phoneStep === 'code'}
+          id={`${id}-email`}
+          label="New email address"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={emailStep === 'code'}
         />
-        {phoneStep === 'code' && (
+        {emailStep === 'code' && (
           <InputField
-            id={`${id}-code`}
-            label="Code sent to the new number"
+            id={`${id}-email-code`}
+            label="Code sent to the new address"
             inputMode="numeric"
             autoComplete="one-time-code"
             maxLength={6}
@@ -764,40 +1036,28 @@ function ContactDetails() {
           />
         )}
         <Button type="submit" variant="secondary">
-          {phoneStep === 'idle' ? 'Send code to new number' : 'Change number'}
+          {emailStep === 'idle' ? 'Send code to new address' : 'Change email'}
         </Button>
-        <p role="status" className="tm-hint">
-          {phoneNote}
-        </p>
-      </form>
-      <p>
-        Email:{' '}
-        <strong>
-          {profile.email
-            ? `${profile.email} · ${profile.emailVerified ? 'Verified' : 'Not verified'}`
-            : 'not added'}
-        </strong>
-      </p>
-      <p className="tm-hint">
-        A verified email gets tip notifications and can recover your account if
-        you lose your number.
-      </p>
-      <form className="settings-form" onSubmit={sendLink} noValidate>
-        <InputField
-          id={`${id}-email`}
-          label="Email address"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Button type="submit" variant="secondary">
-          Send confirmation link
-        </Button>
+        {emailStep === 'code' && (
+          <Button
+            variant="quiet"
+            onClick={() => {
+              setEmailStep('idle');
+              setCode('');
+              setEmailNote('');
+            }}
+          >
+            Use a different address
+          </Button>
+        )}
         <p role="status" className="tm-hint">
           {emailNote}
         </p>
       </form>
+      <p className="tm-hint">
+        Phone numbers are coming soon.{' '}
+        {profile.phone ? `Yours on file: ${profile.phone}.` : ''}
+      </p>
       {profile.emailVerified && (
         <label className="tip-remember" htmlFor={`${id}-email-public`}>
           <input
@@ -918,12 +1178,15 @@ export function SettingsView() {
       <h1>Settings</h1>
       <PendingRecovery />
       <PageState />
+      <PaymentAccountCard />
       <HandleChange />
       <PhotoSettings />
       <TipAmountsSettings />
       <AboutYou />
+      <EmailMoveNotice />
       <ContactDetails />
       <NotificationSettings />
+      <RecoveryEmailCard />
       <Devices />
       <DeletePage />
     </div>

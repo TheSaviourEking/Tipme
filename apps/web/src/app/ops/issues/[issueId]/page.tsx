@@ -26,6 +26,10 @@ import {
 } from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
+// Bachs IDs are opaque (no fixed prefix); whitespace, ':' and '/' are refused. The browser
+// compiles this with the `v` flag, so '/' is escaped.
+const BACHS_ID_PATTERN = String.raw`[^\s:\/]{1,200}`;
+
 type Evidence = OpsIssueEvidence & { traceUrl: string | null };
 
 const RECHECK: Record<OpsRecheckOutcome, string> = {
@@ -104,6 +108,181 @@ function NoteForm({ onSave }: { onSave: (text: string) => Promise<boolean> }) {
       />
       <Button type="submit" variant="secondary" disabled={busy}>
         Save note
+      </Button>
+    </form>
+  );
+}
+
+type RecoveryResult = {
+  outcome:
+    | 'attached'
+    | 'pending'
+    | 'not_found'
+    | 'mismatch'
+    | 'not_pending'
+    | 'recovered';
+  status?: 'ACTIVE' | 'ONBOARDING' | 'RESTRICTED';
+};
+
+function BachsRecoveryAction({
+  valueLabel,
+  valueName,
+  pattern,
+  hint,
+  confirmation,
+  submitLabel,
+  onSubmit,
+}: {
+  valueLabel: string;
+  valueName: string;
+  pattern: string;
+  hint: string;
+  confirmation: string;
+  submitLabel: string;
+  onSubmit: (value: string, reason: string) => Promise<string | null>;
+}) {
+  const id = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const value = String(data.get(valueName) ?? '').trim();
+    const reason = String(data.get('reason') ?? '').trim();
+    if (!value || reason.length < 10 || data.get('dashboardVerified') !== 'on')
+      return;
+    setBusy(true);
+    setError('');
+    const problem = await onSubmit(value, reason);
+    setBusy(false);
+    if (problem) setError(problem);
+    else form.reset();
+  };
+  return (
+    <form
+      className="settings-form ops-recovery"
+      onSubmit={(e) => void submit(e)}
+    >
+      <div className="tm-field">
+        <label htmlFor={`${id}-value`}>{valueLabel}</label>
+        <input
+          id={`${id}-value`}
+          className="tm-input"
+          name={valueName}
+          autoComplete="off"
+          pattern={pattern}
+          maxLength={70}
+          required
+        />
+        <span className="tm-hint">{hint}</span>
+      </div>
+      <TextareaField
+        id={`${id}-reason`}
+        name="reason"
+        label="Why are you recovering this provider record?"
+        hint="Recorded in the audit log with your name and time."
+        minLength={10}
+        maxLength={500}
+        required
+      />
+      <label className="ops-recovery__confirm" htmlFor={`${id}-verified`}>
+        <input
+          id={`${id}-verified`}
+          name="dashboardVerified"
+          type="checkbox"
+          required
+        />
+        <span>{confirmation}</span>
+      </label>
+      {error && (
+        <Notice tone="error" title="Recovery not completed">
+          {error}
+        </Notice>
+      )}
+      <Button type="submit" disabled={busy} aria-busy={busy}>
+        {busy ? 'Checking with Bachs…' : submitLabel}
+      </Button>
+    </form>
+  );
+}
+
+type FeeBearerResult = {
+  outcome:
+    | 'confirmed'
+    | 'not_pending'
+    | 'not_collected'
+    | 'mismatch'
+    | 'recipient_bore_fee';
+};
+
+const FEE_BEARER: Record<FeeBearerResult['outcome'], string> = {
+  confirmed:
+    'Bachs’ payment matched the quote. With the fee confirmed as paid by the platform, the tip is now paid.',
+  not_pending: 'This tip already has a final outcome. Nothing changed.',
+  not_collected:
+    'Bachs has not taken this payment (or TipMe never saw it taken). Nothing changed.',
+  mismatch:
+    'Bachs reports a different amount, currency or TipMe fee than the quote. Nothing changed; look into it in Bachs.',
+  recipient_bore_fee:
+    'Bachs says the recipient paid the processing fee. That cannot be overridden here. Nothing changed.',
+};
+
+/** Confirms one fact Bachs left out (the platform paid the fee); TipMe re-reads the rest. */
+function BachsFeeBearerAction({
+  onSubmit,
+}: {
+  onSubmit: (reason: string) => Promise<string | null>;
+}) {
+  const id = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const reason = String(data.get('reason') ?? '').trim();
+    if (reason.length < 10 || data.get('dashboardVerified') !== 'on') return;
+    setBusy(true);
+    setError('');
+    const problem = await onSubmit(reason);
+    setBusy(false);
+    if (problem) setError(problem);
+    else form.reset();
+  };
+  return (
+    <form
+      className="settings-form ops-recovery"
+      onSubmit={(e) => void submit(e)}
+    >
+      <TextareaField
+        id={`${id}-reason`}
+        name="reason"
+        label="What did you see in Bachs Dashboard?"
+        hint="Recorded in the audit log with your name and time."
+        minLength={10}
+        maxLength={500}
+        required
+      />
+      <label className="ops-recovery__confirm" htmlFor={`${id}-verified`}>
+        <input
+          id={`${id}-verified`}
+          name="dashboardVerified"
+          type="checkbox"
+          required
+        />
+        <span>
+          I found this payment in Bachs Dashboard, and it shows the processing
+          fee was paid by the platform.
+        </span>
+      </label>
+      {error && (
+        <Notice tone="error" title="Not confirmed">
+          {error}
+        </Notice>
+      )}
+      <Button type="submit" disabled={busy} aria-busy={busy}>
+        {busy ? 'Checking with Bachs…' : 'Confirm the fee and check the tip'}
       </Button>
     </form>
   );
@@ -276,6 +455,149 @@ export default function IssuePage() {
           holds.
         </p>
       </Section>
+
+      {open &&
+        (issue.kind === 'stuck_tip' ||
+          issue.kind === 'payment_settlement_currency') &&
+        issue.subject.tipId &&
+        can(access, 'payments.recheck') && (
+          <Section title="Bachs took the money but not the fee details">
+            <p>
+              Use this only when Bachs shows the payment succeeded but never
+              said who paid its processing fee. You confirm that one fact; TipMe
+              then reads the payment from Bachs again and marks the tip paid
+              only if the amount, currency and TipMe fee match the quote. If
+              Bachs says the recipient paid the fee, nothing changes.
+            </p>
+            <BachsFeeBearerAction
+              onSubmit={async (reason) => {
+                const result = await apiFetch<FeeBearerResult>(
+                  '/v1/ops/bachs/fee-bearer-confirmation',
+                  {
+                    method: 'POST',
+                    body: {
+                      issueId: issue.id,
+                      feePaidBy: 'platform',
+                      dashboardVerified: true,
+                      reason,
+                    },
+                  },
+                );
+                if (!result.ok) return failure(result.code);
+                setMessage(FEE_BEARER[result.data.outcome]);
+                await load();
+                return null;
+              }}
+            />
+          </Section>
+        )}
+
+      {open &&
+        issue.kind === 'payment_attempt_unresolved' &&
+        issue.subject.attemptId &&
+        can(access, 'payments.recheck') && (
+          <Section title="Recover an unknown Bachs checkout">
+            <p>
+              Enter a checkout ID you found in Bachs Dashboard. TipMe checks it
+              against the expected amount and currency before linking it. If it
+              is missing or mismatched, the payment stays unknown. This never
+              marks a payment as paid manually.
+            </p>
+            <BachsRecoveryAction
+              valueLabel="Bachs checkout ID"
+              valueName="checkoutId"
+              pattern={BACHS_ID_PATTERN}
+              hint="The ID must be from Bachs Dashboard, not a URL or payment reference."
+              confirmation="I found this checkout in Bachs Dashboard and checked that it belongs to this TipMe payment."
+              submitLabel="Verify and recover checkout"
+              onSubmit={async (checkoutId, reason) => {
+                const result = await apiFetch<RecoveryResult>(
+                  '/v1/ops/bachs/checkout-recovery',
+                  {
+                    method: 'POST',
+                    body: {
+                      issueId: issue.id,
+                      attemptId: issue.subject.attemptId,
+                      checkoutId,
+                      dashboardVerified: true,
+                      reason,
+                    },
+                  },
+                );
+                if (!result.ok) return failure(result.code);
+                const status = result.data.outcome;
+                setMessage(
+                  status === 'attached'
+                    ? 'The checkout was verified and linked. TipMe applied only the provider-verified result.'
+                    : status === 'pending'
+                      ? 'The checkout exists and its amount and currency match, but its outcome is still pending. Nothing was marked paid.'
+                      : status === 'not_found'
+                        ? 'Bachs could not find this checkout. The attempt remains unknown and unlinked.'
+                        : status === 'mismatch'
+                          ? 'The checkout amount or currency did not match. It remains unlinked and the attempt remains unknown.'
+                          : 'This attempt is no longer waiting for checkout recovery.',
+                );
+                await load();
+                return null;
+              }}
+            />
+          </Section>
+        )}
+
+      {open &&
+        issue.kind === 'payment_account_unresolved' &&
+        issue.subject.profileId &&
+        can(access, 'payments.recheck') && (
+          <Section title="Recover an unknown Bachs recipient account">
+            <p>
+              TipMe fetches the account status from Bachs before linking it.
+              Payouts remain disabled. The issue resolves only after the account
+              ID and current provider status are verified.
+            </p>
+            {!person?.emailVerified ? (
+              <Notice tone="error" title="Recipient email is not verified">
+                Do not link an account until the recipient has a verified TipMe
+                email address.
+              </Notice>
+            ) : (
+              <BachsRecoveryAction
+                valueLabel="Bachs account ID"
+                valueName="accountReference"
+                pattern={BACHS_ID_PATTERN}
+                hint="Use the account ID shown in Bachs Dashboard."
+                confirmation="I confirmed in Bachs Dashboard that this account belongs to the recipient’s verified TipMe email and that platform fees are configured correctly."
+                submitLabel="Verify and recover account"
+                onSubmit={async (accountReference, reason) => {
+                  const result = await apiFetch<RecoveryResult>(
+                    '/v1/ops/bachs/account-recovery',
+                    {
+                      method: 'POST',
+                      body: {
+                        issueId: issue.id,
+                        accountReference,
+                        dashboardVerified: true,
+                        reason,
+                      },
+                    },
+                  );
+                  if (!result.ok) return failure(result.code);
+                  const status = result.data.outcome;
+                  setMessage(
+                    status === 'recovered'
+                      ? `The account status was fetched and linked (${result.data.status}). The issue is resolved; payouts remain disabled.`
+                      : status === 'not_found'
+                        ? 'Bachs could not find this account. No mapping was stored and the issue remains open.'
+                        : status === 'mismatch'
+                          ? 'Bachs returned a different account ID. No mapping was stored and the issue remains open.'
+                          : 'This account setup is no longer waiting for recovery.',
+                  );
+                  await load();
+                  return null;
+                }}
+              />
+            )}
+          </Section>
+        )}
 
       {page && (
         <Section title="Page">

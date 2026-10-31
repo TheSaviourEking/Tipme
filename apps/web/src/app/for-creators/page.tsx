@@ -6,7 +6,7 @@ import { HowItWorksSteps } from '@/components/marketing';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
-  'For creators',
+  'For individuals',
   'For the creators, teachers and builders who share useful things: one personal link that makes it easy to say thanks.',
   '/for-creators',
 );
@@ -30,7 +30,7 @@ export default function ForCreators() {
               />
             </div>
             <div className="use-case-copy">
-              <span className="eyebrow">For creators</span>
+              <span className="eyebrow">For individuals</span>
               <h1 id="creators-title" className="page-title">
                 For the generous minds.
               </h1>

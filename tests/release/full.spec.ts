@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { startTip, tipFromProfile } from '../shared/tip-flow';
 import { apiCall, env, newVisitor, signIn } from './client';
 
 // The full release check (PR-010): the whole story on a `test` copy, as a tagged rehearsal.
@@ -48,16 +49,10 @@ async function tip(
 ) {
   await page.goto(`/@${handle}?src=qr`);
   await expect(page).toHaveURL(new RegExp(`/@${handle}$`));
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(
-    page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
-  ).toBeVisible();
-  if (message)
-    await page.getByLabel('Personal message (optional)').fill(message);
-  await page.getByRole('button', { name: /^Tip NGN/ }).click();
-  await page.waitForURL(/\/mock-checkout\//);
-  await page.getByRole('button', { name: new RegExp(`^${outcome}`) }).click();
-  await page.waitForURL(/\/tip\//);
+  await tipFromProfile(page, {
+    outcome: new RegExp(`^${outcome}`),
+    ...(message ? { message } : {}),
+  });
 }
 
 test('the whole story works together, and leaves nothing visible behind', async ({
@@ -75,12 +70,13 @@ test('the whole story works together, and leaves nothing visible behind', async 
   const recipient = await (await newVisitor(browser)).newPage();
   const visitor = await (await newVisitor(browser)).newPage();
   const handle = `rc_${randomUUID().replace(/-/g, '').slice(0, 10)}`;
-  const phone = `+234809${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
+  // Its own domain each run: the pretend inbox shows only the first letter and the domain.
+  const email = `r@rc-${randomUUID().slice(0, 8)}.example`;
   let accountCreated = false;
 
   try {
     // Staff first, so the admin numbers can be compared before and after.
-    await signIn(staff, env.opsPhone, '/sign-in?next=/ops');
+    await signIn(staff, env.opsEmail, '/sign-in?next=/ops');
     await staff.waitForURL(/\/ops/);
     await openAdmin(staff);
     const health = async () =>
@@ -92,7 +88,7 @@ test('the whole story works together, and leaves nothing visible behind', async 
     const before = await health();
 
     // A new recipient signs up, claims a (tagged) handle and goes live.
-    await signIn(recipient, phone, '/sign-up');
+    await signIn(recipient, email, '/sign-up');
     await expect(recipient.getByLabel('Handle')).toBeVisible();
     accountCreated = true;
     const claim = await apiCall(
@@ -107,88 +103,118 @@ test('the whole story works together, and leaves nothing visible behind', async 
     await recipient.getByRole('button', { name: 'Make my page live' }).click();
     await expect(recipient.getByText('Your page is live')).toBeVisible();
 
-    // A supporter scans the QR code and tips; the payment is confirmed.
-    await tip(visitor, handle, 'Pay', 'Release check: thank you');
-    await expect(
-      visitor.getByRole('heading', { name: /paid|thank/i }).first(),
-    ).toBeVisible({ timeout: 30_000 });
+    if (env.paymentProvider === 'bachs-sandbox') {
+      // On the Bachs sandbox a new page cannot take tips until its owner completes Bachs' own
+      // identity form, so the new page says so before a supporter starts, and its owner is told.
+      await visitor.goto(`/@${handle}`);
+      await expect(
+        visitor.getByRole('heading', { name: /can’t receive tips just yet/ }),
+      ).toBeVisible();
+      await expect(
+        visitor.getByRole('button', { name: /^Tip NGN/ }),
+      ).toHaveCount(0);
+      await recipient.goto('/dashboard');
+      await expect(
+        recipient
+          .getByRole('region', { name: 'Needs your attention' })
+          .getByText(/set up payments/i)
+          .first(),
+      ).toBeVisible();
+      // A tip to the standing test page opens Bachs' sandbox checkout. It is never paid: that
+      // would depend on Bachs' own page. The unpaid checkout expires; paid totals do not move.
+      await visitor.goto(`/@${env.bachsHandle}?src=qr`);
+      await startTip(visitor);
+      await visitor.waitForURL(
+        (url) =>
+          url.hostname === 'bachs.io' || url.hostname.endsWith('.bachs.io'),
+        { timeout: 30_000 },
+      );
+    } else {
+      // A supporter scans the QR code and tips; the payment is confirmed.
+      await tip(visitor, handle, 'Pay', 'Release check: thank you');
+      await expect(
+        visitor.getByRole('heading', { name: /paid|thank/i }).first(),
+      ).toBeVisible({ timeout: 30_000 });
 
-    // The recipient sees it, with a notification, and withdraws everything.
-    await recipient.goto('/dashboard');
-    await expect(
-      recipient.getByText(/NGN 1,9\d\d\.\d\d|NGN [\d,]+\.\d\d/).first(),
-    ).toBeVisible({ timeout: 30_000 });
-    await expect
-      .poll(
-        async () =>
-          (
-            await (
-              await apiCall(recipient.request, 'GET', '/v1/me/notifications')
-            ).json()
-          ).data.length,
-        {
-          timeout: 30_000,
-        },
-      )
-      .toBeGreaterThan(0);
+      // The recipient sees it, with a notification, and withdraws everything.
+      await recipient.goto('/dashboard');
+      await expect(
+        recipient.getByText(/NGN 1,9\d\d\.\d\d|NGN [\d,]+\.\d\d/).first(),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await apiCall(recipient.request, 'GET', '/v1/me/notifications')
+              ).json()
+            ).data.length,
+          {
+            timeout: 30_000,
+          },
+        )
+        .toBeGreaterThan(0);
 
-    // A provider problem: the next tip's amount is misreported.
-    await tip(visitor, handle, 'Wrong amount');
-    let issueId = '';
-    await expect(async () => {
-      const list = (
+      // A provider problem: the next tip's amount is misreported.
+      await tip(visitor, handle, 'Wrong amount');
+      let issueId = '';
+      await expect(async () => {
+        const list = (
+          await (
+            await apiCall(
+              staff.request,
+              'GET',
+              '/v1/ops/issues?includeRehearsal=1',
+            )
+          ).json()
+        ).data as {
+          id: string;
+          summary: string;
+          kind: string;
+        }[];
+        issueId =
+          list.find(
+            (i) =>
+              i.kind === 'payment_mismatch' && i.summary.includes(`@${handle}`),
+          )?.id ?? '';
+        expect(issueId).not.toBe('');
+      }).toPass({ timeout: 30_000 });
+      await staff.goto(`/ops/issues/${issueId}`);
+      await expect(staff.getByRole('heading', { level: 1 })).toHaveText(
+        'Amount mismatch',
+      );
+      await staff.getByRole('button', { name: 'Resolve…' }).click();
+      await staff
+        .getByLabel('How was it resolved?')
+        .fill(`Release check ${runId}`);
+      await staff.getByRole('button', { name: 'Resolve issue' }).click();
+      await expect(
+        staff
+          .locator('.ops-issue__status')
+          .getByText('Resolved', { exact: true }),
+      ).toBeVisible();
+
+      // Withdraw everything, so the account can be deleted.
+      const summary = (
         await (
-          await apiCall(
-            staff.request,
-            'GET',
-            '/v1/ops/issues?includeRehearsal=1',
-          )
+          await apiCall(recipient.request, 'GET', '/v1/me/dashboard')
         ).json()
-      ).data as {
-        id: string;
-        summary: string;
-        kind: string;
-      }[];
-      issueId =
-        list.find(
-          (i) =>
-            i.kind === 'payment_mismatch' && i.summary.includes(`@${handle}`),
-        )?.id ?? '';
-      expect(issueId).not.toBe('');
-    }).toPass({ timeout: 30_000 });
-    await staff.goto(`/ops/issues/${issueId}`);
-    await expect(staff.getByRole('heading', { level: 1 })).toHaveText(
-      'Amount mismatch',
-    );
-    await staff.getByRole('button', { name: 'Resolve…' }).click();
-    await staff
-      .getByLabel('How was it resolved?')
-      .fill(`Release check ${runId}`);
-    await staff.getByRole('button', { name: 'Resolve issue' }).click();
-    await expect(
-      staff
-        .locator('.ops-issue__status')
-        .getByText('Resolved', { exact: true }),
-    ).toBeVisible();
-
-    // Withdraw everything, so the account can be deleted.
-    const summary = (
-      await (await apiCall(recipient.request, 'GET', '/v1/me/dashboard')).json()
-    ).data;
-    const available = String(
-      summary.balance?.availableMinor ?? summary.availableMinor ?? '0',
-    );
-    expect(BigInt(available)).toBeGreaterThan(BigInt(0));
-    const withdrawal = await apiCall(
-      recipient.request,
-      'POST',
-      '/v1/me/withdrawals',
-      { amountMinor: available },
-      {
-        'idempotency-key': randomUUID(),
-      },
-    );
-    expect([200, 201]).toContain(withdrawal.status());
+      ).data;
+      const available = String(
+        summary.balance?.availableMinor ?? summary.availableMinor ?? '0',
+      );
+      expect(BigInt(available)).toBeGreaterThan(BigInt(0));
+      const withdrawal = await apiCall(
+        recipient.request,
+        'POST',
+        '/v1/me/withdrawals',
+        { amountMinor: available },
+        {
+          'idempotency-key': randomUUID(),
+        },
+      );
+      expect([200, 201]).toContain(withdrawal.status());
+    }
 
     // The admin numbers did not move: the rehearsal is invisible to them.
     const after = await health();

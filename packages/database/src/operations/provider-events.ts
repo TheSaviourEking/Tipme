@@ -30,9 +30,9 @@ export interface PaymentEvent {
   eventType: 'payment.succeeded' | 'payment.failed' | 'payment.pending';
   attemptId: string;
   providerReference: string;
-  amountMinor: bigint;
-  currency: string;
-  providerFeeMinor: bigint;
+  amountMinor?: bigint;
+  currency?: string;
+  providerFeeMinor?: bigint;
   signatureVerified: true;
   payload: unknown;
   traceId?: string | null;
@@ -52,6 +52,7 @@ interface Locked {
   attempt: {
     id: string;
     status: AttemptStatus;
+    provider: string | null;
     providerReference: string | null;
   };
   tip: { id: string; status: TipStatus; profileId: string; currency: string };
@@ -70,6 +71,7 @@ async function lock(tx: Tx, attemptId: string): Promise<Locked | null> {
     .select({
       id: paymentAttempts.id,
       status: paymentAttempts.status,
+      provider: paymentAttempts.provider,
       intentId: paymentAttempts.intentId,
       providerReference: paymentAttempts.providerReference,
     })
@@ -104,6 +106,7 @@ async function lock(tx: Tx, attemptId: string): Promise<Locked | null> {
     attempt: {
       id: attempt.id,
       status: attempt.status,
+      provider: attempt.provider,
       providerReference: attempt.providerReference,
     },
     tip,
@@ -126,11 +129,21 @@ export async function recordProviderEvent(
       // Lock the attempt BEFORE inserting the event: the event's foreign key takes a KEY SHARE lock
       // on the attempt, and upgrading to FOR UPDATE afterwards deadlocks with a concurrent event.
       const [known] = await tx
-        .select({ id: paymentAttempts.id })
+        .select({
+          id: paymentAttempts.id,
+          provider: paymentAttempts.provider,
+          providerReference: paymentAttempts.providerReference,
+        })
         .from(paymentAttempts)
         .where(eq(paymentAttempts.id, event.attemptId))
         .for('update');
       if (!known) throw new OperationError('ATTEMPT_NOT_FOUND');
+      if (
+        (known.provider !== null && known.provider !== event.provider) ||
+        (known.providerReference !== null &&
+          known.providerReference !== event.providerReference)
+      )
+        throw new OperationError('INVALID_INPUT');
 
       const payload = jsonSafe(event.payload);
       const payloadHash = createHash('sha256')
@@ -231,7 +244,7 @@ async function apply(
         : {};
     await tx
       .update(paymentAttempts)
-      .set({ status: to, ...reference })
+      .set({ status: to, startClaimedAt: null, ...reference })
       .where(eq(paymentAttempts.id, attempt.id));
     await recordTransition(tx, {
       entityType: 'attempt',
@@ -303,11 +316,15 @@ async function apply(
     });
     return 'conflict';
   }
+  const { amountMinor, currency, providerFeeMinor } = event;
   if (
-    event.amountMinor !== quote.payerTotalMinor ||
-    event.currency !== tip.currency ||
-    event.providerFeeMinor < 0n ||
-    event.providerFeeMinor > event.amountMinor
+    amountMinor === undefined ||
+    currency === undefined ||
+    providerFeeMinor === undefined ||
+    amountMinor !== quote.payerTotalMinor ||
+    currency !== tip.currency ||
+    providerFeeMinor < 0n ||
+    providerFeeMinor > amountMinor
   ) {
     // Never book a misreported or tampered amount; hold for verified evidence.
     if (canTransition(ATTEMPT_TRANSITIONS, attempt.status, 'UNKNOWN'))
@@ -346,7 +363,7 @@ async function apply(
       grossMinor: quote.tipMinor,
       platformFeeMinor: quote.platformFeeMinor,
       quotedProviderFeeMinor: quote.providerFeeMinor,
-      actualProviderFeeMinor: event.providerFeeMinor,
+      actualProviderFeeMinor: providerFeeMinor,
       recipientNetMinor: quote.recipientNetMinor,
       profileId: tip.profileId,
     }),

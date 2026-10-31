@@ -26,6 +26,7 @@
     "@opentelemetry/api": "1.9.1",
     "@tipme/contracts": "workspace:*",
     "@tipme/domain": "workspace:*",
+    "@tipme/mail": "workspace:*",
     "@tipme/observability": "workspace:*",
     "drizzle-orm": "0.45.3",
     "libphonenumber-js": "1.13.14",

@@ -36,10 +36,10 @@ export function Navigation() {
             How it works
           </Link>
           <Link href="/for-creators" onClick={() => setOpen(false)}>
-            For creators
+            For individuals
           </Link>
-          <Link href="/@ada" onClick={() => setOpen(false)}>
-            See a demo page
+          <Link href="/for-businesses" onClick={() => setOpen(false)}>
+            For Businesses
           </Link>
           {/* Guest actions; hidden in the dashboard, where someone already has a page (CSS). */}
           <ActionLink

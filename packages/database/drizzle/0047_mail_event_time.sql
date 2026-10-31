@@ -1,0 +1,1 @@
+CREATE INDEX "mail_message_events_occurred" ON "mail_message_events" USING btree ("occurred_at");

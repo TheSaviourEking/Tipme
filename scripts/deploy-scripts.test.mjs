@@ -286,3 +286,17 @@ test('staging passes every setting the API and worker read (no silent defaults)'
     assert.deepEqual(missing, [], `${service} settings missing from compose`);
   }
 });
+
+test('the staging worker can reach the payment provider (it asks Bachs whether tips were paid)', () => {
+  const compose = readFileSync(
+    new URL('../deploy/compose.staging.yml', import.meta.url),
+    'utf8',
+  );
+  const worker =
+    compose.split(/^ {2}worker:\n/m)[1]?.split(/^ {2}[a-z]/m)[0] ?? '';
+  // `internal` has no internet route. Without `edge` every status check times out, the error is
+  // only counted, and paid tips stay "Still checking" until someone looks.
+  const networks = /^ {4}networks: \[([^\]]*)\]/m.exec(worker)?.[1] ?? '';
+  assert.match(networks, /\bedge\b/);
+  assert.match(networks, /\binternal\b/);
+});

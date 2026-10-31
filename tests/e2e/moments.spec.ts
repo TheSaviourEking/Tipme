@@ -42,14 +42,18 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
 
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(`/@${handle}`);
+  const quoteResponse = visitor.waitForResponse(
+    (response) =>
+      response.url().endsWith('/v1/tip-quotes') &&
+      response.request().method() === 'POST',
+  );
   await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
-  // Milestones grant nothing by themselves: the next supporter sees the normal 10% (ADR-0014).
-  await expect(
-    visitor.locator('.tip-breakdown div', { hasText: 'TipMe fee' }),
-  ).toContainText('NGN 200.00');
-  await expect(
-    visitor.locator('.tip-breakdown div', { hasText: 'TipMe fee' }),
-  ).not.toContainText('fee-free');
+  // Milestones grant nothing by themselves: the quote still uses the normal 10% (ADR-0014).
+  const quote = await (await quoteResponse).json();
+  expect(
+    BigInt(quote.data.platformFeeMinor) + BigInt(quote.data.providerFeeMinor),
+  ).toBe(20000n);
+  expect(quote.data.recipientNetMinor).toBe('180000');
 
   const moment = page.locator('.moment-list li', { hasText: '10 tips!' });
   await moment.getByRole('button', { name: 'Share on my page' }).click();
@@ -67,7 +71,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   ).toHaveAttribute('aria-pressed', 'true');
   await expectAccessible(visitor);
   await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(visitor.getByText(/receives NGN/)).toBeVisible();
+  await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible();
   await visitor.getByRole('button', { name: /^Tip NGN/ }).click();
   await visitor.waitForURL(/\/mock-checkout\//);
 

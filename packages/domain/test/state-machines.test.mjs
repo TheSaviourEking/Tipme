@@ -26,11 +26,19 @@ const allowed = {
   },
   attempt: {
     CREATED: [
+      'STARTING',
       'INITIATED',
       'PENDING',
       'VERIFIED_SUCCEEDED',
       'VERIFIED_FAILED',
       'EXPIRED',
+      'UNKNOWN',
+    ],
+    STARTING: [
+      'INITIATED',
+      'PENDING',
+      'VERIFIED_SUCCEEDED',
+      'VERIFIED_FAILED',
       'UNKNOWN',
     ],
     INITIATED: [
@@ -41,7 +49,7 @@ const allowed = {
       'UNKNOWN',
     ],
     PENDING: ['VERIFIED_SUCCEEDED', 'VERIFIED_FAILED', 'EXPIRED', 'UNKNOWN'],
-    UNKNOWN: ['VERIFIED_SUCCEEDED', 'VERIFIED_FAILED'],
+    UNKNOWN: ['PENDING', 'VERIFIED_SUCCEEDED', 'VERIFIED_FAILED'],
     VERIFIED_SUCCEEDED: [],
     VERIFIED_FAILED: [],
     EXPIRED: [],

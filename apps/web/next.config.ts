@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs/config';
 import { parseProductionLaunchAt } from './src/lib/production-launch';
 
 // Validate this at build/start time so a malformed production launch cannot silently expose or
@@ -76,4 +77,19 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Error reports reach Sentry through this site (/sentry-tunnel), so the Content Security Policy
+// above stays limited to this site and the API. Source maps are uploaded, then removed from the
+// deployment, only when SENTRY_AUTH_TOKEN is set (Vercel); local and CI builds upload nothing.
+export default withSentryConfig(nextConfig, {
+  org: 'tipme-fs',
+  project: 'tipme-web',
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  tunnelRoute: '/sentry-tunnel',
+  silent: !process.env.SENTRY_AUTH_TOKEN,
+  telemetry: false,
+  widenClientFileUpload: true,
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    deleteSourcemapsAfterUpload: true,
+  },
+});

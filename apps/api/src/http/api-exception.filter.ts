@@ -46,6 +46,8 @@ const messages: Record<ApiErrorCode, string> = {
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
+  WITHDRAWAL_UNAVAILABLE:
+    'Withdrawals are not available yet for tips paid through this payment provider.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
@@ -66,6 +68,26 @@ const messages: Record<ApiErrorCode, string> = {
   RATE_LIMITED: 'Too many requests. Please wait and retry.',
   DEPENDENCY_UNAVAILABLE:
     'A required service is temporarily unavailable. Please retry.',
+  EMAIL_VERIFICATION_REQUIRED:
+    'Verify your email address before connecting a payment account.',
+  PAYMENT_ACCOUNT_REQUIRED:
+    'Connect and activate a payment account before accepting tips.',
+  EMAIL_TAKEN: 'That email is already used by another TipMe account.',
+  EMAIL_INVALID: 'That email address is not valid.',
+  UNSUBSCRIBE_INVALID: 'That unsubscribe link is not valid.',
+  TOO_MANY_CODES: 'Too many codes were requested for that address.',
+  NO_SIGN_IN_EMAIL: 'This account has no sign-in email.',
+  SAME_AS_SIGN_IN_EMAIL:
+    'Your recovery email must be different from your sign-in email.',
+  SIGN_IN_CODE_REQUIRED:
+    'Changing your recovery email needs a code sent to your sign-in email.',
+  NO_CONFIRMED_TEST:
+    'Send a test through this provider and confirm it arrived before making it active.',
+  PROVIDER_NOT_ALLOWED: 'This provider can’t be made active in production.',
+  PAYMENT_START_REJECTED:
+    'The payment provider refused to start this payment. Nothing was charged.',
+  PROVIDER_OUTCOME_UNKNOWN:
+    'The provider may have accepted the request. Do not retry; contact support.',
   INTERNAL_ERROR: 'Something went wrong.',
 };
 
@@ -101,6 +123,7 @@ const operationErrors: Partial<
   HAS_BALANCE: { status: 409, code: 'HAS_BALANCE' },
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
+  WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },
@@ -108,6 +131,10 @@ const operationErrors: Partial<
   PAGE_SUSPENDED: { status: 409, code: 'PAGE_SUSPENDED' },
   ISSUE_RESOLVED: { status: 409, code: 'ISSUE_RESOLVED' },
   ISSUE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  EMAIL_VERIFICATION_REQUIRED: {
+    status: 409,
+    code: 'EMAIL_VERIFICATION_REQUIRED',
+  },
   MARKET_ENTRY_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },

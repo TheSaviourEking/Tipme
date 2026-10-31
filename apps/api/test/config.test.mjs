@@ -11,6 +11,7 @@ const valid = {
   AUTH_CODE_SECRET: 'a'.repeat(32),
   WEB_REVALIDATE_SECRET: 'r'.repeat(32),
   OPS_TOTP_KEY: Buffer.alloc(32, 1).toString('base64'),
+  MAIL_SEAL_KEY: Buffer.alloc(32, 2).toString('base64'),
 };
 
 test('missing connection settings are named', () => {
@@ -20,7 +21,7 @@ test('missing connection settings are named', () => {
       assert.ok(error instanceof ConfigError);
       assert.equal(
         error.message,
-        'Invalid configuration: AUTH_CODE_SECRET, DATABASE_URL, OPS_TOTP_KEY, REDIS_URL, STATUS_TOKEN_SECRET, WEB_REVALIDATE_SECRET',
+        'Invalid configuration: AUTH_CODE_SECRET, DATABASE_URL, MAIL_SEAL_KEY, OPS_TOTP_KEY, REDIS_URL, STATUS_TOKEN_SECRET, WEB_REVALIDATE_SECRET',
       );
       return true;
     },
@@ -112,6 +113,73 @@ test('a container may bind every interface; a copy is live unless it says test (
   );
 });
 
+test('Bachs sandbox is selectable in test and preview only, never production', () => {
+  const bachs = {
+    ...valid,
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+    // Bachs sends supporters back to the web app, so it must be public.
+    WEB_ORIGIN: 'https://tipme-tunnel.example.com',
+  };
+  assert.equal(
+    loadApiConfig({ ...bachs, NODE_ENV: 'test' }).PAYMENT_PROVIDER,
+    'bachs-sandbox',
+  );
+  assert.equal(
+    loadApiConfig({
+      ...bachs,
+      NODE_ENV: 'production',
+      DEPLOYMENT_MODE: 'preview',
+      RELEASE_KIND: 'test',
+      PREVIEW_PASSWORD: 'p'.repeat(32),
+      WEB_ORIGIN: 'https://tipme-demo.example.com',
+    }).PAYMENT_PROVIDER,
+    'bachs-sandbox',
+  );
+  assert.throws(
+    () => loadApiConfig({ ...bachs, NODE_ENV: 'production' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.throws(() =>
+    loadApiConfig({
+      ...bachs,
+      NODE_ENV: 'test',
+      BACHS_SANDBOX_API_KEY: undefined,
+    }),
+  );
+});
+
+test('the Bachs sandbox refuses a local web address, because Bachs cannot send supporters back to it', () => {
+  for (const WEB_ORIGIN of [
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://app.localhost:3000',
+  ])
+    assert.throws(
+      () =>
+        loadApiConfig({
+          ...valid,
+          NODE_ENV: 'test',
+          PAYMENT_PROVIDER: 'bachs-sandbox',
+          BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+          BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+          WEB_ORIGIN,
+        }),
+      /WEB_ORIGIN/,
+      WEB_ORIGIN,
+    );
+  // The mock provider keeps working locally.
+  assert.equal(
+    loadApiConfig({
+      ...valid,
+      NODE_ENV: 'test',
+      WEB_ORIGIN: 'http://localhost:3000',
+    }).PAYMENT_PROVIDER,
+    'mock',
+  );
+});
+
 test('sign-in codes stay at 3 per number per hour unless a copy raises it (PR-010)', () => {
   assert.equal(
     loadApiConfig({ ...valid, NODE_ENV: 'test' })
@@ -124,5 +192,29 @@ test('sign-in codes stay at 3 per number per hour unless a copy raises it (PR-01
       NODE_ENV: 'test',
       RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: '1000',
     }),
+  );
+});
+
+test('the pretend mail provider is refused in production, allowed in preview', () => {
+  const production = {
+    ...valid,
+    NODE_ENV: 'production',
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+    WEB_ORIGIN: 'https://staging.usetipme.xyz',
+    MAIL_DEFAULT_PROVIDER: 'mock',
+  };
+  assert.equal(loadApiConfig(production).MAIL_DEFAULT_PROVIDER, 'mock');
+  assert.throws(
+    () =>
+      loadApiConfig({
+        ...production,
+        DEPLOYMENT_MODE: 'production',
+        PAYMENT_PROVIDER: 'mock',
+      }),
+    /MAIL_DEFAULT_PROVIDER/,
   );
 });

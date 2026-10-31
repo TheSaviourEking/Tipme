@@ -6,7 +6,7 @@ import { markAttemptInitiated } from './attempts.js';
 import { guarded } from './errors.js';
 import { activeTraceId } from './ids.js';
 import { recordProviderEvent } from './provider-events.js';
-import type { TransactionVerifier } from './reconcile.js';
+import { quotedShare, type TransactionVerifier } from './reconcile.js';
 import { recordTransition } from './transitions.js';
 
 const EXPIRABLE = ['CREATED', 'INITIATED'] as const;
@@ -25,7 +25,7 @@ export interface PaymentLookup extends TransactionVerifier {
  */
 export async function expireStaleTips(input: {
   db: Database;
-  provider: PaymentLookup;
+  provider: PaymentLookup | ((provider: string | null) => PaymentLookup);
   now: Date;
   graceMs?: number;
   limit?: number;
@@ -38,6 +38,8 @@ export async function expireStaleTips(input: {
         attemptId: paymentAttempts.id,
         provider: paymentAttempts.provider,
         providerReference: paymentAttempts.providerReference,
+        platformFeeMinor: tipQuotes.platformFeeMinor,
+        providerFeeMinor: tipQuotes.providerFeeMinor,
       })
       .from(paymentAttempts)
       .innerJoin(
@@ -63,25 +65,45 @@ export async function expireStaleTips(input: {
   let errors = 0;
   for (const candidate of candidates) {
     try {
+      const provider =
+        typeof input.provider === 'function'
+          ? input.provider(candidate.provider)
+          : input.provider;
       if (!candidate.providerReference) {
-        const found = await input.provider.findPayment(candidate.attemptId);
+        const found = await provider.findPayment(candidate.attemptId);
         if (found) {
           // Record the reference first, so a webhook for it can be matched from now on.
           const recorded = await markAttemptInitiated(db, {
             attemptId: candidate.attemptId,
-            provider: input.provider.name,
+            provider: provider.name,
             providerReference: found.providerReference,
           });
           // Something else moved the attempt meanwhile; leave it to the next run.
           if (recorded === 'conflict' || recorded === 'not_found') continue;
-          candidate.provider = input.provider.name;
+          candidate.provider = provider.name;
           candidate.providerReference = found.providerReference;
         }
       }
       if (candidate.provider && candidate.providerReference) {
-        const answer = await input.provider.verifyTransaction(
+        const answer = await provider.verifyTransaction(
           candidate.providerReference,
+          quotedShare(candidate),
         );
+        if (answer.status === 'pending' && answer.collected) {
+          // The provider took the money but its settlement evidence is not final: never cancel
+          // a paid tip. Mark it pending (unbooked) so reconciliation and the issue inbox follow it.
+          await recordProviderEvent(db, {
+            provider: candidate.provider,
+            providerEventId: `expiry.${candidate.attemptId}.collected`,
+            eventType: 'payment.pending',
+            attemptId: candidate.attemptId,
+            providerReference: candidate.providerReference,
+            signatureVerified: true,
+            payload: { source: 'expiry', collected: true },
+            now,
+          });
+          continue;
+        }
         if (answer.status === 'succeeded' || answer.status === 'failed') {
           // Same deterministic ID as reconciliation, so the two can never both apply it.
           const result = await recordProviderEvent(db, {

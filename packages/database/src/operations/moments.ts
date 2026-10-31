@@ -11,6 +11,8 @@ import {
   rewardGrants,
 } from '../schema.js';
 import { guarded } from './errors.js';
+import { mailOwner } from './account-mail.js';
+import type { MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { isoWeekOf } from './reports.js';
 import { postCashReward } from './rewards.js';
@@ -143,6 +145,7 @@ async function createMoment(
     copy: Copy;
     now: Date;
     budgetPerMonthMinor: bigint;
+    sealing: MailSealing;
   },
 ): Promise<boolean> {
   const momentId = newId();
@@ -208,6 +211,21 @@ async function createMoment(
       title,
       body: 'Share it on your page if you like.',
     });
+  if (input.kind === 'milestone') {
+    // Like tip emails: turned off means never queued, not queued and dropped later.
+    const [page] = await tx
+      .select({ wants: profiles.notifyMilestones })
+      .from(profiles)
+      .where(eq(profiles.id, input.profileId));
+    if (page?.wants)
+      await mailOwner(tx, input.sealing, {
+        profileId: input.profileId,
+        type: 'milestone',
+        data: { copy: title },
+        dedupeKey: `milestone.${momentId}`,
+        now: input.now,
+      });
+  }
   return true;
 }
 
@@ -236,6 +254,7 @@ export function evaluateTipMoments(
     tipId: string;
     now: Date;
     budgetPerMonthMinor: bigint;
+    sealing: MailSealing;
   },
 ): Promise<{ created: string[] }> {
   return guarded(() =>
@@ -297,6 +316,7 @@ export function evaluatePeriodMoments(
     periodKey: string;
     now: Date;
     budgetPerMonthMinor: bigint;
+    sealing: MailSealing;
   },
 ): Promise<{ created: number }> {
   const format = input.period === 'week' ? 'IYYY-"W"IW' : 'YYYY-MM';
@@ -358,6 +378,7 @@ export function evaluatePeriodMoments(
                   : 'Your best month so far.',
           now: input.now,
           budgetPerMonthMinor: input.budgetPerMonthMinor,
+          sealing: input.sealing,
         }),
       );
       if (made) created += 1;

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Browser, type Page } from '@playwright/test';
+import { tipFromProfile } from '../shared/tip-flow';
 
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 export async function expectAccessible(page: Page) {
@@ -25,35 +26,52 @@ export function identity(testInfo: {
   // Worker and project last: the pretend inbox shows only the last four digits, and
   // tests running at the same moment must never share them.
   const digits = `${String(Date.now()).slice(-5)}${testInfo.workerIndex % 10}${project}`;
-  return { phone: `+234803${digits}`, handle: `e2e_${digits}` };
+  return {
+    phone: `+234803${digits}`,
+    // The inbox shows only the first letter and the domain, so the domain keeps tests apart.
+    email: `kemi@e2e-${digits}.example`,
+    handle: `e2e_${digits}`,
+  };
 }
 
-/** The newest code sent to this number (matched by its last four digits) in the pretend inbox. */
-export async function readCode(page: Page, phone: string): Promise<string> {
+const hintOf = (email: string) => {
+  const [local = '', domain = ''] = email.toLowerCase().split('@');
+  return `${local.slice(0, 1)}•••@${domain}`;
+};
+
+/** Sign-in code emails to this address that have arrived so far, newest first. */
+async function codeEmails(page: Page, email: string): Promise<string[]> {
   const inbox = await page.context().newPage();
   await inbox.goto('/dev/inbox');
-  const message = inbox
+  const mails = await inbox
     .getByRole('article')
-    .filter({ hasText: `•••${phone.replace(/\D/g, '').slice(-4)}` })
-    .filter({ hasText: 'Your TipMe code is' })
-    .first();
-  await expect(message).toBeVisible();
-  const code =
-    /\b(\d{6})\b/.exec((await message.textContent()) ?? '')?.[1] ?? '';
+    .filter({ hasText: hintOf(email) })
+    .filter({ hasText: 'Your TipMe sign-in code' })
+    .allTextContents();
   await inbox.close();
-  return code;
+  return mails;
 }
 
-export async function signInWithPhone(
+/** Signs in with an email code, reading the code from the pretend inbox. */
+export async function signInWithEmail(
   page: Page,
-  phone: string,
+  email: string,
   start = '/sign-in',
 ) {
+  const before = (await codeEmails(page, email)).length;
   await page.goto(start);
-  await page.getByLabel('Phone number').fill(phone);
+  await page.getByLabel('Email address').fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByLabel('6-digit code')).toBeVisible();
-  await page.getByLabel('6-digit code').fill(await readCode(page, phone));
+  // The worker sends it shortly after; wait for this one, not an earlier sign-in's.
+  let code = '';
+  await expect(async () => {
+    const mails = await codeEmails(page, email);
+    expect(mails.length).toBeGreaterThan(before);
+    code = /\b(\d{6})\b/.exec(mails[0] ?? '')?.[1] ?? '';
+    expect(code).not.toBe('');
+  }).toPass({ timeout: 25_000 });
+  await page.getByLabel('6-digit code').fill(code);
   await page.getByRole('button', { name: 'Continue' }).click();
 }
 
@@ -64,7 +82,7 @@ export async function signUpRecipient(
   { live = true }: { live?: boolean } = {},
 ) {
   const who = identity(testInfo);
-  await signInWithPhone(page, who.phone, '/sign-up');
+  await signInWithEmail(page, who.email, '/sign-up');
   await page.getByLabel('Handle').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
@@ -102,20 +120,11 @@ export async function tipAsVisitor(
       timeout: 1000,
     });
   }).toPass({ timeout: 10_000 });
-  await page.getByRole('radio', { name: amount }).check();
-  await expect(
-    page.getByText(/receives NGN [\d,]+\.\d\d after fees/),
-  ).toBeVisible();
-  if (message)
-    await page.getByLabel('Personal message (optional)').fill(message);
-  if (name) {
-    // The profile keeps the optional extras behind a disclosure.
-    await page.getByText('Add your name or remember tips').click();
-    await page.getByLabel('Your name (optional)').fill(name);
-  }
-  await page.getByRole('button', { name: /^Tip NGN/ }).click();
-  await page.waitForURL(/\/mock-checkout\//);
-  await page.getByRole('button', { name: outcome }).click();
-  await page.waitForURL(/\/tip\//);
+  await tipFromProfile(page, {
+    amount,
+    outcome,
+    ...(name ? { name } : {}),
+    ...(message ? { message } : {}),
+  });
   await context.close();
 }

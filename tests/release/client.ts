@@ -12,11 +12,14 @@ export const env = {
   api: process.env.RELEASE_API ?? '',
   previewPassword: process.env.RELEASE_PREVIEW_PASSWORD ?? '',
   token: process.env.RELEASE_CHECK_TOKEN ?? '',
-  opsPhone: process.env.RELEASE_OPS_PHONE ?? '',
+  opsEmail: process.env.RELEASE_OPS_EMAIL ?? '',
   opsTotpSecret: process.env.RELEASE_OPS_TOTP_SECRET ?? '',
   handle: process.env.RELEASE_HANDLE ?? '',
   expectVersion: process.env.RELEASE_EXPECT_VERSION ?? '',
   insecure: process.env.RELEASE_INSECURE === '1',
+  paymentProvider: process.env.RELEASE_PAYMENT_PROVIDER ?? 'mock',
+  /** On the Bachs sandbox: a standing page whose Bachs account was set up by hand. */
+  bachsHandle: process.env.RELEASE_BACHS_HANDLE ?? '',
 };
 
 /** A new browser context that has passed the staging password (when the copy has one). */
@@ -54,8 +57,15 @@ export function apiCall(
   });
 }
 
-type Message = { id: string; to: string; body: string };
-const codeMessages = async (page: Page, phone: string): Promise<Message[]> => {
+type Message = { id: string; to: string; subject: string | null; body: string };
+
+/** How the pretend inbox shows an address: its first letter and its domain. */
+const hintOf = (email: string) => {
+  const [local = '', domain = ''] = email.toLowerCase().split('@');
+  return `${local.slice(0, 1)}•••@${domain}`;
+};
+
+const codeMessages = async (page: Page, email: string): Promise<Message[]> => {
   const inbox =
     await // On a preview copy the inbox also needs the release token.
     (
@@ -67,37 +77,38 @@ const codeMessages = async (page: Page, phone: string): Promise<Message[]> => {
         env.token ? { authorization: `Bearer ${env.token}` } : {},
       )
     ).json();
-  const last4 = phone.replace(/\D/g, '').slice(-4);
   return (inbox.data as Message[]).filter(
-    (m) => m.to.endsWith(last4) && /Your TipMe code is/.test(m.body),
+    (m) =>
+      m.to === hintOf(email) && /Your TipMe sign-in code/.test(m.subject ?? ''),
   );
 };
 
 /** The code from a message newer than `seen` (staging delivers nothing for real). */
 export async function readCode(
   page: Page,
-  phone: string,
+  email: string,
   seen: Set<string>,
 ): Promise<string> {
   let code = '';
   await expect(async () => {
-    const fresh = (await codeMessages(page, phone)).find(
+    const fresh = (await codeMessages(page, email)).find(
       (m) => !seen.has(m.id),
     );
     code = /\b(\d{6})\b/.exec(fresh?.body ?? '')?.[1] ?? '';
     expect(code).not.toBe('');
-  }).toPass({ timeout: 15_000 });
+    // The worker sends queued mail every few seconds.
+  }).toPass({ timeout: 30_000 });
   return code;
 }
 
-export async function signIn(page: Page, phone: string, start = '/sign-in') {
+export async function signIn(page: Page, email: string, start = '/sign-in') {
   await page.goto(start);
-  // Codes from earlier runs to the same number are not this sign-in's code.
-  const seen = new Set((await codeMessages(page, phone)).map((m) => m.id));
-  await page.getByLabel('Phone number').fill(phone);
+  // Codes from earlier runs to the same address are not this sign-in's code.
+  const seen = new Set((await codeMessages(page, email)).map((m) => m.id));
+  await page.getByLabel('Email address').fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByLabel('6-digit code')).toBeVisible();
-  await page.getByLabel('6-digit code').fill(await readCode(page, phone, seen));
+  await page.getByLabel('6-digit code').fill(await readCode(page, email, seen));
   await page.getByRole('button', { name: 'Continue' }).click();
 }
 

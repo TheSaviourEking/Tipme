@@ -38,6 +38,9 @@ const PUBLIC_REVIEWED = [
   'GET /health/ready',
   'GET /health/release',
   'POST /v1/auth/code',
+  'POST /v1/auth/email-recovery/confirm',
+  'POST /v1/auth/email-recovery/propose',
+  'POST /v1/auth/email-recovery/start',
   'POST /v1/auth/email/confirm',
   'POST /v1/auth/recover',
   'POST /v1/auth/recover/code',
@@ -46,6 +49,8 @@ const PUBLIC_REVIEWED = [
   'GET /v1/avatars/{profileId}/{file}',
   'POST /v1/events',
   'GET /v1/handles/{handle}/availability',
+  'GET /v1/mail/unsubscribe',
+  'POST /v1/mail/unsubscribe',
   'GET /v1/profiles/{handle}',
   'POST /v1/profiles/{handle}/report',
   'POST /v1/tip-intents',
@@ -64,6 +69,12 @@ const PRETEND_PUBLIC_REVIEWED = [
   'POST /v1/mock-provider/checkout/{reference}',
 ];
 
+const SIGNED_PROVIDER_REVIEWED = [
+  'POST /v1/webhooks/bachs',
+  'POST /v1/webhooks/mail/{provider}',
+  'POST /v1/webhooks/mock',
+];
+
 test('the pretend-only public routes are exactly the reviewed ones', () => {
   assert.deepEqual(
     routes
@@ -72,6 +83,16 @@ test('the pretend-only public routes are exactly the reviewed ones', () => {
       .sort(),
     [...PRETEND_PUBLIC_REVIEWED].sort(),
     'a pretend-only public route was added or removed: review it, then update this list',
+  );
+});
+
+test('payment and mail webhooks require provider signatures', () => {
+  assert.deepEqual(
+    routes
+      .filter((r) => r.access === 'provider-signature')
+      .map((r) => r.key)
+      .sort(),
+    [...SIGNED_PROVIDER_REVIEWED].sort(),
   );
 });
 
@@ -159,8 +180,10 @@ test('state machines: finished states have no way out, every state can be reache
   assert.deepEqual(PAYOUT_TRANSITIONS.PAID, ['REVERSED']);
   // A success can never be taken back by the tip's own machine (a refund is a separate record).
   assert.ok(!TIP_TRANSITIONS.SUCCEEDED.includes('FAILED'));
-  // Unknown attempts resolve only to a verified verdict, never back to pending.
-  assert.deepEqual(ATTEMPT_TRANSITIONS.UNKNOWN.sort(), [
+  // An unknown attempt may resolve to a known pending checkout or a verified verdict,
+  // but it can never return to CREATED and permit another provider write.
+  assert.deepEqual([...ATTEMPT_TRANSITIONS.UNKNOWN].sort(), [
+    'PENDING',
     'VERIFIED_FAILED',
     'VERIFIED_SUCCEEDED',
   ]);

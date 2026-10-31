@@ -1,3 +1,192 @@
+# Current task — faster Bachs confirmation (28 October 2026)
+
+- Branch/worktree: `feat/confirm-on-return` / `.worktrees/confirm-on-return`, from `origin/dev`.
+- Found: Bachs never delivered staging's payment events (`GET /v1/webhooks/events`: `attempts: 0`); the only deliveries were six hand redeliveries of one crypto event, answered 400 (#36). The webhook subscription is a Bachs dashboard setting for the user.
+- Added: the receipt's status request asks Bachs directly (`claimReceiptCheck`, at most every 4 s per tip, one UPDATE claim so parallel tabs ask once); staging's worker checks every 20 s from 45 s old (was 60 s from 120 s). Runbook: the three confirmation paths and the webhook subscriptions Bachs needs.
+
+# Current task — staging worker cannot reach Bachs (28 October 2026)
+
+- Branch: `fix/staging-worker-egress`, from `origin/dev`.
+- Staging tips paid through Bachs stayed "Still checking": the worker sat only on Compose's `internal` network (no internet route), so every status check failed with `BachsTransportError` ("response was not received"), counted as `errors: 4` per run and never logged. Found on the server (read-only): the same check succeeds from the API container and from a laptop with staging's exact build `b9701fe`.
+- Fix: the worker joins `edge` as well; reconcile reports failed checks by kind (`error_kinds`). Once deployed, the three paid ₦1,000 tips confirm on the next run; the ₦2,000 checkout was never paid.
+
+# Current task — release check on the Bachs sandbox (28 October 2026)
+
+- Branch/worktree: `ci/release-check-bachs` / `.worktrees/ci-faster`, from `origin/dev` at `9fc7f23`.
+- Staging runs `PAYMENT_PROVIDER=bachs-sandbox` (the user's decision); every staging release check since 16:12 on 27 October waited 5 minutes for a pretend checkout and failed. `GET /health/release` now names the payment provider. On Bachs the full check verifies the new page's "can't receive tips just yet" and the owner's notice, tips the standing page `@release_bachs` until Bachs' sandbox checkout opens (no payment, by the user's decision), and skips the pretend-only mismatch and withdrawal steps. `scripts/release-check.mjs` refuses in seconds when that page is missing or cannot take tips.
+- Not yet exercised against staging: `@release_bachs` must be created by hand (runbook), and GitHub Actions is blocked by billing.
+
+# Current task — faster CI (27 October 2026)
+
+- Branch/worktree: `ci/faster` / `.worktrees/ci-faster`, from `origin/dev` at `c3e5952`.
+- Before: about 7 minutes per push, set by `integration` (70 files one at a time, 303 s) and `e2e` (88 tests on one worker, 3.9 min) on 2-core runners (private repository).
+- Integration files now run in parallel: `prepareTestTemplate` migrates `tipme_it` once, and with `TIPME_TEST_TEMPLATE` set each test process works in its own copy (`openTestDatabase`); `scripts/test-integration.mjs` runs them (`TEST_CONCURRENCY`, `TEST_SHARD`) and drops the copies. CI splits integration and e2e into three shards each, moves the load test and the OpenAPI check into their own jobs, reuses Turborepo results between runs, and skips integration, load and e2e on documentation-only pull requests.
+- Verified locally: the new database and runner tests (seen failing first), script tests 67/67, lint and typecheck; the whole integration suite at 4 files in parallel in 142 s and 126 s (368 pass both times; the 12 backup tests fail only on macOS, where Docker cannot reach 127.0.0.1, as before); no copies left behind.
+
+# Current task — steadier CI (27 October 2026)
+
+- Branch/worktree: `ci/steady-builds` / `.worktrees/steady-builds`, from `origin/dev` at `c7e6612`.
+- Fonts: Manrope and DM Serif Display now ship in `apps/web/src/fonts/` (OFL, Latin and Latin Extended, WOFF2) via `next/font/local`; CI run `40548134712` had failed when the Google Fonts download failed during the build.
+- Load test: missed budgets (k6 exit 99) get one more run before failing (`withOneRetry` in `scripts/load-test.mjs`); the same run later missed the dashboard and profile budgets on a slow runner while the identical code measured 13 ms elsewhere.
+- Verified: typography test and retry tests seen failing first; Turbopack production build passes with both fonts bundled and no Google URL in the output; the real load test passes, and with budgets scaled to 0.001 it retries once and fails with exit 99.
+
+# Current task — public page tip readiness (27 October 2026)
+
+- Branch/worktree: `feat/public-tip-readiness` / `.worktrees/public-readiness`, from `origin/dev` at `c7e6612`. Slice 2 of 3 of the owner-experience work (slice 1 is PR #29).
+- `PublicProfile.acceptingTips` (optional; absent means true): false while new tips need the owner's own Bachs account and it isn't ready, by the same rule checkout applies (`getReadyPaymentAccount`). The profile shows "<Name> can't receive tips just yet." in place of the form.
+- Cache: the owner's own setup refresh revalidates the public page at once; webhook and staff updates rely on the page cache's 30-second backstop.
+- No migration. Verified: database and API readiness tests (seen failing first), web unit 56/56, API unit 36/36, typecheck 15/15, lint 15/15, OpenAPI up to date, full integration on a throwaway PostgreSQL (127.0.0.1:5434), and a browser check at 1440 and 390 px against a stand-in API (panel shown, no form, no overflow).
+
+# Current task — owner attention (27 October 2026)
+
+- Branch/worktree: `feat/owner-attention` / `.worktrees/owner-attention`, from `origin/dev` at `c7e6612`.
+- Scope (slice 1 of 3): a "needs your attention" notice on every dashboard page plus a dot on the tab that leads to the fix (`apps/web/src/lib/owner-attention.ts`); the first-day checklist shows the real Bachs payment step; withdraw says up front when the balance can't be paid out (`DashboardSummary.withdrawalsAvailable`, the same rule `requestWithdrawal` enforces).
+- No migration. Verified: web unit 64/64, API unit 36/36, typecheck 15/15, lint 15/15, OpenAPI up to date, integration 366/366 on a throwaway PostgreSQL (127.0.0.1:5434, database `tipme_oa`), and a browser check at 1440 and 390 px (notice, tab dot, fix link, notice clears, no overflow). The new accounts.spec E2E steps were not run locally; CI runs them.
+- Next slices: the public page tells supporters before they fill the form; "people tried to tip you" count.
+
+# Current task — Bachs gap remediation (27 October 2026)
+
+- PR #24 is open and ready for review against `dev`. CI run `40500650198`
+  passed static, security and integration but exposed 17 E2E assertions that
+  still waited for the intentionally removed “receives … after fees” copy.
+  The shared visitor helper and direct checkout, shell, quality, moments and
+  pricing specs now wait for the concise authoritative “You pay …” total.
+  Pricing coverage still checks the exact 8% and fee-free recipient outcomes
+  from the quote response; those details are not restored to the supporter UI.
+- Fresh checks after the E2E correction: `pnpm typecheck` (15/15), `pnpm lint`
+  (15/15), `pnpm test` (55/55 root tests; 18/18 workspace tasks), Playwright
+  discovery (88 tests), targeted Prettier and `git diff --check` passed. A full
+  local E2E run could not start because port 4100 belongs to the active
+  `.worktrees/physical-interface` API and was left untouched. The first local
+  attempt also found a pre-existing partial migration in shared `tipme_test`;
+  no shared database was reset or altered. Final full E2E verification is the
+  clean PR runner after this correction is pushed.
+- Branch `feat/provider-integrations-bachs`, continued from `ddd3f56` at the user's request. Plan: `docs/superpowers/plans/2026-10-27-bachs-gap-remediation.md`; Tasks 1–14 and rulings are recorded in `.superpowers/sdd/2026-10-27-bachs-gap-remediation/progress.md`. Current implementation head before the UI commit: `9132bcc`.
+- Fixed: Bachs payments can be confirmed (callers pass the quoted TipMe share); expiry never cancels a collected-but-unsettled payment; definite 4xx checkout refusals fail cleanly (`PAYMENT_START_REJECTED`); one readiness rule with Bachs' real fee responsibility; account/capability webhooks re-read the account; withdrawals of Bachs-collected money refused (`WITHDRAWAL_UNAVAILABLE`); worker holds no webhook secret; refunds/disputes raise `payment_reversed` money issues (migration 0041); opaque Bachs IDs; `ddd3f56` compile breaks fixed.
+- Verified: integration 364/364 (69 files, throwaway PostgreSQL 16 on 127.0.0.1:5434 and Redis on 6380, no shared database touched); `pnpm test` 18/18 tasks and 55/55 root tests; `pnpm typecheck` 15/15; `pnpm lint` 15/15; `pnpm format:check`; `pnpm api:openapi --check`; generated docs unchanged; `git diff --check`.
+- Later sandbox checks exercised connected-account setup and checkout behavior; see the local validation record below and the plan ledger for the follow-up fixes. Full E2E remains unrun in this worktree.
+- Payer-total-only tip-form UI is ready to commit with its design record and E2E expectations. Fresh validation: web unit tests 56/56, web lint and typecheck passed, and the Next production Webpack build passed. The default Turbopack build could not be used in this environment because its CSS worker was denied permission to bind a local port. No checkout or payment was submitted by these UI checks.
+- Still open (live blockers): refund/dispute ledger handling, Bachs payouts, automated reserve monitoring, confirming Bachs event names/statuses with captured sandbox fixtures, a provider-neutral account interface. The stuck sandbox attempt `01a17c0b…` still needs a Dashboard check before any retry.
+
+# Current task — recipient onboarding, business page and tip purpose (27 October 2026)
+
+- Branch: `feat/recipient-onboarding-and-tip-purpose`, based on current `origin/dev`. PR #21 already merged and is not being reused.
+- Scope: recipient onboarding guidance on the homepage/dashboard; business coming-soon and voluntary mailto interest path; navbar/copy cleanup; optional structured tip purpose through contract, API, database migration, checkout form and recipient detail; `/for-businesses` layout alignment.
+- Migration `0039_tip_purpose` is additive and was not applied by this work. The Bachs branch has since been rebased onto its merge and now follows it with `0040_bachs_sandbox_recovery`; the migration-number collision is resolved.
+- Earlier local checks passed: `pnpm test` (54 root tests and all 18 package tasks), `pnpm typecheck` (15/15), `pnpm lint` (15/15), `pnpm build` (9/9), `pnpm format:check`, and `git diff --check`.
+- PR CI run `40424132431` exposed a stale OpenAPI file, two outdated onboarding assertions, and four desktop/mobile screenshot mismatches. Follow-up commit `94ac1ab` regenerated the OpenAPI document, corrected the assertions, and added failure-only PNG diagnostics with three-day retention.
+- CI run `40426539167`: integration, security, static, Vercel, dashboard and welcome checks passed; E2E had only four visual failures. The expected/actual/diff images were reviewed at desktop and mobile. Differences were the intended purpose selector and approved navigation/footer/test-mode copy; the profile composition remained readable with no overlap. All eight Darwin/Linux visual baselines have now been refreshed.
+- Verified in this worktree: `pnpm build` (9/9), `pnpm api:openapi --check`, targeted Prettier, `git diff --check`, Playwright discovery (4 onboarding tests), and the focused visual specs (4/4) after updating Darwin snapshots. Linux baselines were taken from the reviewed CI actual images. Full local E2E was not run because the normal port 4100 API belongs to `.worktrees/physical-interface`; it was left running and untouched. The focused visual run used the built PR web app and read-only local API; no database reset occurred.
+- CI run `40431576309` passed after the code/baseline updates; final-head run `40432964292` also passed E2E, integration, static, security, and Vercel. PR #23 was subsequently merged into `dev` at `da0c62a`.
+- No migration was applied and no payment operation occurred. The only deployment was the PR preview. The full E2E suite passed in CI; local full E2E remains unrun because port 4100 is occupied by the active API in `.worktrees/physical-interface`.
+
+# Current task — Bachs sandbox integration safety and routing (26 October 2026)
+
+- Branch/worktree: `feat/provider-integrations-bachs` /
+  `.worktrees/provider-integrations-bachs`, rebased onto `origin/dev` at
+  `da0c62a`. The rebase completed without remaining conflicts; commits
+  `0084177` and `788bd28` contain the accepted sandbox-funds-flow ADR and
+  implementation. Draft PR #24 is open against `dev`; the branch is published.
+- The typed Bachs REST adapter, recipient-account persistence, one-shot
+  checkout-start claim, durable `UNKNOWN` outcome, signed webhook correlation,
+  API account/onboarding/webhook routes, and audited staff recovery workflows
+  are implemented in this worktree. Recovery covers ambiguous checkout IDs and
+  recipient-account creation; it never retries provider writes or manually
+  marks payments paid.
+- Reconciliation, expiry and staff re-check now resolve provider adapters by
+  the persisted attempt/payout provider. A focused database integration test
+  covers historical mock/Bachs attempt routing.
+- Checkout recovery requires a matching open issue, a dashboard-found checkout
+  ID, an authoritative Bachs read, and exact expected amount/currency. Not-found
+  or mismatch remains `UNKNOWN` and unlinked. Account recovery requires verified
+  recipient email, staff attestation to dashboard identity/fee settings, and a
+  successful server-side account fetch; payouts stay disabled.
+- **Bachs sandbox is selectable in test/preview only** (user-approved).
+  Production still rejects it, credentials need `sk_sandbox_`, and
+  `PAYMENTS_LIVE_ENABLED` remains literal `false`. Checkout UI and recipient
+  onboarding card were updated; see HANDOFF.md.
+- Product-owner UI follow-up (27 October): the public tip quote now displays
+  only the exact payer total. Fee breakdown, recipient net, and policy-version
+  copy are removed; the API quote and payment calculations are unchanged. This
+  conflicts with PRD v1.1's fee-treatment disclosure requirement; revisit before
+  enabling real payments.
+- Verified the UI change with `pnpm --filter @tipme/web test` (55/55),
+  `pnpm --filter @tipme/web lint`, `pnpm --filter @tipme/web build`,
+  `pnpm typecheck` (15/15), targeted ESLint/Prettier, and `git diff --check`.
+  A local browser smoke on Ada's profile selected NGN 5,000 and showed only
+  “You pay NGN 5,000.00”; no checkout was submitted. E2E was not run because
+  its global setup resets `tipme_test`.
+- Migration `0040_bachs_sandbox_recovery` now follows merged
+  `0039_tip_purpose`, combining the Bachs schema and issue-kind changes while
+  preserving the custom transition trigger. Superseded Bachs migration files
+  were removed; Drizzle generation reports no schema drift.
+- Staging Compose now forwards Bachs sandbox credentials to both API and
+  worker, and forwards `RELEASE_KIND` to the worker. The staging env example,
+  runbook, ADR, OpenAPI/access-control docs, and webhook-signature regression
+  test were reconciled.
+- Bachs has no checkout lookup by TipMe reference/idempotency key and its
+  successful idempotency cache is limited to 24 hours. Unknown writes are never
+  retried. Bachs payouts remain unsupported; recipient onboarding UI now exists
+  on dashboard settings.
+- Live payments remain blocked by D-01 through D-07, written provider approval,
+  legal/risk review, and reconciliation of Bachs direct-charge
+  merchant-of-record behavior with the proposed custodial model in ADR-0006.
+- At implementation/CI time, no Bachs credentials or provider API requests were
+  used; adapter tests used fake transport. See the local sandbox validation
+  below for the later operator-approved test. Resend/auth work is outside this
+  task; D-11 remains open.
+- Verified after the CI fixes: `pnpm build` (9/9), `pnpm typecheck` (15/15),
+  `pnpm lint` (15/15), `pnpm format:check`, `pnpm test` (55 root tests and
+  18/18 workspace tasks), CI-pinned Gitleaks (102 commits scanned, no leaks),
+  and `git diff --check` passed. Targeted integration tests passed 23/23 on a
+  disposable local PostgreSQL container; no shared or staging database was
+  reset. The full integration suite was not run locally.
+- Moved the PostgreSQL-dependent recovery test into `tests/integration/`,
+  corrected the mismatched provider-reference assertion, narrowed the
+  historical Gitleaks exception to one fingerprint, and refreshed all four
+  Darwin/Linux profile snapshots. Focused visual Playwright passed 4/4;
+  Darwin snapshots used a temporary config and read-only requests to the
+  existing local API. Linux snapshots use the reviewed CI actuals.
+- CI run `40452019057` passed static, security, integration and E2E on
+  implementation commit `141f100`; the Vercel preview also passed. PR #24
+  remains open and draft.
+
+## Local sandbox validation (27 October 2026)
+
+- Copied the user's ignored root `.env` and `apps/web/.env.local` into this
+  worktree; both are mode `0600`. The root `WEB_ORIGIN` is `http://localhost:3001`
+  because another local Node process already owned port 3000. No secrets were
+  printed or tracked.
+- `pnpm build`, `pnpm db:migrate`, and `pnpm db:seed` passed. The local
+  `tipme_local` database is on the existing shared local Postgres container
+  (Compose project `tipme`); it was migrated and seeded, not reset. Existing
+  local Redis was reused.
+- Local web is left running at `http://localhost:3001`, API at
+  `http://localhost:4000`, and the Bachs-configured worker is running.
+  `/health` and `/@ada` returned HTTP 200. Browser smoke completed recipient
+  sign-in using the pretend inbox, confirmed a synthetic local email, and
+  created a sandbox recipient account; the API returned `ACTIVE` with charges
+  enabled.
+- Guest quote creation returned HTTP 201. One Bachs checkout-start attempt
+  returned HTTP 503 `PROVIDER_OUTCOME_UNKNOWN`; the API logged `BachsApiError`.
+  Attempt `01a17c0b-8042-7715-9858-156eb54b83fb` is durably `UNKNOWN`, has no
+  provider reference, and its tip remains `AWAITING_PAYMENT`. The worker opened
+  a `payment_unresolved` issue. No card details were entered and no payment was
+  submitted; the Bachs sandbox API was contacted for account setup and checkout
+  initialization. No live payment, staging change, or production change.
+- The exact Bachs HTTP status/provider code was not logged, so the checkout
+  failure's cause is unresolved. Do not retry this attempt or create another
+  checkout until the open issue is checked against the Bachs sandbox dashboard
+  and resolved through the authoritative recovery flow. The provider adapter
+  has no lookup by TipMe operation reference.
+- Tracked Next.js dev-generated changes were reverted; no application source
+  change remains. `git status` was clean before this continuity update.
+
+- Next exact step: inspect the open `payment_unresolved` issue and the matching
+  Bachs sandbox dashboard record for the attempt above. Do not retry its
+  checkout. Keep live payments disabled and PR #24 unmerged until the outcome
+  and error cause are understood.
+
 # Current task — Production countdown for usetipme.xyz (26 October 2026)
 
 - Branch: `feat/production-countdown`, isolated in `.worktrees/profile-composition`.
@@ -22,10 +211,8 @@
   and have no horizontal overflow.
 - No production settings or deployment have changed. Production API origin is
   still a separate unresolved launch dependency.
-- PR #21 is open against `dev`; latest step checks were still running on GitHub.
-- Next exact step: monitor CI and Vercel preview, address any failures, then
-  verify staging after merge. Production deployment and API configuration are
-  separate.
+- PR #21 was merged into `dev` on 26 October 2026. Production deployment and
+  API configuration remain separate.
 
 # Previous task — PR #19 Linux visual baselines (26 October 2026)
 
@@ -204,3 +391,16 @@ PR-003 to PR-008 are complete.
 ## Next exact step
 
 Stop. PR-009 (analytics and ops view) needs explicit authorisation.
+
+## Navbar, "test mode" copy and tip purpose (uncommitted)
+
+- Navbar: "For individuals" (still `/for-creators`) and "For Businesses" (new `/for-businesses` coming-soon page, replacing "See a demo page").
+- "Pretend" wording replaced with neutral "Test mode" across web copy; real payments remain unapproved, so a test-mode notice stays.
+- Structured optional tip purpose: contracts `tipPurposes`, `tips.purpose` column + migration `0039_tip_purpose` (not applied to any database), form select, recipient tip detail.
+
+## Recipient onboarding path (uncommitted)
+
+- Homepage clarifies that Ada is a fictional demo, surfaces the create-page action, and explains the three recipient setup steps. The portrait caption is constrained so the overlapping tip panel does not cover it.
+- The first-day dashboard now guides recipients through profile details, publishing, and sharing tools, with a payment/payout step clearly marked unavailable pending provider and funds-flow approvals.
+- Business page copy states that business accounts are not open and no launch date has been announced; it links to individual signup and provides a mailto draft to `usetipme@gmail.com`. Submissions are not stored by TipMe; the visitor must send the draft.
+- The separate Bachs branch has sandbox account onboarding, but it is not integrated into this UI branch; no live payout flow is represented here.

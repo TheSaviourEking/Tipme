@@ -3,6 +3,7 @@ import type {
   DashboardSummary,
   MyTipDetail,
   MyTipRow,
+  TipPurpose,
   TipState,
 } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
@@ -19,7 +20,7 @@ export function dashboardSummary(
   db: Database,
   profileId: string,
   now: Date,
-): Promise<DashboardSummary> {
+): Promise<Omit<DashboardSummary, 'withdrawalsAvailable'>> {
   return guarded(async () => {
     const at = now.toISOString();
     const rows = await db.execute<{
@@ -217,6 +218,7 @@ export function myTipDetail(
       state: TipState;
       at: string;
       label: string | null;
+      purpose: TipPurpose | null;
       message: string | null;
       currency: string;
       gross: string;
@@ -230,7 +232,7 @@ export function myTipDetail(
     }>(sql`
       SELECT ${stateSql} AS state,
              to_char(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
-             t.payer_display_label AS label, m.body AS message, t.currency,
+             t.payer_display_label AS label, t.purpose, m.body AS message, t.currency,
              f.hidden_at IS NOT NULL AS hidden, f.reported_at IS NOT NULL AS reported,
              t.gross_minor::text AS gross, q.platform_fee_minor::text AS platform,
              q.provider_fee_minor::text AS provider_fee, q.recipient_net_minor::text AS net,
@@ -253,6 +255,7 @@ export function myTipDetail(
       at: row.at,
       // A supporter's name and words reach the recipient only with a paid tip.
       supporterLabel: row.state === 'paid' ? row.label : null,
+      purpose: row.state === 'paid' ? row.purpose : null,
       message: row.state === 'paid' && !row.hidden ? row.message : null,
       messageHidden: Boolean(row.hidden),
       messageReported: Boolean(row.reported),

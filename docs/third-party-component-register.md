@@ -7,7 +7,7 @@ Do not integrate third-party components until an actual row is completed with fa
 
 ## Physical interface typography and demo imagery
 
-- **Manrope, DM Serif Display** (SIL Open Font License 1.1, Google Fonts): loaded and self-hosted by `next/font` during the build, with no runtime third-party request. Manrope supplies interface weights 400–700, DM Serif Display supplies editorial 400; the wordmark is an SVG (Nunito was removed on 25 October 2026). The rendered candidates remain provisional under D-09. Font-disabled and narrow-layout checks are part of the visual gate.
+- **Manrope, DM Serif Display** (SIL Open Font License 1.1, from the google/fonts repository): stored in `apps/web/src/fonts/` with their licences and loaded by `next/font/local`, so neither the build nor any page downloads a font (a failed download at build time once failed CI). Both are cut to Google's Latin and Latin Extended ranges as unhinted WOFF2, as Google Fonts serves them (hinting changes letter widths on Linux), at 33 KB for Manrope (variable, 200–800) and 21 KB for DM Serif Display 400. DM Serif Display's reserved font name is "Source", which TipMe does not use. Manrope supplies interface weights 400–700, DM Serif Display supplies editorial 400; the wordmark is an SVG (Nunito was removed on 25 October 2026). The rendered candidates remain provisional under D-09. Font-disabled and narrow-layout checks are part of the visual gate.
 - **Ada and Tobi demo portraits:** original fictional images generated for TipMe with OpenAI's built-in image generation tool on 2026-10-25, then encoded as repository-owned WebP assets at 960 px width. They do not depict known people and contain no embedded text, logos, or user data. Decision: adopted for preview/demo profiles only; replaceable without changing product data contracts.
 
 ## PR-001/002 bootstrap
@@ -65,3 +65,7 @@ Decision: ADOPTED (pinned exact). Upgrades are deliberate: re-pin the digest and
 - **`sharp` 0.35.5** (Apache-2.0, https://sharp.pixelplumbing.com): decodes and re-encodes profile photos in the API (to a 512×512 WebP, no metadata), with a 40-megapixel limit against "pixel bombs". It was already in the lockfile through Next.js; it is now a direct, exactly pinned dependency of the API. The Docker image installs its musl (Alpine) build.
 
 Decision: ADOPTED (pinned exact).
+
+## Error reporting for the web app (28 October 2026)
+
+- **`@sentry/nextjs` 11.7.0** (MIT, https://github.com/getsentry/sentry-javascript), a runtime dependency of `apps/web` only. Errors and 10% of traces from the browser, server and edge runtimes, sent to Sentry (`tipme-fs`, EU region) through the site's own `/sentry-tunnel`, so the Content Security Policy is unchanged. Session replay, Sentry logs and personal data are not enabled; every event is scrubbed by `scrubEvent` before it leaves (`docs/runbooks/sentry.md`). Off without a DSN. Pinned to a release at least two weeks old (12 October 2026). The API and worker keep TipMe's own reporter (no SDK).

@@ -19,6 +19,7 @@
     "@tipme/contracts": "workspace:*",
     "@tipme/database": "workspace:*",
     "@tipme/domain": "workspace:*",
+    "@tipme/mail": "workspace:*",
     "@tipme/observability": "workspace:*",
     "@tipme/payments": "workspace:*",
     "bullmq": "6.3.11",

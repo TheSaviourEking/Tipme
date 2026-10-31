@@ -98,17 +98,24 @@ export function LineChart({
   title,
   points,
   unit,
+  previous,
 }: {
   title: string;
   points: Row[];
   unit: string;
+  /** The period before, drawn faintly behind and repeated in the hidden table. */
+  previous?: Row[];
 }) {
   const id = useId();
-  const max = Math.max(1, ...points.map((p) => p.value));
+  const max = Math.max(
+    1,
+    ...points.map((p) => p.value),
+    ...(previous ?? []).map((p) => p.value),
+  );
   const step = points.length > 1 ? 300 / (points.length - 1) : 0;
-  const path = points
-    .map((p, i) => `${i * step},${100 - (p.value / max) * 95}`)
-    .join(' ');
+  const pathOf = (rows: Row[]) =>
+    rows.map((p, i) => `${i * step},${100 - (p.value / max) * 95}`).join(' ');
+  const path = pathOf(points);
   return (
     <figure className="ops-chart" aria-labelledby={`${id}-caption`}>
       <figcaption id={`${id}-caption`}>{title}</figcaption>
@@ -126,6 +133,12 @@ export function LineChart({
         preserveAspectRatio="none"
       >
         <line x1="0" y1="100" x2="300" y2="100" className="ops-chart__axis" />
+        {previous && (
+          <polyline
+            points={pathOf(previous)}
+            className="ops-chart__line ops-chart__line--previous"
+          />
+        )}
         <polyline points={path} className="ops-chart__line" />
       </svg>
       {points.length > 0 && (
@@ -135,6 +148,12 @@ export function LineChart({
         </div>
       )}
       <DataTable rows={points} unit={unit} />
+      {previous && (
+        <DataTable
+          rows={previous.map((p) => ({ ...p, label: `Before: ${p.label}` }))}
+          unit={unit}
+        />
+      )}
     </figure>
   );
 }

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '@tipme/domain';
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   OPS_PERMISSIONS,
@@ -14,7 +14,10 @@ import {
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
+import { normaliseEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
+import { mailOwner } from './account-mail.js';
+import type { MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { openSecret, sealSecret } from './secret-box.js';
@@ -130,10 +133,20 @@ export async function dropOpsAccess(
  */
 export function grantOwner(
   db: Database,
-  input: { phone: string; now?: Date; role?: StaffRole },
+  input: {
+    /** The account's sign-in email; or a phone, while phone sign-in exists in pretend mode. */
+    email?: string;
+    phone?: string;
+    now?: Date;
+    role?: StaffRole;
+    /** Absent only where the operator's command has no mail key: the email is then skipped. */
+    sealing?: MailSealing;
+  },
 ): Promise<{ userId: string; enrolmentCode: string }> {
-  const phone = normalisePhone(input.phone);
-  if (!phone) return Promise.reject(new OperationError('INVALID_INPUT'));
+  const email = input.email ? normaliseEmail(input.email) : null;
+  const phone = input.phone ? normalisePhone(input.phone) : null;
+  if (!email && !phone)
+    return Promise.reject(new OperationError('INVALID_INPUT'));
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -143,10 +156,27 @@ export function grantOwner(
       const [existing] = await tx
         .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.phoneE164, phone), isNull(users.deletedAt)));
+        .where(
+          and(
+            email
+              ? and(
+                  sql`lower(${users.email}) = ${email}`,
+                  isNotNull(users.emailVerifiedAt),
+                )
+              : eq(users.phoneE164, phone!),
+            isNull(users.deletedAt),
+          ),
+        );
       const userId = existing?.id ?? newId();
+      // The person running this names the address; signing in still needs a code sent to it.
       if (!existing)
-        await tx.insert(users).values({ id: userId, phoneE164: phone });
+        await tx
+          .insert(users)
+          .values(
+            email
+              ? { id: userId, email, emailVerifiedAt: now }
+              : { id: userId, phoneE164: phone! },
+          );
       await tx
         .insert(staff)
         .values({ userId, roleId: role, grantedAt: now })
@@ -183,6 +213,14 @@ export function grantOwner(
         subjectId: userId,
         now,
       });
+      if (input.sealing)
+        await mailOwner(tx, input.sealing, {
+          userId,
+          type: 'staff_access_notice',
+          data: { change: 'granted' },
+          dedupeKey: `staff_access_notice.${userId}.${now.getTime()}`,
+          now,
+        });
       return { userId, enrolmentCode };
     }),
   );

@@ -3,7 +3,7 @@ import {
   expectAccessible,
   fitsViewport,
   identity,
-  signInWithPhone,
+  signInWithEmail,
 } from './helpers';
 
 async function claimNewPage(
@@ -11,7 +11,7 @@ async function claimNewPage(
   testInfo: import('@playwright/test').TestInfo,
 ) {
   const who = identity(testInfo);
-  await signInWithPhone(page, who.phone, '/sign-up');
+  await signInWithEmail(page, who.email, '/sign-up');
   await expect(
     page
       .getByRole('list', { name: 'Creating your page' })
@@ -71,6 +71,20 @@ test('a new recipient is welcomed and sets up their page one small step at a tim
   await expect(page.getByText(/Your page is live\./)).toBeVisible();
   await expectAccessible(page);
   await page.screenshot({ path: testInfo.outputPath('welcome-done.png') });
+  await page.getByRole('link', { name: 'Go to my dashboard' }).click();
+  await page.waitForURL(/\/dashboard$/);
+  await expect(
+    page.getByRole('heading', { name: 'Your page is ready to share' }),
+  ).toBeVisible();
+  await expect(page.getByText('Make your page feel like you')).toBeVisible();
+  await expect(page.getByText('Done', { exact: true })).toBeVisible();
+  await expect(page.getByText('Put your page online')).toBeVisible();
+  await expect(page.getByText('Live', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Share your link or QR', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Set up payments and payouts')).toBeVisible();
+  await expect(page.getByText('Coming later', { exact: true })).toBeVisible();
 
   const visitor = await (await browser.newContext()).newPage();
   await expect(async () => {
@@ -98,6 +112,10 @@ test('every welcome step can be skipped, and nothing goes live without asking', 
   await expect(page.getByText(/not online yet/)).toBeVisible();
   await page.getByRole('link', { name: 'Go to my dashboard' }).click();
   await page.waitForURL(/\/dashboard$/);
+  await expect(
+    page.getByRole('heading', { name: 'Get your page ready to share' }),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Page settings' })).toBeVisible();
 });
 
 test(

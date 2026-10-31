@@ -3,7 +3,7 @@ import { expectAccessible, signUpRecipient } from './helpers';
 import { enrolOwner } from './ops-helpers';
 
 // Free and Pro (PR-012): staff make a page Pro, the recipient chooses their own amounts and
-// minimum, and supporters see them with the 10% fee shown as one line.
+// minimum, and supporters see the exact amount they will pay.
 
 test('staff make a page Pro, the recipient chooses amounts, and supporters see them', async ({
   page,
@@ -64,14 +64,8 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
     0,
   );
   await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(
-    visitor.locator('.tip-breakdown div', {
-      hasText: 'TipMe fee (10%, includes processing)',
-    }),
-  ).toContainText('NGN 200.00');
-  await expect(
-    visitor.getByText(/receives NGN 1,800\.00 after fees/),
-  ).toBeVisible();
+  await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible();
+  await expect(visitor.locator('.tip-breakdown')).toHaveCount(0);
   await visitor.getByRole('radio', { name: 'Other amount' }).check();
   await visitor.getByLabel('Your amount (NGN)').fill('1500');
   await visitor.getByRole('button', { name: /^Tip/ }).click();

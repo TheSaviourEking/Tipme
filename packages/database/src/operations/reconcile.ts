@@ -1,20 +1,62 @@
-import { and, asc, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  sql,
+} from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { paymentAttempts, payouts } from '../schema.js';
+import {
+  paymentAttempts,
+  paymentIntents,
+  payouts,
+  tipQuotes,
+} from '../schema.js';
 import { recordAudit } from './audit.js';
+import { openIssue } from './issues.js';
 import { guarded, OperationError } from './errors.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordPayoutOutcome } from './payouts.js';
 import { recordProviderEvent } from './provider-events.js';
 
-/** What reconciliation needs from a provider: an authoritative, server-to-server status check. */
+/**
+ * What reconciliation needs from a provider: an authoritative, server-to-server status check.
+ * `expectation` is TipMe's whole quoted share (processing included); a provider that reports
+ * the platform fee it applied (Bachs) confirms success only when the two match.
+ */
 export interface TransactionVerifier {
-  verifyTransaction(providerReference: string): Promise<{
+  verifyTransaction(
+    providerReference: string,
+    expectation?: { platformFeeMinor: bigint },
+  ): Promise<{
     status: 'succeeded' | 'failed' | 'pending' | 'not_found';
     amountMinor: bigint;
     currency: string;
     feeMinor: bigint;
+    /** Pending, but the provider has already taken the money: never expire it. */
+    collected?: true;
+    /** The provider settled the money in another currency than it was paid in. */
+    settlementCurrency?: string;
   }>;
+}
+
+/** TipMe's whole share of a quote, as sent to the provider as its platform fee. */
+export const quotedShare = (quote: {
+  platformFeeMinor: bigint;
+  providerFeeMinor: bigint;
+}): { platformFeeMinor: bigint } => ({
+  platformFeeMinor: quote.platformFeeMinor + quote.providerFeeMinor,
+});
+
+export type ProviderResolver<T> = T | ((provider: string) => T);
+
+function providerFor<T>(provider: ProviderResolver<T>, name: string): T {
+  return typeof provider === 'function'
+    ? (provider as (provider: string) => T)(name)
+    : provider;
 }
 
 const UNRESOLVED_AFTER_MS = 30 * 60 * 1000;
@@ -28,6 +70,7 @@ export async function findAttemptsToReconcile(
     provider: string;
     providerReference: string;
     createdAt: Date;
+    expectation: { platformFeeMinor: bigint };
   }[]
 > {
   const rows = await db
@@ -36,14 +79,29 @@ export async function findAttemptsToReconcile(
       provider: paymentAttempts.provider,
       providerReference: paymentAttempts.providerReference,
       createdAt: paymentAttempts.createdAt,
+      platformFeeMinor: tipQuotes.platformFeeMinor,
+      providerFeeMinor: tipQuotes.providerFeeMinor,
     })
     .from(paymentAttempts)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, paymentAttempts.intentId))
+    .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
     .where(
       and(
         inArray(paymentAttempts.status, ['INITIATED', 'PENDING', 'UNKNOWN']),
         input.attemptId ? eq(paymentAttempts.id, input.attemptId) : undefined,
         isNotNull(paymentAttempts.providerReference),
         lte(paymentAttempts.createdAt, input.olderThan),
+        // The background sweep skips a finished release check's deliberately misreported tip:
+        // it can never be verified, and asking forever only costs provider calls. An explicit
+        // check of one attempt (staff re-check, receipt, webhook) always asks.
+        input.attemptId
+          ? undefined
+          : sql`NOT EXISTS (
+          SELECT 1 FROM tips t
+            JOIN profiles p ON p.id = t.profile_id
+            JOIN release_runs r ON r.id = p.rehearsal_run_id
+           WHERE t.intent_id = ${paymentAttempts.intentId}
+             AND r.finished_at IS NOT NULL)`,
       ),
     )
     // Least recently checked first, so attempts that never resolve cannot starve newer ones.
@@ -52,13 +110,14 @@ export async function findAttemptsToReconcile(
       asc(paymentAttempts.createdAt),
     )
     .limit(input.limit);
-  return rows.flatMap((row) =>
+  return rows.flatMap(({ platformFeeMinor, providerFeeMinor, ...row }) =>
     row.provider && row.providerReference
       ? [
           {
             ...row,
             provider: row.provider,
             providerReference: row.providerReference,
+            expectation: quotedShare({ platformFeeMinor, providerFeeMinor }),
           },
         ]
       : [],
@@ -72,7 +131,7 @@ export async function findAttemptsToReconcile(
  */
 export async function reconcileAttempts(input: {
   db: Database;
-  provider: TransactionVerifier;
+  provider: ProviderResolver<TransactionVerifier>;
   now: Date;
   minAgeMs: number;
   limit?: number;
@@ -83,6 +142,8 @@ export async function reconcileAttempts(input: {
   applied: number;
   unresolved: number;
   errors: number;
+  /** Failed checks by error kind (e.g. BachsTransportError), so the log says why. */
+  errorKinds: Record<string, number>;
 }> {
   const attempts = await findAttemptsToReconcile(input.db, {
     olderThan: new Date(input.now.getTime() - input.minAgeMs),
@@ -92,11 +153,13 @@ export async function reconcileAttempts(input: {
   let applied = 0;
   let unresolved = 0;
   let errors = 0;
+  const errorKinds: Record<string, number> = {};
   for (const attempt of attempts) {
     try {
-      const answer = await input.provider.verifyTransaction(
-        attempt.providerReference,
-      );
+      const answer = await providerFor(
+        input.provider,
+        attempt.provider,
+      ).verifyTransaction(attempt.providerReference, attempt.expectation);
       if (answer.status === 'succeeded' || answer.status === 'failed') {
         const result = await recordProviderEvent(input.db, {
           provider: attempt.provider,
@@ -115,6 +178,24 @@ export async function reconcileAttempts(input: {
           now: input.now,
         });
         if (result.outcome === 'applied') applied += 1;
+      } else if (answer.status === 'pending' && answer.collected) {
+        await input.db
+          .update(paymentAttempts)
+          .set({ collectedAt: input.now })
+          .where(
+            and(
+              eq(paymentAttempts.id, attempt.attemptId),
+              isNull(paymentAttempts.collectedAt),
+            ),
+          );
+        // Converted money comes with no fee bearer, so it never confirms on its own.
+        if (answer.settlementCurrency)
+          await openIssue(input.db, {
+            dedupeKey: `settlement_currency.${attempt.attemptId}`,
+            kind: 'payment_settlement_currency',
+            subject: { attemptId: attempt.attemptId },
+            now: input.now,
+          });
       } else if (
         answer.status === 'not_found' &&
         input.now.getTime() - attempt.createdAt.getTime() > UNRESOLVED_AFTER_MS
@@ -129,9 +210,11 @@ export async function reconcileAttempts(input: {
         );
         if (raised) unresolved += 1;
       }
-    } catch {
+    } catch (error) {
       // One failing check (provider timeout, bad answer) must not stop the rest of the batch.
       errors += 1;
+      const kind = error instanceof Error ? error.name : 'unknown';
+      errorKinds[kind] = (errorKinds[kind] ?? 0) + 1;
     } finally {
       await input.db
         .update(paymentAttempts)
@@ -140,7 +223,33 @@ export async function reconcileAttempts(input: {
         .catch(() => undefined);
     }
   }
-  return { checked: attempts.length, applied, unresolved, errors };
+  return { checked: attempts.length, applied, unresolved, errors, errorKinds };
+}
+
+/**
+ * A supporter is watching this tip's receipt: claims its unfinished attempt with `provider` for a
+ * check now, unless one ran in the last `minGapMs`. The claim is one UPDATE, so tabs polling at
+ * the same moment ask the provider once. Returns the attempt to check, or null.
+ */
+export function claimReceiptCheck(
+  db: Database,
+  input: { tipId: string; provider: string; now: Date; minGapMs: number },
+): Promise<string | null> {
+  const since = new Date(input.now.getTime() - input.minGapMs);
+  return guarded(async () => {
+    const claimed = await db.execute<{ id: string }>(sql`
+      UPDATE payment_attempts a
+         SET last_reconciled_at = ${input.now.toISOString()}::timestamptz
+        FROM tips t
+       WHERE t.id = ${input.tipId} AND a.intent_id = t.intent_id
+         AND a.provider = ${input.provider}
+         AND a.status IN ('INITIATED', 'PENDING', 'UNKNOWN')
+         AND a.provider_reference IS NOT NULL
+         AND (a.last_reconciled_at IS NULL
+              OR a.last_reconciled_at <= ${since.toISOString()}::timestamptz)
+      RETURNING a.id`);
+    return claimed.rows[0]?.id ?? null;
+  });
 }
 
 /** What payout reconciliation needs from a provider. */
@@ -158,7 +267,7 @@ export interface PayoutVerifier {
  */
 export async function reconcilePayouts(input: {
   db: Database;
-  provider: PayoutVerifier;
+  provider: ProviderResolver<PayoutVerifier>;
   now: Date;
   minAgeMs: number;
   limit?: number;
@@ -190,9 +299,10 @@ export async function reconcilePayouts(input: {
   for (const payout of candidates) {
     if (!payout.provider || !payout.providerReference) continue;
     try {
-      const answer = await input.provider.fetchPayoutStatus(
-        payout.providerReference,
-      );
+      const answer = await providerFor(
+        input.provider,
+        payout.provider,
+      ).fetchPayoutStatus(payout.providerReference);
       if (answer.status === 'paid' || answer.status === 'failed') {
         const result = await recordPayoutOutcome(input.db, {
           payoutId: payout.payoutId,
@@ -229,7 +339,7 @@ export type RecheckOutcome =
  */
 export async function recheckSubject(input: {
   db: Database;
-  provider: TransactionVerifier & PayoutVerifier;
+  provider: ProviderResolver<TransactionVerifier & PayoutVerifier>;
   attemptId?: string;
   payoutId?: string;
   staffUserId: string;

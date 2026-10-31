@@ -11,6 +11,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@sentry/nextjs": "11.7.0",
     "@tipme/contracts": "workspace:*",
     "@tipme/domain": "workspace:*",
     "@tipme/ui": "workspace:*",

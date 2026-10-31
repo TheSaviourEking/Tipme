@@ -10,35 +10,33 @@ import {
 } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { normaliseEmail } from './email-address.js';
 import { normalisePhone, phoneHint } from './phone.js';
+import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { writePretendMessage } from './pretend-outbox.js';
 import { dropOpsAccess, isActiveStaff } from './staff.js';
 import { verifySignInCode } from './sign-in.js';
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 const RECOVER_TTL_MS = 30 * 60 * 1000;
+export { maskEmail, normaliseEmail } from './email-address.js';
+
 /** A recovery takes effect only after this, so the owner can still stop it. */
 export const RECOVERY_HOLD_MS = 24 * 60 * 60 * 1000;
-const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 
-/** "t•••@example.com": enough to recognise, never the whole address. */
-export const maskEmail = (email: string) => {
-  const [local = '', domain = ''] = email.split('@');
-  return `${local.slice(0, 1)}•••@${domain}`;
-};
-
-export const normaliseEmail = (raw: string): string | null => {
-  const email = raw.trim().toLowerCase();
-  return email.length <= 254 && EMAIL.test(email) ? email : null;
-};
-
 /** Sends a link (pretend mailbox) that proves the user owns the address. */
 export function startEmailVerification(
   db: Database,
-  input: { userId: string; email: string; webOrigin: string; now?: Date },
+  input: {
+    sealing: MailSealing;
+    userId: string;
+    email: string;
+    webOrigin: string;
+    now?: Date;
+  },
 ): Promise<void> {
   const email = normaliseEmail(input.email);
   if (!email) return Promise.reject(new OperationError('INVALID_INPUT'));
@@ -53,12 +51,15 @@ export function startEmailVerification(
         purpose: 'verify',
         expiresAt: new Date(now.getTime() + VERIFY_TTL_MS),
       });
-      await writePretendMessage(tx, {
-        channel: 'email',
-        recipientHint: maskEmail(email),
+      await enqueueMail(tx, input.sealing, {
+        type: 'email_verification_link',
+        to: email,
         userId: input.userId,
-        subject: 'Confirm your email for TipMe',
-        body: `Confirm this address for your TipMe account: ${new URL(input.webOrigin).origin}/verify-email#v=${token} (valid for 24 hours). If you didn’t ask for this, ignore this email.`,
+        data: { token },
+        dedupeKey: `email_verification_link.${sha256(token)}`,
+        now,
+        // The link dies after 24 hours; the email must never arrive later.
+        expiresAt: new Date(now.getTime() + VERIFY_TTL_MS),
       });
     }),
   );
@@ -118,7 +119,12 @@ export function confirmEmail(
  */
 export function startRecovery(
   db: Database,
-  input: { email: string; webOrigin: string; now?: Date },
+  input: {
+    sealing: MailSealing;
+    email: string;
+    webOrigin: string;
+    now?: Date;
+  },
 ): Promise<'sent'> {
   const email = normaliseEmail(input.email);
   const now = input.now ?? new Date();
@@ -145,12 +151,14 @@ export function startRecovery(
         purpose: 'recover',
         expiresAt: new Date(now.getTime() + RECOVER_TTL_MS),
       });
-      await writePretendMessage(tx, {
-        channel: 'email',
-        recipientHint: maskEmail(email),
+      await enqueueMail(tx, input.sealing, {
+        type: 'recovery_link',
+        to: email,
         userId: user.id,
-        subject: 'Get back into TipMe',
-        body: `Lost your phone number? Attach a new one here: ${new URL(input.webOrigin).origin}/recover#r=${token} (valid for 30 minutes). You will need a code sent to the new number. If you didn’t ask for this, ignore this email.`,
+        data: { token },
+        dedupeKey: `recovery_link.${sha256(token)}`,
+        now,
+        expiresAt: new Date(now.getTime() + RECOVER_TTL_MS),
       });
     });
     return 'sent';
@@ -227,6 +235,7 @@ export function changePhone(
 export function completeRecovery(
   db: Database,
   input: {
+    sealing: MailSealing;
     token: string;
     newPhone: string;
     code: string;
@@ -259,8 +268,9 @@ export function completeRecovery(
       .from(users)
       .where(eq(users.id, row.userId));
     await db.transaction(async (tx) => {
+      const recoveryId = newId();
       await tx.insert(phoneRecoveries).values({
-        id: newId(),
+        id: recoveryId,
         userId: row.userId,
         newPhoneE164: phone,
         effectiveAt: pendingUntil,
@@ -277,12 +287,13 @@ export function completeRecovery(
           userId: row.userId,
           body: warning,
         });
-      await writePretendMessage(tx, {
-        channel: 'email',
-        recipientHint: maskEmail(row.email),
+      await enqueueMail(tx, input.sealing, {
+        type: 'phone_change_warning',
+        to: row.email,
         userId: row.userId,
-        subject: 'Your TipMe number is about to change',
-        body: warning,
+        data: { newPhoneHint: phoneHint(phone) },
+        dedupeKey: `phone_change_warning.${recoveryId}`,
+        now,
       });
     });
     return { userId: row.userId, pendingUntil };

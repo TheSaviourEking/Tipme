@@ -43,6 +43,15 @@ const call = (method, path, cookie, body) =>
   });
 const inbox = async () =>
   (await (await fetch(`${stack.api}/v1/dev/inbox`)).json()).data;
+/** Email is sent by the worker shortly after it is queued: wait for it, as a person would. */
+async function arrived(matches) {
+  for (let i = 0; i < 100; i++) {
+    const found = (await inbox()).find(matches);
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('email never arrived');
+}
 
 async function tipTobi(outcome = 'succeed') {
   const quote = await (
@@ -121,7 +130,7 @@ test('email is verified by a link, then phone recovery works through it', async 
       .status,
     202,
   );
-  const link = (await inbox()).find(
+  const link = await arrived(
     (m) => m.channel === 'email' && /#v=/.test(m.body),
   );
   const token = /#v=([A-Za-z0-9_-]+)/.exec(link.body)[1];
@@ -141,7 +150,7 @@ test('email is verified by a link, then phone recovery works through it', async 
       .status,
     202,
   );
-  const recover = (await inbox()).find(
+  const recover = await arrived(
     (m) => m.channel === 'email' && /#r=/.test(m.body),
   );
   const recoveryToken = /#r=([A-Za-z0-9_-]+)/.exec(recover.body)[1];

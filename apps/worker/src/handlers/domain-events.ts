@@ -1,7 +1,8 @@
-import type { Database } from '@tipme/database';
+import type { Database, MailSealing } from '@tipme/database';
 import {
   evaluateTipMoments,
   ISSUE_EVENT_NAMES,
+  mailForDomainEvent,
   notifyTipSucceeded,
   openIssueFromEvent,
   recordServerEvent,
@@ -39,9 +40,14 @@ export async function handleDomainEvent(
     dedupeKey?: string;
     /** Record anonymous server-side outcomes (off in production until D-07). */
     analyticsEnabled?: boolean;
+    sealing: MailSealing;
+    /** Payments are pretend (mock provider): the tip email says so. */
+    pretendPayment: boolean;
   },
 ): Promise<'logged' | 'notified' | 'duplicate' | 'skipped' | 'issue_opened'> {
   deps.logger.info({ event: 'domain_event.received', name });
+  // Before the issue below, whose repeat is a no-op: a failed send retries the whole event.
+  await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
   // Alerts that need a person become issues in the admin inbox, once per alert (PR-009).
   if (ISSUE_EVENT_NAMES.has(name) && deps.dedupeKey) {
     const outcome = await openIssueFromEvent(deps.db, {
@@ -98,7 +104,12 @@ export async function handleDomainEvent(
     !UUID.test(profileId)
   )
     return 'skipped';
-  const outcome = await notifyTipSucceeded(deps.db, { tipId, profileId });
+  const outcome = await notifyTipSucceeded(deps.db, {
+    sealing: deps.sealing,
+    tipId,
+    profileId,
+    pretendPayment: deps.pretendPayment,
+  });
   if (deps.analyticsEnabled) {
     await recordServerEvent(deps.db, {
       name: 'tip_completed',
@@ -118,6 +129,7 @@ export async function handleDomainEvent(
     tipId,
     now: new Date(),
     budgetPerMonthMinor: deps.rewardBudgetPerMonthMinor ?? 25_000_000n,
+    sealing: deps.sealing,
   });
   return outcome === 'created' ? 'notified' : outcome;
 }

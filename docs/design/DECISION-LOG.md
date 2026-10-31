@@ -1,5 +1,25 @@
 # Design decision log
 
+## 2026-10-27 — Payer-total-only tip summary
+
+At the product owner's direction, the public tip quote displays only the exact
+amount the supporter pays. The fee breakdown, recipient net, and fee-policy
+version are removed from that summary; quote calculation and payment behavior
+are unchanged. This presentation conflicts with PRD v1.1's fee-treatment
+disclosure requirement and no-hidden-fees principle. Revisit before enabling
+real payments; live payments remain disabled.
+
+## 2026-10-27 — Recipient onboarding and tip-purpose baselines
+
+Accepted for PR #23: the public profile gains an optional structured tip-purpose
+selector, while navigation, footer, and preview copy reflect the current
+individual/business and test-mode experience. The selector adds a deliberate
+step before the personal message; desktop remains the portrait-led composition,
+and mobile remains a readable single sequence with no overlap. The Darwin and
+Linux screenshot baselines were refreshed only after reviewing the CI
+expected/actual/diff images at both sizes. This changes presentation only; it
+does not change payment outcomes or provider behavior.
+
 ## 2026-10-26 — Production launch countdown
 
 Approved for the public production hold: one focused TipMe composition with no
@@ -111,3 +131,27 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - One fee line everywhere, as dev shows it: "TipMe fee (10%, includes processing)". The CSV has one fee column to match.
 - The demo pages keep their portrait photos (`/portraits/*.webp`), described as fictional demo recipients; uploaded photos are described as "Photo of {name}".
 - dev's "Report this page" quiet button sits under the preview note, aligned with it.
+
+## 2026-10-27 — Business interest page composition
+
+- The coming-soon page uses one centred editorial column with deliberate vertical rhythm between the eyebrow, headline, lede and primary action. The voluntary interest form sits in a raised card at the same width, with a mobile-safe stacked layout.
+
+## 2026-10-27 — Recipient onboarding path
+
+- The homepage now explains the recipient journey beside the Ada tipping demo: create a personal link, make the page recognizable, and share the link or QR. The primary action continues to `/sign-up`; the demo remains explicitly identified as fictional.
+- New recipients with no tips see a dashboard checklist for profile details, publishing, sharing, and payment setup. Profile photos remain optional; payment setup is clearly marked unavailable until provider and funds-flow approvals are complete.
+- The dashboard states that payments remain in test mode and real payment/payout setup is blocked on provider and funds-flow approvals.
+- Business interest is a mailto draft to the owner's provided inbox (`usetipme@gmail.com`), not a server submission. The visitor must choose to send it; TipMe does not persist the form value.
+
+## 2026-10-27 — Public page before tips are ready
+
+- While the owner hasn't finished the payment account that new tips need, the profile's tipping panel shows "<Name> can't receive tips just yet." with one line of explanation, in place of the form. Same panel material and position as the form, so the composition holds; no badge and no button, because the supporter has nothing to do.
+- Said before the supporter chooses an amount, never after they press Tip.
+
+## 2026-10-27 — Owner attention
+
+- Anything that stops an owner earning (payments not set up, unfinished or being checked, an unconfirmed email blocking payment setup, the page offline) appears above every dashboard page as the shared neutral notice, one per issue, most urgent first, each with one primary button that names the fix. It disappears as soon as the problem is gone. The welcome flow does not show it.
+- The dashboard tab that leads to the fix carries a small purple dot, announced to screen readers as "(needs your attention)". Purple is the signature material, used here as a mark, not a fill.
+- Tone is encouraging, not alarming: the neutral notice, not the error tone, because nothing has gone wrong yet; the owner has a step left.
+- When payments need the owner's own provider account, the first-day checklist shows the real payment step instead of "Coming later".
+- Withdraw says up front when the balance cannot be paid out yet, and shows no amount form.

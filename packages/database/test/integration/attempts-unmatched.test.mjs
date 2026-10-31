@@ -5,6 +5,8 @@ import {
   createPaymentIntent,
   createQuote,
   findAttemptByReference,
+  claimAttemptStart,
+  markAttemptStartFailed,
   markAttemptInitiated,
   recordUnmatchedEvent,
 } from '../../dist/index.js';
@@ -55,6 +57,45 @@ test('attempt initiation and unmatched events', async (t) => {
         history.map((row) => row.to_status),
         ['CREATED', 'INITIATED'],
       );
+    },
+  );
+
+  await t.test(
+    'a definite provider rejection closes the claimed attempt',
+    async () => {
+      await database.fresh();
+      const { quoteId } = await createQuote(database.db, {
+        handle: 'ada',
+        tipMinor: 100000n,
+        currency: 'NGN',
+      });
+      const { attemptId, tipId } = await createPaymentIntent(database.db, {
+        quoteId,
+        idempotencyKey: randomUUID(),
+      });
+      assert.equal(
+        (await claimAttemptStart(database.db, { attemptId, provider: 'bachs' }))
+          .outcome,
+        'claimed',
+      );
+
+      assert.equal(
+        await markAttemptStartFailed(database.db, {
+          attemptId,
+          provider: 'bachs',
+        }),
+        'failed',
+      );
+      const rows = await q(
+        `SELECT a.status AS attempt_status, t.status AS tip_status
+         FROM payment_attempts a JOIN tips t ON t.intent_id = a.intent_id
+        WHERE a.id = $1 AND t.id = $2`,
+        [attemptId, tipId],
+      );
+      assert.deepEqual(rows[0], {
+        attempt_status: 'VERIFIED_FAILED',
+        tip_status: 'FAILED',
+      });
     },
   );
 

@@ -49,6 +49,16 @@ test('intent requests are strict and bounded', () => {
     true,
   );
   assert.equal(
+    tipIntentRequestSchema.safeParse({ quoteId, purpose: 'great_service' })
+      .success,
+    true,
+  );
+  assert.equal(
+    tipIntentRequestSchema.safeParse({ quoteId, purpose: 'other_reason' })
+      .success,
+    false,
+  );
+  assert.equal(
     tipIntentRequestSchema.safeParse({ quoteId, message: 'x'.repeat(281) })
       .success,
     false,

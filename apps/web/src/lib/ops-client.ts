@@ -33,10 +33,18 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 /** Lagos time, as staff read it. */
 export const when = (iso: string) => dateTime.format(new Date(iso));
 
+/** The provider test link, and where its token waits while staff sign in. */
+export const PROVIDER_TEST_CONFIRM_PATH = '/ops/providers/confirm';
+export const PROVIDER_TEST_TOKEN_KEY = 'tipme.provider-test-token';
+
 export const ISSUE_KIND_LABELS: Record<string, string> = {
   payment_mismatch: 'Amount mismatch',
   payment_conflict: 'Payment after the tip ended',
   payment_unresolved: 'Payment unknown to the provider',
+  payment_attempt_unresolved: 'Bachs checkout outcome unknown',
+  payment_account_unresolved: 'Bachs recipient account outcome unknown',
+  payment_reversed: 'Refund or dispute reported',
+  payment_settlement_currency: 'Settled in another currency',
   payout_failed: 'Withdrawal failed',
   payout_conflict: 'Withdrawal paid after failing',
   provider_event_conflict: 'Conflicting provider event',
