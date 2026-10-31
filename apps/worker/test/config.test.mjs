@@ -239,3 +239,62 @@ test('in production, the worker too needs TLS with a checked certificate for a r
   assert.match(load(remote), /DATABASE_URL/);
   assert.doesNotMatch(load(`${remote}?sslmode=verify-full`), /DATABASE_URL/);
 });
+
+// A production copy: DEPLOYMENT_MODE=production and NODE_ENV=production. Every current
+// PAYMENT_PROVIDER value is refused there until the live provider exists, so the base reports
+// that one setting and each test checks its own setting is named too.
+const productionBase = {
+  DEPLOYMENT_MODE: 'production',
+  NODE_ENV: 'production',
+  MAIL_DEFAULT_PROVIDER: 'ses',
+  SES_CONFIGURATION_SET: 'tipme-tracked',
+  SES_CONFIGURATION_SET_UNTRACKED: 'tipme-untracked',
+  SES_SNS_TOPIC_ARN: 'arn:aws:sns:eu-north-1:123456789012:tipme-ses',
+  REDIS_URL: 'redis://127.0.0.1:6379',
+  DATABASE_URL:
+    'postgres://u:p@tipme-db.aivencloud.com:23456/tipme?sslmode=verify-full&sslrootcert=/run/secrets/db-ca.pem',
+  MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+};
+const productionIssues = (extra) => {
+  try {
+    loadWorkerConfig({ ...productionBase, ...extra });
+    return '';
+  } catch (error) {
+    return error.message;
+  }
+};
+
+test('the production base reports only the payment provider', () => {
+  assert.equal(productionIssues({}), 'Invalid configuration: PAYMENT_PROVIDER');
+});
+
+test('production refuses a preview password', () => {
+  assert.match(
+    productionIssues({ PREVIEW_PASSWORD: 'x'.repeat(32) }),
+    /PREVIEW_PASSWORD/,
+  );
+});
+
+test('production refuses pretend mail domains', () => {
+  assert.match(
+    productionIssues({ MAIL_PRETEND_DOMAINS: 'release-check.usetipme.xyz' }),
+    /MAIL_PRETEND_DOMAINS/,
+  );
+});
+
+test('production refuses RELEASE_KIND=test', () => {
+  assert.match(productionIssues({ RELEASE_KIND: 'test' }), /RELEASE_KIND/);
+});
+
+test('a preview copy keeps these settings', () => {
+  const config = loadWorkerConfig({
+    ...productionBase,
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+    RELEASE_KIND: 'test',
+    MAIL_PRETEND_DOMAINS: 'release-check.usetipme.xyz',
+  });
+  assert.equal(config.RELEASE_KIND, 'test');
+});

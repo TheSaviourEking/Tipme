@@ -20,3 +20,16 @@ export function parseConfig<S extends z.ZodType>(
     `Invalid configuration: ${[...names].sort().join(', ')}`,
   );
 }
+
+/**
+ * A production copy: the live deployment, not staging (`DEPLOYMENT_MODE=preview`) or a test run.
+ * Settings that only make sense for rehearsal are refused here.
+ */
+export function isProductionCopy(config: {
+  DEPLOYMENT_MODE?: string | undefined;
+  NODE_ENV?: string | undefined;
+}): boolean {
+  return (
+    config.DEPLOYMENT_MODE === 'production' && config.NODE_ENV === 'production'
+  );
+}
