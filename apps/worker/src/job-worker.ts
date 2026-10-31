@@ -434,7 +434,13 @@ export async function startJobWorker(
           });
         return override;
       },
-      sender: { domain: config.MAIL_FROM_DOMAIN, name: config.MAIL_FROM_NAME },
+      sender: {
+        domain: config.MAIL_FROM_DOMAIN,
+        name: config.MAIL_FROM_NAME,
+        ...(config.MAIL_FROM_ADDRESS
+          ? { address: config.MAIL_FROM_ADDRESS }
+          : {}),
+      },
       ...(config.MAIL_REPLY_TO ? { replyTo: config.MAIL_REPLY_TO } : {}),
       webOrigin: config.WEB_ORIGIN,
       apiOrigin: config.API_ORIGIN,

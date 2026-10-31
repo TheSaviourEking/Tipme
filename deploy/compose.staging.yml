@@ -151,6 +151,7 @@ services:
       SES_CONFIGURATION_SET_UNTRACKED: ${SES_CONFIGURATION_SET_UNTRACKED:-}
       SES_SNS_TOPIC_ARN: ${SES_SNS_TOPIC_ARN:-}
       MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-staging-mail.usetipme.xyz}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-TipMe Staging}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-support@usetipme.xyz}
       API_ORIGIN: https://${API_HOST:?set API_HOST}
