@@ -77,6 +77,7 @@ export class ReleaseInfoController {
       iso ? Math.round((now - Date.parse(iso)) / 60_000) : null;
     return {
       data: {
+        pointInTime: this.config.POINT_IN_TIME_RECOVERY,
         logical: status.logical
           ? { ageMinutes: age(status.logical.at)! }
           : null,

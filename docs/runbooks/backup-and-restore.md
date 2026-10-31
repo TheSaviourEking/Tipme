@@ -7,6 +7,14 @@
   - `/srv/tipme/backups/tipme-<UTC time>-<version>.dump.enc`;
   - a `.manifest.json` with row counts, ledger totals and the latest migration, read from the same database snapshot as the dump.
 - **Encryption:** AES-256-GCM with `BACKUP_KEY`. Keep a copy of that key off the server; without it backups cannot be read.
+- **Point-in-time recovery is OFF on staging (31 Oct 2026, owner).** Staging is a test copy, and its WAL archive had grown to most of the server's disk. Staging runs with:
+  - `archive_mode=off`;
+  - no base backups (`BASE_BACKUPS=off`);
+  - no `retention` service;
+  - `POINT_IN_TIME_RECOVERY=off`, so `/health/backups` tells the watcher not to expect base backups or WAL.
+
+  The nightly logical dump (and the one before each migration) is staging's backup: a restore loses at most a day. To bring point-in-time recovery back, set `PG_ARCHIVE_MODE=on`, `BASE_BACKUPS=on` and `POINT_IN_TIME_RECOVERY=on`, and restore the `retention` service from git history (#60). The PITR drill below needs it on. Moving staging to a managed database is on the TODO list.
+
 - **Point-in-time recovery (PR-011), staging only:**
   - Postgres archives its write-ahead log (WAL) to the `walarchive` volume at least every 30 minutes (`archive_timeout=1800`, setting `PG_ARCHIVE_TIMEOUT`). Idle or not, that is a 16 MB segment each time: about 0.8 GB a day. It was every 5 minutes (4.6 GB a day) until 31 October; staging is a test copy, so the owner chose a lighter setting.
   - A physical base backup (`tipme-base-<time>-<version>.tar.enc`) is taken daily, labelled with its own file name, so the `.backup` marker Postgres archives names the file it belongs to.

@@ -54,6 +54,8 @@ services:
       API_METRICS_PORT: ${API_METRICS_PORT:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-false}
+      # Off on staging: /health/backups tells the watcher not to expect base backups or WAL.
+      POINT_IN_TIME_RECOVERY: ${POINT_IN_TIME_RECOVERY:-off}
       QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
@@ -197,35 +199,11 @@ services:
       BACKUP_KEY: ${BACKUP_KEY:?}
       GIT_SHA: ${TIPME_VERSION}
       BACKUP_RETAIN: ${BACKUP_RETAIN:-14}
-      # 0 leaves base backups to the retention coordinator; 7 until it is switched to apply.
+      # Staging keeps no base backups (point-in-time recovery is off): the nightly dump is enough.
+      BASE_BACKUPS: ${BASE_BACKUPS:-off}
       BASE_BACKUP_RETAIN: ${BASE_BACKUP_RETAIN:-7}
     read_only: false
     mem_limit: 384m
-
-  # Backup retention coordinator (31 Oct 2026), hourly: checks every base backup decrypts, ties it
-  # to its WAL start, and reports (or, with RETENTION_MODE=apply, deletes) only what no kept
-  # recovery point needs. Root only to read and remove Postgres's archived files: every other
-  # capability is dropped. Staging only: production's database is Aiven's.
-  retention:
-    <<: *app
-    command: ['sh', 'deploy/retention-loop.sh']
-    user: '0:0'
-    cap_drop: [ALL]
-    cap_add: [DAC_OVERRIDE]
-    depends_on:
-      postgres: { condition: service_healthy }
-    volumes:
-      - '${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups'
-      - walarchive:/wal
-    environment:
-      DATABASE_URL: postgres://tipme_backup:${POSTGRES_BACKUP_PASSWORD:?}@postgres:5432/tipme
-      BACKUP_KEY: ${BACKUP_KEY:?}
-      RETENTION_MODE: ${RETENTION_MODE:-dry-run}
-      # Staging is a test copy (owner, 31 Oct): a day of backups is enough.
-      RETENTION_KEEP_DAYS: ${RETENTION_KEEP_DAYS:-1}
-      RETENTION_MIN_KEEP: ${RETENTION_MIN_KEEP:-1}
-      RETENTION_DRILL_MAX_AGE_DAYS: ${RETENTION_DRILL_MAX_AGE_DAYS:-30}
-    mem_limit: 256m
 
   # Rare restore drills/incidents need database-creation privileges; never run continuously.
   restore:
@@ -271,12 +249,9 @@ services:
       POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?}
       POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?}
       POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:?}
-      # Temporary: archive_command's old marker-count pruning, only until the retention
-      # coordinator is switched to RETENTION_MODE=apply (then set this to off).
-      WAL_LEGACY_PRUNE: ${WAL_LEGACY_PRUNE:-on}
-    # Point-in-time recovery (PR-011): every finished WAL segment is archived to /wal, at least
-    # every 30 minutes (PG_ARCHIVE_TIMEOUT). Staging is a test copy (owner, 31 Oct): up to
-    # 30 minutes of data can be lost, for a sixth of the WAL (16 MB per segment, idle or not).
+    # Point-in-time recovery is off on staging (owner, 31 Oct 2026): it's a test copy, and the
+    # WAL archive was most of the server's disk. The nightly dump is the backup. PG_ARCHIVE_MODE=on
+    # brings archiving back (with base backups and the retention service).
     entrypoint:
       - sh
       - -c
@@ -289,7 +264,7 @@ services:
       - -c
       - wal_level=replica
       - -c
-      - archive_mode=on
+      - archive_mode=${PG_ARCHIVE_MODE:-off}
       - -c
       - archive_timeout=${PG_ARCHIVE_TIMEOUT:-1800}
       - -c

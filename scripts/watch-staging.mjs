@@ -32,6 +32,9 @@ export function evaluateHealth(snapshot) {
   }
   if (!backups.logical || backups.logical.ageMinutes > DAY_AND_A_BIT)
     problems.push('The nightly backup is missing or more than 26 hours old.');
+  // Point-in-time recovery switched off on purpose (staging, 31 Oct 2026): the nightly dump is
+  // the backup, so base backups, WAL and retention are not expected. Older APIs omit the field.
+  if (backups.pointInTime === false) return problems;
   if (!backups.base || backups.base.ageMinutes > DAY_AND_A_BIT)
     problems.push(
       'The nightly base backup (for point-in-time recovery) is missing or more than 26 hours old.',

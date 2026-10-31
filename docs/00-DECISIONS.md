@@ -15,7 +15,7 @@
 - Playwright, Vitest/Jest as appropriate, ESLint, Prettier, GitHub Actions.
 - OpenTelemetry + error monitoring and privacy-conscious product analytics.
 
-> **Staging data (31 Oct 2026, owner):** "Staging should not be that serious with data/db management." Staging archives WAL every 30 minutes (up to 30 minutes of data can be lost) and keeps one day of base backups and WAL, pruned by the retention coordinator. Production's database is on Aiven, which provides its backups and point-in-time recovery; the PRD's 15-minute target applies there.
+> **Staging data (31 Oct 2026, owner):** "Staging should not be that serious with data/db management." Staging's WAL archiving and base backups are **off**: the nightly logical dump (kept 14) is its backup, so a restore loses at most a day. Production's database is on Aiven, which provides its backups and point-in-time recovery; the PRD's 15-minute target applies there. Moving staging to a managed database is a TODO.
 
 ## VALIDATE BEFORE REAL MONEY
 | ID | Decision | Required evidence | Owner | Status |

@@ -44,6 +44,12 @@ export const apiConfigSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug'])
       .default('info'),
     DIAGNOSTICS_ENABLED: flag,
+    // Whether this copy keeps base backups and archived WAL. Staging switched it off (31 Oct
+    // 2026): its nightly dump is the backup, and /health/backups says so to the watcher.
+    POINT_IN_TIME_RECOVERY: z
+      .enum(['on', 'off'])
+      .default('on')
+      .transform((value) => value === 'on'),
     // Namespaces BullMQ and idempotency keys; lets tests isolate their queues.
     QUEUE_PREFIX: z
       .string()
