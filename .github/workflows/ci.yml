@@ -14,16 +14,29 @@ concurrency:
   cancel-in-progress: true
 jobs:
   # Whether the slow suites need to run: a pull request that changes only documentation skips
-  # integration, load and e2e. Pushes to dev/main and the staging deploy's own run test everything.
+  # integration, load and e2e. Pushes to dev/main and the staging deploy's own run test everything,
+  # unless a pull request run already passed every job on exactly this file tree (`reused`): then
+  # every job is skipped, and the run still concludes success, which starts the staging deploy.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
+      statuses: read
     outputs:
       code: ${{ steps.diff.outputs.code }}
+      reused: ${{ steps.reuse.outputs.reused }}
     steps:
+      - uses: actions/checkout@v5
+        if: github.event_name == 'push'
+        with:
+          persist-credentials: false
+      - id: reuse
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-reuse.mjs decide
       - id: diff
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,6 +52,8 @@ jobs:
           fi
 
   static:
+    needs: changes
+    if: needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -81,6 +96,8 @@ jobs:
           BACKUP_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
   unit:
+    needs: changes
+    if: needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -109,6 +126,8 @@ jobs:
         run: pnpm api:openapi --check
 
   security:
+    needs: changes
+    if: needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -137,7 +156,7 @@ jobs:
   # (scripts/test-integration.mjs), split across three machines.
   integration:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -171,7 +190,7 @@ jobs:
 
   load:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -200,7 +219,7 @@ jobs:
 
   e2e:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -250,3 +269,23 @@ jobs:
           path: test-results/**/*.png
           if-no-files-found: ignore
           retention-days: 3
+
+  # A pull request run that passed every job, slow suites included, records the file tree it
+  # tested on the PR's head commit, so the merge into dev or main can reuse this run.
+  # Documentation-only runs (slow suites skipped) record nothing.
+  record-tested-tree:
+    needs: [changes, static, unit, security, integration, load, e2e]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci-reuse.mjs record
