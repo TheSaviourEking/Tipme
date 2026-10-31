@@ -167,3 +167,22 @@ test('security and account mail carry no unsubscribe header; optional mail does'
   );
   assert.match(tip.text, /Email settings: http:\/\/localhost:4000\/v1\/mail/);
 });
+
+test('fix: after deletion only security mail goes, so the goodbye really is the last email', async (t) => {
+  const { db, rows } = await fresh(t);
+  await rows('UPDATE users SET deleted_at = now() WHERE id = $1', [TOBI_USER]);
+  const now = new Date();
+  assert.equal(
+    await mailGate(db, sealing, claimed('tip_received', 'transactional'), now),
+    'skipped_preference',
+  );
+  assert.equal(
+    await mailGate(
+      db,
+      sealing,
+      claimed('account_deleted_notice', 'security'),
+      now,
+    ),
+    'send',
+  );
+});

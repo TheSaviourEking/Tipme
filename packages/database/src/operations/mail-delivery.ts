@@ -17,6 +17,7 @@ import {
   mailPreferences,
   mailSuppressions,
   profiles,
+  users,
 } from '../schema.js';
 import {
   addressHmac,
@@ -150,6 +151,14 @@ export async function mailGate(
   )
     return 'suppressed';
   if (!mail.userId) return 'send';
+  // A deleted account gets security mail only: its goodbye is the last email it gets.
+  if (mail.category !== 'security') {
+    const [account] = await db
+      .select({ deletedAt: users.deletedAt })
+      .from(users)
+      .where(eq(users.id, mail.userId));
+    if (account?.deletedAt) return 'skipped_preference';
+  }
   const type = MAIL_TYPES[mail.type];
   if (type?.preference) {
     const column = {
