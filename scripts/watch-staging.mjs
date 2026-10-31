@@ -32,6 +32,9 @@ export function evaluateHealth(snapshot) {
   }
   if (!backups.logical || backups.logical.ageMinutes > DAY_AND_A_BIT)
     problems.push('The nightly backup is missing or more than 26 hours old.');
+  // Point-in-time recovery switched off on purpose (staging, 31 Oct 2026): the nightly dump is
+  // the backup, so base backups, WAL and retention are not expected. Older APIs omit the field.
+  if (backups.pointInTime === false) return problems;
   if (!backups.base || backups.base.ageMinutes > DAY_AND_A_BIT)
     problems.push(
       'The nightly base backup (for point-in-time recovery) is missing or more than 26 hours old.',
@@ -42,9 +45,10 @@ export function evaluateHealth(snapshot) {
       'WAL archiving is off: point-in-time recovery is not possible.',
     );
   else {
-    if (wal.lastArchivedAgeMinutes === null || wal.lastArchivedAgeMinutes > 15)
+    // Staging archives at least every 30 minutes (archive_timeout=1800): it's a test copy.
+    if (wal.lastArchivedAgeMinutes === null || wal.lastArchivedAgeMinutes > 45)
       problems.push(
-        'No WAL has been archived in the last 15 minutes: recent data is not protected.',
+        'No WAL has been archived in the last 45 minutes: recent data is not protected.',
       );
     if (wal.lastFailedAgeMinutes !== null && wal.lastFailedAgeMinutes < 60)
       problems.push(

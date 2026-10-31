@@ -218,3 +218,22 @@ test('the pretend mail provider is refused in production, allowed in preview', (
     /MAIL_DEFAULT_PROVIDER/,
   );
 });
+
+test('point-in-time recovery is expected unless switched off (staging keeps only nightly dumps)', () => {
+  assert.equal(
+    loadApiConfig({ ...valid, NODE_ENV: 'test' }).POINT_IN_TIME_RECOVERY,
+    true,
+  );
+  assert.equal(
+    loadApiConfig({ ...valid, NODE_ENV: 'test', POINT_IN_TIME_RECOVERY: 'off' })
+      .POINT_IN_TIME_RECOVERY,
+    false,
+  );
+  assert.throws(() =>
+    loadApiConfig({
+      ...valid,
+      NODE_ENV: 'test',
+      POINT_IN_TIME_RECOVERY: 'maybe',
+    }),
+  );
+});
