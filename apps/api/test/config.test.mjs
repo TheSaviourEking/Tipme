@@ -311,6 +311,7 @@ const productionBase = {
   PAYMENT_PROVIDER: 'bachs-live',
   BACHS_LIVE_API_KEY: 'sk_live_dummy_key_value',
   BACHS_LIVE_WEBHOOK_SECRET: 'l'.repeat(32),
+  WEB_ORIGIN: 'https://usetipme.xyz',
   MAIL_DEFAULT_PROVIDER: 'ses',
   SES_CONFIGURATION_SET: 'tipme-tracked',
   SES_CONFIGURATION_SET_UNTRACKED: 'tipme-untracked',
@@ -362,6 +363,28 @@ test('production may switch live payments on only with bachs-live; other copies 
   assert.throws(
     () => loadApiConfig({ ...productionBase, NODE_ENV: 'test' }),
     /PAYMENT_PROVIDER/,
+  );
+});
+
+test('bachs-live on a production copy needs a public https web address', () => {
+  // Bachs sends supporters back to WEB_ORIGIN; unset, it would default to localhost.
+  for (const WEB_ORIGIN of [undefined, 'http://localhost:3000']) {
+    const issues = productionIssues({ WEB_ORIGIN });
+    assert.match(issues, /WEB_ORIGIN/, String(WEB_ORIGIN));
+  }
+  assert.match(
+    productionIssues({ WEB_ORIGIN: 'https://localhost' }),
+    /WEB_ORIGIN/,
+  );
+  assert.match(
+    productionIssues({ WEB_ORIGIN: 'http://usetipme.xyz' }),
+    /WEB_ORIGIN/,
+  );
+  assert.equal(productionIssues({ WEB_ORIGIN: 'https://usetipme.xyz' }), '');
+  assert.equal(
+    loadApiConfig({ ...productionBase, WEB_ORIGIN: 'https://usetipme.xyz' })
+      .WEB_ORIGIN,
+    'https://usetipme.xyz',
   );
 });
 

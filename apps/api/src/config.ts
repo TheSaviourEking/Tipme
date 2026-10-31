@@ -2,6 +2,7 @@ import { isProductionCopy, parseConfig } from '@tipme/observability';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import {
+  bachsEnvironment,
   checkPaymentSettings,
   paymentSettingsShape,
   paymentWebhookSettingsShape,
@@ -181,15 +182,9 @@ export const apiConfigSchema = z
       });
     }
     checkPaymentSettings(config, context, { webhooks: true });
-    if (config.PAYMENT_PROVIDER === 'bachs-sandbox') {
-      if (!config.BACHS_WEBHOOK_SECRET) {
-        context.addIssue({
-          code: 'custom',
-          path: ['BACHS_WEBHOOK_SECRET'],
-          message: 'required for Bachs sandbox',
-        });
-      }
-      // Bachs sends supporters back to the web app and refuses local addresses.
+    // Bachs (sandbox or live) sends supporters back to the web app and refuses local addresses.
+    // WEB_ORIGIN defaults to localhost, so an unset one is refused here too.
+    if (bachsEnvironment(config.PAYMENT_PROVIDER)) {
       const webHost = new URL(config.WEB_ORIGIN).hostname;
       if (
         ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'].includes(webHost) ||
@@ -200,6 +195,25 @@ export const apiConfigSchema = z
           path: ['WEB_ORIGIN'],
           message:
             'Bachs needs a public web address (for example an https tunnel), not localhost',
+        });
+      }
+    }
+    if (
+      isProductionCopy(config) &&
+      new URL(config.WEB_ORIGIN).protocol !== 'https:'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['WEB_ORIGIN'],
+        message: 'production requires HTTPS',
+      });
+    }
+    if (config.PAYMENT_PROVIDER === 'bachs-sandbox') {
+      if (!config.BACHS_WEBHOOK_SECRET) {
+        context.addIssue({
+          code: 'custom',
+          path: ['BACHS_WEBHOOK_SECRET'],
+          message: 'required for Bachs sandbox',
         });
       }
       if (!config.MOCK_PROVIDER_WEBHOOK_SECRET) {
