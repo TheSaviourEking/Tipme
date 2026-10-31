@@ -36,6 +36,7 @@ import {
   createMockProvider,
   type BachsProvider,
   type MockProvider,
+  wiredPaymentProvider,
 } from '@tipme/payments';
 import { Redis } from 'ioredis';
 import { closeWithin } from './close-within.js';
@@ -139,6 +140,8 @@ export async function startJobWorker(
     redis: markers,
     prefix: config.QUEUE_PREFIX,
   });
+  // Fails startup for a provider this build cannot run (never a silent mock).
+  wiredPaymentProvider(config.PAYMENT_PROVIDER);
   const bachsProvider: BachsProvider | null =
     // Read-only: the worker only asks Bachs for statuses, so it never holds a webhook secret.
     config.BACHS_SANDBOX_API_KEY

@@ -190,3 +190,13 @@ test('bachs-live and a live key only name the live Bachs', () => {
   assert.equal(bachsEnvironment('bachs-sandbox'), 'sandbox');
   assert.equal(bachsEnvironment('mock'), null);
 });
+
+test('only providers this build can run are wired; bachs-live fails closed', async () => {
+  const { wiredPaymentProvider } = await import('../dist/index.js');
+  assert.equal(wiredPaymentProvider('mock'), 'mock');
+  assert.equal(wiredPaymentProvider('bachs-sandbox'), 'bachs-sandbox');
+  assert.throws(
+    () => wiredPaymentProvider('bachs-live'),
+    /PAYMENT_PROVIDER=bachs-live is not wired yet/,
+  );
+});

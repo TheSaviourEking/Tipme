@@ -5,6 +5,7 @@ import {
   type BachsProvider,
   type MockProvider,
   type PaymentProvider,
+  wiredPaymentProvider,
 } from '@tipme/payments';
 import type { Redis } from 'ioredis';
 import { API_CONFIG, type ApiConfig } from '../config.js';
@@ -37,6 +38,8 @@ export const bachsProviderProvider: Provider<BachsProvider | null> = {
   provide: BACHS_PROVIDER_TOKEN,
   inject: [API_CONFIG],
   useFactory: (config: ApiConfig): BachsProvider | null => {
+    // Fails startup for a provider this build cannot run (never a silent mock).
+    wiredPaymentProvider(config.PAYMENT_PROVIDER);
     if (!config.BACHS_SANDBOX_API_KEY && !config.BACHS_WEBHOOK_SECRET)
       return null;
     if (!config.BACHS_SANDBOX_API_KEY || !config.BACHS_WEBHOOK_SECRET)
@@ -61,7 +64,7 @@ export const checkoutProviderProvider: Provider<CheckoutPaymentProvider> = {
     mock: MockProvider,
     bachs: BachsProvider | null,
   ): CheckoutPaymentProvider => {
-    if (config.PAYMENT_PROVIDER === 'bachs-sandbox') {
+    if (wiredPaymentProvider(config.PAYMENT_PROVIDER) === 'bachs-sandbox') {
       if (!bachs) throw new Error('Bachs sandbox provider is unavailable');
       return {
         name: bachs.name,

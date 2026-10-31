@@ -121,3 +121,24 @@ export function checkPaymentSettings(
       'Bachs live credentials are restricted to production',
     );
 }
+
+/**
+ * The provider a process can actually run today. Exhaustive on purpose: a new provider name
+ * cannot be added without a branch here, and an unwired one stops startup rather than quietly
+ * falling back to the pretend provider.
+ */
+export function wiredPaymentProvider(
+  name: PaymentProviderName,
+): 'mock' | 'bachs-sandbox' {
+  switch (name) {
+    case 'mock':
+    case 'bachs-sandbox':
+      return name;
+    case 'bachs-live':
+      throw new Error('PAYMENT_PROVIDER=bachs-live is not wired yet');
+    default: {
+      const unreachable: never = name;
+      throw new Error(`PAYMENT_PROVIDER=${String(unreachable)} is not wired`);
+    }
+  }
+}
