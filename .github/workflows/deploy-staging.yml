@@ -30,6 +30,10 @@ jobs:
   checks:
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci.yml
+    # A called workflow gets no more than this: CI's `changes` job reads a pull request's files.
+    permissions:
+      contents: read
+      pull-requests: read
 
   # Environment variables are not readable in a job's `if:` (it is evaluated before the job
   # enters the environment), so the auto-deploy switch is read here, inside the environment.
