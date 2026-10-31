@@ -64,7 +64,6 @@ test('shipping copies that version’s deploy files and streams its image to the
   const release = join(server, 'releases/abcdef123456');
   for (const file of [
     'compose.staging.yml',
-    'Caddyfile',
     'scripts/deploy.sh',
     'scripts/rollback.sh',
     'scripts/lib.sh',

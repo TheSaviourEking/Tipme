@@ -14,7 +14,7 @@ export class HealthController {
     return { status: 'ok', service: 'api' };
   }
 
-  /** Dependency readiness: 503 while Postgres or Redis is unreachable. */
+  /** Dependency readiness: 503 while Postgres or Redis is unreachable or the API is draining. */
   @Get('ready')
   @Header('Cache-Control', 'no-store')
   async ready(

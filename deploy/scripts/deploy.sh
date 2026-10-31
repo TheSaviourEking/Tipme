@@ -7,6 +7,7 @@
 #
 #   deploy/scripts/deploy.sh <version>     # version = 12-character git sha
 set -euo pipefail
+TIPME_STACK=staging # never production's files, whatever the environment says
 source "$(dirname "$0")/lib.sh"
 
 version=${1:?usage: deploy.sh <version>}
@@ -33,6 +34,7 @@ compose_for "$version" exec -T postgres sh /opt/tipme/bootstrap-roles.sh
 
 echo "==> Switching to $version"
 compose_for "$version" up -d --remove-orphans $(app_services "$version")
+attach_edge "$version"
 
 if wait_healthy "$version"; then
   echo "$version" >>"$DEPLOYED"
@@ -44,6 +46,7 @@ else
   if [[ -n "$previous" ]]; then
     echo "!! Putting $previous back." >&2
     compose_for "$previous" up -d --remove-orphans $(app_services "$previous")
+    attach_edge "$previous"
     wait_healthy "$previous" && echo "!! Back on $previous." >&2
   fi
   exit 1

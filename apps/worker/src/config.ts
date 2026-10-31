@@ -1,4 +1,4 @@
-import { parseConfig } from '@tipme/observability';
+import { isProductionCopy, parseConfig } from '@tipme/observability';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { z } from 'zod';
@@ -127,6 +127,27 @@ export const workerConfigSchema = z
       });
     }
     checkMailSettings(config, context);
+    // A production copy carries none of the rehearsal settings (messages name, never show, them).
+    if (isProductionCopy(config)) {
+      if (config.PREVIEW_PASSWORD)
+        context.addIssue({
+          code: 'custom',
+          path: ['PREVIEW_PASSWORD'],
+          message: 'not allowed in production',
+        });
+      if (config.MAIL_PRETEND_DOMAINS.length)
+        context.addIssue({
+          code: 'custom',
+          path: ['MAIL_PRETEND_DOMAINS'],
+          message: 'not allowed in production',
+        });
+      if (config.RELEASE_KIND === 'test')
+        context.addIssue({
+          code: 'custom',
+          path: ['RELEASE_KIND'],
+          message: 'a production copy is never a test copy',
+        });
+    }
     if (
       config.NODE_ENV === 'production' &&
       config.DEPLOYMENT_MODE !== 'preview'

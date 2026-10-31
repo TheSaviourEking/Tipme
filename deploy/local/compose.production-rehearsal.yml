@@ -1,0 +1,79 @@
+# Local no-downtime rehearsal of production (scripts/rehearse-production.sh). Never on the server.
+# Merged over deploy/compose.production.yml, so everything the rehearsal does not name here is
+# production's own: the colours, three copies each, the workers, Redis, the networks, read-only
+# containers, the drain and stop grace, the db-roles and migrate tools, the CA mount.
+#
+# Two kinds of change:
+#   1. Aiven is replaced by a Postgres 16 container that only speaks TLS with a throwaway CA the
+#      script generates, so `sslmode=verify-full&sslrootcert=/run/secrets/db-ca.pem` is really
+#      checked (the certificate names rehearsal-db, the host in every URL below). The URLs are
+#      set here, not only in the env file, so a real production.env can never aim this at Aiven.
+#   2. Production mode cannot boot yet: its config refuses every payment provider until the
+#      payments plan adds bachs-live. The API and workers therefore run in password-protected
+#      preview with the mock provider and mock mail. Production-mode boot is proven on launch day
+#      (docs/runbooks/production.md, launch day step 2), not here.
+x-rehearsal-env: &rehearsal-env
+  DEPLOYMENT_MODE: preview
+  PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:?set PREVIEW_PASSWORD}
+  PAYMENT_PROVIDER: mock
+  MOCK_PROVIDER_WEBHOOK_SECRET: ${MOCK_PROVIDER_WEBHOOK_SECRET:?set MOCK_PROVIDER_WEBHOOK_SECRET}
+  MAIL_DEFAULT_PROVIDER: mock
+  DATABASE_URL: postgres://tipme_runtime:${POSTGRES_RUNTIME_PASSWORD:?}@rehearsal-db:5432/tipme?sslmode=verify-full&sslrootcert=/run/secrets/db-ca.pem
+
+# One copy per colour (production runs three): a laptop's Docker cannot hold six API copies, two
+# workers, Postgres, Redis, Caddy and k6 at once (31 Oct 2026, the VM restarted under it). The
+# switch is the same: the idle colour starts, Caddy's checks find it, the old colour drains and
+# stops; the four other upstream names stay unresolvable, as the stopped colour's are in production.
+services:
+  api-blue:
+    deploy: { replicas: 1 }
+    environment: *rehearsal-env
+  api-green:
+    deploy: { replicas: 1 }
+    environment: *rehearsal-env
+  worker-a:
+    environment: *rehearsal-env
+  worker-b:
+    environment: *rehearsal-env
+  migrate:
+    environment:
+      DATABASE_URL: postgres://tipme_migrator:${POSTGRES_MIGRATOR_PASSWORD:?}@rehearsal-db:5432/tipme?sslmode=verify-full&sslrootcert=/run/secrets/db-ca.pem
+  db-roles:
+    environment:
+      # The stand-in's superuser plays Aiven's admin.
+      DATABASE_ADMIN_URL: postgres://rehearsal_admin:${REHEARSAL_DB_ADMIN_PASSWORD:?}@rehearsal-db:5432/tipme?sslmode=verify-full&sslrootcert=/run/secrets/db-ca.pem
+
+  # Started by the script before the first deploy. The key must belong to the postgres user with
+  # mode 600, which a bind mount from the host cannot promise, so it is copied in at start.
+  rehearsal-db:
+    image: postgres:16.13-alpine
+    restart: 'no'
+    networks: [egress]
+    environment:
+      POSTGRES_USER: rehearsal_admin
+      POSTGRES_PASSWORD: ${REHEARSAL_DB_ADMIN_PASSWORD:?set REHEARSAL_DB_ADMIN_PASSWORD}
+      POSTGRES_DB: tipme
+    volumes:
+      - ${TIPME_HOME:?set TIPME_HOME}/rehearsal-db-tls:/tls:ro
+      - rehearsaldb:/var/lib/postgresql/data
+    entrypoint:
+      - sh
+      - -c
+      - |
+        install -d -o postgres -g postgres -m 700 /var/lib/postgresql/tls
+        install -o postgres -g postgres -m 600 /tls/server.crt /tls/server.key /var/lib/postgresql/tls/
+        # TLS only: the stock pg_hba.conf would also accept plain connections.
+        printf 'local all all trust\nhostssl all all all scram-sha-256\n' > /var/lib/postgresql/tls/pg_hba.conf
+        chown postgres:postgres /var/lib/postgresql/tls/pg_hba.conf
+        exec docker-entrypoint.sh postgres -c ssl=on \
+          -c ssl_cert_file=/var/lib/postgresql/tls/server.crt \
+          -c ssl_key_file=/var/lib/postgresql/tls/server.key \
+          -c hba_file=/var/lib/postgresql/tls/pg_hba.conf
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'rehearsal_admin', '-d', 'tipme']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  rehearsaldb:

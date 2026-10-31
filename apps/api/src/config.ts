@@ -1,4 +1,4 @@
-import { parseConfig } from '@tipme/observability';
+import { isProductionCopy, parseConfig } from '@tipme/observability';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { z } from 'zod';
@@ -151,6 +151,9 @@ export const apiConfigSchema = z
       .optional(),
     // Proxies in front of the API whose X-Forwarded-For is trusted for the client IP (0: none).
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // On SIGTERM, how long readiness answers 503 before the server closes, so the load balancer
+    // (health checks every 2 s) stops routing here first. Keep above two check intervals.
+    SHUTDOWN_DRAIN_MS: z.coerce.number().int().min(0).max(30000).default(5000),
   })
   .superRefine((config, context) => {
     if (config.DEPLOYMENT_MODE === 'preview' && !config.PREVIEW_PASSWORD) {
@@ -264,6 +267,33 @@ export const apiConfigSchema = z
           path: [name],
           message: 'required with the other R2 settings',
         });
+    // A production copy carries none of the rehearsal settings (messages name, never show, them).
+    if (isProductionCopy(config)) {
+      if (config.PREVIEW_PASSWORD)
+        context.addIssue({
+          code: 'custom',
+          path: ['PREVIEW_PASSWORD'],
+          message: 'not allowed in production',
+        });
+      if (config.MAIL_PRETEND_DOMAINS.length)
+        context.addIssue({
+          code: 'custom',
+          path: ['MAIL_PRETEND_DOMAINS'],
+          message: 'not allowed in production',
+        });
+      if (config.RELEASE_KIND === 'test')
+        context.addIssue({
+          code: 'custom',
+          path: ['RELEASE_KIND'],
+          message: 'a production copy is never a test copy',
+        });
+      if (config.RELEASE_CHECK_TOKEN)
+        context.addIssue({
+          code: 'custom',
+          path: ['RELEASE_CHECK_TOKEN'],
+          message: 'not allowed in production',
+        });
+    }
     if (
       config.NODE_ENV === 'production' &&
       config.DEPLOYMENT_MODE !== 'preview'

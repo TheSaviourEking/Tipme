@@ -1,0 +1,270 @@
+# TipMe production: two API colours (blue/green, three copies each), two workers and Redis on
+# one server. Postgres is Aiven's (no local database, backup or retention service here). The web
+# app runs on Vercel. Nothing is published: the one edge Caddy (deploy/edge, its own Compose
+# project) owns 80/443 and reaches the API copies by their default container names
+# tipme-production-api-{blue,green}-{1,2,3} on the external network edge-production.
+#
+# The deploy script drives this file (one colour at a time, the other keeps serving):
+#   TIPME_VERSION=<sha> TIPME_BLUE_VERSION=<sha> TIPME_GREEN_VERSION=<sha> \
+#     docker compose -f deploy/compose.production.yml --env-file /srv/tipme-production/production.env up -d api-green
+# Compose reads the whole file for any command, so the script always passes all three versions.
+name: tipme-production
+
+x-app: &app
+  restart: unless-stopped
+  read_only: true
+  tmpfs: ['/tmp']
+  security_opt: ['no-new-privileges:true']
+  networks: [internal]
+  logging: &logging
+    driver: json-file
+    options: { max-size: 10m, max-file: '3' }
+
+# Aiven's CA, so sslmode=verify-full can check the certificate (docs/runbooks/remote-database.md).
+x-db-ca: &db-ca ${TIPME_HOME:?set TIPME_HOME}/db-ca.pem:/run/secrets/db-ca.pem:ro
+
+# Everything the API reads. Left out on purpose: PREVIEW_PASSWORD, PREVIEW_COOKIE_DOMAIN,
+# MAIL_PRETEND_DOMAINS, RELEASE_CHECK_TOKEN (a production copy refuses them) and the mock
+# provider's webhook secret. Only GIT_SHA differs between the colours.
+x-api-env: &api-env
+  DEPLOYMENT_MODE: production
+  NODE_ENV: production
+  RELEASE_KIND: live
+  HOST: 0.0.0.0
+  TRUST_PROXY_HOPS: '1'
+  SENTRY_ENVIRONMENT: production
+  # Aiven keeps the backups and point-in-time recovery; /health/backups must not expect ours.
+  POINT_IN_TIME_RECOVERY: 'off'
+  # Two failed 2 s edge readiness checks take a draining copy out (up to about 6 s), so drain
+  # for 7 s; the API's default (5 s) is for staging, which has one copy and no edge checks.
+  SHUTDOWN_DRAIN_MS: '7000'
+  PORT: ${PORT:-4000}
+  DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (the runtime role, sslmode=verify-full)}
+  REDIS_URL: redis://redis:6379
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
+  API_METRICS_PORT: ${API_METRICS_PORT:-}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-false}
+  # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
+  R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+  R2_BUCKET: ${R2_BUCKET:-}
+  QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
+  PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?set PAYMENT_PROVIDER (bachs-live in production)}
+  PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
+  BACHS_SANDBOX_API_KEY: ${BACHS_SANDBOX_API_KEY:-}
+  BACHS_WEBHOOK_SECRET: ${BACHS_WEBHOOK_SECRET:-}
+  BACHS_PREVIOUS_WEBHOOK_SECRET: ${BACHS_PREVIOUS_WEBHOOK_SECRET:-}
+  WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
+  STATUS_TOKEN_SECRET: ${STATUS_TOKEN_SECRET:?}
+  RATE_LIMIT_QUOTES_PER_MIN: ${RATE_LIMIT_QUOTES_PER_MIN:-30}
+  RATE_LIMIT_INTENTS_PER_MIN: ${RATE_LIMIT_INTENTS_PER_MIN:-10}
+  RATE_LIMIT_HANDLES_PER_MIN: ${RATE_LIMIT_HANDLES_PER_MIN:-60}
+  RATE_LIMIT_ANALYTICS_PER_MIN: ${RATE_LIMIT_ANALYTICS_PER_MIN:-120}
+  RATE_LIMIT_REPORTS_PER_HOUR: ${RATE_LIMIT_REPORTS_PER_HOUR:-10}
+  RATE_LIMIT_UNSUBSCRIBE_PER_MIN: ${RATE_LIMIT_UNSUBSCRIBE_PER_MIN:-600}
+  RATE_LIMIT_AVATARS_PER_HOUR: ${RATE_LIMIT_AVATARS_PER_HOUR:-20}
+  ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
+  RATE_LIMIT_AUTH_PER_HOUR: ${RATE_LIMIT_AUTH_PER_HOUR:-10}
+  RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: ${RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR:-3}
+  AUTH_CODE_SECRET: ${AUTH_CODE_SECRET:?}
+  # No default: a forgotten value must stop the deploy, not send customers' mail to a pretend inbox.
+  MAIL_DEFAULT_PROVIDER: ${MAIL_DEFAULT_PROVIDER:?set MAIL_DEFAULT_PROVIDER}
+  ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
+  ZEPTOMAIL_API_BASE: ${ZEPTOMAIL_API_BASE:-}
+  ZEPTOMAIL_WEBHOOK_KEY: ${ZEPTOMAIL_WEBHOOK_KEY:-}
+  ZEPTOMAIL_BOUNCE_ADDRESS: ${ZEPTOMAIL_BOUNCE_ADDRESS:-}
+  SES_REGION: ${SES_REGION:-eu-north-1}
+  SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}
+  SES_SECRET_ACCESS_KEY: ${SES_SECRET_ACCESS_KEY:-}
+  SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET:-}
+  SES_CONFIGURATION_SET_UNTRACKED: ${SES_CONFIGURATION_SET_UNTRACKED:-}
+  SES_SNS_TOPIC_ARN: ${SES_SNS_TOPIC_ARN:-}
+  WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
+  WEB_REVALIDATE_URL: ${WEB_REVALIDATE_URL:-}
+  OPS_TOTP_KEY: ${OPS_TOTP_KEY:?}
+  MAIL_SEAL_KEY: ${MAIL_SEAL_KEY:?}
+  OPS_TRACE_URL_TEMPLATE: ${OPS_TRACE_URL_TEMPLATE:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+
+x-api: &api
+  <<: *app
+  command:
+    [
+      'node',
+      '--import',
+      './apps/api/dist/instrument.js',
+      'apps/api/dist/main.js',
+    ]
+  volumes: [*db-ca]
+  depends_on:
+    redis: { condition: service_healthy }
+  healthcheck:
+    test:
+      [
+        'CMD',
+        'node',
+        '-e',
+        "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+      ]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+  mem_limit: 384m
+  # Longer than the API's drain-then-close (7 s drain + up to 10 s close deadline), so a stop
+  # never kills it mid-request.
+  stop_grace_period: 20s
+  deploy:
+    replicas: 3
+  # edge-production is how the edge reaches the copies (by container name). `egress` is the route
+  # out to Aiven, Bachs, ZeptoMail, R2 and Sentry; it does not depend on the edge's network.
+  networks: [edge-production, egress, internal]
+
+x-worker: &worker
+  <<: *app
+  image: tipme-app:${TIPME_VERSION:?set TIPME_VERSION to the git sha}
+  # Reaches Aiven and the payment provider (Bachs); publishes nothing.
+  networks: [egress, internal]
+  volumes: [*db-ca]
+  command:
+    [
+      'node',
+      '--import',
+      './apps/worker/dist/instrument.js',
+      'apps/worker/dist/main.js',
+    ]
+  environment: &worker-env
+    DEPLOYMENT_MODE: production
+    NODE_ENV: production
+    RELEASE_KIND: live
+    SENTRY_ENVIRONMENT: production
+    DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (the runtime role, sslmode=verify-full)}
+    REDIS_URL: redis://redis:6379
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
+    WORKER_METRICS_PORT: ${WORKER_METRICS_PORT:-}
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
+    PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?set PAYMENT_PROVIDER (bachs-live in production)}
+    PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
+    BACHS_SANDBOX_API_KEY: ${BACHS_SANDBOX_API_KEY:-}
+    MAIL_SEAL_KEY: ${MAIL_SEAL_KEY:?}
+    MAIL_DEFAULT_PROVIDER: ${MAIL_DEFAULT_PROVIDER:?set MAIL_DEFAULT_PROVIDER}
+    ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
+    ZEPTOMAIL_API_BASE: ${ZEPTOMAIL_API_BASE:-}
+    ZEPTOMAIL_WEBHOOK_KEY: ${ZEPTOMAIL_WEBHOOK_KEY:-}
+    ZEPTOMAIL_BOUNCE_ADDRESS: ${ZEPTOMAIL_BOUNCE_ADDRESS:-}
+    SES_REGION: ${SES_REGION:-eu-north-1}
+    SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}
+    SES_SECRET_ACCESS_KEY: ${SES_SECRET_ACCESS_KEY:-}
+    SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET:-}
+    SES_CONFIGURATION_SET_UNTRACKED: ${SES_CONFIGURATION_SET_UNTRACKED:-}
+    SES_SNS_TOPIC_ARN: ${SES_SNS_TOPIC_ARN:-}
+    MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:?set MAIL_FROM_DOMAIN}
+    MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+    MAIL_FROM_NAME: ${MAIL_FROM_NAME:-TipMe}
+    MAIL_REPLY_TO: ${MAIL_REPLY_TO:-support@usetipme.xyz}
+    API_ORIGIN: https://${API_HOST:?set API_HOST}
+    WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
+    ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
+    SENTRY_DSN: ${SENTRY_DSN:-}
+    GIT_SHA: ${TIPME_VERSION}
+    # The safety net when neither a webhook nor the open receipt confirmed a tip (as staging).
+    RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-20000}
+    RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-45000}
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-25000000}
+  depends_on:
+    redis: { condition: service_healthy }
+  mem_limit: 512m
+
+services:
+  # The colours differ only in the image (and GIT_SHA): the deploy script starts the idle colour
+  # on the new version, waits for /health/ready, then lets the edge send traffic to it.
+  api-blue:
+    <<: *api
+    image: tipme-app:${TIPME_BLUE_VERSION:-none}
+    environment:
+      <<: *api-env
+      GIT_SHA: ${TIPME_BLUE_VERSION:-none}
+
+  api-green:
+    <<: *api
+    image: tipme-app:${TIPME_GREEN_VERSION:-none}
+    environment:
+      <<: *api-env
+      GIT_SHA: ${TIPME_GREEN_VERSION:-none}
+
+  # Two workers (BullMQ shares the queues between them), so one can restart without a pause.
+  worker-a:
+    <<: *worker
+
+  worker-b:
+    <<: *worker
+
+  # Run by the deploy script before switching versions: guarded, after a fresh Aiven backup check.
+  migrate:
+    <<: *app
+    image: tipme-app:${TIPME_VERSION:?set TIPME_VERSION to the git sha}
+    restart: 'no'
+    profiles: [tools]
+    networks: [egress]
+    volumes: [*db-ca]
+    command: ['node', 'packages/database/dist/scripts/release-migrate.js']
+    environment:
+      GIT_SHA: ${TIPME_VERSION}
+      # The migrator role, not the runtime one.
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?set MIGRATION_DATABASE_URL (the migrator role)}
+      MIGRATE_CONFIRM_DATABASE: ${MIGRATE_CONFIRM_DATABASE:-}
+      MIGRATE_BACKUP_DONE: ${MIGRATE_BACKUP_DONE:-}
+
+  # Sets up the runtime, migrator and backup roles as Aiven's admin; run before and after migrating.
+  # The admin URL is given to this tool only, never to the API or worker.
+  db-roles:
+    <<: *app
+    image: tipme-app:${TIPME_VERSION:?set TIPME_VERSION to the git sha}
+    restart: 'no'
+    profiles: [tools]
+    networks: [egress]
+    volumes: [*db-ca]
+    command: ['node', 'packages/database/dist/scripts/db-roles.js']
+    environment:
+      DATABASE_ADMIN_URL: ${DATABASE_ADMIN_URL:?set DATABASE_ADMIN_URL}
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?}
+      POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?}
+      POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:?}
+
+  redis:
+    image: redis:7.4.5-alpine
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '192mb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    volumes: ['redisdata:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [internal]
+    mem_limit: 256m
+    logging: *logging
+
+networks:
+  # The edge Caddy's network, created once by deploy/edge/setup-networks.sh.
+  edge-production: { external: true }
+  # Internet route for the API, workers and tools (Aiven, Bachs, ZeptoMail, R2, Sentry).
+  egress: {}
+  # No internet route at all: Redis is reachable only from here.
+  internal: { internal: true }
+
+volumes:
+  redisdata:

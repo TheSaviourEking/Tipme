@@ -1,99 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
-// The real server scripts (deploy/scripts), with docker, git, curl and sleep replaced by
-// stand-ins that record what they were asked and simulate a healthy or broken version.
-// Images are built and shipped by GitHub Actions: the server never builds or fetches code.
-const SCRIPTS = resolve('deploy/scripts');
-
-function stage({ password = 'hexpassword0123456789abcdef' } = {}) {
-  const home = mkdtempSync(join(tmpdir(), 'tipme-deploy-'));
-  const bin = join(home, 'bin');
-  mkdirSync(bin);
-  writeFileSync(
-    join(home, 'staging.env'),
-    `API_HOST=api.staging.example.test\nPOSTGRES_PASSWORD=${password}\nPOSTGRES_RUNTIME_PASSWORD=runtime-password-1234\nPOSTGRES_MIGRATOR_PASSWORD=migrator-password-1234\nPOSTGRES_BACKUP_PASSWORD=backup-password-1234\n`,
-  );
-  const fake = (name, body) => {
-    writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`);
-    chmodSync(join(bin, name), 0o755);
-  };
-  // docker: log every call; `compose ... up ... api` makes TIPME_VERSION the running version;
-  // `image inspect/rm` use a list of loaded images.
-  fake(
-    'docker',
-    `echo "docker $* | version=$TIPME_VERSION confirm=$MIGRATE_CONFIRM_DATABASE backup=$MIGRATE_BACKUP_DONE" >> "$FAKE_LOG"
-if [[ "$1 $2" == "image inspect" ]]; then grep -qx "$3" "$FAKE_IMAGES" 2>/dev/null; exit $?; fi
-if [[ "$1 $2" == "image rm" ]]; then grep -vx "$3" "$FAKE_IMAGES" > "$FAKE_IMAGES.tmp"; mv "$FAKE_IMAGES.tmp" "$FAKE_IMAGES"; exit 0; fi
-if [[ " $* " == *" up "* && " $* " == *" api "* ]]; then echo "$TIPME_VERSION" > "$FAKE_RUNNING"; fi
-# config --services: what the version's compose file defines (versions marked new add retention).
-if [[ " $* " == *" config --services "* ]]; then
-  printf 'api\nworker\ncaddy\nbackup\npostgres\n'
-  if [[ " $FAKE_NEW_VERSIONS " == *" $TIPME_VERSION "* ]]; then echo retention; fi
-fi
-exit 0`,
-  );
-  fake('git', 'echo "git $*" >> "$FAKE_LOG"; exit 1');
-  // lib.sh checks that backups are owned by the image user (uid 1000). The temp dir is not.
-  fake(
-    'stat',
-    `if [[ "$1" == "-c" && "$2" == "%u" ]]; then echo "\${FAKE_STAT_UID:-1000}"; exit 0; fi
-echo "unexpected stat $*" >&2
-exit 1`,
-  );
-  // curl: healthy unless the running version is the broken one.
-  fake(
-    'curl',
-    `running=$(cat "$FAKE_RUNNING" 2>/dev/null)
-if [[ -n "$FAKE_BROKEN" && "$running" == "$FAKE_BROKEN" ]]; then exit 22; fi
-case "$*" in *release*) echo "{\\"data\\":{\\"version\\":\\"$running\\"}}" ;; esac
-exit 0`,
-  );
-  fake('sleep', 'exit 0');
-  const env = {
-    PATH: `${bin}:${process.env.PATH}`,
-    TIPME_HOME: home,
-    FAKE_LOG: join(home, 'calls.log'),
-    FAKE_RUNNING: join(home, 'running'),
-    FAKE_IMAGES: join(home, 'images'),
-    HEALTH_TRIES: '2',
-  };
-  /** What GitHub Actions does before deploying: load the image and copy that version's files. */
-  const ship = (version, compose = 'services: {}\n') => {
-    mkdirSync(join(home, 'releases', version), { recursive: true });
-    writeFileSync(
-      join(home, 'releases', version, 'compose.staging.yml'),
-      compose,
-    );
-    writeFileSync(env.FAKE_IMAGES, `tipme-app:${version}\n`, { flag: 'a' });
-  };
-  const run = (script, args = [], extra = {}) =>
-    spawnSync('bash', [join(SCRIPTS, script), ...args], {
-      env: { ...env, ...extra },
-      encoding: 'utf8',
-    });
-  const read = (file) => {
-    try {
-      return readFileSync(join(home, file), 'utf8');
-    } catch {
-      return '';
-    }
-  };
-  const exists = (file) => existsSync(join(home, file));
-  return { run, read, ship, exists, home };
-}
+import { stage } from './test-support/fake-server.mjs';
 
 test('a deploy of a shipped image backs up, migrates with the database named, switches and records it, without git or a build', () => {
   const { run, read, ship } = stage();
@@ -126,6 +36,87 @@ test('a deploy of a shipped image backs up, migrates with the database named, sw
   assert.equal(at(/^git /), -1, 'the server never fetches code');
   assert.equal(read('releases/current').trim(), 'aaaaaaa1');
   assert.equal(read('running').trim(), 'aaaaaaa1');
+});
+
+test('a staging version whose files still define caddy never starts it', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  const result = run('deploy.sh', ['aaaaaaa1']);
+  assert.equal(result.status, 0, result.stderr);
+  const ups = read('calls.log')
+    .split('\n')
+    .filter((line) => / up /.test(line));
+  assert.ok(
+    ups.some((line) => /\bapi\b/.test(line)),
+    'the app services start',
+  );
+  assert.ok(
+    ups.every((line) => !/\bcaddy\b/.test(line)),
+    ups.join('\n'),
+  );
+});
+
+test('a missing edge network is refused before anything runs, pointing to the runbook', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  const result = run('deploy.sh', ['aaaaaaa1'], { FAKE_NO_EDGE: '1' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /edge-staging/);
+  assert.match(result.stderr, /staging-setup\.md/);
+  assert.equal(
+    read('calls.log')
+      .split('\n')
+      .filter((line) => line && !/network inspect/.test(line)).length,
+    0,
+    'nothing was backed up, migrated or started',
+  );
+});
+
+test('rolling back to a version from before the edge move attaches its API to edge-staging, once', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  ship('bbbbbbb2');
+  const extra = { FAKE_PREMOVE_VERSIONS: 'aaaaaaa1' };
+  assert.equal(run('deploy.sh', ['aaaaaaa1'], extra).status, 0);
+  assert.equal(run('deploy.sh', ['bbbbbbb2'], extra).status, 0);
+  const connects = () =>
+    read('calls.log')
+      .split('\n')
+      .filter((l) => / network connect /.test(l));
+  assert.equal(connects().length, 1, 'only the pre-move deploy needed it');
+  assert.match(
+    connects()[0],
+    /network connect --alias staging-api edge-staging api-container/,
+  );
+  const back = run('rollback.sh', [], extra);
+  assert.equal(back.status, 0, back.stderr);
+  assert.equal(read('running').trim(), 'aaaaaaa1');
+  assert.equal(connects().length, 2, 'the rolled-back API was attached');
+  // Already attached: another attach pass does nothing.
+  assert.equal(run('rollback.sh', ['aaaaaaa1'], extra).status, 2);
+  assert.equal(connects().length, 2);
+});
+
+test('an unhealthy deploy puts the previous pre-move version back on edge-staging too', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  ship('ccccccc3');
+  const extra = { FAKE_PREMOVE_VERSIONS: 'aaaaaaa1' };
+  assert.equal(run('deploy.sh', ['aaaaaaa1'], extra).status, 0);
+  const broken = run('deploy.sh', ['ccccccc3'], {
+    ...extra,
+    FAKE_BROKEN: 'ccccccc3',
+  });
+  assert.equal(broken.status, 1);
+  assert.equal(read('running').trim(), 'aaaaaaa1');
+  const calls = read('calls.log').split('\n');
+  const restore = calls.findLastIndex(
+    (l) => /version=aaaaaaa1/.test(l) && / up /.test(l),
+  );
+  assert.ok(
+    calls.slice(restore).some((l) => / network connect /.test(l)),
+    calls.join('\n'),
+  );
 });
 
 test('a version that was never shipped is refused before anything runs', () => {
@@ -234,10 +225,7 @@ test('a version with the retention service starts it; rolling back to one withou
   const ups = read('calls.log')
     .split('\n')
     .filter((l) => / up -d --remove-orphans /.test(l));
-  assert.match(
-    ups.at(-1),
-    /api worker caddy backup retention .*version=bbbbbbb2/,
-  );
+  assert.match(ups.at(-1), /api worker backup retention .*version=bbbbbbb2/);
   assert.doesNotMatch(ups[0], /retention/);
   const back = run('rollback.sh', [], extra);
   assert.equal(back.status, 0, back.stderr);
@@ -317,6 +305,17 @@ test('staging passes every setting the API and worker read (no silent defaults)'
   }
 });
 
+test('the staging api keeps its own internet route, independent of the edge network', () => {
+  const compose = readFileSync(
+    new URL('../deploy/compose.staging.yml', import.meta.url),
+    'utf8',
+  );
+  const api = compose.split(/^ {2}api:\n/m)[1]?.split(/^ {2}[a-z]/m)[0] ?? '';
+  assert.match(api, /^ {6}egress:/m);
+  assert.match(api, /^ {6}internal:/m);
+  assert.match(api, /^ {6}edge-staging: \{ aliases: \[staging-api\] \}/m);
+});
+
 test('the staging worker can reach the payment provider (it asks Bachs whether tips were paid)', () => {
   const compose = readFileSync(
     new URL('../deploy/compose.staging.yml', import.meta.url),
@@ -324,9 +323,9 @@ test('the staging worker can reach the payment provider (it asks Bachs whether t
   );
   const worker =
     compose.split(/^ {2}worker:\n/m)[1]?.split(/^ {2}[a-z]/m)[0] ?? '';
-  // `internal` has no internet route. Without `edge` every status check times out, the error is
+  // `internal` has no internet route. Without `egress` every status check times out, the error is
   // only counted, and paid tips stay "Still checking" until someone looks.
   const networks = /^ {4}networks: \[([^\]]*)\]/m.exec(worker)?.[1] ?? '';
-  assert.match(networks, /\bedge\b/);
+  assert.match(networks, /\begress\b/);
   assert.match(networks, /\binternal\b/);
 });
