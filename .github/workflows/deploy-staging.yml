@@ -9,7 +9,7 @@
 # Repository settings → Environments → "staging":
 #   secrets:   STAGING_SSH_KEY (private key of the server's deploy user), STAGING_SSH_KNOWN_HOSTS
 #              (`ssh-keyscan <server>` output, checked by hand), RELEASE_PREVIEW_PASSWORD,
-#              RELEASE_CHECK_TOKEN, RELEASE_OPS_PHONE, RELEASE_OPS_TOTP_SECRET,
+#              RELEASE_CHECK_TOKEN, RELEASE_OPS_EMAIL, RELEASE_OPS_TOTP_SECRET,
 #              SLACK_WEBHOOK_URL (optional; posts deploy status and fix summaries to Slack)
 #   variables: STAGING_SSH (deploy@<server>), STAGING_WEB_URL, STAGING_API_URL
 name: Deploy staging
@@ -30,6 +30,10 @@ jobs:
   checks:
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci.yml
+    # A called workflow gets no more than this: CI's `changes` job reads a pull request's files.
+    permissions:
+      contents: read
+      pull-requests: read
 
   # Environment variables are not readable in a job's `if:` (it is evaluated before the job
   # enters the environment), so the auto-deploy switch is read here, inside the environment.
@@ -107,7 +111,7 @@ jobs:
         env:
           RELEASE_PREVIEW_PASSWORD: ${{ secrets.RELEASE_PREVIEW_PASSWORD }}
           RELEASE_CHECK_TOKEN: ${{ secrets.RELEASE_CHECK_TOKEN }}
-          RELEASE_OPS_PHONE: ${{ secrets.RELEASE_OPS_PHONE }}
+          RELEASE_OPS_EMAIL: ${{ secrets.RELEASE_OPS_EMAIL }}
           RELEASE_OPS_TOTP_SECRET: ${{ secrets.RELEASE_OPS_TOTP_SECRET }}
           WEB: ${{ vars.STAGING_WEB_URL }}
           API: ${{ vars.STAGING_API_URL }}

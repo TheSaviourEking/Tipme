@@ -52,11 +52,16 @@ export type MailSender = keyof typeof MAIL_SENDERS;
 /** `security` on staging-mail.usetipme.xyz → "TipMe Staging Security <security@…>". */
 export function senderAddress(
   sender: MailSender,
-  brand: { domain: string; name: string },
+  brand: {
+    domain: string;
+    name: string;
+    /** One address for every sender, e.g. while the mail domain awaits verification. */
+    address?: string | undefined;
+  },
 ): { address: string; name: string } {
   const { local, label } = MAIL_SENDERS[sender];
   return {
-    address: `${local}@${brand.domain}`,
+    address: brand.address ?? `${local}@${brand.domain}`,
     name: label ? `${brand.name} ${label}` : brand.name,
   };
 }

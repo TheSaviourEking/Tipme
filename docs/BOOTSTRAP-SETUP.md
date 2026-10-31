@@ -82,7 +82,7 @@ It prints the tip's status, the provider evidence and a trace link. `no-reply` i
   - `MESSAGING_PROVIDER=mock`;
   - optionally `REWARD_CASH_BUDGET_MINOR_PER_MONTH` for the worker.
   - The web app reads `WEB_REVALIDATE_SECRET` and `API_INTERNAL_ORIGIN` (the API as reached from the web server) from its own environment.
-- **Sign in or sign up.** Open `/sign-up` or `/sign-in` and enter a phone number. The 6-digit code is in the **pretend inbox** at `/dev/inbox`; nothing is really sent until a messaging provider is approved.
+- **Sign in or sign up.** Open `/sign-up` or `/sign-in` and enter an email address. The 6-digit code is in the **pretend inbox** at `/dev/inbox`; nothing is really sent until a messaging provider is approved.
 - **Demo recipients:** Ada (`0800 000 0001`) and Tobi (`0800 000 0002`).
 - **Weekly report:** `POST http://127.0.0.1:4000/v1/dev/jobs/weekly-report` (optionally `{"isoWeek":"2026-W42","handle":"tobi"}`) builds it now instead of waiting for Monday 07:00 in Lagos.
 - **Pretend money:** withdrawals, cash rewards and fee-free tips are pretend. See ADR-0003, ADR-0009 and the [sign-in runbook](runbooks/sign-in-problems.md).
@@ -94,7 +94,7 @@ It prints the tip's status, the provider evidence and a trace link. `no-reply` i
   - `RATE_LIMIT_ANALYTICS_PER_MIN` (default 120);
   - `OPS_TRACE_URL_TEMPLATE` (default: local Jaeger outside production).
 - **Become the Owner:**
-  1. Run `pnpm ops:grant-owner --phone 0800 000 0002` (any number). It prints a one-time enrolment code, valid 30 minutes.
+  1. Run `pnpm ops:grant-owner --email you@example.com` (any address you can sign in with). It prints a one-time enrolment code, valid 30 minutes.
   2. Open `/ops`, sign in with that number, enter the enrolment code and scan the QR code with an authenticator app.
 - **Pages:**
   - Overview (health this week against last week);

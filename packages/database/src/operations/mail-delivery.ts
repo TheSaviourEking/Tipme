@@ -362,7 +362,7 @@ export interface MailDeliveryDeps {
   activeProvider(): Promise<MailProviderName>;
   overrideFor(userId: string): Promise<MailProviderName | null>;
   /** The mail domain and brand name; each type's sender is an address on it. */
-  sender: { domain: string; name: string };
+  sender: { domain: string; name: string; address?: string | undefined };
   replyTo?: string;
   webOrigin: string;
   /** Where one-click unsubscribe is answered (the API). */

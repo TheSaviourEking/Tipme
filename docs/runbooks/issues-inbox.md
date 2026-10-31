@@ -4,7 +4,7 @@
 
 ## Getting in
 
-1. **Become staff (once):** run `pnpm ops:grant-owner --phone <your number>` against the local database. It prints a one-time **enrolment code**, valid 30 minutes.
+1. **Become staff (once):** run `pnpm ops:grant-owner --email <your address>` against the local database. It prints a one-time **enrolment code**, valid 30 minutes.
 2. **Sign in:** open `/ops` and sign in with that number (6-digit code, as usual).
 3. **Set up the authenticator:** enter the enrolment code, scan the QR code with an authenticator app, and enter its first code.
 4. **Later visits:** enter the current code from the app. Access lasts 12 hours at most, or 1 hour idle, and ends when you sign out.
