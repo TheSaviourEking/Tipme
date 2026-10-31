@@ -14,7 +14,7 @@ import { test } from 'node:test';
 
 // scripts/ship-production.sh with a stand-in `ssh` (runs the remote command locally, in a fake
 // server) and `docker` (save prints bytes, load records them, run reports the Caddyfile verdict).
-function stage({ caddyfileValid = true } = {}) {
+function stage({ caddyfileValid = true, reloadFails = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'tipme-ship-prod-'));
   const production = join(root, 'srv-tipme-production');
   const edge = join(root, 'srv-tipme-edge');
@@ -44,6 +44,7 @@ bash -c "$cmd"`,
   save) echo "IMAGE-BYTES-$2" ;;
   load) cat > "$FAKE_PRODUCTION/loaded"; echo "Loaded image" ;;
   run) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_CADDY_VALID" == "1" ]] ;;
+  compose) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_RELOAD_FAIL" != "1" ]] ;;
   *) echo "docker $*" >> "$FAKE_LOG" ;;
 esac`,
   );
@@ -52,6 +53,7 @@ esac`,
     FAKE_LOG: join(root, 'calls.log'),
     FAKE_PRODUCTION: production,
     FAKE_EDGE: edge,
+    FAKE_RELOAD_FAIL: reloadFails ? '1' : '0',
     FAKE_CADDY_VALID: caddyfileValid ? '1' : '0',
     PRODUCTION_SSH: 'deploy@production.example.test',
     PRODUCTION_HOME: production,
@@ -59,6 +61,7 @@ esac`,
     // Stop before the real deploy script runs: it is tested on its own.
     PRODUCTION_SKIP_DEPLOY: '1',
   };
+  // A fake deploy script is not needed: nothing is shipped when the edge step fails.
   const run = (args) =>
     spawnSync('bash', [resolve('scripts/ship-production.sh'), ...args], {
       env,
@@ -134,4 +137,19 @@ test('shipping refuses anything that is not a version', () => {
   const { run } = stage();
   for (const bad of [[], ['main'], ['abc; rm -rf /']])
     assert.equal(run(bad).status, 2, JSON.stringify(bad));
+});
+
+test('a failed reload puts the previous Caddyfile back and stops before production', () => {
+  const { run, edge, production, log } = stage({ reloadFails: true });
+  const result = run(['abcdef123456']);
+  assert.notEqual(result.status, 0);
+  assert.equal(
+    readFileSync(join(edge, 'Caddyfile'), 'utf8'),
+    'old caddyfile\n',
+  );
+  assert.match(result.stderr + result.stdout, /reload failed/i);
+  // Reloaded once for the new file, once more for the restored one.
+  assert.equal((log().match(/caddy reload/g) ?? []).length, 2);
+  assert.equal(existsSync(join(production, 'releases')), false);
+  assert.equal(existsSync(join(production, 'loaded')), false);
 });

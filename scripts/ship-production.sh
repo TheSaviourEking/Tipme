@@ -38,11 +38,23 @@ ssh "${ssh_opts[@]}" "$target" "set -e
 docker run --rm --env-file '$edge/edge.env' -v '$edge/incoming:/etc/caddy:ro' caddy:2.10.2-alpine \
   caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 if ! cmp -s '$edge/incoming/Caddyfile' '$edge/Caddyfile'; then
+  # Kept so a failed reload can put the running config's file back; otherwise the next run
+  # would find the disk and the incoming file equal and call it unchanged while the edge still
+  # runs the old one. Staged beside the live file first, so a partial copy never reaches it.
+  cp '$edge/Caddyfile' '$edge/Caddyfile.previous'
+  cp '$edge/incoming/Caddyfile' '$edge/Caddyfile.new'
   # Written in place, not moved: the running container bind-mounts this one file, and a
   # replaced file would leave it reading the old copy.
-  cat '$edge/incoming/Caddyfile' > '$edge/Caddyfile'
-  docker compose -p tipme-edge -f '$edge/compose.edge.yml' exec -T caddy caddy reload --config /etc/caddy/Caddyfile
-  echo 'Caddyfile updated and reloaded.'
+  cat '$edge/Caddyfile.new' > '$edge/Caddyfile'
+  rm -f '$edge/Caddyfile.new'
+  if docker compose -p tipme-edge -f '$edge/compose.edge.yml' exec -T caddy caddy reload --config /etc/caddy/Caddyfile; then
+    echo 'Caddyfile updated and reloaded.'
+  else
+    cat '$edge/Caddyfile.previous' > '$edge/Caddyfile'
+    docker compose -p tipme-edge -f '$edge/compose.edge.yml' exec -T caddy caddy reload --config /etc/caddy/Caddyfile || echo 'The restored Caddyfile did not reload either: check the edge by hand.'
+    echo 'ERROR: caddy reload failed; the previous Caddyfile is back in place. Production was not deployed.' >&2
+    exit 1
+  fi
 else
   echo 'Caddyfile unchanged.'
 fi
