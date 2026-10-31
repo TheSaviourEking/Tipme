@@ -59,7 +59,7 @@ The `deploy-production` workflow (hand-run, from `main` only) and `watch-product
   curl -sf https://api.usetipme.xyz/health/ready && curl -sf https://api.staging.usetipme.xyz/health/ready
   ```
 
-  Both environments are unreachable for the few seconds the container takes to restart.
+  Both environments are unreachable for the few seconds the container takes to restart. The edge's log limit (10 MB, 3 files) lives in `compose.edge.yml`, so it lands with the first edge install or this manual `up -d`; the Caddyfile's log filter (health-check noise) lands with the next ship.
 
 - **Never stop the edge for a staging problem.** Production shares it. Staging's deploy and rollback scripts re-attach staging's API to `edge-staging` themselves; fix staging there.
 

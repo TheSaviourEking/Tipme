@@ -152,6 +152,9 @@ test(
       ]);
       assert.equal(service.mem_limit, String(384 * 1024 * 1024));
       assert.equal(service.stop_grace_period, '20s');
+      // Two failed 2 s readiness checks take a draining copy out (up to ~6 s): drain 7 s, then
+      // the 10 s close deadline, inside the 20 s stop grace.
+      assert.equal(service.environment.SHUTDOWN_DRAIN_MS, '7000');
       assert.match(service.healthcheck.test.join(' '), /\/health\/ready/);
     }
     assert.equal(config.services['api-blue'].image, 'tipme-app:dummy');
@@ -228,6 +231,16 @@ test(
     assert.match(raw, /image: tipme-app:\$\{TIPME_VERSION/);
   },
 );
+
+test('every long-running service caps its json-file logs', { skip }, () => {
+  const { services } = parse();
+  for (const name of ['api-blue', 'api-green', 'worker-a', 'worker-b', 'redis'])
+    assert.deepEqual(
+      services[name].logging,
+      { driver: 'json-file', options: { 'max-size': '10m', 'max-file': '3' } },
+      `${name} has no log limit`,
+    );
+});
 
 // Not Docker-dependent.
 test('production.env.example names every ${VAR} the compose file reads, with no values for secrets', () => {

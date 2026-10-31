@@ -204,10 +204,19 @@ test(
   },
 );
 
+test('health-checker noise stays out of the edge log', { skip }, () => {
+  const logs = docker(['logs', CADDY]);
+  const text = `${logs.stdout}${logs.stderr}`;
+  assert.ok(!/health_checker/.test(text), 'health checker lines in the log');
+  // The stopped colour's names fail every check; the log must still be usable.
+  assert.match(text, /serving initial configuration/);
+});
+
 test('a copy failing readiness gets no traffic', { skip }, async () => {
   writeFileSync(join(flags, 'blue-2.notready'), '');
   try {
-    await sleep(3500);
+    // Two failed checks, 2 s apart, take a copy out.
+    await sleep(6500);
     const results = await burst(20);
     assert.deepEqual(
       [...new Set(results.map((r) => `${r.status} ${r.body}`))].sort(),

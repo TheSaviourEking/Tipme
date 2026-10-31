@@ -4,6 +4,11 @@
 # name, so a project can be redeployed or rolled back without touching this file.
 {
 	email {$ACME_EMAIL}
+	# The stopped production colour's three names fail an active health check every 2 s, for
+	# as long as it stays stopped; keep that out of the log (the access and error lines stay).
+	log default {
+		exclude http.handlers.reverse_proxy.health_checker.active
+	}
 }
 
 {$STAGING_API_HOST} {
@@ -38,7 +43,11 @@
 		lb_try_interval 250ms
 		health_uri /health/ready
 		health_interval 2s
-		health_timeout 1s
+		# Longer than the API's own 1 s probe timeouts, and two failures in a row, so one slow
+		# answer (an Aiven TLS reconnect, a GC pause) does not take a copy out. A draining copy
+		# leaves in about 4-6 s, which SHUTDOWN_DRAIN_MS (compose.production.yml) covers.
+		health_timeout 3s
+		health_fails 2
 		health_status 200
 	}
 }

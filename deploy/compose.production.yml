@@ -16,6 +16,9 @@ x-app: &app
   tmpfs: ['/tmp']
   security_opt: ['no-new-privileges:true']
   networks: [internal]
+  logging: &logging
+    driver: json-file
+    options: { max-size: 10m, max-file: '3' }
 
 # Aiven's CA, so sslmode=verify-full can check the certificate (docs/runbooks/remote-database.md).
 x-db-ca: &db-ca ${TIPME_HOME:?set TIPME_HOME}/db-ca.pem:/run/secrets/db-ca.pem:ro
@@ -32,7 +35,9 @@ x-api-env: &api-env
   SENTRY_ENVIRONMENT: production
   # Aiven keeps the backups and point-in-time recovery; /health/backups must not expect ours.
   POINT_IN_TIME_RECOVERY: 'off'
-  SHUTDOWN_DRAIN_MS: ${SHUTDOWN_DRAIN_MS:-5000}
+  # Two failed 2 s edge readiness checks take a draining copy out (up to about 6 s), so drain
+  # for 7 s; the API's default (5 s) is for staging, which has one copy and no edge checks.
+  SHUTDOWN_DRAIN_MS: '7000'
   PORT: ${PORT:-4000}
   DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (the runtime role, sslmode=verify-full)}
   REDIS_URL: redis://redis:6379
@@ -108,7 +113,8 @@ x-api: &api
     timeout: 5s
     retries: 12
   mem_limit: 384m
-  # Longer than the API's drain-then-close (about 15 s), so a stop never kills it mid-request.
+  # Longer than the API's drain-then-close (7 s drain + up to 10 s close deadline), so a stop
+  # never kills it mid-request.
   stop_grace_period: 20s
   deploy:
     replicas: 3
@@ -250,6 +256,7 @@ services:
       retries: 12
     networks: [internal]
     mem_limit: 256m
+    logging: *logging
 
 networks:
   # The edge Caddy's network, created once by deploy/edge/setup-networks.sh.

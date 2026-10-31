@@ -20,6 +20,9 @@ services:
       - caddy_config:/config
     networks: [edge-staging, edge-production]
     mem_limit: 128m
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
 
 networks:
   # Created by setup-networks.sh, shared with the staging and production projects.

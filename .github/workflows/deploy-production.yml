@@ -20,8 +20,10 @@
 #   secrets:   PRODUCTION_SSH_KEY (private key of the server's deploy user),
 #              PRODUCTION_SSH_KNOWN_HOSTS (`ssh-keyscan <server>` output, checked by hand),
 #              SLACK_WEBHOOK_URL (optional; posts deploy status to Slack)
-#   variables: PRODUCTION_SSH (deploy@<server>), PRODUCTION_WEB_URL, PRODUCTION_API_URL
-# Also read, as a repository/staging variable already used by Deploy staging: STAGING_API_URL
+# Repository settings → Secrets and variables → Actions → Variables (repository variables, not
+# environment ones: watch-production's `if:` cannot see environment variables):
+#   PRODUCTION_SSH (deploy@<server>), PRODUCTION_WEB_URL, PRODUCTION_API_URL
+# Also read, as a repository variable already used by Deploy staging: STAGING_API_URL
 # (the gate asks it which version staging runs).
 name: Deploy production
 on:
@@ -110,6 +112,16 @@ jobs:
             echo "PREVIOUS_VERSION=$previous" >> "$GITHUB_ENV"
           fi
 
+      # Set up before anything touches production, so a setup hiccup cannot leave it switched
+      # but unchecked. The release check below only runs it.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
       - name: Build the image (once, here)
         run: docker build -f deploy/Dockerfile -t "tipme-app:$VERSION" .
 
@@ -124,6 +136,7 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
       - name: Ship and deploy
+        id: ship
         env:
           PRODUCTION_SSH: ${{ vars.PRODUCTION_SSH }}
           PRODUCTION_SSH_KEY_FILE: /home/runner/.ssh/production
@@ -131,13 +144,6 @@ jobs:
 
       # The release check runs from here, against the deployed copy. Read-only: it refuses
       # --full on a copy that takes real payments, and nothing here asks for it.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
       - name: Release check (read-only)
         env:
           WEB: ${{ vars.PRODUCTION_WEB_URL }}
@@ -149,6 +155,23 @@ jobs:
           name: release-check
           path: test-results/
           retention-days: 7
+
+      - name: What state is production in?
+        if: failure()
+        env:
+          SHIP_OUTCOME: ${{ steps.ship.outcome }}
+        run: |
+          {
+            echo '### Deploy failed'
+            if [ "$SHIP_OUTCOME" = skipped ]; then
+              echo 'The deploy step had not run: production was not changed.'
+            elif [ "$SHIP_OUTCOME" = failure ]; then
+              echo 'The deploy step ran and failed: production may be partly switched. Check which colour serves, and roll back if needed.'
+            else
+              echo 'The deploy step had already run: production runs the new version, unchecked or failing its release check.'
+            fi
+            echo 'To go back: deploy/scripts/rollback-production.sh on the server (docs/runbooks/production.md section 7).'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Forget the key
         if: always()
