@@ -9,7 +9,7 @@
 # Repository settings → Environments → "staging":
 #   secrets:   STAGING_SSH_KEY (private key of the server's deploy user), STAGING_SSH_KNOWN_HOSTS
 #              (`ssh-keyscan <server>` output, checked by hand), RELEASE_PREVIEW_PASSWORD,
-#              RELEASE_CHECK_TOKEN, RELEASE_OPS_PHONE, RELEASE_OPS_TOTP_SECRET,
+#              RELEASE_CHECK_TOKEN, RELEASE_OPS_EMAIL, RELEASE_OPS_TOTP_SECRET,
 #              SLACK_WEBHOOK_URL (optional; posts deploy status and fix summaries to Slack)
 #   variables: STAGING_SSH (deploy@<server>), STAGING_WEB_URL, STAGING_API_URL
 name: Deploy staging
@@ -107,7 +107,7 @@ jobs:
         env:
           RELEASE_PREVIEW_PASSWORD: ${{ secrets.RELEASE_PREVIEW_PASSWORD }}
           RELEASE_CHECK_TOKEN: ${{ secrets.RELEASE_CHECK_TOKEN }}
-          RELEASE_OPS_PHONE: ${{ secrets.RELEASE_OPS_PHONE }}
+          RELEASE_OPS_EMAIL: ${{ secrets.RELEASE_OPS_EMAIL }}
           RELEASE_OPS_TOTP_SECRET: ${{ secrets.RELEASE_OPS_TOTP_SECRET }}
           WEB: ${{ vars.STAGING_WEB_URL }}
           API: ${{ vars.STAGING_API_URL }}
