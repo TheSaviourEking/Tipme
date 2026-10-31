@@ -141,7 +141,12 @@ export async function mailGate(
     .select({ reason: mailSuppressions.reason })
     .from(mailSuppressions)
     .where(eq(mailSuppressions.addressHmac, addressHmac(sealing, mail.to)));
-  if (suppressed) return 'suppressed';
+  // A provider test is about the provider, so only an address that doesn't exist blocks it.
+  if (
+    suppressed &&
+    (mail.type !== 'provider_test' || suppressed.reason === 'hard_bounce')
+  )
+    return 'suppressed';
   if (!mail.userId) return 'send';
   const type = MAIL_TYPES[mail.type];
   if (type?.preference) {
@@ -216,7 +221,8 @@ export async function recordMailSent(
     const updated = await tx
       .update(mailMessages)
       .set({
-        status: 'sent',
+        // A bounce or complaint may have arrived first: it stays, and the send is still recorded.
+        status: sql`CASE WHEN ${mailMessages.status} = 'sending' THEN 'sent' ELSE ${mailMessages.status} END`,
         provider: input.provider,
         providerMessageId: input.providerMessageId,
         renderedSealed: input.snapshot
@@ -224,11 +230,17 @@ export async function recordMailSent(
           : null,
         attempts: sql`${mailMessages.attempts} + 1`,
         sentAt: input.now,
-        finalAt: input.now,
+        finalAt: sql`coalesce(${mailMessages.finalAt}, ${input.now.toISOString()}::timestamptz)`,
         claimedAt: null,
         lastError: null,
       })
-      .where(ownsClaim(input.id, input.claimedAt))
+      .where(
+        and(
+          eq(mailMessages.id, input.id),
+          inArray(mailMessages.status, ['sending', 'bounced', 'complained']),
+          eq(mailMessages.claimedAt, input.claimedAt),
+        ),
+      )
       .returning({ id: mailMessages.id });
     if (updated.length === 0) return 'stale' as const;
     await recordMailEvent(tx, {

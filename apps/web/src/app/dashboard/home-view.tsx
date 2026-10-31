@@ -14,6 +14,7 @@ import { PageCard } from '@/components/dashboard/page-card';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { change, naira } from '@/lib/money';
 import { recipientReturned, track } from '@/lib/analytics';
+import { isPaymentAttention } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
 function Tile({
@@ -98,7 +99,7 @@ export default function DashboardHome() {
     profile.displayName !== profile.handle &&
     Boolean(profile.role?.trim() || profile.bio?.trim());
   // The first payment-related notice, if any (they are listed most urgent first).
-  const paymentTodo = attention?.find((item) => item.id !== 'page_offline');
+  const paymentTodo = attention?.find(isPaymentAttention);
   const pageReady =
     profileDetailsComplete && profile.pageState === 'live' && !paymentTodo;
 

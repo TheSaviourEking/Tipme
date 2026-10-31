@@ -3780,6 +3780,18 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   font-size: var(--text-lg);
 }
 
+.ops-chart__line--previous {
+  opacity: 0.3;
+}
+
+.ops-email-preview {
+  width: 100%;
+  min-height: 420px;
+  border: 1px solid var(--color-border, currentColor);
+  border-radius: var(--radius-md, 8px);
+  background: #ffffff;
+}
+
 .ops-filters {
   display: flex;
   flex-wrap: wrap;

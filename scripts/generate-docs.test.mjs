@@ -38,6 +38,9 @@ const PUBLIC_REVIEWED = [
   'GET /health/ready',
   'GET /health/release',
   'POST /v1/auth/code',
+  'POST /v1/auth/email-recovery/confirm',
+  'POST /v1/auth/email-recovery/propose',
+  'POST /v1/auth/email-recovery/start',
   'POST /v1/auth/email/confirm',
   'POST /v1/auth/recover',
   'POST /v1/auth/recover/code',
@@ -66,6 +69,7 @@ const PRETEND_PUBLIC_REVIEWED = [
 
 const SIGNED_PROVIDER_REVIEWED = [
   'POST /v1/webhooks/bachs',
+  'POST /v1/webhooks/mail/{provider}',
   'POST /v1/webhooks/mock',
 ];
 
@@ -80,7 +84,7 @@ test('the pretend-only public routes are exactly the reviewed ones', () => {
   );
 });
 
-test('payment webhooks require provider signatures', () => {
+test('payment and mail webhooks require provider signatures', () => {
   assert.deepEqual(
     routes
       .filter((r) => r.access === 'provider-signature')

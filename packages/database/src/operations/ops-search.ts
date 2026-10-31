@@ -22,6 +22,7 @@ const iso = (value: unknown) => new Date(String(value)).toISOString();
 
 const pageOf = (p: Row): OpsSearchResult['pages'][number] => ({
   profileId: String(p['id']),
+  userId: p['user_id'] ? String(p['user_id']) : null,
   handle: String(p['handle']),
   displayName: String(p['display_name']),
   plan: p['plan'] as 'free' | 'pro',
@@ -47,7 +48,7 @@ const rowsOf = async (tx: Tx, query: ReturnType<typeof sql>) =>
 async function byId(tx: Tx, id: string): Promise<OpsSearchResult> {
   const pages = await rowsOf(
     tx,
-    sql`SELECT id, handle, display_name, plan, page_state, status FROM profiles
+    sql`SELECT id, user_id, handle, display_name, plan, page_state, status FROM profiles
          WHERE id = ${id}::uuid AND page_state <> 'deleted'`,
   );
   const tips = await rowsOf(
@@ -91,10 +92,10 @@ async function byText(tx: Tx, q: string): Promise<OpsSearchResult> {
   const text = likeText(q);
   const pageRows = await rowsOf(
     tx,
-    sql`SELECT id, handle, display_name, plan, page_state, status FROM profiles
+    sql`SELECT id, user_id, handle, display_name, plan, page_state, status FROM profiles
          WHERE page_state <> 'deleted' AND handle_lower LIKE ${`${text.toLowerCase()}%`} ESCAPE '\\'
         UNION
-        SELECT id, handle, display_name, plan, page_state, status FROM profiles
+        SELECT id, user_id, handle, display_name, plan, page_state, status FROM profiles
          WHERE page_state <> 'deleted' AND display_name ILIKE ${`%${text}%`} ESCAPE '\\'
          ORDER BY handle LIMIT ${LIMIT}`,
   );

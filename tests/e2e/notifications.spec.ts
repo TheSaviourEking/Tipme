@@ -56,17 +56,17 @@ test('a recipient is told about a confirmed tip, verifies an email and is emaile
   const domain = `${handle.replace('_', '-')}.example`;
   const email = `kemi@${domain}`;
   await page.goto('/dashboard/settings');
-  await page.getByLabel('Email address').fill(email);
-  await page.getByRole('button', { name: 'Send confirmation link' }).click();
-  await expect(page.getByText(/We sent a link to/)).toBeVisible();
-  const mail = await readMail(page, new RegExp(`k•••@${domain}.*Confirm`, 's'));
-  const link = /(http:\/\/\S+#v=[A-Za-z0-9_-]+)/.exec(mail)?.[1] ?? '';
-  await page.goto(link.replace(/^http:\/\/[^/]+/, ''));
-  await expect(
-    page.getByRole('heading', { name: 'Email confirmed' }),
-  ).toBeVisible();
-  await page.goto('/dashboard/settings');
-  await expect(page.getByText(`${email} · Verified`)).toBeVisible();
+  await page.getByLabel('New email address').fill(email);
+  await page.getByRole('button', { name: 'Send code to new address' }).click();
+  await expect(page.getByText(/We sent a code to/)).toBeVisible();
+  const mail = await readMail(
+    page,
+    new RegExp(`k•••@${domain}.*Confirm your new TipMe email`, 's'),
+  );
+  const code = /\b(\d{6})\b/.exec(mail)?.[1] ?? '';
+  await page.getByLabel('Code sent to the new address').fill(code);
+  await page.getByRole('button', { name: 'Change email' }).click();
+  await expect(page.getByText(/Your email was changed/)).toBeVisible();
 
   await tipAsVisitor(browser, handle, { name: 'Chidi' });
   await readMail(

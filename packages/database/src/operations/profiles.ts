@@ -24,9 +24,12 @@ import {
   handleAliases,
   handleHolds,
   profileAvatars,
+  emailRecoveries,
   phoneRecoveries,
   profiles,
   sessions,
+  emailCodeLockouts,
+  emailCodes,
   signInCodes,
   signInLockouts,
   users,
@@ -255,6 +258,7 @@ export function opsPageByHandle(
 
 const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   profileId: row.id,
+  userId: row.userId,
   handle: row.handle,
   displayName: row.displayName,
   plan: row.plan as PagePlan,
@@ -664,7 +668,7 @@ export function deleteAccount(
       }
       // Erase what identifies the person, including codes, lockouts and pending links or recoveries.
       const [person] = await tx
-        .select({ phone: users.phoneE164 })
+        .select({ phone: users.phoneE164, email: users.email })
         .from(users)
         .where(eq(users.id, input.userId));
       if (person?.phone) {
@@ -674,6 +678,12 @@ export function deleteAccount(
         await tx
           .delete(signInLockouts)
           .where(eq(signInLockouts.phoneE164, person.phone));
+      }
+      if (person?.email) {
+        await tx.delete(emailCodes).where(eq(emailCodes.email, person.email));
+        await tx
+          .delete(emailCodeLockouts)
+          .where(eq(emailCodeLockouts.email, person.email));
       }
       await tx
         .update(emailTokens)
@@ -691,10 +701,16 @@ export function deleteAccount(
             isNull(phoneRecoveries.completedAt),
           ),
         );
+      // Deleted, not cancelled: each row holds an address, and it must not move back later.
+      await tx
+        .delete(emailRecoveries)
+        .where(eq(emailRecoveries.userId, input.userId));
       await tx
         .update(users)
         .set({
           phoneE164: null,
+          recoveryEmail: null,
+          recoveryEmailVerifiedAt: null,
           email: null,
           emailVerifiedAt: null,
           deletedAt: now,

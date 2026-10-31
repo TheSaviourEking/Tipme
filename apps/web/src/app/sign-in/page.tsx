@@ -12,7 +12,7 @@ export default function SignInPage() {
   return (
     <AuthStage
       title="Welcome back."
-      lede="Use the phone number you signed up with, and we’ll send you a code."
+      lede="Use the email you signed up with, and we’ll send you a code."
     >
       <Suspense>
         <SignInView />

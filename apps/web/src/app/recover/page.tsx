@@ -3,7 +3,7 @@ import { AuthStage } from '@/components/account/auth-stage';
 import { RecoverFlow } from './recover-flow';
 
 export const metadata: Metadata = {
-  title: 'Lost your number?',
+  title: 'Can’t get into your email?',
   robots: { index: false, follow: false },
   referrer: 'no-referrer',
 };
@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 export default function RecoverPage() {
   return (
     <AuthStage
-      title="Lost your number?"
-      lede="It happens. If you verified an email, we can move your page to your new number."
+      title="Can’t get into your email?"
+      lede="It happens. If you added a recovery email, we can move your account to a new address."
     >
       <RecoverFlow />
     </AuthStage>

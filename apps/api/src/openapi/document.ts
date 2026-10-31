@@ -42,6 +42,7 @@ const OTHER_ACCESS: Record<string, string> = {
   // The payment provider: a signature over the raw body, with a replay window.
   MockWebhookController: 'provider-signature',
   BachsWebhookController: 'provider-signature',
+  MailWebhookController: 'provider-signature',
   // The release check: a bearer token, and only on copies that say RELEASE_KIND=test.
   ReleaseRunsController: 'release-token',
 };

@@ -72,6 +72,17 @@ const messages: Record<ApiErrorCode, string> = {
     'Verify your email address before connecting a payment account.',
   PAYMENT_ACCOUNT_REQUIRED:
     'Connect and activate a payment account before accepting tips.',
+  EMAIL_TAKEN: 'That email is already used by another TipMe account.',
+  EMAIL_INVALID: 'That email address is not valid.',
+  TOO_MANY_CODES: 'Too many codes were requested for that address.',
+  NO_SIGN_IN_EMAIL: 'This account has no sign-in email.',
+  SAME_AS_SIGN_IN_EMAIL:
+    'Your recovery email must be different from your sign-in email.',
+  SIGN_IN_CODE_REQUIRED:
+    'Changing your recovery email needs a code sent to your sign-in email.',
+  NO_CONFIRMED_TEST:
+    'Send a test through this provider and confirm it arrived before making it active.',
+  PROVIDER_NOT_ALLOWED: 'This provider can’t be made active in production.',
   PAYMENT_START_REJECTED:
     'The payment provider refused to start this payment. Nothing was charged.',
   PROVIDER_OUTCOME_UNKNOWN:

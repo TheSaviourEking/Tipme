@@ -1,0 +1,2 @@
+ALTER TABLE "mail_message_events" ADD COLUMN "address_hmac" text;--> statement-breakpoint
+CREATE INDEX "mail_message_events_address" ON "mail_message_events" USING btree ("address_hmac","kind","occurred_at") WHERE address_hmac IS NOT NULL;

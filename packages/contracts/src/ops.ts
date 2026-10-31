@@ -447,6 +447,8 @@ export interface MarketEntry {
 /** A page as staff see it when changing its plan (PR-012). */
 export interface OpsPage {
   profileId: string;
+  /** The account behind the page; null once it has none. */
+  userId: string | null;
   handle: string;
   displayName: string;
   plan: 'free' | 'pro';
@@ -508,3 +510,241 @@ export interface OpsSearchResult {
     at: string;
   }[];
 }
+
+// ---- Mail providers (mail platform spec §5) ----
+
+export const mailProviderNameSchema = z.enum(['mock', 'zeptomail', 'ses']);
+
+export interface OpsMailProviderCard {
+  name: z.infer<typeof mailProviderNameSchema>;
+  label: string;
+  active: boolean;
+  /** True while it only delivers to verified recipients; null when the provider can't say. */
+  sandbox: boolean | null;
+  statusDetail: string | null;
+  lastTest: {
+    status: 'pending' | 'confirmed' | 'failed' | 'expired';
+    startedAt: string;
+    confirmedAt: string | null;
+    targetHint: string | null;
+    /** How the test email itself is doing: queued, sent, failed… */
+    messageStatus: string | null;
+    failureCode: string | null;
+  } | null;
+  /** A confirmed test is still valid, so this provider can be made active. */
+  canActivate: boolean;
+  last24h: {
+    sent: number;
+    failed: number;
+    bounced: number;
+    complained: number;
+  };
+}
+
+export interface OpsMailProviderOverride {
+  userId: string;
+  handle: string | null;
+  provider: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface OpsMailProviders {
+  providers: OpsMailProviderCard[];
+  overrides: OpsMailProviderOverride[];
+  changedAt: string | null;
+  reason: string | null;
+}
+
+export const opsMailTestSchema = opsReasonSchema
+  .extend({ to: z.email().max(254).optional() })
+  .strict();
+export type OpsMailTestRequest = z.infer<typeof opsMailTestSchema>;
+
+export const opsProviderTestConfirmSchema = z
+  .object({ token: z.string().min(16).max(128) })
+  .strict();
+export type OpsProviderTestConfirmRequest = z.infer<
+  typeof opsProviderTestConfirmSchema
+>;
+
+export const opsMailSwitchSchema = opsReasonSchema
+  .extend({ provider: mailProviderNameSchema })
+  .strict();
+export type OpsMailSwitchRequest = z.infer<typeof opsMailSwitchSchema>;
+
+/** `account` is a handle or a user id. */
+export const opsMailOverrideSchema = opsReasonSchema
+  .extend({
+    account: z.string().trim().min(1).max(64),
+    provider: mailProviderNameSchema,
+  })
+  .strict();
+export type OpsMailOverrideRequest = z.infer<typeof opsMailOverrideSchema>;
+
+export const opsMailOverrideRemoveSchema = opsReasonSchema
+  .extend({ userId: z.uuid() })
+  .strict();
+export type OpsMailOverrideRemoveRequest = z.infer<
+  typeof opsMailOverrideRemoveSchema
+>;
+
+// Addresses travel in the body, never the URL, so they stay out of access logs.
+export const opsSuppressionLookupSchema = z
+  .object({ address: z.email().max(254) })
+  .strict();
+export type OpsSuppressionLookupRequest = z.infer<
+  typeof opsSuppressionLookupSchema
+>;
+
+export const opsSuppressionRemoveSchema = opsReasonSchema
+  .extend({
+    address: z.email().max(254),
+    confirmComplaint: z.boolean().default(false),
+  })
+  .strict();
+export type OpsSuppressionRemoveRequest = z.infer<
+  typeof opsSuppressionRemoveSchema
+>;
+
+// ---- Email console (mail platform spec §5.1) ----
+
+const mailPeriodFields = {
+  period: z
+    .enum([
+      'today',
+      'yesterday',
+      'this_week',
+      'last_week',
+      'this_month',
+      'last_month',
+      'range',
+    ])
+    .default('this_month'),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+};
+const MAIL_RANGE_MAX_DAYS = 366;
+/** A range needs both dates, in order, and at most a year. */
+const validMailRange = (q: {
+  period: string;
+  from?: string | undefined;
+  to?: string | undefined;
+}) =>
+  q.period !== 'range' ||
+  Boolean(
+    q.from &&
+    q.to &&
+    q.from <= q.to &&
+    Date.parse(q.to) - Date.parse(q.from) <= MAIL_RANGE_MAX_DAYS * 86_400_000,
+  );
+const mailRangeMessage = {
+  message: 'a range needs from and to, in order, within a year',
+};
+
+export const opsMailPeriodQuerySchema = z
+  .object(mailPeriodFields)
+  .refine(validMailRange, mailRangeMessage);
+
+const mailListFields = {
+  ...mailPeriodFields,
+  type: z
+    .string()
+    .regex(/^[a-z0-9_]{1,60}$/)
+    .optional(),
+  status: z
+    .string()
+    .regex(/^[a-z_]{1,20}$/)
+    .optional(),
+  provider: mailProviderNameSchema.optional(),
+  account: z.string().trim().min(1).max(64).optional(),
+};
+
+export const opsMailListQuerySchema = z
+  .object({ ...mailListFields, cursor: z.string().max(100).optional() })
+  .refine(validMailRange, mailRangeMessage);
+
+export const opsMailExportQuerySchema = z
+  .object({ ...mailListFields, kind: z.enum(['summary', 'messages']) })
+  .refine(validMailRange, mailRangeMessage);
+
+export interface OpsMailTotal {
+  count: number;
+  previous: number;
+  /** Null when the previous period was zero. */
+  changePct: number | null;
+}
+
+export interface OpsMailSummary {
+  range: { from: string; to: string };
+  previous: { from: string; to: string };
+  totals: Record<
+    | 'sent'
+    | 'delivered'
+    | 'bounced'
+    | 'complained'
+    | 'opened'
+    | 'clicked'
+    | 'failed',
+    OpsMailTotal
+  >;
+  rates: {
+    delivery: number | null;
+    open: number | null;
+    click: number | null;
+  };
+  byType: { type: string; sent: number; previous: number }[];
+  byProvider: { provider: string; sent: number; previous: number }[];
+  byCategory: { category: string; sent: number; previous: number }[];
+  /** Every type with any activity in the period, including ones that only failed. */
+  types: string[];
+  /** How long the oldest waiting email has been queued, in seconds. */
+  queueAgeSeconds: number;
+}
+
+export interface OpsMailSeriesPoint {
+  date: string;
+  sent: number;
+  delivered: number;
+  bounced: number;
+  opened: number;
+  clicked: number;
+  failed: number;
+  previousSent: number;
+}
+
+export interface OpsMailRow {
+  id: string;
+  createdAt: string;
+  type: string;
+  category: string;
+  toHint: string;
+  userId: string | null;
+  handle: string | null;
+  provider: string | null;
+  providerMessageId: string | null;
+  status: string;
+  lastEvent: string | null;
+}
+
+export interface OpsMailTimelineEvent {
+  kind: string;
+  provider: string | null;
+  linkKey: string | null;
+  occurredAt: string;
+}
+
+export type OpsMailContent =
+  | { status: 'ok'; subject: string; html: string; text: string }
+  | { status: 'withheld' };
+
+// ---- Staff email recovery (mail platform spec §8.5) ----
+
+export const opsEmailRecoverySchema = opsReasonSchema
+  .extend({
+    newEmail: z.email().max(254),
+    // What was checked to be sure who this is; goes in the audit log.
+    checks: z.string().trim().min(10).max(500),
+  })
+  .strict();
+export type OpsEmailRecoveryRequest = z.infer<typeof opsEmailRecoverySchema>;

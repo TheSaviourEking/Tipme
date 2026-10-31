@@ -77,15 +77,95 @@ export const operationType = pgEnum('operation_type', [
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey(),
-  status: text('status').notNull().default('active'),
-  // E.164 phone number: the identity. Nulled when the account is deleted (PR-008).
-  phoneE164: text('phone_e164').unique(),
-  email: text('email'),
-  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-  createdAt: createdAt(),
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey(),
+    status: text('status').notNull().default('active'),
+    // E.164 phone number: the identity. Nulled when the account is deleted (PR-008).
+    phoneE164: text('phone_e164').unique(),
+    email: text('email'),
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+    // A second address, for getting back in if the sign-in email is lost.
+    recoveryEmail: text('recovery_email'),
+    recoveryEmailVerifiedAt: timestamp('recovery_email_verified_at', {
+      withTimezone: true,
+    }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // A proven address belongs to one live account; it is the sign-in identity.
+    uniqueIndex('users_verified_email')
+      .on(sql`lower(${table.email})`)
+      .where(sql`email_verified_at IS NOT NULL AND deleted_at IS NULL`),
+    uniqueIndex('users_verified_recovery_email')
+      .on(sql`lower(${table.recoveryEmail})`)
+      .where(
+        sql`recovery_email_verified_at IS NOT NULL AND deleted_at IS NULL`,
+      ),
+  ],
+);
+
+/**
+ * Moving an account to a new sign-in email when the old one is lost. It takes effect 24 hours
+ * after the new address is proven, so the owner can still stop it.
+ */
+export const emailRecoveries = pgTable(
+  'email_recoveries',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    newEmail: text('new_email').notNull(),
+    startedBy: text('started_by').notNull(),
+    staffUserId: uuid('staff_user_id'),
+    // Filled when the new address is proven; the hold runs from here.
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('email_recoveries_started_by', sql`started_by IN ('self', 'staff')`),
+    index('email_recoveries_user').on(table.userId),
+    index('email_recoveries_due')
+      .on(table.effectiveAt)
+      .where(sql`completed_at IS NULL AND cancelled_at IS NULL`),
+  ],
+);
+
+/**
+ * One-time codes sent by email, stored only as an HMAC. Only the latest unused code for an
+ * address and purpose counts. Kept apart from phone codes, which return with phone sign-in.
+ */
+export const emailCodes = pgTable(
+  'email_codes',
+  {
+    id: uuid('id').primaryKey(),
+    email: text('email').notNull(),
+    codeHmac: text('code_hmac').notNull(),
+    purpose: text('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      'email_codes_purpose',
+      sql`purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email')`,
+    ),
+    index('email_codes_email_created').on(table.email, table.createdAt),
+  ],
+);
+
+/** Wrong-code counting and lockouts, per address. */
+export const emailCodeLockouts = pgTable('email_code_lockouts', {
+  email: text('email').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
 });
 
 /** One-time sign-in codes, stored only as an HMAC. Only the latest unused code for a number counts. */
@@ -123,6 +203,8 @@ export const sessions = pgTable(
       .references(() => users.id),
     tokenSha256: text('token_sha256').notNull().unique(),
     deviceLabel: text('device_label').notNull().default(''),
+    // SHA-256 of a long-lived browser cookie, to notice sign-ins from a new device.
+    deviceHash: text('device_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -251,6 +333,8 @@ export const mailMessageEvents = pgTable(
     provider: text('provider'),
     providerEventId: text('provider_event_id'),
     linkKey: text('link_key'),
+    // Set on bounces, so repeated soft bounces to one address can be counted (no plain address).
+    addressHmac: text('address_hmac'),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     receivedAt: createdAt(),
   },
@@ -260,6 +344,10 @@ export const mailMessageEvents = pgTable(
       .on(table.provider, table.providerEventId)
       .where(sql`provider_event_id IS NOT NULL`),
     index('mail_message_events_message').on(table.messageId, table.occurredAt),
+    index('mail_message_events_occurred').on(table.occurredAt),
+    index('mail_message_events_address')
+      .on(table.addressHmac, table.kind, table.occurredAt)
+      .where(sql`address_hmac IS NOT NULL`),
   ],
 );
 
@@ -317,6 +405,74 @@ export const mailPreferences = pgTable('mail_preferences', {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * The provider staff chose for a kind of traffic; no row means the server default. Shared with
+ * payment provider switching, which adds its state to `state` and `detail`.
+ */
+export const providerSettings = pgTable(
+  'provider_settings',
+  {
+    kind: text('kind').primaryKey(),
+    activeProvider: text('active_provider').notNull(),
+    state: text('state').notNull().default('stable'),
+    changedBy: uuid('changed_by'),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+    detail: jsonb('detail').notNull().default({}),
+  },
+  () => [check('provider_settings_kind', sql`kind IN ('mail', 'payment')`)],
+);
+
+/** A staff test of a provider. Only a hash of the confirmation token is kept. */
+export const providerTests = pgTable(
+  'provider_tests',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    provider: text('provider').notNull(),
+    startedBy: uuid('started_by').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    targetHint: text('target_hint'),
+    tokenSha256: text('token_sha256').unique(),
+    status: text('status').notNull().default('pending'),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    failureCode: text('failure_code'),
+    messageId: uuid('message_id').references(() => mailMessages.id),
+    tipId: uuid('tip_id'),
+  },
+  (table) => [
+    check('provider_tests_kind', sql`kind IN ('mail', 'payment')`),
+    check(
+      'provider_tests_status',
+      sql`status IN ('pending', 'confirmed', 'failed', 'expired')`,
+    ),
+    index('provider_tests_recent').on(
+      table.kind,
+      table.provider,
+      table.startedAt,
+    ),
+  ],
+);
+
+/** An account pinned to a provider other than the system one. Set by staff, always audited. */
+export const providerOverrides = pgTable(
+  'provider_overrides',
+  {
+    kind: text('kind').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    provider: text('provider').notNull(),
+    setBy: uuid('set_by').notNull(),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.kind, table.userId] }),
+    check('provider_overrides_kind', sql`kind IN ('mail', 'payment')`),
+  ],
+);
 
 export const profiles = pgTable(
   'profiles',
@@ -999,6 +1155,8 @@ export const OPS_PERMISSIONS = [
   'pages.plan',
   'search.view',
   'fees.manage',
+  'providers.manage',
+  'recoveries.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 

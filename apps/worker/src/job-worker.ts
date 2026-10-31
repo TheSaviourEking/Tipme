@@ -7,7 +7,7 @@ import {
   withExtractedContext,
   type DestinationStream,
 } from '@tipme/observability';
-import { createMockMailProvider } from '@tipme/mail';
+import { configuredMailProviders, type MailProviderName } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   autoResolveIssues,
@@ -17,6 +17,8 @@ import {
   evaluatePeriodMoments,
   expireStaleTips,
   previousIsoWeek,
+  activeMailProvider,
+  mailOverrideFor,
   mailSealing,
   pretendMailSink,
   runWeeklyReports,
@@ -394,15 +396,42 @@ export async function startJobWorker(
     logger.warn({ event: 'worker.error', error: error.name }),
   );
   const relay = startOutboxRelay({ db: database.db, queue, logger });
-  // The pretend provider's "inbox" is the development-only pretend_outbox, shown on /dev/inbox.
-  const pretendMail = createMockMailProvider(pretendMailSink(database.db));
+  // Configured providers; the pretend one "delivers" to the development-only pretend inbox.
+  const mailProviders = configuredMailProviders(
+    config,
+    pretendMailSink(database.db),
+  );
+  // What staff chose in ops, read at most every 5 seconds. A chosen provider whose keys were
+  // removed falls back to the server default instead of failing every email.
+  let activeCache: { provider: MailProviderName; at: number } | null = null;
+  const activeProvider = async (): Promise<MailProviderName> => {
+    if (activeCache && Date.now() - activeCache.at < 5000)
+      return activeCache.provider;
+    const chosen = await activeMailProvider(
+      database.db,
+      config.MAIL_DEFAULT_PROVIDER,
+    );
+    const provider = mailProviders.has(chosen)
+      ? chosen
+      : config.MAIL_DEFAULT_PROVIDER;
+    activeCache = { provider, at: Date.now() };
+    return provider;
+  };
   const mailDelivery = startMailDelivery({
     deps: {
       db: database.db,
       sealing,
-      providers: new Map([['mock', pretendMail]]),
-      activeProvider: async () => config.MAIL_DEFAULT_PROVIDER,
-      overrideFor: async () => null,
+      providers: mailProviders,
+      activeProvider: () => activeProvider(),
+      overrideFor: async (userId) => {
+        const override = await mailOverrideFor(database.db, userId);
+        if (override && !mailProviders.has(override))
+          logger.warn({
+            event: 'mail.override_unavailable',
+            provider: override,
+          });
+        return override;
+      },
       from: { address: config.MAIL_FROM_ADDRESS, name: config.MAIL_FROM_NAME },
       ...(config.MAIL_REPLY_TO ? { replyTo: config.MAIL_REPLY_TO } : {}),
       webOrigin: config.WEB_ORIGIN,
