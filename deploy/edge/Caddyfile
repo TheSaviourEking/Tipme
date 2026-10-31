@@ -18,13 +18,11 @@
 	}
 }
 
-# Production runs two copies of the API under one name (prod-api). Caddy re-resolves the name
-# every 2 s, spreads requests over the copies it finds, and retries a request that meets a
-# dead copy on another for up to 5 s. A copy draining after SIGTERM keeps serving until it
-# closes, so a stop costs no request.
-# Not here on purpose: health_uri /health/ready. Caddy runs active health checks only for
-# static upstreams and ignores them for dynamic ones (verified on 2.10.2 by
-# scripts/edge-caddy.test.mjs), so such lines would look protective and do nothing.
+# Production runs three copies of the API per colour (blue, green), only one colour at a time;
+# the other colour's names do not resolve, fail their health checks and get no traffic. The
+# upstreams are static names (Compose's default container names on edge-production) because
+# Caddy's active health checks do not cover dynamic upstreams, and a copy that is not ready
+# (starting, draining) must get no traffic. Adding a copy means adding a line here.
 {$PRODUCTION_API_HOST} {
 	encode zstd gzip
 	header {
@@ -33,11 +31,14 @@
 		-Server
 	}
 	reverse_proxy {
-		dynamic a prod-api 4000 {
-			refresh 2s
-		}
+		to tipme-production-api-blue-1:4000 tipme-production-api-blue-2:4000 tipme-production-api-blue-3:4000
+		to tipme-production-api-green-1:4000 tipme-production-api-green-2:4000 tipme-production-api-green-3:4000
 		lb_policy round_robin
 		lb_try_duration 5s
 		lb_try_interval 250ms
+		health_uri /health/ready
+		health_interval 2s
+		health_timeout 1s
+		health_status 200
 	}
 }

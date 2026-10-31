@@ -111,8 +111,8 @@ before(async () => {
   flags = mkdtempSync(join(tmpdir(), 'tipme-edgetest-'));
   assert.equal(docker(['network', 'create', NET]).status, 0);
   upstream('staging', 'staging-api');
-  upstream('prod-a', 'prod-api');
-  upstream('prod-b', 'prod-api');
+  for (const n of [1, 2, 3])
+    upstream(`blue-${n}`, `tipme-production-api-blue-${n}`);
   const run = docker([
     'run',
     '-d',
@@ -142,8 +142,8 @@ before(async () => {
   );
   await waitFor(async () => {
     const seen = new Set((await burst(10)).map((r) => r.body));
-    return seen.has('prod-a') && seen.has('prod-b');
-  }, 'both production copies');
+    return [1, 2, 3].every((n) => seen.has(`blue-${n}`));
+  }, 'every ready production copy');
 });
 
 after(() => {
@@ -176,7 +176,7 @@ test('the Caddyfile exists and validates', { skip }, () => {
 
 test('both hosts route to their own project', { skip }, async () => {
   assert.equal((await get(STAGING_HOST)).body, 'staging');
-  assert.match((await get(PRODUCTION_HOST)).body, /^prod-[ab]$/);
+  assert.match((await get(PRODUCTION_HOST)).body, /^blue-[123]$/);
 });
 
 test(
@@ -185,36 +185,42 @@ test(
   async () => {
     const bodies = (await burst(20)).map((r) => r.body);
     assert.ok(
-      bodies.includes('prod-a') && bodies.includes('prod-b'),
+      [1, 2, 3].every((n) => bodies.includes(`blue-${n}`)),
       bodies.join(),
     );
   },
 );
 
-// Known gap, kept visible: Caddy ignores health checks for dynamic upstreams, so a copy that
-// answers /health/ready 503 while still running keeps its share. Passes once production
-// routes to named copies (static upstreams) or Caddy health-checks dynamic ones.
+// Only one colour runs at a time, so three of the six names never resolve: the normal state.
 test(
-  'a copy failing readiness gets no traffic',
-  { skip, todo: 'Caddy skips active health checks on dynamic upstreams' },
+  'with one colour running (three of the six names exist) nothing fails',
+  { skip },
   async () => {
-    writeFileSync(join(flags, 'prod-b.notready'), '');
-    try {
-      await sleep(3500);
-      const results = await burst(20);
-      assert.deepEqual(
-        [...new Set(results.map((r) => `${r.status} ${r.body}`))],
-        ['200 prod-a'],
-      );
-    } finally {
-      rmSync(join(flags, 'prod-b.notready'), { force: true });
-    }
-    await waitFor(async () => {
-      const seen = new Set((await burst(10)).map((r) => r.body));
-      return seen.has('prod-b');
-    }, 'prod-b to take traffic again');
+    const results = await burst(30);
+    assert.deepEqual(
+      results.filter((r) => r.status !== 200),
+      [],
+    );
   },
 );
+
+test('a copy failing readiness gets no traffic', { skip }, async () => {
+  writeFileSync(join(flags, 'blue-2.notready'), '');
+  try {
+    await sleep(3500);
+    const results = await burst(20);
+    assert.deepEqual(
+      [...new Set(results.map((r) => `${r.status} ${r.body}`))].sort(),
+      ['200 blue-1', '200 blue-3'].sort(),
+    );
+  } finally {
+    rmSync(join(flags, 'blue-2.notready'), { force: true });
+  }
+  await waitFor(async () => {
+    const seen = new Set((await burst(10)).map((r) => r.body));
+    return seen.has('blue-2');
+  }, 'blue-2 to take traffic again');
+});
 
 test(
   'a copy stopped mid-traffic costs no failed request',
@@ -229,7 +235,7 @@ test(
       }
     })();
     await sleep(500);
-    assert.equal(docker(['stop', '-t', '10', `${NET}-prod-b`]).status, 0);
+    assert.equal(docker(['stop', '-t', '10', `${NET}-blue-3`]).status, 0);
     await sleep(4000);
     stop = true;
     await traffic;

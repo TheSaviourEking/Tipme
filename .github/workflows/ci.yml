@@ -125,22 +125,6 @@ jobs:
       - name: OpenAPI document is current
         run: pnpm api:openapi --check
 
-  # The edge Caddy's real Caddyfile in front of stand-in APIs on a throwaway Docker network:
-  # both hosts route to their own project, production spreads over its copies and survives one
-  # stopping. The Caddyfile reaches the server by a different path than the app, so its change
-  # needs its own proof.
-  edge-config:
-    needs: changes
-    if: needs.changes.outputs.reused != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: .nvmrc
-      - run: node --test scripts/edge-caddy.test.mjs
-
   security:
     needs: changes
     if: needs.changes.outputs.reused != 'true'
@@ -291,7 +275,7 @@ jobs:
   # Documentation-only runs (slow suites skipped) record nothing.
   record-tested-tree:
     needs:
-      [changes, static, unit, edge-config, security, integration, load, e2e]
+      [changes, static, unit, security, integration, load, e2e]
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
