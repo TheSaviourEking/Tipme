@@ -25,8 +25,8 @@ psql \
   --username "$POSTGRES_USER" \
   --dbname "$POSTGRES_DB" \
   <<SQL
-\\set runtime_password $POSTGRES_RUNTIME_PASSWORD
-\\set migrator_password $POSTGRES_MIGRATOR_PASSWORD
-\\set backup_password $POSTGRES_BACKUP_PASSWORD
+SELECT set_config('tipme.runtime_password', '$POSTGRES_RUNTIME_PASSWORD', false) \\g /dev/null
+SELECT set_config('tipme.migrator_password', '$POSTGRES_MIGRATOR_PASSWORD', false) \\g /dev/null
+SELECT set_config('tipme.backup_password', '$POSTGRES_BACKUP_PASSWORD', false) \\g /dev/null
 \\i /opt/tipme/roles.sql
 SQL

@@ -1,4 +1,5 @@
 import { parseConfig } from '@tipme/observability';
+import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { z } from 'zod';
 
@@ -230,6 +231,18 @@ export const apiConfigSchema = z
       });
     }
     checkMailSettings(config, context);
+    if (
+      config.NODE_ENV === 'production' &&
+      config.DEPLOYMENT_MODE !== 'preview'
+    ) {
+      const problem = productionDatabaseUrlProblem(config.DATABASE_URL);
+      if (problem)
+        context.addIssue({
+          code: 'custom',
+          path: ['DATABASE_URL'],
+          message: problem,
+        });
+    }
     if (
       config.PAYMENT_PROVIDER === 'mock' &&
       !config.MOCK_PROVIDER_WEBHOOK_SECRET
