@@ -149,7 +149,7 @@ Off-site copies are optional. If enabling rclone, create `/srv/tipme/offsite.env
 
 ```sh
 /srv/tipme/live/scripts/compose.sh run --rm -e TIPME_CONFIRM_DATABASE=tipme migrate \
-  node packages/database/dist/scripts/grant-owner.js --phone <a number you keep for this> --role release_check
+  node packages/database/dist/scripts/grant-owner.js --email <an address you keep for this> --role release_check
 ```
 
 Then, on your machine within 30 minutes:
@@ -157,12 +157,12 @@ Then, on your machine within 30 minutes:
 ```sh
 RELEASE_PREVIEW_PASSWORD=... RELEASE_CHECK_TOKEN=... node scripts/release-enrol.mjs \
   --web https://staging.<domain> --api https://api.staging.<domain> \
-  --phone <same number> --code <the enrolment code> --out ./release-totp.txt
+  --email <same address> --code <the enrolment code> --out ./release-totp.txt
 ```
 
 (The pretend inbox on staging needs the release token as well as the password. Testers open `/dev/inbox` and enter the same token as the "Inbox key".)
 
-Add the secret from `release-totp.txt` as `RELEASE_OPS_TOTP_SECRET` (then delete the file), and the number as `RELEASE_OPS_PHONE`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
+Add the secret from `release-totp.txt` as `RELEASE_OPS_TOTP_SECRET` (then delete the file), and the address as `RELEASE_OPS_EMAIL`, to the GitHub `staging` environment (and your password manager). From then on every deploy runs the **full** check. Grant yourself the Owner role the same way (without `--role`) to use `/ops`.
 
 ## 8. Prove it
 

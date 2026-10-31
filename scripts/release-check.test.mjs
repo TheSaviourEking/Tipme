@@ -52,7 +52,7 @@ const fullCheck = (api, env = {}) =>
       env: {
         PATH: process.env.PATH,
         RELEASE_CHECK_TOKEN: 't',
-        RELEASE_OPS_PHONE: '+2348000000000',
+        RELEASE_OPS_EMAIL: 'release@example.com',
         RELEASE_OPS_TOTP_SECRET: 's',
         ...env,
       },

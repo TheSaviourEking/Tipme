@@ -4,7 +4,7 @@
 // Read-only by default: safe on any copy, it creates nothing. `--full` plays the whole story
 // (tip → dashboard → withdrawal → admin issue) as a tagged rehearsal and cleans up after itself,
 // and only on a copy that declares RELEASE_KIND=test. Secrets come from the environment, never
-// the command line: RELEASE_PREVIEW_PASSWORD, RELEASE_CHECK_TOKEN, RELEASE_OPS_PHONE,
+// the command line: RELEASE_PREVIEW_PASSWORD, RELEASE_CHECK_TOKEN, RELEASE_OPS_EMAIL,
 // RELEASE_OPS_TOTP_SECRET. On the Bachs sandbox a new page cannot take tips until its owner
 // completes Bachs' own form, so tips go to a standing test page set up once by hand: @release_bachs,
 // or RELEASE_BACHS_HANDLE (docs/runbooks/staging-setup.md).
@@ -66,7 +66,7 @@ if (values.full && info.kind !== 'test')
 if (values.full)
   for (const name of [
     'RELEASE_CHECK_TOKEN',
-    'RELEASE_OPS_PHONE',
+    'RELEASE_OPS_EMAIL',
     'RELEASE_OPS_TOTP_SECRET',
   ])
     if (!process.env[name]) stop(`--full needs ${name} in the environment.`);
