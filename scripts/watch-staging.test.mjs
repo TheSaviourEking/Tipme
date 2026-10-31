@@ -63,10 +63,10 @@ test('each failure is named in plain words', () => {
     problems({
       backups: {
         ...healthy.backups,
-        wal: { ...healthy.backups.wal, lastArchivedAgeMinutes: 45 },
+        wal: { ...healthy.backups.wal, lastArchivedAgeMinutes: 60 },
       },
     })[0],
-    /15 minutes/,
+    /45 minutes/,
   );
   assert.match(
     problems({
@@ -131,5 +131,50 @@ test('backup retention: a broken recovery chain is named; the expected dry-run b
   assert.match(
     retention({ mode: 'apply', outcome: 'blocked', blocked: ['no-drill'] })[0],
     /recovery drill/,
+  );
+});
+
+test('staging archives WAL at least every 30 minutes: a 40-minute-old segment is fine, 50 is not', () => {
+  const wal = (lastArchivedAgeMinutes) =>
+    problems({
+      backups: {
+        ...healthy.backups,
+        wal: { ...healthy.backups.wal, lastArchivedAgeMinutes },
+      },
+    });
+  assert.deepEqual(wal(40), []);
+  assert.match(wal(50)[0], /45 minutes/);
+});
+
+test('with point-in-time recovery off on purpose, only the nightly dump is watched', () => {
+  const off = {
+    ...healthy.backups,
+    pointInTime: false,
+    base: null,
+    wal: {
+      archiving: false,
+      lastArchivedAgeMinutes: null,
+      lastFailedAgeMinutes: null,
+      failedCount: 0,
+    },
+    retention: null,
+  };
+  assert.deepEqual(problems({ backups: off }), []);
+  assert.match(
+    problems({ backups: { ...off, logical: { ageMinutes: 27 * 60 } } })[0],
+    /nightly backup/,
+  );
+});
+
+test('when point-in-time recovery is meant to be on, archiving off is still a problem', () => {
+  assert.match(
+    problems({
+      backups: {
+        ...healthy.backups,
+        pointInTime: true,
+        wal: { ...healthy.backups.wal, archiving: false },
+      },
+    })[0],
+    /archiving is off/,
   );
 });

@@ -10,6 +10,9 @@ if [ "${1:-}" = "once" ]; then backup; exit $?; fi
 while true; do
   # "Done today" comes from the database's backup record, not from files on disk.
   backup --if-missing-today || echo "backup failed; retrying in an hour"
-  base_backup --if-missing-today || echo "base backup failed; retrying in an hour"
+  # BASE_BACKUPS=off (staging since 31 Oct 2026): no point-in-time recovery, dumps only.
+  if [ "${BASE_BACKUPS:-on}" != off ]; then
+    base_backup --if-missing-today || echo "base backup failed; retrying in an hour"
+  fi
   sleep 3600
 done

@@ -1,3 +1,9 @@
+# Current task — handoff (31 October 2026)
+
+The agent that built the mail platform, the WAL retention coordinator and the live-pilot design handed over. The full state, the priorities and the commands are in `docs/agent/HANDOFF.md` → "Current handoff — mail platform, staging backups and the live pilot".
+
+Start with **2A**: confirm the retention coordinator runs on staging, propose the lighter staging backup settings the owner asked for, post the dry-run report, and switch to apply. Then **2B**: release-check enrolment, an owner action. Then **2C**: mail Tasks 25–26 and the ZeptoMail domain.
+
 # Current task — faster Bachs confirmation (28 October 2026)
 
 - Branch/worktree: `feat/confirm-on-return` / `.worktrees/confirm-on-return`, from `origin/dev`.
