@@ -35,6 +35,16 @@ test('backup health is public (for alerts), shows only times and counts, and wor
     `INSERT INTO backup_runs (id, kind, file, version, finished_at)
      VALUES (gen_random_uuid(), 'logical', 'tipme-20261021T010000Z-abc.dump.enc', 'abc', now() - interval '2 hours')`,
   );
+  // The newest retention run, blocked by a WAL gap and a stale drill: reasons name segments.
+  await database.pool.query(
+    `INSERT INTO backup_retention_runs (id, ran_at, mode, outcome, blocked, retained_backups,
+       boundary, archive_bytes, candidate_bytes, deleted_bytes, disk_free_bytes, disk_total_bytes)
+     VALUES (gen_random_uuid(), now() - interval '10 minutes', 'dry-run', 'planned', $1, 4,
+       '0000000100000005000000A1', 27000000000, 13000000000, 0, 11000000000, 48000000000)`,
+    [
+      'WAL gap: 0000000100000006000000AB is missing, so kept backups can’t be restored past it\nno passing recovery drill in the last 7 days',
+    ],
+  );
   const response = await fetch(`${stack.api}/health/backups`);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
@@ -47,6 +57,25 @@ test('backup health is public (for alerts), shows only times and counts, and wor
     JSON.stringify(body).includes('tipme-2026'),
     false,
     'no file names',
+  );
+  assert.equal(body.pointInTime, true, 'expected unless switched off');
+  assert.deepEqual(body.retention, {
+    lastRunAgeMinutes: body.retention.lastRunAgeMinutes,
+    mode: 'dry-run',
+    outcome: 'planned',
+    blocked: ['wal-gap', 'no-drill'],
+    archiveBytes: 27000000000,
+    candidateBytes: 13000000000,
+    diskFreePercent: 23,
+  });
+  assert.ok(
+    body.retention.lastRunAgeMinutes >= 9 &&
+      body.retention.lastRunAgeMinutes <= 11,
+  );
+  assert.equal(
+    JSON.stringify(body).includes('000000010000'),
+    false,
+    'no segment names',
   );
 });
 

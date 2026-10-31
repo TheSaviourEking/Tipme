@@ -1,0 +1,34 @@
+# The one edge Caddy for the server: owns 80/443 and routes to staging and production by host
+# name. A Compose project of its own (tipme-edge), so deploying or stopping either environment
+# never touches it, and it owns its certificates (volume tipme-edge_caddy_data).
+#
+#   docker compose -p tipme-edge -f /srv/tipme-edge/compose.edge.yml up -d
+#
+# Needs the networks first (deploy/edge/setup-networks.sh) and /srv/tipme-edge/edge.env with
+# ACME_EMAIL, STAGING_API_HOST and PRODUCTION_API_HOST (names only, see edge.env.example).
+name: tipme-edge
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports: ['80:80', '443:443', '443:443/udp']
+    env_file: /srv/tipme-edge/edge.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge-staging, edge-production]
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+networks:
+  # Created by setup-networks.sh, shared with the staging and production projects.
+  edge-staging: { external: true }
+  edge-production: { external: true }
+
+volumes:
+  caddy_data:
+  caddy_config:

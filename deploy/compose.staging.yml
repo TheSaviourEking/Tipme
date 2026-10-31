@@ -1,5 +1,7 @@
-# TipMe staging (PR-010): API, worker, Postgres, Redis and Caddy on one server.
-# The web app runs on Vercel. Only Caddy is published (80/443); everything else is internal.
+# TipMe staging (PR-010): API, worker, Postgres and Redis on one server.
+# The web app runs on Vercel. Nothing here is published: the one edge Caddy (deploy/edge, its own
+# Compose project) owns 80/443 and reaches the API as staging-api on the external network
+# edge-staging. Everything else is internal.
 #
 #   TIPME_VERSION=<git sha> docker compose -f deploy/compose.staging.yml --env-file /srv/tipme/staging.env up -d
 name: tipme-staging
@@ -13,21 +15,6 @@ x-app: &app
   networks: [internal]
 
 services:
-  caddy:
-    image: caddy:2.10.2-alpine
-    restart: unless-stopped
-    ports: ['80:80', '443:443', '443:443/udp']
-    environment:
-      API_HOST: ${API_HOST:?set API_HOST, e.g. api.staging.example.com}
-      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for certificate notices}
-    volumes:
-      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks: [edge, internal]
-    depends_on: [api]
-    mem_limit: 128m
-
   api:
     <<: *app
     command:
@@ -39,6 +26,7 @@ services:
       ]
     environment:
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-production}
+      SHUTDOWN_DRAIN_MS: ${SHUTDOWN_DRAIN_MS:-5000}
       PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:-}
       NODE_ENV: ${NODE_ENV:-production}
       HOST: ${HOST:-0.0.0.0}
@@ -54,6 +42,13 @@ services:
       API_METRICS_PORT: ${API_METRICS_PORT:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-false}
+      # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      # Off on staging: /health/backups tells the watcher not to expect base backups or WAL.
+      POINT_IN_TIME_RECOVERY: ${POINT_IN_TIME_RECOVERY:-off}
       QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
@@ -73,6 +68,8 @@ services:
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       RATE_LIMIT_AUTH_PER_HOUR: ${RATE_LIMIT_AUTH_PER_HOUR:-10}
       RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: ${RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR:-3}
+      # The release check's staff address: lifted code limit on this test copy (as .example).
+      MAIL_PRETEND_DOMAINS: ${MAIL_PRETEND_DOMAINS:-release-check.usetipme.xyz}
       AUTH_CODE_SECRET: ${AUTH_CODE_SECRET:?}
       MAIL_DEFAULT_PROVIDER: ${MAIL_DEFAULT_PROVIDER:-mock}
       ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
@@ -108,14 +105,19 @@ services:
       timeout: 5s
       retries: 12
     mem_limit: 768m
-    # Needs the internet only to tell the web app (Vercel) that a public page changed.
-    networks: [edge, internal]
+    # Needs the internet only to tell the web app (Vercel) that a public page changed: that route is
+    # `egress`, so it does not depend on the edge's network. edge-staging is only how the edge
+    # reaches this API.
+    networks:
+      edge-staging: { aliases: [staging-api] }
+      egress:
+      internal:
 
   worker:
     <<: *app
     # The worker asks the payment provider (Bachs) whether tips were paid, so it needs a route
     # out; it still publishes nothing and is reachable only from the internal network.
-    networks: [edge, internal]
+    networks: [egress, internal]
     command:
       [
         'node',
@@ -151,9 +153,12 @@ services:
       SES_CONFIGURATION_SET_UNTRACKED: ${SES_CONFIGURATION_SET_UNTRACKED:-}
       SES_SNS_TOPIC_ARN: ${SES_SNS_TOPIC_ARN:-}
       MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-staging-mail.usetipme.xyz}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-TipMe Staging}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-support@usetipme.xyz}
       API_ORIGIN: https://${API_HOST:?set API_HOST}
+      # The release check's staff address: its mail goes to the pretend inbox, like .example.
+      MAIL_PRETEND_DOMAINS: ${MAIL_PRETEND_DOMAINS:-release-check.usetipme.xyz}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
@@ -196,6 +201,8 @@ services:
       BACKUP_KEY: ${BACKUP_KEY:?}
       GIT_SHA: ${TIPME_VERSION}
       BACKUP_RETAIN: ${BACKUP_RETAIN:-14}
+      # Staging keeps no base backups (point-in-time recovery is off): the nightly dump is enough.
+      BASE_BACKUPS: ${BASE_BACKUPS:-off}
       BASE_BACKUP_RETAIN: ${BASE_BACKUP_RETAIN:-7}
     read_only: false
     mem_limit: 384m
@@ -231,7 +238,7 @@ services:
       - '${TIPME_BACKUP_DIR:-/srv/tipme/backups}:/backups:ro'
       - walarchive:/wal:ro
       - ./scripts/offsite-loop.sh:/offsite-loop.sh:ro
-    networks: [edge]
+    networks: [egress]
     mem_limit: 128m
 
   postgres:
@@ -244,8 +251,9 @@ services:
       POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?}
       POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?}
       POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:?}
-    # Point-in-time recovery (PR-011): every finished WAL segment is archived to /wal, at least
-    # every 5 minutes while anything changes, so at most about 5 minutes of data can be lost.
+    # Point-in-time recovery is off on staging (owner, 31 Oct 2026): it's a test copy, and the
+    # WAL archive was most of the server's disk. The nightly dump is the backup. PG_ARCHIVE_MODE=on
+    # brings archiving back (with base backups and the retention service).
     entrypoint:
       - sh
       - -c
@@ -258,9 +266,9 @@ services:
       - -c
       - wal_level=replica
       - -c
-      - archive_mode=on
+      - archive_mode=${PG_ARCHIVE_MODE:-off}
       - -c
-      - archive_timeout=300
+      - archive_timeout=${PG_ARCHIVE_TIMEOUT:-1800}
       - -c
       - archive_command=/bin/sh /etc/postgresql/archive-wal.sh %p %f
     volumes:
@@ -301,7 +309,10 @@ services:
     mem_limit: 256m
 
 networks:
-  edge: {}
+  # The edge Caddy's network, created once by deploy/edge/setup-networks.sh (deploy.sh checks it).
+  edge-staging: { external: true }
+  # Internet route for the worker and the off-server copy, without joining the edge's network.
+  egress: {}
   # No internet route at all: Postgres, Redis and the worker are reachable only from here.
   internal: { internal: true }
 
@@ -309,5 +320,3 @@ volumes:
   pgdata:
   walarchive:
   redisdata:
-  caddy_data:
-  caddy_config:

@@ -28,6 +28,7 @@ import {
   lagosDaysBefore,
   purgeAnalytics,
   purgeProfileReports,
+  sweepRehearsals,
   rollupAnalytics,
 } from '@tipme/database';
 import {
@@ -52,6 +53,9 @@ const RECONCILE_JOB = 'reconcile.payments';
 const WEEKLY_REPORTS_JOB = 'reports.weekly';
 const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
+const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
+/** A release check takes minutes: anything still tagged after this was left behind. */
+const REHEARSAL_GRACE_MS = 2 * 3_600_000;
 const ANALYTICS_RETENTION_MS = 90 * 86_400_000;
 
 /** The calendar month (Lagos) before `now`, as YYYY-MM. */
@@ -175,6 +179,16 @@ export async function startJobWorker(
     repeat: { pattern: '0 1 * * *', tz: 'Africa/Lagos' },
     logger,
   });
+  // Test copies only (RELEASE_KIND=test): every hour, erase what crashed release checks left.
+  const rehearsalSchedule =
+    config.RELEASE_KIND === 'test'
+      ? ensureSchedule({
+          queue,
+          id: REHEARSAL_SWEEP_JOB,
+          every: 3_600_000,
+          logger,
+        })
+      : null;
   queue.on('error', () => undefined);
 
   const meter = getMeter(SERVICE_NAME);
@@ -310,6 +324,17 @@ export async function startJobWorker(
             processed.add(1, { outcome: 'celebrated' });
             return 'celebrated';
           }
+          if (job.name === REHEARSAL_SWEEP_JOB) {
+            // Never on a live copy, even if the job was queued before RELEASE_KIND changed.
+            if (config.RELEASE_KIND !== 'test') return 'skipped';
+            const result = await sweepRehearsals(database.db, {
+              sealing,
+              olderThanMs: REHEARSAL_GRACE_MS,
+            });
+            logger.info({ event: 'rehearsals.swept', ...result });
+            processed.add(1, { outcome: 'swept' });
+            return 'swept';
+          }
           if (job.name === ANALYTICS_DAILY_JOB) {
             const now = new Date();
             for (const date of lagosDaysBefore(now, 3))
@@ -434,10 +459,17 @@ export async function startJobWorker(
           });
         return override;
       },
-      sender: { domain: config.MAIL_FROM_DOMAIN, name: config.MAIL_FROM_NAME },
+      sender: {
+        domain: config.MAIL_FROM_DOMAIN,
+        name: config.MAIL_FROM_NAME,
+        ...(config.MAIL_FROM_ADDRESS
+          ? { address: config.MAIL_FROM_ADDRESS }
+          : {}),
+      },
       ...(config.MAIL_REPLY_TO ? { replyTo: config.MAIL_REPLY_TO } : {}),
       webOrigin: config.WEB_ORIGIN,
       apiOrigin: config.API_ORIGIN,
+      pretendDomains: config.MAIL_PRETEND_DOMAINS,
     },
     logger,
   });
@@ -448,6 +480,7 @@ export async function startJobWorker(
       await weeklySchedule.stop();
       await monthlySchedule.stop();
       await analyticsSchedule.stop();
+      await rehearsalSchedule?.stop();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

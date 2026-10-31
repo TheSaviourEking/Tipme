@@ -15,6 +15,7 @@ import type {
 } from '@tipme/contracts';
 import {
   backupStatus,
+  retentionBlockCode,
   finishReleaseRun,
   openReleaseRun,
   type BackupStatus,
@@ -76,6 +77,7 @@ export class ReleaseInfoController {
       iso ? Math.round((now - Date.parse(iso)) / 60_000) : null;
     return {
       data: {
+        pointInTime: this.config.POINT_IN_TIME_RECOVERY,
         logical: status.logical
           ? { ageMinutes: age(status.logical.at)! }
           : null,
@@ -86,6 +88,19 @@ export class ReleaseInfoController {
           lastFailedAgeMinutes: age(status.wal.lastFailedAt),
           failedCount: status.wal.failedCount,
         },
+        retention: status.retention
+          ? {
+              lastRunAgeMinutes: age(status.retention.at)!,
+              mode: status.retention.mode,
+              outcome: status.retention.outcome,
+              blocked: [
+                ...new Set(status.retention.blocked.map(retentionBlockCode)),
+              ],
+              archiveBytes: status.retention.archiveBytes,
+              candidateBytes: status.retention.candidateBytes,
+              diskFreePercent: status.retention.diskFreePercent,
+            }
+          : null,
       },
     };
   }

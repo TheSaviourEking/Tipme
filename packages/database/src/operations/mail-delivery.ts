@@ -17,6 +17,7 @@ import {
   mailPreferences,
   mailSuppressions,
   profiles,
+  users,
 } from '../schema.js';
 import {
   addressHmac,
@@ -150,6 +151,14 @@ export async function mailGate(
   )
     return 'suppressed';
   if (!mail.userId) return 'send';
+  // A deleted account gets security mail only: its goodbye is the last email it gets.
+  if (mail.category !== 'security') {
+    const [account] = await db
+      .select({ deletedAt: users.deletedAt })
+      .from(users)
+      .where(eq(users.id, mail.userId));
+    if (account?.deletedAt) return 'skipped_preference';
+  }
   const type = MAIL_TYPES[mail.type];
   if (type?.preference) {
     const column = {
@@ -353,9 +362,11 @@ export interface MailDeliveryDeps {
   activeProvider(): Promise<MailProviderName>;
   overrideFor(userId: string): Promise<MailProviderName | null>;
   /** The mail domain and brand name; each type's sender is an address on it. */
-  sender: { domain: string; name: string };
+  sender: { domain: string; name: string; address?: string | undefined };
   replyTo?: string;
   webOrigin: string;
+  /** A copy's own never-deliverable domains: their mail goes to the pretend inbox, if it has one. */
+  pretendDomains?: readonly string[];
   /** Where one-click unsubscribe is answered (the API). */
   apiOrigin: string;
   /** Structured log of each outcome: ids, type, provider and codes only. */
@@ -418,6 +429,8 @@ export async function deliverDueMail(
       override: mail.userId ? await deps.overrideFor(mail.userId) : null,
       active,
       configured,
+      to: mail.to,
+      pretendDomains: deps.pretendDomains ?? [],
     });
     const provider = deps.providers.get(providerName);
     const fail = async (code: string, permanent: boolean) => {

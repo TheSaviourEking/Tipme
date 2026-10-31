@@ -458,3 +458,38 @@ test('one unreadable mail fails on its own and does not hold back the rest', asy
   assert.equal((await status(code.id)).status, 'sent');
   assert.equal(sent.length, 1);
 });
+
+test('mail to an address that can never receive it goes to the pretend inbox, not the active provider', async (t) => {
+  const { db } = await fresh(t);
+  const real = scripted([]);
+  const pretend = scripted([]);
+  const both = {
+    ...deps(db, real.provider),
+    providers: new Map([
+      ['zeptomail', real.provider],
+      ['mock', pretend.provider],
+    ]),
+    activeProvider: async () => 'zeptomail',
+    pretendDomains: ['release-check.usetipme.xyz'],
+  };
+  for (const [to, key] of [
+    ['r@rc-1a2b.example', 'a'],
+    ['release@release-check.usetipme.xyz', 'b'],
+    ['tobi@realmail.com', 'c'],
+  ])
+    await enqueueMail(db, sealing, {
+      type: 'tip_received',
+      to,
+      data: tip,
+      dedupeKey: `tip_received.pretend.${key}`,
+    });
+  await deliverDueMail(both, { now: new Date() });
+  assert.deepEqual(pretend.sent.map((m) => m.to).sort(), [
+    'r@rc-1a2b.example',
+    'release@release-check.usetipme.xyz',
+  ]);
+  assert.deepEqual(
+    real.sent.map((m) => m.to),
+    ['tobi@realmail.com'],
+  );
+});

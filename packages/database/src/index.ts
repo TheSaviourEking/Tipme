@@ -1,4 +1,6 @@
 export * from './client.js';
+export * from './photo-store.js';
+export * from './connection.js';
 export * from './local-only.js';
 export * from './migrations.js';
 export * from './seed.js';
@@ -55,3 +57,4 @@ export * from './operations/avatars.js';
 export * from './operations/ops-search.js';
 export * from './operations/fees.js';
 export * from './operations/export.js';
+export * from './operations/rehearsal-sweep.js';

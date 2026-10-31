@@ -1,3 +1,247 @@
+# Current handoff — production infrastructure (31 October 2026)
+
+Branch `feat/production-infra` (worktree `.worktrees/production-infra`), from `8b2db32`, not pushed. Plan: `docs/superpowers/plans/2026-10-31-production-infrastructure.md`; spec: `docs/superpowers/specs/2026-10-31-production-launch-design.md`.
+
+- **Built (Tasks 1–8, reviewed):** production config refusals; the API drain on SIGTERM; one edge Caddy (`deploy/edge`) for both environments; `deploy/compose.production.yml` on Aiven (blue/green ×3, two workers, Redis); `deploy-production.sh` / `rollback-production.sh`; staging's full pass recorded by file tree and the production gate; the hand-run `deploy-production` workflow (ships the edge first); `watch-production` every 5 minutes.
+- **Task 9:** `docs/runbooks/production.md` (server, GitHub settings, edge, Aiven, restore drill, uptime ping, deploy/rollback/override, launch day) and `scripts/rehearse-production.sh` with `deploy/local/compose.production-rehearsal.yml` and `tests/load/no-downtime.k6.js`.
+- **No-downtime rehearsal: passed** (runbook §8, run 3): 0 of 1,800 served reads failed across a deploy and a rollback under 30 reads/s; readiness answered `503 draining` 9 times, by design. One copy per colour locally (six crashed the laptop's Docker VM). **Not done:** the run on `8b2db32` showing drops without the drain (needs two more image builds).
+- **Production-mode boot is not proven anywhere:** production refuses every payment provider until the payments plan adds `bachs-live`. The rehearsal runs in password-protected preview; launch day step 2 is the first production-mode boot.
+- **Owner actions:** runbook §1–§6 (`tipme-prod` user and key, the `production` environment and its settings, the edge move and `/srv/tipme-edge` ownership, Aiven and Q8, the restore drill, the uptime ping), DNS for `api.usetipme.xyz`, one `_dmarc` record.
+- **Next:** the live-payments plan (`docs/superpowers/plans/2026-10-31-live-payments.md`). Its Task 1 must turn the two "production base reports only PAYMENT_PROVIDER" config tests (API and worker) into clean loads.
+
+# Current handoff — mail platform, staging backups and the live pilot (31 October 2026)
+
+Read this first. It is written for an agent taking over with no memory of the previous session. Its state was checked at about 05:00 UTC on 31 October 2026.
+
+## Ground rules that still apply
+
+- Read `AGENTS.md`, the nearest scoped `AGENTS.md`, `docs/00-DECISIONS.md` and `docs/09-AGENT-PROMPT-PLAYBOOK.md`. Real money stays gated (`PAYMENTS_LIVE_ENABLED=false`) until the owner explicitly activates the live pilot (see §4).
+- **Merging is the owner's.** Open PRs into `dev`. The owner merges them (`pnpm pr:merge <n>`, or GitHub). The agent's merge attempts were blocked as "merge without review".
+- **Never print secrets.** Check settings by name only (`grep -c '^NAME=.\+'`). Values the owner pastes into chat must not be repeated.
+- **Report command evidence:** the command and its pass/fail counts. Say plainly when a test wasn't watched failing first, or wasn't run.
+- **Workflow files live on two branches.** Automatic staging deploys run `.github/workflows/deploy-staging.yml` **from `main`** (a `workflow_run` trigger) while checking out `dev`. A workflow change must land on both branches, or `dev` merged into `main`. This caused #54 and #56/#57.
+
+## 1. Where things stand
+
+**Merged into `dev`, all CI-green:**
+
+- #45–#52: the mail platform, Tasks 1–24. #51 landed #46–#50, which had been merged into stacked branches by mistake.
+- #53: the release check signs in by email.
+- #57: the deploy workflow permission.
+- #58: optional single sender address.
+- #59: the #52 review fixes.
+- #60: the WAL retention coordinator.
+
+**On `main`:** `dev` merged as #55, plus #54 (workflow email setting and `.gitleaksignore`) and #56 (permission fix).
+
+**No PRs are open.** This handoff's PR is the only new one.
+
+**Staging** (`https://staging.usetipme.xyz`, API `https://api.staging.usetipme.xyz`):
+
+- Running `90826c1` (#59). The deploy of #60 (`de92259`) started at 05:00 UTC; check `GET /health/release`.
+- Payments: Bachs **sandbox**.
+- **Mail:**
+  - ZeptoMail's three settings are set in `/srv/tipme/staging.env`.
+  - Sending is temporarily from `MAIL_FROM_ADDRESS=staging@usetipme.xyz`, because `staging-mail.usetipme.xyz` isn't verified in ZeptoMail yet. `MAIL_FROM_DOMAIN=usetipme.xyz`.
+  - The owner reports email works. Confirm ZeptoMail is the **active** provider in Ops → Providers; the worker logs show `mock` or `zeptomail` per send.
+- **Disk:** 38 GB of 48 GB used (79%). The WAL archive is about 27 GB (§2).
+- **Production:** not built yet.
+  - Its database will be on **Aiven** (managed; Aiven does its backups and point-in-time recovery).
+  - Its API, worker, Redis and Caddy will run **on the same server as staging**, as a separate Compose project.
+  - `usetipme.xyz` currently serves the web app from Vercel. `api.usetipme.xyz` doesn't exist.
+
+**Server access:**
+
+- `ssh tipme` (user `deploy`).
+- `/srv/tipme/live/scripts/compose.sh <compose args>` runs Compose for the running version.
+- Env file: `/srv/tipme/staging.env`, mode 600. Several backups of it sit beside it: `staging.env.bak-*`.
+- The agent's edits to that file were sometimes blocked by the permission system. When that happens, give the owner the exact line instead.
+
+## 2. Next, in priority order
+
+### A. Staging backups: make them light, then let retention prune
+
+**Owner direction (31 Oct):** "Staging should not be that serious with data/db management."
+
+**Why it matters:**
+
+- The WAL archive is 27 GB. `archive_timeout=300` writes a 16 MB segment every 5 minutes, idle or not (about 4.6 GB a day).
+- Old pruning counted `.backup` markers, and an orphan marker kept WAL back to 25 October.
+- Production will share this disk.
+
+**What #60 built:**
+
+- A `retention` service (`deploy/retention-loop.sh` runs `packages/database/src/scripts/backup-retention.ts`), dry run by default.
+- `archive-wal.sh` now only copies. The old marker rule survives as `WAL_LEGACY_PRUNE=on`, which stops the disk filling during the dry run.
+- Base backups are labelled with their own file name.
+- Runs are recorded in `backup_retention_runs`, and drills in `recovery_drills`.
+- `/health/backups` gained `retention`, and the watcher alerts on it.
+- The runbook (`docs/runbooks/backup-and-restore.md` → "Backup retention") has the switch-to-apply checklist and the undo.
+
+**To do:**
+
+1. **Confirm #60 is deployed and the coordinator runs.**
+   - `compose.sh logs --no-log-prefix --tail 400 retention`, or one run now: `compose.sh run --rm retention node packages/database/dist/scripts/backup-retention.js`.
+   - `/health/backups` should show `retention` with `mode: dry-run`.
+   - The retention container runs as root with only `DAC_OVERRIDE`, because the WAL files are `postgres`-owned with mode 600. If it can't read or delete them, look there first.
+2. **Lighten staging,** per the owner's direction. Propose these to the owner as one small PR; the compose defaults are in `deploy/compose.staging.yml`:
+   - `archive_timeout` from 300 to 1800, or turn off WAL archiving and base backups on staging altogether and keep only the nightly logical dumps. Either cuts WAL by 6× or more.
+   - `RETENTION_KEEP_DAYS=1`, `RETENTION_MIN_KEEP=1`, `RETENTION_DRILL_MAX_AGE_DAYS=30`.
+   - Optionally, compressed archived WAL. That changes the archive format and needs the restore command to decompress.
+3. **Post the dry-run report the owner asked for:**
+   - the inventory;
+   - the verified recovery boundary;
+   - the candidates, with sizes and reasons;
+   - the space it would free;
+   - the rollback plan;
+   - the conditions for apply.
+
+   Expect the orphan marker `000000010000000000000006.00000028.backup` (25 Oct 00:47; its file `tipme-base-20261025T004754Z-…` was pruned) to appear as a candidate.
+
+4. **Switch to apply, following the runbook:**
+   1. Run `/srv/tipme/live/scripts/pitr-drill.sh`. It records a pass.
+   2. Set `RETENTION_MODE=apply`, `WAL_LEGACY_PRUNE=off` and `BASE_BACKUP_RETAIN=0`.
+   3. Redeploy.
+   4. Watch the next run.
+
+   Never delete WAL by hand, never touch `pg_wal`, and never delete the `pgdata` volume.
+
+### B. Release check: enrol the staff account by email (owner action, half done)
+
+- `RELEASE_OPS_EMAIL=release@release-check.usetipme.xyz` is set as a GitHub `staging` secret. `RELEASE_OPS_TOTP_SECRET` still belongs to the old phone account. Until it's replaced, every deploy's full release check fails at staff sign-in (the deploy itself still ships).
+- **Steps on the server.** No Node on the host: everything runs in the app image.
+
+```sh
+# 1. Grant the role; it prints a 10-character code, valid 30 minutes.
+/srv/tipme/live/scripts/compose.sh run --rm -e TIPME_CONFIRM_DATABASE=tipme migrate \
+  node packages/database/dist/scripts/grant-owner.js --email release@release-check.usetipme.xyz --role release_check
+# 2. Get the email version of the enrol script onto the server. It isn't in the image; it is in dev since #53.
+#    From a checkout: git show origin/dev:scripts/release-enrol.mjs | ssh tipme 'cat > /tmp/release-enrol.mjs'
+# 3. Enrol through the internal network (the container can't reach the public address).
+export RELEASE_PREVIEW_PASSWORD="$(grep '^PREVIEW_PASSWORD=' /srv/tipme/staging.env | cut -d= -f2-)"
+export RELEASE_CHECK_TOKEN="$(grep '^RELEASE_CHECK_TOKEN=' /srv/tipme/staging.env | cut -d= -f2-)"
+/srv/tipme/live/scripts/compose.sh run --rm --no-deps \
+  -v /tmp/release-enrol.mjs:/repo/scripts/release-enrol.mjs:ro \
+  -e RELEASE_PREVIEW_PASSWORD -e RELEASE_CHECK_TOKEN \
+  migrate node scripts/release-enrol.mjs \
+    --web https://staging.usetipme.xyz --api http://api:4000 \
+    --email release@release-check.usetipme.xyz --code <CODE FROM STEP 1>
+# 4. Put the printed secret in the GitHub staging secret RELEASE_OPS_TOTP_SECRET.
+#    Delete RELEASE_OPS_PHONE. Then: rm /tmp/release-enrol.mjs; unset both variables.
+```
+
+- The owner's last attempts got as far as signing in. They failed only because they passed the example code `ABCDE23456` instead of running step 1.
+
+### C. Mail: finish setup and the last two plan tasks
+
+1. **ZeptoMail domain.**
+   - Verify `staging-mail.usetipme.xyz` in the ZeptoMail agent: a DKIM TXT record and a bounce CNAME, set in Cloudflare by the owner, DNS only.
+   - Then empty `MAIL_FROM_ADDRESS` and set `MAIL_FROM_DOMAIN=staging-mail.usetipme.xyz`. Each kind of email then has its own sender: `security@`, `notifications@`, `payments@`, `reports@`, `hello@`, `legal@`, `system@`.
+   - ZeptoMail error **SM_111** means the sender's domain isn't verified in that agent.
+2. **ZeptoMail webhook.**
+   - URL: `https://api.staging.usetipme.xyz/v1/webhooks/mail/zeptomail`. It returns 401 unsigned, which is correct.
+   - The event JSON shape was **inferred from ZeptoMail's docs**, with no real sample (ledger: Task 6 ruling). After real sends, check Ops → Email shows delivered, bounced and opened. If not, capture a real event and fix the parser in `packages/mail/src/zeptomail/webhook.ts`.
+3. **DMARC.** `_dmarc.usetipme.xyz` still has **two** TXT records, which is invalid. The owner was given one merged record to keep: `v=DMARC1; p=none; rua=mailto:4bd6543375d141cb9886044475c5bb66@dmarc-reports.cloudflare.net,mailto:dmarc@usetipme.xyz; fo=1`.
+4. **Task 25** of `docs/superpowers/plans/2026-10-30-mail-platform.md`: the onboarding series (days 1, 3 and 7), the payment-setup reminder, and policy notices with an ops broadcast.
+   - The brief is in the plan.
+   - The "guides and suggestions" switch (Task 24) controls nothing until Task 25 ships.
+   - New email types must name a `sender`, which the registry test enforces.
+5. **Task 26:** ADR-0017, `docs/runbooks/mail.md`, the D-11 note, the ADR-0003 addendum, the privacy and processor docs, the register entry for `@aws-sdk/client-sesv2`, and a **TODO for phone codes** (the owner's request).
+6. **Final steps for the plan:**
+   1. a whole-branch review by a fresh reviewer;
+   2. a final message listing every ruling and deferred minor (both in `docs/superpowers/plans/2026-10-30-mail-platform-ledger.md`);
+   3. then finishing-a-development-branch.
+
+   The working ledger is `.superpowers/sdd/2026-10-30-mail-platform/progress.md` in the `.worktrees/mail-platform` worktree; that worktree is detached at `ce48cb7`.
+
+7. **Owner decisions still open from the mail work:**
+   - Per-address code limits let anyone delay someone's sign-in code for up to an hour. Accept it, or rate-limit per IP?
+   - Whether changing the sign-in email should also need a code sent to the old address.
+   - Confirm the "like-for-like" period comparisons in the email console.
+   - Phone sign-in and link routes stay open only while the active mail provider is mock. Make sure that is so in production.
+
+### D. Live pilot (real tips and payouts through Bachs live)
+
+- The design is `docs/superpowers/specs/2026-10-31-live-pilot-design.md`. **It isn't approved yet.**
+- **Answered by the owner:**
+  - Bachs live Connect is active.
+  - Anyone can sign up (no invitations); a pilot notice replaces terms.
+  - Withdrawals happen only in TipMe's own screens, whenever the recipient likes.
+  - TipMe pays all fees.
+  - Reserve alert below ₦1,000.
+  - Production database on Aiven, on the same server.
+- **Still open:**
+  - Q2 (ask Bachs): can a connected account's payout fee be billed to the platform? If not, how does TipMe make the recipient whole? The docs say the fee is charged on top, from the paying account; no platform option is documented.
+  - Q3 (ask Bachs): can recipients move money themselves, or is there an automatic payout schedule?
+  - Q4: is written confirmation from Bachs required?
+  - Q5: may the owner alone settle money issues, with an audit trail?
+  - Q6: will the owner pre-fund the reserve?
+- **Next:** get answers, have the owner approve the design, then `superpowers:writing-plans`.
+- Relevant Bachs documentation:
+  - Payouts (`POST /v1/payouts` with `X-Account-Id`, fee on top, `payout.paid` / `payout.failed`)
+  - Going live (`https://api.bachs.io`, `sk_live_`, a new webhook endpoint and secret, accounts recreated in live, capabilities start `restricted`)
+  - Balances (`GET /v1/balances`)
+  - Requirements (NIN or ID document; a `bank_account` destination)
+
+### E. Approved designs with no plan yet
+
+- `docs/superpowers/specs/2026-10-30-payment-provider-switching-design.md`: a switch moves everyone, per-account overrides, and a staged "switching in progress".
+- `docs/superpowers/specs/2026-10-30-ops-account-overview-design.md`: growth figures for staff and recipients, username change count, each user's emails on their admin page.
+
+### F. Smaller items
+
+- **The `trace-flow` integration test fails locally** with "no Redis spans", **on plain `dev` too**. It probably comes from the local test Redis (`redis:7-alpine`, recreated 31 Oct). Check CI before assuming a code bug.
+- **Rotate secrets the owner pasted into chat:**
+  - the staging preview password and the release check token, in `staging.env` and the GitHub secrets together;
+  - and the ZeptoMail values, if they were pasted.
+- **Owner actions left from earlier:**
+  - reply to AWS SES case 179320356100126 (production access was **denied**; SES stays in sandbox);
+  - create an IAM send-only key if SES is wanted;
+  - set an off-site backup bucket (`BACKUP_RCLONE_REMOTE`; none is configured);
+  - set Vercel production environment variables when production exists;
+  - rotate the Bachs webhook secret.
+- **Old worktrees** under `.worktrees/`, about 20 of them, belong to finished work. Don't delete any without the owner's say; some may hold unpushed work.
+
+## 3. Local testing on this Mac
+
+- **Unit tests:** `pnpm -s --filter <pkg> test`; root scripts with `node --test scripts/<file>.test.mjs`. **Build first:** tests import `dist/`, so run `pnpm -s turbo run build`, and rebuild after switching branches.
+- **Integration tests** need a throwaway Postgres and Redis. The agent used containers `tipme-mailtest-pg` (`postgres:16-alpine`, user, password and database `tipme_local` / `tipme_local_password` / `tipme_local`, port 127.0.0.1:5434) and `tipme-mailtest-redis` (`redis:7-alpine`, port 6380). Recreate them if they're gone (`docker run -d --rm …`). Never touch `tipme-postgres-1` or `tipme-redis-1`, which are the owner's local stack, or the `tipme-staging-*` containers.
+
+```sh
+B=$(grep -o "postgres://tipme_local:[^']*" packages/database/src/test-support.ts | head -1)
+DATABASE_URL="${B/127.0.0.1:5432/127.0.0.1:5434}" REDIS_URL=redis://127.0.0.1:6380 TEST_CONCURRENCY=4 \
+  node scripts/test-integration.mjs                       # the whole suite
+DATABASE_URL="${B/127.0.0.1:5432/127.0.0.1:5434}" REDIS_URL=redis://127.0.0.1:6380 \
+  node --test --test-concurrency=1 <files>                 # one or a few files
+```
+
+- **12 backup tests always fail on macOS** (Docker can't reach 127.0.0.1 there). They pass on CI.
+- Under load, a handful of API tests are flaky (unsubscribe, readiness, handle rename). Run them alone before concluding anything.
+- **e2e can't run locally:** port 4100 is held by another session's stack. CI is the evidence. Say so in the PR.
+- **Before pushing:**
+  - the pre-push hook runs the checks;
+  - `pnpm -s api:openapi` must leave no diff;
+  - `pnpm -s docs:generate` regenerates the docs the route-review test compares;
+  - `scripts/deploy-scripts.test.mjs` requires every setting a service reads to be passed in `deploy/compose.staging.yml`.
+
+## 4. What production needs before the pilot (summary of the 31 Oct checklist)
+
+- **Code:**
+  - a Bachs live adapter (`bachs-live`, live base URL and key, live webhook secret);
+  - payouts through the provider;
+  - the "Get paid" bank setup;
+  - the pilot notice;
+  - a reserve balance alert.
+- **Infrastructure:**
+  - `deploy/compose.production.yml` (Aiven connection URL; its own Redis, Caddy and network on the same host);
+  - a manual `deploy-production` workflow from `main`;
+  - Sentry for production;
+  - `ALERT_WEBHOOK_URL` alerts (it is unset on staging);
+  - the ZeptoMail production agent with `mail.usetipme.xyz` verified;
+  - Vercel production environment variables;
+  - fresh secrets.
+- **The activation switch:** production starts with `PAYMENTS_LIVE_ENABLED=false`. The owner switches it on only after the conditions in the design's §6.8.
+
 # Current handoff — PR #24 payer-total E2E correction (27 October 2026)
 
 - Branch/worktree: `feat/provider-integrations-bachs` at

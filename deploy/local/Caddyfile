@@ -10,7 +10,7 @@
 
 api.staging.localhost {
 	encode zstd gzip
-	reverse_proxy api:4000
+	reverse_proxy staging-api:4000
 }
 
 staging.localhost {

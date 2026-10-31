@@ -278,3 +278,24 @@ test('tip_reversed is queued once per provider event', async (t) => {
   await event('payment.reversed.b');
   assert.equal((await sent('tip_reversed')).length, 2);
 });
+
+test('fix: restoring a page that was never paused sends nothing', async (t) => {
+  const { db, sent } = await fresh(t);
+  const act = (suspend) =>
+    setPageSuspension(db, {
+      profileId: ADA,
+      staffUserId: STAFF,
+      suspend,
+      reason: 'checking the button',
+      sealing,
+    });
+  await act(false);
+  assert.equal((await sent('page_restored')).length, 0);
+  await act(true);
+  await act(true);
+  assert.equal(
+    (await sent('page_paused')).length,
+    1,
+    'a repeat changes nothing',
+  );
+});

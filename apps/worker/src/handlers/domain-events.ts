@@ -20,6 +20,7 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'payment.unresolved',
   'payment.conflict',
   'payment.mismatch',
+  'payment.reversed',
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;
@@ -46,8 +47,6 @@ export async function handleDomainEvent(
   },
 ): Promise<'logged' | 'notified' | 'duplicate' | 'skipped' | 'issue_opened'> {
   deps.logger.info({ event: 'domain_event.received', name });
-  // Before the issue below, whose repeat is a no-op: a failed send retries the whole event.
-  await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
   // Alerts that need a person become issues in the admin inbox, once per alert (PR-009).
   if (ISSUE_EVENT_NAMES.has(name) && deps.dedupeKey) {
     const outcome = await openIssueFromEvent(deps.db, {
@@ -55,8 +54,12 @@ export async function handleDomainEvent(
       dedupeKey: deps.dedupeKey,
       payload: data,
     });
+    // After the issue, so staff always see it; a failed email retries the event, and both
+    // steps are no-ops the second time.
+    await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
     return outcome === 'opened' ? 'issue_opened' : 'duplicate';
   }
+  await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
   if (name === 'tip.failed' && deps.analyticsEnabled) {
     const { tipId, profileId } = (data ?? {}) as Record<string, unknown>;
     if (typeof tipId === 'string' && UUID.test(tipId))

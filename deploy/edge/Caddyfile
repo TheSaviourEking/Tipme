@@ -1,0 +1,53 @@
+# The only public entry on the server: HTTPS for the staging and production API hosts,
+# certificates automatic. Hosts and the certificate contact come from /srv/tipme-edge/edge.env.
+# Each project's API answers on its own network (edge-staging, edge-production) under a fixed
+# name, so a project can be redeployed or rolled back without touching this file.
+{
+	email {$ACME_EMAIL}
+	# The stopped production colour's three names fail an active health check every 2 s, for
+	# as long as it stays stopped; keep that out of the log (the access and error lines stay).
+	log default {
+		exclude http.handlers.reverse_proxy.health_checker.active
+	}
+}
+
+{$STAGING_API_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	reverse_proxy staging-api:4000 {
+		health_uri /health/live
+	}
+}
+
+# Production runs three copies of the API per colour (blue, green), only one colour at a time;
+# the other colour's names do not resolve, fail their health checks and get no traffic. The
+# upstreams are static names (Compose's default container names on edge-production) because
+# Caddy's active health checks do not cover dynamic upstreams, and a copy that is not ready
+# (starting, draining) must get no traffic. Adding a copy means adding a line here.
+{$PRODUCTION_API_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	reverse_proxy {
+		to tipme-production-api-blue-1:4000 tipme-production-api-blue-2:4000 tipme-production-api-blue-3:4000
+		to tipme-production-api-green-1:4000 tipme-production-api-green-2:4000 tipme-production-api-green-3:4000
+		lb_policy round_robin
+		lb_try_duration 5s
+		lb_try_interval 250ms
+		health_uri /health/ready
+		health_interval 2s
+		# Longer than the API's own 1 s probe timeouts, and two failures in a row, so one slow
+		# answer (an Aiven TLS reconnect, a GC pause) does not take a copy out. A draining copy
+		# leaves in about 4-6 s, which SHUTDOWN_DRAIN_MS (compose.production.yml) covers.
+		health_timeout 3s
+		health_fails 2
+		health_status 200
+	}
+}

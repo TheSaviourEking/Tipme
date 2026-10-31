@@ -38,6 +38,7 @@ import {
 } from '@tipme/database';
 import type { Request, Response } from 'express';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { codesPerHourFor } from './code-limit.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -91,7 +92,11 @@ export class AuthController {
       await requestEmailSignInCode(this.database.db, this.sealing, {
         email: body.email,
         secret: this.config.AUTH_CODE_SECRET,
-        codesPerHour: this.config.RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR,
+        codesPerHour: codesPerHourFor(body.email, {
+          releaseKind: this.config.RELEASE_KIND,
+          pretendDomains: this.config.MAIL_PRETEND_DOMAINS,
+          normal: this.config.RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR,
+        }),
       });
       return { data: { sent: true } };
     }

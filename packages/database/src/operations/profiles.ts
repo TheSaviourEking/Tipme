@@ -41,6 +41,7 @@ import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { mailOwner } from './account-mail.js';
 import type { MailSealing } from './mail-queue.js';
+import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
 import { publicCelebration } from './moments.js';
 import {
@@ -601,23 +602,41 @@ export function publicProfile(
  */
 export function deleteAccount(
   db: Database,
-  input: { userId: string; sealing: MailSealing; now?: Date },
+  input: {
+    userId: string;
+    sealing: MailSealing;
+    /** Where photos live when not in Postgres: their objects go with the account. */
+    photos?: PhotoStore;
+    now?: Date;
+    /**
+     * The release-check sweep only: the account must be a tagged rehearsal. Its test money
+     * doesn't block deletion (nothing is unbooked), and nobody is emailed.
+     */
+    rehearsalCleanup?: boolean;
+  },
 ): Promise<{ handle: string }> {
   const now = input.now ?? new Date();
-  return guarded(() =>
-    db.transaction(async (tx) => {
+  const photoKeys: string[] = [];
+  return guarded(async () => {
+    const result = await db.transaction(async (tx) => {
       const [row] = await tx
         .select({
           id: profiles.id,
           handleLower: profiles.handleLower,
           pageState: profiles.pageState,
+          rehearsalRunId: profiles.rehearsalRunId,
         })
         .from(profiles)
         .where(eq(profiles.userId, input.userId))
         .for('update');
+      if (input.rehearsalCleanup && !row?.rehearsalRunId)
+        throw new OperationError('INVALID_INPUT');
       if (row && row.pageState !== 'deleted') {
         const balance = await balanceIn(tx, row.id);
-        if (balance.availableMinor > 0n || balance.confirmingMinor > 0n)
+        if (
+          !input.rehearsalCleanup &&
+          (balance.availableMinor > 0n || balance.confirmingMinor > 0n)
+        )
           throw new OperationError('HAS_BALANCE');
         await tx
           .update(profiles)
@@ -639,7 +658,12 @@ export function deleteAccount(
         // The photo is personal data too: its bytes go with the page (PR-013).
         await tx
           .delete(profileAvatars)
-          .where(eq(profileAvatars.profileId, row.id));
+          .where(eq(profileAvatars.profileId, row.id))
+          .returning({ objectKey: profileAvatars.objectKey })
+          .then((removed) => {
+            for (const r of removed)
+              if (r.objectKey) photoKeys.push(r.objectKey);
+          });
         await tx
           .insert(handleHolds)
           .values({
@@ -704,14 +728,15 @@ export function deleteAccount(
             isNull(phoneRecoveries.completedAt),
           ),
         );
-      // Before the address goes: this is the last email the account gets.
-      await mailOwner(tx, input.sealing, {
-        userId: input.userId,
-        type: 'account_deleted_notice',
-        data: {},
-        dedupeKey: `account_deleted_notice.${input.userId}`,
-        now,
-      });
+      // Before the address goes: this is the last email the account gets (rehearsals get none).
+      if (!input.rehearsalCleanup)
+        await mailOwner(tx, input.sealing, {
+          userId: input.userId,
+          type: 'account_deleted_notice',
+          data: {},
+          dedupeKey: `account_deleted_notice.${input.userId}`,
+          now,
+        });
       // Deleted, not cancelled: each row holds an address, and it must not move back later.
       await tx
         .delete(emailRecoveries)
@@ -732,8 +757,12 @@ export function deleteAccount(
         .set({ revokedAt: now })
         .where(eq(sessions.userId, input.userId));
       return { handle: row?.handleLower ?? '' };
-    }),
-  );
+    });
+    // After the commit: an account's photos must not outlive it in the bucket.
+    for (const key of photoKeys)
+      await input.photos?.remove(key).catch(() => undefined);
+    return result;
+  });
 }
 export { normaliseHandle } from '@tipme/domain';
 
@@ -753,6 +782,11 @@ export function setPageSuspension(
 ): Promise<{ handle: string }> {
   return guarded(() =>
     db.transaction(async (tx) => {
+      const [before] = await tx
+        .select({ status: profiles.status })
+        .from(profiles)
+        .where(eq(profiles.id, input.profileId))
+        .for('update');
       const [row] = await tx
         .update(profiles)
         .set(
@@ -776,15 +810,18 @@ export function setPageSuspension(
         subjectId: input.profileId,
         reason: input.reason,
       });
-      // Staff notes stay private: the email says what happened, not why.
+      // Staff notes stay private: the email says what happened, not why. Only a real change is
+      // news: restoring a page that was never paused, or pausing twice, sends nothing.
       const type = input.suspend ? 'page_paused' : 'page_restored';
-      await mailOwner(tx, input.sealing, {
-        profileId: input.profileId,
-        type,
-        data: {},
-        // Each action is news, even back and forth in the same minute.
-        dedupeKey: `${type}.${input.profileId}.${newId()}`,
-      });
+      const changed = (before?.status === 'suspended') !== input.suspend;
+      if (changed)
+        await mailOwner(tx, input.sealing, {
+          profileId: input.profileId,
+          type,
+          data: {},
+          // Each action is news, even back and forth in the same minute.
+          dedupeKey: `${type}.${input.profileId}.${newId()}`,
+        });
       return { handle: row.handle };
     }),
   );

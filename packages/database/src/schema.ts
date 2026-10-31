@@ -1362,17 +1362,28 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
 
 /**
  * A page's photo (PR-013): one per page, already re-encoded on the server (512×512 WebP, no
- * metadata). In Postgres so it is backed up and recovered with everything else; about 30 KB.
- * `version` changes with each upload, so the URL can be cached for ever.
+ * metadata), about 30 KB. Either in Postgres (`bytes`) or, when R2 is configured, in a private
+ * R2 bucket (`object_key`); exactly one of the two. `version` changes with each upload, so the
+ * URL can be cached for ever.
  */
-export const profileAvatars = pgTable('profile_avatars', {
-  profileId: uuid('profile_id')
-    .primaryKey()
-    .references(() => profiles.id),
-  version: integer('version').notNull(),
-  bytes: bytea('bytes').notNull(),
-  createdAt: createdAt(),
-});
+export const profileAvatars = pgTable(
+  'profile_avatars',
+  {
+    profileId: uuid('profile_id')
+      .primaryKey()
+      .references(() => profiles.id),
+    version: integer('version').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdAt: createdAt(),
+  },
+  () => [
+    check(
+      'profile_avatars_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+  ],
+);
 
 /**
  * Visitors' reports of a page (PR-013): the page, a reason from a fixed list and the minute.
@@ -1494,6 +1505,53 @@ export const backupRuns = pgTable(
   (table) => [
     check('backup_runs_kind', sql`kind IN ('logical', 'base')`),
     index('backup_runs_kind_finished').on(table.kind, table.finishedAt),
+  ],
+);
+
+/**
+ * Each run of the backup retention coordinator (staging's local Postgres): what it found, what it
+ * would delete or deleted, and why it was blocked. Read by /health/backups and the watcher.
+ */
+export const backupRetentionRuns = pgTable(
+  'backup_retention_runs',
+  {
+    id: uuid('id').primaryKey(),
+    ranAt: timestamp('ran_at', { withTimezone: true }).notNull(),
+    mode: text('mode').notNull(),
+    outcome: text('outcome').notNull(),
+    /** Why pruning was blocked, one reason per line; empty when nothing blocked it. */
+    blocked: text('blocked').notNull().default(''),
+    retainedBackups: integer('retained_backups').notNull(),
+    boundary: text('boundary'),
+    archiveBytes: bigint('archive_bytes', { mode: 'bigint' }).notNull(),
+    candidateBytes: bigint('candidate_bytes', { mode: 'bigint' }).notNull(),
+    deletedBytes: bigint('deleted_bytes', { mode: 'bigint' }).notNull(),
+    diskFreeBytes: bigint('disk_free_bytes', { mode: 'bigint' }).notNull(),
+    diskTotalBytes: bigint('disk_total_bytes', { mode: 'bigint' }).notNull(),
+  },
+  (table) => [
+    check('backup_retention_runs_mode', sql`mode IN ('dry-run', 'apply')`),
+    check(
+      'backup_retention_runs_outcome',
+      sql`outcome IN ('planned', 'applied', 'blocked', 'failed')`,
+    ),
+    index('backup_retention_runs_ran_at').on(table.ranAt),
+  ],
+);
+
+/** Each recovery drill (pitr-drill.sh): pruning needs a recent pass. */
+export const recoveryDrills = pgTable(
+  'recovery_drills',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    baseFile: text('base_file'),
+    passed: boolean('passed').notNull(),
+    ranAt: timestamp('ran_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('recovery_drills_kind', sql`kind IN ('pitr')`),
+    index('recovery_drills_ran_at').on(table.ranAt),
   ],
 );
 

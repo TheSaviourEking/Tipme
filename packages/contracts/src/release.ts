@@ -15,6 +15,8 @@ export interface ReleaseInfo {
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */
 export interface BackupHealth {
+  /** Base backups and archived WAL are expected; false when switched off on purpose. */
+  pointInTime: boolean;
   logical: { ageMinutes: number } | null;
   base: { ageMinutes: number } | null;
   wal: {
@@ -23,4 +25,23 @@ export interface BackupHealth {
     lastFailedAgeMinutes: number | null;
     failedCount: number;
   };
+  /** The newest backup retention run (staging's local Postgres); null before the first. */
+  retention: {
+    lastRunAgeMinutes: number;
+    mode: 'dry-run' | 'apply';
+    outcome: 'planned' | 'applied' | 'blocked' | 'failed';
+    /** Why pruning is blocked, as codes: no file or segment names on this public route. */
+    blocked: RetentionBlock[];
+    archiveBytes: number;
+    candidateBytes: number;
+    diskFreePercent: number;
+  } | null;
 }
+
+export type RetentionBlock =
+  | 'backup-running'
+  | 'no-verified-backup'
+  | 'no-drill'
+  | 'wal-gap'
+  | 'archive-missing'
+  | 'other';
