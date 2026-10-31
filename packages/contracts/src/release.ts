@@ -10,7 +10,7 @@ export interface ReleaseInfo {
   paymentsLive: boolean;
   analytics: boolean;
   /** Which checkout a tip goes through: the release check completes a pretend one only. */
-  paymentProvider: 'mock' | 'bachs-sandbox';
+  paymentProvider: 'mock' | 'bachs-sandbox' | 'bachs-live';
 }
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */

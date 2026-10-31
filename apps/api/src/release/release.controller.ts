@@ -41,8 +41,8 @@ export class ReleaseInfoController {
         kind: this.config.RELEASE_KIND,
         version: this.config.GIT_SHA ?? 'unknown',
         deploymentMode: this.config.DEPLOYMENT_MODE,
-        // Live payments cannot be configured yet (D-03); the check fails if this ever turns true.
-        paymentsLive: (this.config.PAYMENTS_LIVE_ENABLED as string) === 'true',
+        // The release check fails on a test copy if this is ever true.
+        paymentsLive: this.config.PAYMENTS_LIVE_ENABLED,
         analytics:
           this.config.ANALYTICS_ENABLED ??
           this.config.NODE_ENV !== 'production',

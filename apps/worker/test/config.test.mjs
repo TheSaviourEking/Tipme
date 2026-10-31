@@ -240,12 +240,13 @@ test('in production, the worker too needs TLS with a checked certificate for a r
   assert.doesNotMatch(load(`${remote}?sslmode=verify-full`), /DATABASE_URL/);
 });
 
-// A production copy: DEPLOYMENT_MODE=production and NODE_ENV=production. Every current
-// PAYMENT_PROVIDER value is refused there until the live provider exists, so the base reports
-// that one setting and each test checks its own setting is named too.
+// A production copy: DEPLOYMENT_MODE=production and NODE_ENV=production, with the live provider
+// (payments switched off) and a dummy live key. Each test adds one setting and checks it is named.
 const productionBase = {
   DEPLOYMENT_MODE: 'production',
   NODE_ENV: 'production',
+  PAYMENT_PROVIDER: 'bachs-live',
+  BACHS_LIVE_API_KEY: 'sk_live_dummy_key_value',
   MAIL_DEFAULT_PROVIDER: 'ses',
   SES_CONFIGURATION_SET: 'tipme-tracked',
   SES_CONFIGURATION_SET_UNTRACKED: 'tipme-untracked',
@@ -264,8 +265,27 @@ const productionIssues = (extra) => {
   }
 };
 
-test('the production base reports only the payment provider', () => {
-  assert.equal(productionIssues({}), 'Invalid configuration: PAYMENT_PROVIDER');
+test('the production base loads', () => {
+  assert.equal(productionIssues({}), '');
+  const config = loadWorkerConfig(productionBase);
+  assert.equal(config.PAYMENT_PROVIDER, 'bachs-live');
+  assert.equal(config.PAYMENTS_LIVE_ENABLED, false);
+});
+
+test('production refuses mock and sandbox, and live payments need bachs-live and its key', () => {
+  assert.match(
+    productionIssues({ PAYMENT_PROVIDER: 'mock' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.match(
+    productionIssues({ PAYMENT_PROVIDER: 'bachs-sandbox' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.equal(productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }), '');
+  assert.match(
+    productionIssues({ BACHS_LIVE_API_KEY: undefined }),
+    /BACHS_LIVE_API_KEY/,
+  );
 });
 
 test('production refuses a preview password', () => {
@@ -293,6 +313,7 @@ test('a preview copy keeps these settings', () => {
     PREVIEW_PASSWORD: 'p'.repeat(32),
     PAYMENT_PROVIDER: 'bachs-sandbox',
     BACHS_SANDBOX_API_KEY: 'sk_sandbox_test',
+    BACHS_LIVE_API_KEY: undefined,
     RELEASE_KIND: 'test',
     MAIL_PRETEND_DOMAINS: 'release-check.usetipme.xyz',
   });

@@ -301,13 +301,16 @@ test('point-in-time recovery is expected unless switched off (staging keeps only
   );
 });
 
-// A production copy: DEPLOYMENT_MODE=production and NODE_ENV=production. Every current
-// PAYMENT_PROVIDER value is refused there until the live provider exists, so the base reports
-// that one setting and each test checks its own setting is named too.
+// A production copy: DEPLOYMENT_MODE=production and NODE_ENV=production, with the live provider
+// (payments switched off) and dummy live credentials. Each test adds one setting and checks it
+// is named.
 const productionBase = {
   ...valid,
   DEPLOYMENT_MODE: 'production',
   NODE_ENV: 'production',
+  PAYMENT_PROVIDER: 'bachs-live',
+  BACHS_LIVE_API_KEY: 'sk_live_dummy_key_value',
+  BACHS_LIVE_WEBHOOK_SECRET: 'l'.repeat(32),
   MAIL_DEFAULT_PROVIDER: 'ses',
   SES_CONFIGURATION_SET: 'tipme-tracked',
   SES_CONFIGURATION_SET_UNTRACKED: 'tipme-untracked',
@@ -324,8 +327,42 @@ const productionIssues = (extra) => {
   }
 };
 
-test('the production base reports only the payment provider', () => {
-  assert.equal(productionIssues({}), 'Invalid configuration: PAYMENT_PROVIDER');
+test('the production base loads', () => {
+  assert.equal(productionIssues({}), '');
+  const config = loadApiConfig(productionBase);
+  assert.equal(config.PAYMENT_PROVIDER, 'bachs-live');
+  assert.equal(config.PAYMENTS_LIVE_ENABLED, false);
+});
+
+test('production refuses mock and sandbox, and sandbox credentials beside bachs-live', () => {
+  assert.match(
+    productionIssues({ PAYMENT_PROVIDER: 'mock' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.match(
+    productionIssues({ PAYMENT_PROVIDER: 'bachs-sandbox' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.match(
+    productionIssues({ BACHS_SANDBOX_API_KEY: 'sk_sandbox_test' }),
+    /BACHS_SANDBOX_API_KEY/,
+  );
+});
+
+test('production may switch live payments on only with bachs-live; other copies refuse bachs-live', () => {
+  assert.equal(productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }), '');
+  assert.match(
+    productionIssues({ BACHS_LIVE_API_KEY: undefined }),
+    /BACHS_LIVE_API_KEY/,
+  );
+  assert.match(
+    productionIssues({ BACHS_LIVE_WEBHOOK_SECRET: undefined }),
+    /BACHS_LIVE_WEBHOOK_SECRET/,
+  );
+  assert.throws(
+    () => loadApiConfig({ ...productionBase, NODE_ENV: 'test' }),
+    /PAYMENT_PROVIDER/,
+  );
 });
 
 test('production refuses a preview password', () => {

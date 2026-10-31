@@ -1,6 +1,11 @@
 import { isProductionCopy, parseConfig } from '@tipme/observability';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
+import {
+  checkPaymentSettings,
+  paymentSettingsShape,
+  paymentWebhookSettingsShape,
+} from '@tipme/payments';
 import { z } from 'zod';
 
 const flag = z
@@ -56,16 +61,10 @@ export const apiConfigSchema = z
       .string()
       .regex(/^[a-z0-9-]{1,32}$/)
       .default('tipme'),
-    // Sandbox only: selectable in test and password-protected preview, never production.
-    PAYMENT_PROVIDER: z.enum(['mock', 'bachs-sandbox']).default('mock'),
-    PAYMENTS_LIVE_ENABLED: z.literal('false').default('false'),
+    // Provider, live switch and Bachs credentials: one definition with the worker.
+    ...paymentSettingsShape,
+    ...paymentWebhookSettingsShape,
     MOCK_PROVIDER_WEBHOOK_SECRET: z.string().min(32).optional(),
-    BACHS_SANDBOX_API_KEY: z
-      .string()
-      .regex(/^sk_sandbox_.+$/)
-      .optional(),
-    BACHS_WEBHOOK_SECRET: z.string().min(16).optional(),
-    BACHS_PREVIOUS_WEBHOOK_SECRET: z.string().min(16).optional(),
     // The public web app; the only CORS origin and the base of checkout return URLs.
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })
@@ -181,36 +180,8 @@ export const apiConfigSchema = z
         message: 'not allowed in production',
       });
     }
-    if (
-      config.PAYMENT_PROVIDER === 'mock' &&
-      config.NODE_ENV === 'production' &&
-      config.DEPLOYMENT_MODE !== 'preview'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PAYMENT_PROVIDER'],
-        message: 'mock not allowed in production',
-      });
-    }
+    checkPaymentSettings(config, context, { webhooks: true });
     if (config.PAYMENT_PROVIDER === 'bachs-sandbox') {
-      if (
-        config.NODE_ENV === 'production' &&
-        config.DEPLOYMENT_MODE !== 'preview'
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['PAYMENT_PROVIDER'],
-          message:
-            'Bachs sandbox is allowed only in test or password-protected preview',
-        });
-      }
-      if (!config.BACHS_SANDBOX_API_KEY) {
-        context.addIssue({
-          code: 'custom',
-          path: ['BACHS_SANDBOX_API_KEY'],
-          message: 'required for Bachs sandbox',
-        });
-      }
       if (!config.BACHS_WEBHOOK_SECRET) {
         context.addIssue({
           code: 'custom',
@@ -238,19 +209,6 @@ export const apiConfigSchema = z
           message: 'required to preserve existing mock webhook handling',
         });
       }
-    }
-    if (
-      (config.BACHS_SANDBOX_API_KEY ||
-        config.BACHS_WEBHOOK_SECRET ||
-        config.BACHS_PREVIOUS_WEBHOOK_SECRET) &&
-      config.NODE_ENV === 'production' &&
-      config.DEPLOYMENT_MODE !== 'preview'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['BACHS_SANDBOX_API_KEY'],
-        message: 'Bachs sandbox credentials are restricted to test or preview',
-      });
     }
     checkMailSettings(config, context);
     const r2 = [
