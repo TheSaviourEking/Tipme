@@ -469,6 +469,7 @@ export async function startJobWorker(
       ...(config.MAIL_REPLY_TO ? { replyTo: config.MAIL_REPLY_TO } : {}),
       webOrigin: config.WEB_ORIGIN,
       apiOrigin: config.API_ORIGIN,
+      pretendDomains: config.MAIL_PRETEND_DOMAINS,
     },
     logger,
   });

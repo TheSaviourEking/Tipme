@@ -53,6 +53,17 @@ export const workerConfigSchema = z
     API_ORIGIN: z
       .url({ protocol: /^https?$/ })
       .default('http://localhost:4000'),
+    // Test domains whose mail goes to the pretend inbox instead of the provider (comma-separated),
+    // besides the reserved .example/.test/.invalid. Only where the pretend provider exists.
+    MAIL_PRETEND_DOMAINS: z
+      .string()
+      .default('')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((d) => d.trim().toLowerCase())
+          .filter(Boolean),
+      ),
     // Links in emails point here.
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })

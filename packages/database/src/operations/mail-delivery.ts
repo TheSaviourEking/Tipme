@@ -365,6 +365,8 @@ export interface MailDeliveryDeps {
   sender: { domain: string; name: string; address?: string | undefined };
   replyTo?: string;
   webOrigin: string;
+  /** A copy's own never-deliverable domains: their mail goes to the pretend inbox, if it has one. */
+  pretendDomains?: readonly string[];
   /** Where one-click unsubscribe is answered (the API). */
   apiOrigin: string;
   /** Structured log of each outcome: ids, type, provider and codes only. */
@@ -427,6 +429,8 @@ export async function deliverDueMail(
       override: mail.userId ? await deps.overrideFor(mail.userId) : null,
       active,
       configured,
+      to: mail.to,
+      pretendDomains: deps.pretendDomains ?? [],
     });
     const provider = deps.providers.get(providerName);
     const fail = async (code: string, permanent: boolean) => {

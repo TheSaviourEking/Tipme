@@ -162,6 +162,8 @@ services:
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-TipMe Staging}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-support@usetipme.xyz}
       API_ORIGIN: https://${API_HOST:?set API_HOST}
+      # The release check's staff address: its mail goes to the pretend inbox, like .example.
+      MAIL_PRETEND_DOMAINS: ${MAIL_PRETEND_DOMAINS:-release-check.usetipme.xyz}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       SENTRY_DSN: ${SENTRY_DSN:-}

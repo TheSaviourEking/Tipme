@@ -204,6 +204,23 @@ test('a single sender address is optional and must be an address', () => {
   );
 });
 
+test('pretend domains are a lowercase list, empty by default', () => {
+  const base = {
+    NODE_ENV: 'test',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+  };
+  assert.deepEqual(loadWorkerConfig(base).MAIL_PRETEND_DOMAINS, []);
+  assert.deepEqual(
+    loadWorkerConfig({
+      ...base,
+      MAIL_PRETEND_DOMAINS: ' Release-Check.UseTipMe.xyz , qa.example ',
+    }).MAIL_PRETEND_DOMAINS,
+    ['release-check.usetipme.xyz', 'qa.example'],
+  );
+});
+
 test('in production, the worker too needs TLS with a checked certificate for a remote database', () => {
   const load = (DATABASE_URL) => {
     try {
