@@ -42,6 +42,9 @@ export const workerConfigSchema = z
       .string()
       .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)
       .default('mail.usetipme.xyz'),
+    // Optional: one address for every email instead of security@, notifications@, … on the
+    // domain above (e.g. staging@usetipme.xyz while the staging mail domain awaits verification).
+    MAIL_FROM_ADDRESS: z.email().optional(),
     // The brand in each sender's name: "TipMe Security", "TipMe Notifications", …
     MAIL_FROM_NAME: z.string().min(1).max(40).default('TipMe'),
     MAIL_REPLY_TO: z.email().optional(),

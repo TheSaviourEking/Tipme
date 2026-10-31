@@ -184,3 +184,22 @@ test('mail defaults: pretend provider, TipMe sender, no reply-to', () => {
   assert.equal(config.MAIL_FROM_NAME, 'TipMe');
   assert.equal(config.MAIL_REPLY_TO, undefined);
 });
+
+test('a single sender address is optional and must be an address', () => {
+  const base = {
+    NODE_ENV: 'test',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+  };
+  assert.equal(loadWorkerConfig(base).MAIL_FROM_ADDRESS, undefined);
+  assert.equal(
+    loadWorkerConfig({ ...base, MAIL_FROM_ADDRESS: 'staging@usetipme.xyz' })
+      .MAIL_FROM_ADDRESS,
+    'staging@usetipme.xyz',
+  );
+  assert.throws(() =>
+    loadWorkerConfig({ ...base, MAIL_FROM_ADDRESS: 'not an address' }),
+  );
+});

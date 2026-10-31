@@ -112,3 +112,19 @@ test('a sender is an address on the mail domain with a branded name', () => {
     { address: 'notifications@mail.usetipme.xyz', name: 'TipMe Notifications' },
   );
 });
+
+test('one address can stand in for every sender, keeping each sender’s name', () => {
+  const brand = {
+    domain: 'staging-mail.usetipme.xyz',
+    name: 'TipMe Staging',
+    address: 'staging@usetipme.xyz',
+  };
+  assert.deepEqual(senderAddress('security', brand), {
+    address: 'staging@usetipme.xyz',
+    name: 'TipMe Staging Security',
+  });
+  assert.equal(
+    senderAddress('notifications', brand).address,
+    'staging@usetipme.xyz',
+  );
+});
