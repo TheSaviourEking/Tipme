@@ -38,7 +38,14 @@ function stage({ password = 'hexpassword0123456789abcdef' } = {}) {
 if [[ "$1 $2" == "network inspect" ]]; then [[ -z "$FAKE_NO_EDGE" ]]; exit $?; fi
 if [[ "$1 $2" == "image inspect" ]]; then grep -qx "$3" "$FAKE_IMAGES" 2>/dev/null; exit $?; fi
 if [[ "$1 $2" == "image rm" ]]; then grep -vx "$3" "$FAKE_IMAGES" > "$FAKE_IMAGES.tmp"; mv "$FAKE_IMAGES.tmp" "$FAKE_IMAGES"; exit 0; fi
-if [[ " $* " == *" up "* && " $* " == *" api "* ]]; then echo "$TIPME_VERSION" > "$FAKE_RUNNING"; fi
+if [[ " $* " == *" up "* && " $* " == *" api "* ]]; then
+  echo "$TIPME_VERSION" > "$FAKE_RUNNING"
+  # Versions from before the edge move leave their API off edge-staging.
+  if [[ " $FAKE_PREMOVE_VERSIONS " == *" $TIPME_VERSION "* ]]; then rm -f "$FAKE_ATTACHED"; else touch "$FAKE_ATTACHED"; fi
+fi
+if [[ " $* " == *" ps -q api "* ]]; then echo api-container; exit 0; fi
+if [[ "$1" == "inspect" ]]; then echo "tipme-staging_internal $([[ -f "$FAKE_ATTACHED" ]] && echo edge-staging)"; exit 0; fi
+if [[ "$1 $2" == "network connect" ]]; then touch "$FAKE_ATTACHED"; exit 0; fi
 # config --services: what the version's compose file defines (versions marked new add retention).
 if [[ " $* " == *" config --services "* ]]; then
   printf 'api\nworker\ncaddy\nbackup\npostgres\n'
@@ -69,6 +76,7 @@ exit 0`,
     FAKE_LOG: join(home, 'calls.log'),
     FAKE_RUNNING: join(home, 'running'),
     FAKE_IMAGES: join(home, 'images'),
+    FAKE_ATTACHED: join(home, 'attached'),
     HEALTH_TRIES: '2',
   };
   /** What GitHub Actions does before deploying: load the image and copy that version's files. */
@@ -160,6 +168,53 @@ test('a missing edge network is refused before anything runs, pointing to the ru
       .filter((line) => line && !/network inspect/.test(line)).length,
     0,
     'nothing was backed up, migrated or started',
+  );
+});
+
+test('rolling back to a version from before the edge move attaches its API to edge-staging, once', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  ship('bbbbbbb2');
+  const extra = { FAKE_PREMOVE_VERSIONS: 'aaaaaaa1' };
+  assert.equal(run('deploy.sh', ['aaaaaaa1'], extra).status, 0);
+  assert.equal(run('deploy.sh', ['bbbbbbb2'], extra).status, 0);
+  const connects = () =>
+    read('calls.log')
+      .split('\n')
+      .filter((l) => / network connect /.test(l));
+  assert.equal(connects().length, 1, 'only the pre-move deploy needed it');
+  assert.match(
+    connects()[0],
+    /network connect --alias staging-api edge-staging api-container/,
+  );
+  const back = run('rollback.sh', [], extra);
+  assert.equal(back.status, 0, back.stderr);
+  assert.equal(read('running').trim(), 'aaaaaaa1');
+  assert.equal(connects().length, 2, 'the rolled-back API was attached');
+  // Already attached: another attach pass does nothing.
+  assert.equal(run('rollback.sh', ['aaaaaaa1'], extra).status, 2);
+  assert.equal(connects().length, 2);
+});
+
+test('an unhealthy deploy puts the previous pre-move version back on edge-staging too', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  ship('ccccccc3');
+  const extra = { FAKE_PREMOVE_VERSIONS: 'aaaaaaa1' };
+  assert.equal(run('deploy.sh', ['aaaaaaa1'], extra).status, 0);
+  const broken = run('deploy.sh', ['ccccccc3'], {
+    ...extra,
+    FAKE_BROKEN: 'ccccccc3',
+  });
+  assert.equal(broken.status, 1);
+  assert.equal(read('running').trim(), 'aaaaaaa1');
+  const calls = read('calls.log').split('\n');
+  const restore = calls.findLastIndex(
+    (l) => /version=aaaaaaa1/.test(l) && / up /.test(l),
+  );
+  assert.ok(
+    calls.slice(restore).some((l) => / network connect /.test(l)),
+    calls.join('\n'),
   );
 });
 
@@ -347,6 +402,17 @@ test('staging passes every setting the API and worker read (no silent defaults)'
     );
     assert.deepEqual(missing, [], `${service} settings missing from compose`);
   }
+});
+
+test('the staging api keeps its own internet route, independent of the edge network', () => {
+  const compose = readFileSync(
+    new URL('../deploy/compose.staging.yml', import.meta.url),
+    'utf8',
+  );
+  const api = compose.split(/^ {2}api:\n/m)[1]?.split(/^ {2}[a-z]/m)[0] ?? '';
+  assert.match(api, /^ {6}egress:/m);
+  assert.match(api, /^ {6}internal:/m);
+  assert.match(api, /^ {6}edge-staging: \{ aliases: \[staging-api\] \}/m);
 });
 
 test('the staging worker can reach the payment provider (it asks Bachs whether tips were paid)', () => {

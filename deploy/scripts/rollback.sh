@@ -15,6 +15,7 @@ shipped "$target" || { echo "tipme-app:$target is no longer on this server; ship
 
 echo "==> Rolling back $current → $target"
 compose_for "$target" up -d --remove-orphans $(app_services "$target")
+attach_edge "$target"
 wait_healthy "$target" || { echo "!! $target did not become healthy." >&2; exit 1; }
 set_current "$target"
 # A version from before PR-011 runs Postgres without WAL archiving (its Compose file restarts it).

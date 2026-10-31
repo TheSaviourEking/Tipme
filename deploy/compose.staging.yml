@@ -105,10 +105,12 @@ services:
       timeout: 5s
       retries: 12
     mem_limit: 768m
-    # Needs the internet only to tell the web app (Vercel) that a public page changed; edge-staging
-    # is a normal bridge, so it also gives that route out.
+    # Needs the internet only to tell the web app (Vercel) that a public page changed: that route is
+    # `egress`, so it does not depend on the edge's network. edge-staging is only how the edge
+    # reaches this API.
     networks:
       edge-staging: { aliases: [staging-api] }
+      egress:
       internal:
 
   worker:

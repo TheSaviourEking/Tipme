@@ -109,6 +109,21 @@ version_before() {
   awk -v cur="$current" '{ v[NR] = $0; if ($0 == cur) last = NR } END { if (last > 1) print v[last - 1] }' "$DEPLOYED"
 }
 
+# The edge Caddy reaches staging's API as staging-api on edge-staging. A version from before the
+# edge move does not join that network itself, so after bringing any version up, attach its API
+# there when it is not already (rollbacks and the automatic restore go through this). Staging
+# problems are fixed here, never by stopping the edge, which production shares.
+attach_edge() {
+  local id
+  id=$(compose_for "$1" ps -q api | head -n 1)
+  [[ -n "$id" ]] || return 0
+  if docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$id" | grep -qw edge-staging; then
+    return 0
+  fi
+  docker network connect --alias staging-api edge-staging "$id" ||
+    echo "!! Could not attach the API to edge-staging: staging is unreachable through the edge." >&2
+}
+
 # The long-running services a version defines (newer versions add some, e.g. retention), so a
 # rollback to an older version never asks Compose for a service its file doesn't have.
 # Never caddy: older versions' files still define it, but the edge (deploy/edge) owns 80/443 now.

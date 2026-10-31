@@ -63,7 +63,7 @@ Every container that connects mounts the CA at `/run/secrets/db-ca.pem`, read-on
 ## Not done yet (production environment work)
 
 - **A production Compose project for this server.** It has no local `postgres`, `backup` or `retention` services, and its own Redis, network and env file.
-- **Ports 80 and 443.** Done: the edge Caddy (`deploy/edge`, project `tipme-edge`) owns them and routes both API hosts. Production's API must answer as `prod-api` on the external network `edge-production`.
+- **Ports 80 and 443.** Done: the edge Caddy (`deploy/edge`, project `tipme-edge`) owns them and routes both API hosts. Production's API copies must be the containers `tipme-production-api-{blue,green}-{1,2,3}` (project `tipme-production`) on the external network `edge-production`; the edge lists those six names.
 - **A `deploy-production` workflow** that runs the role setup and migrations above as its steps.
 - **Allowing only this server** in Aiven's IP allow-list.
 
