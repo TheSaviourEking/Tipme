@@ -1,3 +1,14 @@
+# Current handoff — production infrastructure (31 October 2026)
+
+Branch `feat/production-infra` (worktree `.worktrees/production-infra`), from `8b2db32`, not pushed. Plan: `docs/superpowers/plans/2026-10-31-production-infrastructure.md`; spec: `docs/superpowers/specs/2026-10-31-production-launch-design.md`.
+
+- **Built (Tasks 1–8, reviewed):** production config refusals; the API drain on SIGTERM; one edge Caddy (`deploy/edge`) for both environments; `deploy/compose.production.yml` on Aiven (blue/green ×3, two workers, Redis); `deploy-production.sh` / `rollback-production.sh`; staging's full pass recorded by file tree and the production gate; the hand-run `deploy-production` workflow (ships the edge first); `watch-production` every 5 minutes.
+- **Task 9:** `docs/runbooks/production.md` (server, GitHub settings, edge, Aiven, restore drill, uptime ping, deploy/rollback/override, launch day) and `scripts/rehearse-production.sh` with `deploy/local/compose.production-rehearsal.yml` and `tests/load/no-downtime.k6.js`.
+- **No-downtime rehearsal: passed** (runbook §8, run 3): 0 of 1,800 served reads failed across a deploy and a rollback under 30 reads/s; readiness answered `503 draining` 9 times, by design. One copy per colour locally (six crashed the laptop's Docker VM). **Not done:** the run on `8b2db32` showing drops without the drain (needs two more image builds).
+- **Production-mode boot is not proven anywhere:** production refuses every payment provider until the payments plan adds `bachs-live`. The rehearsal runs in password-protected preview; launch day step 2 is the first production-mode boot.
+- **Owner actions:** runbook §1–§6 (`tipme-prod` user and key, the `production` environment and its settings, the edge move and `/srv/tipme-edge` ownership, Aiven and Q8, the restore drill, the uptime ping), DNS for `api.usetipme.xyz`, one `_dmarc` record.
+- **Next:** the live-payments plan (`docs/superpowers/plans/2026-10-31-live-payments.md`). Its Task 1 must turn the two "production base reports only PAYMENT_PROVIDER" config tests (API and worker) into clean loads.
+
 # Current handoff — mail platform, staging backups and the live pilot (31 October 2026)
 
 Read this first. It is written for an agent taking over with no memory of the previous session. Its state was checked at about 05:00 UTC on 31 October 2026.
