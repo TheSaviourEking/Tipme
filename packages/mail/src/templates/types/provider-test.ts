@@ -6,6 +6,7 @@ import { letter } from '../layout.js';
 export const providerTest = defineMailType({
   id: 'provider_test',
   category: 'account',
+  sender: 'system',
   preference: null,
   tracking: false,
   schema: z

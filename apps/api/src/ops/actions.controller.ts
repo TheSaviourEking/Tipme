@@ -55,6 +55,8 @@ import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { LOGGER } from '../tokens.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
+import type { MailSealing } from '@tipme/database';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const uuidParam = (value: string) => {
@@ -76,6 +78,7 @@ export class OpsActionsController {
     @Inject(BACHS_PROVIDER_TOKEN)
     private readonly bachsProvider: BachsProvider | null,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {}
 
   @Post('issues/:id/resolve')
@@ -542,6 +545,7 @@ export class OpsActionsController {
     suspend: boolean,
   ): Promise<ApiDataResponse<{ handle: string }>> {
     const { handle } = await setPageSuspension(this.database.db, {
+      sealing: this.sealing,
       profileId: uuidParam(profileId),
       staffUserId: ops.userId,
       suspend,

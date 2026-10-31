@@ -5,7 +5,10 @@ import {
   beginPaymentAccountCreation,
   seedDemoProfiles,
   updatePaymentAccountStatus,
+  mailSealing,
 } from '../../packages/database/dist/index.js';
+
+const sealing = mailSealing(Buffer.alloc(32, 7));
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { TOBI } from '../../packages/database/test/integration/helpers.mjs';
 
@@ -33,6 +36,7 @@ async function existingAccount(t) {
     environment: 'sandbox',
   });
   await updatePaymentAccountStatus(database.db, {
+    sealing,
     profileId: TOBI,
     provider: 'bachs',
     environment: 'sandbox',
@@ -63,6 +67,7 @@ function onboard(db, provider, warnings = []) {
     provider,
     { info() {}, warn: (entry) => warnings.push(entry), error() {} },
     { revalidate() {} },
+    sealing,
   ).onboard({ userId: TOBI_USER }, { country: 'NG', entityType: 'individual' });
 }
 

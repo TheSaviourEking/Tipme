@@ -1154,6 +1154,67 @@
         "x-tipme-rate-limit": "handles"
       }
     },
+    "/v1/mail/unsubscribe": {
+      "get": {
+        "operationId": "Unsubscribe.show",
+        "tags": [
+          "Unsubscribe"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      },
+      "post": {
+        "operationId": "Unsubscribe.unsubscribe",
+        "tags": [
+          "Unsubscribe"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "unsubscribe"
+      }
+    },
     "/v1/me/account": {
       "delete": {
         "operationId": "MeProfile.remove",
@@ -1794,12 +1855,16 @@
                   },
                   "milestones": {
                     "type": "boolean"
+                  },
+                  "guideEmails": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
                   "tipEmails",
                   "weeklyReports",
-                  "milestones"
+                  "milestones",
+                  "guideEmails"
                 ],
                 "additionalProperties": false
               }
@@ -7111,6 +7176,7 @@
                   "NO_CONFIRMED_TEST",
                   "EMAIL_TAKEN",
                   "EMAIL_INVALID",
+                  "UNSUBSCRIBE_INVALID",
                   "TOO_MANY_CODES",
                   "NO_SIGN_IN_EMAIL",
                   "SAME_AS_SIGN_IN_EMAIL",

@@ -28,6 +28,8 @@ export * from './operations/rewards.js';
 export * from './operations/notifications.js';
 export * from './operations/email.js';
 export * from './operations/mail-queue.js';
+export * from './operations/mail-preferences.js';
+export { mailForDomainEvent } from './operations/account-mail.js';
 export * from './operations/mail-delivery.js';
 export * from './operations/mail-events.js';
 export * from './operations/email-sign-in.js';

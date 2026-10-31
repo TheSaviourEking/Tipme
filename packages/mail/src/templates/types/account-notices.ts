@@ -5,6 +5,7 @@ import { letter } from '../layout.js';
 export const welcome = defineMailType({
   id: 'welcome',
   category: 'account',
+  sender: 'hello',
   preference: null,
   schema: z.object({}).strict(),
   sample: {},
@@ -33,6 +34,7 @@ export const welcome = defineMailType({
 export const newSignInNotice = defineMailType({
   id: 'new_sign_in_notice',
   category: 'security',
+  sender: 'security',
   preference: null,
   schema: z.object({ deviceLabel: z.string().max(80) }).strict(),
   sample: { deviceLabel: 'Safari on iPhone' },
@@ -60,6 +62,7 @@ export const newSignInNotice = defineMailType({
 export const emailChangedNotice = defineMailType({
   id: 'email_changed_notice',
   category: 'security',
+  sender: 'security',
   preference: null,
   schema: z.object({ newEmailHint: z.string().max(260) }).strict(),
   sample: { newEmailHint: 'a•••@example.com' },
@@ -88,6 +91,7 @@ export const emailChangedNotice = defineMailType({
 export const recoveryStartedNotice = defineMailType({
   id: 'recovery_started_notice',
   category: 'security',
+  sender: 'security',
   preference: null,
   schema: z.object({ newEmailHint: z.string().max(260) }).strict(),
   sample: { newEmailHint: 'a•••@example.com' },
@@ -120,6 +124,7 @@ export const recoveryStartedNotice = defineMailType({
 export const recoveryCompletedNotice = defineMailType({
   id: 'recovery_completed_notice',
   category: 'security',
+  sender: 'security',
   preference: null,
   schema: z.object({ newEmailHint: z.string().max(260) }).strict(),
   sample: { newEmailHint: 'a•••@example.com' },

@@ -74,3 +74,26 @@ test('a recipient is told about a confirmed tip, verifies an email and is emaile
     new RegExp(`k•••@${domain}.*You got a ₦1,800 tip on TipMe.*Chidi`, 's'),
   );
 });
+
+test('the settings email section lists security and account mail as always sent', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#emails');
+  const section = page.locator('#emails');
+  await expect(
+    section.getByText(/always reach you: sign-in codes, security warnings/),
+  ).toBeVisible();
+  const guides = section.getByLabel(
+    'Send me guides and suggestions for getting started',
+  );
+  await expect(guides).toBeChecked();
+  await guides.uncheck();
+  await section.getByRole('button', { name: /Save/ }).click();
+  await page.reload();
+  await expect(
+    page
+      .locator('#emails')
+      .getByLabel('Send me guides and suggestions for getting started'),
+  ).not.toBeChecked();
+});

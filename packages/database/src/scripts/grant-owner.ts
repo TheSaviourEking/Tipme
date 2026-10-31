@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { maskEmail } from '../operations/email-address.js';
 import { grantOwner } from '../operations/staff.js';
+import { mailSealing } from '../operations/mail-queue.js';
 import { phoneHint } from '../operations/phone.js';
 import { runAgainstLocalDatabase } from './run.js';
 
@@ -27,9 +28,13 @@ if (
   const { email, phone } = values;
   await runAgainstLocalDatabase(
     async (db) => {
+      const sealKey = process.env['MAIL_SEAL_KEY'];
       const { enrolmentCode } = await grantOwner(db, {
         ...(email ? { email } : { phone: phone! }),
         role,
+        ...(sealKey
+          ? { sealing: mailSealing(Buffer.from(sealKey, 'base64')) }
+          : {}),
       });
       console.log(
         `Owner granted to the account on ${email ? maskEmail(email) : phoneHint(phone!.replace(/\D/g, ''))}.`,

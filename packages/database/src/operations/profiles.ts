@@ -25,6 +25,7 @@ import {
   handleHolds,
   profileAvatars,
   emailRecoveries,
+  mailPreferences,
   phoneRecoveries,
   profiles,
   sessions,
@@ -38,6 +39,8 @@ import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
+import { mailOwner } from './account-mail.js';
+import type { MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { publicCelebration } from './moments.js';
 import {
@@ -598,7 +601,7 @@ export function publicProfile(
  */
 export function deleteAccount(
   db: Database,
-  input: { userId: string; now?: Date },
+  input: { userId: string; sealing: MailSealing; now?: Date },
 ): Promise<{ handle: string }> {
   const now = input.now ?? new Date();
   return guarded(() =>
@@ -701,6 +704,14 @@ export function deleteAccount(
             isNull(phoneRecoveries.completedAt),
           ),
         );
+      // Before the address goes: this is the last email the account gets.
+      await mailOwner(tx, input.sealing, {
+        userId: input.userId,
+        type: 'account_deleted_notice',
+        data: {},
+        dedupeKey: `account_deleted_notice.${input.userId}`,
+        now,
+      });
       // Deleted, not cancelled: each row holds an address, and it must not move back later.
       await tx
         .delete(emailRecoveries)
@@ -737,6 +748,7 @@ export function setPageSuspension(
     staffUserId: string;
     suspend: boolean;
     reason: string;
+    sealing: MailSealing;
   },
 ): Promise<{ handle: string }> {
   return guarded(() =>
@@ -764,17 +776,28 @@ export function setPageSuspension(
         subjectId: input.profileId,
         reason: input.reason,
       });
+      // Staff notes stay private: the email says what happened, not why.
+      const type = input.suspend ? 'page_paused' : 'page_restored';
+      await mailOwner(tx, input.sealing, {
+        profileId: input.profileId,
+        type,
+        data: {},
+        // Each action is news, even back and forth in the same minute.
+        dedupeKey: `${type}.${input.profileId}.${newId()}`,
+      });
       return { handle: row.handle };
     }),
   );
 }
 
-/** The recipient's notification preferences (PR-013). */
+/** The recipient's notification preferences (PR-013), and the guides email switch. */
 export function getNotificationPrefs(
   db: Database,
   userId: string,
 ): Promise<NotificationPrefs> {
-  return guarded(async () => prefsOf((await myRow(db, userId)).profile));
+  return guarded(async () =>
+    prefsOf((await myRow(db, userId)).profile, await guidesOn(db, userId)),
+  );
 }
 
 export function setNotificationPrefs(
@@ -793,16 +816,35 @@ export function setNotificationPrefs(
       })
       .where(eq(profiles.id, row.profile.id))
       .returning();
-    return prefsOf(updated!);
+    await db
+      .insert(mailPreferences)
+      .values({ userId, engagement: prefs.guideEmails })
+      .onConflictDoUpdate({
+        target: mailPreferences.userId,
+        set: { engagement: prefs.guideEmails, updatedAt: new Date() },
+      });
+    return prefsOf(updated!, prefs.guideEmails);
   });
 }
 
-const prefsOf = (profile: {
-  notifyTipEmails: boolean;
-  notifyWeeklyReports: boolean;
-  notifyMilestones: boolean;
-}): NotificationPrefs => ({
+async function guidesOn(db: Database, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ on: mailPreferences.engagement })
+    .from(mailPreferences)
+    .where(eq(mailPreferences.userId, userId));
+  return row?.on ?? true;
+}
+
+const prefsOf = (
+  profile: {
+    notifyTipEmails: boolean;
+    notifyWeeklyReports: boolean;
+    notifyMilestones: boolean;
+  },
+  guideEmails: boolean,
+): NotificationPrefs => ({
   tipEmails: profile.notifyTipEmails,
   weeklyReports: profile.notifyWeeklyReports,
   milestones: profile.notifyMilestones,
+  guideEmails,
 });

@@ -527,7 +527,7 @@ test('fix: deleting an account stops its recovery and leaves no address behind',
   await addRecovery(userId, 'safe@example.com');
   const started = new Date();
   await recover('me@example.com', 'safe@example.com', 'new@example.com');
-  await deleteAccount(db, { userId });
+  await deleteAccount(db, { userId, sealing });
   await completeDueRecoveries(
     db,
     sealing,

@@ -283,6 +283,7 @@ export async function startJobWorker(
               periodKey: isoWeek,
               now: new Date(),
               budgetPerMonthMinor: config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
+              sealing,
             });
             const { created } = await runWeeklyReports(database.db, {
               sealing,
@@ -303,6 +304,7 @@ export async function startJobWorker(
               periodKey: previousMonth(now),
               now,
               budgetPerMonthMinor: config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
+              sealing,
             });
             logger.info({ event: 'moments.monthly.completed', created });
             processed.add(1, { outcome: 'celebrated' });
@@ -432,9 +434,10 @@ export async function startJobWorker(
           });
         return override;
       },
-      from: { address: config.MAIL_FROM_ADDRESS, name: config.MAIL_FROM_NAME },
+      sender: { domain: config.MAIL_FROM_DOMAIN, name: config.MAIL_FROM_NAME },
       ...(config.MAIL_REPLY_TO ? { replyTo: config.MAIL_REPLY_TO } : {}),
       webOrigin: config.WEB_ORIGIN,
+      apiOrigin: config.API_ORIGIN,
     },
     logger,
   });

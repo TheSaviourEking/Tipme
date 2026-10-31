@@ -25,6 +25,7 @@ type RateLimitedRoute =
   | 'handles'
   | 'analytics'
   | 'reports'
+  | 'unsubscribe'
   | 'avatars';
 
 /**
@@ -99,6 +100,12 @@ export class RateLimitGuard implements CanActivate {
       reports: {
         limit: this.config.RATE_LIMIT_REPORTS_PER_HOUR,
         windowMs: 3_600_000,
+      },
+      // One-click unsubscribe: mail providers post from shared addresses, so this is generous;
+      // the signed token is what stops abuse.
+      unsubscribe: {
+        limit: this.config.RATE_LIMIT_UNSUBSCRIBE_PER_MIN,
+        windowMs: 60_000,
       },
       // Photo uploads (PR-013): each one is a full decode and re-encode.
       avatars: {

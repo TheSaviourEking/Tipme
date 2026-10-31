@@ -24,6 +24,7 @@ export const RESERVED_HANDLES = [
   'design_system',
   'dev',
   'download',
+  'email',
   'explore',
   'faq',
   'favicon',

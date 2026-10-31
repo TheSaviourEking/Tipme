@@ -102,6 +102,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/diagnostics/trace-probe/{jobId}` | n/a (read) | – | yes |
 | POST | `/v1/events` | – | `analytics` | – |
 | GET | `/v1/handles/{handle}/availability` | n/a (read) | `handles` | – |
+| GET | `/v1/mail/unsubscribe` | n/a (read) | – | – |
+| POST | `/v1/mail/unsubscribe` | – | `unsubscribe` | – |
 | GET | `/v1/mock-provider/checkout/{reference}` | n/a (read) | – | yes |
 | POST | `/v1/mock-provider/checkout/{reference}` | – | – | yes |
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
@@ -256,6 +258,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |
 | `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                        | Only the current photo of a live, active page                                                                      |
 | `POST /v1/tip-quotes`, `POST /v1/tip-intents`                                          | A supporter tips without an account                                   | Rate-limited; amounts and fees computed on the server; idempotency key                                             |
+| `GET`, `POST /v1/mail/unsubscribe`                                                     | One-click unsubscribe from a mail app, with no session                | A signed token naming one person and one optional email type; GET only shows a page; rate-limited                  |
 | `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                    | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07 |
 | `POST /v1/auth/code`, `/v1/auth/verify`, `/v1/auth/recover*`, `/v1/auth/email/confirm` | Signing in and recovering an account happen before there is a session | Per-address and per-number limits; lockouts; codes expire                                                          |
 

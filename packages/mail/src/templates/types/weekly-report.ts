@@ -6,6 +6,7 @@ import { ngn } from '../money.js';
 export const weeklyReport = defineMailType({
   id: 'weekly_report',
   category: 'engagement',
+  sender: 'reports',
   preference: 'notify_weekly_reports',
   schema: z
     .object({

@@ -15,6 +15,7 @@ function codeMail(input: {
   return defineMailType({
     id: input.id,
     category: 'security',
+    sender: 'security',
     preference: null,
     schema: z.object({ code }).strict(),
     sample: { code: '482915' },

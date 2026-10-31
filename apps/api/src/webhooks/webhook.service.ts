@@ -21,6 +21,8 @@ import {
   recordUnmatchedEvent,
 } from '@tipme/database';
 import { DatabaseProvider } from '../infra/database.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
+import type { MailSealing } from '@tipme/database';
 
 const PROVIDER = 'mock';
 
@@ -32,6 +34,7 @@ const PROVIDER = 'mock';
 export class WebhookService {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {}
 
   async apply(event: MockWebhook): Promise<string> {
@@ -203,6 +206,7 @@ export class WebhookService {
     const remote = await accounts.getRecipientAccount(event.accountReference);
     const { status, chargesEnabled } = bachsAccountReadiness(remote);
     await updatePaymentAccountStatus(db, {
+      sealing: this.sealing,
       profileId: known.profileId,
       provider: 'bachs',
       environment: 'sandbox',

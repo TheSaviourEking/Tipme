@@ -72,9 +72,10 @@ function deps(db, provider, name = provider.name) {
     providers: new Map([[name, provider]]),
     activeProvider: async () => name,
     overrideFor: async () => null,
-    from: { address: 'hello@mail.usetipme.xyz', name: 'TipMe' },
+    sender: { domain: 'mail.usetipme.xyz', name: 'TipMe' },
     replyTo: 'support@usetipme.xyz',
     webOrigin: WEB,
+    apiOrigin: 'http://localhost:4000',
   };
 }
 

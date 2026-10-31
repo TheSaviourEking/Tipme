@@ -43,6 +43,8 @@ import { BACHS_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { LOGGER } from '../tokens.js';
 import { ProfileRevalidator } from './revalidate.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
+import type { MailSealing } from '@tipme/database';
 
 @Controller('v1/me/payment-account')
 @UseGuards(SessionGuard, CsrfGuard)
@@ -55,6 +57,7 @@ export class PaymentAccountsController {
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(ProfileRevalidator)
     private readonly revalidator: Pick<ProfileRevalidator, 'revalidate'>,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {}
 
   @Get()
@@ -198,6 +201,7 @@ export class PaymentAccountsController {
 
     const { status, chargesEnabled } = bachsAccountReadiness(remoteAccount);
     const account = await updatePaymentAccountStatus(this.database.db, {
+      sealing: this.sealing,
       profileId: recipient.profileId,
       provider: 'bachs',
       environment: 'sandbox',

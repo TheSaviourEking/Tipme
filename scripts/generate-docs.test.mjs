@@ -49,6 +49,8 @@ const PUBLIC_REVIEWED = [
   'GET /v1/avatars/{profileId}/{file}',
   'POST /v1/events',
   'GET /v1/handles/{handle}/availability',
+  'GET /v1/mail/unsubscribe',
+  'POST /v1/mail/unsubscribe',
   'GET /v1/profiles/{handle}',
   'POST /v1/profiles/{handle}/report',
   'POST /v1/tip-intents',

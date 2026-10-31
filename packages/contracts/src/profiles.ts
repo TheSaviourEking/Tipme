@@ -161,6 +161,8 @@ export const notificationPrefsSchema = z
     tipEmails: z.boolean(),
     weeklyReports: z.boolean(),
     milestones: z.boolean(),
+    /** Guides and suggestions (engagement mail without a switch of its own). */
+    guideEmails: z.boolean(),
   })
   .strict();
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;

@@ -6,7 +6,10 @@ import {
   beginPaymentAccountCreation,
   seedDemoProfiles,
   updatePaymentAccountStatus,
+  mailSealing,
 } from '../../packages/database/dist/index.js';
+
+const sealing = mailSealing(Buffer.alloc(32, 7));
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { TOBI } from '../../packages/database/test/integration/helpers.mjs';
 
@@ -61,6 +64,7 @@ test('finishing payment setup refreshes the cached public page at once', async (
     environment: 'sandbox',
   });
   await updatePaymentAccountStatus(database.db, {
+    sealing,
     profileId: TOBI,
     provider: 'bachs',
     environment: 'sandbox',
@@ -89,6 +93,7 @@ test('finishing payment setup refreshes the cached public page at once', async (
     },
     logger,
     { revalidate: (handle) => refreshed.push(handle) },
+    sealing,
   );
   const result = await accounts.onboard(
     { userId: TOBI_USER },
