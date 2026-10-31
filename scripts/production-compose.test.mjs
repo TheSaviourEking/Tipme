@@ -16,7 +16,18 @@ const readVars = [...raw.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]);
 const haveDocker =
   !spawnSync('docker', ['compose', 'version']).error &&
   spawnSync('docker', ['compose', 'version']).status === 0;
-const skip = haveDocker ? false : 'docker compose is not available';
+// In CI a missing docker must fail the run, never skip these tests silently.
+const skip = haveDocker
+  ? false
+  : process.env.CI
+    ? false
+    : 'docker compose is not available';
+if (!haveDocker && process.env.CI)
+  test('docker compose is available (required in CI)', () => {
+    assert.fail(
+      'docker compose is not available, so the structural tests cannot run',
+    );
+  });
 
 const dummyEnv = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' };
 for (const name of readVars) dummyEnv[name] = 'dummy';
@@ -239,4 +250,35 @@ test('production.env.example names every ${VAR} the compose file reads, with no 
   assert.match(example, /openssl rand/);
   assert.match(example, /^# .*SITE_INDEXING.*Vercel/m);
   assert.ok(!values.has('SITE_INDEXING'));
+});
+
+test('payment and mail settings have no silent default in the compose file', () => {
+  for (const name of [
+    'PAYMENT_PROVIDER',
+    'MAIL_DEFAULT_PROVIDER',
+    'MAIL_FROM_DOMAIN',
+  ]) {
+    const uses = [...raw.matchAll(new RegExp(`\\$\\{${name}([^}]*)\\}`, 'g'))];
+    assert.ok(uses.length > 0, `${name} is not read`);
+    for (const use of uses)
+      assert.match(
+        use[1],
+        /^:\?/,
+        `${name} must be required (:?), not defaulted`,
+      );
+  }
+});
+
+test('production.env.example gives the non-secret production values', () => {
+  const example = readFileSync(envExampleUrl, 'utf8');
+  const value = (name) => new RegExp(`^${name}=(.*)$`, 'm').exec(example)?.[1];
+  assert.equal(value('MAIL_DEFAULT_PROVIDER'), 'zeptomail');
+  assert.equal(value('MAIL_FROM_DOMAIN'), 'usetipme.xyz');
+  assert.equal(value('MAIL_FROM_NAME'), 'TipMe');
+  assert.equal(value('MAIL_REPLY_TO'), 'support@usetipme.xyz');
+  assert.equal(value('PAYMENT_PROVIDER'), 'bachs-live');
+  assert.match(
+    example,
+    /^# .*payments plan.*bachs-live|^# .*bachs-live.*payments plan/im,
+  );
 });
