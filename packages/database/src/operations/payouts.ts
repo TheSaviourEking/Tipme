@@ -34,6 +34,7 @@ import { openIssue } from './issues.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
+import { jsonSafe } from './provider-events.js';
 import { recordTransition } from './transitions.js';
 
 export interface PayoutResult {
@@ -224,7 +225,11 @@ export function recordPayoutFee(
         .from(payouts)
         .where(eq(payouts.id, input.payoutId))
         .for('update');
-      if (!payout?.accountReference || payout.status === 'FAILED') return;
+      if (
+        !payout?.accountReference ||
+        (payout.status !== 'REQUESTED' && payout.status !== 'PROCESSING')
+      )
+        return;
       await noteActualFee(tx, payout, input.feeMinor, input.now);
     }),
   );
@@ -243,7 +248,12 @@ export function setPayoutReview(
           ? sql`COALESCE(${payouts.providerReviewAt}, ${input.now.toISOString()}::timestamptz)`
           : null,
       })
-      .where(eq(payouts.id, input.payoutId));
+      .where(
+        and(
+          eq(payouts.id, input.payoutId),
+          inArray(payouts.status, ['REQUESTED', 'PROCESSING']),
+        ),
+      );
   });
 }
 
@@ -297,9 +307,9 @@ export async function recordPayoutOutcome(
           eventType: `payout.${input.outcome}`,
           signatureVerified: input.signatureVerified,
           payloadHash: createHash('sha256')
-            .update(JSON.stringify(input.payload))
+            .update(JSON.stringify(jsonSafe(input.payload)))
             .digest('hex'),
-          payload: input.payload,
+          payload: jsonSafe(input.payload),
           payoutId: payout.id,
         })
         .onConflictDoNothing({

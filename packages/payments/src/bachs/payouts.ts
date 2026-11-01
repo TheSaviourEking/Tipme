@@ -7,6 +7,7 @@ import {
 } from '../provider.js';
 import type { BachsApiClient } from './client.js';
 import {
+  AmbiguousPayoutError,
   BachsApiError,
   BachsProtocolError,
   BachsRequestNotSentError,
@@ -284,13 +285,40 @@ function chargedFee(
   }
 }
 
+/** What the provider says the payout is. An NGN amount that can't be read is no answer at all. */
+function payoutDetails(payout: z.infer<typeof payoutSchema>): {
+  amountMinor?: bigint;
+  currency: string;
+  destinationRef?: string;
+} {
+  const destination = payout.destination
+    ? { destinationRef: payout.destination }
+    : {};
+  if (payout.currency !== 'NGN')
+    return { currency: payout.currency, ...destination };
+  try {
+    return {
+      amountMinor: decimalToMinor(payout.amount, 'NGN'),
+      currency: payout.currency,
+      ...destination,
+    };
+  } catch {
+    throw new BachsProtocolError(
+      'The payment provider returned an invalid payout amount',
+    );
+  }
+}
+
 function payoutState(payout: z.infer<typeof payoutSchema>): {
   status: 'paid' | 'failed' | 'pending' | 'review';
   failureReason?: PayoutFailureReason;
   feeMinor?: bigint;
+  amountMinor?: bigint;
+  currency: string;
+  destinationRef?: string;
 } {
   const status = payout.status.toLowerCase();
-  const fee = chargedFee(payout);
+  const fee = { ...chargedFee(payout), ...payoutDetails(payout) };
   if (status === 'completed') return { status: 'paid', ...fee };
   if (status === 'failed')
     return {
@@ -485,6 +513,8 @@ export function createBachsPayouts(
             amount,
             currency: input.currency,
             description: 'Payout fee',
+            // Transfers can't be looked up by key, so staff can find a lost one by this.
+            transfer_group: idempotencyKey,
           },
           schema: transferSchema,
         }),
@@ -634,16 +664,22 @@ export function createBachsPayouts(
       if (list.total === 0 && list.items.length === 0) return null;
       const total = list.total ?? list.items.length;
       const payout = list.items[0];
+      if (total > 1 || list.items.length > 1)
+        throw new AmbiguousPayoutError(operation);
       if (
         total !== 1 ||
         list.items.length !== 1 ||
         payout?.reference !== payoutId
       )
         throw unexpected(operation);
-      return {
-        providerReference: `${account}:${payout.id}`,
-        ...payoutState(payout),
-      };
+      try {
+        return {
+          providerReference: `${account}:${payout.id}`,
+          ...payoutState(payout),
+        };
+      } catch {
+        throw unexpected(operation);
+      }
     },
   };
 }

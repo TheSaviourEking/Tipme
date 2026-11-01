@@ -1,5 +1,5 @@
 {
-  "id": "5eda6487-3f2d-4280-ad8c-47cff3fff742",
+  "id": "6ead42bc-72e4-4674-9483-52e873353f14",
   "prevId": "915f54bc-a0fe-41c3-82d6-65118254f7e2",
   "version": "7",
   "dialect": "postgresql",
@@ -3429,6 +3429,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "start_step": {
+          "name": "start_step",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "provider_review_at": {
           "name": "provider_review_at",
           "type": "timestamp with time zone",
@@ -3540,6 +3546,10 @@
         "payouts_fee_not_negative": {
           "name": "payouts_fee_not_negative",
           "value": "fee_minor IS NULL OR fee_minor >= 0"
+        },
+        "payouts_start_step": {
+          "name": "payouts_start_step",
+          "value": "start_step IS NULL OR start_step IN ('fee', 'payout')"
         }
       },
       "isRLSEnabled": false

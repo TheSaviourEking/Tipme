@@ -46,7 +46,7 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payment_reversed: 'Refund or dispute reported',
   payment_settlement_currency: 'Settled in another currency',
   payout_failed: 'Withdrawal failed',
-  payout_conflict: 'Withdrawal paid after failing',
+  payout_conflict: 'Withdrawal conflict',
   payout_unexpected: 'Unexpected payout',
   payout_unresolved: 'Withdrawal outcome unknown',
   payout_fee_short: 'Payout fee above what was covered',

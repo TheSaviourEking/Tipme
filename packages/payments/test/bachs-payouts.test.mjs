@@ -55,6 +55,14 @@ const payoutBody = (overrides = {}) => ({
   ...overrides,
 });
 
+// What a read reports about payoutBody(), to compare with what was asked for.
+const readDetails = {
+  feeMinor: 5000n,
+  amountMinor: 150000n,
+  currency: 'NGN',
+  destinationRef: 'pd_7Kq2',
+};
+
 const payoutInput = {
   payoutId: 'p1',
   accountRef: ACCOUNT,
@@ -146,7 +154,7 @@ test('payout statuses map pending, processing, completed, failed and review', as
     const { provider, calls } = fake(jsonResponse(payoutBody({ status })));
     assert.deepEqual(await provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`), {
       ...expected,
-      feeMinor: 5000n,
+      ...readDetails,
     });
     assert.equal(calls[0].method, 'GET');
     assert.equal(calls[0].path, '/v1/payouts/pay_1');
@@ -188,7 +196,7 @@ test('a failed payout names only an allowlisted reason, never the provider text'
     assert.deepEqual(await provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`), {
       status: 'failed',
       failureReason,
-      feeMinor: 5000n,
+      ...readDetails,
     });
   }
 });
@@ -632,7 +640,7 @@ test('a payout is found by its reference, scoped to its account', async () => {
     assert.deepEqual(await provider.findPayoutByReference(ACCOUNT, 'p1'), {
       providerReference: `${ACCOUNT}:pay_4Xr9dLc0mNv7Kq2B`,
       ...expected,
-      feeMinor: 5000n,
+      ...readDetails,
     });
     assert.equal(calls[0].method, 'GET');
     assert.equal(calls[0].path, '/v1/payouts?reference=p1');
@@ -645,6 +653,51 @@ test('a payout is found by its reference, scoped to its account', async () => {
 test('only a definite empty answer means no payout exists', async () => {
   const { provider } = fake(jsonResponse({ total: 0, items: [] }));
   assert.equal(await provider.findPayoutByReference(ACCOUNT, 'p1'), null);
+});
+
+test('more than one match is its own error, so it can raise an alarm', async () => {
+  const { provider } = fake(
+    jsonResponse({
+      total: 2,
+      items: [payoutBody(), payoutBody({ id: 'pay_2' })],
+    }),
+  );
+  await assert.rejects(provider.findPayoutByReference(ACCOUNT, 'p1'), {
+    name: 'AmbiguousPayoutError',
+  });
+});
+
+test('reads carry amount, currency and destination; an unreadable amount is no answer', async () => {
+  const { provider } = fake(jsonResponse(payoutBody()));
+  const read = await provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`);
+  assert.equal(read.amountMinor, 150000n);
+  assert.equal(read.currency, 'NGN');
+  assert.equal(read.destinationRef, 'pd_7Kq2');
+  const foreign = fake(jsonResponse(payoutBody({ currency: 'USD' })));
+  const other = await foreign.provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`);
+  assert.equal(other.currency, 'USD');
+  assert.equal(other.amountMinor, undefined);
+  const bad = fake(jsonResponse(payoutBody({ amount: 'lots' })));
+  await assert.rejects(bad.provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`));
+});
+
+test('a payout event carries its amount, currency, reference and fee', () => {
+  const { event } = verify(
+    payoutEvent('payout.paid', { withdrawal_fee: '60.00' }),
+  );
+  assert.equal(event.amountMinor, 150000n);
+  assert.equal(event.currency, 'NGN');
+  assert.equal(event.operationReference, 'p1');
+  assert.equal(event.feeMinor, 6000n);
+  assert.equal(event.contradicted, undefined);
+  const foreign = verify(payoutEvent('payout.paid', { currency: 'USD' })).event;
+  assert.equal(foreign.currency, 'USD');
+  assert.equal(foreign.amountMinor, undefined);
+  for (const amount of ['lots', undefined])
+    assert.equal(
+      verify(payoutEvent('payout.paid', { amount })).event.contradicted,
+      true,
+    );
 });
 
 test('more than one match is uncertain, never a pick', async () => {
@@ -802,6 +855,9 @@ test('payout.paid and payout.failed webhooks normalize to payout events', () => 
       providerReference: `${ACCOUNT}:pay_1`,
       accountReference: ACCOUNT,
       status: 'paid',
+      currency: 'NGN',
+      amountMinor: 150000n,
+      operationReference: 'p1',
     },
   });
   assert.deepEqual(verify(payoutEvent('payout.failed')), {
@@ -813,6 +869,9 @@ test('payout.paid and payout.failed webhooks normalize to payout events', () => 
       providerReference: `${ACCOUNT}:pay_1`,
       accountReference: ACCOUNT,
       status: 'failed',
+      currency: 'NGN',
+      amountMinor: 150000n,
+      operationReference: 'p1',
     },
   });
   const inDebt = verify(

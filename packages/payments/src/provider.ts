@@ -55,6 +55,12 @@ export type NormalizedProviderEvent =
       failureReason?: PayoutFailureReason;
       /** The signed event disagrees with itself: only a read of the payout may decide. */
       contradicted?: true;
+      /** What the event says the payout is, to compare with what TipMe asked for. */
+      amountMinor?: bigint;
+      currency?: string;
+      /** The reference TipMe set when it created the payout: its own payout id. */
+      operationReference?: string;
+      feeMinor?: bigint;
     }
   | {
       kind: 'ignored';
@@ -184,6 +190,10 @@ export interface PayoutPort {
     status: 'paid' | 'failed' | 'pending' | 'review' | 'not_found';
     failureReason?: PayoutFailureReason;
     feeMinor?: bigint;
+    /** What the provider says this payout is, to compare with what TipMe asked for. */
+    amountMinor?: bigint;
+    currency?: string;
+    destinationRef?: string;
   }>;
   /**
    * Finds the payout a lost answer may have created. Null means the provider has none right now;
@@ -200,6 +210,9 @@ export interface PayoutPort {
     status: 'paid' | 'failed' | 'pending' | 'review';
     failureReason?: PayoutFailureReason;
     feeMinor?: bigint;
+    amountMinor?: bigint;
+    currency?: string;
+    destinationRef?: string;
   } | null>;
 }
 

@@ -1,6 +1,7 @@
 import type {
   Database,
   PayoutStarter,
+  PayoutStartLog,
   PayoutStartOutcome,
 } from '@tipme/database';
 import { startPayout } from '@tipme/database';
@@ -16,12 +17,17 @@ const payloadSchema = z.object({ payoutId: z.uuid() });
  */
 export function handlePayoutStart(
   data: unknown,
-  deps: { db: Database; provider: (name: string) => PayoutStarter },
+  deps: {
+    db: Database;
+    provider: (name: string) => PayoutStarter;
+    log?: PayoutStartLog;
+  },
 ): Promise<PayoutStartOutcome> {
   const payload = payloadSchema.safeParse(data);
   if (!payload.success) throw new UnrecoverableError('invalid_payload');
   return startPayout(deps.db, {
     payoutId: payload.data.payoutId,
     provider: deps.provider,
+    ...(deps.log ? { log: deps.log } : {}),
   });
 }

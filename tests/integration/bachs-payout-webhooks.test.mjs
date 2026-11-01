@@ -10,13 +10,17 @@ import {
   mailForDomainEvent,
   mailSealing,
   markAttemptInitiated,
+  openUnexpectedPayout,
   PAYOUT_NOT_FOUND_AFTER_MS,
+  PAYOUT_STUCK_AFTER_MS,
   PAYOUT_UNEXPECTED_AFTER_MS,
   reconcilePayouts,
+  recordPayoutFee,
   recordProviderEvent,
   requestWithdrawal,
   runIssueDetectors,
   seedDemoProfiles,
+  setPayoutReview,
   startPayout,
 } from '../../packages/database/dist/index.js';
 import {
@@ -848,4 +852,350 @@ test('a payout on the pretend provider has no account, bank or fee', async (t) =
   await reconcilePayouts({ db, provider, now: new Date(), minAgeMs: 0 });
   assert.equal((await row(payoutId)).status, 'PAID');
   assert.equal((await ledger(payoutId)).length, 2);
+});
+
+// ---- Review round 1 ----
+
+const timingOut = (overrides = {}) => {
+  const provider = scripted({
+    async initiatePayout(input) {
+      provider.calls.push({ call: 'payout', ...input });
+      throw timeout();
+    },
+    ...overrides,
+  });
+  return provider;
+};
+
+for (const [label, wrong] of [
+  ['amount', { amountMinor: 999n, currency: 'NGN' }],
+  ['currency', { amountMinor: 200000n, currency: 'USD' }],
+  [
+    'destination',
+    { amountMinor: 200000n, currency: 'NGN', destinationRef: 'ba_other' },
+  ],
+]) {
+  test(`a lookup with the wrong ${label} is not booked: conflict, and the money stays reserved`, async (t) => {
+    const { db, withdraw, row, issues, ledger, available, reconcile } =
+      await fixture(t);
+    const payoutId = await withdraw();
+    const reserved = await available();
+    const provider = timingOut();
+    await startPayout(db, { payoutId, provider });
+    provider.found = {
+      providerReference: `${ACCOUNT}:po_w`,
+      status: 'paid',
+      ...wrong,
+    };
+    await reconcile(provider);
+    const payout = await row(payoutId);
+    assert.equal(payout.status, 'REQUESTED');
+    assert.equal(payout.provider_reference, null);
+    assert.equal((await ledger(payoutId)).length, 0);
+    assert.equal(await available(), reserved);
+    assert.equal((await issues('payout_conflict')).length, 1);
+  });
+}
+
+test('a matching lookup is still applied', async (t) => {
+  const { db, withdraw, row, reconcile } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = timingOut();
+  await startPayout(db, { payoutId, provider });
+  provider.found = {
+    providerReference: `${ACCOUNT}:po_ok`,
+    status: 'paid',
+    amountMinor: 200000n,
+    currency: 'NGN',
+    destinationRef: 'ba_tobi',
+  };
+  await reconcile(provider);
+  assert.equal((await row(payoutId)).status, 'PAID');
+});
+
+test('a status read with the wrong amount is not booked', async (t) => {
+  const { db, withdraw, row, issues, ledger, reconcile } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  provider.status = { status: 'paid', amountMinor: 1n, currency: 'NGN' };
+  await reconcile(provider);
+  assert.equal((await row(payoutId)).status, 'PROCESSING');
+  assert.equal((await ledger(payoutId)).length, 0);
+  assert.equal((await issues('payout_conflict')).length, 1);
+});
+
+for (const [label, wrong] of [
+  ['amount', { amountMinor: 999n, currency: 'NGN' }],
+  ['currency', { amountMinor: 200000n, currency: 'USD' }],
+]) {
+  test(`a signed payout.paid with the wrong ${label} is not applied`, async (t) => {
+    const { db, withdraw, row, issues, ledger, paidEvent, webhooks } =
+      await fixture(t);
+    const payoutId = await withdraw();
+    const provider = scripted();
+    await startPayout(db, { payoutId, provider });
+    assert.equal(
+      await webhooks.applyBachs(paidEvent(payoutId, wrong), provider),
+      'conflict',
+    );
+    assert.equal((await row(payoutId)).status, 'PROCESSING');
+    assert.equal((await ledger(payoutId)).length, 0);
+    assert.equal((await issues('payout_conflict')).length, 1);
+  });
+}
+
+test('a matching signed payout.paid is applied, with the fee it states', async (t) => {
+  const { db, withdraw, row, ledger, paidEvent, webhooks } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  const event = paidEvent(payoutId, {
+    amountMinor: 200000n,
+    currency: 'NGN',
+    feeMinor: 6000n,
+    operationReference: payoutId,
+  });
+  assert.equal(await webhooks.applyBachs(event, provider), 'applied');
+  assert.equal((await row(payoutId)).status, 'PAID');
+  assert.ok(
+    (await ledger(payoutId)).some(
+      (l) => l.code === 'provider_fee_expense' && l.amount === '6000',
+    ),
+  );
+});
+
+test('two references for one payout stay a conflict that closes only by hand', async (t) => {
+  const { db, withdraw, issues } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  const { applyFoundPayout } =
+    await import('../../packages/database/dist/index.js');
+  await applyFoundPayout(
+    db,
+    { id: payoutId, provider: 'bachs' },
+    { providerReference: `${ACCOUNT}:po_second`, status: 'pending' },
+    new Date(),
+  );
+  await autoResolveIssues(db, new Date());
+  const [issue] = await issues('payout_conflict');
+  assert.equal(issue.status, 'open');
+});
+
+test('a lookup that keeps erroring reaches staff past the wait, and nothing is released', async (t) => {
+  const { db, withdraw, row, issues, reconcile, available } = await fixture(t);
+  const payoutId = await withdraw();
+  const reserved = await available();
+  const provider = timingOut({
+    async findPayoutByReference() {
+      throw timeout();
+    },
+  });
+  await startPayout(db, { payoutId, provider });
+  await reconcile(provider);
+  assert.equal((await issues('payout_unresolved')).length, 0);
+  const result = await reconcile(provider, after(PAYOUT_NOT_FOUND_AFTER_MS));
+  assert.equal(result.errors, 1);
+  assert.equal((await issues('payout_unresolved')).length, 1);
+  assert.equal((await row(payoutId)).status, 'REQUESTED');
+  assert.equal(await available(), reserved);
+});
+
+test('two payouts with our reference is a conflict at once', async (t) => {
+  const { db, withdraw, row, issues, reconcile } = await fixture(t);
+  const payoutId = await withdraw();
+  const ambiguous = () => {
+    const error = timeout();
+    error.name = 'AmbiguousPayoutError';
+    return error;
+  };
+  const provider = timingOut({
+    async findPayoutByReference() {
+      throw ambiguous();
+    },
+  });
+  await startPayout(db, { payoutId, provider });
+  await reconcile(provider);
+  assert.equal((await issues('payout_conflict')).length, 1);
+  assert.equal((await row(payoutId)).status, 'REQUESTED');
+});
+
+for (const [label, status] of [
+  ['stays pending', { status: 'pending' }],
+  ['keeps answering not found', { status: 'not_found' }],
+]) {
+  test(`a referenced payout that ${label} reaches staff, and the issue does not close itself`, async (t) => {
+    const { db, withdraw, row, issues, reconcile } = await fixture(t);
+    const payoutId = await withdraw();
+    const provider = scripted();
+    await startPayout(db, { payoutId, provider });
+    provider.status = status;
+    await reconcile(provider);
+    assert.equal((await issues('payout_unresolved')).length, 0);
+    const late = after(PAYOUT_STUCK_AFTER_MS);
+    await reconcile(provider, late);
+    await reconcile(provider, late);
+    assert.equal((await issues('payout_unresolved')).length, 1);
+    await autoResolveIssues(db, late);
+    assert.equal((await issues('payout_unresolved'))[0].status, 'open');
+    assert.equal((await row(payoutId)).status, 'PROCESSING');
+    // A final answer does close it.
+    provider.status = { status: 'paid' };
+    await reconcile(provider, late);
+    await autoResolveIssues(db, late);
+    assert.equal((await issues('payout_unresolved'))[0].status, 'resolved');
+  });
+}
+
+test('a parked event naming our payout is never unexpected, even through a long outage', async (t) => {
+  const { db, withdraw, row, issues, holds, paidEvent, webhooks, reconcile } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  const provider = timingOut();
+  await startPayout(db, { payoutId, provider });
+  const event = paidEvent(payoutId, {
+    operationReference: payoutId,
+    amountMinor: 200000n,
+    currency: 'NGN',
+  });
+  assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  // Reads down for hours: the mark is older than any wait, and it stays parked.
+  provider.fetchPayoutStatus = async () => {
+    throw timeout();
+  };
+  provider.findPayoutByReference = async () => {
+    throw timeout();
+  };
+  await reconcile(provider, after(PAYOUT_NOT_FOUND_AFTER_MS * 2));
+  assert.equal((await issues('payout_unexpected')).length, 0);
+  assert.equal((await holds()).length, 0);
+  // Reads back: the payout is adopted after a read, then settled by the event.
+  provider.fetchPayoutStatus = async () => ({
+    status: 'paid',
+    amountMinor: 200000n,
+    currency: 'NGN',
+  });
+  await reconcile(provider, after(PAYOUT_NOT_FOUND_AFTER_MS * 2));
+  const payout = await row(payoutId);
+  assert.equal(payout.status, 'PAID');
+  assert.equal(payout.provider_reference, event.providerReference);
+  assert.equal((await holds()).length, 0);
+});
+
+test('an event naming another account’s payout does not adopt it', async (t) => {
+  const { withdraw, row, issues, holds, paidEvent, webhooks, reconcile, q } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  await q(`UPDATE payouts SET account_reference = 'acct_other' WHERE id = $1`, [
+    payoutId,
+  ]);
+  const provider = scripted();
+  await webhooks.applyBachs(
+    paidEvent('zzz', { operationReference: payoutId }),
+    provider,
+  );
+  await reconcile(provider, after(PAYOUT_UNEXPECTED_AFTER_MS));
+  assert.equal((await row(payoutId)).provider_reference, null);
+  assert.equal((await issues('payout_unexpected')).length, 1);
+  assert.equal((await holds()).length, 1);
+});
+
+test('opening payout_unexpected rechecks in its transaction: a payout recorded meanwhile stops it', async (t) => {
+  const { db, withdraw, issues, holds } = await fixture(t);
+  const payoutId = await withdraw();
+  await startPayout(db, { payoutId, provider: scripted() });
+  await openUnexpectedPayout(db, {
+    unmatchedId: randomUUID(),
+    accountReference: ACCOUNT,
+    providerReference: `${ACCOUNT}:po_${payoutId}`,
+    operationReference: null,
+    now: after(PAYOUT_NOT_FOUND_AFTER_MS),
+  });
+  assert.equal((await issues('payout_unexpected')).length, 0);
+  assert.equal((await holds()).length, 0);
+});
+
+test('the step attempted is recorded and said in the issue; a lost fee answer says the payout was not sent', async (t) => {
+  const { db, withdraw, row, issues, reconcile } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted({
+    async coverPayoutFee() {
+      throw timeout();
+    },
+  });
+  const logs = [];
+  await startPayout(db, {
+    payoutId,
+    provider,
+    log: (entry) => logs.push(entry),
+  });
+  assert.equal((await row(payoutId)).start_step, 'fee');
+  assert.deepEqual(logs, [
+    {
+      event: 'payout.start_uncertain',
+      payout_id: payoutId,
+      step: 'fee',
+      error: 'UncertainProviderOutcomeError',
+      cause: 'no_response',
+    },
+  ]);
+  await reconcile(provider, after(PAYOUT_NOT_FOUND_AFTER_MS));
+  const [issue] = await issues('payout_unresolved');
+  assert.match(issue.summary, /fee top-up/);
+  assert.match(issue.summary, /payout itself was not sent/);
+
+  const second = await withdraw();
+  const other = timingOut();
+  await startPayout(db, { payoutId: second, provider: other });
+  assert.equal((await row(second)).start_step, 'payout');
+});
+
+test('a top-up that cannot be recorded logs its transfer reference', async (t) => {
+  const { db, withdraw, row, q } = await fixture(t);
+  const payoutId = await withdraw();
+  // The credit's primary key is taken, with another account: the insert does nothing, so force a failure.
+  await q(
+    `CREATE FUNCTION test_refuse_credit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'refused'; END $$`,
+  );
+  await q(
+    `CREATE TRIGGER test_refuse BEFORE INSERT ON provider_fee_credits FOR EACH ROW EXECUTE FUNCTION test_refuse_credit()`,
+  );
+  const logs = [];
+  const provider = scripted();
+  assert.equal(
+    await startPayout(db, {
+      payoutId,
+      provider,
+      log: (entry) => logs.push(entry),
+    }),
+    'uncertain',
+  );
+  assert.equal(
+    provider.calls.filter(({ call }) => call === 'payout').length,
+    0,
+  );
+  assert.ok(
+    logs.some(
+      (e) =>
+        e.event === 'payout.fee_unrecorded' &&
+        e.transfer_ref === `tr_payout-fee.${payoutId}`,
+    ),
+  );
+  assert.equal((await row(payoutId)).start_step, 'fee');
+  await q(`DROP TRIGGER test_refuse ON provider_fee_credits`);
+  await q(`DROP FUNCTION test_refuse_credit()`);
+});
+
+test('fee and review notes do not write on a finished payout', async (t) => {
+  const { db, withdraw, row, paidEvent, webhooks } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  await webhooks.applyBachs(paidEvent(payoutId), provider);
+  await recordPayoutFee(db, { payoutId, feeMinor: 9000n, now: new Date() });
+  await setPayoutReview(db, { payoutId, inReview: true, now: new Date() });
+  const payout = await row(payoutId);
+  assert.equal(payout.fee_minor, '5000');
+  assert.equal(payout.provider_review_at, null);
 });

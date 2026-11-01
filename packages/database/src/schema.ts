@@ -955,9 +955,13 @@ export const payouts = pgTable(
     // The provider's fee for this payout, in minor units of the payout currency.
     feeMinor: minor('fee_minor'),
     feeTransferReference: text('fee_transfer_reference'),
-    // Written and committed before any provider write, and cleared only by a definite answer: if
-    // the answer never comes (timeout, crash) the payout is looked up, never sent again.
+    // Written and committed before any provider write. The attempt that set it clears it only on a
+    // definite answer of its own; an outcome learned later by a read leaves it as evidence. While it
+    // is set the payout is looked up, never sent again.
     startUncertainAt: timestamp('start_uncertain_at', { withTimezone: true }),
+    // The provider call about to be made ('fee' or 'payout'), committed before it: staff need to know
+    // whether the payout itself may have left.
+    startStep: text('start_step'),
     // While the provider itself is checking this payout; the recipient is told so.
     providerReviewAt: timestamp('provider_review_at', { withTimezone: true }),
     // The provider's connected account the payout was requested on, recorded at request time.
@@ -968,6 +972,10 @@ export const payouts = pgTable(
     currencyCheck('payouts'),
     check('payouts_amount_positive', sql`amount_minor > 0`),
     check('payouts_fee_not_negative', sql`fee_minor IS NULL OR fee_minor >= 0`),
+    check(
+      'payouts_start_step',
+      sql`start_step IS NULL OR start_step IN ('fee', 'payout')`,
+    ),
     unique('payouts_provider_reference').on(
       table.provider,
       table.providerReference,

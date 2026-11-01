@@ -69,6 +69,19 @@ function verifyDigest(
   return matched;
 }
 
+/** An NGN decimal in a payout event; anything else is left out for the caller to judge. */
+function eventMoney(
+  value: unknown,
+  currency: string | null,
+): bigint | undefined {
+  if (typeof value !== 'string' || currency !== 'NGN') return undefined;
+  try {
+    return decimalToMinor(value, 'NGN');
+  } catch {
+    return undefined;
+  }
+}
+
 function verifySignature(
   rawBody: Buffer,
   headers: Record<string, string | string[] | undefined>,
@@ -177,6 +190,10 @@ function normalizeEvent(
       return undefined;
     const failureReason = nullableString(data['failure_reason']);
     const stated = nullableString(data['status'])?.toLowerCase();
+    const currency = nullableString(data['currency']);
+    const amountMinor = eventMoney(data['amount'], currency);
+    const feeMinor = eventMoney(data['withdrawal_fee'], currency);
+    const reference = nullableString(data['reference']);
     return {
       kind: 'payout',
       eventId: event.id,
@@ -189,11 +206,16 @@ function normalizeEvent(
         ? { failureReason: payoutFailureReason(failureReason) }
         : {}),
       ...(event.type === 'payout.paid' &&
-      stated &&
-      stated !== 'paid' &&
-      stated !== 'completed'
+      ((stated && stated !== 'paid' && stated !== 'completed') ||
+        !currency ||
+        // The docs always send an amount: one that is missing or unreadable can't be trusted.
+        (currency === 'NGN' && amountMinor === undefined))
         ? { contradicted: true as const }
         : {}),
+      ...(currency ? { currency } : {}),
+      ...(amountMinor === undefined ? {} : { amountMinor }),
+      ...(feeMinor === undefined ? {} : { feeMinor }),
+      ...(reference ? { operationReference: reference } : {}),
     };
   }
   const checkoutId = nullableString(data['checkout_id']);

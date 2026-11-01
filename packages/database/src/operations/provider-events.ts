@@ -383,7 +383,7 @@ async function apply(
 }
 
 /** JSON-safe copy of a provider payload: bigint becomes a decimal string, undefined is dropped. */
-function jsonSafe(value: unknown): unknown {
+export function jsonSafe(value: unknown): unknown {
   // A missing payload is stored as {}: a JSON null would reach the NOT NULL column as SQL NULL.
   if (value === undefined || value === null) return {};
   return JSON.parse(

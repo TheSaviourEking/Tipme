@@ -405,6 +405,7 @@ export async function startJobWorker(
             const outcome = await handlePayoutStart(job.data, {
               db: database.db,
               provider: providerFor,
+              log: (entry) => logger.warn({ ...entry, ...fields }),
             });
             logger.info({ event: 'payout.start', outcome, ...fields });
             processed.add(1, { outcome: `payout_${outcome}` });

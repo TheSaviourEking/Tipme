@@ -2,7 +2,6 @@ import {
   and,
   asc,
   eq,
-  gt,
   inArray,
   isNotNull,
   isNull,
@@ -25,9 +24,13 @@ import { findPayoutByReference } from './attempts.js';
 import {
   applyFoundPayout,
   applyPayoutSignal,
+  isAmbiguousLookup,
+  openPayoutConflict,
   openUnexpectedPayout,
   PAYOUT_NOT_FOUND_AFTER_MS,
+  PAYOUT_STUCK_AFTER_MS,
   PAYOUT_UNEXPECTED_AFTER_MS,
+  startStepNote,
   type FoundPayout,
 } from './payout-start.js';
 import type { PayoutFailure } from './payouts.js';
@@ -269,6 +272,9 @@ export interface PayoutVerifier {
     status: 'paid' | 'failed' | 'pending' | 'review' | 'not_found';
     failureReason?: PayoutFailure;
     feeMinor?: bigint;
+    amountMinor?: bigint;
+    currency?: string;
+    destinationRef?: string;
   }>;
   /** Without it, a start with no answer can only be handed to staff. */
   findPayoutByReference?(
@@ -277,12 +283,19 @@ export interface PayoutVerifier {
   ): Promise<FoundPayout | null>;
 }
 
-const openUnresolved = (db: Database, payoutId: string, now: Date) =>
+const openUnresolved = (
+  db: Database,
+  payoutId: string,
+  now: Date,
+  note: string,
+  dedupeKey = `payout_unresolved.${payoutId}`,
+) =>
   guarded(() =>
     openIssue(db, {
-      dedupeKey: `payout_unresolved.${payoutId}`,
+      dedupeKey,
       kind: 'payout_unresolved',
       subject: { payoutId },
+      note,
       now,
     }),
   );
@@ -291,9 +304,11 @@ const openUnresolved = (db: Database, payoutId: string, now: Date) =>
  * Asks the provider about payouts it has not confirmed to us, and records what a read says. It never
  * initiates a payout and never releases a reservation on "not found":
  * - with a reference: read by reference; a definite answer goes through recordPayoutOutcome.
- * - a start with no answer: look it up by our id. Found, it continues from there. Not found is no
- *   proof until PAYOUT_NOT_FOUND_AFTER_MS; past that staff get one payout_unresolved, and the money
- *   stays reserved, because only a person can tell that nothing left.
+ *   Still unfinished or unreadable after PAYOUT_STUCK_AFTER_MS, staff get one payout_unresolved.
+ * - a start with no answer: look it up by our id. Found, it continues from there. Not found, or a
+ *   lookup that fails, is no proof until PAYOUT_NOT_FOUND_AFTER_MS; past that staff get one
+ *   payout_unresolved, and the money stays reserved, because only a person can tell nothing left.
+ *   More than one match is a payout_conflict at once.
  * - a start that never ran (a lost job): staff get the same issue, after the same wait.
  * - parked payout events: applied once the reference is known, or payout_unexpected and a hold when
  *   none turned up within PAYOUT_UNEXPECTED_AFTER_MS.
@@ -326,6 +341,7 @@ export async function reconcilePayouts(input: {
       id: payouts.id,
       provider: payouts.provider,
       providerReference: payouts.providerReference,
+      createdAt: payouts.createdAt,
     })
     .from(payouts)
     .where(
@@ -344,36 +360,48 @@ export async function reconcilePayouts(input: {
   let applied = 0;
   let errors = 0;
   let unresolved = 0;
+  const stuckBefore = new Date(now.getTime() - PAYOUT_STUCK_AFTER_MS);
   for (const payout of candidates) {
     if (!payout.provider || !payout.providerReference) continue;
+    let finished = false;
     try {
-      const answer = await providerFor(
+      const { status, ...details } = await providerFor(
         input.provider,
         payout.provider,
       ).fetchPayoutStatus(payout.providerReference);
       // A 404 is not a failure: this asks again next time.
-      if (answer.status === 'not_found') continue;
-      const result = await applyFoundPayout(
-        db,
-        payout,
-        {
-          providerReference: payout.providerReference,
-          status: answer.status,
-          ...(answer.failureReason
-            ? { failureReason: answer.failureReason }
-            : {}),
-          ...(answer.feeMinor === undefined
-            ? {}
-            : { feeMinor: answer.feeMinor }),
-        },
-        now,
-      );
-      if (result.applied) applied += 1;
+      if (status !== 'not_found') {
+        const result = await applyFoundPayout(
+          db,
+          payout,
+          {
+            providerReference: payout.providerReference,
+            status,
+            ...details,
+          },
+          now,
+        );
+        if (result.applied) applied += 1;
+        finished = status === 'paid' || status === 'failed';
+      }
     } catch {
       errors += 1;
     } finally {
       await touch(payout.id);
     }
+    if (!finished && payout.createdAt <= stuckBefore)
+      try {
+        const issue = await openUnresolved(
+          db,
+          payout.id,
+          now,
+          'The provider accepted it, but it has not finished or cannot be read.',
+          `payout_stuck.${payout.id}`,
+        );
+        if (issue.opened) unresolved += 1;
+      } catch {
+        errors += 1;
+      }
   }
 
   const uncertain = await db
@@ -394,8 +422,11 @@ export async function reconcilePayouts(input: {
     )
     .limit(limit);
   for (const payout of uncertain) {
+    if (!payout.provider) continue;
+    const pastWait =
+      payout.startUncertainAt !== null &&
+      payout.startUncertainAt <= notFoundBefore;
     try {
-      if (!payout.provider) continue;
       const lookup = providerFor(input.provider, payout.provider);
       const found = lookup.findPayoutByReference
         ? await lookup.findPayoutByReference(
@@ -406,14 +437,37 @@ export async function reconcilePayouts(input: {
       if (found) {
         if ((await applyFoundPayout(db, payout, found, now)).applied)
           applied += 1;
-      } else if (
-        payout.startUncertainAt &&
-        payout.startUncertainAt <= notFoundBefore
-      ) {
-        if ((await openUnresolved(db, payout.id, now)).opened) unresolved += 1;
+      } else if (pastWait) {
+        const issue = await openUnresolved(
+          db,
+          payout.id,
+          now,
+          startStepNote(payout.startStep),
+        );
+        if (issue.opened) unresolved += 1;
       }
-    } catch {
+    } catch (error) {
       errors += 1;
+      // Failures here must not leave the payout stuck with nobody told.
+      try {
+        if (isAmbiguousLookup(error))
+          await openPayoutConflict(db, {
+            payoutId: payout.id,
+            why: 'ambiguous',
+            now,
+          });
+        else if (pastWait) {
+          const issue = await openUnresolved(
+            db,
+            payout.id,
+            now,
+            startStepNote(payout.startStep),
+          );
+          if (issue.opened) unresolved += 1;
+        }
+      } catch {
+        errors += 1;
+      }
     } finally {
       await touch(payout.id);
     }
@@ -441,7 +495,17 @@ export async function reconcilePayouts(input: {
     )
     .limit(limit);
   for (const payout of neverStarted)
-    if ((await openUnresolved(db, payout.id, now)).opened) unresolved += 1;
+    try {
+      const issue = await openUnresolved(
+        db,
+        payout.id,
+        now,
+        startStepNote(null),
+      );
+      if (issue.opened) unresolved += 1;
+    } catch {
+      errors += 1;
+    }
 
   if (!input.payoutId) {
     const parked = await sweepParkedPayoutEvents(input, limit);
@@ -492,18 +556,62 @@ async function sweepParkedPayoutEvents(
   let applied = 0;
   let errors = 0;
   for (const row of parked) {
+    // Stored as JSON, so money comes back as strings.
     const event = row.payload as {
       providerReference: string;
       accountReference: string;
       status: 'paid' | 'failed';
       contradicted?: boolean;
+      amountMinor?: string;
+      currency?: string;
+      operationReference?: string;
+      feeMinor?: string;
+    };
+    const claims = {
+      ...(event.amountMinor === undefined
+        ? {}
+        : { amountMinor: BigInt(event.amountMinor) }),
+      ...(event.currency === undefined ? {} : { currency: event.currency }),
     };
     try {
-      const payoutId = await findPayoutByReference(
+      let payoutId = await findPayoutByReference(
         db,
         'bachs',
         event.providerReference,
       );
+      if (!payoutId && event.operationReference) {
+        // The signed reference names a payout of ours on this account: never unexpected. Adopt it,
+        // but only on a read; until one answers, it waits here however long that takes.
+        const [named] = await db
+          .select({ id: payouts.id, provider: payouts.provider })
+          .from(payouts)
+          .where(
+            and(
+              sql`${payouts.id}::text = ${event.operationReference}`,
+              eq(payouts.accountReference, event.accountReference),
+            ),
+          );
+        if (named) {
+          const { status, ...details } = await providerFor(
+            input.provider,
+            'bachs',
+          ).fetchPayoutStatus(event.providerReference);
+          if (status === 'not_found') continue;
+          const adopted = await applyFoundPayout(
+            db,
+            named,
+            {
+              providerReference: event.providerReference,
+              status,
+              ...details,
+            },
+            now,
+          );
+          if (adopted.applied) applied += 1;
+          payoutId = named.id;
+          if (adopted.outcome === 'uncertain') continue;
+        }
+      }
       if (payoutId) {
         const reader = providerFor(input.provider, 'bachs');
         const outcome = await applyPayoutSignal(db, {
@@ -512,6 +620,15 @@ async function sweepParkedPayoutEvents(
           eventId: row.providerEventId,
           status: event.status,
           contradicted: event.contradicted === true,
+          claims: {
+            ...claims,
+            ...(event.operationReference
+              ? { operationReference: event.operationReference }
+              : {}),
+          },
+          ...(event.feeMinor === undefined
+            ? {}
+            : { feeMinor: BigInt(event.feeMinor) }),
           reader: {
             fetchPayoutStatus: (reference) =>
               reader.fetchPayoutStatus(reference),
@@ -527,26 +644,11 @@ async function sweepParkedPayoutEvents(
         PAYOUT_UNEXPECTED_AFTER_MS
       )
         continue;
-      // It may answer a start of ours that is still being looked up; give that its full wait.
-      const notFoundBefore = new Date(
-        now.getTime() - PAYOUT_NOT_FOUND_AFTER_MS,
-      );
-      const [pending] = await db
-        .select({ id: payouts.id })
-        .from(payouts)
-        .where(
-          and(
-            eq(payouts.accountReference, event.accountReference),
-            eq(payouts.status, 'REQUESTED'),
-            isNull(payouts.providerReference),
-            gt(payouts.startUncertainAt, notFoundBefore),
-          ),
-        )
-        .limit(1);
-      if (pending) continue;
       await openUnexpectedPayout(db, {
         unmatchedId: row.id,
         accountReference: event.accountReference,
+        providerReference: event.providerReference,
+        operationReference: event.operationReference ?? null,
         now,
       });
     } catch {

@@ -59,3 +59,15 @@ export class UncertainProviderOutcomeError extends Error {
     this.name = 'UncertainProviderOutcomeError';
   }
 }
+
+/** More than one payout carries one of TipMe's references: possibly paid twice. Never a pick. */
+export class AmbiguousPayoutError extends UncertainProviderOutcomeError {
+  constructor(operationReference: string) {
+    super(
+      operationReference,
+      'the payment provider has more than one payout for this reference',
+      { cause: 'unexpected_state' },
+    );
+    this.name = 'AmbiguousPayoutError';
+  }
+}

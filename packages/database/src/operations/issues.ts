@@ -79,7 +79,7 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
     case 'payout_failed':
       return `A withdrawal for ${page} failed. The money is back in their balance.`;
     case 'payout_conflict':
-      return `The provider says a withdrawal for ${page} was paid after TipMe recorded it as failed.`;
+      return `The provider’s record of a withdrawal for ${page} conflicts with TipMe’s.`;
     case 'payout_unexpected':
       return `The provider paid out money for ${page} that TipMe did not ask for. Withdrawals for them are on hold until it is checked.`;
     case 'payout_unresolved':
@@ -173,6 +173,8 @@ export async function openIssue(
     kind: IssueKind;
     subject: IssueSubject;
     now: Date;
+    /** Ids and plain words only: what is known about this case, after the kind's summary. */
+    note?: string;
   },
 ): Promise<{ id: string; opened: boolean }> {
   const { subject, handle, rehearsal } = await completeSubject(
@@ -187,7 +189,9 @@ export async function openIssue(
       kind: input.kind,
       severity: SEVERITY[input.kind],
       subject,
-      summary: summaryOf(input.kind, handle),
+      summary: input.note
+        ? `${summaryOf(input.kind, handle)} ${input.note}`
+        : summaryOf(input.kind, handle),
       openedAt: input.now,
       rehearsal,
     })
@@ -229,6 +233,11 @@ export function openIssueFromEvent(
         kind,
         subject,
         now: input.now ?? new Date(),
+        ...(input.eventType === 'payout.conflict'
+          ? {
+              note: 'It says the withdrawal was paid after TipMe recorded it as failed.',
+            }
+          : {}),
       })
     ).opened
       ? 'opened'
@@ -457,7 +466,10 @@ export function autoResolveIssues(
       SELECT i.id, 'The withdrawal was found at the provider or reached a final state.'
         FROM issues i JOIN payouts p ON p.id = (i.subject->>'payoutId')::uuid
        WHERE i.status = 'open' AND i.kind IN ('payout_unresolved', 'payout_held')
-         AND (p.provider_reference IS NOT NULL OR p.status NOT IN ('REQUESTED', 'PROCESSING'))
+         -- Finding the reference answers an unknown start, not a payout stuck after it.
+         AND (p.status NOT IN ('REQUESTED', 'PROCESSING')
+              OR (p.provider_reference IS NOT NULL
+                  AND i.dedupe_key NOT LIKE 'payout_stuck.%'))
       UNION ALL
       -- Raised after its release check finished (the misreported tip never confirms).
       SELECT i.id, 'The release check that raised it has finished.'

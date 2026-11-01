@@ -178,6 +178,16 @@ export class WebhookService {
       eventId: event.eventId,
       status: event.status,
       contradicted: event.contradicted === true,
+      claims: {
+        ...(event.amountMinor === undefined
+          ? {}
+          : { amountMinor: event.amountMinor }),
+        ...(event.currency === undefined ? {} : { currency: event.currency }),
+        ...(event.operationReference
+          ? { operationReference: event.operationReference }
+          : {}),
+      },
+      ...(event.feeMinor === undefined ? {} : { feeMinor: event.feeMinor }),
       reader: bachs,
       payload: event,
       now: new Date(),
