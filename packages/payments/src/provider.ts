@@ -181,9 +181,11 @@ export interface PayoutPort {
     failureReason?: PayoutFailureReason;
   }>;
   /**
-   * Finds the payout a lost answer may have created. Null only when the provider definitely has
-   * none; anything else raises UncertainProviderOutcomeError. The account is required because a
-   * provider searches the caller's own payouts: without it, the answer would be a false "none".
+   * Finds the payout a lost answer may have created. Null means the provider has none right now;
+   * anything unclear raises UncertainProviderOutcomeError. A null soon after a timed-out create is
+   * not proof, because that request may still be in flight: act on null only once the attempt is
+   * older than an age threshold. The account is required because a provider searches the caller's
+   * own payouts: without it, the answer would be a false "none".
    */
   findPayoutByReference(
     accountRef: string,

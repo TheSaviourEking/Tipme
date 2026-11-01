@@ -606,8 +606,10 @@ export function createBachsPayouts(
               },
         );
       }
+      // The docs define "none" as empty with `total` 0. An empty list alone could be a changed
+      // envelope, and null is what lets a reservation be released.
+      if (list.total === 0 && list.items.length === 0) return null;
       const total = list.total ?? list.items.length;
-      if (total === 0 && list.items.length === 0) return null;
       const payout = list.items[0];
       if (
         total !== 1 ||

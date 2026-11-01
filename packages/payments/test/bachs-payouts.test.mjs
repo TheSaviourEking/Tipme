@@ -660,6 +660,10 @@ test('anything but a clear answer from the lookup is uncertain', async () => {
     () => jsonResponse({ error_code: 'TOO_MANY_REQUESTS' }, 429),
     () => new Response('not json', { status: 200 }),
     () => jsonResponse({ unexpected: true }),
+    // No total: an empty list alone does not prove there is none.
+    () => jsonResponse({ items: [] }),
+    () => jsonResponse({ items: [], pagination: { total: 0 } }),
+    () => jsonResponse({ total: null, items: [] }),
     // Says some exist but lists none.
     () => jsonResponse({ total: 1, items: [] }),
     // Not the payout that was asked about.
