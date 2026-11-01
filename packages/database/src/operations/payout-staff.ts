@@ -13,6 +13,7 @@ import {
   withdrawalHolds,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
+import { withdrawalsSwitchState } from './withdrawals-switch.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { newId } from './ids.js';
 import { markResolved } from './issues.js';
@@ -426,6 +427,8 @@ export async function resumeHeldPayout(
         .for('update');
       const current = await loadCase(tx, input.issueId);
       if (!current || !offersFor(current, answer, now).resume) return false;
+      // Asked again here: the job would only wait, with the issue left saying it was resumed.
+      if ((await withdrawalsSwitchState(tx)).paused) return false;
       await enqueueOutbox(tx, {
         eventType: PAYOUT_START_EVENT,
         aggregateId: kase.payout.id,

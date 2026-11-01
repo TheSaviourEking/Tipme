@@ -109,3 +109,14 @@ test('no state names a provider', () => {
       /bachs|mock/i,
     );
 });
+
+test('withdrawals switched off for everyone say so plainly, with no form and no provider named', () => {
+  const view = of({ state: 'paused', reason: 'switched_off' });
+  assert.equal(view.canWithdraw, false);
+  assert.equal(view.showForm, false);
+  assert.equal(
+    view.notice.body,
+    'Withdrawals are paused for now. Your balance is safe.',
+  );
+  assert.doesNotMatch(JSON.stringify(view.notice), /bachs/i);
+});

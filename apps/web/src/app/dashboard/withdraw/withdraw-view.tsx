@@ -66,6 +66,7 @@ export default function WithdrawPage({
     }
     if (
       result.code === 'WITHDRAWALS_PAUSED' ||
+      result.code === 'WITHDRAWALS_SWITCHED_OFF' ||
       result.code === 'PAYOUT_SETUP_NEEDED' ||
       result.code === 'PAYOUT_DESTINATION_NEEDED' ||
       result.code === 'PAYOUT_PROVIDER_UNAVAILABLE' ||

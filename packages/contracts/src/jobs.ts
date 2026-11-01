@@ -5,6 +5,8 @@ export const JOB_QUEUE = 'tipme-jobs';
 export const JOB_NAMES = { traceProbe: 'diagnostics.trace-probe' } as const;
 /** Queued with a new withdrawal; the worker starts the payout from it. */
 export const PAYOUT_START_EVENT = 'payouts.start';
+/** Staff switched all withdrawals: the worker tells the alert route. */
+export const WITHDRAWALS_SWITCH_EVENT = 'withdrawals.switch_changed';
 
 /** W3C trace context carried inside job payloads so worker spans join the producer's trace. */
 export const traceCarrierSchema = z

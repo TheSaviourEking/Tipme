@@ -48,6 +48,8 @@ const messages: Record<ApiErrorCode, string> = {
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
+  WITHDRAWALS_SWITCHED_OFF:
+    'Withdrawals are paused for now. Your balance is safe.',
   WITHDRAWALS_PAUSED:
     'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
   PAYOUT_SETUP_NEEDED: 'Finish setting up how you get paid to withdraw.',
@@ -139,6 +141,7 @@ const operationErrors: Partial<
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
+  WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
   PAYOUT_SETUP_NEEDED: { status: 409, code: 'PAYOUT_SETUP_NEEDED' },
   PAYOUT_DESTINATION_NEEDED: {
     status: 409,

@@ -3,6 +3,7 @@ import {
   JOB_NAMES,
   JOB_QUEUE,
   PAYOUT_START_EVENT,
+  WITHDRAWALS_SWITCH_EVENT,
   traceCarrierSchema,
 } from '@tipme/contracts';
 import {
@@ -60,6 +61,7 @@ import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
+import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
 import { runUnlessRunning } from './run-lock.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
@@ -496,6 +498,14 @@ export async function startJobWorker(
             });
             processed.add(1, { outcome: `reserve_${result.value}` });
             return result.value;
+          }
+          if (job.name === WITHDRAWALS_SWITCH_EVENT) {
+            const outcome = await handleWithdrawalsSwitchChanged(job.data, {
+              url: config.ALERT_WEBHOOK_URL,
+              log: (entry) => logger.warn({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome: `withdrawals_switch_${outcome}` });
+            return outcome;
           }
           if (job.name === PAYOUT_START_EVENT) {
             const outcome = await handlePayoutStart(job.data, {

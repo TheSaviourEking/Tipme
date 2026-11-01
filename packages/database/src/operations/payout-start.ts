@@ -10,6 +10,7 @@ import {
 } from '../schema.js';
 import { markPayoutInitiated } from './attempts.js';
 import { guarded, safeError } from './errors.js';
+import { withdrawalsSwitchState } from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
 import {
   holdWithdrawals,
@@ -179,7 +180,7 @@ export interface PayoutStarter {
 }
 
 export type PayoutStartOutcome =
-  'started' | 'already' | 'uncertain' | 'failed' | 'held';
+  'started' | 'already' | 'uncertain' | 'failed' | 'held' | 'switched_off';
 
 type Payout = typeof payouts.$inferSelect;
 
@@ -304,6 +305,11 @@ async function claimStart(
       : input.provider;
   // An earlier attempt may have reached the provider. Never send it again; only ask.
   if (payout.startUncertainAt) return { kind: 'read', payout, starter };
+
+  // Off: it stays queued and reserved, with no failure, and is queued again when switched on. A
+  // read that fails throws, so the job retries and nothing leaves on a guess.
+  if ((await withdrawalsSwitchState(tx)).paused)
+    return { kind: 'done', outcome: 'switched_off' };
 
   const [hold] = await tx
     .select({ id: withdrawalHolds.id })

@@ -8,6 +8,7 @@ import type {
 } from '@tipme/contracts';
 import { Notice, Skeleton } from '@tipme/ui';
 import { Funnel, Tile } from '@/components/ops/charts';
+import { WithdrawalsSwitch } from '@/components/ops/withdrawals-switch';
 import { change, naira } from '@/lib/money';
 import { liveSwitchView } from '@/lib/live-switch-view';
 import { reserveView } from '@/lib/payment-reserve';
@@ -78,6 +79,7 @@ export default function OpsOverviewPage() {
     reserve = null,
     liveSwitch = null,
     liveNow,
+    withdrawalsSwitch,
   } = health.metrics;
   const live = liveSwitchView(liveNow, liveSwitch);
   const reserveNow = reserveView(reserve, openedAt);
@@ -98,6 +100,20 @@ export default function OpsOverviewPage() {
       </p>
       {live.current && <p data-testid="live-now">{live.current}</p>}
       {live.history && <p className="tm-hint">{live.history}</p>}
+      {withdrawalsSwitch && (
+        <WithdrawalsSwitch
+          state={withdrawalsSwitch}
+          onChanged={(next) =>
+            setHealth(
+              (current) =>
+                current && {
+                  ...current,
+                  metrics: { ...current.metrics, withdrawalsSwitch: next },
+                },
+            )
+          }
+        />
+      )}
       {live.disagrees && (
         <Notice tone="error" title="The record of live payments disagrees">
           This API’s setting and the last recorded change don’t match: a record

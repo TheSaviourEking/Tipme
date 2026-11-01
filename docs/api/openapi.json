@@ -7303,6 +7303,69 @@
         "x-tipme-permission": "recoveries.cancel"
       }
     },
+    "/v1/ops/withdrawals-switch": {
+      "post": {
+        "operationId": "OpsWithdrawalsSwitch.set",
+        "tags": [
+          "OpsWithdrawalsSwitch"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "paused": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "paused"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
+      }
+    },
     "/v1/payout-banks": {
       "get": {
         "operationId": "PayoutDestination.banks",
@@ -7941,6 +8004,7 @@
                   "WITHDRAWAL_TOO_SMALL",
                   "WITHDRAWAL_UNAVAILABLE",
                   "WITHDRAWALS_PAUSED",
+                  "WITHDRAWALS_SWITCHED_OFF",
                   "PAYOUT_SETUP_NEEDED",
                   "PAYOUT_DESTINATION_NEEDED",
                   "PAYOUT_DESTINATION_REFUSED",

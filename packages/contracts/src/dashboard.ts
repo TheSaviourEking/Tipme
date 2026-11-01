@@ -83,7 +83,12 @@ export type WithdrawalQuote =
   // `review` covers holds whose cause staff keep to themselves (a reported account takeover).
   | {
       state: 'paused';
-      reason: 'reversal' | 'in_debt' | 'unexpected_payout' | 'review';
+      reason:
+        | 'reversal'
+        | 'in_debt'
+        | 'unexpected_payout'
+        | 'review'
+        | 'switched_off';
     }
   | { state: 'provider_unavailable' };
 

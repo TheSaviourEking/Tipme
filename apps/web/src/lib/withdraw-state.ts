@@ -71,6 +71,12 @@ export function withdrawState(input: {
     };
   switch (quote.state) {
     case 'paused':
+      if (quote.reason === 'switched_off')
+        return blocked('paused', {
+          title: 'Withdrawals are paused',
+          body: 'Withdrawals are paused for now. Your balance is safe.',
+          tone: 'neutral',
+        });
       return blocked('paused', {
         title: 'Withdrawals are paused',
         body: 'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',

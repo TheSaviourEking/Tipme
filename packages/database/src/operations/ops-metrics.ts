@@ -1,6 +1,7 @@
 import type {
   OpsHealth,
   OpsLiveSwitch,
+  OpsWithdrawalsSwitch,
   OpsPaymentReserve,
   OpsVisibility,
 } from '@tipme/contracts';
@@ -9,6 +10,7 @@ import type { Database } from '../client.js';
 import { webVitalsSummary } from './analytics.js';
 import { guarded } from './errors.js';
 import { currentLiveSwitch } from './live-switch.js';
+import { withdrawalsSwitchState } from './withdrawals-switch.js';
 import { latestReserveReading, reserveIsStale } from './payment-reserve.js';
 
 const ZONE = 'Africa/Lagos';
@@ -189,6 +191,7 @@ export function healthMetrics(
       webVitals: await webVitalsSummary(db, { now: input.now, days: 28 }),
       reserve: await reserveSummary(db, input.now),
       liveSwitch: await liveSwitchSummary(db),
+      withdrawalsSwitch: await withdrawalsSwitchSummary(db),
     };
   });
 }
@@ -278,6 +281,16 @@ export function visibilityMetrics(
       })),
     };
   });
+}
+
+async function withdrawalsSwitchSummary(
+  db: Database,
+): Promise<OpsWithdrawalsSwitch> {
+  const state = await withdrawalsSwitchState(db);
+  return {
+    paused: state.paused,
+    changedAt: state.changedAt?.toISOString() ?? null,
+  };
 }
 
 async function liveSwitchSummary(db: Database): Promise<OpsLiveSwitch | null> {

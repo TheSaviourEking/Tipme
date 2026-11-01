@@ -115,9 +115,12 @@ async function until(check, what, timeoutMs = 20_000) {
   }
 }
 
-async function startApi(port) {
+async function startApi(wanted, extra = {}) {
+  const port = wanted || (await freePort());
   const api = start(API_MAIN, {
     ...shared(),
+    LIVE_CHECKOUT_HANDLES: '',
+    ...extra,
     PORT: String(port),
     HOST: '127.0.0.1',
     BACHS_LIVE_WEBHOOK_SECRET: 'l'.repeat(32),
@@ -305,6 +308,87 @@ test(
     } finally {
       await redis.del(key);
       redis.disconnect();
+    }
+  },
+);
+
+const seededProfile = async (handle) => {
+  await database.pool.query(
+    `INSERT INTO profiles (id, handle, handle_lower, display_name, page_state)
+     VALUES (gen_random_uuid(), $1, $1, 'Live test', 'live')
+     ON CONFLICT DO NOTHING`,
+    [handle],
+  );
+};
+const quoteOn = (api, handle) =>
+  fetch(`${api.origin}/v1/tip-quotes`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: 'https://web.example.test',
+      'x-tipme-csrf': '1',
+    },
+    body: JSON.stringify({ handle, amountMinor: '100000', currency: 'NGN' }),
+  });
+
+test(
+  'limited stage on the real API: the named page quotes, others are refused by direct call, and its page says so',
+  { timeout: 60_000 },
+  async () => {
+    await seededProfile('stage_owner');
+    await seededProfile('stage_other');
+    const start = (handles) => startApi(0, { LIVE_CHECKOUT_HANDLES: handles });
+    const named = await start('stage_owner');
+    assert.equal((await quoteOn(named, 'stage_owner')).status, 201);
+    const refused = await quoteOn(named, 'stage_other');
+    assert.equal(refused.status, 409);
+    assert.equal((await refused.json()).error.code, 'TIPPING_NOT_OPEN');
+    const page = async (handle) =>
+      (await data(`${named.origin}/v1/profiles/${handle}`)).tippingOpen;
+    assert.equal(await page('stage_owner'), true);
+    assert.equal(await page('stage_other'), false);
+    await stop(named);
+
+    const blank = await start('');
+    assert.equal((await quoteOn(blank, 'stage_owner')).status, 409);
+    await stop(blank);
+
+    const everyone = await start('*');
+    assert.equal((await quoteOn(everyone, 'stage_other')).status, 201);
+    await stop(everyone);
+  },
+);
+
+test(
+  'bachs-live with payments off, started for real: closed, jobs run, no alert address needed, nothing is sent',
+  { timeout: 60_000 },
+  async () => {
+    const off = { PAYMENTS_LIVE_ENABLED: 'false' };
+    const api = await startApi(0, { ...off, LIVE_CHECKOUT_HANDLES: '*' });
+    const release = await data(`${api.origin}/health/release`);
+    assert.equal(release.paymentsLive, false);
+    assert.equal(release.paymentProvider, 'bachs-live');
+    // Off outranks the list.
+    assert.equal((await quoteOn(api, 'stage_owner')).status, 409);
+    assert.equal((await data(`${api.origin}/health/payments`)).stale, false);
+    const before = requests.length;
+    const worker = start(WORKER_MAIN, {
+      ...shared(),
+      ...off,
+      QUEUE_PREFIX: uniquePrefix(),
+    });
+    await until(
+      () => worker.out.includes('reserve.checked'),
+      'a reserve check with payments off',
+      40_000,
+    );
+    assert.ok(worker.child.exitCode === null, 'the worker stays up');
+    await stop(worker);
+    await stop(api);
+    // Reads only here: no account exists to set up, and nothing moved money.
+    for (const request of requests.slice(before)) {
+      assert.doesNotMatch(request.url, /\/v1\/(transfers|payouts)/);
+      assert.equal(request.method, 'GET', request.url);
     }
   },
 );

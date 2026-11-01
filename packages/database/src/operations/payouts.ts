@@ -33,6 +33,10 @@ import {
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { recordAudit } from './audit.js';
+import {
+  withdrawalsSwitchedOff,
+  withdrawalsSwitchState,
+} from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
@@ -684,7 +688,12 @@ export type WithdrawalQuoteResult =
   | { state: 'destination_pending' }
   | {
       state: 'paused';
-      reason: 'reversal' | 'in_debt' | 'unexpected_payout' | 'review';
+      reason:
+        | 'reversal'
+        | 'in_debt'
+        | 'unexpected_payout'
+        | 'review'
+        | 'switched_off';
     }
   | { state: 'provider_unavailable' };
 
@@ -912,6 +921,8 @@ export async function withdrawalQuote(
     onReadFailure?: ProviderReadFailureLog;
   },
 ): Promise<WithdrawalQuoteResult> {
+  if (await withdrawalsSwitchedOff(db))
+    return { state: 'paused', reason: 'switched_off' };
   const { hold, route, foreign } = await guarded(async () => ({
     hold: await activeHold(db, input.profileId),
     route: await payoutRoute(db, input),
@@ -1007,6 +1018,9 @@ export async function requestWithdrawal(
   const earlier = await guarded(() => replayIn(db));
   if (earlier) return earlier;
   if (input.amountMinor <= 0n) throw new OperationError('INVALID_INPUT');
+  // Before any provider read: while off nothing about this request needs one.
+  if ((await withdrawalsSwitchState(db)).paused)
+    throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
   const providerName = input.provider.name;
   const isForeign = () =>
     collectedElsewhere(db, {
@@ -1039,6 +1053,9 @@ export async function requestWithdrawal(
         .for('update');
       const afterLock = await replayIn(tx);
       if (afterLock) return afterLock;
+      // Under the lock too, and read for real: a switch that can't be read refuses here.
+      if ((await withdrawalsSwitchState(tx)).paused)
+        throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
       if (await activeHold(tx, input.profileId))
         throw new OperationError('WITHDRAWALS_PAUSED');
       const { availableMinor } = await balanceIn(tx, input.profileId);

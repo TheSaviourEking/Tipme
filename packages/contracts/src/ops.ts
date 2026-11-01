@@ -478,6 +478,20 @@ export interface OpsHealth {
   liveSwitch?: OpsLiveSwitch | null;
   /** Optional as above. */
   liveNow?: OpsLiveNow;
+  /** Optional as above. */
+  withdrawalsSwitch?: OpsWithdrawalsSwitch;
+}
+
+/** All withdrawals stopped or restarted by staff: always with a written reason (audited). */
+export const opsWithdrawalsSwitchSchema = opsReasonSchema
+  .extend({ paused: z.boolean() })
+  .strict();
+export type OpsWithdrawalsSwitchRequest = z.infer<
+  typeof opsWithdrawalsSwitchSchema
+>;
+export interface OpsWithdrawalsSwitch {
+  paused: boolean;
+  changedAt: string | null;
 }
 
 /** What the API answering now was started with, from its own config: the truth for this moment. */

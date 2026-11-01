@@ -421,6 +421,13 @@
       "when": 1793558380182,
       "tag": "0059_account_takeover_hold",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793561342652,
+      "tag": "0060_withdrawals_switch",
+      "breakpoints": true
     }
   ]
 }

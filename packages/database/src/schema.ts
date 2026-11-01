@@ -1282,13 +1282,20 @@ export const parkedPayoutChecks = pgTable('parked_payout_checks', {
 });
 
 /**
- * One read of the platform's payment reserve (the balance that covers payout fees), taken every
- * 15 minutes by the worker. A read that failed has no amount: `available_minor` and `low` are then
- * both null ("unknown"), never a guess. `alerted_at` is when staff were told about this reading;
- * it is how an alert is told once per low spell and again every 6 hours, across restarts.
- * `provider` is the adapter name (bachs-live or bachs-sandbox), so sandbox readings never count
- * for live.
+ * Staff's switch for all withdrawals, one row, read on every request and start so a change takes
+ * effect at once with no deploy. No row is on: nobody has ever switched it. Each change is audited.
  */
+export const withdrawalsSwitch = pgTable(
+  'withdrawals_switch',
+  {
+    id: text('id').primaryKey().default('global'),
+    paused: boolean('paused').notNull(),
+    changedBy: uuid('changed_by'),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+  },
+  () => [check('withdrawals_switch_one_row', sql`id = 'global'`)],
+);
+
 /** Each time live payments changed on this copy: the API records one at boot. */
 export const livePaymentSwitches = pgTable(
   'live_payment_switches',
@@ -1308,6 +1315,14 @@ export const livePaymentSwitches = pgTable(
   ],
 );
 
+/**
+ * One read of the platform's payment reserve (the balance that covers payout fees), taken every
+ * 15 minutes by the worker. A read that failed has no amount: `available_minor` and `low` are then
+ * both null ("unknown"), never a guess. `alerted_at` is when staff were told about this reading;
+ * it is how an alert is told once per low spell and again every 6 hours, across restarts.
+ * `provider` is the adapter name (bachs-live or bachs-sandbox), so sandbox readings never count
+ * for live.
+ */
 export const paymentReserveReadings = pgTable(
   'payment_reserve_readings',
   {
