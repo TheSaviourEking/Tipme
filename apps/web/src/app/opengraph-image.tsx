@@ -35,19 +35,6 @@ export default function OpengraphImage() {
             <path key={path.d.slice(0, 24)} d={path.d} fill={path.fill} />
           ))}
         </svg>
-        {/* Preview pill */}
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 22,
-            padding: '10px 20px',
-            borderRadius: 999,
-            border: '2px solid #DCC5FF',
-            color: '#511CB0',
-          }}
-        >
-          Development preview · No real payments
-        </div>
       </div>
 
       {/* Headline */}

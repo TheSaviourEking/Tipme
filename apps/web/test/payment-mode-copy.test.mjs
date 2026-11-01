@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   HOME_DESCRIPTION,
+  SHARE_CARD_ALT,
   SITE_DESCRIPTION,
   paymentModeCopy,
 } from '../src/lib/payment-mode-copy.ts';
@@ -64,6 +65,8 @@ test('only test and live copies show a pay button', () => {
 test('metadata shown in every mode never claims a test or a preview without payments', () => {
   assert.doesNotMatch(SITE_DESCRIPTION, testWords);
   assert.doesNotMatch(HOME_DESCRIPTION, testWords);
+  assert.doesNotMatch(SHARE_CARD_ALT, testWords);
+  assert.doesNotMatch(SHARE_CARD_ALT, /preview|no real payments/i);
 });
 
 // /about-preview, the demo pay form and demo links describe a test copy: reachable only there.
