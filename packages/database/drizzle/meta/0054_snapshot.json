@@ -1,5 +1,5 @@
 {
-  "id": "61cf42e6-aeb2-4c3d-9137-5540997764ca",
+  "id": "8f6c80f0-3142-479d-9fa6-19bef947f42c",
   "prevId": "31ae2f88-3baf-47d6-96e4-fb4c9b10419c",
   "version": "7",
   "dialect": "postgresql",
@@ -1098,7 +1098,7 @@
         },
         "issues_resolution_outcome": {
           "name": "issues_resolution_outcome",
-          "value": "resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off'))"
+          "value": "resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off', 'staff_confirmed_absent'))"
         },
         "issues_resolution": {
           "name": "issues_resolution",
@@ -6430,7 +6430,8 @@
       "values": [
         "provider_event",
         "system",
-        "expiry"
+        "expiry",
+        "staff"
       ]
     }
   },

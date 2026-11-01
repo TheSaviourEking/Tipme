@@ -92,6 +92,10 @@ export class OpsActionsController {
     @Body(new ZodValidationPipe(opsResolveIssueSchema))
     body: OpsResolveIssueRequest,
   ): Promise<ApiDataResponse<{ resolved: true }>> {
+    // Closing a money issue can lift a hold, so it takes what acting on money takes.
+    const issue = await issueById(this.database.db, uuidParam(id));
+    if (issue?.severity === 'money' && !ops.permissions.has('payouts.resolve'))
+      throw new CodedHttpException(403, 'FORBIDDEN');
     await resolveIssue(this.database.db, {
       issueId: uuidParam(id),
       staffUserId: ops.userId,

@@ -13,6 +13,7 @@ export function ReasonAction({
   onSubmit,
   variant = 'secondary',
   hint = 'Recorded in the audit log with your name and the time.',
+  errorTitle = 'Not done',
 }: {
   open: string;
   field: string;
@@ -21,6 +22,8 @@ export function ReasonAction({
   variant?: 'primary' | 'secondary' | 'quiet';
   /** Who reads the text; say so plainly when it is not only staff. */
   hint?: string;
+  /** Where a failure can't say that nothing happened. */
+  errorTitle?: string;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -61,7 +64,7 @@ export function ReasonAction({
         autoFocus
       />
       {error && (
-        <Notice tone="error" title="Not done">
+        <Notice tone="error" title={errorTitle}>
           {error}
         </Notice>
       )}

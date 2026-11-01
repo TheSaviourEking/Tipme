@@ -1,7 +1,7 @@
 'use client';
 import { useId, useState, type FormEvent } from 'react';
 import { Button, Notice, TextareaField } from '@tipme/ui';
-import { ISSUE_OUTCOME_LABELS } from '@/lib/ops-client';
+import { ISSUE_OUTCOME_CHOICES } from '@/lib/ops-client';
 
 /** Resolving a money issue: how it was settled, and why. Neither changes a balance. */
 export function ResolveMoneyIssue({
@@ -53,7 +53,7 @@ export function ResolveMoneyIssue({
           <option value="" disabled>
             Choose an outcome
           </option>
-          {Object.entries(ISSUE_OUTCOME_LABELS).map(([value, label]) => (
+          {Object.entries(ISSUE_OUTCOME_CHOICES).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>

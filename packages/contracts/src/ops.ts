@@ -145,6 +145,8 @@ export const ISSUE_OUTCOMES = [
   'resolved_by_provider',
   'recipient_owes',
   'written_off',
+  // Only the mark-failed tool states this: staff looked, and the provider has no such payout.
+  'staff_confirmed_absent',
 ] as const;
 export type OpsIssueOutcome = (typeof ISSUE_OUTCOMES)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';

@@ -140,7 +140,7 @@ test('resolving needs a reason; it records who resolved it and why', async () =>
     (e) => e.action === 'issue.resolved' && e.subjectId === issue.id,
   );
   assert.equal(row.reason, reason);
-  assert.equal(row.permission, 'issues.resolve');
+  assert.equal(row.permission, 'payouts.resolve');
 
   const note = await call(
     'POST',

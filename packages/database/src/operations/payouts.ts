@@ -312,6 +312,47 @@ const STATUS: Record<'processing' | 'paid' | 'failed', PayoutStatus> = {
   failed: 'FAILED',
 };
 
+/** What a payout's failure releases, whoever decided it: its tips, and the recipient is told. */
+async function releaseFailedPayout(
+  tx: Tx,
+  payout: { id: string; profileId: string },
+): Promise<void> {
+  // Release the tips so they can be paid out again.
+  await tx
+    .update(payoutItems)
+    .set({ active: false })
+    .where(eq(payoutItems.payoutId, payout.id));
+  await enqueueOutbox(tx, {
+    eventType: 'payout.failed',
+    aggregateId: payout.id,
+    payload: { payoutId: payout.id, profileId: payout.profileId },
+  });
+}
+
+/**
+ * A person, not the provider, decided this payout failed. So no provider event is written: the
+ * provider said nothing to store, and only the audit row and a `staff` transition say what happened.
+ * The caller holds the row lock and has checked what makes this safe.
+ */
+export async function failPayoutByStaff(
+  tx: Tx,
+  payout: { id: string; profileId: string; status: string },
+): Promise<void> {
+  await tx
+    .update(payouts)
+    .set({ status: 'FAILED', startUncertainAt: null })
+    .where(eq(payouts.id, payout.id));
+  await recordTransition(tx, {
+    entityType: 'payout',
+    entityId: payout.id,
+    fromStatus: payout.status,
+    toStatus: 'FAILED',
+    cause: 'staff',
+    traceId: activeTraceId(),
+  });
+  await releaseFailedPayout(tx, payout);
+}
+
 type PayoutOutcomeInput = {
   payoutId: string;
   provider: string;
@@ -343,8 +384,7 @@ export function recordPayoutOutcome(
   );
 }
 
-/** The same, inside a caller's transaction. */
-export async function recordPayoutOutcomeIn(
+async function recordPayoutOutcomeIn(
   tx: Tx,
   input: PayoutOutcomeInput,
 ): Promise<PayoutOutcomeResult> {
@@ -486,16 +526,7 @@ export async function recordPayoutOutcomeIn(
     }
   }
   if (to === 'FAILED') {
-    // Release the tips so they can be paid out again.
-    await tx
-      .update(payoutItems)
-      .set({ active: false })
-      .where(eq(payoutItems.payoutId, payout.id));
-    await enqueueOutbox(tx, {
-      eventType: 'payout.failed',
-      aggregateId: payout.id,
-      payload: { payoutId: payout.id, profileId: payout.profileId },
-    });
+    await releaseFailedPayout(tx, payout);
     if (input.failureReason === 'in_debt') {
       const issue = await openIssue(tx, {
         dedupeKey: `provider_in_debt.${payout.id}`,
