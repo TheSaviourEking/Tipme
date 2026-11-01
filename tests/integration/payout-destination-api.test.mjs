@@ -1646,3 +1646,96 @@ test('through HTTP: ten lookups a day for one person, then 429; another person i
   assert.ok(Number(limited.headers.get('retry-after')) > 0);
   assert.equal((await resolve(b)).status, 200);
 });
+
+/** Accounts on pages of their own, none with manual payouts or capabilities recorded yet. */
+async function moreAccounts(database, count) {
+  for (let i = 0; i < count; i += 1) {
+    const profile = randomUUID();
+    await database.pool.query(
+      `INSERT INTO profiles (id, handle, handle_lower, display_name)
+       VALUES ($1, $2, $2, 'Sweep test')`,
+      [profile, `sweep_${i}`],
+    );
+    await database.pool.query(
+      `INSERT INTO payment_accounts
+         (id, profile_id, provider, environment, provider_account_reference, status,
+          charges_enabled, payouts_enabled, fee_collector)
+       VALUES ($1, $2, 'bachs', 'sandbox', $3, 'ACTIVE', true, false, 'platform')`,
+      [randomUUID(), profile, `acct_sweep_${i}`],
+    );
+  }
+}
+
+test('dead accounts stop the account phase, and a bank under review still settles on that sweep', async (t) => {
+  const database = await setUp(t);
+  await moreAccounts(database, ops.PAYOUT_SWEEP_MAX_FAILURES_IN_A_ROW);
+  await setPayoutDestination(database.db, {
+    sealing,
+    profileId: TOBI,
+    provider: 'bachs',
+    destinationRef: 'pd_pending',
+    bankCode: '058',
+    bankName: 'Guaranty Trust Bank',
+    last4: '6789',
+    status: 'pending_review',
+  });
+  const swept = await sweepPayoutSetup(database.db, {
+    provider: failingManual(),
+  });
+  assert.equal(swept.stoppedEarly, true);
+  assert.equal(swept.destinationsSettled, 1);
+  const [row] = await database.rows(
+    `SELECT status FROM payout_destinations WHERE profile_id = $1`,
+    [TOBI],
+  );
+  assert.equal(row.status, 'usable');
+});
+
+test('banks that can not be read never stop the others being read', async (t) => {
+  const database = await setUp(t);
+  await moreAccounts(database, 2);
+  const { rows: profiles } = await database.pool.query(
+    `SELECT id FROM profiles WHERE handle LIKE 'sweep_%' ORDER BY handle`,
+  );
+  const add = (profileId, destinationRef) =>
+    setPayoutDestination(database.db, {
+      sealing,
+      profileId,
+      provider: 'bachs',
+      destinationRef,
+      bankCode: '058',
+      bankName: 'Guaranty Trust Bank',
+      last4: '6789',
+      status: 'pending_review',
+    });
+  await add(profiles[0].id, 'pd_dead_1');
+  await add(profiles[1].id, 'pd_dead_2');
+  await add(TOBI, 'pd_good');
+  const swept = await sweepPayoutSetup(database.db, {
+    maxFailuresInARow: 1,
+    provider: fakeBachs({
+      payoutDestinationStatus: async (_account, reference) => {
+        if (reference !== 'pd_good') throw new Error('down');
+        return 'usable';
+      },
+    }),
+  });
+  assert.equal(swept.destinationsSettled, 1);
+  assert.equal(swept.stoppedEarly, false);
+});
+
+test('repeated capability failures alone do not stop the run', async (t) => {
+  const database = await setUp(t);
+  const count = ops.PAYOUT_SWEEP_MAX_FAILURES_IN_A_ROW + 2;
+  await moreAccounts(database, count);
+  const provider = fakeBachs({
+    payoutCapability: async () => {
+      throw new Error('capability read down');
+    },
+  });
+  const swept = await sweepPayoutSetup(database.db, { provider });
+  assert.equal(swept.stoppedEarly, false);
+  assert.equal(swept.checked, count);
+  assert.equal(swept.failed, count);
+  assert.equal(provider.named('setManualPayouts').length, count);
+});

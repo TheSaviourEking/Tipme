@@ -334,9 +334,9 @@ async function applyPayoutSetup(
   provider: PayoutSetupProvider,
   account: SetupRow,
   log?: PayoutSetupLog,
-): Promise<number> {
+): Promise<{ failed: number; manualFailed: boolean; manualTried: boolean }> {
   const reference = account.providerAccountReference;
-  if (!reference) return 0;
+  if (!reference) return { failed: 0, manualFailed: false, manualTried: false };
   await guarded(() =>
     db
       .update(paymentAccounts)
@@ -344,6 +344,7 @@ async function applyPayoutSetup(
       .where(eq(paymentAccounts.id, account.id)),
   );
   let failed = 0;
+  let manualFailed = false;
   const failure = (event: string, error: unknown) => {
     failed += 1;
     log?.({ event, provider: 'bachs', error: errorName(error) });
@@ -368,11 +369,12 @@ async function applyPayoutSetup(
       await provider.setManualPayouts(reference);
       await markManualPayoutsSet(db, account.id);
     } catch (error) {
+      manualFailed = true;
       failure('payment_account.manual_payouts_failed', error);
       await tellStaffSetupFailed(db, account, log);
     }
   }
-  return failed;
+  return { failed, manualFailed, manualTried: !account.manualPayoutsAt };
 }
 
 const setupIssueKey = (accountId: string) =>
@@ -510,7 +512,11 @@ export async function refreshPendingDestination(
 
 const SWEEP_PAGE = 100;
 
-/** This many failures together look like the provider being down, so the run ends there. */
+/**
+ * This many manual-payouts failures together look like the provider being down, so the account
+ * phase ends there. Reading banks under review always runs after it: those are reads, few, and a
+ * stop there could leave a good bank behind unreadable ones on every run.
+ */
 export const PAYOUT_SWEEP_MAX_FAILURES_IN_A_ROW = 5;
 
 /**
@@ -548,11 +554,10 @@ export async function sweepPayoutSetup(
       provider: 'bachs',
       error: 'repeated_failures',
     });
-    return totals;
   };
   const runStart = new Date();
   let inARow = 0;
-  for (;;) {
+  accounts: for (;;) {
     // Each account tried is stamped past runStart, so this drains and ends.
     const page: SetupRow[] = await guarded(() =>
       db
@@ -585,15 +590,19 @@ export async function sweepPayoutSetup(
     );
     for (const account of page) {
       totals.checked += 1;
-      const failed = await applyPayoutSetup(
+      const { failed, manualFailed, manualTried } = await applyPayoutSetup(
         db,
         input.provider,
         account,
         input.log,
       );
       totals.failed += failed;
-      inARow = failed > 0 ? inARow + 1 : 0;
-      if (inARow >= limit) return stop();
+      if (manualFailed) inARow += 1;
+      else if (manualTried) inARow = 0;
+      if (inARow >= limit) {
+        stop();
+        break accounts;
+      }
     }
     if (page.length < SWEEP_PAGE) break;
   }
@@ -633,20 +642,15 @@ export async function sweepPayoutSetup(
         .orderBy(asc(payoutDestinations.id))
         .limit(SWEEP_PAGE),
     );
-    for (const row of pending) {
-      let readFailed = false;
-      const settled = await refreshPendingDestination(db, input.provider, {
-        profileId: row.profileId,
-        accountReference: row.accountReference,
-        log: (entry) => {
-          readFailed = true;
-          input.log?.(entry);
-        },
-      });
-      if (settled) totals.destinationsSettled += 1;
-      inARow = readFailed ? inARow + 1 : 0;
-      if (inARow >= limit) return stop();
-    }
+    for (const row of pending)
+      if (
+        await refreshPendingDestination(db, input.provider, {
+          profileId: row.profileId,
+          accountReference: row.accountReference,
+          log: input.log,
+        })
+      )
+        totals.destinationsSettled += 1;
     const last = pending.at(-1);
     if (!last || pending.length < SWEEP_PAGE) break;
     afterDestination = last.id;
