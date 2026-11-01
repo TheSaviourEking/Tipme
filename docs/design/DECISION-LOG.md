@@ -162,3 +162,17 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - Money never performs: balances don't count up, and no animation implies a payment or withdrawal has progressed past its recorded state.
 - The Appreciation Moment plays once per confirmed tip, and is the only celebration. A paid withdrawal is deliberately quiet, because it's the person's own money.
 - No parallax or scroll-tied animation on money screens; the home page alone may use one-time section entrances.
+
+## 2026-11-01 — Public page leads with the person and the tip
+
+- The owner approved this on 1 Nov, with the mockup's Main, Phone and PhoneClosed boards: the cover-led page replaces the portrait-led Concept A on `/@handle` only. This supersedes the 2026-10-26 "Report this page sits under the preview note" placement. "Portrait-led identity" in the constitution now means the profile photo here; other surfaces keep their compositions.
+- The page opens with the logo, then the cover. The profile photo overlaps the cover's edge, appears once, and shows initials in the same circle when there is none. Its ring is solid canvas, because it sits on any of the 24 covers.
+- The site's navigation and footer links are hidden on `/@handle` only (CSS, including its loading state). The page's own footer is "Report this page" and, except on Pro pages, "Get your own TipMe page". Privacy and Terms links are therefore not on this page; the owner should confirm that before launch.
+- Phone Tip bar: the form's own submit button, fixed to the bottom, so there is one action and one accessible button. It hides while a field has focus, because the keyboard needs the room. Scroll padding and page padding keep focus, errors and the Report link clear of it. Closing an Android keyboard ends the editing, so the bar comes back.
+- While a tip is starting, the form's transitions are switched off: only the button's label changes.
+- On phones the panel fades without rising 12px, because a transform on the panel would carry the fixed bar with it.
+- Kept from the existing form rather than the mockup, because the checkout flow and its tests depend on them: the "Other" key that reveals the amount field, the purpose select and the amount format on the button ("NGN 2,000.00"). Awaiting the owner's view.
+
+## 2026-11-01 — Cover colour exception
+
+- Covers may use colours beyond `#7A32F9`, `#FFFFFF` and `#000000`: the catalogue's tones and the pattern artwork. It is a narrow exception to the locked palette, for the person's own decorative picture only. Controls, text and TipMe's own surfaces keep the locked colours and the tokens, and nothing that carries meaning sits only on a cover.

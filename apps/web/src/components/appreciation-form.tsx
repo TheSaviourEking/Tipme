@@ -61,6 +61,7 @@ export function AppreciationForm({
   collapseExtras = false,
   celebration,
   tipAmounts,
+  surface = 'home',
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -73,6 +74,8 @@ export function AppreciationForm({
   collapseExtras?: boolean;
   /** A moment the recipient shared: supporters may add their tip to it. */
   celebration?: { momentId: string; label: string };
+  /** A person's own page has its own heading and wording, and a Tip bar on phones. */
+  surface?: 'home' | 'profile';
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -96,6 +99,8 @@ export function AppreciationForm({
   const latestQuote = useRef(0);
   const customField = useRef<HTMLInputElement>(null);
   const firstChoice = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const onProfile = surface === 'profile';
 
   const amount =
     selection === 'other'
@@ -229,6 +234,41 @@ export function AppreciationForm({
     setNotice(failureMessage(result, options.rangeText));
   };
 
+  // On a phone the Tip bar can be pressed from anywhere on the page: bring a problem into view,
+  // above the bar (the page's scroll padding), however far away the supporter was.
+  const problem =
+    error || notice || (shown.kind === 'failed' ? shown.message : '');
+  useEffect(() => {
+    if (!onProfile || !problem) return;
+    form.current
+      ?.querySelector('.tm-notice, .tm-field-error')
+      ?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }, [onProfile, problem]);
+
+  // The Tip bar steps aside while a field has focus (CSS). Android's back gesture closes the
+  // keyboard but leaves the field focused, which would leave the bar away: end the editing too.
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!onProfile || !view) return;
+    let { height, scale } = view;
+    const resized = () => {
+      const grew = view.height - height > 120 && view.scale === scale;
+      ({ height, scale } = view);
+      const field = document.activeElement;
+      if (
+        grew &&
+        matchMedia('(max-width: 860px)').matches &&
+        field instanceof HTMLElement &&
+        field.matches(
+          'input:not([type="radio"], [type="checkbox"]), select, textarea',
+        )
+      )
+        field.blur();
+    };
+    view.addEventListener('resize', resized);
+    return () => view.removeEventListener('resize', resized);
+  }, [onProfile]);
+
   const ready = shown.kind === 'ready' ? shown.quote : null;
   const busy = submitting || shown.kind === 'loading';
   const extras = (
@@ -264,7 +304,10 @@ export function AppreciationForm({
       </label>
     </>
   );
-  if (closed || !copy.payable) return <TippingOpensSoon announce={closed} />;
+  if (closed || !copy.payable)
+    return (
+      <TippingOpensSoon announce={closed} {...(onProfile ? { handle } : {})} />
+    );
   return (
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}
@@ -274,7 +317,13 @@ export function AppreciationForm({
         {copy.formBadge && <Badge>{copy.formBadge}</Badge>}
       </div>
       {/* No browser form restoration: after Back, the controls must match React's state. */}
-      <form onSubmit={submit} noValidate autoComplete="off">
+      <form
+        ref={form}
+        onSubmit={submit}
+        noValidate
+        autoComplete="off"
+        {...(submitting ? { 'data-submitting': '' } : {})}
+      >
         {celebration && (
           <div className="celebration-banner">
             <p>
@@ -294,10 +343,16 @@ export function AppreciationForm({
             </Button>
           </div>
         )}
-        <h2>Make {recipient}’s day.</h2>
-        <p className="composer-description">
-          A small gesture. A very human thank you.
-        </p>
+        {onProfile ? (
+          <h2>Tip {recipient}</h2>
+        ) : (
+          <>
+            <h2>Make {recipient}’s day.</h2>
+            <p className="composer-description">
+              A small gesture. A very human thank you.
+            </p>
+          </>
+        )}
         <fieldset
           disabled={submitting}
           aria-describedby={`${id}-currency ${error && selection !== 'other' ? `${id}-error` : ''}`}
@@ -439,19 +494,22 @@ export function AppreciationForm({
             {notice}
           </Notice>
         )}
-        <Button
-          className="composer-submit"
-          type="submit"
-          disabled={busy}
-          aria-busy={busy}
-        >
-          {submitting
-            ? 'Starting your tip…'
-            : amount
-              ? `Tip ${formatDemoAmount(amount)}`
-              : 'Tip'}{' '}
-          <Arrow />
-        </Button>
+        {/* A fixed bar on a phone's public page (CSS): still this form's one submit button. */}
+        <div className="composer-action">
+          <Button
+            className="composer-submit"
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+          >
+            {submitting
+              ? 'Starting your tip…'
+              : amount
+                ? `Tip ${formatDemoAmount(amount)}`
+                : 'Tip'}{' '}
+            <Arrow />
+          </Button>
+        </div>
         <p className="composer-disclaimer">
           {copy.formDisclaimer && (
             <>
@@ -461,6 +519,25 @@ export function AppreciationForm({
           )}
           You’ll confirm on the payment provider’s page next.
         </p>
+        {onProfile && copy.formTrust && (
+          <p className="composer-trust">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="5" y="11" width="14" height="9" rx="2" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
+            <span>{copy.formTrust}</span>
+          </p>
+        )}
       </form>
     </Card>
   );

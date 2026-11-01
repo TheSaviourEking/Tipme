@@ -17,7 +17,8 @@ export type PaymentModeCopy = {
   closedBody: string;
   formBadge: string | null;
   formDisclaimer: string | null;
-  profileSafety: string;
+  /** Beside the Tip button on the public page, wherever a supporter can pay. */
+  formTrust: string | null;
   profileMetaSuffix: string;
   homeRecipientNotice: string | null;
   homeClarity: string;
@@ -42,6 +43,8 @@ const SIGN_UP =
 const CLARITY =
   'You see the full cost and what the person receives before you pay.';
 const PAY_STEP = 'Review the full amount and what they receive, then pay.';
+const TRUST =
+  'No account needed. You’ll see the full total before you pay, and our payment partner handles your card securely.';
 const EXAMPLE_TITLE = 'Tip the people you know';
 const EXAMPLE_BODY =
   'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to thank.';
@@ -65,8 +68,7 @@ const TEST: PaymentModeCopy = {
   closedBody: CLOSED_BODY,
   formBadge: 'Test payments',
   formDisclaimer: 'TipMe is in test mode: no real money moves yet.',
-  profileSafety:
-    'No account needed. TipMe is in test mode: no real money moves yet.',
+  formTrust: TRUST,
   profileMetaSuffix: ' Test mode.',
   homeRecipientNotice:
     'Payments are in test mode. Real payments and payout setup are not available until provider and funds-flow approvals are complete.',
@@ -98,7 +100,7 @@ const LIVE: PaymentModeCopy = {
   closedBody: CLOSED_BODY,
   formBadge: null,
   formDisclaimer: null,
-  profileSafety: 'No account needed.',
+  formTrust: TRUST,
   profileMetaSuffix: '',
   homeRecipientNotice: null,
   homeClarity: CLARITY,
@@ -120,7 +122,7 @@ const CLOSED: PaymentModeCopy = {
   ...LIVE,
   payable: false,
   homeDemo: 'closed',
-  profileSafety: `No account needed. ${CLOSED_TITLE}.`,
+  formTrust: null,
   homeRecipientNotice: `${CLOSED_TITLE}. You can create your page now.`,
   homeClarity: `${CLARITY} ${CLOSED_TITLE}.`,
   howItWorksPay: `${PAY_STEP} ${CLOSED_TITLE}.`,

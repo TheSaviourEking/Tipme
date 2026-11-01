@@ -1,18 +1,17 @@
-import { Container, Skeleton } from '@tipme/ui';
+import { Skeleton } from '@tipme/ui';
 
-/** The profile's own silhouette while it loads, so nothing jumps when the person appears. */
+/** The page's own silhouette while it loads, so nothing jumps when the person appears. */
 export default function Loading() {
   return (
     <main id="main" tabIndex={-1} className="profile-page">
-      <Container>
-        <div className="profile-stage profile-stage--loading">
-          <div className="profile-scene">
-            <div className="profile-headline">
-              <h1 className="profile-headline__title">Finding your person.</h1>
+      <div className="profile-sheet">
+        <div className="profile-cover profile-cover--loading" />
+        <div className="profile-columns">
+          <div className="profile-identity">
+            <div className="profile-identity__head">
+              <span className="profile-photo avatar--initials" />
             </div>
-            <div className="profile-portrait">
-              <Skeleton label="Loading their page" />
-            </div>
+            <Skeleton label="Loading their page" />
           </div>
           <div className="profile-composer tip-instrument">
             <div className="appreciation-card tm-card">
@@ -20,7 +19,7 @@ export default function Loading() {
             </div>
           </div>
         </div>
-      </Container>
+      </div>
     </main>
   );
 }

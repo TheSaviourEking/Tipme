@@ -13,13 +13,14 @@ const source = new URL(
   import.meta.url,
 );
 const copy = new URL('../src/lib/payment-mode-copy.ts', import.meta.url);
-const { outputText } = ts.transpileModule(readFileSync(source, 'utf8'), {
-  compilerOptions: {
-    jsx: ts.JsxEmit.ReactJSX,
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ES2022,
-  },
-});
+const compile = (file) =>
+  ts.transpileModule(readFileSync(file, 'utf8'), {
+    compilerOptions: {
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
 // Inside apps/web, so react and @tipme/ui resolve from its node_modules.
 const outDir = fileURLToPath(
   new URL('../node_modules/.cache/tipme-test/', import.meta.url),
@@ -27,8 +28,14 @@ const outDir = fileURLToPath(
 mkdirSync(outDir, { recursive: true });
 const compiled = `${outDir}tipping-opens-soon.mjs`;
 writeFileSync(
+  `${outDir}share-profile.mjs`,
+  compile(new URL('../src/components/share-profile.tsx', import.meta.url)),
+);
+writeFileSync(
   compiled,
-  outputText.replace("'@/lib/payment-mode-copy'", `'${copy.href}'`),
+  compile(source)
+    .replace("'@/lib/payment-mode-copy'", `'${copy.href}'`)
+    .replace("'./share-profile'", "'./share-profile.mjs'"),
 );
 const { TippingOpensSoon } = await import(pathToFileURL(compiled).href);
 
@@ -37,6 +44,14 @@ test('the closed card says tipping opens soon, with no pay button', () => {
   assert.match(html, /<h2[^>]*>Tipping opens soon<\/h2>/);
   assert.doesNotMatch(html, /<button|<form/);
   assert.doesNotMatch(html, /test|sandbox|no real money/i);
+});
+
+test('on a person’s page it offers the page link, and still no way to pay', () => {
+  const html = renderToStaticMarkup(
+    createElement(TippingOpensSoon, { handle: 'kemi' }),
+  );
+  assert.match(html, /<button[^>]*>Copy page link<\/button>/);
+  assert.doesNotMatch(html, /<form|type="submit"/);
 });
 
 test('closing after a refusal is announced: a polite live region and a focusable heading', () => {

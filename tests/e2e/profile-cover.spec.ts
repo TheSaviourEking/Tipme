@@ -2,8 +2,7 @@ import { readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 // The cover artwork is served by the web app itself, so a page never waits on another origin for
-// it. The component is not on the public page until the page redesign lands; these checks cover
-// the files it draws, and the page-level checks (empty alt, no layout shift) follow with it.
+// it. These checks cover the files; profile-page.spec.ts has the page-level ones.
 const covers = readdirSync('apps/web/public/covers')
   .filter((file) => file.endsWith('.webp'))
   .map((file) => file.replace(/\.webp$/, ''));

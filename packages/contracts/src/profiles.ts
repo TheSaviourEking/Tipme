@@ -140,6 +140,8 @@ export interface PublicProfile {
   acceptingTips?: boolean;
   /** The page's cover. Absent from older APIs: the web app deploys first. */
   cover?: ResolvedCover;
+  /** Free or Pro, and nothing else about the plan. Pro pages hide TipMe's own invitation. */
+  plan?: PagePlan;
 }
 
 /** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */

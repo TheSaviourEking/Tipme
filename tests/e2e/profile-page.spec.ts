@@ -1,0 +1,657 @@
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { signUpRecipient } from './helpers';
+import { makePagePro } from './ops-helpers';
+import {
+  LONG_NAME,
+  UNBROKEN_NAME,
+  startStack,
+  type Mode,
+  type Stack,
+} from './profile-fixtures';
+
+// The public page (spec section 5). Test mode runs on the full e2e stack. The other payment states
+// and the worst-case pages run the same built web app against a stand-in API (profile-fixtures).
+
+const TRUST =
+  'No account needed. You’ll see the full total before you pay, and our payment partner handles your card securely.';
+const tipButton = (page: Page) => page.getByRole('button', { name: /^Tip\b/ });
+const share = (page: Page) =>
+  page.getByRole('button', { name: 'Share this page' });
+const makeYourOwn = (page: Page) =>
+  page.getByRole('link', { name: 'Get your own TipMe page' });
+
+/** Each check at desktop width and on a phone. */
+const both = (
+  name: string,
+  body: (args: { page: Page }, info: TestInfo) => Promise<void>,
+) => {
+  test(name, ({ page }, info) => body({ page }, info));
+  test(`${name} @mobile`, ({ page }, info) => body({ page }, info));
+};
+
+const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+async function expectAccessible(page: Page, label: string) {
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(wcag)
+    .analyze();
+  expect(
+    violations.map(
+      ({ id, nodes }) =>
+        `${label} ${id}: ${nodes.map((n) => n.target.join(' ')).join(', ')}`,
+    ),
+  ).toEqual([]);
+}
+
+const box = async (page: Page, selector: string) => {
+  await page.locator(selector).first().waitFor();
+  const found = await page.locator(selector).first().boundingBox();
+  if (!found) throw new Error(`${selector} is not rendered`);
+  return found;
+};
+
+const fitsWidth = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+
+/** No overlap between the on-screen part of an element and the fixed Tip bar. */
+const clearOfBar = (page: Page, selector: string) =>
+  page.evaluate((target) => {
+    const bar = document.querySelector('.composer-action');
+    const element = document.querySelector(target);
+    if (!bar || !element) throw new Error(`missing ${target}`);
+    const a = bar.getBoundingClientRect();
+    const b = element.getBoundingClientRect();
+    const hidden = getComputedStyle(bar).visibility === 'hidden';
+    return hidden || b.bottom <= a.top || b.top >= a.bottom;
+  }, selector);
+
+both(
+  'the page shows only the logo above the cover, with no nav, sign-in or breadcrumb',
+  async ({ page }) => {
+    await page.goto('/@ada');
+    await expect(page.getByRole('link', { name: 'TipMe home' })).toBeVisible();
+    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Menu' })).toHaveCount(0);
+    await expect(
+      page.getByRole('link', { name: 'Home', exact: true }),
+    ).toHaveCount(0);
+    const logo = await box(page, '.site-header .brand');
+    const cover = await box(page, '[data-profile-cover]');
+    expect(logo.y + logo.height).toBeLessThanOrEqual(cover.y + 1);
+    // The site's own footer links go too, on this page only.
+    await expect(page.getByRole('link', { name: 'Privacy' })).toHaveCount(0);
+  },
+);
+
+both(
+  'other pages keep the site navigation and footer',
+  async ({ page }, info) => {
+    for (const path of ['/', '/how-it-works', '/@not-a-person']) {
+      await page.goto(path);
+      if (info.project.name === 'mobile')
+        await expect(page.getByRole('button', { name: 'Menu' })).toBeVisible();
+      else
+        await expect(
+          page.getByRole('link', { name: 'Sign in' }).first(),
+        ).toBeVisible();
+      await expect(
+        page.getByRole('navigation', { name: 'Footer navigation' }),
+      ).toBeVisible();
+    }
+  },
+);
+
+both(
+  'the name is the h1 and "Support Great People" is gone',
+  async ({ page }) => {
+    await page.goto('/@ada');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      'Ada Okafor',
+    );
+    await expect(page.getByText('Support Great People')).toHaveCount(0);
+    await expect(page.getByText('A simpler, more thoughtful way')).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole('heading', { level: 2, name: 'Tip Ada' }),
+    ).toBeVisible();
+  },
+);
+
+test.describe('the page in each payment state', () => {
+  test.describe.configure({ mode: 'serial' });
+  test.setTimeout(120_000);
+  const stacks = new Map<Mode, Stack>();
+  const at = async (mode: Mode, path: string, page: Page) => {
+    let stack = stacks.get(mode);
+    if (!stack) {
+      stack = await startStack(mode);
+      stacks.set(mode, stack);
+    }
+    await page.goto(`${stack.origin}${path}`);
+    // The loading silhouette has been swapped for the page.
+    await page.getByRole('heading', { level: 1 }).waitFor();
+    return stack.origin;
+  };
+  test.afterAll(async () => {
+    await Promise.all([...stacks.values()].map((s) => s.stop()));
+  });
+
+  both(
+    'the profile photo appears once, with links inside the identity block',
+    async ({ page }, info) => {
+      await at('live', '/@kemi', page);
+      const identity = page.locator('[data-profile-card]');
+      const list = identity.getByRole('list', { name: 'Find Kemi elsewhere' });
+      for (const name of [
+        'X',
+        'Instagram',
+        'Facebook',
+        '+2348000000000',
+        'kemi@example.com',
+      ])
+        await expect(
+          list.getByRole('link', { name, exact: true }),
+        ).toBeVisible();
+      await expect(list.locator('svg')).toHaveCount(5);
+      const links = await list
+        .getByRole('link')
+        .evaluateAll((all) => all.map((a) => a.getBoundingClientRect().height));
+      for (const height of links) expect(height).toBeGreaterThanOrEqual(44);
+
+      // Initials stand in for the missing photo, once, in the circle over the cover's edge.
+      await expect(page.locator('.profile-photo')).toHaveCount(1);
+      const photo = await box(page, '.profile-photo');
+      const cover = await box(page, '[data-profile-cover]');
+      expect(photo.y).toBeLessThan(cover.y + cover.height);
+      expect(photo.y + photo.height).toBeGreaterThan(cover.y + cover.height);
+      const size = info.project.name === 'mobile' ? 104 : 144;
+      expect(photo.width).toBe(size);
+      expect(photo.height).toBe(size);
+      // The ring sits on any cover, so it is the solid canvas colour.
+      const ring = await page.locator('.profile-photo').evaluate((el) => {
+        const style = getComputedStyle(el);
+        return [
+          style.borderTopColor,
+          parseFloat(style.borderTopWidth),
+          getComputedStyle(document.querySelector('.profile-page')!)
+            .backgroundColor,
+        ] as const;
+      });
+      expect(ring[0]).toBe(ring[2]);
+      expect(ring[0]).toMatch(/^rgb\(/);
+      expect(ring[1]).toBeGreaterThanOrEqual(4);
+    },
+  );
+
+  both('no text on the page says demo', async ({ page }) => {
+    for (const [mode, path] of [
+      ['test', '/@kemi'],
+      ['live', '/@kemi'],
+      ['closed', '/@kemi'],
+    ] as const) {
+      await at(mode, path, page);
+      expect(await page.locator('body').innerText()).not.toMatch(/demo/i);
+      await expect(
+        page.locator('main [alt*="demo" i], main [aria-label*="demo" i]'),
+      ).toHaveCount(0);
+    }
+  });
+
+  both(
+    'closed checkout shows no Tip button, and offers Copy page link',
+    async ({ page }, info) => {
+      await page
+        .context()
+        .grantPermissions(['clipboard-read', 'clipboard-write']);
+      const origin = await at('closed', '/@kemi', page);
+      await expect(
+        page.getByRole('heading', { name: 'Tipping opens soon' }),
+      ).toBeVisible();
+      await expect(tipButton(page)).toHaveCount(0);
+      await expect(page.locator('.composer-action')).toHaveCount(0);
+      await expect(page.getByText(TRUST)).toHaveCount(0);
+      const copy = page.getByRole('button', { name: 'Copy page link' });
+      const before = await copy.boundingBox();
+      await copy.click();
+      await expect(page.getByText('Link copied.').first()).toBeVisible();
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        `${origin}/@kemi`,
+      );
+      // The button keeps its width, and goes back after two seconds.
+      expect(
+        (await page.locator('.share-profile--text button').boundingBox())
+          ?.width,
+      ).toBe(before?.width);
+      await expect(
+        page.getByRole('button', { name: 'Copy page link' }),
+      ).toBeVisible({ timeout: 4000 });
+      if (info.project.name === 'mobile')
+        await expect(page.locator('.profile-page')).not.toHaveCSS(
+          'padding-bottom',
+          /^(8|9)\dpx/,
+        );
+    },
+  );
+
+  both('Pro pages hide "Get your own TipMe page"', async ({ page }) => {
+    await at('live', '/@kemi', page);
+    await expect(makeYourOwn(page)).toHaveAttribute('href', '/sign-up');
+    await expect(
+      page.getByRole('button', { name: 'Report this page' }),
+    ).toBeVisible();
+    await at('live', '/@propage', page);
+    await expect(makeYourOwn(page)).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Report this page' }),
+    ).toBeVisible();
+  });
+
+  both(
+    'a 60-character name, 280-character bio, and no photo, role or links all hold at 320px',
+    async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 700 });
+      await at('live', '/@longname', page);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        LONG_NAME,
+      );
+      expect(await fitsWidth(page)).toBe(true);
+      const name = await box(page, 'h1');
+      const shareButton = await share(page).boundingBox();
+      expect(name.x + name.width).toBeLessThanOrEqual(320);
+      expect(shareButton?.width).toBe(44);
+      expect(shareButton?.height).toBe(44);
+      await at('live', '/@widename', page);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        UNBROKEN_NAME,
+      );
+      expect(await fitsWidth(page)).toBe(true);
+      await at('live', '/@bareface', page);
+      expect(await fitsWidth(page)).toBe(true);
+      await expect(page.locator('.profile-photo')).toHaveText('NE');
+      await expect(page.getByRole('list', { name: /elsewhere/ })).toHaveCount(
+        0,
+      );
+      await expect(page.locator('.profile-role, .profile-bio')).toHaveCount(0);
+    },
+  );
+
+  both(
+    'axe finds nothing on phone and desktop, in every payment state',
+    async ({ page }) => {
+      for (const [mode, path] of [
+        ['test', '/@kemi'],
+        ['live', '/@kemi'],
+        ['live', '/@waiting'],
+        ['live', '/@bareface'],
+        ['live', '/@hearts'],
+        ['closed', '/@kemi'],
+      ] as const) {
+        await at(mode, path, page);
+        await page.waitForTimeout(350);
+        await expectAccessible(page, `${mode} ${path}`);
+      }
+    },
+  );
+
+  both(
+    'the cover is decorative, server-rendered, holds its space and does not hold up the largest paint',
+    async ({ page }) => {
+      const origin = await at('live', '/@kemi', page);
+      const html = await (await page.request.get(`${origin}/@kemi`)).text();
+      expect(html).toContain('data-profile-cover="image"');
+      expect(html).toMatch(
+        /<img[^>]*alt=""[^>]*fetchPriority="high"|<img[^>]*fetchPriority="high"[^>]*alt=""/i,
+      );
+      expect(html).toMatch(/<h1[^>]*>Kemi Bello<\/h1>/);
+      await expect(page.locator('[data-profile-cover] img')).toHaveAttribute(
+        'alt',
+        '',
+      );
+
+      // Slow the picture down: nothing below it may move when it arrives.
+      await page.addInitScript(() => {
+        const w = window as unknown as {
+          __cls: number;
+          __lcp: { name: string; at: number }[];
+        };
+        w.__cls = 0;
+        w.__lcp = [];
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries() as unknown as {
+            value: number;
+          }[])
+            w.__cls += entry.value;
+        }).observe({ type: 'layout-shift', buffered: true });
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries() as unknown as {
+            element?: Element;
+            startTime: number;
+          }[])
+            w.__lcp.push({
+              name: entry.element?.closest('[data-profile-cover]')
+                ? 'cover'
+                : (entry.element?.tagName ?? ''),
+              at: entry.startTime,
+            });
+        }).observe({ type: 'largest-contentful-paint', buffered: true });
+      });
+      let release = () => {};
+      const held = new Promise<void>((done) => (release = done));
+      await page.route('**/_next/image**covers**', async (route) => {
+        await held;
+        await route.continue();
+      });
+      await page.goto(`${origin}/@kemi`, { waitUntil: 'commit' });
+      const name = await box(page, 'h1');
+      const frame = await box(page, '[data-profile-cover]');
+      release();
+      await expect
+        .poll(() =>
+          page
+            .locator('[data-profile-cover] img')
+            .evaluate(
+              (img: HTMLImageElement) => img.complete && img.naturalWidth > 0,
+            ),
+        )
+        .toBe(true);
+      await page.waitForTimeout(300);
+      expect((await box(page, 'h1')).y).toBe(name.y);
+      expect((await box(page, '[data-profile-cover]')).height).toBe(
+        frame.height,
+      );
+      const seen = await page.evaluate(() => {
+        const w = window as unknown as {
+          __cls: number;
+          __lcp: { name: string; at: number }[];
+        };
+        return { cls: w.__cls, lcp: w.__lcp };
+      });
+      expect(seen.cls).toBeLessThan(0.01);
+      const largest = seen.lcp.at(-1);
+      expect(['cover', 'H1', 'P', 'IMG']).toContain(largest?.name);
+    },
+  );
+
+  test('the largest paint arrives with the cover or name, with no animation holding it', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const origin = await at('live', '/@hearts', page);
+    await page.goto(`${origin}/@hearts`);
+    const moving = await page.evaluate(() =>
+      document.getAnimations().flatMap((a) => {
+        const target = (a.effect as KeyframeEffect | null)?.target;
+        return target?.closest('[data-profile-cover], [data-profile-card]')
+          ? [target.tagName]
+          : [];
+      }),
+    );
+    expect(moving).toEqual([]);
+  });
+
+  test("on a wide screen the panel overlaps the cover's lower right and stays in view", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 980 });
+    await at('live', '/@kemi', page);
+    const cover = await box(page, '[data-profile-cover]');
+    const panel = await box(page, '[data-tip-panel]');
+    const identity = await box(page, '[data-profile-card]');
+    expect(cover.width).toBe(1120);
+    expect(panel.y).toBeLessThan(cover.y + cover.height);
+    expect(panel.y).toBeGreaterThan(cover.y);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(
+      cover.x + cover.width + 1,
+    );
+    expect(panel.x).toBeGreaterThan(identity.x + identity.width - 1);
+    await expect(page.locator('[data-tip-panel]')).toHaveCSS(
+      'position',
+      'sticky',
+    );
+    await expect(page.getByText(TRUST)).toBeVisible();
+    await expect(tipButton(page)).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+    // Space for the live pilot notice: the wording stays directly under the button.
+    const button = await tipButton(page).boundingBox();
+    const wording = await box(page, '.composer-action + .composer-disclaimer');
+    expect(wording.y).toBeGreaterThanOrEqual(
+      (button?.y ?? 0) + (button?.height ?? 0),
+    );
+    const trust = await page.getByText(TRUST).boundingBox();
+    expect(trust?.y).toBeGreaterThanOrEqual(wording.y);
+  });
+
+  test('the panel rises in, without moving the fixed Tip bar on a phone', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await at('live', '/@kemi', page);
+    await expect(page.locator('[data-tip-panel]')).toHaveCSS(
+      'animation-name',
+      /profile-panel-rise/,
+    );
+    await expect(page.locator('[data-tip-panel]')).toHaveCSS(
+      'animation-duration',
+      '0.24s',
+    );
+    await page.setViewportSize({ width: 390, height: 800 });
+    await expect(page.locator('[data-tip-panel]')).toHaveCSS(
+      'animation-name',
+      /profile-panel-fade/,
+    );
+  });
+});
+
+test('Copy page link copies the page link and says Link copied.', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/@ada');
+  await share(page).click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Link copied.' }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `${baseURL}/@ada`,
+  );
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Link copied.' }),
+  ).toHaveCount(0, { timeout: 4000 });
+});
+
+test('Copy page link says so when the browser refuses @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: () => Promise.reject(new Error('no')) },
+    });
+  });
+  await share(page).click();
+  await expect(page.getByText(/Copy is unavailable/)).toBeVisible();
+  expect(await fitsWidth(page)).toBe(true);
+});
+
+test('on a phone the Tip button stays in view and the form still works @mobile', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/@ada');
+  // One action: a single accessible button, the form's own.
+  await expect(tipButton(page)).toHaveCount(1);
+  await expect(
+    page.locator('form:has(.composer-action) button[type="submit"]'),
+  ).toHaveCount(1);
+  const viewport = page.viewportSize()!;
+  const inView = async () => {
+    const found = await tipButton(page).boundingBox();
+    expect(found!.y).toBeGreaterThanOrEqual(0);
+    expect(found!.y + found!.height).toBeLessThanOrEqual(viewport.height);
+  };
+  await inView();
+  await page.evaluate(() => scrollTo({ top: 500, behavior: 'instant' }));
+  await inView();
+  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await expect(tipButton(page)).toHaveText(/Tip NGN 2,000/);
+  await expect(page.getByText(/You pay/)).toBeVisible();
+  await inView();
+  // Nothing moves while it starts: only the button's busy state.
+  await page.route('**/v1/tip-intents', async (route) => {
+    await new Promise((done) => setTimeout(done, 400));
+    await route.continue();
+  });
+  await tipButton(page).click();
+  await expect(
+    page.getByRole('button', { name: /Starting your tip/ }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      document
+        .getAnimations()
+        .filter((a) => a.playState === 'running')
+        .map((a) => {
+          const target = (a.effect as KeyframeEffect | null)?.target;
+          return `${target?.tagName}.${target?.className}: ${(a as CSSTransition).transitionProperty ?? (a as CSSAnimation).animationName}`;
+        }),
+    ),
+  ).toEqual([]);
+  await page.waitForURL(/mock-checkout|\/tip\//);
+});
+
+test('the Tip bar never covers a focused field, an error or the Report link @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  const bar = page.locator('.composer-action');
+  // Tapping Tip with nothing chosen: the error is shown clear of the bar.
+  await tipButton(page).click();
+  const error = page.getByText('Choose an amount or enter your own.');
+  await expect(error).toBeVisible();
+  await expect
+    .poll(() => clearOfBar(page, '.appreciation-card .tm-field-error'))
+    .toBe(true);
+  await expect(error).toBeInViewport();
+
+  // Each field: the bar is out of the way while it has focus, and back after.
+  for (const field of [
+    page.getByLabel('Personal message (optional)'),
+    page.getByLabel('What is this tip for? (optional)'),
+  ]) {
+    await field.focus();
+    await expect(bar).toBeHidden();
+    await expect(tipButton(page)).toHaveCount(0);
+    await field.blur();
+    await expect(bar).toBeVisible();
+  }
+
+  // Keyboard users: anything focused by Tab is scrolled clear of the bar.
+  await page.getByRole('radio', { name: '1,000 NGN' }).focus();
+  await expect.poll(() => clearOfBar(page, '.tm-amount-choice')).toBe(true);
+  await page.locator('.composer-extras summary').focus();
+  await expect
+    .poll(() => clearOfBar(page, '.composer-extras summary'))
+    .toBe(true);
+
+  // Back at the page's end, the Report link sits above the bar.
+  await page
+    .getByRole('button', { name: 'Report this page' })
+    .scrollIntoViewIfNeeded();
+  await page.evaluate(() =>
+    scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }),
+  );
+  await expect
+    .poll(() => clearOfBar(page, '.profile-foot .report-page'))
+    .toBe(true);
+  const report = await page
+    .getByRole('button', { name: 'Report this page' })
+    .boundingBox();
+  const barBox = await bar.boundingBox();
+  expect(report!.y + report!.height).toBeLessThanOrEqual(barBox!.y);
+
+  // Opening the report form hides nothing, and its field has the bar out of the way too.
+  await page.getByRole('button', { name: 'Report this page' }).click();
+  const reason = page.getByLabel('What’s wrong with this page?');
+  await reason.focus();
+  await expect(bar).toBeHidden();
+  await reason.blur();
+});
+
+test('closing the phone keyboard with a field still focused brings the Tip bar back @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  const field = page.getByLabel('Personal message (optional)');
+  await field.focus();
+  await page.setViewportSize({ width: 360, height: 500 });
+  await expect(page.locator('.composer-action')).toBeHidden();
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(page.locator('.composer-action')).toBeVisible();
+  await expect(field).not.toBeFocused();
+});
+
+test('a failed start is shown clear of the Tip bar @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await expect(page.getByText(/You pay/)).toBeVisible();
+  await page.route('**/v1/tip-intents', (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: { code: 'DEPENDENCY_UNAVAILABLE', message: 'x' },
+      }),
+    }),
+  );
+  await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+  await tipButton(page).click();
+  const notice = page.locator('.appreciation-card .tm-notice');
+  await expect(notice).toBeInViewport();
+  await expect
+    .poll(() => clearOfBar(page, '.appreciation-card .tm-notice'))
+    .toBe(true);
+});
+
+test('the wording under the Tip button stays in its place on a phone @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await expect(
+    page.locator('.composer-action + .composer-disclaimer'),
+  ).toContainText('You’ll confirm on the payment provider’s page next.');
+  await expect(page.locator('.composer-trust')).toContainText(TRUST);
+});
+
+test('a Pro page loses "Get your own TipMe page" within seconds of staff changing the plan', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const { handle } = await signUpRecipient(page, testInfo);
+  const visitor = await (await browser.newContext()).newPage();
+  await expect(async () => {
+    await visitor.goto(`/@${handle}`);
+    await expect(makeYourOwn(visitor)).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await makePagePro(browser, handle, testInfo);
+  // Inside the 30-second backstop: the change itself refreshed the cached page.
+  await expect(async () => {
+    await visitor.goto(`/@${handle}`);
+    await expect(makeYourOwn(visitor)).toHaveCount(0, { timeout: 500 });
+  }).toPass({ timeout: 10_000 });
+});
+
+test('home keeps its own form wording', async ({ page }) => {
+  await page.goto('/');
+  await expect(
+    page.getByRole('heading', { name: 'Make Ada’s day.' }),
+  ).toBeVisible();
+  await expect(page.locator('.home-hero__panel .composer-trust')).toHaveCount(
+    0,
+  );
+});

@@ -1,17 +1,13 @@
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
-import type { PublicProfile } from '@tipme/contracts';
-import { Container } from '@tipme/ui';
+import type { ResolvedCover } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
-import {
-  RecipientIdentity,
-  RecipientPortrait,
-} from '@/components/profile/recipient-card';
+import { ProfileCover } from '@/components/profile/cover';
+import { RecipientIdentity } from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ReportPage } from '@/components/report-page';
-import { ShareProfile } from '@/components/share-profile';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getPaymentMode } from '@/lib/payment-mode-api';
@@ -35,40 +31,12 @@ export async function generateMetadata({ params }: Props) {
     : { title: 'Page unavailable', robots: { index: false, follow: false } };
 }
 
-const socialNames = {
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  x: 'X (Twitter)',
-} as const;
-
-function Contact({ profile }: { profile: PublicProfile }) {
-  const socials = Object.entries(profile.socials ?? {}) as [
-    keyof typeof socialNames,
-    string,
-  ][];
-  if (socials.length === 0 && !profile.phone && !profile.email) return null;
-  return (
-    <ul className="profile-contact" aria-label="Find me elsewhere">
-      {socials.map(([kind, url]) => (
-        <li key={kind}>
-          <a href={url} rel="noopener noreferrer nofollow" target="_blank">
-            {socialNames[kind]}
-          </a>
-        </li>
-      ))}
-      {profile.phone && (
-        <li>
-          <a href={`tel:${profile.phone}`}>{profile.phone}</a>
-        </li>
-      )}
-      {profile.email && (
-        <li>
-          <a href={`mailto:${profile.email}`}>{profile.email}</a>
-        </li>
-      )}
-    </ul>
-  );
-}
+// An API older than the covers sends none: the same quiet look a cover falls back to.
+const NO_COVER: ResolvedCover = {
+  kind: 'design',
+  design: 'scattered',
+  colour: 'neutral',
+};
 
 export default async function ProfilePage({ params, searchParams }: Props) {
   const profile = await getPublicProfile((await params).handle);
@@ -82,29 +50,10 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
-      <Container>
-        <nav className="profile-breadcrumb" aria-label="Breadcrumb">
-          <Link href="/">Home</Link>
-          <span aria-hidden="true">/</span>
-          <span aria-current="page">Meet {firstName}</span>
-        </nav>
-        {/* Portrait-led composition: the identity card and tipping panel overlap the portrait. */}
-        <div className="profile-stage">
-          <div className="profile-scene">
-            <div className="profile-headline">
-              <p className="profile-headline__title">Support Great People</p>
-              <p className="profile-headline__lede">
-                A simpler, more thoughtful way to send appreciation.
-              </p>
-            </div>
-            <RecipientPortrait profile={profile} />
-            <section
-              className="profile-identity-slot"
-              aria-labelledby="profile-name"
-            >
-              <RecipientIdentity profile={profile} />
-            </section>
-          </div>
+      <div className="profile-sheet">
+        <ProfileCover cover={profile.cover ?? NO_COVER} priority />
+        <div className="profile-columns">
+          <RecipientIdentity profile={profile} firstName={firstName} />
           <aside
             className="profile-composer tip-instrument"
             aria-label={`Tip ${firstName}`}
@@ -112,11 +61,12 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           >
             {/* Closed checkout outranks the owner's own setup: nobody can tip yet. */}
             {!copy.payable ? (
-              <TippingOpensSoon />
+              <TippingOpensSoon handle={profile.handle} />
             ) : profile.acceptingTips === false ? (
               <TipsNotReady recipient={firstName} />
             ) : (
               <AppreciationForm
+                surface="profile"
                 paymentMode={mode}
                 recipient={firstName}
                 handle={profile.handle}
@@ -131,30 +81,18 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             )}
           </aside>
         </div>
-        <section className="profile-more" aria-label={`More from ${firstName}`}>
-          {(profile.craft ?? profile.note) && (
-            <div className="profile-more__words">
-              {profile.craft && (
-                <p className="profile-more__craft">{profile.craft}</p>
-              )}
-              {profile.note && (
-                <blockquote className="profile-note">{profile.note}</blockquote>
-              )}
-            </div>
+        <footer className="profile-foot">
+          <ReportPage handle={profile.handle} />
+          {copy.previewPages && (
+            <Link href="/about-preview">Learn about this preview</Link>
           )}
-          <div className="profile-more__links">
-            <Contact profile={profile} />
-            <ShareProfile handle={profile.handle} />
-          </div>
-          <div className="profile-safety">
-            <p>{copy.profileSafety}</p>
-            {copy.previewPages && (
-              <Link href="/about-preview">Learn about this preview</Link>
-            )}
-            <ReportPage handle={profile.handle} />
-          </div>
-        </section>
-      </Container>
+          {profile.plan !== 'pro' && (
+            <Link className="profile-foot__own" href="/sign-up">
+              Get your own TipMe page
+            </Link>
+          )}
+        </footer>
+      </div>
     </main>
   );
 }

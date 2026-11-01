@@ -670,6 +670,7 @@ export function publicProfile(
       tipAmounts: tipAmountsOf(profile),
       acceptingTips,
       cover: resolveCover(profile),
+      plan: profile.plan as PagePlan,
     };
   });
 }
