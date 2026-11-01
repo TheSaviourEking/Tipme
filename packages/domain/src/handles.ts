@@ -20,6 +20,7 @@ export const RESERVED_HANDLES = [
   'business',
   'careers',
   'contact',
+  'covers',
   'dashboard',
   'design_system',
   'dev',

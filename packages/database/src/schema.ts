@@ -510,6 +510,13 @@ export const profiles = pgTable(
     // The page's photo version (PR-013): only ever goes up, so a photo URL is never reused, not
     // even after removing a photo and adding another.
     avatarVersion: integer('avatar_version').notNull().default(0),
+    // The page's cover. A chosen design and colour from the catalogue (@tipme/contracts), held
+    // as text so that removing a catalogue entry needs no migration; `coverPath` is an uploaded
+    // photo, which wins over them. `coverVersion` only ever goes up, like `avatarVersion`.
+    coverDesign: text('cover_design'),
+    coverColour: text('cover_colour'),
+    coverPath: text('cover_path'),
+    coverVersion: integer('cover_version').notNull().default(0),
     // When the page first went live (PR-013): `profile_published` is recorded once, ever.
     firstPublishedAt: timestamp('first_published_at', { withTimezone: true }),
     // Notification preferences (PR-013): what the recipient chose not to be told about.
@@ -1389,6 +1396,29 @@ export const profileAvatars = pgTable(
   () => [
     check(
       'profile_avatars_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+  ],
+);
+
+/**
+ * A page's uploaded cover: one per page, already re-encoded on the server (2240×600 WebP, no
+ * metadata). Kept like `profile_avatars`: in Postgres or in R2, exactly one of the two.
+ */
+export const profileCovers = pgTable(
+  'profile_covers',
+  {
+    profileId: uuid('profile_id')
+      .primaryKey()
+      .references(() => profiles.id),
+    version: integer('version').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdAt: createdAt(),
+  },
+  () => [
+    check(
+      'profile_covers_one_place',
       sql`(bytes IS NULL) <> (object_key IS NULL)`,
     ),
   ],

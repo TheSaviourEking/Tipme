@@ -107,7 +107,7 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_UNSUBSCRIBE_PER_MIN,
         windowMs: 60_000,
       },
-      // Photo uploads (PR-013): each one is a full decode and re-encode.
+      // Photo and cover uploads (PR-013): each one is a full decode and re-encode.
       avatars: {
         limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
         windowMs: 3_600_000,

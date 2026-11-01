@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ResolvedCover } from './covers.js';
 
 /** Social links accepted on a recipient page: https only, on the named site. */
 export const SOCIAL_HOSTS = {
@@ -106,6 +107,14 @@ export interface MyProfile {
    * until the release after this one: the web app deploys before the API.
    */
   handleChanges?: HandleChanges;
+  /** What the page's cover resolves to now. Optional, as `handleChanges`. */
+  cover?: ResolvedCover;
+  /** What the owner chose, as opposed to what shows. Optional, as `handleChanges`. */
+  coverChoice?: {
+    design: string | null;
+    colour: string | null;
+    hasPhoto: boolean;
+  };
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
@@ -129,6 +138,8 @@ export interface PublicProfile {
    * page says so before a supporter fills in the form. Absent from older APIs: treat as true.
    */
   acceptingTips?: boolean;
+  /** The page's cover. Absent from older APIs: the web app deploys first. */
+  cover?: ResolvedCover;
 }
 
 /** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */

@@ -1,11 +1,11 @@
-# Runbook: page photos in Cloudflare R2
+# Runbook: page photos and covers in Cloudflare R2
 
-Page photos are re-encoded by the API (512×512 WebP, no metadata, about 30 KB). Where they're kept:
+Page photos and uploaded covers are re-encoded by the API (photos 512×512 WebP, about 30 KB; covers 2240×600 WebP; no metadata in either). Where they're kept:
 
 - **R2 configured:** in a **private** R2 bucket, with the database row holding only the object's key.
 - **R2 not configured:** in Postgres, as before. Local development and tests use this.
 
-The bucket is never public. The API serves each photo at `/v1/avatars/<page>/<version>.webp`, and only while the page is live and not paused. So a hidden page's photo stays hidden, even to someone who saved its link.
+The bucket is never public. The API serves each photo at `/v1/avatars/<page>/<version>.webp` and each cover at `/v1/covers/<page>/<version>.webp`, and only while the page is live and not paused. So a hidden page's photo stays hidden, even to someone who saved its link.
 
 ## Switching R2 on (per copy: staging, then production)
 
@@ -20,17 +20,18 @@ The bucket is never public. The API serves each photo at `/v1/avatars/<page>/<ve
    ```
    You need all four, or none: with only some set, the API refuses to start and names the missing ones.
 4. **Deploy.** New photos go to R2.
-5. **Move the photos already in Postgres.** It's safe to run twice:
+5. **Move the photos and covers already in Postgres.** It's safe to run twice:
    ```sh
    /srv/tipme/live/scripts/compose.sh run --rm \
      -e R2_ACCOUNT_ID -e R2_ACCESS_KEY_ID -e R2_SECRET_ACCESS_KEY -e R2_BUCKET \
      migrate node packages/database/dist/scripts/move-photos-to-r2.js
    ```
    (The `migrate` service has the database URL. Export the four R2 variables in your shell first, or pass `--env-file`.)
-6. **Check:** open a page with a photo, and upload a new one. In Cloudflare, the bucket shows `avatars/<page id>/<random>.webp`.
+6. **Check:** open a page with a photo, and upload a new one. In Cloudflare, the bucket shows `avatars/<page id>/<random>.webp`, and covers under `covers/<page id>/`.
 
 ## How it behaves
 
 - **Upload:** the photo goes to R2 first, then its row. If the row fails, the new object is removed. The old object is removed after the new row is saved.
 - **Remove a photo, or delete an account:** the row goes first, then the object. A failed object removal only leaves an unused object; it never breaks a page.
+- **Covers are bigger than photos.** Without R2 they sit in Postgres and in every database dump, so switch R2 on before many pages upload one.
 - **Backups:** the database dumps hold the photo keys, not the photos. R2 keeps the objects; Cloudflare doesn't version them unless you turn that on.

@@ -96,6 +96,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/auth/recover/complete` | yes | `auth_verify` | – |
 | POST | `/v1/auth/verify` | yes | `auth_verify` | – |
 | GET | `/v1/avatars/{profileId}/{file}` | n/a (read) | – | – |
+| GET | `/v1/covers/{profileId}/{file}` | n/a (read) | – | – |
 | GET | `/v1/dev/inbox` | n/a (read) | – | yes |
 | POST | `/v1/dev/jobs/weekly-report` | – | – | yes |
 | POST | `/v1/diagnostics/trace-probe` | – | – | yes |
@@ -142,6 +143,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/me/activity` | n/a (read) | – | – |
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
+| DELETE | `/v1/me/cover` | yes | – | – |
+| PUT | `/v1/me/cover` | yes | `avatars` | – |
+| PUT | `/v1/me/cover-design` | yes | – | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
 | GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
@@ -258,6 +262,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `POST /v1/profiles/{handle}/report`                                                    | Anyone can report a page                                              | A reason from a fixed list; always answers the same; rate-limited                                                  |
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |
 | `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                        | Only the current photo of a live, active page                                                                      |
+| `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                       | Only the current cover of a live, active page                                                                      |
 | `POST /v1/tip-quotes`, `POST /v1/tip-intents`                                          | A supporter tips without an account                                   | Rate-limited; amounts and fees computed on the server; idempotency key                                             |
 | `GET`, `POST /v1/mail/unsubscribe`                                                     | One-click unsubscribe from a mail app, with no session                | A signed token naming one person and one optional email type; GET only shows a page; rate-limited                  |
 | `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                    | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07 |

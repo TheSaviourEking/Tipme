@@ -2,6 +2,7 @@ import {
   MAX_HANDLE_CHANGE_EXTRA,
   MAX_HANDLE_CHANGE_GRANT,
   profilePatchSchema,
+  resolveCover,
   type HandleStatus,
   type MyProfile,
   type NotificationPrefs,
@@ -26,6 +27,7 @@ import {
   handleAliases,
   handleHolds,
   profileAvatars,
+  profileCovers,
   emailRecoveries,
   mailPreferences,
   phoneRecoveries,
@@ -366,6 +368,12 @@ const toMine = async (
   plan: row.profile.plan as PagePlan,
   tipAmounts: tipAmountsOf(row.profile),
   avatarPath: row.profile.avatarPath,
+  cover: resolveCover(row.profile),
+  coverChoice: {
+    design: row.profile.coverDesign,
+    colour: row.profile.coverColour,
+    hasPhoto: row.profile.coverPath !== null,
+  },
   handleChanges: handleChangesOf(row.profile),
 });
 
@@ -656,6 +664,7 @@ export function publicProfile(
       ...(celebration ? { celebration } : {}),
       tipAmounts: tipAmountsOf(profile),
       acceptingTips,
+      cover: resolveCover(profile),
     };
   });
 }
@@ -715,6 +724,9 @@ export function deleteAccount(
             craft: null,
             note: null,
             avatarPath: null,
+            coverDesign: null,
+            coverColour: null,
+            coverPath: null,
             socials: {},
             phonePublic: false,
             emailPublic: false,
@@ -725,6 +737,14 @@ export function deleteAccount(
           .delete(profileAvatars)
           .where(eq(profileAvatars.profileId, row.id))
           .returning({ objectKey: profileAvatars.objectKey })
+          .then((removed) => {
+            for (const r of removed)
+              if (r.objectKey) photoKeys.push(r.objectKey);
+          });
+        await tx
+          .delete(profileCovers)
+          .where(eq(profileCovers.profileId, row.id))
+          .returning({ objectKey: profileCovers.objectKey })
           .then((removed) => {
             for (const r of removed)
               if (r.objectKey) photoKeys.push(r.objectKey);
