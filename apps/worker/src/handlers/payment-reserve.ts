@@ -2,6 +2,7 @@ import type { Database, ReserveReader } from '@tipme/database';
 import {
   checkReserve,
   purgeReserveReadings,
+  requeuePayoutsWaitingOnPlatform,
   RESERVE_KEEP_MS,
 } from '@tipme/database';
 
@@ -74,6 +75,8 @@ export async function handlePaymentReserve(deps: {
   log: PaymentReserveLog;
   fetchImpl?: typeof fetch;
   now?: Date;
+  /** Queues again what waits on the platform. Replaced in tests. */
+  requeue?: typeof requeuePayoutsWaitingOnPlatform;
 }): Promise<PaymentReserveOutcome> {
   const result = await checkReserve(deps.db, {
     provider: deps.provider,
@@ -86,6 +89,11 @@ export async function handlePaymentReserve(deps: {
     ...(deps.now ? { now: deps.now } : {}),
   });
   if (result.alertFailed) deps.log({ event: 'reserve.alert_failed' });
+  // Funded, as read just now. Every 15 minutes while any still wait; the jobs are safe to repeat.
+  if (result.low === false)
+    await (deps.requeue ?? requeuePayoutsWaitingOnPlatform)(deps.db).catch(() =>
+      deps.log({ event: 'reserve.requeue_failed' }),
+    );
   // Housekeeping after the check, never in its way: old readings are not needed for the 6-hour rule.
   await purgeReserveReadings(deps.db, {
     before: new Date((deps.now ?? new Date()).getTime() - RESERVE_KEEP_MS),

@@ -788,3 +788,50 @@ test('only staff who may view analytics see the reserve amount', async () => {
     '98765',
   );
 });
+
+test('a reading at or above the alert level queues withdrawals waiting on the platform, a low one does not', async () => {
+  const requeued = [];
+  const deps = {
+    db: database.db,
+    thresholdMinor: THRESHOLD,
+    alertWebhookUrl: undefined,
+    log: () => {},
+    requeue: async () => {
+      requeued.push(1);
+      return { queued: 0 };
+    },
+  };
+  await handlePaymentReserve({
+    ...deps,
+    provider: provider(1000n),
+    now: at(0),
+  });
+  assert.equal(requeued.length, 0);
+  await handlePaymentReserve({
+    ...deps,
+    provider: provider(new Error('down')),
+    now: at(MINUTE),
+  });
+  assert.equal(requeued.length, 0);
+  await handlePaymentReserve({
+    ...deps,
+    provider: provider(THRESHOLD),
+    now: at(2 * MINUTE),
+  });
+  assert.equal(requeued.length, 1);
+  // A failure there is logged, and the check still reports what it read.
+  const logged = [];
+  assert.equal(
+    await handlePaymentReserve({
+      ...deps,
+      provider: provider(THRESHOLD),
+      now: at(3 * MINUTE),
+      log: (entry) => logged.push(entry.event),
+      requeue: async () => {
+        throw new Error('db');
+      },
+    }),
+    'ok',
+  );
+  assert.ok(logged.includes('reserve.requeue_failed'));
+});

@@ -2,7 +2,7 @@
 
 PRD §15 (7). Who may do what in TipMe, and the proof that the server enforces it. The route and permission tables below are **generated from the API's committed description**, `docs/api/openapi.json`, which is itself generated from the running API and checked by `pnpm api:openapi --check` and its test (`pnpm docs:generate` rewrites the tables), and `scripts/generate-docs.test.mjs` fails when they are stale or when a route is added that nobody has reviewed. Everything is enforced on the server; hiding a button is never the control.
 
-Status: money is pretend. Nothing here approves real payments (`docs/00-DECISIONS.md`).
+Status: the code can move real money once the owner works through `docs/runbooks/live-activation.md`, and it stays pretend until then. Nothing here approves real payments (`docs/00-DECISIONS.md`).
 
 ## Who the actors are
 
@@ -26,7 +26,7 @@ Status: money is pretend. Nothing here approves real payments (`docs/00-DECISION
 6. **No route returns phone numbers, emails or supporter messages to staff by default.** A message is revealed only through the `private.view` permission with a written reason, and every reveal is audited. The same reveal also shows the recipient's full phone number and email.
 7. **CORS** allows only the web app's origin. Credentials are allowed only on `/v1/auth/`, `/v1/me/`, `/v1/ops/`, `/v1/handles/` and `/v1/dev/` (and on every route in a private preview, where the preview cookie must travel). Checkout never sends them.
 8. **Private previews** (staging) put a password gate in front of the web app and the API; only health, release info, backup health, payment reserve health and signed webhooks pass without it.
-9. **Every privileged change is audited** (who, what, when, why) in an append-only table. Admin actions never move money: there are no refunds, adjustments or payout holds in the admin yet.
+9. **Every privileged change is audited** (who, what, when, why) in an append-only table. Most admin actions move no money, and there are no refunds or ledger adjustments in the admin. Three can affect money leaving: the takeover freeze and the withdrawals switch stop withdrawals, and Resume queues a payout that was never tried, which then sends real money on a live copy.
 
 ## Staff roles and permissions
 

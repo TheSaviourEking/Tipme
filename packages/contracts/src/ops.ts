@@ -89,6 +89,8 @@ export interface OpsPayoutIssueView {
   openConflict: boolean;
   /** The recipient has changed bank since; a resumed payout still goes to the recorded one. */
   destinationReplaced: boolean;
+  /** A hold was in force at some point since this withdrawal was requested. */
+  holdTouched: boolean;
   read: {
     state:
       | 'paid'
@@ -145,6 +147,8 @@ export const ISSUE_KINDS = [
   'message_reported',
   'profile_reported',
   'account_takeover_reported',
+  'reserve_empty',
+  'provider_key_refused',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -323,6 +327,11 @@ export interface OpsIssueEvidence {
   } | null;
   traceId: string | null;
   related: OpsIssue[];
+  /**
+   * The recipient's withdrawals are on hold: these open issues keep them there. Empty otherwise.
+   * Optional for the copy of the web that deploys before the API.
+   */
+  holdPins?: OpsIssue[];
   private: {
     message: boolean;
     supporterLabel: boolean;

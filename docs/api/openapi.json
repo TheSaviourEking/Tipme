@@ -4919,7 +4919,9 @@
                 "pending_recovery",
                 "message_reported",
                 "profile_reported",
-                "account_takeover_reported"
+                "account_takeover_reported",
+                "reserve_empty",
+                "provider_key_refused"
               ]
             }
           },

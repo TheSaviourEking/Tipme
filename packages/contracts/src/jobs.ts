@@ -7,6 +7,8 @@ export const JOB_NAMES = { traceProbe: 'diagnostics.trace-probe' } as const;
 export const PAYOUT_START_EVENT = 'payouts.start';
 /** Staff switched all withdrawals: the worker tells the alert route. */
 export const WITHDRAWALS_SWITCH_EVENT = 'withdrawals.switch_changed';
+/** The provider refused TipMe itself (empty reserve, or a bad key): the worker tells the alert route. */
+export const PLATFORM_REFUSAL_EVENT = 'payouts.platform_refused';
 
 /** W3C trace context carried inside job payloads so worker spans join the producer's trace. */
 export const traceCarrierSchema = z

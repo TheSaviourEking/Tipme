@@ -252,11 +252,11 @@ test('while frozen the bank cannot change, under the profile lock; after release
   await setPayoutDestination(database.db, bank);
 });
 
-test('closing the takeover issue while another money issue is open keeps the hold until that closes too', async () => {
+test('closing the takeover issue while another issue that places a hold is open keeps the hold until that closes too', async () => {
   const { issueId } = (await (await freeze()).json()).data;
   const [{ id: other }] = await rows(
     `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
-     VALUES ($1, $2, 'payout_failed', 'money', $3, 'x', now()) RETURNING id`,
+     VALUES ($1, $2, 'payment_reversed', 'money', $3, 'x', now()) RETURNING id`,
     [randomUUID(), `test.${randomUUID()}`, { profileId: TOBI }],
   );
   await resolve(issueId, {
@@ -268,6 +268,22 @@ test('closing the takeover issue while another money issue is open keeps the hol
     null,
   );
   await resolve(other, { outcome: 'resolved_by_provider' });
+  assert.ok(
+    (await rows('SELECT released_at FROM withdrawal_holds'))[0].released_at,
+  );
+});
+
+test('a failed withdrawal left open does not keep a released takeover on hold', async () => {
+  const { issueId } = (await (await freeze()).json()).data;
+  await rows(
+    `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
+     VALUES ($1, $2, 'payout_failed', 'money', $3, 'x', now())`,
+    [randomUUID(), `test.${randomUUID()}`, { profileId: TOBI }],
+  );
+  await resolve(issueId, {
+    outcome: 'account_secured',
+    bankAndSignInChecked: true,
+  });
   assert.ok(
     (await rows('SELECT released_at FROM withdrawal_holds'))[0].released_at,
   );

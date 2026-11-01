@@ -969,6 +969,10 @@ export const payouts = pgTable(
     // The provider call about to be made ('fee' or 'payout'), committed before it: staff need to know
     // whether the payout itself may have left.
     startStep: text('start_step'),
+    // Set when the provider definitely refused TipMe itself (empty reserve, refused key) on the last
+    // try. Nothing moved and nothing is in doubt: the payout waits to be queued again, and the time
+    // also keys its next top-up, since a provider may replay a refused key for good.
+    platformWaitSince: timestamp('platform_wait_since', { withTimezone: true }),
     // While the provider itself is checking this payout; the recipient is told so.
     providerReviewAt: timestamp('provider_review_at', { withTimezone: true }),
     // The provider's connected account the payout was requested on, recorded at request time.

@@ -6,11 +6,13 @@ import {
   balanceOf,
   createPaymentIntent,
   createQuote,
+  freezeWithdrawals,
   holdWithdrawals,
   markAttemptInitiated,
   markPayoutFailedAbsent,
   openIssue,
   PAYOUT_NOT_FOUND_AFTER_MS,
+  PAYOUT_STUCK_AFTER_MS,
   readPayoutIssue,
   recordPayoutOutcome,
   recordProviderEvent,
@@ -18,6 +20,7 @@ import {
   resolveIssue,
   resumeHeldPayout,
   startPayout,
+  withdrawalHoldPins,
   withdrawalQuote,
 } from '../../dist/index.js';
 import { TOBI, useDatabase } from './helpers.mjs';
@@ -356,7 +359,7 @@ test('a held payout resumes only with no hold and no attempt, and only re-queues
   assert.equal((await jobs()).length, 2);
 });
 
-test('mark failed needs a definite absence past the wait and no payout step, then releases once', async (t) => {
+test('mark failed needs a definite absence past the wait, and the short wait is not enough after a payout step, then releases once', async (t) => {
   const s = await setup(t);
   const payoutId = await s.withdraw();
   const issueId = await s.issueFor(payoutId);
@@ -715,10 +718,22 @@ test('a hold is never placed for an issue already closed', async (t) => {
   );
 });
 
-test('a money issue the system closes last still releases the hold', async (t) => {
+test('a payout issue with no hold of its own never pins a hold', async (t) => {
   const s = await setup(t);
   const payoutId = await s.withdraw();
-  const unresolved = await s.issueFor(payoutId);
+  await s.issueFor(payoutId);
+  const failed = await openIssue(s.db, {
+    dedupeKey: `event.payout.failed.${randomUUID()}`,
+    kind: 'payout_failed',
+    subject: { profileId: TOBI },
+    now: new Date(),
+  });
+  const shortFee = await openIssue(s.db, {
+    dedupeKey: `fee.${randomUUID()}`,
+    kind: 'payout_fee_short',
+    subject: { profileId: TOBI },
+    now: new Date(),
+  });
   const holdIssue = await s.hold();
   await resolveIssue(s.db, {
     issueId: holdIssue,
@@ -726,24 +741,86 @@ test('a money issue the system closes last still releases the hold', async (t) =
     reason: REASON,
     outcome: 'written_off',
   });
-  const active = async () =>
+  // Week 1's failure and an unresolved start say nothing about this reversal.
+  assert.equal(
     (await s.q('SELECT 1 FROM withdrawal_holds WHERE released_at IS NULL'))
-      .length;
-  assert.equal(await active(), 1);
-  // The payout reaches a final state: the detector closes its issue, with no person involved.
-  await recordPayoutOutcome(s.db, {
-    payoutId,
-    provider: 'mock',
-    providerEventId: `evt.${payoutId}`,
-    providerReference: 'ref_final',
-    outcome: 'paid',
-    signatureVerified: true,
-    payload: {},
+      .length,
+    0,
+  );
+  assert.equal(await s.issueStatus(failed.id), 'open');
+  assert.equal(await s.issueStatus(shortFee.id), 'open');
+});
+
+test('a hold that cannot release says which issues pin it', async (t) => {
+  const s = await setup(t);
+  const closing = await s.hold();
+  const debt = await s.hold('provider_in_debt', 'in_debt');
+  await resolveIssue(s.db, {
+    issueId: closing,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'written_off',
   });
-  const { autoResolveIssues } = await import('../../dist/index.js');
-  await autoResolveIssues(s.db, new Date());
-  assert.equal(await s.issueStatus(unresolved), 'resolved');
-  assert.equal(await active(), 0);
+  const pins = await withdrawalHoldPins(s.db, { profileId: TOBI });
+  assert.equal(pins.length, 1);
+  assert.equal(pins[0].id, debt);
+  assert.equal(pins[0].kind, 'provider_in_debt');
+  const [audit] = await s.q(
+    `SELECT reason, subject_id FROM audit_events WHERE action = 'withdrawals.still_held'`,
+  );
+  assert.equal(audit.subject_id, TOBI);
+  assert.match(audit.reason, /provider_in_debt/);
+  await resolveIssue(s.db, {
+    issueId: debt,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'written_off',
+  });
+  assert.deepEqual(await withdrawalHoldPins(s.db, { profileId: TOBI }), []);
+});
+
+test('closing other issues never releases a takeover freeze', async (t) => {
+  const s = await setup(t);
+  const freeze = await freezeWithdrawals(s.db, {
+    profileId: TOBI,
+    staffUserId: STAFF,
+    reason: REASON,
+  });
+  const failed = await openIssue(s.db, {
+    dedupeKey: `event.payout.failed.${randomUUID()}`,
+    kind: 'payout_failed',
+    subject: { profileId: TOBI },
+    now: new Date(),
+  });
+  const reversal = await s.hold();
+  const active = async () =>
+    (
+      await s.q(
+        `SELECT 1 FROM withdrawal_holds WHERE released_at IS NULL AND reason = 'account_takeover'`,
+      )
+    ).length;
+  for (const issueId of [failed.id, reversal]) {
+    await resolveIssue(s.db, {
+      issueId,
+      staffUserId: STAFF,
+      reason: REASON,
+      outcome: 'written_off',
+    });
+    assert.equal(await active(), 1);
+  }
+  // Even a takeover issue closed some other way than "the owner has it back" keeps its freeze.
+  await s.q(
+    `UPDATE issues SET status = 'resolved', resolved_at = now(), resolved_by = 'system' WHERE id = $1`,
+    [freeze.issueId],
+  );
+  const another = await s.hold();
+  await resolveIssue(s.db, {
+    issueId: another,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'written_off',
+  });
+  assert.equal(await active(), 1);
 });
 
 test('a failed balance read reaches the caller by name only, never with account data', async (t) => {
@@ -761,4 +838,114 @@ test('a failed balance read reaches the caller by name only, never with account 
   });
   assert.equal(quote.state, 'provider_unavailable');
   assert.deepEqual(failures, [{ error: 'TypeError' }]);
+});
+
+test('a create that died: 24 hours on, a definite absence and a dashboard check release it', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  await s.q(
+    `UPDATE payouts SET start_uncertain_at = now(), start_step = 'payout' WHERE id = $1`,
+    [payoutId],
+  );
+  const base = { issueId, reason: REASON, staffUserId: STAFF };
+  const reserved = await s.available();
+  const dayOn = new Date(Date.now() + PAYOUT_STUCK_AFTER_MS + 60_000);
+  const failedRead = (name) =>
+    fakeProvider({
+      find: async () => {
+        throw Object.assign(new Error('no'), { name });
+      },
+    });
+
+  // Before the wait, even a definite absence isn't enough: money may have left.
+  const early = await readPayoutIssue(s.db, {
+    ...base,
+    provider: resolver(fakeProvider()),
+    now: new Date(Date.now() + PAYOUT_STUCK_AFTER_MS - 60_000),
+  });
+  assert.equal(early.read.state, 'absent');
+  assert.equal(offers(early).markFailed, false);
+
+  // Past it, an unclear or unavailable read doesn't count, and neither does a found one.
+  for (const provider of [
+    failedRead('AmbiguousPayoutError'),
+    failedRead('UncertainProviderOutcomeError'),
+    fakeProvider({
+      find: async () => ({ providerReference: 'r', status: 'pending' }),
+    }),
+  ]) {
+    const refused = await markPayoutFailedAbsent(s.db, {
+      ...base,
+      dashboardVerified: true,
+      provider: resolver(provider),
+      now: dayOn,
+    });
+    assert.equal(refused.outcome, 'not_offered');
+    assert.equal(await s.statusOf(payoutId), 'REQUESTED');
+  }
+
+  // No box, no release, whatever the provider says.
+  await assert.rejects(
+    markPayoutFailedAbsent(s.db, {
+      ...base,
+      provider: resolver(fakeProvider()),
+      now: dayOn,
+    }),
+    /INVALID_INPUT/,
+  );
+
+  // The provider accepted it once: "not found" now is a puzzle, not a definite absence.
+  await s.q(
+    `UPDATE payouts SET provider_reference = 'acct:po_1' WHERE id = $1`,
+    [payoutId],
+  );
+  const referenced = await readPayoutIssue(s.db, {
+    ...base,
+    provider: resolver(fakeProvider()),
+    now: dayOn,
+  });
+  assert.equal(offers(referenced).markFailed, false);
+  await s.q(`UPDATE payouts SET provider_reference = NULL WHERE id = $1`, [
+    payoutId,
+  ]);
+
+  const done = await markPayoutFailedAbsent(s.db, {
+    ...base,
+    dashboardVerified: true,
+    provider: resolver(fakeProvider()),
+    now: dayOn,
+  });
+  assert.equal(done.outcome, 'marked_failed');
+  assert.equal(await s.statusOf(payoutId), 'FAILED');
+  assert.equal(await s.available(), reserved + 100000n);
+  const [audit] = await s.q(
+    `SELECT reason FROM audit_events WHERE action = 'payout.staff_marked_failed'`,
+  );
+  assert.match(audit.reason, /start step payout/);
+  assert.match(audit.reason, /dashboardVerified/);
+});
+
+test('the Resume view says when a hold touched the withdrawal', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId, 'payout_held');
+  const read = () =>
+    readPayoutIssue(s.db, {
+      issueId,
+      staffUserId: STAFF,
+      provider: resolver(fakeProvider()),
+    });
+  assert.equal((await read()).holdTouched, false);
+  const holdIssue = await s.hold();
+  await resolveIssue(s.db, {
+    issueId: holdIssue,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'written_off',
+  });
+  const view = await read();
+  assert.equal(view.holdActive, false);
+  assert.equal(view.holdTouched, true);
+  assert.equal(offers(view).resume, true);
 });

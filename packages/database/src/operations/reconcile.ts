@@ -497,6 +497,8 @@ export async function reconcilePayouts(input: {
             input.payoutId ? eq(payouts.id, input.payoutId) : undefined,
             isNull(payouts.providerReference),
             isNull(payouts.startUncertainAt),
+            // Waiting on the platform, with its own issue, and queued again once funded.
+            isNull(payouts.platformWaitSince),
             isNotNull(payouts.provider),
             lte(payouts.createdAt, notFoundBefore),
             sql`NOT EXISTS (

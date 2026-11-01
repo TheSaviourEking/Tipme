@@ -6,6 +6,7 @@ import type {
 } from '@tipme/contracts';
 import { Button, Notice, TextareaField } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
+import { resumeWarnings } from '@/lib/payout-resume-warnings';
 import { apiFetch } from '@/lib/session-client';
 
 const READ: Record<OpsPayoutIssueView['read']['state'], string> = {
@@ -157,13 +158,19 @@ function Answer({
       {view.openConflict && (
         <p className="tm-hint">Another conflict about this payout is open.</p>
       )}
-      {view.startStep === 'payout' && (
+      {view.startStep === 'payout' && !offers.markFailed && (
         <p className="tm-hint">
-          The payout call was attempted, so this can’t be released here. Ask the
-          provider’s support about the reference.
+          The payout call was attempted, so it may have reached the provider.
+          This can be released here only 24 hours after the attempt, and only if
+          the provider definitely has no such payout.
         </p>
       )}
       {none && <p className="tm-hint">Nothing can be done from this answer.</p>}
+      {offers.resume && resumeWarnings(view).length > 0 && (
+        <Notice tone="error" title="Check this before you resume">
+          {resumeWarnings(view).join(' ')}
+        </Notice>
+      )}
       <div className="ops-actions">
         {offers.applyReported && (
           <ReasonAction
@@ -185,13 +192,7 @@ function Answer({
             errorTitle="Check what happened"
             open="Resume this withdrawal…"
             field="Why resume it?"
-            hint={
-              view.takeoverReported
-                ? 'This account had a reported takeover. This withdrawal may be the thief’s, going to the thief’s bank. Check the bank recorded with it first; if in doubt, don’t resume it. Recorded in the audit log.'
-                : view.destinationReplaced
-                  ? 'The recipient has changed their bank since asking; it still goes to the bank recorded with the withdrawal. Recorded in the audit log.'
-                  : 'No create was ever tried. Recorded in the audit log with your name and the time.'
-            }
+            hint="No create was ever tried. Recorded in the audit log with your name and the time."
             submit="Resume withdrawal"
             onSubmit={(reason) => act('payout-resume', { reason })}
           />
@@ -241,9 +242,11 @@ function MarkFailed({
     >
       <h3>Mark failed and release the money</h3>
       <p>
-        {step === 'fee'
-          ? 'The last step tried was the fee top-up, so the payout itself was not sent. The top-up may have gone through: check for it.'
-          : 'No payout call was recorded as attempted.'}{' '}
+        {step === 'payout'
+          ? 'The last step tried was the payout itself, and its call got no answer. It may have reached the provider, so be sure it isn’t in the dashboard. If it did leave, a later event from the provider opens a conflict.'
+          : step === 'fee'
+            ? 'The last step tried was the fee top-up, so the payout itself was not sent. The top-up may have gone through: check for it.'
+            : 'No payout call was recorded as attempted.'}{' '}
         The money becomes available to the recipient again.
       </p>
       <TextareaField

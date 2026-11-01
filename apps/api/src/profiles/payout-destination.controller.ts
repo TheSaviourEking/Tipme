@@ -28,6 +28,7 @@ import {
   getPaymentAccountRecipient,
   getPayoutDestination,
   payoutBankChangesFrom,
+  reportProviderKeyRefused,
   refreshPendingDestination,
   withdrawalsFrozen,
   requestPayoutDestinationCode,
@@ -280,12 +281,22 @@ export class PayoutDestinationController {
     return recipient;
   }
 
-  /** A provider's own refusal is a 400-level answer; anything else is it being unreachable. */
+  /** A provider's refusal of the bank details is a 400-level answer; anything else is it being unreachable. */
   private async calling<T>(step: string, call: () => Promise<T>): Promise<T> {
     try {
       return await call();
     } catch (error) {
       this.logFailure(step, error);
+      // Our key, not their bank: they try again later and staff are told. No payout is involved.
+      if (
+        error instanceof BachsApiError &&
+        (error.statusCode === 401 || error.statusCode === 403)
+      ) {
+        await reportProviderKeyRefused(this.database.db, {}).catch(() =>
+          this.logFailure('report_key_refused', new Error('not recorded')),
+        );
+        throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
+      }
       if (
         error instanceof BachsApiError &&
         error.statusCode >= 400 &&

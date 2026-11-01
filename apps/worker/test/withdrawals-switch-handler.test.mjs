@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { handlePlatformRefusal } from '../dist/handlers/platform-refusal.js';
 import { handleWithdrawalsSwitchChanged } from '../dist/handlers/withdrawals-switch.js';
 
 const URL_WITH_SECRET =
@@ -84,4 +85,33 @@ test('with no route it is logged and reported unrouted, not sent', async () => {
     'unrouted',
   );
   assert.equal(entries[0].event, 'withdrawals.switch_alert_unrouted');
+});
+
+test('a platform refusal tells staff in plain words, and a failed post retries', async () => {
+  const route = recording();
+  const deps = { url: URL_WITH_SECRET, fetchImpl: route.fetchImpl };
+  assert.equal(
+    await handlePlatformRefusal({ cause: 'reserve_empty' }, deps),
+    'sent',
+  );
+  assert.equal(
+    await handlePlatformRefusal({ cause: 'provider_key' }, deps),
+    'sent',
+  );
+  assert.match(route.sent[0].text, /reserve/i);
+  assert.match(route.sent[1].text, /key/i);
+  await assert.rejects(
+    handlePlatformRefusal(
+      { cause: 'reserve_empty' },
+      {
+        url: URL_WITH_SECRET,
+        fetchImpl: async () => new Response('no', { status: 500 }),
+      },
+    ),
+    /alert_route_refused_500/,
+  );
+  assert.equal(
+    await handlePlatformRefusal({ cause: 'reserve_empty' }, { url: undefined }),
+    'unrouted',
+  );
 });

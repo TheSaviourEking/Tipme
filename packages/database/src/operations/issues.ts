@@ -22,6 +22,21 @@ import { newId } from './ids.js';
 
 const STUCK_AFTER_MS = 30 * 60 * 1000;
 
+/**
+ * The issues that place a hold, and so the only ones that keep it. A failed withdrawal or an unknown
+ * start says nothing about why a hold was placed, and some of them never close.
+ */
+const HOLD_KINDS = [
+  'payment_reversed',
+  'provider_in_debt',
+  'payout_unexpected',
+  'account_takeover_reported',
+] as const satisfies readonly IssueKind[];
+const HOLD_KINDS_SQL = sql.join(
+  HOLD_KINDS.map((kind) => sql`${kind}`),
+  sql`, `,
+);
+
 /** Outbox alerts that need a person, and the issue kind each becomes. */
 const EVENT_KINDS: Record<string, IssueKind> = {
   'payment.mismatch': 'payment_mismatch',
@@ -53,6 +68,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payout_held: 'money',
   account_takeover_reported: 'money',
   provider_in_debt: 'money',
+  reserve_empty: 'money',
+  provider_key_refused: 'money',
   provider_event_conflict: 'money',
   stuck_tip: 'info',
   unmatched_event: 'info',
@@ -95,6 +112,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A withdrawal for ${page} was not started because their withdrawals went on hold first. Nothing was sent, and the money stays reserved.`;
     case 'provider_in_debt':
       return `The provider reports ${page}’s account owes it money. Withdrawals for them are on hold until it is settled.`;
+    case 'reserve_empty':
+      return 'The platform reserve could not cover a payout fee, so withdrawals are waiting. Nothing failed and the recipients were not told. Top up the reserve: they start again once a reading is at the alert level, and this closes itself.';
+    case 'provider_key_refused':
+      return 'The provider refused TipMe’s API key. Withdrawals are waiting and adding a bank account is unavailable; recipients are told to try later. Check the key and its permissions, then resolve this. Waiting withdrawals start again at the next reserve reading at the alert level.';
     case 'provider_event_conflict':
       return `The provider sent the same event twice with different contents (tip to ${page}).`;
     case 'stuck_tip':
@@ -443,10 +464,9 @@ export async function markResolved(
 }
 
 /**
- * The recipient's withdrawals resume once none of their money issues is open, however the last one
- * closed. A payout waiting on the hold doesn't count: it is a result of the hold, not a cause, and
- * it can only resume once the hold has gone. The profile lock makes two closes take turns, so
- * neither misses the other.
+ * The recipient's withdrawals resume once none of the issues that place holds is open for them,
+ * however the last one closed. A takeover freeze goes only by its own issue closing as "the owner has
+ * the account back". The profile lock makes two closes take turns, so neither misses the other.
  */
 async function releaseHoldsIfClear(
   tx: Tx,
@@ -457,19 +477,39 @@ async function releaseHoldsIfClear(
     .from(profiles)
     .where(eq(profiles.id, input.profileId))
     .for('update');
-  const [other] = await tx
-    .select({ id: issues.id })
+  const other = await tx
+    .select({ kind: issues.kind })
     .from(issues)
     .where(
       and(
         eq(issues.status, 'open'),
-        eq(issues.severity, 'money'),
-        sql`${issues.kind} <> 'payout_held'`,
+        sql`${issues.kind} IN (${HOLD_KINDS_SQL})`,
         sql`${issues.subject}->>'profileId' = ${input.profileId}`,
       ),
-    )
-    .limit(1);
-  if (other) return;
+    );
+  if (other.length > 0) {
+    const [held] = await tx
+      .select({ id: withdrawalHolds.id })
+      .from(withdrawalHolds)
+      .where(
+        and(
+          eq(withdrawalHolds.profileId, input.profileId),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      )
+      .limit(1);
+    if (held)
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'withdrawals.still_held',
+        permission: input.staffUserId ? 'payouts.resolve' : undefined,
+        subjectType: 'profile',
+        subjectId: input.profileId,
+        reason: `Still open: ${[...new Set(other.map(({ kind }) => kind))].join(', ')}.`,
+        now: input.now,
+      });
+    return;
+  }
   const released = await tx
     .update(withdrawalHolds)
     .set({ releasedAt: input.now, releasedBy: input.staffUserId })
@@ -481,7 +521,9 @@ async function releaseHoldsIfClear(
         // goes only once its own cause has closed, so a new one can't be released as it is placed.
         sql`EXISTS (
           SELECT 1 FROM issues i
-           WHERE i.id = ${withdrawalHolds.issueId} AND i.status <> 'open')`,
+           WHERE i.id = ${withdrawalHolds.issueId} AND i.status <> 'open'
+             AND (${withdrawalHolds.reason} <> 'account_takeover'
+                  OR i.resolution_outcome = 'account_secured'))`,
       ),
     )
     .returning({ id: withdrawalHolds.id });
@@ -492,7 +534,8 @@ async function releaseHoldsIfClear(
       permission: input.staffUserId ? 'payouts.resolve' : undefined,
       subjectType: 'profile',
       subjectId: input.profileId,
-      reason: 'None of the recipient’s money issues is open.',
+      reason:
+        'None of the issues that hold the recipient’s withdrawals is open.',
       now: input.now,
     });
 }
@@ -553,6 +596,20 @@ export function autoResolveIssues(
          AND (p.status NOT IN ('REQUESTED', 'PROCESSING')
               OR (p.provider_reference IS NOT NULL
                   AND i.dedupe_key NOT LIKE 'payout_stuck.%'))
+      UNION ALL
+      -- A payout with its own open issue is a person's now, and no longer the reserve's to answer for.
+      SELECT i.id, 'No withdrawal is waiting on the reserve any more.'
+        FROM issues i
+       WHERE i.status = 'open' AND i.kind = 'reserve_empty'
+         AND NOT EXISTS (
+           SELECT 1 FROM payouts p
+            WHERE p.status = 'REQUESTED'
+              AND p.platform_wait_since IS NOT NULL
+              AND p.provider_reference IS NULL
+              AND p.start_uncertain_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM issues pi
+                 WHERE pi.status = 'open' AND pi.subject->>'payoutId' = p.id::text))
       UNION ALL
       -- Raised after its release check finished (the misreported tip never confirms).
       SELECT i.id, 'The release check that raised it has finished.'
@@ -638,6 +695,40 @@ export function issueById(db: Database, id: string): Promise<IssueView | null> {
   return guarded(async () => {
     const [row] = await db.select().from(issues).where(eq(issues.id, id));
     return row ? view(row) : null;
+  });
+}
+
+/**
+ * What keeps a recipient's withdrawals on hold, so staff can see why a hold didn't release: the open
+ * hold-placing issues about them, and any open cause of a hold in force. Empty with no hold in force.
+ */
+export function withdrawalHoldPins(
+  db: Database,
+  input: { profileId: string },
+): Promise<IssueView[]> {
+  return guarded(async () => {
+    const rows = await db
+      .select()
+      .from(issues)
+      .where(
+        and(
+          eq(issues.status, 'open'),
+          sql`EXISTS (
+            SELECT 1 FROM withdrawal_holds h
+             WHERE h.profile_id = ${input.profileId} AND h.released_at IS NULL)`,
+          sql`(
+            (${issues.kind} IN (${HOLD_KINDS_SQL})
+              AND ${issues.subject}->>'profileId' = ${input.profileId})
+            OR EXISTS (
+              SELECT 1 FROM withdrawal_holds h
+               WHERE h.issue_id = ${issues.id}
+                 AND h.profile_id = ${input.profileId}
+                 AND h.released_at IS NULL))`,
+        ),
+      )
+      .orderBy(desc(issues.id))
+      .limit(20);
+    return rows.map(view);
   });
 }
 

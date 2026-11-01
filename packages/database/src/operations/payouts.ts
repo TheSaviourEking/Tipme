@@ -222,7 +222,7 @@ export async function holdWithdrawals(
  * Staff freeze a recipient's withdrawals after a reported account takeover, from the Pages screen.
  * Audited with the written reason, which stays out of the issue's summary and the recipient's view.
  * It stops money leaving and moves none: a payout already with the provider isn't recalled. It ends
- * the way every hold does, when the last of the recipient's money issues closes. Under the profile
+ * by its own issue closing as "the owner has the account back", once no other hold's cause is open. Under the profile
  * lock, so a second report finds the first.
  */
 export function freezeWithdrawals(

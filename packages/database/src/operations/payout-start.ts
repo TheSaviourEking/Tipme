@@ -1,6 +1,8 @@
-import { and, asc, eq, gte, isNull, or, sql } from 'drizzle-orm';
+import { PAYOUT_START_EVENT, PLATFORM_REFUSAL_EVENT } from '@tipme/contracts';
+import { and, asc, eq, gte, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  issues,
   paymentAccounts,
   payoutDestinations,
   payouts,
@@ -10,6 +12,8 @@ import {
 } from '../schema.js';
 import { markPayoutInitiated } from './attempts.js';
 import { guarded, safeError } from './errors.js';
+import { newId } from './ids.js';
+import { enqueueOutbox } from './outbox.js';
 import { withdrawalsSwitchState } from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
 import {
@@ -180,7 +184,13 @@ export interface PayoutStarter {
 }
 
 export type PayoutStartOutcome =
-  'started' | 'already' | 'uncertain' | 'failed' | 'held' | 'switched_off';
+  | 'started'
+  | 'already'
+  | 'uncertain'
+  | 'failed'
+  | 'held'
+  | 'switched_off'
+  | 'waiting_on_platform';
 
 type Payout = typeof payouts.$inferSelect;
 
@@ -191,6 +201,130 @@ function refusal(error: unknown): { failureReason: PayoutFailure } | null {
     'failureReason' in error
     ? { failureReason: error.failureReason as PayoutFailure }
     : null;
+}
+
+// PlatformRefusalError lives there too. Only that error says so: a timeout is never one.
+function platformRefusal(error: unknown): PlatformRefusal | null {
+  return error instanceof Error &&
+    error.name === 'PlatformRefusalError' &&
+    'refusal' in error
+    ? (error.refusal as PlatformRefusal)
+    : null;
+}
+
+type PlatformRefusal = 'reserve_empty' | 'provider_key';
+
+/**
+ * One open issue and one alert per spell, however many withdrawals run into it. Each spell gets its
+ * own key, since a closed issue must not swallow the next one.
+ */
+async function openPlatformRefusalIssue(
+  tx: Tx,
+  refusal: PlatformRefusal,
+  now: Date,
+): Promise<void> {
+  const kind =
+    refusal === 'reserve_empty' ? 'reserve_empty' : 'provider_key_refused';
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`platform_refusal:${kind}`}::text))`,
+  );
+  const [open] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(and(eq(issues.kind, kind), eq(issues.status, 'open')))
+    .limit(1);
+  if (open) return;
+  const spell = newId();
+  await openIssue(tx, {
+    dedupeKey: `${kind}.${spell}`,
+    kind,
+    subject: {},
+    now,
+  });
+  // The cause only: the alert route is a chat room.
+  await enqueueOutbox(tx, {
+    eventType: PLATFORM_REFUSAL_EVENT,
+    aggregateId: spell,
+    payload: { cause: refusal },
+  });
+}
+
+/** The provider refused our key on some other call: staff hear of it the same way. */
+export function reportProviderKeyRefused(
+  db: Database,
+  input: { now?: Date },
+): Promise<void> {
+  return guarded(() =>
+    db.transaction((tx) =>
+      openPlatformRefusalIssue(tx, 'provider_key', input.now ?? new Date()),
+    ),
+  );
+}
+
+/**
+ * A definite refusal of TipMe itself: nothing moved, so the mark and step come off (nothing is in
+ * doubt, and the money stays reserved) and the recipient hears nothing, since it isn't theirs to fix.
+ */
+function waitOnPlatform(
+  db: Database,
+  payout: Payout,
+  refusal: PlatformRefusal,
+  now: Date,
+): Promise<'waiting_on_platform'> {
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      await tx
+        .update(payouts)
+        .set({
+          startUncertainAt: null,
+          startStep: null,
+          platformWaitSince: now,
+        })
+        .where(and(eq(payouts.id, payout.id), eq(payouts.status, 'REQUESTED')));
+      await openPlatformRefusalIssue(tx, refusal, now);
+      return 'waiting_on_platform' as const;
+    }),
+  );
+}
+
+/**
+ * Queues again what waits on the platform, once a reserve reading says it is funded. Only payouts
+ * whose last try was a definite refusal: an attempt with no answer keeps its mark and is never sent
+ * again. Those with an open issue are a person's to decide, and the job's own checks still apply.
+ */
+export function requeuePayoutsWaitingOnPlatform(
+  db: Database,
+): Promise<{ queued: number }> {
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      if ((await withdrawalsSwitchState(tx)).paused) return { queued: 0 };
+      const waiting = await tx
+        .select({ id: payouts.id, profileId: payouts.profileId })
+        .from(payouts)
+        .where(
+          and(
+            eq(payouts.status, 'REQUESTED'),
+            isNotNull(payouts.platformWaitSince),
+            isNull(payouts.providerReference),
+            isNull(payouts.startStep),
+            isNull(payouts.startUncertainAt),
+            sql`NOT EXISTS (
+              SELECT 1 FROM issues i
+               WHERE i.status = 'open'
+                 AND i.subject->>'payoutId' = ${payouts.id}::text)`,
+          ),
+        )
+        .limit(500);
+      for (const payout of waiting)
+        await enqueueOutbox(tx, {
+          eventType: PAYOUT_START_EVENT,
+          aggregateId: payout.id,
+          dedupeSuffix: `platform.${newId()}`,
+          payload: { payoutId: payout.id, profileId: payout.profileId },
+        });
+      return { queued: waiting.length };
+    }),
+  );
 }
 
 /**
@@ -524,6 +658,8 @@ export async function startPayout(
   const { route } = claim;
   const answer = await sendPayout(db, payout, starter, route, input.log);
   if (answer.kind === 'uncertain') return 'uncertain';
+  if (answer.kind === 'platform')
+    return waitOnPlatform(db, payout, answer.refusal, now);
   if (answer.kind === 'refused')
     return failStart(db, payout, answer.failureReason, now);
 
@@ -581,6 +717,7 @@ async function sendPayout(
       started: Awaited<ReturnType<PayoutStarter['initiatePayout']>>;
     }
   | { kind: 'refused'; failureReason: PayoutFailure }
+  | { kind: 'platform'; refusal: PlatformRefusal }
   | { kind: 'uncertain' }
 > {
   let step: 'fee' | 'payout' = 'fee';
@@ -597,6 +734,8 @@ async function sendPayout(
     });
     return { kind: 'sent', started };
   } catch (error) {
+    const platform = platformRefusal(error);
+    if (platform) return { kind: 'platform', refusal: platform };
     const refused = refusal(error);
     if (refused) return { kind: 'refused', ...refused };
     // Anything else, even an error of our own, may have followed a request that left.
@@ -625,7 +764,11 @@ async function coverFee(
     accountRef,
     feeMinor,
     currency: 'NGN',
-    idempotencyKey: `payout-fee.${payout.id}`,
+    // A new key only after a definite refusal, which moved nothing and may replay under the old one.
+    // An attempt with no answer never gets here again.
+    idempotencyKey: payout.platformWaitSince
+      ? `payout-fee.${payout.id}.r${payout.platformWaitSince.getTime()}`
+      : `payout-fee.${payout.id}`,
   });
   try {
     await recordFeeTopUp(db, payout, { accountRef, feeMinor, transferRef });

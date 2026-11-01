@@ -12,9 +12,9 @@ Rules for this page:
 - Record dates, counts and ids in the [record](#record) at the end, not in chat.
 - No script or test calls the live provider. The live money calls here are the owner's own, in section 5.
 
-**Know this before merging, even with payments off.** Once deployed with `bachs-live`, the worker talks to the live provider every 15 minutes whatever the switch says. It reads the platform balance and accounts, and it **writes** to live connected accounts: manual payouts and payout capabilities. No transfer and no payout. That is live-provider activity while D-03 is open.
+**Know this before merging, even with payments off.** Once deployed with `bachs-live`, two paths talk to the live provider whatever the switch says. The worker, every 15 minutes, reads the platform balance and accounts and **writes** to live connected accounts: manual payouts and payout capabilities. The API, on every `account.*` or `capability.*` webhook the provider delivers, also **writes** (`ensurePayoutSetup`: account configuration and `balance_settings`). No transfer and no payout on either path. That is live-provider activity while D-03 is open.
 
-- [ ] **BLOCKING:** the owner accepts this, in the acceptance, or keeps production from deploying with `bachs-live`.
+- [ ] **BLOCKING:** the owner accepts both paths, in the acceptance, or keeps production from deploying with `bachs-live`.
 
 ## 1. Owner decisions and written acceptances
 
@@ -85,9 +85,11 @@ Use `curl -K ~/.bachs-h …` below, and delete `~/.bachs-h` when done. Each chec
 - [ ] **BLOCKING, `balance_settings` on recipient accounts:** after setup, the same read (or the partner's dashboard) shows manual payouts. If a recipient account refuses it, onboarding stops: the "Manual payouts not set" issue opens.
 - [ ] **BLOCKING, reference lookup lag:** immediately after a payout, how long until `?reference=` finds it? It must be well under the 30 minutes after which TipMe treats "not found" as unresolved. Record the longest seen.
 - [ ] **BLOCKING, a real `payout.paid`:** from a real delivery in Ops evidence: is `data.amount` the amount sent, or that plus the fee? It decides whether a real payout reads as a mismatch.
+- [ ] **BLOCKING, gross amounts on the status read:** confirm before any live payout what `GET /v1/payouts/{id}` reports as `amount` on a real payout: the amount sent, or that plus the fee. If the read reports gross, every payout becomes an unresolvable `payout_conflict`: nothing is booked, the money stays reserved, no staff action applies, and the code has no override. Record the value seen against the amount requested. A gross read stops the switch until the adapter is changed.
 - [ ] **BLOCKING, `is_active`:** read `/v1/accounts/$ACCT` on a merchant and on a recipient account, and record `is_active` for both. A recipient reading false would refuse its payouts.
 - [ ] **BLOCKING, the worker's jobs on a real provider:** in the staging worker log, `payout_setup.swept` and `reserve.checked` appear every 15 minutes, and Overview shows a reading. A reserve below ₦1,000 reaches the alert address, if staging has one.
 - [ ] **BLOCKING, the withdrawals switch on staging:** switch off with a withdrawal queued. It stays queued and reserved, the alert arrives, and it starts when switched back on.
+- [ ] **Ask the payment partner:** which error codes and statuses it returns for a transfer from an empty platform balance, and for a bad key. TipMe holds the withdrawal only on `INSUFFICIENT_BALANCE`, `ORGANIZATION_IN_DEBT`, 401 and 403. Any other answer for an empty reserve would fail or strand the withdrawal instead.
 - [ ] **Ask the payment partner:** how long it keeps idempotency keys. A key that lapses could let a retry pay twice. TipMe retries nothing unknown without asking, but record the answer.
 
 ## 3. Production preparation
@@ -220,6 +222,10 @@ Ops → Overview → **Switch off all withdrawals…**, with a written reason. N
 4. Decide about tips: [switch off](#switching-off) if they are affected too.
 5. Tell the affected recipients.
 6. When it's understood, switch back on with why it's safe. **Queued withdrawals with no open issue start at once,** so check them first in the provider's and TipMe's records.
+
+### A queued withdrawal keeps its bank
+
+A withdrawal keeps the bank recorded when it was requested, even if the recipient changes bank while it is still queued, for example while withdrawals are switched off or the reserve is empty. This is by design, and the security email's "under way" includes a queued one. Staff see a warning on Resume when the bank changed or a hold touched the withdrawal.
 
 ## Rolling back the code
 

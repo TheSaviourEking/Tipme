@@ -5,6 +5,7 @@ import { PaymentAccountsController } from '../../apps/api/dist/profiles/payment-
 import { PayoutDestinationController } from '../../apps/api/dist/profiles/payout-destination.controller.js';
 import { RateLimitGuard } from '../../apps/api/dist/checkout/rate-limit.guard.js';
 import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js';
+import { BachsApiError } from '../../packages/payments/dist/index.js';
 import * as ops from '../../packages/database/dist/index.js';
 import {
   beginPaymentAccountCreation,
@@ -1886,4 +1887,43 @@ test('repeated capability failures alone do not stop the run', async (t) => {
   assert.equal(swept.checked, count);
   assert.equal(swept.failed, count);
   assert.equal(provider.named('setManualPayouts').length, count);
+});
+
+for (const statusCode of [401, 403])
+  test(`a ${statusCode} from the provider is our key, not their bank: they retry later and staff are told once`, async (t) => {
+    const database = await setUp(t);
+    const refused = () => {
+      throw new BachsApiError(statusCode);
+    };
+    const controller = controllerFor(
+      database,
+      fakeBachs({ resolveBankAccount: refused, listBanks: refused }),
+    );
+    for (let i = 0; i < 2; i += 1)
+      await assert.rejects(controller.banks(), (error) =>
+        /PAYOUT_PROVIDER_UNAVAILABLE/.test(
+          JSON.stringify(error.getResponse?.() ?? error.code),
+        ),
+      );
+    const { rows } = await database.pool.query(
+      `SELECT kind, status FROM issues WHERE kind = 'provider_key_refused'`,
+    );
+    assert.deepEqual(rows, [{ kind: 'provider_key_refused', status: 'open' }]);
+    const alerts = await database.pool.query(
+      `SELECT 1 FROM outbox_events WHERE event_type = 'payouts.platform_refused'`,
+    );
+    assert.equal(alerts.rows.length, 1);
+  });
+
+test('a 422 is still the provider refusing the bank account', async (t) => {
+  const database = await setUp(t);
+  const refused = () => {
+    throw new BachsApiError(422);
+  };
+  const controller = controllerFor(database, fakeBachs({ listBanks: refused }));
+  await assert.rejects(controller.banks(), (error) =>
+    /PAYOUT_DESTINATION_REFUSED/.test(
+      JSON.stringify(error.getResponse?.() ?? error.code),
+    ),
+  );
 });

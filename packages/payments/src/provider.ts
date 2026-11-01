@@ -239,6 +239,20 @@ export class PayoutRejectedError extends Error {
   }
 }
 
+/**
+ * The provider definitely refused TipMe itself, not the recipient: the reserve can't cover a top-up,
+ * or the key was refused. No money moved, and the withdrawal waits rather than fails.
+ */
+export class PlatformRefusalError extends Error {
+  constructor(
+    readonly refusal: 'reserve_empty' | 'provider_key',
+    readonly providerCode?: string,
+  ) {
+    super('The payment provider refused the platform');
+    this.name = 'PlatformRefusalError';
+  }
+}
+
 export class UnsupportedProviderCapabilityError extends Error {
   constructor(capability: string) {
     super(`Payment provider does not support ${capability}`);

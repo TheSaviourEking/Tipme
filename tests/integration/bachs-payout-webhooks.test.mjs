@@ -5,6 +5,9 @@ import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js'
 import {
   autoResolveIssues,
   balanceOf,
+  holdWithdrawals,
+  markPayoutFailedAbsent,
+  openIssue,
   createPaymentIntent,
   createQuote,
   mailForDomainEvent,
@@ -15,6 +18,8 @@ import {
   PAYOUT_STUCK_AFTER_MS,
   PAYOUT_UNEXPECTED_AFTER_MS,
   reconcilePayouts,
+  requeuePayoutsWaitingOnPlatform,
+  reportProviderKeyRefused,
   recordPayoutFee,
   recordPayoutOutcome,
   recordProviderEvent,
@@ -31,6 +36,7 @@ import {
 import { TOBI } from '../../packages/database/test/integration/helpers.mjs';
 import {
   PayoutRejectedError,
+  PlatformRefusalError,
   UncertainProviderOutcomeError,
 } from '../../packages/payments/dist/index.js';
 
@@ -1539,4 +1545,274 @@ test('a rotation stamp that fails is counted', async (t) => {
   await q(`DROP TRIGGER test_refuse ON parked_payout_checks`);
   await q(`DROP FUNCTION test_refuse_stamp()`);
   assert.equal(result.errors, 1);
+});
+
+test('a paid event after staff released a create that died is the conflict path, and books nothing', async (t) => {
+  const {
+    db,
+    q,
+    withdraw,
+    row,
+    issues,
+    paidEvent,
+    webhooks,
+    reconcile,
+    ledger,
+    available,
+  } = await fixture(t);
+  const payoutId = await withdraw();
+  const dead = scripted({
+    async initiatePayout() {
+      throw timeout();
+    },
+  });
+  assert.equal(
+    await startPayout(db, { payoutId, provider: dead }),
+    'uncertain',
+  );
+  assert.equal((await row(payoutId)).start_step, 'payout');
+  const dayOn = after(PAYOUT_STUCK_AFTER_MS);
+  await reconcile(scripted(), after(PAYOUT_NOT_FOUND_AFTER_MS));
+  const [unresolved] = await issues('payout_unresolved');
+  const marked = await markPayoutFailedAbsent(db, {
+    issueId: unresolved.id,
+    staffUserId: '00000000-0000-7000-8000-00000000abcd',
+    reason: 'Not in the provider dashboard, checked by hand.',
+    dashboardVerified: true,
+    provider: () => scripted(),
+    now: dayOn,
+  });
+  assert.equal(marked.outcome, 'marked_failed');
+  const released = await available();
+  const ledgerBefore = await ledger(payoutId);
+
+  const provider = scripted();
+  const event = paidEvent(payoutId, { operationReference: payoutId });
+  assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  await reconcile(provider);
+  const conflicts = await issues('payout_conflict');
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].status, 'open');
+  assert.equal(conflicts[0].subject.payoutId, payoutId);
+  assert.equal((await row(payoutId)).status, 'FAILED');
+  assert.equal(await available(), released);
+  assert.deepEqual(await ledger(payoutId), ledgerBefore);
+  assert.ok(q);
+});
+
+const emptyReserve = (code = 'INSUFFICIENT_BALANCE') =>
+  new PlatformRefusalError('reserve_empty', code);
+
+test('an empty reserve holds the withdrawal: no failure, no email, one issue and one alert', async (t) => {
+  const { db, q, withdraw, row, issues, available } = await fixture(t);
+  const reserved = await available();
+  const first = await withdraw();
+  const second = await withdraw();
+  const held = await available();
+  assert.ok(held < reserved);
+  const provider = scripted({
+    async coverPayoutFee(input) {
+      provider.calls.push({ call: 'fee', ...input });
+      throw emptyReserve();
+    },
+  });
+  for (const payoutId of [first, second])
+    assert.equal(
+      await startPayout(db, { payoutId, provider }),
+      'waiting_on_platform',
+    );
+  assert.equal(
+    writes(provider).filter(({ call }) => call === 'payout').length,
+    0,
+  );
+  for (const payoutId of [first, second]) {
+    const payout = await row(payoutId);
+    assert.equal(payout.status, 'REQUESTED');
+    // A definite answer: nothing is in doubt, so nothing says it may have left.
+    assert.equal(payout.start_uncertain_at, null);
+    assert.equal(payout.start_step, null);
+    assert.ok(payout.platform_wait_since);
+  }
+  assert.equal(await available(), held);
+  assert.equal((await issues('payout_failed')).length, 0);
+  const outbox = await q('SELECT event_type FROM outbox_events');
+  assert.equal(
+    outbox.filter((e) => e.event_type === 'payout.failed').length,
+    0,
+  );
+  assert.equal(
+    outbox.filter((e) => e.event_type === 'payouts.platform_refused').length,
+    1,
+  );
+  const open = await issues('reserve_empty');
+  assert.equal(open.length, 1);
+  assert.equal(open[0].severity, 'money');
+});
+
+test('a timeout on the top-up is not an empty reserve: it stays uncertain and is never re-sent', async (t) => {
+  const { db, withdraw, row, issues } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted({
+    async coverPayoutFee(input) {
+      provider.calls.push({ call: 'fee', ...input });
+      throw timeout();
+    },
+  });
+  assert.equal(await startPayout(db, { payoutId, provider }), 'uncertain');
+  const payout = await row(payoutId);
+  assert.ok(payout.start_uncertain_at);
+  assert.equal(payout.start_step, 'fee');
+  assert.equal(payout.platform_wait_since, null);
+  assert.equal((await issues('reserve_empty')).length, 0);
+  // Funding the reserve doesn't touch it.
+  assert.equal((await requeuePayoutsWaitingOnPlatform(db)).queued, 0);
+  assert.equal(writes(provider).length, 1);
+});
+
+test('once funded it resumes under a new key, the issue closes itself, and a later spell opens a new one', async (t) => {
+  const { db, q, withdraw, row, issues } = await fixture(t);
+  const payoutId = await withdraw();
+  const refusing = scripted({
+    async coverPayoutFee(input) {
+      refusing.calls.push({ call: 'fee', ...input });
+      throw emptyReserve('ORGANIZATION_IN_DEBT');
+    },
+  });
+  const t0 = new Date();
+  await startPayout(db, { payoutId, provider: refusing, now: t0 });
+
+  // Nothing closes it, or calls the wait a lost job, while it waits.
+  await autoResolveIssues(db, new Date());
+  assert.equal((await issues('reserve_empty'))[0].status, 'open');
+  await reconcilePayouts({
+    db,
+    provider: scripted(),
+    now: after(PAYOUT_NOT_FOUND_AFTER_MS),
+    minAgeMs: 0,
+  });
+  assert.equal((await issues('payout_unresolved')).length, 0);
+
+  assert.equal((await requeuePayoutsWaitingOnPlatform(db)).queued, 1);
+  const queued = await q(
+    `SELECT dedupe_key FROM outbox_events WHERE event_type = 'payouts.start' AND aggregate_id = $1`,
+    [payoutId],
+  );
+  assert.equal(queued.length, 2);
+
+  // The first key stays spent on a refusal, which a provider may replay for good.
+  const provider = scripted();
+  assert.equal(await startPayout(db, { payoutId, provider }), 'started');
+  assert.notEqual(
+    refusing.calls[0].idempotencyKey,
+    provider.calls[0].idempotencyKey,
+  );
+  assert.match(
+    provider.calls[0].idempotencyKey,
+    new RegExp(`^payout-fee\\.${payoutId}\\.`),
+  );
+  assert.equal((await row(payoutId)).status, 'PROCESSING');
+  assert.equal(writes(refusing).length, 1);
+
+  await autoResolveIssues(db, new Date());
+  assert.equal((await issues('reserve_empty'))[0].status, 'resolved');
+  assert.equal((await requeuePayoutsWaitingOnPlatform(db)).queued, 0);
+
+  const next = await withdraw();
+  await startPayout(db, { payoutId: next, provider: refusing });
+  assert.equal(
+    (await issues('reserve_empty')).filter((i) => i.status === 'open').length,
+    1,
+  );
+});
+
+test('a hold or the switch still stops a waiting payout when the reserve is funded', async (t) => {
+  const { db, q, withdraw, issues } = await fixture(t);
+  const payoutId = await withdraw();
+  await startPayout(db, {
+    payoutId,
+    provider: scripted({
+      async coverPayoutFee() {
+        throw emptyReserve();
+      },
+    }),
+  });
+  const cause = await openIssue(db, {
+    dedupeKey: `hold.${randomUUID()}`,
+    kind: 'payment_reversed',
+    subject: { profileId: TOBI },
+    now: new Date(),
+  });
+  await db.transaction((tx) =>
+    holdWithdrawals(tx, {
+      profileId: TOBI,
+      reason: 'reversal',
+      issueId: cause.id,
+    }),
+  );
+  // A person decides it now: its own issue says so, and funding the reserve doesn't queue it.
+  assert.equal((await issues('payout_held')).length, 1);
+  assert.equal((await requeuePayoutsWaitingOnPlatform(db)).queued, 0);
+  const provider = scripted();
+  assert.equal(await startPayout(db, { payoutId, provider }), 'held');
+  assert.equal(writes(provider).length, 0);
+  // That payout is no longer the reserve's to answer for.
+  await autoResolveIssues(db, new Date());
+  assert.equal((await issues('reserve_empty'))[0].status, 'resolved');
+
+  await q(`DELETE FROM issues WHERE kind = 'payout_held'`);
+  await q(`UPDATE withdrawal_holds SET released_at = now()`);
+  await q(`UPDATE withdrawals_switch SET paused = true`);
+  assert.equal((await requeuePayoutsWaitingOnPlatform(db)).queued, 0);
+});
+
+test('a key the provider refuses holds the withdrawal too, on either call, with its own issue', async (t) => {
+  const { db, q, withdraw, row, issues } = await fixture(t);
+  const keyRefused = (code) => new PlatformRefusalError('provider_key', code);
+  const onFee = await withdraw();
+  const onPayout = await withdraw();
+  assert.equal(
+    await startPayout(db, {
+      payoutId: onFee,
+      provider: scripted({
+        async coverPayoutFee() {
+          throw keyRefused('UNAUTHORIZED');
+        },
+      }),
+    }),
+    'waiting_on_platform',
+  );
+  assert.equal(
+    await startPayout(db, {
+      payoutId: onPayout,
+      provider: scripted({
+        async initiatePayout() {
+          throw keyRefused('FORBIDDEN');
+        },
+      }),
+    }),
+    'waiting_on_platform',
+  );
+  assert.equal((await row(onFee)).status, 'REQUESTED');
+  assert.equal((await row(onPayout)).status, 'REQUESTED');
+  // The top-up that did go through is recorded, so the next try doesn't pay it again.
+  assert.ok((await row(onPayout)).fee_transfer_reference);
+  assert.equal((await issues('payout_failed')).length, 0);
+  const open = await issues('provider_key_refused');
+  assert.equal(open.length, 1);
+  assert.equal(
+    (await q(`SELECT 1 FROM outbox_events WHERE event_type = 'payout.failed'`))
+      .length,
+    0,
+  );
+  // Another report while it is open adds nothing.
+  await reportProviderKeyRefused(db, { now: new Date() });
+  assert.equal((await issues('provider_key_refused')).length, 1);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'payouts.platform_refused'`,
+      )
+    ).length,
+    1,
+  );
 });

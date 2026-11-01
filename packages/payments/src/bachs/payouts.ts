@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { z } from 'zod';
 import {
   PayoutRejectedError,
+  PlatformRefusalError,
   type PayoutFailureReason,
   type PayoutPort,
 } from '../provider.js';
@@ -137,21 +138,19 @@ const PAYOUT_REFUSALS: Readonly<Record<string, PayoutFailureReason>> = {
   DESTINATION_REJECTED: 'destination',
   BANK_ROUTING_DETAILS_INVALID: 'destination',
   INSUFFICIENT_BALANCE: 'other',
-  FORBIDDEN: 'other',
-  UNAUTHORIZED: 'other',
   VALIDATION_ERROR: 'other',
   PAYOUT_CURRENCY_NOT_ENABLED: 'other',
   PAYOUT_SOURCE_CURRENCY_UNSUPPORTED: 'other',
   PAYOUT_RECIPIENT_INCOMPLETE: 'other',
 };
 
-// On a transfer the debited side is the platform, so a debt here is TipMe's and not the
-// recipient's: it must not read as 'in_debt', which pauses the recipient's withdrawals.
-const TRANSFER_REFUSALS: Readonly<Record<string, PayoutFailureReason>> = {
-  ORGANIZATION_IN_DEBT: 'other',
-  INSUFFICIENT_BALANCE: 'other',
-  FORBIDDEN: 'other',
-  UNAUTHORIZED: 'other',
+// On a transfer the debited side is the platform, so an empty or indebted balance here is TipMe's
+// and not the recipient's: their withdrawal waits for the reserve instead of failing.
+const TRANSFER_REFUSALS: Readonly<
+  Record<string, PayoutFailureReason | 'reserve_empty'>
+> = {
+  ORGANIZATION_IN_DEBT: 'reserve_empty',
+  INSUFFICIENT_BALANCE: 'reserve_empty',
   NOT_FOUND: 'other',
   VALIDATION_ERROR: 'other',
 };
@@ -229,7 +228,7 @@ function unexpected(operation: string): UncertainProviderOutcomeError {
 /** Runs a money write: a listed refusal is definite, every other error stays unknown. */
 async function moneyWrite<T>(
   operation: string,
-  refusals: Readonly<Record<string, PayoutFailureReason>>,
+  refusals: Readonly<Record<string, PayoutFailureReason | 'reserve_empty'>>,
   write: () => Promise<T>,
 ): Promise<T> {
   try {
@@ -237,10 +236,20 @@ async function moneyWrite<T>(
   } catch (error) {
     if (!(error instanceof BachsApiError)) throw error;
     const code = error.providerCode;
+    // TipMe's key, whatever else the answer says: nothing was done, and it isn't the recipient's.
+    if (
+      error.statusCode === 401 ||
+      error.statusCode === 403 ||
+      code === 'UNAUTHORIZED' ||
+      code === 'FORBIDDEN'
+    )
+      throw new PlatformRefusalError('provider_key', code);
     const reason =
       code !== undefined && Object.hasOwn(refusals, code)
         ? refusals[code]
         : undefined;
+    if (reason === 'reserve_empty')
+      throw new PlatformRefusalError('reserve_empty', code);
     if (reason) throw new PayoutRejectedError(reason, code);
     throw new UncertainProviderOutcomeError(
       operation,

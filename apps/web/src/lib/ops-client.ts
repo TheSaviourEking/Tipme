@@ -67,6 +67,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payout_held: 'Withdrawal waiting on a hold',
   account_takeover_reported: 'Reported account takeover',
   provider_in_debt: 'Provider account in debt',
+  reserve_empty: 'Payment reserve empty',
+  provider_key_refused: 'Provider refused our key',
   provider_event_conflict: 'Conflicting provider event',
   stuck_tip: 'Tip stuck confirming',
   unmatched_event: 'Unmatched provider event',
