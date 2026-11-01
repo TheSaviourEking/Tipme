@@ -1,3 +1,12 @@
+# Current handoff — staging workflow cannot call reusable CI (1 November 2026)
+
+- Branch/worktree: `fix/staging-reusable-workflow-permissions-dev` / `.worktrees/staging-workflow-fix-dev`, based on `origin/dev` commit `1b79d7c`.
+- Root cause: `.github/workflows/ci.yml` gives its `changes` job `statuses: read` so it can inspect tested-tree statuses. `.github/workflows/deploy-staging.yml` calls that workflow but omitted `statuses: read`; GitHub rejects a called workflow that requests more permission than its caller grants. Staging therefore had a startup failure before any job or deployment ran.
+- Minimal fix: add `statuses: read` to the staging `checks` caller job. The regression test compares requested and granted permission levels and was observed failing with `[['statuses', 'read']]` before the fix, then passing.
+- Fresh verification after building the isolated worktree: `pnpm build` passed 10/10 tasks; `pnpm test` passed 154/154 script tests and 20/20 Turbo tasks; `pnpm lint` and `pnpm typecheck` passed 17/17 tasks each; `pnpm format:check` and `git diff --check` passed. The initial sandboxed test attempt failed from missing build artifacts and denied localhost binds, not assertions in the change; the correctly prepared rerun passed.
+- Production is not independently broken: its staging-pass gate correctly refused the untested tree. PR #75 already put the fix on `main`; this corrective PR puts it on `dev`, following the required `feature → dev → main` flow for subsequent work. Run staging for the target commit and require a successful full release check before production. Do not use `override_reason` for this workflow defect.
+- Next exact step: merge the prepared PR into `dev` through the owner's normal review flow, then run staging. No real payment, staging/production deployment, environment mutation or secret access was performed during diagnosis.
+
 # Current handoff — production infrastructure (31 October 2026)
 
 Branch `feat/production-infra` (worktree `.worktrees/production-infra`), from `8b2db32`, not pushed. Plan: `docs/superpowers/plans/2026-10-31-production-infrastructure.md`; spec: `docs/superpowers/specs/2026-10-31-production-launch-design.md`.
