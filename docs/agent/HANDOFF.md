@@ -1,3 +1,14 @@
+# Current handoff — live payments, Task 12: fence removed, nothing activated (1 November 2026)
+
+- Branch/worktree: `feat/live-payments-payouts` / `.worktrees/live-payouts`, not pushed. Migrations `0058_live_payment_switches`, `0059_account_takeover_hold`.
+- **Nothing is live.** The code fence is gone, so `PAYMENTS_LIVE_ENABLED=true` now starts on a production copy with `bachs-live` and every setting it needs. Every example, compose default and doc keeps `false`, and production keeps `false`. Activation is the owner's: `docs/runbooks/live-activation.md`. D-02 to D-07 stay open, and the acceptance in `docs/00-DECISIONS.md` is a blank template.
+- **Built:** the API records each change at boot (`recordLiveSwitch`) and Overview shows it; the deploy stops before changing anything if payments are on without an https `ALERT_WEBHOOK_URL`; `--expect-live` on the release check; the setup sweep has a run lock, reads at most 100 pending banks per run at random, and stops on three 429s in a row; a staff takeover freeze on Pages.
+- **Not done, needs a push and deploy:** every sandbox check in the runbook's section 2, including a sandbox payout end to end and the worker's jobs on a real provider. No payout id exists yet.
+- **Tests:** `tests/integration/live-stack.test.mjs` starts the real API and worker as production with `bachs-live`, with Bachs a local stand-in (`no-real-provider.mjs`). The 12 backup entries can't run without `tipme-postgres-1`; they must pass in CI on these migrations before the PR merges.
+- **Decision to confirm:** the takeover freeze is an exception to "payout holds stay out of admin" (`docs/00-DECISIONS.md`, Takeover freeze).
+- **Rollback note:** a version from before this work refuses `PAYMENTS_LIVE_ENABLED=true` at startup; switch off first.
+- Next: the owner's review and PR. The PR must say that activation stays an owner act.
+
 # Current handoff — production release-check LCP (1 November 2026)
 
 - Branch/worktree: `fix/home-lcp` / `.worktrees/home-lcp`, based on `origin/main` at `26c324e`; four code/test files plus these continuity notes are uncommitted.

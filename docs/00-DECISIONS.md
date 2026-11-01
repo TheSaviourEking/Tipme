@@ -95,6 +95,23 @@
 >     - Staff match a whole reference or that 6-character ending, so neither can rebuild a full provider reference.
 >     - Admin search is indexed and stops after 3 seconds.
 
+> **Live pilot acceptance (TEMPLATE, NOT ACCEPTED).** The code fence on live payments is gone (1 Nov 2026), and production keeps `PAYMENTS_LIVE_ENABLED=false`. Removing the fence decides nothing. Live payments stay unapproved until the owner completes the block below and works through `docs/runbooks/live-activation.md`. Only the owner fills this in; no agent writes an answer here.
+>
+> - Accepted by / date:
+> - Scope (closed pilot, or public; Q7):
+> - D-02 legal opinion, or accepted risk and why:
+> - D-03 the payment partner's written confirmation (Q4), and where it is kept:
+> - D-04 signed funds-flow diagram, and where it is kept:
+> - D-05 refunds, chargebacks, reward cash:
+> - D-06 verification, holds and support; may the owner alone settle money issues (Q5):
+> - D-07 compliance assessment, or accepted risk and why:
+> - Stolen inbox (email sign-in plus a bank code to the same inbox adds a bank at once): accepted / changed:
+> - Stolen session and the 72-hour bank wait: accepted / changed:
+> - One admin until second-person approval ships: accepted / changed:
+> - Reserve funded to, and who tops it up (Q6):
+
+> **Takeover freeze (1 Nov 2026), PROPOSED, needs the owner's confirmation.** "Admin and money" above says payout holds stay out of admin until there are two staff. The owner's list of decisions before live named the missing takeover freeze, so a narrow one was built: staff with `payouts.resolve` can freeze a page's withdrawals for a reported account takeover, with a written reason, audited. It moves no money, recalls nothing with the provider, and ends when its money issue is resolved. All other holds stay out of admin. If the owner declines the exception, remove it before live.
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 

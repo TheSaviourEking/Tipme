@@ -4849,7 +4849,8 @@
                 "unmatched_event",
                 "pending_recovery",
                 "message_reported",
-                "profile_reported"
+                "profile_reported",
+                "account_takeover_reported"
               ]
             }
           },
@@ -5321,7 +5322,8 @@
                     "enum": [
                       "resolved_by_provider",
                       "recipient_owes",
-                      "written_off"
+                      "written_off",
+                      "account_secured"
                     ]
                   }
                 },
@@ -6405,6 +6407,75 @@
           }
         ],
         "x-tipme-permission": "pages.suspend"
+      }
+    },
+    "/v1/ops/pages/{profileId}/withdrawal-freeze": {
+      "post": {
+        "operationId": "OpsPages.freeze",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
       }
     },
     "/v1/ops/providers/mail": {

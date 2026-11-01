@@ -63,7 +63,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/recheck` |
-| `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume` |
+| `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze` |
 | `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `providers.manage` | POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
@@ -239,6 +239,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
+| POST | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | yes | – | – |
 | GET | `/v1/ops/providers/mail` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | – | – |
