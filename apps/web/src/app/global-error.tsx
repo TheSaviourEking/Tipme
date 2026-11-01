@@ -1,6 +1,6 @@
 'use client';
-import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
+import { captureDeferredException } from '@/lib/deferred-sentry';
 import '@tipme/ui/tokens.css';
 import '@tipme/ui/components.css';
 import './globals.css';
@@ -15,7 +15,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    captureDeferredException(error);
   }, [error]);
   return (
     <html lang="en">
