@@ -1,6 +1,14 @@
 import { eq, and, isNotNull, isNull } from 'drizzle-orm';
-import { paymentAttempts, payouts, profiles, tips, users } from '../schema.js';
+import {
+  paymentAttempts,
+  payouts,
+  profiles,
+  staff,
+  tips,
+  users,
+} from '../schema.js';
 import type { Database, Tx } from '../client.js';
+import { maskEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
 
@@ -62,6 +70,47 @@ const idOf = (value: unknown) =>
  * Emails caused by outbox events. The outbox row commits with the operation, so these can't exist
  * without it, and each dedupe key makes a repeated delivery a no-op.
  */
+/** Every owner hears, the person who acted included: it may not have been them at the keyboard. */
+async function mailOwnersActedAlone(
+  db: Database,
+  sealing: MailSealing,
+  payload: Record<string, unknown>,
+  dedupeKey?: string,
+): Promise<void> {
+  const actorId = idOf(payload['requestedBy']);
+  const action = payload['action'];
+  if (!actorId || typeof action !== 'string' || !dedupeKey) return;
+  const [actor] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, actorId));
+  const owners = await db
+    .select({ userId: users.id, email: users.email })
+    .from(staff)
+    .innerJoin(users, eq(users.id, staff.userId))
+    .where(
+      and(
+        eq(staff.roleId, 'owner'),
+        isNull(staff.revokedAt),
+        isNotNull(users.emailVerifiedAt),
+        isNull(users.deletedAt),
+      ),
+    );
+  for (const owner of owners)
+    if (owner.email)
+      await enqueueMail(db, sealing, {
+        type: 'staff_acted_alone',
+        to: owner.email,
+        userId: owner.userId,
+        data: {
+          personHint: actor?.email ? maskEmail(actor.email) : 'A staff member',
+          action,
+        },
+        // A retried event sends nothing twice; each action is its own event.
+        dedupeKey: `staff_acted_alone.${dedupeKey}.${owner.userId}`,
+      });
+}
+
 export function mailForDomainEvent(
   db: Database,
   sealing: MailSealing,
@@ -71,6 +120,10 @@ export function mailForDomainEvent(
 ): Promise<void> {
   const payload = (data ?? {}) as Record<string, unknown>;
   return guarded(async () => {
+    if (name === 'ops.acted_alone') {
+      await mailOwnersActedAlone(db, sealing, payload, dedupeKey);
+      return;
+    }
     if (name === 'payout.paid' || name === 'payout.failed') {
       const payoutId = idOf(payload['payoutId']);
       if (!payoutId) return;

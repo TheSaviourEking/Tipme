@@ -1,5 +1,5 @@
 import type { OpsIssue, OpsIssueOutcome } from '@tipme/contracts';
-import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   issueNotes,
@@ -11,16 +11,20 @@ import {
   phoneRecoveries,
   profiles,
   tips,
+  users,
   withdrawalHolds,
   type IssueKind,
   type IssueSeverity,
   type IssueSubject,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
+import { normaliseStaffEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { canonicalId } from './staff.js';
 
 const STUCK_AFTER_MS = 30 * 60 * 1000;
+const ACTED_ALONE_CLOSES_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Outbox alerts that need a person, and the issue kind each becomes. */
 const EVENT_KINDS: Record<string, IssueKind> = {
@@ -218,7 +222,7 @@ function actedAloneNote(payload: Record<string, unknown>): string {
     typeof payload.action === 'string' && /^[a-z_.]{1,60}$/.test(payload.action)
       ? payload.action
       : 'unknown';
-  return `Action: ${action}. Staff member: ${idOf(payload.requestedBy) ?? 'unknown'}. The audit log has the reason.`;
+  return `Action: ${action}. Staff member: ${idOf(payload.requestedBy) ?? 'unknown'}. The audit log has the reason. Someone else must close this; if nobody does, it closes itself after 30 days.`;
 }
 
 /** One issue per outbox alert, keyed by the alert's dedupe key, so redelivery changes nothing. */
@@ -239,6 +243,11 @@ export function openIssueFromEvent(
   ] as const) {
     const id = idOf(payload[key]);
     if (id) subject[key] = id;
+  }
+  // Who acted, so they can't be the one to close it.
+  if (input.eventType === 'ops.acted_alone') {
+    const actor = idOf(payload.requestedBy);
+    if (actor) subject.userId = actor;
   }
   return guarded(async () =>
     (
@@ -565,6 +574,12 @@ export function autoResolveIssues(
         JOIN release_runs r ON r.id = p.rehearsal_run_id
        WHERE i.status = 'open' AND i.rehearsal AND r.finished_at IS NOT NULL
       UNION ALL
+      -- A lone admin can't close their own alert, and with nobody else it mustn't stay open forever.
+      SELECT i.id, 'Closed automatically after 30 days: nobody else was available to close it.'
+        FROM issues i
+       WHERE i.status = 'open' AND i.kind = 'staff_acted_alone'
+         AND i.opened_at < ${new Date(now.getTime() - ACTED_ALONE_CLOSES_AFTER_MS).toISOString()}::timestamptz
+      UNION ALL
       SELECT i.id, 'The recovery was completed or cancelled.'
         FROM issues i JOIN phone_recoveries r ON r.id = (i.subject->>'recoveryId')::uuid
        WHERE i.status = 'open' AND i.kind = 'pending_recovery'
@@ -681,6 +696,28 @@ export function relatedOpenIssues(
  * issue also needs how it was settled, which is stored and changes no balance; the API also asks
  * `payouts.resolve` for one.
  */
+/** By id or by mailbox: a second account on the same address is still the same person. */
+async function isSamePerson(
+  tx: Tx,
+  actedBy: string | undefined,
+  closingBy: string,
+): Promise<boolean> {
+  if (!actedBy) return false;
+  const closer = canonicalId(closingBy);
+  if (closer === actedBy) return true;
+  if (!closer) return false;
+  const people = await tx
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(inArray(users.id, [actedBy, closer]));
+  const [first, second] = people.map((person) => person.email);
+  return Boolean(
+    first &&
+    second &&
+    normaliseStaffEmail(first) === normaliseStaffEmail(second),
+  );
+}
+
 export function resolveIssue(
   db: Database,
   input: {
@@ -697,6 +734,7 @@ export function resolveIssue(
     db.transaction(async (tx) => {
       const [current] = await tx
         .select({
+          kind: issues.kind,
           severity: issues.severity,
           status: issues.status,
           subject: issues.subject,
@@ -704,6 +742,12 @@ export function resolveIssue(
         .from(issues)
         .where(eq(issues.id, input.issueId));
       if (!current) throw new OperationError('ISSUE_NOT_FOUND');
+      if (
+        current.status === 'open' &&
+        current.kind === 'staff_acted_alone' &&
+        (await isSamePerson(tx, current.subject.userId, input.staffUserId))
+      )
+        throw new OperationError('ISSUE_OWN_ALERT');
       if (
         current.status === 'open' &&
         current.severity === 'money' &&

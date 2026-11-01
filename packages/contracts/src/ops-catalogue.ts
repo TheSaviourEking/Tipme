@@ -142,6 +142,44 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
   },
 };
 
+/**
+ * Routes under a sensitive permission that don't ask for a fresh code. Each is a read that shows no
+ * private detail; the route test pins the verb and permission, and fails on anything else.
+ */
+export const OPS_FRESH_CODE_EXEMPT: Record<
+  string,
+  { verb: 'GET' | 'POST'; permission: OpsPermission; reason: string }
+> = {
+  'OpsPagesController.page': {
+    verb: 'GET',
+    permission: 'pages.plan',
+    reason:
+      'Finds a page by handle: public-level fields only, changes nothing.',
+  },
+  'OpsPagesController.pricing': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason: 'Shows a page’s fee numbers before a change; changes nothing.',
+  },
+  'OpsStaffController.roles': {
+    verb: 'GET',
+    permission: 'staff.manage',
+    reason: 'Role names and permission lists: structure, no people’s details.',
+  },
+  'OpsStaffController.impact': {
+    verb: 'POST',
+    permission: 'staff.manage',
+    reason:
+      'A dry run of a role edit, a POST only to carry its body. Writes nothing.',
+  },
+  'OpsStaffController.access': {
+    verb: 'GET',
+    permission: 'staff.manage',
+    reason:
+      'One person’s role id and permission names: no email, phone or other detail.',
+  },
+};
+
 /** Actions serious enough that a later task asks a second person to approve them. */
 export const SERIOUS_ACTIONS = [
   'email_recovery.start',

@@ -33,6 +33,7 @@ import { phoneChangeWarning } from './types/phone-change-warning.js';
 import { providerTest } from './types/provider-test.js';
 import { recoveryLink } from './types/recovery-link.js';
 import {
+  staffActedAlone,
   staffInvitation,
   staffInvitationDeclined,
 } from './types/staff-invitation.js';
@@ -49,6 +50,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     recoveryLink,
     staffInvitation,
     staffInvitationDeclined,
+    staffActedAlone,
     phoneChangeWarning,
     providerTest,
     signInCode,

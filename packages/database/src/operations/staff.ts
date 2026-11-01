@@ -22,7 +22,7 @@ import {
   normaliseEmail,
   normaliseStaffEmail,
 } from './email-address.js';
-import { guarded, OperationError } from './errors.js';
+import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { mailOwner } from './account-mail.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
@@ -88,14 +88,33 @@ export async function isActiveStaff(
   return Boolean(row);
 }
 
+// Each waiter holds one of the API's five pooled connections, so only a few may wait in this
+// process: public pages keep the rest. Everyone else gets a retryable refusal straight away.
+const STAFF_ADMIN_MAX_WAITERS = 3;
+let staffAdminWaiters = 0;
+
 /**
  * Serialises every change to who holds what, for the rest of the transaction. Take it first, and
- * read anything the change depends on after it.
+ * read anything the change depends on after it. Waits about 5 seconds at most, then refuses with
+ * STAFF_ADMIN_BUSY: nothing has changed, so trying again is safe. The limit covers this wait only.
  */
 export async function lockStaffAdmin(tx: Tx): Promise<void> {
-  await tx.execute(
-    sql`SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
-  );
+  if (staffAdminWaiters >= STAFF_ADMIN_MAX_WAITERS)
+    throw new OperationError('STAFF_ADMIN_BUSY');
+  staffAdminWaiters += 1;
+  try {
+    await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
+    );
+    await tx.execute(sql`SET LOCAL lock_timeout TO DEFAULT`);
+  } catch (error) {
+    if (sqlStateOf(error) === '55P03')
+      throw new OperationError('STAFF_ADMIN_BUSY');
+    throw error;
+  } finally {
+    staffAdminWaiters -= 1;
+  }
 }
 
 /**
@@ -735,7 +754,7 @@ export function startTotpEnrolment(
   );
 }
 
-export type CodeCheck = 'ok' | 'invalid' | 'locked';
+export type CodeCheck = 'ok' | 'invalid' | 'locked' | 'reused';
 
 async function isLocked(tx: Tx, userId: string, now: Date): Promise<boolean> {
   const [row] = await tx
@@ -798,6 +817,8 @@ export async function checkStaffCode(
     input.now,
     row.lastStep,
   );
+  // Refused, but not a guess: a double click or two tabs must not walk someone into a lockout.
+  if (!result.ok && result.reused) return 'reused';
   if (!result.ok) return failure(tx, input.userId, input.now);
   await tx
     .update(staffTotp)

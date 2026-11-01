@@ -4579,7 +4579,7 @@
         },
         "x-tipme-access": "staff",
         "x-tipme-csrf": true,
-        "x-tipme-rate-limit": "auth_verify"
+        "x-tipme-rate-limit": "ops_code"
       }
     },
     "/v1/ops/issues": {
@@ -8503,6 +8503,9 @@
                   "PROVIDER_NOT_ALLOWED",
                   "PERMISSION_NOT_HELD",
                   "FRESH_CODE_REQUIRED",
+                  "CODE_ALREADY_USED",
+                  "STAFF_ADMIN_BUSY",
+                  "ISSUE_OWN_ALERT",
                   "SELF_ACCESS_CHANGE",
                   "ROLE_NAME_TAKEN",
                   "ROLE_IN_USE",

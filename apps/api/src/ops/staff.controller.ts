@@ -70,6 +70,7 @@ export class OpsStaffController {
   ) {}
 
   @Get()
+  @FreshCode()
   @OpsPermission('staff.manage')
   async people(): Promise<ApiDataResponse<OpsStaffPerson[]>> {
     return { data: await activeStaffList(this.database.db) };

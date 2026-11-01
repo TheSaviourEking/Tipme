@@ -204,7 +204,7 @@ test('staff access', async (t) => {
             now: later,
           })
         ).status,
-        'invalid',
+        'reused',
       );
       const audit = await listAudit(database.db, { limit: 10 });
       assert.ok(audit.some((e) => e.action === 'ops.grant_opened'));

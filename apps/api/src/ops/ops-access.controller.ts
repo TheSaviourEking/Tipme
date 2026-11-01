@@ -55,6 +55,7 @@ import {
   type OpsContext,
   type OpsRequest,
 } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 /** Staff sign-in step (authenticator), the audit log and the admin's own role (ADR-0010). */
@@ -144,10 +145,12 @@ export class OpsAccessController {
     );
   }
 
+  // After StaffGuard (decorators apply bottom-up): the budget is this person's, so colleagues on
+  // one office address can't spend each other's. Their authenticator's lockout stops guessing.
   @Post('grant')
   @HttpCode(200)
+  @RateLimit('ops_code')
   @UseGuards(CsrfGuard, StaffGuard)
-  @RateLimit('auth_verify')
   async grant(
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(opsCodeSchema)) body: OpsCodeRequest,
@@ -190,6 +193,7 @@ export class OpsAccessController {
   }
 
   @Get('audit')
+  @FreshCode()
   @OpsPermission('audit.view')
   async audit(
     @CurrentOps() _ops: OpsContext,
@@ -210,6 +214,8 @@ export class OpsAccessController {
       setOpsCookie(response, this.config, result.token, result.expiresAt);
       return { data: { expiresAt: result.expiresAt.toISOString() } };
     }
+    if (result.status === 'reused')
+      throw new CodedHttpException(400, 'CODE_ALREADY_USED');
     if (result.status === 'locked')
       throw new CodedHttpException(429, 'OPS_LOCKED');
     if (result.status === 'not_staff')

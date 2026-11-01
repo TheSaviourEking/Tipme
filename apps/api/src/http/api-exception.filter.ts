@@ -28,6 +28,12 @@ const messages: Record<ApiErrorCode, string> = {
   PERMISSION_NOT_HELD:
     'You can only give or take away access you hold yourself.',
   FRESH_CODE_REQUIRED: 'Enter a code from your authenticator to do this.',
+  CODE_ALREADY_USED:
+    'That code has just been used. Wait for the next one in your app.',
+  STAFF_ADMIN_BUSY:
+    'Another staff change is in progress and nothing was changed. Please try again in a moment.',
+  ISSUE_OWN_ALERT:
+    'Someone else has to close this one, because it records your own action. With nobody else, it closes by itself after 30 days.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
@@ -183,6 +189,9 @@ const operationErrors: Partial<
   },
   MARKET_ENTRY_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   PERMISSION_NOT_HELD: { status: 403, code: 'PERMISSION_NOT_HELD' },
+  FRESH_CODE_REQUIRED: { status: 403, code: 'FRESH_CODE_REQUIRED' },
+  STAFF_ADMIN_BUSY: { status: 503, code: 'STAFF_ADMIN_BUSY' },
+  ISSUE_OWN_ALERT: { status: 403, code: 'ISSUE_OWN_ALERT' },
   SELF_ACCESS_CHANGE: { status: 403, code: 'SELF_ACCESS_CHANGE' },
   ROLE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   ROLE_NAME_TAKEN: { status: 409, code: 'ROLE_NAME_TAKEN' },

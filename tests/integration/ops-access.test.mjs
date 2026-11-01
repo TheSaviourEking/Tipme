@@ -111,7 +111,7 @@ test('the full flow opens a grant with every Owner permission, and it is audited
     code,
   });
   assert.equal(replay.status, 400);
-  assert.equal(await errorCode(replay), 'CODE_INVALID');
+  assert.equal(await errorCode(replay), 'CODE_ALREADY_USED');
 });
 
 test('signing out ends the admin grant, even with the old admin cookie (Review Focus 1)', async () => {

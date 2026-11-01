@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { sql } from '../../packages/database/node_modules/drizzle-orm/index.js';
 import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
-import { OPS_CATALOGUE } from '../../packages/contracts/dist/index.js';
+import * as contracts from '../../packages/contracts/dist/index.js';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
+import * as ops from '../../packages/database/dist/index.js';
 import {
   ISSUE_EVENT_NAMES,
   OperationError,
+  autoResolveIssues,
+  holdWithdrawals,
+  openIssue,
   openIssueFromEvent,
+  resolveIssue,
   qualifiedApprovers,
   registerSeriousAction,
   requestSeriousAction,
@@ -20,7 +27,17 @@ import {
   FRESH_CODE,
   FreshCodeGuard,
 } from '../../apps/api/dist/ops/fresh-code.guard.js';
-import { WEB, browserHeaders, opsSignIn, startStack } from './helpers.mjs';
+import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
+import {
+  MAIL_SEAL_KEY,
+  WEB,
+  browserHeaders,
+  opsSignIn,
+  startStack,
+} from './helpers.mjs';
+
+const { OPS_CATALOGUE } = contracts;
+const sealing = ops.mailSealing(Buffer.from(MAIL_SEAL_KEY, 'base64'));
 
 startTelemetry({
   serviceName: 'tipme-integration',
@@ -59,6 +76,16 @@ registerSeriousAction({
   describe: async (_tx, payload) => `Set the test value to ${payload.value}`,
   run: async (_tx, payload, ctx) => {
     runs.push({ payload, ctx });
+    return { applied: payload.value };
+  },
+});
+registerSeriousAction({
+  name: 'test.slow_run',
+  permission: 'fees.manage',
+  validate: async () => {},
+  describe: async () => 'Runs too long',
+  run: async (tx) => {
+    await tx.execute(sql`SELECT pg_sleep(30)`);
   },
 });
 registerSeriousAction({
@@ -84,6 +111,7 @@ registerSeriousAction({
 
 const REASON = 'The provider confirmed the change by phone';
 let phoneSeq = 0;
+const grants = new Map();
 
 /** Nobody is staff; each test adds exactly the people it is about. */
 beforeEach(async () => {
@@ -117,6 +145,23 @@ async function person({
     `INSERT INTO staff_totp (user_id, secret_enc, confirmed_at) VALUES ($1, 'sealed', $2)`,
     [id, enrolled ? new Date() : null],
   );
+  grants.set(id, await grantFor(id));
+  return id;
+}
+
+/** A live admin grant on a session of its own, last given a code `minutesAgo` minutes ago. */
+async function grantFor(userId, minutesAgo = 0) {
+  const [{ id: sessionId }] = await q(
+    `INSERT INTO sessions (id, user_id, token_sha256, created_at, last_seen_at, expires_at)
+     VALUES (gen_random_uuid(), $1, $2, now(), now(), now() + interval '1 day') RETURNING id`,
+    [userId, randomBytes(32).toString('hex')],
+  );
+  const [{ id }] = await q(
+    `INSERT INTO ops_sessions (id, user_id, session_id, token_sha256, created_at, last_seen_at, expires_at, last_totp_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, now(), now(), now() + interval '1 hour', now() - make_interval(mins => $4))
+     RETURNING id`,
+    [userId, sessionId, randomBytes(32).toString('hex'), minutesAgo],
+  );
   return id;
 }
 
@@ -136,6 +181,7 @@ const ask = (actorId, overrides = {}) =>
     name: ACTION,
     payload: { value: 'x' },
     actorId,
+    grantId: grants.get(String(actorId).toLowerCase()) ?? randomUUID(),
     reason: REASON,
     ...overrides,
   });
@@ -207,20 +253,9 @@ test('a sensitive route refuses without a code in the last 5 minutes, and accept
     (await call('POST', '/v1/ops/providers/overrides', cookie, {})).status,
     400,
   );
-  // The old grant didn't get fresher because a new one opened.
-  assert.equal((await sensitive()).status, 403);
+  // The old grant is gone, not merely stale.
+  assert.equal((await sensitive()).status, 404);
 });
-
-/** Read-only screens that show no private detail. New routes don't get in here by accident. */
-const NO_CODE_NEEDED = new Set([
-  'OpsAccessController.audit',
-  'OpsPagesController.page',
-  'OpsPagesController.pricing',
-  'OpsStaffController.people',
-  'OpsStaffController.roles',
-  'OpsStaffController.impact',
-  'OpsStaffController.access',
-]);
 
 /** Every controller the API actually mounts, however deep, so a new module can't slip past. */
 function mountedControllers() {
@@ -250,9 +285,14 @@ function mountedControllers() {
   return [...controllers];
 }
 
+const VERBS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+
 test('every route under a sensitive permission asks for a fresh code, enforced in the right order', () => {
+  const exemptions = contracts.OPS_FRESH_CODE_EXEMPT;
+  assert.ok(exemptions, 'the exemptions live in the catalogue');
   const missing = [];
   const misordered = [];
+  const opaque = [];
   const exempt = new Set();
   let sensitive = 0;
   for (const controller of mountedControllers()) {
@@ -260,16 +300,29 @@ test('every route under a sensitive permission asks for a fresh code, enforced i
     for (const name of Object.getOwnPropertyNames(proto)) {
       const handler = proto[name];
       if (name === 'constructor' || typeof handler !== 'function') continue;
-      if (Reflect.getMetadata('method', handler) === undefined) continue;
+      const route = `${controller.name}.${name}`;
+      // A gate written in code is invisible to the decorator, so read the code too.
+      const inline = [
+        ...handler.toString().matchAll(/permissions\s*\.has\(\s*([^)]*)\)/g),
+      ].map((match) => match[1].trim());
+      const isRoute = Reflect.getMetadata('method', handler) !== undefined;
+      if (!isRoute) {
+        if (inline.length) opaque.push(`${route} (helper)`);
+        continue;
+      }
       const permission =
         Reflect.getMetadata(OPS_PERMISSION, handler) ??
         Reflect.getMetadata(OPS_PERMISSION, controller);
-      if (!permission) continue;
+      if (!permission) {
+        if (inline.length) opaque.push(`${route} (no permission)`);
+        continue;
+      }
       assert.ok(
         OPS_CATALOGUE[permission],
         `${permission} not in the catalogue`,
       );
-      const route = `${controller.name}.${name}`;
+      const names = inline.map((text) => /^'([^']+)'$/.exec(text)?.[1]);
+      if (names.includes(undefined)) opaque.push(`${route} (computed)`);
       const marked = Reflect.getMetadata(FRESH_CODE, handler) === true;
       if (marked) {
         const guards = Reflect.getMetadata('__guards__', handler) ?? [];
@@ -277,18 +330,191 @@ test('every route under a sensitive permission asks for a fresh code, enforced i
         if (fresh < 0 || fresh < guards.indexOf(OpsGuard))
           misordered.push(route);
       }
-      if (!OPS_CATALOGUE[permission].sensitive) continue;
+      const held = [permission, ...names.filter(Boolean)];
+      if (!held.some((held1) => OPS_CATALOGUE[held1]?.sensitive)) continue;
       sensitive += 1;
-      if (NO_CODE_NEEDED.has(route)) {
+      const exemption = exemptions[route];
+      if (exemption) {
         exempt.add(route);
         assert.equal(marked, false, `${route} is exempt and marked`);
+        assert.equal(
+          exemption.verb,
+          VERBS[Reflect.getMetadata('method', handler)],
+          `${route}: verb`,
+        );
+        assert.equal(exemption.permission, permission, `${route}: permission`);
+        assert.ok(exemption.reason.length > 20, `${route}: reason`);
       } else if (!marked) missing.push(route);
     }
   }
   assert.ok(sensitive > 25, `the walk found the routes (${sensitive})`);
   assert.deepEqual(missing, []);
   assert.deepEqual(misordered, []);
-  assert.deepEqual([...exempt].sort(), [...NO_CODE_NEEDED].sort());
+  assert.deepEqual(opaque, []);
+  assert.deepEqual([...exempt].sort(), Object.keys(exemptions).sort());
+  for (const named of [
+    'OpsAccessController.audit',
+    'OpsStaffController.people',
+  ])
+    assert.equal(exemptions[named], undefined, `${named} needs a code`);
+});
+
+const staleCode = (phone) =>
+  q(
+    `UPDATE ops_sessions SET last_totp_at = now() - interval '6 hours'
+     WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $1)`,
+    [phone],
+  );
+const activeHolds = async (profileId) =>
+  (
+    await q(
+      `SELECT count(*)::int n FROM withdrawal_holds WHERE profile_id = $1 AND released_at IS NULL`,
+      [profileId],
+    )
+  )[0].n;
+
+test('a stale code cannot close a money issue or lift its hold; a fresh one can', async () => {
+  const phone = '+2348036660902';
+  const owner = await opsSignIn(stack.api, database.db, phone);
+  const [{ id: profileId }] = await q(
+    `SELECT id FROM profiles WHERE handle = 'ada'`,
+  );
+  const { id: issueId } = await openIssue(database.db, {
+    dedupeKey: `test.${randomUUID()}`,
+    kind: 'payment_reversed',
+    subject: { profileId },
+    now: new Date(),
+  });
+  await database.db.transaction((tx) =>
+    holdWithdrawals(tx, { profileId, reason: 'reversal', issueId }),
+  );
+  const before = await activeHolds(profileId);
+  assert.ok(before >= 1);
+  await staleCode(phone);
+  const close = () =>
+    call('POST', `/v1/ops/issues/${issueId}/resolve`, owner.cookie, {
+      reason: 'Closing this after checking the provider',
+      outcome: 'written_off',
+    });
+  const refused = await close();
+  assert.equal(refused.status, 403);
+  assert.equal((await refused.json()).error.code, 'FRESH_CODE_REQUIRED');
+  assert.equal(await activeHolds(profileId), before);
+  assert.equal(
+    (await q(`SELECT status FROM issues WHERE id = $1`, [issueId]))[0].status,
+    'open',
+  );
+  await q(
+    `UPDATE ops_sessions SET last_totp_at = now()
+     WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $1)`,
+    [phone],
+  );
+  assert.equal((await close()).status, 200);
+});
+
+test('the log and the staff list ask for a fresh code; screens exempted do not', async () => {
+  const phone = '+2348036660903';
+  const owner = await opsSignIn(stack.api, database.db, phone);
+  await staleCode(phone);
+  for (const path of ['/v1/ops/audit', '/v1/ops/staff']) {
+    const response = await call('GET', path, owner.cookie);
+    assert.equal(response.status, 403, path);
+    assert.equal((await response.json()).error.code, 'FRESH_CODE_REQUIRED');
+  }
+  assert.equal(
+    (await call('GET', '/v1/ops/staff/roles', owner.cookie)).status,
+    200,
+  );
+});
+
+// ---- Re-entering a code ----
+
+test('a used code is its own error and never counts towards the lockout; wrong codes still do', async () => {
+  const phone = '+2348036660904';
+  const owner = await opsSignIn(stack.api, database.db, phone);
+  const code = await owner.nextCode();
+  const grant = (value) =>
+    call('POST', '/v1/ops/grant', owner.sessionCookie, { code: value });
+  assert.equal((await grant(code)).status, 200);
+  for (let i = 0; i < 7; i += 1) {
+    const replay = await grant(code);
+    assert.equal(replay.status, 400);
+    assert.equal((await replay.json()).error.code, 'CODE_ALREADY_USED');
+  }
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM ops_lockouts WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $1) AND locked_until > now()`,
+        [phone],
+      )
+    ).length,
+    0,
+  );
+  // A wrong guess isn't excused by any of that.
+  const statuses = [];
+  const wrong = code === '000000' ? '000001' : '000000';
+  for (let i = 0; i < 6; i += 1) statuses.push((await grant(wrong)).status);
+  assert.deepEqual(statuses, [400, 400, 400, 400, 429, 429]);
+});
+
+test('re-entering a code replaces the grant and keeps its expiry, rather than stacking', async () => {
+  const phone = '+2348036660905';
+  const owner = await opsSignIn(stack.api, database.db, phone);
+  const rows = () =>
+    q(
+      `SELECT expires_at, revoked_at FROM ops_sessions
+       WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $1) ORDER BY created_at`,
+      [phone],
+    );
+  const [{ expires_at: original }] = await rows();
+  const grant = await call('POST', '/v1/ops/grant', owner.sessionCookie, {
+    code: await owner.nextCode(),
+  });
+  assert.equal(grant.status, 200);
+  const after = await rows();
+  assert.equal(after.filter((row) => !row.revoked_at).length, 1);
+  const live = after.find((row) => !row.revoked_at);
+  assert.equal(live.expires_at.getTime(), original.getTime());
+  assert.equal((await call('GET', '/v1/ops/issues', owner.cookie)).status, 404);
+  const expiry = (await grant.json()).data.expiresAt;
+  assert.equal(new Date(expiry).getTime(), original.getTime());
+});
+
+test('at the default limits, staff re-entry has a per-person budget nobody else can spend', async () => {
+  const defaults = await startStack({ databaseUrl: database.url });
+  try {
+    const [a, b] = [
+      await opsSignIn(defaults.api, database.db, '+2348036660906'),
+      await opsSignIn(defaults.api, database.db, '+2348036660907'),
+    ];
+    const code = await a.nextCode();
+    const grant = (who, value) =>
+      fetch(`${defaults.api}/v1/ops/grant`, {
+        method: 'POST',
+        headers: browserHeaders(who.sessionCookie, { origin: WEB }),
+        body: JSON.stringify({ code: value }),
+      });
+    assert.equal((await grant(a, code)).status, 200);
+    // Used codes don't lock anyone out, so they spend the budget alone. The shared per-address
+    // limit is 30 an hour by default, and sign-in above already spent part of it.
+    let status;
+    let count = 0;
+    while (count < 70) {
+      status = (await grant(a, code)).status;
+      count += 1;
+      if (status === 429) break;
+    }
+    assert.equal(status, 429, `limited after ${count}`);
+    assert.equal(count, 60, 'one person gets 60 an hour');
+    const other = await grant(b, await b.nextCode());
+    assert.equal(
+      other.status,
+      200,
+      'someone else on that address is unaffected',
+    );
+  } finally {
+    await defaults.stop();
+  }
 });
 
 // ---- Who counts as the second person ----
@@ -296,7 +522,11 @@ test('every route under a sensitive permission asks for a fresh code, enforced i
 test('with nobody else qualified, the action runs at once and logs that no second person was available', async () => {
   const owner = await person();
   const outcome = await ask(owner);
-  assert.deepEqual(outcome, { state: 'ran', aloneReason: 'no_second_person' });
+  assert.deepEqual(outcome, {
+    state: 'ran',
+    aloneReason: 'no_second_person',
+    result: { applied: 'x' },
+  });
   assert.equal(runs.length, 1);
   assert.deepEqual(runs[0].payload, { value: 'x' });
   assert.equal(runs[0].ctx.actorId, owner);
@@ -331,7 +561,7 @@ test('the alone path posts an alert', async () => {
       dedupeKey: alerts[0].dedupe_key,
       payload: alerts[0].payload,
     });
-  assert.equal(await open(), 'opened');
+  await open();
   assert.equal(await open(), 'duplicate');
   const [issue] = await q(`SELECT * FROM issues WHERE dedupe_key = $1`, [
     `event.${alerts[0].dedupe_key}`,
@@ -521,6 +751,15 @@ test('an action registers once, with a permission the catalogue knows', () => {
       }),
     /unknown permission/,
   );
+  assert.throws(
+    () =>
+      registerSeriousAction({
+        ...entry,
+        name: 'test.other',
+        permission: 'issues.view',
+      }),
+    /not sensitive/,
+  );
 });
 
 test('requests made at once each run, and each is on the record', async () => {
@@ -564,4 +803,259 @@ test('a request waits for a staff change in flight, then sees its result', async
   } finally {
     client.release();
   }
+});
+
+// ---- Fresh code inside the engine ----
+
+test('the engine refuses without a fresh code on a live grant of the requester', async () => {
+  const owner = await person();
+  const refuse = (grantId) =>
+    assert.rejects(ask(owner, { grantId }), { code: 'FRESH_CODE_REQUIRED' });
+  await refuse(undefined);
+  await refuse('not-a-uuid');
+  await refuse(randomUUID());
+  await refuse(await grantFor(owner, 6));
+  const other = await person();
+  await refuse(grants.get(other));
+  const revoked = await grantFor(owner);
+  await q(`UPDATE ops_sessions SET revoked_at = now() WHERE id = $1`, [
+    revoked,
+  ]);
+  await refuse(revoked);
+  assert.equal(runs.length, 0);
+  const within = await grantFor(owner, 4);
+  assert.equal((await ask(owner, { grantId: within })).state, 'pending');
+});
+
+test('a code that goes stale while the request waits on the lock is refused', async () => {
+  const owner = await person();
+  const client = await database.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
+    );
+    const asked = ask(owner);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await q(
+      `UPDATE ops_sessions SET last_totp_at = now() - interval '6 minutes' WHERE id = $1`,
+      [grants.get(owner)],
+    );
+    await client.query('COMMIT');
+    await assert.rejects(asked, { code: 'FRESH_CODE_REQUIRED' });
+    assert.equal(runs.length, 0);
+  } finally {
+    client.release();
+  }
+});
+
+// ---- The lock can't take the API down ----
+
+test('a stuck staff-admin lock gives a retryable refusal after about 5 seconds', async () => {
+  const owner = await person();
+  const client = await database.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
+    );
+    const started = Date.now();
+    await assert.rejects(ask(owner), { code: 'STAFF_ADMIN_BUSY' });
+    const waited = Date.now() - started;
+    assert.ok(waited > 4000 && waited < 7000, `waited ${waited}ms`);
+    await client.query('ROLLBACK');
+  } finally {
+    client.release();
+  }
+  assert.equal(runs.length, 0);
+});
+
+test('a run that overstays its time rolls back with the same refusal', async () => {
+  const owner = await person();
+  const started = Date.now();
+  await assert.rejects(ask(owner, { name: 'test.slow_run' }), {
+    code: 'STAFF_ADMIN_BUSY',
+  });
+  assert.ok(Date.now() - started < 15_000);
+  assert.equal((await auditFor('serious_action.ran_alone', owner)).length, 0);
+});
+
+test('public pages stay up while requests queue on the staff-admin lock', async () => {
+  const owner = await opsSignIn(stack.api, database.db, '+2348036660908');
+  const page = async () =>
+    (
+      await fetch(`${stack.api}/v1/profiles/ada`, {
+        signal: AbortSignal.timeout(4000),
+      })
+    ).status;
+  assert.equal(await page(), 200);
+  const client = await database.pool.connect();
+  let queued = [];
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
+    );
+    queued = Array.from({ length: 6 }, (_, i) =>
+      call('POST', '/v1/ops/staff/roles', owner.cookie, {
+        name: `Queue role ${i} ${randomUUID().slice(0, 6)}`,
+        reason: 'Queueing on the lock to test the pool',
+        permissions: [],
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    for (let i = 0; i < 4; i += 1) assert.equal(await page(), 200);
+    await client.query('ROLLBACK');
+  } finally {
+    client.release();
+  }
+  const answers = await Promise.all(queued);
+  const busy = answers.filter((answer) => answer.status === 503);
+  assert.ok(busy.length >= 1, 'the overflow was told to retry');
+  for (const answer of busy)
+    assert.equal((await answer.json()).error.code, 'STAFF_ADMIN_BUSY');
+  assert.ok(answers.every((answer) => [201, 200, 503].includes(answer.status)));
+});
+
+// ---- The alert doesn't stop at an inbox the actor controls ----
+
+const waitFor = async (check, timeoutMs = 15_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = await check();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error('timed out');
+};
+const verified = async (email, options = {}) => {
+  const id = await person({ email, ...options });
+  await q(`UPDATE users SET email_verified_at = now() WHERE id = $1`, [id]);
+  return id;
+};
+const issuesOf = (userId) =>
+  q(
+    `SELECT * FROM issues WHERE kind = 'staff_acted_alone' AND subject->>'userId' = $1 ORDER BY opened_at`,
+    [userId],
+  );
+
+test('each lone action reaches the inbox and every owner by mail, through the worker', async () => {
+  const owner = await verified(`lone-${randomUUID()}@example.com`);
+  // A second owner mid-reset can't approve, so the action runs alone, but they still hear of it.
+  const other = await verified(`other-${randomUUID()}@example.com`);
+  await q(`UPDATE staff_totp SET confirmed_at = NULL WHERE user_id = $1`, [
+    other,
+  ]);
+  await ask(owner);
+  await ask(owner);
+  // Two actions, two issues: repeats aren't swallowed.
+  await waitFor(async () => (await issuesOf(owner)).length === 2);
+  const mailFor = (userId) =>
+    q(
+      `SELECT * FROM mail_messages WHERE type = 'staff_acted_alone' AND user_id = $1`,
+      [userId],
+    );
+  await waitFor(async () => (await mailFor(owner)).length === 2);
+  // The worker sends them one after another, so this one can land a moment later.
+  await waitFor(async () => (await mailFor(other)).length === 2);
+});
+
+test('the webhook has a named place to plug in, and is told of each alert', async () => {
+  const told = [];
+  const outcome = await handleDomainEvent(
+    'ops.acted_alone',
+    { action: ACTION, requestedBy: randomUUID() },
+    {
+      db: database.db,
+      logger: { info() {}, warn() {}, error() {} },
+      dedupeKey: `ops.acted_alone.${randomUUID()}`,
+      sealing,
+      pretendPayment: true,
+      postStaffAlert: async (alert) => told.push(alert),
+    },
+  );
+  assert.equal(outcome, 'issue_opened');
+  assert.equal(told.length, 1);
+  assert.equal(told[0].action, ACTION);
+});
+
+test('the person who acted alone cannot close their own alert; someone else can', async () => {
+  const email = `actor-${randomUUID()}@example.com`;
+  const owner = await verified(email);
+  await ask(owner);
+  const [issue] = await waitFor(async () => {
+    const found = await issuesOf(owner);
+    return found.length ? found : null;
+  });
+  const close = (staffUserId) =>
+    resolveIssue(database.db, {
+      issueId: issue.id,
+      staffUserId,
+      reason: 'Looked at this and it was expected',
+    });
+  await assert.rejects(close(owner), { code: 'ISSUE_OWN_ALERT' });
+  await assert.rejects(close(owner.toUpperCase()), { code: 'ISSUE_OWN_ALERT' });
+  // Their second account on the same mailbox is still them.
+  const [local, domain] = email.split('@');
+  const second = await person({ email: `${local}+two@${domain}` });
+  await assert.rejects(close(second), { code: 'ISSUE_OWN_ALERT' });
+  const colleague = await person({
+    email: `colleague-${randomUUID()}@example.com`,
+  });
+  await close(colleague);
+  assert.equal(
+    (await q(`SELECT status FROM issues WHERE id = $1`, [issue.id]))[0].status,
+    'resolved',
+  );
+});
+
+test('an alert nobody else can close closes itself after 30 days, on the record', async () => {
+  const owner = await person();
+  await ask(owner);
+  const [issue] = await waitFor(async () => {
+    const found = await issuesOf(owner);
+    return found.length ? found : null;
+  });
+  const now = new Date();
+  await autoResolveIssues(database.db, now);
+  assert.equal(
+    (await q(`SELECT status FROM issues WHERE id = $1`, [issue.id]))[0].status,
+    'open',
+  );
+  await autoResolveIssues(
+    database.db,
+    new Date(now.getTime() + 31 * 86_400_000),
+  );
+  assert.equal(
+    (await q(`SELECT status FROM issues WHERE id = $1`, [issue.id]))[0].status,
+    'resolved',
+  );
+  const [row] = await q(
+    `SELECT * FROM audit_events WHERE action = 'issue.auto_resolved' AND subject_id = $1`,
+    [issue.id],
+  );
+  assert.match(row.reason, /30 days/);
+  assert.equal(row.staff_user_id, null);
+});
+
+// ---- Payloads ----
+
+test('a payload is plain JSON on both paths, and holds no secrets', async () => {
+  const owner = await person();
+  const when = new Date('2026-11-01T10:00:00Z');
+  await ask(owner, { payload: { value: 'x', at: when, gone: undefined } });
+  assert.deepEqual(runs[0].payload, {
+    value: 'x',
+    at: when.toISOString(),
+  });
+  for (const payload of [
+    { code: '123456' },
+    { enrolmentCode: 'abc' },
+    { nested: { accessToken: 't' } },
+    { list: [{ SECRET: 's' }] },
+    undefined,
+    { amount: 10n },
+  ])
+    await assert.rejects(ask(owner, { payload }), { code: 'INVALID_INPUT' });
+  assert.equal(runs.length, 1);
 });

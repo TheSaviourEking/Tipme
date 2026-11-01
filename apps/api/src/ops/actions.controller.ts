@@ -86,6 +86,7 @@ export class OpsActionsController {
 
   @Post('issues/:id/resolve')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('issues.resolve')
   async resolve(
     @CurrentOps() ops: OpsContext,

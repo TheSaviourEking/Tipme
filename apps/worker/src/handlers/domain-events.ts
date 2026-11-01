@@ -16,6 +16,7 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'payout.paid',
   'payout.failed',
   'payout.conflict',
+  'ops.acted_alone',
   'provider_event.conflict',
   'payment.unresolved',
   'payment.conflict',
@@ -24,6 +25,19 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;
+
+export interface StaffAlert {
+  event: string;
+  action: string;
+  requestedBy: string;
+}
+
+/**
+ * Where the Slack webhook plugs in (spec 6.4). ALERT_WEBHOOK_URL arrives with the payouts merge;
+ * wire it to `postStaffAlert` in job-worker.ts. An event can be delivered again, and the inbox and
+ * mail steps dedupe but a post won't, so it may repeat; it holds names and ids only.
+ */
+export type PostStaffAlert = (alert: StaffAlert) => Promise<void>;
 
 /**
  * A verified tip notifies its recipient (in-app, and by email when verified); repeats of the same
@@ -44,6 +58,7 @@ export async function handleDomainEvent(
     sealing: MailSealing;
     /** Payments are pretend (mock provider): the tip email says so. */
     pretendPayment: boolean;
+    postStaffAlert?: PostStaffAlert;
   },
 ): Promise<'logged' | 'notified' | 'duplicate' | 'skipped' | 'issue_opened'> {
   deps.logger.info({ event: 'domain_event.received', name });
@@ -57,6 +72,14 @@ export async function handleDomainEvent(
     // After the issue, so staff always see it; a failed email retries the event, and both
     // steps are no-ops the second time.
     await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
+    if (name === 'ops.acted_alone' && deps.postStaffAlert) {
+      const { action, requestedBy } = (data ?? {}) as Record<string, unknown>;
+      await deps.postStaffAlert({
+        event: name,
+        action: typeof action === 'string' ? action : 'unknown',
+        requestedBy: typeof requestedBy === 'string' ? requestedBy : 'unknown',
+      });
+    }
     return outcome === 'opened' ? 'issue_opened' : 'duplicate';
   }
   await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);

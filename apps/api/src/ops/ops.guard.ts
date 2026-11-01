@@ -20,6 +20,7 @@ import { DatabaseProvider } from '../infra/database.js';
 export interface OpsContext {
   userId: string;
   sessionId: string;
+  grantId: string;
   permissions: Set<string>;
   lastTotpAt: Date | null;
 }

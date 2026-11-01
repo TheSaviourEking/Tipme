@@ -89,3 +89,33 @@ export const staffInvitationDeclined = defineMailType({
       ctx,
     ),
 });
+
+/** To every owner: a serious action ran with no second person. It can't happen quietly (spec 6.5). */
+export const staffActedAlone = defineMailType({
+  id: 'staff_acted_alone',
+  category: 'security',
+  sender: 'security',
+  preference: null,
+  schema: z
+    .object({
+      personHint: z.string().max(260),
+      action: z.string().max(60),
+    })
+    .strict(),
+  sample: { personHint: 'a•••@example.com', action: 'fee.change' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'A serious TipMe admin action ran without a second person',
+        heading: 'Done without a second person',
+        blocks: [
+          {
+            kind: 'text',
+            text: `${data.personHint} took a serious admin action (${data.action}) on their own, because nobody else was available to approve it. The admin audit log has their reason. If you didn’t expect this, check it now.`,
+          },
+        ],
+        reason: 'You get this email because you are a TipMe owner.',
+      },
+      ctx,
+    ),
+});

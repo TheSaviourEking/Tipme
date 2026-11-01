@@ -15,6 +15,8 @@ const problems: Record<string, string> = {
     'That enrolment code is not right or has expired. Ask an owner for a new one, or run pnpm ops:grant-owner again.',
   CODE_INVALID:
     'That code didn’t work. Wait for the next code in your app and try again.',
+  CODE_ALREADY_USED:
+    'That code has just been used. Wait for the next one in your app.',
   OPS_LOCKED: 'Too many wrong codes. Admin access is locked for 15 minutes.',
   RATE_LIMITED: 'Too many attempts. Please wait a minute and try again.',
 };

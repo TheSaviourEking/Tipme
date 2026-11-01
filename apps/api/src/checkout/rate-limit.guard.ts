@@ -26,7 +26,8 @@ type RateLimitedRoute =
   | 'analytics'
   | 'reports'
   | 'unsubscribe'
-  | 'avatars';
+  | 'avatars'
+  | 'ops_code';
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -112,6 +113,11 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
         windowMs: 3_600_000,
       },
+      // Per person, not per address: staff re-enter a code about every 5 minutes while working.
+      ops_code: {
+        limit: this.config.RATE_LIMIT_OPS_CODE_PER_HOUR,
+        windowMs: 3_600_000,
+      },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
         windowMs: 3_600_000,
@@ -122,9 +128,13 @@ export class RateLimitGuard implements CanActivate {
         windowMs: 3_600_000,
       },
     }[route];
-    const ip = rateLimitSubject(
-      context.switchToHttp().getRequest<Request>().ip,
-    );
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { auth?: { userId: string } }>();
+    const ip =
+      route === 'ops_code' && request.auth
+        ? `user:${request.auth.userId}`
+        : rateLimitSubject(request.ip);
     const now = Date.now();
     const key = `rl:${this.config.QUEUE_PREFIX}:${route}:${ip}:${Math.floor(now / windowMs)}`;
     let count: number;
