@@ -184,3 +184,9 @@ test("requirements read as plain words, never as the provider's field names", ()
   assert.deepEqual(requirementWords(['some.unknown_field']), ['other details']);
   assert.deepEqual(requirementWords(['payout_destination']), []);
 });
+
+test("a business name is a business detail, not the person's name", () => {
+  assert.deepEqual(requirementWords(['business_name']), ['business details']);
+  assert.deepEqual(requirementWords(['company.name']), ['business details']);
+  assert.deepEqual(requirementWords(['individual.first_name']), ['your name']);
+});

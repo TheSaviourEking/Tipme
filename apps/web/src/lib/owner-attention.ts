@@ -30,6 +30,8 @@ export const onboardingRequirements = (requirementsDue: readonly string[]) =>
   requirementsDue.filter((item) => item !== BANK_ACCOUNT_REQUIREMENT);
 
 const REQUIREMENT_WORDS: readonly (readonly [RegExp, string])[] = [
+  // First: a business has a name and an address too, and they aren't the person's.
+  [/business|company/i, 'business details'],
   [/id_number|national_id|\bnin\b|\bbvn\b/i, 'your ID number'],
   [/document|verification|selfie/i, 'your ID document'],
   [/dob|birth/i, 'your date of birth'],
@@ -37,7 +39,6 @@ const REQUIREMENT_WORDS: readonly (readonly [RegExp, string])[] = [
   [/address/i, 'your address'],
   [/phone/i, 'your phone number'],
   [/email/i, 'your email'],
-  [/business|company/i, 'business details'],
   [/tos|terms|agreement/i, 'accepting the terms'],
 ];
 

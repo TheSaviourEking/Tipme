@@ -41,3 +41,7 @@
 - Edit tip, attempt or ledger rows directly. The database refuses most such edits; the ones it allows bypass the audit trail.
 - Retry a charge to "fix" an unknown outcome.
 - Re-send a create for a payout whose start was attempted. Only a read may move it.
+
+## Manual payouts not set (`payment_account_setup_failed`)
+
+Manual payouts could not be set on a recipient's payment account. Until they are, the recipient can't withdraw and an account still in setup gets no onboarding link. Accounts are retried on every account event, every setup visit and every 15-minute sweep; a sweep ends after 5 failures in a row and logs `payout_setup.sweep_stopped`, which usually means the provider is down. The issue closes itself once manual payouts are set. If it stays open, look for `payment_account.manual_payouts_failed` in the logs and check the account at the provider. There is one issue per account: closing it by hand while the failure continues won't raise another, so leave it open.

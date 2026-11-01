@@ -1,5 +1,5 @@
 {
-  "id": "f529dc80-491d-4bab-baa7-2fa6d979e60a",
+  "id": "54597dfa-c77c-4494-a91e-4b86084a3045",
   "prevId": "8f6c80f0-3142-479d-9fa6-19bef947f42c",
   "version": "7",
   "dialect": "postgresql",
@@ -1086,7 +1086,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -2835,6 +2835,12 @@
         },
         "payout_capabilities_requested_at": {
           "name": "payout_capabilities_requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_setup_attempted_at": {
+          "name": "payout_setup_attempted_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

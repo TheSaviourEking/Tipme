@@ -216,8 +216,8 @@ export class PaymentAccountsController {
       requirementsDue: remoteAccount.requirementsDue,
     });
     // A bank entered on the hosted page could be paid to on a provider schedule, with no code and no
-    // record here, so no link goes out below until this is recorded. Tips aren't held up by it; the
-    // next visit, event or sweep tries again.
+    // record here, so no link goes out below until this is recorded: an account still in setup stops
+    // here until it is. A failure tells staff, and the next visit, event or sweep tries again.
     const setup = await ensurePayoutSetup(this.database.db, {
       profileId: recipient.profileId,
       provider,

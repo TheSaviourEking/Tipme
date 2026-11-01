@@ -595,6 +595,10 @@ export const paymentAccounts = pgTable(
         withTimezone: true,
       },
     ),
+    // The last try at either step above, so a sweep cut short starts with the accounts it missed.
+    payoutSetupAttemptedAt: timestamp('payout_setup_attempted_at', {
+      withTimezone: true,
+    }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()

@@ -119,6 +119,7 @@ export const ISSUE_KINDS = [
   'payment_unresolved',
   'payment_attempt_unresolved',
   'payment_account_unresolved',
+  'payment_account_setup_failed',
   'payment_reversed',
   'payment_settlement_currency',
   'payout_failed',

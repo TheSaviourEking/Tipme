@@ -42,6 +42,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_unresolved: 'money',
   payment_attempt_unresolved: 'money',
   payment_account_unresolved: 'account',
+  payment_account_setup_failed: 'account',
   payment_reversed: 'money',
   payment_settlement_currency: 'money',
   payout_failed: 'money',
@@ -73,6 +74,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A Bachs checkout for a tip to ${page} has an unknown outcome. Find and verify the checkout in Bachs Dashboard; do not retry it.`;
     case 'payment_account_unresolved':
       return `Bachs account setup for ${page} has an unknown outcome. Confirm the recipient account in Bachs Dashboard before linking it.`;
+    case 'payment_account_setup_failed':
+      return `Manual payouts could not be set on the payment account for ${page}. They can't withdraw, and can't finish setup if it isn't done. TipMe keeps trying, and this closes itself once it works. If it stays open, check the account at the provider.`;
     case 'payment_reversed':
       return `Bachs reported a refund or dispute on a paid tip to ${page}. TipMe changed no balance: review it in Bachs Dashboard.`;
     case 'payment_settlement_currency':
@@ -533,6 +536,12 @@ export function autoResolveIssues(
               AND a.provider = 'bachs'
               AND a.status = 'UNKNOWN'
               AND a.provider_account_reference IS NULL)
+      UNION ALL
+      SELECT i.id, 'Manual payouts are now set on the account.'
+        FROM issues i
+        JOIN payment_accounts a ON i.dedupe_key = 'payment_account_setup.' || a.id
+       WHERE i.status = 'open' AND i.kind = 'payment_account_setup_failed'
+         AND a.manual_payouts_at IS NOT NULL
       UNION ALL
       SELECT i.id, 'The withdrawal was found at the provider or reached a final state.'
         FROM issues i JOIN payouts p ON p.id = (i.subject->>'payoutId')::uuid

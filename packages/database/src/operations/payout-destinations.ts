@@ -1,7 +1,8 @@
 import { recordedProviderName } from '@tipme/contracts';
-import { and, asc, eq, gt, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
+  issues,
   paymentAccounts,
   payoutDestinations,
   profiles,
@@ -15,6 +16,7 @@ import {
 } from './email-sign-in.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { markResolved, openIssue } from './issues.js';
 import type { MailSealing } from './mail-queue.js';
 import {
   bachsAccountEnvironment,
@@ -315,6 +317,7 @@ const errorName = (error: unknown) =>
 type SetupRow = Pick<
   typeof paymentAccounts.$inferSelect,
   | 'id'
+  | 'profileId'
   | 'providerAccountReference'
   | 'manualPayoutsAt'
   | 'payoutCapabilitiesRequestedAt'
@@ -334,17 +337,19 @@ async function applyPayoutSetup(
 ): Promise<number> {
   const reference = account.providerAccountReference;
   if (!reference) return 0;
+  await guarded(() =>
+    db
+      .update(paymentAccounts)
+      .set({ payoutSetupAttemptedAt: new Date() })
+      .where(eq(paymentAccounts.id, account.id)),
+  );
   let failed = 0;
-  const step = async (event: string, run: () => Promise<void>) => {
-    try {
-      await run();
-    } catch (error) {
-      failed += 1;
-      log?.({ event, provider: 'bachs', error: errorName(error) });
-    }
+  const failure = (event: string, error: unknown) => {
+    failed += 1;
+    log?.({ event, provider: 'bachs', error: errorName(error) });
   };
-  if (!account.payoutCapabilitiesRequestedAt)
-    await step('payment_account.capabilities_failed', async () => {
+  if (!account.payoutCapabilitiesRequestedAt) {
+    try {
       const { status } = await provider.payoutCapability(reference);
       if (status === 'missing')
         await provider.requestPayoutCapabilities(reference);
@@ -354,18 +359,77 @@ async function applyPayoutSetup(
           .set({ payoutCapabilitiesRequestedAt: new Date() })
           .where(eq(paymentAccounts.id, account.id)),
       );
-    });
-  if (!account.manualPayoutsAt)
-    await step('payment_account.manual_payouts_failed', async () => {
+    } catch (error) {
+      failure('payment_account.capabilities_failed', error);
+    }
+  }
+  if (!account.manualPayoutsAt) {
+    try {
       await provider.setManualPayouts(reference);
-      await guarded(() =>
-        db
-          .update(paymentAccounts)
-          .set({ manualPayoutsAt: new Date() })
-          .where(eq(paymentAccounts.id, account.id)),
-      );
-    });
+      await markManualPayoutsSet(db, account.id);
+    } catch (error) {
+      failure('payment_account.manual_payouts_failed', error);
+      await tellStaffSetupFailed(db, account, log);
+    }
+  }
   return failed;
+}
+
+const setupIssueKey = (accountId: string) =>
+  `payment_account_setup.${accountId}`;
+
+/** Stamped with its issue closed, so staff never see "not set" about an account that is. */
+function markManualPayoutsSet(db: Database, accountId: string): Promise<void> {
+  const now = new Date();
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      await tx
+        .update(paymentAccounts)
+        .set({ manualPayoutsAt: now })
+        .where(eq(paymentAccounts.id, accountId));
+      const [open] = await tx
+        .select({ id: issues.id })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.dedupeKey, setupIssueKey(accountId)),
+            eq(issues.status, 'open'),
+          ),
+        );
+      if (open)
+        await markResolved(tx, {
+          issueId: open.id,
+          resolvedBy: 'system',
+          staffUserId: null,
+          reason: 'Manual payouts are now set on the account.',
+          now,
+        });
+    }),
+  );
+}
+
+/** One issue per account however often it fails. Failing to raise it must not stop the caller. */
+async function tellStaffSetupFailed(
+  db: Database,
+  account: SetupRow,
+  log?: PayoutSetupLog,
+): Promise<void> {
+  try {
+    await guarded(() =>
+      openIssue(db, {
+        dedupeKey: setupIssueKey(account.id),
+        kind: 'payment_account_setup_failed',
+        subject: { profileId: account.profileId },
+        now: new Date(),
+      }),
+    );
+  } catch (error) {
+    log?.({
+      event: 'payment_account.setup_issue_failed',
+      provider: 'bachs',
+      error: errorName(error),
+    });
+  }
 }
 
 /** The account's refresh path: finishes its setup, and picks up a bank review that has ended. */
@@ -446,24 +510,55 @@ export async function refreshPendingDestination(
 
 const SWEEP_PAGE = 100;
 
+/** This many failures together look like the provider being down, so the run ends there. */
+export const PAYOUT_SWEEP_MAX_FAILURES_IN_A_ROW = 5;
+
 /**
  * The worker's sweep: every account in this environment still missing a step of its setup, which
  * reaches accounts made before this and ones that never receive an event, and every bank under
- * review. Walks by id, so an account that keeps failing can't crowd out the ones behind it.
+ * review. Least recently tried first, so accounts that keep failing go to the back and can't crowd
+ * out the rest, even when a run ends early.
  */
 export async function sweepPayoutSetup(
   db: Database,
-  input: { provider: PayoutSetupProvider; log?: PayoutSetupLog },
-): Promise<{ checked: number; failed: number; destinationsSettled: number }> {
+  input: {
+    provider: PayoutSetupProvider;
+    log?: PayoutSetupLog;
+    maxFailuresInARow?: number;
+  },
+): Promise<{
+  checked: number;
+  failed: number;
+  destinationsSettled: number;
+  stoppedEarly: boolean;
+}> {
   const environment = bachsAccountEnvironment(input.provider.environment);
   const stored = recordedProviderName(input.provider.name);
-  const totals = { checked: 0, failed: 0, destinationsSettled: 0 };
-  let after: string | null = null;
+  const limit = input.maxFailuresInARow ?? PAYOUT_SWEEP_MAX_FAILURES_IN_A_ROW;
+  const totals = {
+    checked: 0,
+    failed: 0,
+    destinationsSettled: 0,
+    stoppedEarly: false,
+  };
+  const stop = () => {
+    totals.stoppedEarly = true;
+    input.log?.({
+      event: 'payout_setup.sweep_stopped',
+      provider: 'bachs',
+      error: 'repeated_failures',
+    });
+    return totals;
+  };
+  const runStart = new Date();
+  let inARow = 0;
   for (;;) {
+    // Each account tried is stamped past runStart, so this drains and ends.
     const page: SetupRow[] = await guarded(() =>
       db
         .select({
           id: paymentAccounts.id,
+          profileId: paymentAccounts.profileId,
           providerAccountReference: paymentAccounts.providerAccountReference,
           manualPayoutsAt: paymentAccounts.manualPayoutsAt,
           payoutCapabilitiesRequestedAt:
@@ -479,24 +574,28 @@ export async function sweepPayoutSetup(
               isNull(paymentAccounts.manualPayoutsAt),
               isNull(paymentAccounts.payoutCapabilitiesRequestedAt),
             ),
-            after ? gt(paymentAccounts.id, after) : undefined,
+            or(
+              isNull(paymentAccounts.payoutSetupAttemptedAt),
+              lt(paymentAccounts.payoutSetupAttemptedAt, runStart),
+            ),
           ),
         )
-        .orderBy(asc(paymentAccounts.id))
+        .orderBy(sql`${paymentAccounts.payoutSetupAttemptedAt} ASC NULLS FIRST`)
         .limit(SWEEP_PAGE),
     );
     for (const account of page) {
       totals.checked += 1;
-      totals.failed += await applyPayoutSetup(
+      const failed = await applyPayoutSetup(
         db,
         input.provider,
         account,
         input.log,
       );
+      totals.failed += failed;
+      inARow = failed > 0 ? inARow + 1 : 0;
+      if (inARow >= limit) return stop();
     }
-    const last = page.at(-1);
-    if (!last || page.length < SWEEP_PAGE) break;
-    after = last.id;
+    if (page.length < SWEEP_PAGE) break;
   }
 
   let afterDestination: string | null = null;
@@ -534,15 +633,20 @@ export async function sweepPayoutSetup(
         .orderBy(asc(payoutDestinations.id))
         .limit(SWEEP_PAGE),
     );
-    for (const row of pending)
-      if (
-        await refreshPendingDestination(db, input.provider, {
-          profileId: row.profileId,
-          accountReference: row.accountReference,
-          log: input.log,
-        })
-      )
-        totals.destinationsSettled += 1;
+    for (const row of pending) {
+      let readFailed = false;
+      const settled = await refreshPendingDestination(db, input.provider, {
+        profileId: row.profileId,
+        accountReference: row.accountReference,
+        log: (entry) => {
+          readFailed = true;
+          input.log?.(entry);
+        },
+      });
+      if (settled) totals.destinationsSettled += 1;
+      inARow = readFailed ? inARow + 1 : 0;
+      if (inARow >= limit) return stop();
+    }
     const last = pending.at(-1);
     if (!last || pending.length < SWEEP_PAGE) break;
     afterDestination = last.id;

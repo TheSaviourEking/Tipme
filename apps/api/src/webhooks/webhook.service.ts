@@ -22,7 +22,9 @@ import {
   recordProviderEvent,
   recordUnmatchedEvent,
 } from '@tipme/database';
+import type { Logger } from '@tipme/observability';
 import { DatabaseProvider } from '../infra/database.js';
+import { LOGGER } from '../tokens.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { MailSealing } from '@tipme/database';
 
@@ -37,6 +39,7 @@ export class WebhookService {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(LOGGER) private readonly logger: Pick<Logger, 'warn'>,
   ) {}
 
   async apply(event: MockWebhook): Promise<string> {
@@ -315,6 +318,7 @@ export class WebhookService {
           requestPayoutCapabilities: accounts.requestPayoutCapabilities,
           payoutDestinationStatus: accounts.payoutDestinationStatus,
         },
+        log: (entry) => this.logger?.warn(entry),
       });
     return 'account_refreshed';
   }

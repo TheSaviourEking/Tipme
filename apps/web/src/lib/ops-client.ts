@@ -55,6 +55,7 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payment_unresolved: 'Payment unknown to the provider',
   payment_attempt_unresolved: 'Bachs checkout outcome unknown',
   payment_account_unresolved: 'Bachs recipient account outcome unknown',
+  payment_account_setup_failed: 'Manual payouts not set',
   payment_reversed: 'Refund or dispute reported',
   payment_settlement_currency: 'Settled in another currency',
   payout_failed: 'Withdrawal failed',

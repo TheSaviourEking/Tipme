@@ -25,7 +25,10 @@ import {
   openTestDatabase,
   queuedMail,
 } from '../../packages/database/dist/test-support.js';
-import { TOBI } from '../../packages/database/test/integration/helpers.mjs';
+import {
+  ADA,
+  TOBI,
+} from '../../packages/database/test/integration/helpers.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { browserHeaders, startStack, uniquePrefix } from './helpers.mjs';
 
@@ -1439,4 +1442,207 @@ test('the bank list is cached; a failure is not', async (t) => {
   t.mock.method(Date, 'now', () => new Date().getTime() + 25 * 3_600_000);
   await controller.banks();
   assert.equal(provider.named('listBanks').length, 2);
+});
+
+const failingManual = (overrides = {}) =>
+  fakeBachs({
+    setManualPayouts: async () => {
+      throw new Error('provider down');
+    },
+    ...overrides,
+  });
+
+const setupIssues = ({ rows }) =>
+  rows(
+    `SELECT status, severity, subject, summary, resolved_by
+       FROM issues WHERE kind = 'payment_account_setup_failed'`,
+  );
+
+test('a failed setup tells staff once, by any path, and closes itself once set', async (t) => {
+  const database = await setUp(t, { manual: false });
+  const provider = failingManual();
+  await sweepPayoutSetup(database.db, { provider });
+  await new WebhookService({ db: database.db }).applyBachs(
+    {
+      kind: 'account',
+      eventId: 'evt_issue',
+      eventType: 'account.updated',
+      accountReference: ACCOUNT,
+    },
+    provider,
+  );
+  await onboard(database, provider); // An active account: no link to withhold.
+  const open = await setupIssues(database);
+  assert.equal(open.length, 1);
+  assert.equal(open[0].status, 'open');
+  assert.equal(open[0].severity, 'account');
+  assert.deepEqual(Object.keys(open[0].subject).sort(), [
+    'profileId',
+    'userId',
+  ]);
+  assert.doesNotMatch(JSON.stringify(open[0]), new RegExp(ACCOUNT));
+
+  await sweepPayoutSetup(database.db, { provider: fakeBachs() });
+  const [closed] = await setupIssues(database);
+  assert.equal(closed.status, 'resolved');
+  assert.equal(closed.resolved_by, 'system');
+});
+
+test('each path that sees a failure opens the issue on its own', async (t) => {
+  const database = await setUp(t, { manual: false });
+  await new WebhookService({ db: database.db }).applyBachs(
+    {
+      kind: 'account',
+      eventId: 'evt_alone',
+      eventType: 'account.updated',
+      accountReference: ACCOUNT,
+    },
+    failingManual(),
+  );
+  assert.equal((await setupIssues(database)).length, 1);
+  await database.pool.query(`DELETE FROM issues`);
+  await onboard(database, failingManual());
+  assert.equal((await setupIssues(database)).length, 1);
+});
+
+test('an issue left open after the account was set closes on the regular check', async (t) => {
+  const database = await setUp(t, { manual: false });
+  await sweepPayoutSetup(database.db, { provider: failingManual() });
+  await database.pool.query(
+    `UPDATE payment_accounts SET manual_payouts_at = now()`,
+  );
+  await ops.autoResolveIssues(database.db, new Date());
+  assert.equal((await setupIssues(database))[0].status, 'resolved');
+});
+
+test('a failure on the webhook path is logged, with no account data', async (t) => {
+  const database = await setUp(t, { manual: false });
+  const logs = [];
+  await new WebhookService({ db: database.db }, sealing, {
+    info() {},
+    warn: (entry) => logs.push(entry),
+    error() {},
+  }).applyBachs(
+    {
+      kind: 'account',
+      eventId: 'evt_log',
+      eventType: 'account.updated',
+      accountReference: ACCOUNT,
+    },
+    failingManual(),
+  );
+  assert.ok(
+    logs.some(
+      (entry) => entry.event === 'payment_account.manual_payouts_failed',
+    ),
+  );
+  assert.doesNotMatch(JSON.stringify(logs), new RegExp(ACCOUNT));
+});
+
+async function secondAccount(database) {
+  await database.pool.query(
+    `INSERT INTO payment_accounts
+       (id, profile_id, provider, environment, provider_account_reference, status,
+        charges_enabled, payouts_enabled, fee_collector)
+     VALUES ($1, $2, 'bachs', 'sandbox', 'acct_ada123', 'ACTIVE', true, false, 'platform')`,
+    [randomUUID(), ADA],
+  );
+}
+
+test('a sweep stops early on repeated failures, and the next one starts with the others', async (t) => {
+  const database = await setUp(t, { manual: false });
+  await secondAccount(database);
+  const logs = [];
+  const seen = [];
+  const provider = failingManual({
+    setManualPayouts: async (reference) => {
+      seen.push(reference);
+      throw new Error('provider down');
+    },
+  });
+  const first = await sweepPayoutSetup(database.db, {
+    provider,
+    maxFailuresInARow: 1,
+    log: (entry) => logs.push(entry),
+  });
+  assert.equal(first.stoppedEarly, true);
+  assert.equal(first.checked, 1);
+  assert.equal(seen.length, 1);
+  assert.ok(logs.some((entry) => entry.event === 'payout_setup.sweep_stopped'));
+
+  await sweepPayoutSetup(database.db, { provider, maxFailuresInARow: 1 });
+  assert.equal(seen.length, 2);
+  assert.notEqual(seen[0], seen[1], 'a dead account must not block the rest');
+});
+
+test('the default stop is a named count, and a success resets it', async (t) => {
+  assert.equal(ops.PAYOUT_SWEEP_MAX_FAILURES_IN_A_ROW, 5);
+  const database = await setUp(t, { manual: false });
+  await secondAccount(database);
+  let calls = 0;
+  const provider = fakeBachs({
+    setManualPayouts: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('one bad account');
+    },
+  });
+  const swept = await sweepPayoutSetup(database.db, {
+    provider,
+    maxFailuresInARow: 2,
+  });
+  assert.equal(swept.stoppedEarly, false);
+  assert.equal(swept.checked, 2);
+});
+
+test('through HTTP: ten lookups a day for one person, then 429; another person is unaffected', async (t) => {
+  const database = await openTestDatabase();
+  t.after(() => database.close());
+  await database.reset();
+  const stack = await startStack({
+    databaseUrl: database.url,
+    apiEnv: {
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_BANK_RESOLVE_PER_HOUR: '1000',
+    },
+  });
+  t.after(() => stack.stop());
+  const post = (path, body, cookie) =>
+    fetch(`${stack.api}${path}`, {
+      method: 'POST',
+      headers: browserHeaders(cookie),
+      body: JSON.stringify(body),
+    });
+  const signUp = async (handle) => {
+    const domain = `${uniquePrefix()}.example`;
+    const email = `a@${domain}`;
+    await post('/v1/auth/code', { email });
+    let code;
+    for (let i = 0; i < 100 && !code; i += 1) {
+      const { data } = await (await fetch(`${stack.api}/v1/dev/inbox`)).json();
+      const mail = data.find((m) => m.to === `a•••@${domain}`);
+      code = mail && /\b(\d{6})\b/.exec(mail.body)?.[1];
+      if (!code) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const verify = await post('/v1/auth/verify', { email, code });
+    assert.equal(verify.status, 200);
+    const cookie = verify.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0])
+      .join('; ');
+    assert.equal((await post('/v1/me/page', { handle }, cookie)).status, 201);
+    return cookie;
+  };
+  const a = await signUp('limit_a');
+  const b = await signUp('limit_b');
+  const resolve = (cookie) =>
+    post(
+      '/v1/me/payout-destination/resolve',
+      { bankCode: '058', accountNumber: NUMBER },
+      cookie,
+    );
+  for (let i = 0; i < 10; i += 1) assert.equal((await resolve(a)).status, 200);
+  const limited = await resolve(a);
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) > 0);
+  assert.equal((await resolve(b)).status, 200);
 });
