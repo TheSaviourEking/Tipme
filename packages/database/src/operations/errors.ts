@@ -33,7 +33,15 @@ export type OperationErrorCode =
   | 'ISSUE_NOT_FOUND'
   | 'ISSUE_RESOLVED'
   | 'ISSUE_OUTCOME_REQUIRED'
-  | 'MARKET_ENTRY_NOT_FOUND';
+  | 'MARKET_ENTRY_NOT_FOUND'
+  | 'PERMISSION_NOT_HELD'
+  | 'SELF_ACCESS_CHANGE'
+  | 'ROLE_NOT_FOUND'
+  | 'ROLE_NAME_TAKEN'
+  | 'ROLE_IN_USE'
+  | 'ROLE_PROTECTED'
+  | 'STAFF_NOT_FOUND'
+  | 'STAFF_PROTECTED';
 
 /** Expected business outcomes callers map to responses; never carries request values. */
 export class OperationError extends Error {

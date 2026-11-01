@@ -25,6 +25,13 @@ export class DependencyUnavailableError extends Error {
 
 // Fixed messages: framework and parser messages can quote request input.
 const messages: Record<ApiErrorCode, string> = {
+  PERMISSION_NOT_HELD:
+    'You can only give or take away access you hold yourself.',
+  SELF_ACCESS_CHANGE: 'You can’t change your own access.',
+  ROLE_NAME_TAKEN: 'A role with that name already exists.',
+  ROLE_IN_USE: 'Move everyone off this role before deleting it.',
+  ROLE_PROTECTED: 'This built-in role can’t be changed.',
+  STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
   VALIDATION_FAILED: 'The request was not valid.',
   UNAUTHORIZED: 'Unauthorized.',
   NOT_FOUND: 'Not found.',
@@ -155,6 +162,14 @@ const operationErrors: Partial<
     code: 'EMAIL_VERIFICATION_REQUIRED',
   },
   MARKET_ENTRY_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  PERMISSION_NOT_HELD: { status: 403, code: 'PERMISSION_NOT_HELD' },
+  SELF_ACCESS_CHANGE: { status: 403, code: 'SELF_ACCESS_CHANGE' },
+  ROLE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  ROLE_NAME_TAKEN: { status: 409, code: 'ROLE_NAME_TAKEN' },
+  ROLE_IN_USE: { status: 409, code: 'ROLE_IN_USE' },
+  ROLE_PROTECTED: { status: 409, code: 'ROLE_PROTECTED' },
+  STAFF_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  STAFF_PROTECTED: { status: 409, code: 'STAFF_PROTECTED' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },
   QUOTE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },

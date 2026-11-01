@@ -11,6 +11,7 @@ import {
   roles,
   staff,
   staffEnrolments,
+  staffPermissionOverrides,
   staffTotp,
   users,
 } from '../schema.js';
@@ -44,7 +45,7 @@ export type StaffRole = 'owner' | 'release_check';
 export async function ensureOwnerRole(tx: Database | Tx): Promise<void> {
   await tx
     .insert(roles)
-    .values({ id: 'owner', name: 'Owner' })
+    .values({ id: 'owner', name: 'Owner', system: true })
     .onConflictDoNothing();
   await tx
     .insert(rolePermissions)
@@ -57,7 +58,7 @@ export async function ensureOwnerRole(tx: Database | Tx): Promise<void> {
 async function ensureReleaseCheckRole(tx: Database | Tx): Promise<void> {
   await tx
     .insert(roles)
-    .values({ id: 'release_check', name: 'Release check' })
+    .values({ id: 'release_check', name: 'Release check', system: true })
     .onConflictDoNothing();
   await tx
     .insert(rolePermissions)
@@ -82,20 +83,102 @@ export async function isActiveStaff(
   return Boolean(row);
 }
 
+export interface StaffAccess {
+  roleId: string;
+  permissions: Set<string>;
+  additions: string[];
+  removals: string[];
+}
+
+/** Adjustments never apply to the built-in roles: owner has everything, release_check is fixed. */
+export const ignoresAdjustments = (roleId: string): boolean =>
+  roleId === 'owner' || roleId === 'release_check';
+
+/** Effective access: the role's permissions, plus personal additions, minus personal removals. */
+export function composeAccess(
+  roleId: string,
+  rolePermissionNames: readonly string[],
+  overrides: readonly { permission: string; effect: string }[],
+): StaffAccess {
+  // Owner comes from the catalogue, not stored rows, so it holds future permissions too.
+  if (roleId === 'owner')
+    return {
+      roleId,
+      permissions: new Set(OPS_PERMISSIONS),
+      additions: [],
+      removals: [],
+    };
+  if (ignoresAdjustments(roleId))
+    return {
+      roleId,
+      permissions: new Set(rolePermissionNames),
+      additions: [],
+      removals: [],
+    };
+  const additions = overrides
+    .filter((row) => row.effect === 'add')
+    .map((row) => row.permission)
+    .sort();
+  const removals = overrides
+    .filter((row) => row.effect === 'remove')
+    .map((row) => row.permission)
+    .sort();
+  const permissions = new Set([...rolePermissionNames, ...additions]);
+  for (const permission of removals) permissions.delete(permission);
+  return { roleId, permissions, additions, removals };
+}
+
+/** A person's stored adjustments, whether or not their current role applies them. */
+export function readOverrides(
+  db: Database | Tx,
+  userId: string,
+): Promise<{ permission: string; effect: string }[]> {
+  return db
+    .select({
+      permission: staffPermissionOverrides.permission,
+      effect: staffPermissionOverrides.effect,
+    })
+    .from(staffPermissionOverrides)
+    .where(eq(staffPermissionOverrides.userId, userId));
+}
+
+/** The permission names stored on a role. */
+export async function readRolePermissions(
+  db: Database | Tx,
+  roleId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ permission: rolePermissions.permission })
+    .from(rolePermissions)
+    .where(eq(rolePermissions.roleId, roleId));
+  return rows.map((row) => row.permission);
+}
+
+/** Read from the database every time, so a change applies on the person's next request. */
+export async function readStaffAccess(
+  db: Database | Tx,
+  userId: string,
+): Promise<StaffAccess | null> {
+  const [row] = await db
+    .select({ roleId: staff.roleId })
+    .from(staff)
+    .where(and(eq(staff.userId, userId), isNull(staff.revokedAt)));
+  if (!row) return null;
+  const [names, overrides] = [
+    await readRolePermissions(db, row.roleId),
+    await readOverrides(db, userId),
+  ];
+  return composeAccess(row.roleId, names, overrides);
+}
+
 /** The permissions of an active staff member, or null for everyone else. */
 export function staffPermissions(
   db: Database | Tx,
   userId: string,
 ): Promise<Set<string> | null> {
-  return guarded(async () => {
-    if (!(await isActiveStaff(db, userId))) return null;
-    const rows = await db
-      .select({ permission: rolePermissions.permission })
-      .from(staff)
-      .innerJoin(rolePermissions, eq(rolePermissions.roleId, staff.roleId))
-      .where(eq(staff.userId, userId));
-    return new Set(rows.map((row) => row.permission));
-  });
+  return guarded(
+    async () => (await readStaffAccess(db, userId))?.permissions ?? null,
+  );
 }
 
 /** The role id of an active staff member, or null. */

@@ -347,13 +347,15 @@ test('the withdrawal tools need payouts.resolve, on the owner role only, and rea
   const path = `/v1/ops/issues/${issueId}/payout-read`;
   // Not a withdrawal issue: nothing to read.
   assert.equal((await call('POST', path, owner.cookie, {})).status, 404);
+  // Owner always holds every permission, so someone without it is on another role.
+  const other = await opsSignIn(stack.api, database.db, '+2348039990099');
   await database.pool.query(
-    `DELETE FROM role_permissions WHERE permission = 'payouts.resolve'`,
+    `INSERT INTO roles (id, name) VALUES ('no_payouts', 'No payouts') ON CONFLICT DO NOTHING`,
   );
-  assert.equal((await call('POST', path, owner.cookie, {})).status, 403);
   await database.pool.query(
-    `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
+    `UPDATE staff SET role_id = 'no_payouts' WHERE user_id = (SELECT id FROM users WHERE phone_e164 = '+2348039990099')`,
   );
+  assert.equal((await call('POST', path, other.cookie, {})).status, 403);
   const { rows } = await database.pool.query(
     `SELECT role_id FROM role_permissions WHERE permission = 'payouts.resolve'`,
   );

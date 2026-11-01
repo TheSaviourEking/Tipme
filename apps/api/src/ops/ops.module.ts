@@ -12,6 +12,7 @@ import { OpsMarketController } from './market.controller.js';
 import { OpsAccountRecoveryController } from './account-recovery.controller.js';
 import { OpsEmailConsoleController } from './email-console.controller.js';
 import { OpsProvidersController } from './providers.controller.js';
+import { OpsStaffController } from './staff.controller.js';
 import { MailModule } from '../mail/mail.module.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
@@ -30,6 +31,7 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsPagesController,
     OpsSearchController,
     OpsProvidersController,
+    OpsStaffController,
     OpsEmailConsoleController,
     OpsAccountRecoveryController,
   ],

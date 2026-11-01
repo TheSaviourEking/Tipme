@@ -1282,12 +1282,22 @@ export const parkedPayoutChecks = pgTable('parked_payout_checks', {
 export { OPS_PERMISSIONS };
 export type { OpsPermission };
 
-/** A role is a named set of permissions, so new roles need no code change. Only `owner` is seeded. */
-export const roles = pgTable('roles', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  createdAt: createdAt(),
-});
+/**
+ * A role is a named set of permissions, so new roles need no code change. `system` roles (`owner`,
+ * `release_check`) can't be edited or deleted; the rest are generated ids, and names are unique
+ * whatever their case.
+ */
+export const roles = pgTable(
+  'roles',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    system: boolean('system').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [uniqueIndex('roles_name_lower').on(sql`lower(${table.name})`)],
+);
 
 export const rolePermissions = pgTable(
   'role_permissions',
@@ -1317,6 +1327,33 @@ export const staff = pgTable('staff', {
   grantedAt: timestamp('granted_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 });
+
+/** A person's adjustments on top of their role; they stay when the role changes. */
+export const staffPermissionOverrides = pgTable(
+  'staff_permission_overrides',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    permission: text('permission').notNull(),
+    effect: text('effect').notNull(),
+    grantedBy: uuid('granted_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.permission] }),
+    check(
+      'staff_permission_overrides_known',
+      sql`permission IN (${sql.raw(OPS_PERMISSIONS.map((p) => `'${p}'`).join(', '))})`,
+    ),
+    check(
+      'staff_permission_overrides_effect',
+      sql`effect IN ('add', 'remove')`,
+    ),
+  ],
+);
 
 /** One-time codes that allow registering an authenticator; only the SHA-256 is stored. */
 export const staffEnrolments = pgTable('staff_enrolments', {

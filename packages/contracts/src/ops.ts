@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { WebVitalSummary } from './analytics.js';
+import { OPS_PERMISSIONS } from './ops-catalogue.js';
 import type { ProfileReportReason } from './profiles.js';
 
 // Staff admin area (PR-009, ADR-0010).
@@ -838,3 +839,90 @@ export const opsEmailRecoverySchema = opsReasonSchema
   })
   .strict();
 export type OpsEmailRecoveryRequest = z.infer<typeof opsEmailRecoverySchema>;
+
+// Custom roles and per-person access (admin roles plan, Task 2).
+
+const opsPermissionList = z
+  .array(z.enum(OPS_PERMISSIONS))
+  .max(OPS_PERMISSIONS.length)
+  .refine((list) => new Set(list).size === list.length, 'repeated permission');
+const opsRoleName = z.string().trim().min(2).max(60);
+const opsRoleDescription = z.string().trim().max(300);
+
+/** A new role starts with nothing ticked. */
+export const opsRoleCreateSchema = opsReasonSchema.extend({
+  name: opsRoleName,
+  description: opsRoleDescription.default(''),
+  permissions: opsPermissionList.default([]),
+});
+export type OpsRoleCreateRequest = z.infer<typeof opsRoleCreateSchema>;
+
+export const opsRoleUpdateSchema = opsReasonSchema
+  .extend({
+    name: opsRoleName.optional(),
+    description: opsRoleDescription.optional(),
+    permissions: opsPermissionList.optional(),
+  })
+  .refine(
+    (patch) =>
+      patch.name !== undefined ||
+      patch.description !== undefined ||
+      patch.permissions !== undefined,
+    'nothing to change',
+  );
+export type OpsRoleUpdateRequest = z.infer<typeof opsRoleUpdateSchema>;
+
+export const opsRoleImpactSchema = z
+  .object({ permissions: opsPermissionList })
+  .strict();
+export type OpsRoleImpactRequest = z.infer<typeof opsRoleImpactSchema>;
+
+/** The person's full list of adjustments: it replaces what they had. */
+export const opsPersonalAccessSchema = opsReasonSchema
+  .extend({ additions: opsPermissionList, removals: opsPermissionList })
+  .refine(
+    (body) => !body.additions.some((p) => body.removals.includes(p)),
+    'a permission cannot be both added and removed',
+  );
+export type OpsPersonalAccessRequest = z.infer<typeof opsPersonalAccessSchema>;
+
+export const opsChangeRoleSchema = opsReasonSchema.extend({
+  roleId: z.string().min(1).max(64),
+});
+export type OpsChangeRoleRequest = z.infer<typeof opsChangeRoleSchema>;
+
+export interface OpsRole {
+  id: string;
+  name: string;
+  description: string;
+  /** Built in: `owner` and `release_check`, which can't be edited or deleted. */
+  system: boolean;
+  permissions: string[];
+  /** Active staff on this role. */
+  people: number;
+}
+
+export interface OpsEffectiveAccess {
+  roleId: string;
+  permissions: string[];
+  additions: string[];
+  removals: string[];
+}
+
+/** What a role edit would do; a person is listed only if their access would really change. */
+export interface OpsRoleImpact {
+  roleId: string;
+  added: string[];
+  removed: string[];
+  affected: {
+    userId: string;
+    email: string | null;
+    gains: string[];
+    losses: string[];
+  }[];
+}
+
+export interface OpsRoleUpdated {
+  role: OpsRole;
+  affected: OpsRoleImpact['affected'];
+}

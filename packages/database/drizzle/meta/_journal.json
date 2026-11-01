@@ -393,6 +393,13 @@
       "when": 1793540764793,
       "tag": "0055_ops_catalogue_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793541617827,
+      "tag": "0056_custom_roles_personal_access",
+      "breakpoints": true
     }
   ]
 }

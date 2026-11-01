@@ -45,6 +45,7 @@ export * from './operations/moments.js';
 export * from './operations/secret-box.js';
 export * from './operations/audit.js';
 export * from './operations/staff.js';
+export * from './operations/staff-admin.js';
 export * from './operations/ops-sessions.js';
 export * from './operations/issues.js';
 export * from './operations/evidence.js';

@@ -51,6 +51,12 @@ export const apiErrorCodes = [
   'SAME_AS_SIGN_IN_EMAIL',
   'SIGN_IN_CODE_REQUIRED',
   'PROVIDER_NOT_ALLOWED',
+  'PERMISSION_NOT_HELD',
+  'SELF_ACCESS_CHANGE',
+  'ROLE_NAME_TAKEN',
+  'ROLE_IN_USE',
+  'ROLE_PROTECTED',
+  'STAFF_PROTECTED',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];
