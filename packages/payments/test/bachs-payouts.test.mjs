@@ -61,6 +61,7 @@ const readDetails = {
   amountMinor: 150000n,
   currency: 'NGN',
   destinationRef: 'pd_7Kq2',
+  operationReference: 'p1',
 };
 
 const payoutInput = {
@@ -673,6 +674,13 @@ test('reads carry amount, currency and destination; an unreadable amount is no a
   assert.equal(read.amountMinor, 150000n);
   assert.equal(read.currency, 'NGN');
   assert.equal(read.destinationRef, 'pd_7Kq2');
+  assert.equal(read.operationReference, 'p1');
+  const unnamed = fake(jsonResponse(payoutBody({ reference: null })));
+  assert.equal(
+    (await unnamed.provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`))
+      .operationReference,
+    undefined,
+  );
   const foreign = fake(jsonResponse(payoutBody({ currency: 'USD' })));
   const other = await foreign.provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`);
   assert.equal(other.currency, 'USD');

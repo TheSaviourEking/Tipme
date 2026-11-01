@@ -22,6 +22,10 @@ erDiagram
   profiles ||--o{ ledger_accounts : payable_for
   tips ||--o| ledger_transactions : payment_posting
   payouts ||--o| ledger_transactions : payout_posting
+  parked_payout_checks {
+    uuid unmatched_id PK
+    timestamptz last_checked_at
+  }
   unmatched_provider_events {
     uuid id PK
     text provider_event_id "UNIQUE per provider"
@@ -83,4 +87,4 @@ erDiagram
 
 Rules the database enforces beyond keys: a quote funds one intent (`payment_intents.quote_id` UNIQUE); tip, attempt and payout status changes must follow the PRD state machines; ledger accounts are immutable; history tables refuse TRUNCATE; `status_transitions`, `ledger_transactions` and `ledger_entries` are append-only (triggers); every ledger transaction balances with at least two entries at commit (deferred constraint triggers); entry currency must match its transaction and account; quotes must satisfy `recipient_net = tip − platform fee − provider fee`.
 
-`unmatched_provider_events` (PR-006) keeps verified provider messages that match no known attempt or payout; it is append-only and refuses TRUNCATE.
+`unmatched_provider_events` (PR-006) keeps verified provider messages that match no known attempt or payout; it is append-only and refuses TRUNCATE. `parked_payout_checks` records when reconciliation last tried each parked payout event, so rows that never resolve can't crowd out newer ones. It is a separate table because the events table is append-only, and has no foreign key because one would change how that table refuses TRUNCATE.

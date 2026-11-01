@@ -656,6 +656,7 @@ export async function applyPayoutSignal(
         amountMinor?: bigint;
         currency?: string;
         destinationRef?: string;
+        operationReference?: string;
       }>;
     };
     payload: unknown;
@@ -664,8 +665,12 @@ export async function applyPayoutSignal(
 ): Promise<string> {
   // The docs don't settle whether an event's amount includes the fee, so an event that differs is
   // only a contradiction: a read decides, and only a read that differs is a conflict.
-  const eventDiffers =
-    (await differences(db, input.payoutId, input.claims ?? {})).length > 0;
+  const eventDiffering = await differences(
+    db,
+    input.payoutId,
+    input.claims ?? {},
+  );
+  const eventDiffers = eventDiffering.length > 0;
   let outcome: 'paid' | 'failed' = input.status;
   let details: { failureReason?: PayoutFailure; actualFeeMinor?: bigint } =
     input.feeMinor === undefined ? {} : { actualFeeMinor: input.feeMinor };
@@ -698,6 +703,11 @@ export async function applyPayoutSignal(
     }
     // An event that differs needs a read that positively says otherwise, not a silent one.
     if (eventDiffers && read.amountMinor === undefined) return 'unread';
+    if (
+      eventDiffering.includes('reference') &&
+      read.operationReference === undefined
+    )
+      return 'unread';
     outcome = read.status;
     details = {
       ...(read.failureReason ? { failureReason: read.failureReason } : {}),

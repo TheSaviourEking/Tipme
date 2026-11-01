@@ -17,6 +17,11 @@
 4. `payment.unresolved`: the provider cannot find the payment 30 minutes later. Check the provider by reference. If it truly does not exist, the supporter was not charged; the attempt expires on its own once its quote is 15 minutes past expiry.
 5. A supporter's status screen says "Still checking": the attempt is `UNKNOWN` or the tip is more than 2 minutes old without a verdict. It never shows success until verified; follow steps 2–4.
 6. Messages for payments TipMe does not know are in `unmatched_provider_events`. Match them by reference with the provider before acting.
+7. Payout events with a reference TipMe has not recorded are parked in `unmatched_provider_events` (`reason = 'unknown_payout'`) and retried on every reconciliation run, least recently tried first; `parked_payout_checks` holds the last try. They do not open `unmatched_event`. What happens next:
+   - The reference is recorded, or the event's signed reference names a live payout on that account: a read confirms it and it is applied. An event or read that differs from the request is never booked; a read that differs opens `payout_conflict`.
+   - The event names a payout that already ended or has another reference: `payout_conflict` at once, before any read. Money may have left; check the provider. Only a person closes it. Exception: `payout.failed` naming a failed payout with no reference is stored without an issue, because no money moved.
+   - It names no payout of ours and 10 minutes have passed: `payout_unexpected` and a withdrawal hold.
+   - It names a payout but has had no usable answer for 24 hours: `payout_unresolved` (dedupe key `payout_parked.<id>`). The event keeps being retried, and this issue closes itself when the payout ends or gets a reference.
 
 ## Never
 

@@ -194,6 +194,8 @@ export interface PayoutPort {
     amountMinor?: bigint;
     currency?: string;
     destinationRef?: string;
+    /** The reference TipMe set when it created the payout. */
+    operationReference?: string;
   }>;
   /**
    * Finds the payout a lost answer may have created. Null means the provider has none right now;
@@ -213,6 +215,7 @@ export interface PayoutPort {
     amountMinor?: bigint;
     currency?: string;
     destinationRef?: string;
+    operationReference?: string;
   } | null>;
 }
 

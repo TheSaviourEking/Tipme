@@ -36,7 +36,7 @@ import {
   startStepNote,
   type FoundPayout,
 } from './payout-start.js';
-import type { PayoutFailure } from './payouts.js';
+import { recordPayoutOutcome, type PayoutFailure } from './payouts.js';
 import { recordProviderEvent } from './provider-events.js';
 
 /**
@@ -278,6 +278,7 @@ export interface PayoutVerifier {
     amountMinor?: bigint;
     currency?: string;
     destinationRef?: string;
+    operationReference?: string;
   }>;
   /** Without it, a start with no answer can only be handed to staff. */
   findPayoutByReference?(
@@ -479,7 +480,7 @@ export async function reconcilePayouts(input: {
   // A job lost before it ever ran would otherwise hold the money silently. On hold is another
   // matter: that payout is waiting on purpose, and has its own issue.
   const neverStarted = await db
-    .select({ id: payouts.id })
+    .select({ id: payouts.id, startStep: payouts.startStep })
     .from(payouts)
     .where(
       and(
@@ -503,7 +504,7 @@ export async function reconcilePayouts(input: {
         db,
         payout.id,
         now,
-        startStepNote(null),
+        startStepNote(payout.startStep),
       );
       if (issue.opened) unresolved += 1;
     } catch {
@@ -557,8 +558,7 @@ async function sweepParkedPayoutEvents(
           SELECT 1 FROM issues i
            WHERE i.dedupe_key IN (
              'payout_unexpected.' || ${unmatchedProviderEvents.id},
-             'payout_conflict.parked.' || ${unmatchedProviderEvents.id},
-             'payout_parked.' || ${unmatchedProviderEvents.id}))`,
+             'payout_conflict.parked.' || ${unmatchedProviderEvents.id}))`,
       ),
     )
     // Least recently checked first, so rows that never resolve cannot starve newer ones.
@@ -622,7 +622,28 @@ async function sweepParkedPayoutEvents(
               eq(payouts.accountReference, event.accountReference),
             ),
           );
-        if (
+        if (named?.providerReference === event.providerReference) {
+          // Recorded meanwhile: simply that payout's event.
+          payoutId = named.id;
+        } else if (
+          named?.providerReference === null &&
+          named.status === 'FAILED' &&
+          event.status === 'failed'
+        ) {
+          // Failed, about a payout refused and released: no money moved, and nothing to raise.
+          // Stored as seen, which also takes it out of the queue.
+          await recordPayoutOutcome(db, {
+            payoutId: named.id,
+            provider: 'bachs',
+            providerEventId: row.providerEventId,
+            providerReference: null,
+            outcome: 'failed',
+            signatureVerified: true,
+            payload: row.payload,
+            now,
+          });
+          continue;
+        } else if (
           named &&
           (named.providerReference !== null ||
             (named.status !== 'REQUESTED' && named.status !== 'PROCESSING'))
@@ -634,8 +655,7 @@ async function sweepParkedPayoutEvents(
             now,
           });
           continue;
-        }
-        if (named) {
+        } else if (named) {
           await capParkedAge(row, named.id);
           const { status, ...details } = await providerFor(
             input.provider,
@@ -700,14 +720,18 @@ async function sweepParkedPayoutEvents(
     } catch {
       errors += 1;
     } finally {
-      await db
-        .insert(parkedPayoutChecks)
-        .values({ unmatchedId: row.id, lastCheckedAt: now })
-        .onConflictDoUpdate({
-          target: parkedPayoutChecks.unmatchedId,
-          set: { lastCheckedAt: now },
-        })
-        .catch(() => undefined);
+      try {
+        await db
+          .insert(parkedPayoutChecks)
+          .values({ unmatchedId: row.id, lastCheckedAt: now })
+          .onConflictDoUpdate({
+            target: parkedPayoutChecks.unmatchedId,
+            set: { lastCheckedAt: now },
+          });
+      } catch {
+        // Counted: without the stamp this row may crowd out newer ones.
+        errors += 1;
+      }
     }
   }
   return { applied, errors };

@@ -301,6 +301,29 @@ test('reconciliation', async (t) => {
   );
 
   await t.test(
+    'a payout with no mark but a recorded step says which step it reached',
+    async () => {
+      await database.fresh();
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                              request_fingerprint, provider, start_step, created_at)
+         VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'f', 'bachs', 'payout', now() - interval '2 hours')`,
+        [randomUUID(), ADA, randomUUID()],
+      );
+      await reconcilePayouts({
+        db: database.db,
+        provider: { fetchPayoutStatus: async () => ({ status: 'pending' }) },
+        now: new Date(),
+        minAgeMs: 0,
+      });
+      const [issue] = await q(
+        `SELECT summary FROM issues WHERE kind = 'payout_unresolved'`,
+      );
+      assert.match(issue.summary, /payout itself/);
+    },
+  );
+
+  await t.test(
     'a payment the provider cannot find for 30 minutes raises one alert',
     async () => {
       await database.fresh();

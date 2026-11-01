@@ -290,10 +290,12 @@ function payoutDetails(payout: z.infer<typeof payoutSchema>): {
   amountMinor?: bigint;
   currency: string;
   destinationRef?: string;
+  operationReference?: string;
 } {
-  const destination = payout.destination
-    ? { destinationRef: payout.destination }
-    : {};
+  const destination = {
+    ...(payout.destination ? { destinationRef: payout.destination } : {}),
+    ...(payout.reference ? { operationReference: payout.reference } : {}),
+  };
   if (payout.currency !== 'NGN')
     return { currency: payout.currency, ...destination };
   try {
@@ -316,6 +318,7 @@ function payoutState(payout: z.infer<typeof payoutSchema>): {
   amountMinor?: bigint;
   currency: string;
   destinationRef?: string;
+  operationReference?: string;
 } {
   const status = payout.status.toLowerCase();
   const fee = { ...chargedFee(payout), ...payoutDetails(payout) };

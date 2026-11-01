@@ -16,6 +16,7 @@ import {
   PAYOUT_UNEXPECTED_AFTER_MS,
   reconcilePayouts,
   recordPayoutFee,
+  recordPayoutOutcome,
   recordProviderEvent,
   requestWithdrawal,
   runIssueDetectors,
@@ -1382,5 +1383,160 @@ test('an unreadable stored amount fails one parked row, not the sweep', async (t
   await webhooks.applyBachs(good, provider);
   assert.equal((await row(payoutId)).status, 'PAID');
   const result = await reconcile(provider);
+  assert.equal(result.errors, 1);
+});
+
+// ---- Review round 3 ----
+
+for (const [label, read, expected, status] of [
+  [
+    'the same reference',
+    (id) => ({ operationReference: id }),
+    'applied',
+    'PAID',
+  ],
+  [
+    'another reference',
+    () => ({ operationReference: 'someone-else' }),
+    'conflict',
+    'PROCESSING',
+  ],
+  ['no reference', () => ({}), 'unread', 'PROCESSING'],
+]) {
+  test(`an event with a wrong reference and a read with ${label}: ${expected}`, async (t) => {
+    const { db, withdraw, row, issues, ledger, paidEvent, webhooks } =
+      await fixture(t);
+    const payoutId = await withdraw();
+    const provider = scripted();
+    await startPayout(db, { payoutId, provider });
+    provider.status = {
+      status: 'paid',
+      amountMinor: 200000n,
+      currency: 'NGN',
+      ...read(payoutId),
+    };
+    const event = paidEvent(payoutId, { operationReference: 'not-ours' });
+    assert.equal(await webhooks.applyBachs(event, provider), expected);
+    assert.equal((await row(payoutId)).status, status);
+    assert.equal((await ledger(payoutId)).length, status === 'PAID' ? 4 : 0);
+    assert.equal(
+      (await issues('payout_conflict')).length,
+      expected === 'conflict' ? 1 : 0,
+    );
+  });
+}
+
+test('a status read naming another reference is not booked or released', async (t) => {
+  const { db, withdraw, row, issues, reconcile } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  provider.status = { status: 'failed', operationReference: 'someone-else' };
+  await reconcile(provider);
+  assert.equal((await row(payoutId)).status, 'PROCESSING');
+  assert.match((await issues('payout_conflict'))[0].summary, /reference/);
+});
+
+test('after the age cap the row is still tried: a payout that then fails raises the conflict', async (t) => {
+  const { db, withdraw, row, issues, paidEvent, webhooks, reconcile } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted({
+    async initiatePayout() {
+      throw timeout();
+    },
+    async fetchPayoutStatus() {
+      return { status: 'not_found' };
+    },
+  });
+  await startPayout(db, { payoutId, provider });
+  await webhooks.applyBachs(
+    paidEvent(payoutId, { operationReference: payoutId }),
+    provider,
+  );
+  const late = after(PAYOUT_STUCK_AFTER_MS);
+  await reconcile(provider, late);
+  const capped = () =>
+    issues('payout_unresolved').then((rows) =>
+      rows.filter((i) => i.dedupe_key.startsWith('payout_parked.')),
+    );
+  assert.equal((await capped()).length, 1);
+  await recordPayoutOutcome(db, {
+    payoutId,
+    provider: 'bachs',
+    providerEventId: `staff.${payoutId}`,
+    providerReference: null,
+    outcome: 'failed',
+    signatureVerified: true,
+    payload: {},
+  });
+  assert.equal((await row(payoutId)).status, 'FAILED');
+  await autoResolveIssues(db, late);
+  assert.equal((await capped())[0].status, 'resolved');
+  await reconcile(provider, late);
+  const [conflict] = await issues('payout_conflict');
+  assert.equal(conflict.status, 'open');
+  assert.equal(conflict.subject.payoutId, payoutId);
+});
+
+test('a parked payout.failed naming a failed payout is no alarm, and leaves the queue', async (t) => {
+  const { db, withdraw, issues, q, failedEvent, webhooks, reconcile } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  await startPayout(db, {
+    payoutId,
+    provider: scripted({
+      async initiatePayout() {
+        throw new PayoutRejectedError('other', 'INSUFFICIENT_BALANCE');
+      },
+    }),
+  });
+  const provider = scripted();
+  const event = failedEvent(payoutId, { operationReference: payoutId });
+  assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  await reconcile(provider);
+  await reconcile(provider, after(PAYOUT_STUCK_AFTER_MS));
+  assert.equal((await issues('payout_conflict')).length, 0);
+  assert.equal((await issues('payout_unexpected')).length, 0);
+  assert.equal(
+    (
+      await q('SELECT 1 FROM provider_events WHERE provider_event_id = $1', [
+        event.eventId,
+      ])
+    ).length,
+    1,
+  );
+});
+
+test('a parked event naming a payout that already has its reference is that payout', async (t) => {
+  const { db, withdraw, row, issues, q, paidEvent, webhooks, reconcile } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  const event = paidEvent(payoutId, { operationReference: payoutId });
+  // Parked as if it arrived just before the reference was recorded, then the lookup missed it.
+  await q(`UPDATE payouts SET provider = 'bachs_old' WHERE id = $1`, [
+    payoutId,
+  ]);
+  assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  await reconcile(provider);
+  assert.equal((await issues('payout_conflict')).length, 0);
+  assert.equal((await row(payoutId)).status, 'PAID');
+});
+
+test('a rotation stamp that fails is counted', async (t) => {
+  const { paidEvent, webhooks, reconcile, q } = await fixture(t);
+  const provider = scripted();
+  await webhooks.applyBachs(paidEvent('x'), provider);
+  await q(
+    `CREATE FUNCTION test_refuse_stamp() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'refused'; END $$`,
+  );
+  await q(
+    `CREATE TRIGGER test_refuse BEFORE INSERT ON parked_payout_checks FOR EACH ROW EXECUTE FUNCTION test_refuse_stamp()`,
+  );
+  const result = await reconcile(provider);
+  await q(`DROP TRIGGER test_refuse ON parked_payout_checks`);
+  await q(`DROP FUNCTION test_refuse_stamp()`);
   assert.equal(result.errors, 1);
 });
