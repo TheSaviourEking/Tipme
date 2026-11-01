@@ -155,3 +155,12 @@ To repeat: `scripts/rehearse-production.sh` (builds both images, about 5 minutes
 4. **Verify the Bachs live webhook** with a real delivery: `live-activation.md`.
 5. **Switch payments on:** `PAYMENTS_LIVE_ENABLED=true`, deploy, set the repository variable `PRODUCTION_PAYMENTS_LIVE=true`, then the ₦1,000 smoke tip to the owner's page, confirmed and withdrawn: `live-activation.md`.
 6. **Open the site:** `usetipme.xyz` switches from the countdown to TipMe, as Q7 decides (public, or the pilot first).
+
+### The pilot notice (web, Vercel)
+
+The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" shows in the footer of every page when the web app has `PILOT_NOTICE=on`. The owner reviews the wording before activation.
+
+- **Where:** Vercel → the `tipme` project → Settings → Environment Variables → Production. Add `PILOT_NOTICE` = `on`. Unset, or any other value, means no notice.
+- **It is a server setting, not a build one:** the web app reads it for each request, and it has no `NEXT_PUBLIC_` twin, so nothing about it reaches the browser bundle. Vercel still applies a changed variable only to a **new deployment**: after adding or removing it, **redeploy** (Deployments → the latest → Redeploy). Instant Rollback to an older deployment restores that deployment's value of the variable.
+- **Check:** open `/@<a real handle>`, a receipt and `/dashboard`; each shows the line at the bottom with a `mailto:support@usetipme.xyz` link. With it off, none does. Staging and Preview leave it unset unless you want to see it.
+- Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.

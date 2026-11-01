@@ -60,6 +60,10 @@ export default defineConfig({
         PATH: process.env.PATH ?? '',
         API_INTERNAL_ORIGIN: API_ORIGIN,
         WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
+        // The pilot notice is off unless a run asks for it (tests/e2e/pilot-notice.spec.ts).
+        ...(process.env.E2E_PILOT_NOTICE
+          ? { PILOT_NOTICE: process.env.E2E_PILOT_NOTICE }
+          : {}),
       },
       reuseExistingServer: false,
     },
