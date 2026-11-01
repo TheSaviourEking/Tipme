@@ -1,11 +1,12 @@
 # Current handoff — staging workflow cannot call reusable CI (1 November 2026)
 
-- Branch/worktree: `fix/staging-reusable-workflow-permissions` / `.worktrees/staging-workflow-fix`, based on `origin/main` commit `62d68aa`.
+- **Correction (1 Nov):** #75/#76 granted only `statuses: read`, and staging run `41275075923` still had a startup failure on `main` with them. `record-tested-tree` in `ci.yml` requests `statuses: write`, and GitHub validates every job of a called workflow, even skipped ones. The caller now grants `statuses: write`, and `scripts/workflow-contracts.test.mjs` checks every CI job, not only `changes`. It takes effect only once on `main`, because `workflow_run` uses `main`'s file.
+- Branch/worktree: `chore/sync-main-into-dev-after-75` / `.worktrees/sync-main-dev`, based on `origin/dev` commit `c92bb38` and merging `origin/main` commit `6b8db24`.
 - Root cause: `.github/workflows/ci.yml` gives its `changes` job `statuses: read` so it can inspect tested-tree statuses. `.github/workflows/deploy-staging.yml` calls that workflow but omitted `statuses: read`; GitHub rejects a called workflow that requests more permission than its caller grants. Staging therefore had a startup failure before any job or deployment ran.
 - Minimal fix: add `statuses: read` to the staging `checks` caller job. The regression test compares requested and granted permission levels and was observed failing with `[['statuses', 'read']]` before the fix, then passing.
 - Fresh verification after building the isolated worktree: `pnpm build` passed 10/10 tasks; `pnpm test` passed 154/154 script tests and 20/20 Turbo tasks; `pnpm lint` and `pnpm typecheck` passed 17/17 tasks each; `pnpm format:check` and `git diff --check` passed. The initial sandboxed test attempt failed from missing build artifacts and denied localhost binds, not assertions in the change; the correctly prepared rerun passed.
-- Production is not independently broken: its staging-pass gate correctly refused the untested tree. Once this workflow fix is on `main`, run staging for the target commit and require a successful full release check before production. Do not use `override_reason` for this workflow defect.
-- Next exact step: merge the prepared PR into `main` through the owner's normal review flow, then run staging. No real payment, staging/production deployment, environment mutation or secret access was performed during diagnosis.
+- Production is not independently broken: its staging-pass gate correctly refused the untested tree. PR #75 put the fix on `main`; PR #76 put it on `dev`; this sync reunifies their history. Run staging for the target commit and require a successful full release check before production. Do not use `override_reason` for this workflow defect.
+- Next exact step: merge this history-sync PR into `dev`, then open the normal `dev → main` PR and run staging. No real payment, staging/production deployment, environment mutation or secret access was performed during diagnosis.
 
 # Current handoff — production infrastructure (31 October 2026)
 
