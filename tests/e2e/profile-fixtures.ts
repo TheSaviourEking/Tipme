@@ -66,8 +66,12 @@ export const PAGES: PublicProfile[] = [
 
 export interface Stack {
   origin: string;
+  /** Every profile lookup from now on: answered, a 503, or never answered. */
+  setApi: (state: ApiState) => void;
   stop: () => Promise<void>;
 }
+
+export type ApiState = 'up' | 'failing' | 'hanging';
 
 const portOf = (server: Server) => (server.address() as AddressInfo).port;
 
@@ -80,9 +84,16 @@ async function freePort() {
 }
 
 export async function startStack(mode: Mode): Promise<Stack> {
+  let state: ApiState = 'up';
   const api = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://stand-in');
     const handle = /^\/v1\/profiles\/(\w+)$/.exec(url.pathname)?.[1];
+    if (handle && state === 'hanging') return;
+    if (handle && state === 'failing') {
+      response.statusCode = 503;
+      response.end('{}');
+      return;
+    }
     const found = PAGES.find((p) => p.handle === handle);
     const answer = url.pathname === '/health/release' ? RELEASE[mode] : found;
     if (handle === 'oldname') {
@@ -115,6 +126,7 @@ export async function startStack(mode: Mode): Promise<Stack> {
   const origin = `http://127.0.0.1:${port}`;
   const stop = async () => {
     web.kill();
+    api.closeAllConnections();
     await new Promise((done) => api.close(done));
   };
   for (let tries = 0; tries < 120; tries += 1) {
@@ -122,7 +134,7 @@ export async function startStack(mode: Mode): Promise<Stack> {
       (r) => r.ok,
       () => false,
     );
-    if (up) return { origin, stop };
+    if (up) return { origin, setApi: (next) => (state = next), stop };
     await new Promise((done) => setTimeout(done, 500));
   }
   await stop();

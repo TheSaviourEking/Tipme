@@ -8,6 +8,8 @@ export const API_ORIGIN =
   process.env.NEXT_PUBLIC_API_ORIGIN ??
   'http://localhost:4000';
 
+const LOOKUP_TIMEOUT_MS = 4000;
+
 export const profileTag = (handle: string) => `profile:${handle.toLowerCase()}`;
 
 /**
@@ -29,6 +31,8 @@ export async function getPublicProfile(
     `${API_ORIGIN}/v1/profiles/${encodeURIComponent(handle)}`,
     {
       redirect: 'manual',
+      // A hung API must end in the retry screen, not a page that never finishes.
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
       // Staging/preview: the web server proves itself to the API's gate with the server key.
       ...(password
         ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
@@ -45,4 +49,20 @@ export async function getPublicProfile(
   if (!response.ok)
     throw new Error(`profile lookup failed: ${response.status}`);
   return ((await response.json()) as { data: PublicProfile }).data;
+}
+
+/**
+ * For the page itself. Under Partial Prerendering a thrown failure ends in an empty body with no
+ * error screen, so a failed lookup comes back as a value the page can render. It isn't cached:
+ * only getPublicProfile's answers are.
+ */
+export async function loadPublicProfile(
+  handle: string,
+): Promise<Awaited<ReturnType<typeof getPublicProfile>> | 'unreachable'> {
+  try {
+    return await getPublicProfile(handle);
+  } catch (error) {
+    console.error('profile lookup failed', error);
+    return 'unreachable';
+  }
 }

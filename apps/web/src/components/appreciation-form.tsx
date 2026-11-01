@@ -325,14 +325,25 @@ export function AppreciationForm({
       </label>
     </>
   );
+  // On a person's page the visible figure rides in the Tip bar, which hides while a field has
+  // focus and takes a live region with it. So the words are read from one hidden region outside
+  // the bar, and the visible copies stay out of the accessibility tree. Try again stays in it.
+  const shownOnly = onProfile ? ({ 'aria-hidden': true } as const) : {};
   const quoteArea = (
-    <div className="tip-quote" aria-live="polite">
+    <div
+      className="tip-quote"
+      {...(onProfile ? {} : { 'aria-live': 'polite' })}
+    >
       {shown.kind === 'loading' && (
-        <p className="tm-hint">Getting the latest price…</p>
+        <p className="tm-hint" {...shownOnly}>
+          Getting the latest price…
+        </p>
       )}
       {shown.kind === 'failed' && (
         <div className="tip-quote__failed">
-          <p className="tm-field-error">{shown.message}</p>
+          <p className="tm-field-error" {...shownOnly}>
+            {shown.message}
+          </p>
           <Button
             variant="secondary"
             onClick={() => void fetchQuote(shown.amount)}
@@ -342,7 +353,7 @@ export function AppreciationForm({
         </div>
       )}
       {ready && (
-        <p className="tip-payment-total">
+        <p className="tip-payment-total" {...shownOnly}>
           You pay {formatDemoAmount(Number(ready.payerTotalMinor))}
         </p>
       )}
@@ -463,7 +474,19 @@ export function AppreciationForm({
             hint={`${options.rangeText}.`}
           />
         )}
-        {!onProfile && quoteArea}
+        {onProfile ? (
+          <p className="tip-quote-live sr-only" aria-live="polite">
+            {shown.kind === 'loading'
+              ? 'Getting the latest price…'
+              : shown.kind === 'failed'
+                ? shown.message
+                : ready
+                  ? `Total to pay: ${formatDemoAmount(Number(ready.payerTotalMinor))}`
+                  : ''}
+          </p>
+        ) : (
+          quoteArea
+        )}
         <div className="tm-field">
           <label htmlFor={`${id}-purpose`}>
             What is this tip for? (optional)

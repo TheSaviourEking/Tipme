@@ -4,6 +4,7 @@ import type { ResolvedCover } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
+import { PageRetry } from '@/components/profile/page-retry';
 import { ProfileCover } from '@/components/profile/cover';
 import { RecipientIdentity } from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
@@ -12,7 +13,7 @@ import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getPaymentMode } from '@/lib/payment-mode-api';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { getPublicProfile } from '@/lib/profiles-api';
+import { loadPublicProfile } from '@/lib/profiles-api';
 import ProfileUnavailable from './not-found';
 
 // Wait for the cached page rather than stream a silhouette: the name and photo are in the first
@@ -26,7 +27,9 @@ type Props = {
 };
 
 export async function generateMetadata({ params }: Props) {
-  const profile = await getPublicProfile((await params).handle);
+  const profile = await loadPublicProfile((await params).handle);
+  // Says nothing about the page: not "unavailable", and no robots rule of its own.
+  if (profile === 'unreachable') return { title: 'Let’s try that again' };
   const copy = paymentModeCopy(await getPaymentMode());
   return profile && !('movedTo' in profile)
     ? previewMetadata(
@@ -45,7 +48,10 @@ const NO_COVER: ResolvedCover = {
 };
 
 export default async function ProfilePage({ params, searchParams }: Props) {
-  const profile = await getPublicProfile((await params).handle);
+  const { handle } = await params;
+  const profile = await loadPublicProfile(handle);
+  if (profile === 'unreachable')
+    return <PageRetry href={movedProfilePath(handle, await searchParams)} />;
   // Rendered, not thrown: the status is 200 either way here, and a thrown not-found leaves the
   // page blank without scripts.
   if (!profile) return <ProfileUnavailable />;

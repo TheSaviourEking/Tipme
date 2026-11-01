@@ -375,9 +375,11 @@ test('minor: a failed price refresh is reported as a failure, not as refreshed',
   await page.route('**/v1/tip-quotes', (route) => route.abort());
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await expect(
-    page.getByText(
-      'We couldn’t reach TipMe. Check your connection and try again.',
-    ),
+    page
+      .locator('.tip-quote')
+      .getByText(
+        'We couldn’t reach TipMe. Check your connection and try again.',
+      ),
   ).toBeVisible();
   await expect(page.getByText(/Your price was refreshed/)).toHaveCount(0);
 });

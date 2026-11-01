@@ -893,3 +893,92 @@ test.describe('the page without scripts, and its status codes', () => {
     expect(seen.some((url) => url.endsWith('/@kemi?src=qr'))).toBe(true);
   });
 });
+
+test.describe('when the API fails on a page not in the cache', () => {
+  test.describe.configure({ mode: 'serial' });
+  test.setTimeout(120_000);
+  let stack: Stack;
+  test.beforeAll(async () => {
+    stack = await startStack('live');
+  });
+  test.afterAll(async () => {
+    await stack.stop();
+  });
+
+  for (const [state, handle] of [
+    ['failing', 'longname'],
+    ['hanging', 'widename'],
+  ] as const)
+    both(
+      `${state}: a retry screen with nav and footer, scripts or not`,
+      async ({ page }) => {
+        stack.setApi(state);
+        const started = Date.now();
+        await page.goto(`${stack.origin}/@${handle}`);
+        const retry = page.getByRole('link', { name: 'Try again' });
+        await expect(retry).toBeVisible();
+        expect(Date.now() - started).toBeLessThan(9000);
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+          'Let’s try that again',
+        );
+        await expect(
+          page.getByRole('navigation', { name: 'Footer navigation' }),
+        ).toBeVisible();
+        // Not a claim that the page is gone.
+        await expect(page).not.toHaveTitle(/unavailable/i);
+        const context = await page.context().browser()!.newContext({
+          javaScriptEnabled: false,
+        });
+        const noJs = await context.newPage();
+        await noJs.goto(`${stack.origin}/@${handle}`);
+        await expect(
+          noJs.getByRole('link', { name: 'Try again' }),
+        ).toBeVisible();
+        await context.close();
+
+        // Nothing about the failure is kept: the retry finds the page.
+        stack.setApi('up');
+        await retry.click();
+        await expect(page.locator('[data-profile-card]')).toBeVisible();
+      },
+    );
+
+  test('a page in the cache still shows while the API is down', async ({
+    page,
+  }) => {
+    stack.setApi('up');
+    await page.goto(`${stack.origin}/@kemi`);
+    await expect(page.locator('[data-profile-card]')).toBeVisible();
+    stack.setApi('failing');
+    await page.reload();
+    await expect(page.locator('[data-profile-card]')).toBeVisible();
+    stack.setApi('up');
+  });
+});
+
+test('typing an amount on a phone is still announced: one live region, outside the bar @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await page.getByRole('radio', { name: 'Other amount' }).check();
+  const field = page.getByLabel('Your amount (NGN)');
+  await field.focus();
+  await field.fill('2500');
+  await expect(page.locator('.composer-action')).toBeHidden();
+  await expect(page.locator('[data-tip-panel] [aria-live]')).toHaveCount(1);
+  const live = page.locator('.tip-quote-live');
+  await expect(live).toHaveText('Total to pay: NGN 2,500.00');
+  expect(
+    await live.evaluate((el) => el.closest('.composer-action') === null),
+  ).toBe(true);
+  // In the accessibility tree while the field is focused, with the bar out of it.
+  const tree = await page.locator('[data-tip-panel]').ariaSnapshot();
+  expect(tree).toContain('Total to pay: NGN 2,500.00');
+  expect(tree).not.toContain('You pay');
+  // The visible total is hidden from assistive technology when the bar is back: read once.
+  await field.blur();
+  await expect(page.getByText(/You pay NGN 2,500/)).toBeVisible();
+  const back = await page.locator('[data-tip-panel]').ariaSnapshot();
+  expect(back).not.toContain('You pay');
+  expect(back.match(/Total to pay/g)).toHaveLength(1);
+});
