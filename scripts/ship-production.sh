@@ -19,6 +19,9 @@ set -euo pipefail
 
 version=${1:-}
 [[ "$version" =~ ^[0-9a-f]{7,40}$ ]] || { echo "usage: ship-production.sh <version (git sha)>" >&2; exit 2; }
+# What production's env file must say about live payments: the deploy stops if it disagrees.
+expected_live=${PRODUCTION_PAYMENTS_LIVE:-false}
+[[ "$expected_live" == true || "$expected_live" == false ]] || { echo "PRODUCTION_PAYMENTS_LIVE must be true or false." >&2; exit 2; }
 target=${PRODUCTION_SSH:?set PRODUCTION_SSH, e.g. deploy@203.0.113.10}
 home=${PRODUCTION_HOME:-/srv/tipme-production}
 edge=${PRODUCTION_EDGE_HOME:-/srv/tipme-edge}
@@ -75,4 +78,4 @@ if [[ "${PRODUCTION_SKIP_DEPLOY:-}" == "1" ]]; then
   exit 0
 fi
 echo "==> Deploying $version"
-ssh "${ssh_opts[@]}" "$target" "bash '$release/scripts/deploy-production.sh' '$version'"
+ssh "${ssh_opts[@]}" "$target" "bash '$release/scripts/deploy-production.sh' '$version' '$expected_live'"

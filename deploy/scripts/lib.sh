@@ -124,13 +124,47 @@ preflight_production() {
   fi
 }
 
-# A deploy that switches payments on must not reach the workers before finding out the worker will
-# refuse it (apps/worker/src/config.ts keeps that rule): the new API would already be serving. Only
-# the worker holds the address, so it is checked here rather than in the API's config. The address
-# is a credential: messages name the setting only.
+# How many lines set this name, however they are written. Compose takes the last one and also reads
+# `export NAME=`, while `setting` takes the first, so more than one means the two could disagree.
+setting_lines() { grep -cE "^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=" "$ENV_FILE" || true; }
+
+# Stops a deploy before anything starts when the switch isn't clearly what this deploy was told to
+# expect, or the worker would refuse it after the new API is already serving
+# (apps/worker/src/config.ts keeps that rule). Compose strips quotes and comments and reads the
+# last duplicate, so anything but one plain true or false is refused rather than interpreted. Only
+# the worker holds the alert address, so it is checked here and not in the API's config. The address
+# is a credential: messages name settings only. No line at all is false, Compose's default.
 preflight_live_payments() {
-  [[ "$(setting PAYMENTS_LIVE_ENABLED || true)" == true ]] || return 0
-  local address
+  local expected=${1:-false} value=false name address
+  if [[ "$expected" != true && "$expected" != false ]]; then
+    echo "The expected live state must be true or false." >&2
+    exit 2
+  fi
+  case "$(setting_lines PAYMENTS_LIVE_ENABLED)" in
+    0) ;;
+    1)
+      value=$(grep -E '^PAYMENTS_LIVE_ENABLED=' "$ENV_FILE" | cut -d= -f2- || true)
+      if [[ "$value" != true && "$value" != false ]]; then
+        echo "PAYMENTS_LIVE_ENABLED must be written exactly PAYMENTS_LIVE_ENABLED=true or =false in $ENV_FILE: no quotes, spaces, comments or export." >&2
+        exit 2
+      fi
+      ;;
+    *)
+      echo "PAYMENTS_LIVE_ENABLED is set more than once in $ENV_FILE: keep one line." >&2
+      exit 2
+      ;;
+  esac
+  if [[ "$value" != "$expected" ]]; then
+    echo "$ENV_FILE says PAYMENTS_LIVE_ENABLED=$value, but this deploy expects live=$expected (the repository variable PRODUCTION_PAYMENTS_LIVE, or the second argument here). Nothing was started." >&2
+    exit 2
+  fi
+  [[ "$value" == true ]] || return 0
+  for name in ALERT_WEBHOOK_URL LIVE_CHECKOUT_HANDLES; do
+    if (( $(setting_lines "$name") > 1 )); then
+      echo "$name is set more than once in $ENV_FILE: keep one line." >&2
+      exit 2
+    fi
+  done
   address=$(setting ALERT_WEBHOOK_URL || true)
   if [[ -z "$address" ]]; then
     echo "ALERT_WEBHOOK_URL is required in $ENV_FILE once PAYMENTS_LIVE_ENABLED=true: the worker refuses to start without it." >&2

@@ -140,6 +140,7 @@ jobs:
         env:
           PRODUCTION_SSH: ${{ vars.PRODUCTION_SSH }}
           PRODUCTION_SSH_KEY_FILE: /home/runner/.ssh/production
+          PRODUCTION_PAYMENTS_LIVE: ${{ vars.PRODUCTION_PAYMENTS_LIVE || 'false' }}
         run: scripts/ship-production.sh "$VERSION"
 
       # The release check runs from here, against the deployed copy. Read-only: it refuses
