@@ -64,6 +64,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payout_fee_short: 'Payout fee above what was covered',
   payout_held: 'Withdrawal waiting on a hold',
   staff_acted_alone: 'Serious action without a second person',
+  staff_approval_pending: 'Serious action waiting for approval',
+  staff_last_approver_removed: 'Last second person removed',
   provider_in_debt: 'Provider account in debt',
   provider_event_conflict: 'Conflicting provider event',
   stuck_tip: 'Tip stuck confirming',

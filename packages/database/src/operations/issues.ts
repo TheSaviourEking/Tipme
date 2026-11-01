@@ -36,10 +36,18 @@ const EVENT_KINDS: Record<string, IssueKind> = {
   'payout.conflict': 'payout_conflict',
   'provider_event.conflict': 'provider_event_conflict',
   'ops.acted_alone': 'staff_acted_alone',
+  'ops.approval_pending': 'staff_approval_pending',
+  'ops.last_approver_removed': 'staff_last_approver_removed',
 };
 export const ISSUE_EVENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(EVENT_KINDS),
 );
+/** Alerts about what a staff member did, or asked for: the issue records who. */
+const OWN_ALERT_EVENTS: ReadonlySet<string> = new Set([
+  'ops.acted_alone',
+  'ops.approval_pending',
+  'ops.last_approver_removed',
+]);
 
 const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_mismatch: 'money',
@@ -63,6 +71,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   message_reported: 'account',
   profile_reported: 'account',
   staff_acted_alone: 'account',
+  staff_approval_pending: 'info',
+  staff_last_approver_removed: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -109,6 +119,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
     case 'staff_acted_alone':
       return 'A staff member took a serious action without a second person, because none was available.';
+    case 'staff_approval_pending':
+      return 'A serious action is waiting for a second person. Decide it under Approvals.';
+    case 'staff_last_approver_removed':
+      return 'A staff change left nobody else to act as second person, so one person can now take serious actions alone.';
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
@@ -225,6 +239,30 @@ function actedAloneNote(payload: Record<string, unknown>): string {
   return `Action: ${action}. Staff member: ${idOf(payload.requestedBy) ?? 'unknown'}. The audit log has the reason. Someone else must close this; if nobody does, it closes itself after 30 days.`;
 }
 
+const PERMISSION_LIST = /^[a-z_.,]{1,400}$/;
+
+/** Same care as above. A pending request closes its issue once decided; the other asks for a person. */
+function staffAlertNote(
+  eventType: string,
+  payload: Record<string, unknown>,
+): string {
+  const actor = idOf(payload.requestedBy) ?? 'unknown';
+  if (eventType === 'ops.approval_pending') {
+    const action =
+      typeof payload.action === 'string' &&
+      /^[a-z_.]{1,60}$/.test(payload.action)
+        ? payload.action
+        : 'unknown';
+    return `Action: ${action}. Requested by: ${actor}. This closes itself once the request is decided or expires.`;
+  }
+  const permissions =
+    typeof payload.permissions === 'string' &&
+    PERMISSION_LIST.test(payload.permissions)
+      ? payload.permissions
+      : 'unknown';
+  return `Permissions: ${permissions}. Changed by: ${actor}. The audit log has the reason. Someone else must close this; if nobody does, it closes itself after 30 days.`;
+}
+
 /** One issue per outbox alert, keyed by the alert's dedupe key, so redelivery changes nothing. */
 export function openIssueFromEvent(
   db: Database,
@@ -245,10 +283,13 @@ export function openIssueFromEvent(
     if (id) subject[key] = id;
   }
   // Who acted, so they can't be the one to close it.
-  if (input.eventType === 'ops.acted_alone') {
+  if (OWN_ALERT_EVENTS.has(input.eventType)) {
     const actor = idOf(payload.requestedBy);
     if (actor) subject.userId = actor;
   }
+  const requestId = idOf(payload.requestId);
+  if (input.eventType === 'ops.approval_pending' && requestId)
+    subject.requestId = requestId;
   return guarded(async () =>
     (
       await openIssue(db, {
@@ -263,6 +304,10 @@ export function openIssueFromEvent(
           : {}),
         ...(input.eventType === 'ops.acted_alone'
           ? { note: actedAloneNote(payload) }
+          : {}),
+        ...(input.eventType === 'ops.approval_pending' ||
+        input.eventType === 'ops.last_approver_removed'
+          ? { note: staffAlertNote(input.eventType, payload) }
           : {}),
       })
     ).opened
@@ -577,8 +622,13 @@ export function autoResolveIssues(
       -- A lone admin can't close their own alert, and with nobody else it mustn't stay open forever.
       SELECT i.id, 'Closed automatically after 30 days: nobody else was available to close it.'
         FROM issues i
-       WHERE i.status = 'open' AND i.kind = 'staff_acted_alone'
+       WHERE i.status = 'open' AND i.kind IN ('staff_acted_alone', 'staff_last_approver_removed')
          AND i.opened_at < ${new Date(now.getTime() - ACTED_ALONE_CLOSES_AFTER_MS).toISOString()}::timestamptz
+      UNION ALL
+      SELECT i.id, 'The request was decided, cancelled or expired.'
+        FROM issues i JOIN approval_requests r ON r.id = (i.subject->>'requestId')::uuid
+       WHERE i.status = 'open' AND i.kind = 'staff_approval_pending'
+         AND r.status <> 'pending'
       UNION ALL
       SELECT i.id, 'The recovery was completed or cancelled.'
         FROM issues i JOIN phone_recoveries r ON r.id = (i.subject->>'recoveryId')::uuid
@@ -744,7 +794,8 @@ export function resolveIssue(
       if (!current) throw new OperationError('ISSUE_NOT_FOUND');
       if (
         current.status === 'open' &&
-        current.kind === 'staff_acted_alone' &&
+        (current.kind === 'staff_acted_alone' ||
+          current.kind === 'staff_last_approver_removed') &&
         (await isSamePerson(tx, current.subject.userId, input.staffUserId))
       )
         throw new OperationError('ISSUE_OWN_ALERT');

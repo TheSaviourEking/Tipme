@@ -119,3 +119,67 @@ export const staffActedAlone = defineMailType({
       ctx,
     ),
 });
+
+/** To everyone qualified to decide it, not the person who asked (spec 6.5 step 2). */
+export const staffApprovalPending = defineMailType({
+  id: 'staff_approval_pending',
+  category: 'security',
+  sender: 'security',
+  preference: null,
+  schema: z
+    .object({
+      personHint: z.string().max(260),
+      action: z.string().max(60),
+    })
+    .strict(),
+  sample: { personHint: 'a•••@example.com', action: 'fee.change' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'A serious TipMe admin action is waiting for you',
+        heading: 'Waiting for a second person',
+        blocks: [
+          {
+            kind: 'text',
+            text: `${data.personHint} asked for a serious admin action (${data.action}). Nothing has happened yet. Open Approvals in the admin area to see exactly what would change, and approve or reject it. It closes by itself after 24 hours.`,
+          },
+        ],
+        reason:
+          'You get this email because you hold the permission this action needs.',
+      },
+      ctx,
+    ),
+});
+
+/** To every owner: nobody else can now approve, so someone can act alone (spec 6.5). */
+export const staffLastApproverRemoved = defineMailType({
+  id: 'staff_last_approver_removed',
+  category: 'security',
+  sender: 'security',
+  preference: null,
+  schema: z
+    .object({
+      personHint: z.string().max(260),
+      permissions: z.string().max(400),
+    })
+    .strict(),
+  sample: {
+    personHint: 'a•••@example.com',
+    permissions: 'fees.manage,staff.manage',
+  },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'A TipMe staff change removed the last second person',
+        heading: 'No second person left',
+        blocks: [
+          {
+            kind: 'text',
+            text: `A staff change by ${data.personHint} left nobody else to approve serious admin actions under these permissions: ${data.permissions}. One person can now take those actions alone. The admin audit log has their reason. If you didn’t expect this, check it now.`,
+          },
+        ],
+        reason: 'You get this email because you are a TipMe owner.',
+      },
+      ctx,
+    ),
+});

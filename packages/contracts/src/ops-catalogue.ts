@@ -194,3 +194,18 @@ export const SERIOUS_ACTIONS = [
   'mail_provider.switch',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
+
+/** The permission each action needs, and so who can be the second person (spec 6.9). */
+export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
+  {
+    'email_recovery.start': 'recoveries.manage',
+    'payout.settle': 'payouts.resolve',
+    'balance.write_off': 'payouts.resolve',
+    'fee.change': 'fees.manage',
+    'fee.free': 'fees.manage',
+    'staff.grant_owner': 'staff.manage',
+    'staff.grant_sensitive': 'staff.manage',
+    'role.add_sensitive': 'staff.manage',
+    'staff.reset_authenticator': 'staff.manage',
+    'mail_provider.switch': 'providers.manage',
+  };

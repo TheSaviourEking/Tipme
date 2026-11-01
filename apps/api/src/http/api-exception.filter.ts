@@ -34,6 +34,17 @@ const messages: Record<ApiErrorCode, string> = {
     'Another staff change is in progress and nothing was changed. Please try again in a moment.',
   ISSUE_OWN_ALERT:
     'Someone else has to close this one, because it records your own action. With nobody else, it closes by itself after 30 days.',
+  APPROVAL_OWN_REQUEST:
+    'Someone else has to decide this one, because you asked for it.',
+  APPROVAL_NOT_YOURS: 'Only the person who asked can cancel this request.',
+  APPROVAL_CLOSED:
+    'This request has already been closed. Nothing more was done.',
+  APPROVAL_EXPIRED:
+    'This request passed its 24 hours, so it has closed. Nothing ran. Ask again if it is still needed.',
+  APPROVAL_STALE:
+    'Things have changed since this was asked for, so it stopped and nothing ran. Ask again if it is still needed.',
+  APPROVAL_ALREADY_PENDING:
+    'You already have this same request waiting. Cancel it first, then you can act.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
@@ -192,6 +203,12 @@ const operationErrors: Partial<
   FRESH_CODE_REQUIRED: { status: 403, code: 'FRESH_CODE_REQUIRED' },
   STAFF_ADMIN_BUSY: { status: 503, code: 'STAFF_ADMIN_BUSY' },
   ISSUE_OWN_ALERT: { status: 403, code: 'ISSUE_OWN_ALERT' },
+  APPROVAL_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  APPROVAL_OWN_REQUEST: { status: 403, code: 'APPROVAL_OWN_REQUEST' },
+  APPROVAL_NOT_YOURS: { status: 403, code: 'APPROVAL_NOT_YOURS' },
+  APPROVAL_CLOSED: { status: 409, code: 'APPROVAL_CLOSED' },
+  APPROVAL_EXPIRED: { status: 409, code: 'APPROVAL_EXPIRED' },
+  APPROVAL_ALREADY_PENDING: { status: 409, code: 'APPROVAL_ALREADY_PENDING' },
   SELF_ACCESS_CHANGE: { status: 403, code: 'SELF_ACCESS_CHANGE' },
   ROLE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   ROLE_NAME_TAKEN: { status: 409, code: 'ROLE_NAME_TAKEN' },

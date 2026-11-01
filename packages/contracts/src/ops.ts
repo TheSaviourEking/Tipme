@@ -44,6 +44,54 @@ export const opsReasonSchema = z
   .strict();
 export type OpsReasonRequest = z.infer<typeof opsReasonSchema>;
 
+export const OPS_APPROVAL_STATUSES = [
+  'pending',
+  'approved',
+  'rejected',
+  'cancelled',
+  'expired',
+  'stale',
+] as const;
+export type OpsApprovalStatus = (typeof OPS_APPROVAL_STATUSES)[number];
+
+/** A code entered for this approval: a recent one in the session doesn't count (spec 6.9). */
+export const opsApproveSchema = opsCodeSchema
+  .extend({ reason: z.string().trim().min(10).max(500).optional() })
+  .strict();
+export type OpsApproveRequest = z.infer<typeof opsApproveSchema>;
+
+export const opsApprovalListSchema = z
+  .object({ status: z.enum(OPS_APPROVAL_STATUSES).optional() })
+  .strict();
+export type OpsApprovalListQuery = z.infer<typeof opsApprovalListSchema>;
+
+/** A request as a screen shows it: the words fixed when asked for, and never the payload. */
+export interface OpsApproval {
+  id: string;
+  action: string;
+  summary: string;
+  permission: string;
+  requestedBy: string;
+  requestedByHint: string | null;
+  reason: string;
+  status: OpsApprovalStatus;
+  decidedBy: string | null;
+  decidedByHint: string | null;
+  decidedReason: string | null;
+  createdAt: string;
+  expiresAt: string;
+  decidedAt: string | null;
+  mine: boolean;
+  /** Whether this viewer could approve or reject it now. */
+  canDecide: boolean;
+  /** Waiting, with nobody left who could decide: the requester can cancel and act alone. */
+  nobodyElseQualified: boolean;
+}
+
+export interface OpsApprovalApproved {
+  status: 'approved';
+}
+
 /** Resolving an issue: a money issue must also say how it was settled (the operation checks). */
 export const opsResolveIssueSchema = opsReasonSchema
   .extend({
@@ -136,6 +184,8 @@ export const ISSUE_KINDS = [
   'message_reported',
   'profile_reported',
   'staff_acted_alone',
+  'staff_approval_pending',
+  'staff_last_approver_removed',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -161,6 +211,7 @@ export interface OpsIssueSubject {
   userId?: string;
   unmatchedId?: string;
   recoveryId?: string;
+  requestId?: string;
   providerEventRowId?: string;
 }
 

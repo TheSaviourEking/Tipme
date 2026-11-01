@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { SERIOUS_ACTION_PERMISSIONS } from '@tipme/contracts';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '@tipme/domain';
 import { and, desc, eq, gt, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
@@ -27,6 +28,7 @@ import { mailOwner } from './account-mail.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { normalisePhone, phoneHint } from './phone.js';
+import { enqueueOutbox } from './outbox.js';
 import { openSecret, sealSecret } from './secret-box.js';
 
 const ENROLMENT_TTL_MS = 30 * 60 * 1000;
@@ -501,6 +503,81 @@ export async function readStaffAccess(
   return composeAccess(row.roleId, names, overrides);
 }
 
+/**
+ * Everyone who could enter a code right now: active staff with a confirmed authenticator on a live
+ * account. Someone mid-reset has enrolled before, but can't.
+ */
+export function staffAbleToEnterCode(
+  db: Database | Tx,
+): Promise<{ userId: string; email: string | null }[]> {
+  return db
+    .select({ userId: staff.userId, email: users.email })
+    .from(staff)
+    .innerJoin(users, eq(users.id, staff.userId))
+    .innerJoin(staffTotp, eq(staffTotp.userId, staff.userId))
+    .where(
+      and(
+        isNull(staff.revokedAt),
+        isNotNull(staffTotp.confirmedAt),
+        isNull(users.deletedAt),
+      ),
+    );
+}
+
+const SERIOUS_PERMISSIONS = new Set<string>(
+  Object.values(SERIOUS_ACTION_PERMISSIONS),
+);
+
+/**
+ * For each permission behind a serious action, who could act under it. People, not accounts: two
+ * accounts on one mailbox count once, as they can't approve for each other.
+ */
+export async function seriousPermissionHolders(
+  tx: Database | Tx,
+): Promise<Map<string, Set<string>>> {
+  const holders = new Map<string, Set<string>>();
+  for (const person of await staffAbleToEnterCode(tx)) {
+    const access = await readStaffAccess(tx, person.userId);
+    const who = person.email
+      ? normaliseStaffEmail(person.email)
+      : person.userId;
+    for (const permission of access?.permissions ?? [])
+      if (SERIOUS_PERMISSIONS.has(permission))
+        holders.set(
+          permission,
+          (holders.get(permission) ?? new Set<string>()).add(who),
+        );
+  }
+  return holders;
+}
+
+/**
+ * Spec 6.5: removing colleagues to act alone stays possible, but can't be done quietly. Compares with
+ * `before`, read under the staff-admin lock at the start of the change, and alerts on any permission
+ * that had a second person and no longer does.
+ */
+export async function alertIfLastApproverGone(
+  tx: Tx,
+  before: Map<string, Set<string>>,
+  actorId: string | null,
+): Promise<void> {
+  const after = await seriousPermissionHolders(tx);
+  const gone = [...before]
+    .filter(
+      ([permission, people]) =>
+        people.size >= 2 && (after.get(permission)?.size ?? 0) < 2,
+    )
+    .map(([permission]) => permission)
+    .sort();
+  if (gone.length === 0) return;
+  await enqueueOutbox(tx, {
+    eventType: 'ops.last_approver_removed',
+    // Each occurrence is its own alert.
+    aggregateId: newId(),
+    payload: { permissions: gone.join(','), requestedBy: actorId },
+  });
+}
+
 /** The permissions of an active staff member, or null for everyone else. */
 export function staffPermissions(
   db: Database | Tx,
@@ -568,6 +645,7 @@ export function grantOwner(
     db.transaction(async (tx) => {
       // Break-glass, but still one change among the others: it waits its turn.
       await lockStaffAdmin(tx);
+      const holdersBefore = await seriousPermissionHolders(tx);
       await ensureOwnerRole(tx);
       await ensureReleaseCheckRole(tx);
       const role = input.role ?? 'owner';
@@ -668,6 +746,7 @@ export function grantOwner(
         }),
         now,
       });
+      await alertIfLastApproverGone(tx, holdersBefore, null);
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
           userId,

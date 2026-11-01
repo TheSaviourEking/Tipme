@@ -42,7 +42,9 @@ import {
   checkedReason,
   clearOverrides,
   composeAccess,
+  alertIfLastApproverGone,
   dropOpsAccess,
+  seriousPermissionHolders,
   isUnenrolledInvitee,
   ignoresAdjustments,
   issueEnrolment,
@@ -328,6 +330,7 @@ export function updateRole(
       throw new OperationError('INVALID_INPUT');
     return db.transaction(async (tx) => {
       const actor = await authorise(tx, input.actorId);
+      const holdersBefore = await seriousPermissionHolders(tx);
       const role = await roleOrThrow(tx, input.roleId);
       if (role.system) throw new OperationError('ROLE_PROTECTED');
       let affected: AffectedPerson[] = [];
@@ -385,6 +388,7 @@ export function updateRole(
             : {}),
         }),
       });
+      await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       return { role: await roleView(tx, input.roleId), affected };
     });
   });
@@ -479,6 +483,7 @@ export function setPersonalAccess(
       throw new OperationError('INVALID_INPUT');
     return db.transaction(async (tx) => {
       const actor = await authorise(tx, input.actorId);
+      const holdersBefore = await seriousPermissionHolders(tx);
       const target = await targetOrThrow(tx, actor.id, input.userId);
       if (ignoresAdjustments(target.access.roleId))
         throw new OperationError('STAFF_PROTECTED');
@@ -543,6 +548,7 @@ export function setPersonalAccess(
             .sort(),
         }),
       });
+      await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       const after = await readStaffAccess(tx, target.id);
       return {
         ...after!,
@@ -566,6 +572,7 @@ export function changeRole(
     const reason = checkedReason(input.reason);
     return db.transaction(async (tx) => {
       const actor = await authorise(tx, input.actorId);
+      const holdersBefore = await seriousPermissionHolders(tx);
       const { id: userId, access: target } = await targetOrThrow(
         tx,
         actor.id,
@@ -622,6 +629,7 @@ export function changeRole(
           ...cleared,
         }),
       });
+      await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       return { ...after, permissions: [...after.permissions].sort() };
     });
   });
@@ -1016,6 +1024,7 @@ export function removeStaff(
     const now = input.now ?? new Date();
     await db.transaction(async (tx) => {
       const actor = await authorise(tx, input.actorId);
+      const holdersBefore = await seriousPermissionHolders(tx);
       const { id: userId, access } = await targetOrThrow(
         tx,
         actor.id,
@@ -1057,6 +1066,7 @@ export function removeStaff(
         }),
         now,
       });
+      await alertIfLastApproverGone(tx, holdersBefore, actor.id);
     });
   });
 }
@@ -1081,6 +1091,7 @@ export function resetAuthenticator(
     const now = input.now ?? new Date();
     return db.transaction(async (tx) => {
       const actor = await authorise(tx, input.actorId);
+      const holdersBefore = await seriousPermissionHolders(tx);
       if (actor.roleId !== 'owner')
         throw new OperationError('PERMISSION_NOT_HELD');
       const { id: userId } = await targetOrThrow(tx, actor.id, input.userId);
@@ -1109,6 +1120,7 @@ export function resetAuthenticator(
         }),
         now,
       });
+      await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       return link;
     });
   });

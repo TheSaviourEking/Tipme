@@ -27,6 +27,8 @@ export interface OpsContext {
 export type OpsRequest = Request & { auth?: AuthContext; ops?: OpsContext };
 
 export const OPS_PERMISSION = 'tipme:ops-permission';
+/** No permission fits the route: the operation behind it decides, per record. */
+export const OPS_ANY_STAFF = 'tipme:ops-any-staff';
 
 // Anyone who is not signed-in staff learns nothing about the admin area: every refusal is a 404.
 const hidden = () => new CodedHttpException(404, 'NOT_FOUND');
@@ -83,7 +85,11 @@ export class OpsGuard implements CanActivate {
       OPS_PERMISSION,
       [context.getHandler(), context.getClass()],
     );
-    if (!permission || !grant.permissions.has(permission))
+    const anyStaff = this.reflector.getAllAndOverride<boolean | undefined>(
+      OPS_ANY_STAFF,
+      [context.getHandler(), context.getClass()],
+    );
+    if (!anyStaff && (!permission || !grant.permissions.has(permission)))
       throw new CodedHttpException(403, 'FORBIDDEN');
     request.auth = session;
     request.ops = { ...grant, sessionId: session.sessionId };

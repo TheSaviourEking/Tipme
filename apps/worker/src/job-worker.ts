@@ -16,6 +16,7 @@ import { configuredMailProviders, type MailProviderName } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   autoResolveIssues,
+  expireRequests,
   createDatabase,
   expireStalePaymentAccountCreations,
   expireStaleAttemptStarts,
@@ -61,6 +62,7 @@ const WEEKLY_REPORTS_JOB = 'reports.weekly';
 const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
+const APPROVALS_EXPIRE_JOB = 'approvals.expire';
 /** A release check takes minutes: anything still tagged after this was left behind. */
 const REHEARSAL_GRACE_MS = 2 * 3_600_000;
 const ANALYTICS_RETENTION_MS = 90 * 86_400_000;
@@ -225,6 +227,13 @@ export async function startJobWorker(
     repeat: { pattern: '0 1 * * *', tz: 'Africa/Lagos' },
     logger,
   });
+  // Its own job, so a slow provider in reconciliation can't hold it up. Approving checks expiry too.
+  const approvalsSchedule = ensureSchedule({
+    queue,
+    id: APPROVALS_EXPIRE_JOB,
+    every: 60_000,
+    logger,
+  });
   // Test copies only (RELEASE_KIND=test): every hour, erase what crashed release checks left.
   const rehearsalSchedule =
     config.RELEASE_KIND === 'test'
@@ -370,6 +379,14 @@ export async function startJobWorker(
             logger.info({ event: 'moments.monthly.completed', created });
             processed.add(1, { outcome: 'celebrated' });
             return 'celebrated';
+          }
+          if (job.name === APPROVALS_EXPIRE_JOB) {
+            const result = await expireRequests(database.db, {
+              now: new Date(),
+            });
+            logger.info({ event: 'approvals.expired', ...result });
+            processed.add(1, { outcome: 'approvals_swept' });
+            return 'approvals_swept';
           }
           if (job.name === REHEARSAL_SWEEP_JOB) {
             // Never on a live copy, even if the job was queued before RELEASE_KIND changed.
@@ -538,6 +555,7 @@ export async function startJobWorker(
       await monthlySchedule.stop();
       await analyticsSchedule.stop();
       await rehearsalSchedule?.stop();
+      await approvalsSchedule.stop();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

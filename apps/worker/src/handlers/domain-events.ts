@@ -17,6 +17,8 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'payout.failed',
   'payout.conflict',
   'ops.acted_alone',
+  'ops.approval_pending',
+  'ops.last_approver_removed',
   'provider_event.conflict',
   'payment.unresolved',
   'payment.conflict',
@@ -25,6 +27,12 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;
+
+const STAFF_ALERT_EVENTS: ReadonlySet<string> = new Set([
+  'ops.acted_alone',
+  'ops.approval_pending',
+  'ops.last_approver_removed',
+]);
 
 export interface StaffAlert {
   event: string;
@@ -72,8 +80,11 @@ export async function handleDomainEvent(
     // After the issue, so staff always see it; a failed email retries the event, and both
     // steps are no-ops the second time.
     await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
-    if (name === 'ops.acted_alone' && deps.postStaffAlert) {
-      const { action, requestedBy } = (data ?? {}) as Record<string, unknown>;
+    if (STAFF_ALERT_EVENTS.has(name) && deps.postStaffAlert) {
+      const fields = (data ?? {}) as Record<string, unknown>;
+      const { requestedBy } = fields;
+      // Losing the last second person is about permissions, not one action.
+      const action = fields['action'] ?? fields['permissions'];
       await deps.postStaffAlert({
         event: name,
         action: typeof action === 'string' ? action : 'unknown',
