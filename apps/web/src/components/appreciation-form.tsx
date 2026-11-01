@@ -18,6 +18,8 @@ import { formatDemoAmount } from '@/lib/demo-amount';
 import { amountOptions } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
+import { usePaymentMode } from './payment-mode-context';
 import { Arrow } from './brand';
 
 type QuoteState =
@@ -50,6 +52,20 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   return 'Something went wrong on our side. Please try again.';
 };
 
+/**
+ * In place of the tip form while checkout is closed (Bachs live, live payments switched off):
+ * said before a supporter chooses an amount, and no pay button anywhere.
+ */
+export function TippingOpensSoon() {
+  const copy = paymentModeCopy('closed');
+  return (
+    <Card className="appreciation-card tips-not-ready">
+      <h2>{copy.closedTitle}</h2>
+      <p className="composer-description">{copy.closedBody}</p>
+    </Card>
+  );
+}
+
 export function AppreciationForm({
   recipient,
   handle,
@@ -69,6 +85,9 @@ export function AppreciationForm({
   celebration?: { momentId: string; label: string };
 }) {
   const id = useId();
+  const copy = paymentModeCopy(usePaymentMode());
+  // The API refused as not open (switched off since this page loaded): close the form.
+  const [closed, setClosed] = useState(false);
   const options = amountOptions(tipAmounts);
   const presets = options.presets;
   const [joining, setJoining] = useState(false);
@@ -101,6 +120,7 @@ export function AppreciationForm({
     if (request !== latestQuote.current) return null;
     draftKey.current = null;
     if (!result.ok) {
+      if (result.code === 'TIPPING_NOT_OPEN') setClosed(true);
       setQuote({
         kind: 'failed',
         amount: minor,
@@ -200,6 +220,10 @@ export function AppreciationForm({
       return;
     }
     setSubmitting(false);
+    if (result.code === 'TIPPING_NOT_OPEN') {
+      setClosed(true);
+      return;
+    }
     if (
       result.code === 'QUOTE_EXPIRED' ||
       result.code === 'QUOTE_ALREADY_USED'
@@ -250,13 +274,14 @@ export function AppreciationForm({
       </label>
     </>
   );
+  if (closed || !copy.payable) return <TippingOpensSoon />;
   return (
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}
     >
       <div className="composer-topline">
         <span className="eyebrow">A little appreciation</span>
-        <Badge>Test payments</Badge>
+        {copy.formBadge && <Badge>{copy.formBadge}</Badge>}
       </div>
       {/* No browser form restoration: after Back, the controls must match React's state. */}
       <form onSubmit={submit} noValidate autoComplete="off">
@@ -438,8 +463,12 @@ export function AppreciationForm({
           <Arrow />
         </Button>
         <p className="composer-disclaimer">
-          TipMe is in test mode: no real money moves yet.
-          <br />
+          {copy.formDisclaimer && (
+            <>
+              {copy.formDisclaimer}
+              <br />
+            </>
+          )}
           You’ll confirm on the payment provider’s page next.
         </p>
       </form>

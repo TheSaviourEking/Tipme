@@ -4,6 +4,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { TipStatusView } from '@tipme/contracts';
 import { Button, Card, Notice, Skeleton } from '@tipme/ui';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
 import { formatDemoAmount } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
@@ -36,6 +38,7 @@ const noSubscription = () => () => undefined;
 
 export function StatusView() {
   const { tipId } = useParams<{ tipId: string }>();
+  const copy = paymentModeCopy(usePaymentMode());
   // undefined while rendering on the server (loading), null when the link has no token.
   const token = useSyncExternalStore(
     noSubscription,
@@ -189,7 +192,9 @@ export function StatusView() {
   const profile = `/@${tip.recipient.handle}`;
   return (
     <Card className={`tip-status-card tip-status-card--${tip.state}`}>
-      <p className="tip-status-pretend">Test payment · no real money moved</p>
+      {copy.receiptBanner && (
+        <p className="tip-status-pretend">{copy.receiptBanner}</p>
+      )}
       <div role="status" aria-live="polite" className="tip-status-live">
         {tip.state === 'waiting' && (
           <>

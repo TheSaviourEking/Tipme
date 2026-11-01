@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Container } from '@tipme/ui';
+import type { PaymentMode } from '@/lib/payment-mode';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { Brand } from './brand';
 
 const groups = [
@@ -30,7 +32,8 @@ const groups = [
   },
 ] as const;
 
-export function Footer() {
+export function Footer({ mode }: { mode: PaymentMode }) {
+  const { footerNote } = paymentModeCopy(mode);
   return (
     <footer className="site-footer">
       <Container>
@@ -56,7 +59,7 @@ export function Footer() {
         </div>
         <div className="footer-bottom">
           <span>© 2026 TipMe. A little thanks goes a long way.</span>
-          <span>Development preview · Test mode</span>
+          {footerNote && <span>{footerNote}</span>}
         </div>
       </Container>
     </footer>

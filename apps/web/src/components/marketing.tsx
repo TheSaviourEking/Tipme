@@ -1,7 +1,10 @@
 /** Marketing pieces shared by the home page and the PRD marketing routes. */
+import { getPaymentMode } from '@/lib/payment-mode-api';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 
 /** The three steps of a tip, in order. */
-export function HowItWorksSteps() {
+export async function HowItWorksSteps() {
+  const copy = paymentModeCopy(await getPaymentMode());
   return (
     <ol className="steps">
       <li>
@@ -23,10 +26,7 @@ export function HowItWorksSteps() {
       <li>
         <span>03</span>
         <h3>See the thought behind it.</h3>
-        <p>
-          Review the full amount and what they receive, then pay. Payments are
-          still in test mode; real payments are not available yet.
-        </p>
+        <p>{copy.howItWorksPay}</p>
       </li>
     </ol>
   );

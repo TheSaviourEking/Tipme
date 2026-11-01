@@ -10,6 +10,8 @@ import type {
 import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
@@ -27,6 +29,7 @@ const links = [
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const copy = paymentModeCopy(usePaymentMode());
   const [profile, setProfile] = useState<MyProfile | null>(null);
 
   useEffect(() => {
@@ -90,7 +93,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </Link>
               ))}
             </nav>
-            <Badge>Test mode</Badge>
+            {copy.dashboardBadge && <Badge>{copy.dashboardBadge}</Badge>}
             {profile && <NotificationBell />}
             {profile && (
               <Button variant="quiet" onClick={() => void signOut()}>

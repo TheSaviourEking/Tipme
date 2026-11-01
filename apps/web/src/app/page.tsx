@@ -1,7 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ActionLink, Badge, Container } from '@tipme/ui';
-import { AppreciationForm } from '@/components/appreciation-form';
+import {
+  AppreciationForm,
+  TippingOpensSoon,
+} from '@/components/appreciation-form';
+import { getPaymentMode } from '@/lib/payment-mode-api';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { Arrow } from '@/components/brand';
 import { HowItWorksSteps } from '@/components/marketing';
 import { ViewTracker } from '@/components/view-tracker';
@@ -13,7 +18,8 @@ export const metadata = marketingMetadata(
   '/',
 );
 
-export default function Home() {
+export default async function Home() {
+  const copy = paymentModeCopy(await getPaymentMode());
   return (
     <main id="main" tabIndex={-1} className="home-page">
       <ViewTracker name="landing_viewed" />
@@ -68,7 +74,11 @@ export default function Home() {
             </figure>
           </div>
           <div className="home-hero__panel tip-instrument" id="try-it">
-            <AppreciationForm recipient="Ada" handle="ada" collapseExtras />
+            {copy.payable ? (
+              <AppreciationForm recipient="Ada" handle="ada" collapseExtras />
+            ) : (
+              <TippingOpensSoon />
+            )}
           </div>
         </section>
       </Container>
@@ -107,10 +117,11 @@ export default function Home() {
               <p>Copy your link or QR code and let people know it is yours.</p>
             </li>
           </ol>
-          <p className="recipient-start__notice">
-            Payments are in test mode. Real payments and payout setup are not
-            available until provider and funds-flow approvals are complete.
-          </p>
+          {copy.homeRecipientNotice && (
+            <p className="recipient-start__notice">
+              {copy.homeRecipientNotice}
+            </p>
+          )}
           <ActionLink className="home-primary" href="/sign-up">
             Create your page <Arrow />
           </ActionLink>
@@ -176,11 +187,7 @@ export default function Home() {
               </li>
               <li>
                 <h3>Clarity before commitment.</h3>
-                <p>
-                  You see the full cost and what the person receives before you
-                  pay. Payments are still in test mode; real payments are not
-                  available yet.
-                </p>
+                <p>{copy.homeClarity}</p>
               </li>
               <li>
                 <h3>Honest about the outcome.</h3>

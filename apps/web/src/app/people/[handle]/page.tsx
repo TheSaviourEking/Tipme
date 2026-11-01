@@ -2,7 +2,10 @@ import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Container } from '@tipme/ui';
-import { AppreciationForm } from '@/components/appreciation-form';
+import {
+  AppreciationForm,
+  TippingOpensSoon,
+} from '@/components/appreciation-form';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import {
   RecipientIdentity,
@@ -13,6 +16,8 @@ import { ReportPage } from '@/components/report-page';
 import { ShareProfile } from '@/components/share-profile';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
+import { getPaymentMode } from '@/lib/payment-mode-api';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { getPublicProfile } from '@/lib/profiles-api';
 
 type Props = {
@@ -22,10 +27,11 @@ type Props = {
 
 export async function generateMetadata({ params }: Props) {
   const profile = await getPublicProfile((await params).handle);
+  const copy = paymentModeCopy(await getPaymentMode());
   return profile && !('movedTo' in profile)
     ? previewMetadata(
         `${profile.displayName} on TipMe`,
-        `${profile.role ?? 'A TipMe recipient'}. Test mode.`,
+        `${profile.role ?? 'A TipMe recipient'}.${copy.profileMetaSuffix}`,
         `/@${profile.handle}`,
       )
     : { title: 'Page unavailable', robots: { index: false, follow: false } };
@@ -73,6 +79,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   if ('movedTo' in profile)
     permanentRedirect(movedProfilePath(profile.movedTo, await searchParams));
   const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
+  const copy = paymentModeCopy(await getPaymentMode());
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
@@ -104,7 +111,10 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             aria-label={`Tip ${firstName}`}
             data-tip-panel
           >
-            {profile.acceptingTips === false ? (
+            {/* Closed checkout outranks the owner's own setup: nobody can tip yet. */}
+            {!copy.payable ? (
+              <TippingOpensSoon />
+            ) : profile.acceptingTips === false ? (
               <TipsNotReady recipient={firstName} />
             ) : (
               <AppreciationForm
@@ -137,9 +147,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             <ShareProfile handle={profile.handle} />
           </div>
           <div className="profile-safety">
-            <p>
-              No account needed. TipMe is in test mode: no real money moves yet.
-            </p>
+            <p>{copy.profileSafety}</p>
             <Link href="/about-preview">Learn about this preview</Link>
             <ReportPage handle={profile.handle} />
           </div>
