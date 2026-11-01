@@ -1397,8 +1397,52 @@ export const opsSessions = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    // When an authenticator code was last entered for this grant; sensitive routes ask for a recent one.
+    lastTotpAt: timestamp('last_totp_at', { withTimezone: true }),
   },
   (table) => [index('ops_sessions_user').on(table.userId)],
+);
+
+export const APPROVAL_STATUSES = [
+  'pending',
+  'approved',
+  'rejected',
+  'cancelled',
+  'expired',
+  'stale',
+] as const;
+
+/** A serious action waiting for a second person. It stores the action and what to run it with. */
+export const approvalRequests = pgTable(
+  'approval_requests',
+  {
+    id: uuid('id').primaryKey(),
+    action: text('action').notNull(),
+    payload: jsonb('payload').notNull(),
+    // Exactly what will change, in words, fixed when requested.
+    summary: text('summary').notNull(),
+    permission: text('permission').notNull(),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id),
+    reason: text('reason').notNull(),
+    status: text('status').notNull().default('pending'),
+    decidedBy: uuid('decided_by').references(() => users.id),
+    decidedReason: text('decided_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      'approval_requests_status',
+      sql`status IN (${sql.raw(APPROVAL_STATUSES.map((s) => `'${s}'`).join(', '))})`,
+    ),
+    index('approval_requests_pending')
+      .on(table.expiresAt)
+      .where(sql`status = 'pending'`),
+    index('approval_requests_created').on(table.createdAt),
+  ],
 );
 
 export const opsLockouts = pgTable('ops_lockouts', {

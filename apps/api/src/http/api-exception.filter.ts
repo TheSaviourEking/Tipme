@@ -27,6 +27,7 @@ export class DependencyUnavailableError extends Error {
 const messages: Record<ApiErrorCode, string> = {
   PERMISSION_NOT_HELD:
     'You can only give or take away access you hold yourself.',
+  FRESH_CODE_REQUIRED: 'Enter a code from your authenticator to do this.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',

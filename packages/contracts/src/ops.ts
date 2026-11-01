@@ -135,6 +135,7 @@ export const ISSUE_KINDS = [
   'pending_recovery',
   'message_reported',
   'profile_reported',
+  'staff_acted_alone',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

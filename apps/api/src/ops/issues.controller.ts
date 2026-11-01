@@ -29,6 +29,7 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const LOCAL_TRACE_URL = 'http://127.0.0.1:16686/trace/{traceId}';
@@ -89,6 +90,7 @@ export class OpsIssuesController {
 
   @Post(':id/reveal')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('private.view')
   async reveal(
     @CurrentOps() ops: OpsContext,

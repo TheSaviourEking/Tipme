@@ -56,6 +56,7 @@ import {
   type MailProviders,
 } from '../mail/mail-providers.provider.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const STATUS_TIMEOUT_MS = 3000;
@@ -142,6 +143,7 @@ export class OpsProvidersController {
 
   @Post('mail/:provider/test')
   @HttpCode(202)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async startTest(
     @CurrentOps() ops: OpsContext,
@@ -183,6 +185,7 @@ export class OpsProvidersController {
 
   @Post('mail/active')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async switchProvider(
     @CurrentOps() ops: OpsContext,
@@ -215,6 +218,7 @@ export class OpsProvidersController {
 
   @Post('overrides')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async setOverride(
     @CurrentOps() ops: OpsContext,
@@ -250,6 +254,7 @@ export class OpsProvidersController {
 
   @Post('overrides/remove')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async removeOverride(
     @CurrentOps() ops: OpsContext,
@@ -271,6 +276,7 @@ export class OpsProvidersController {
   /** The address goes in the body so it stays out of access logs. */
   @Post('suppressions/lookup')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('private.view')
   async lookupSuppression(
     @CurrentOps() ops: OpsContext,
@@ -302,6 +308,7 @@ export class OpsProvidersController {
 
   @Post('suppressions/remove')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async removeAddressSuppression(
     @CurrentOps() ops: OpsContext,

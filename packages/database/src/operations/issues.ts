@@ -31,6 +31,7 @@ const EVENT_KINDS: Record<string, IssueKind> = {
   'payout.failed': 'payout_failed',
   'payout.conflict': 'payout_conflict',
   'provider_event.conflict': 'provider_event_conflict',
+  'ops.acted_alone': 'staff_acted_alone',
 };
 export const ISSUE_EVENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(EVENT_KINDS),
@@ -57,6 +58,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   pending_recovery: 'account',
   message_reported: 'account',
   profile_reported: 'account',
+  staff_acted_alone: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -101,6 +103,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `${page} reported a supporter’s message. Reveal it (with a reason) to review it.`;
     case 'profile_reported':
       return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
+    case 'staff_acted_alone':
+      return 'A staff member took a serious action without a second person, because none was available.';
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
@@ -208,6 +212,15 @@ export async function openIssue(
   return { id: existing.id, opened: false };
 }
 
+/** Our own names and ids only, and checked, so the note can't carry anything else. */
+function actedAloneNote(payload: Record<string, unknown>): string {
+  const action =
+    typeof payload.action === 'string' && /^[a-z_.]{1,60}$/.test(payload.action)
+      ? payload.action
+      : 'unknown';
+  return `Action: ${action}. Staff member: ${idOf(payload.requestedBy) ?? 'unknown'}. The audit log has the reason.`;
+}
+
 /** One issue per outbox alert, keyed by the alert's dedupe key, so redelivery changes nothing. */
 export function openIssueFromEvent(
   db: Database,
@@ -238,6 +251,9 @@ export function openIssueFromEvent(
           ? {
               note: 'It says the withdrawal was paid after TipMe recorded it as failed.',
             }
+          : {}),
+        ...(input.eventType === 'ops.acted_alone'
+          ? { note: actedAloneNote(payload) }
           : {}),
       })
     ).opened

@@ -55,6 +55,7 @@ import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { uuidParam } from './actions.controller.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 /**
@@ -76,6 +77,7 @@ export class OpsStaffController {
 
   @Post()
   @HttpCode(201)
+  @FreshCode()
   @OpsPermission('staff.manage')
   async addPerson(
     @CurrentOps() ops: OpsContext,
@@ -92,6 +94,7 @@ export class OpsStaffController {
 
   @Post(':userId/remove')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('staff.manage')
   async removePerson(
     @CurrentOps() ops: OpsContext,
@@ -109,6 +112,7 @@ export class OpsStaffController {
 
   @Post(':userId/resend-invitation')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('staff.manage')
   async resendPersonInvitation(
     @CurrentOps() ops: OpsContext,
@@ -127,6 +131,7 @@ export class OpsStaffController {
 
   @Post(':userId/reset-authenticator')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('staff.manage')
   async resetPersonAuthenticator(
     @CurrentOps() ops: OpsContext,
@@ -151,6 +156,7 @@ export class OpsStaffController {
 
   @Post('roles')
   @HttpCode(201)
+  @FreshCode()
   @OpsPermission('staff.manage')
   async create(
     @CurrentOps() ops: OpsContext,
@@ -166,6 +172,7 @@ export class OpsStaffController {
   }
 
   @Patch('roles/:roleId')
+  @FreshCode()
   @OpsPermission('staff.manage')
   async update(
     @CurrentOps() ops: OpsContext,
@@ -205,6 +212,7 @@ export class OpsStaffController {
 
   @Post('roles/:roleId/delete')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('staff.manage')
   async remove(
     @CurrentOps() ops: OpsContext,
@@ -230,6 +238,7 @@ export class OpsStaffController {
   }
 
   @Put(':userId/access')
+  @FreshCode()
   @OpsPermission('staff.manage')
   async setAccess(
     @CurrentOps() ops: OpsContext,
@@ -247,6 +256,7 @@ export class OpsStaffController {
   }
 
   @Put(':userId/role')
+  @FreshCode()
   @OpsPermission('staff.manage')
   async setRole(
     @CurrentOps() ops: OpsContext,

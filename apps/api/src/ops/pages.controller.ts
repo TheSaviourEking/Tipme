@@ -30,6 +30,7 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -58,6 +59,7 @@ export class OpsPagesController {
 
   @Post(':profileId/plan')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('pages.plan')
   async plan(
     @CurrentOps() ops: OpsContext,
@@ -92,6 +94,7 @@ export class OpsPagesController {
 
   @Post(':profileId/fee')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('fees.manage')
   async fee(
     @CurrentOps() ops: OpsContext,
@@ -112,6 +115,7 @@ export class OpsPagesController {
 
   @Post(':profileId/fee-free')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('fees.manage')
   async feeFree(
     @CurrentOps() ops: OpsContext,

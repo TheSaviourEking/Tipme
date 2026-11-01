@@ -38,6 +38,8 @@ import { newId } from './ids.js';
 import { addressHmac, enqueueMail, type MailSealing } from './mail-queue.js';
 import {
   assertNotLastOwner,
+  canonicalId,
+  checkedReason,
   clearOverrides,
   composeAccess,
   dropOpsAccess,
@@ -45,7 +47,6 @@ import {
   ignoresAdjustments,
   issueEnrolment,
   lockStaffAdmin,
-  looksLikeAuditChange,
   readOverrides,
   readRolePermissions,
   readStaffAccess,
@@ -91,21 +92,6 @@ const without = (
   from: Iterable<string>,
   remove: { has(value: string): boolean },
 ): string[] => [...from].filter((value) => !remove.has(value)).sort();
-
-function checkedReason(reason: string): string {
-  const trimmed = reason.trim();
-  if (
-    trimmed.length < 10 ||
-    trimmed.length > 500 ||
-    looksLikeAuditChange(trimmed)
-  )
-    throw new OperationError('INVALID_INPUT');
-  return trimmed;
-}
-
-/** Postgres reads a uuid in any case, so every comparison and record uses this one form. */
-const canonicalId = (id: string): string | null =>
-  UUID.test(id) ? id.toLowerCase() : null;
 
 function checkedName(name: string): string {
   const trimmed = name.trim();

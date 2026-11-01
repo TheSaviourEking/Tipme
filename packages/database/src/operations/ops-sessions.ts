@@ -9,6 +9,8 @@ import { checkStaffCode, isActiveStaff, staffPermissions } from './staff.js';
 
 export const OPS_GRANT_TTL_MS = 12 * 60 * 60 * 1000;
 export const OPS_GRANT_IDLE_MS = 60 * 60 * 1000;
+/** One code covers sensitive actions in that grant for this long. */
+export const FRESH_CODE_WINDOW_MS = 5 * 60 * 1000;
 
 const hashToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');
@@ -68,6 +70,8 @@ async function insertGrant(
     createdAt: now,
     lastSeenAt: now,
     expiresAt,
+    // Opening a grant always takes a code.
+    lastTotpAt: now,
   });
   await recordAudit(tx, {
     staffUserId: userId,
@@ -124,12 +128,20 @@ export function confirmEnrolmentAndOpenGrant(
 export function resolveOpsGrant(
   db: Database,
   input: { token: string; sessionId: string; now?: Date },
-): Promise<{ userId: string; permissions: Set<string> } | null> {
+): Promise<{
+  userId: string;
+  permissions: Set<string>;
+  lastTotpAt: Date | null;
+} | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(input.token)) return Promise.resolve(null);
   const now = input.now ?? new Date();
   return guarded(async () => {
     const [row] = await db
-      .select({ id: opsSessions.id, userId: opsSessions.userId })
+      .select({
+        id: opsSessions.id,
+        userId: opsSessions.userId,
+        lastTotpAt: opsSessions.lastTotpAt,
+      })
       .from(opsSessions)
       .innerJoin(sessions, eq(sessions.id, opsSessions.sessionId))
       .where(
@@ -153,7 +165,7 @@ export function resolveOpsGrant(
       .update(opsSessions)
       .set({ lastSeenAt: now })
       .where(eq(opsSessions.id, row.id));
-    return { userId: row.userId, permissions };
+    return { userId: row.userId, permissions, lastTotpAt: row.lastTotpAt };
   });
 }
 

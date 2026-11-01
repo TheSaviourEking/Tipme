@@ -18,6 +18,7 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -33,6 +34,7 @@ export class OpsAccountRecoveryController {
 
   @Post(':userId/email-recovery')
   @HttpCode(202)
+  @FreshCode()
   @OpsPermission('recoveries.manage')
   async startEmailRecovery(
     @CurrentOps() ops: OpsContext,

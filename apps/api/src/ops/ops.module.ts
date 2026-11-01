@@ -16,6 +16,7 @@ import { OpsStaffController } from './staff.controller.js';
 import { MailModule } from '../mail/mail.module.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
+import { FreshCodeGuard } from './fresh-code.guard.js';
 import { OpsGuard, StaffGuard } from './ops.guard.js';
 
 /** The staff admin area (PR-009). */
@@ -35,6 +36,6 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsEmailConsoleController,
     OpsAccountRecoveryController,
   ],
-  providers: [CsrfGuard, RateLimitGuard, StaffGuard, OpsGuard],
+  providers: [CsrfGuard, RateLimitGuard, StaffGuard, OpsGuard, FreshCodeGuard],
 })
 export class OpsModule {}

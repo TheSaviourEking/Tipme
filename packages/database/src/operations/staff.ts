@@ -356,6 +356,24 @@ export const withAuditChange = (reason: string, change: object): string =>
 export const looksLikeAuditChange = (text: string): boolean =>
   text.normalize('NFKC').toLowerCase().includes(AUDIT_CHANGE_MARKER);
 
+/** A person's written reason, for a staff change or a serious action. */
+export function checkedReason(reason: string): string {
+  const trimmed = typeof reason === 'string' ? reason.trim() : '';
+  if (
+    trimmed.length < 10 ||
+    trimmed.length > 500 ||
+    looksLikeAuditChange(trimmed)
+  )
+    throw new OperationError('INVALID_INPUT');
+  return trimmed;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Postgres reads a uuid in any case, so every comparison and record uses this one form. */
+export const canonicalId = (id: string): string | null =>
+  UUID.test(id) ? id.toLowerCase() : null;
+
 export interface StaffAccess {
   roleId: string;
   permissions: Set<string>;

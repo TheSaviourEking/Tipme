@@ -36,6 +36,7 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { LOGGER } from '../tokens.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 /**
@@ -67,6 +68,7 @@ export class OpsPayoutIssuesController {
 
   @Post('payout-read')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payouts.resolve')
   async read(
     @CurrentOps() ops: OpsContext,
@@ -79,6 +81,7 @@ export class OpsPayoutIssuesController {
 
   @Post('payout-apply')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payouts.resolve')
   async apply(
     @CurrentOps() ops: OpsContext,
@@ -97,6 +100,7 @@ export class OpsPayoutIssuesController {
 
   @Post('payout-resume')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payouts.resolve')
   async resume(
     @CurrentOps() ops: OpsContext,
@@ -113,6 +117,7 @@ export class OpsPayoutIssuesController {
 
   @Post('payout-mark-failed')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payouts.resolve')
   async markFailed(
     @CurrentOps() ops: OpsContext,

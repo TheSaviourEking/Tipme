@@ -21,6 +21,7 @@ export interface OpsContext {
   userId: string;
   sessionId: string;
   permissions: Set<string>;
+  lastTotpAt: Date | null;
 }
 export type OpsRequest = Request & { auth?: AuthContext; ops?: OpsContext };
 

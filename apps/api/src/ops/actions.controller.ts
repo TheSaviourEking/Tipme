@@ -56,6 +56,7 @@ import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { LOGGER } from '../tokens.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { MailSealing } from '@tipme/database';
@@ -171,6 +172,7 @@ export class OpsActionsController {
   /** Verifies a dashboard-found checkout before linking it; unknown/mismatched IDs stay unlinked. */
   @Post('bachs/checkout-recovery')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payments.repair')
   async recoverBachsCheckout(
     @CurrentOps() ops: OpsContext,
@@ -328,6 +330,7 @@ export class OpsActionsController {
    */
   @Post('bachs/fee-bearer-confirmation')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payments.repair')
   async confirmBachsFeeBearer(
     @CurrentOps() ops: OpsContext,
@@ -429,6 +432,7 @@ export class OpsActionsController {
 
   @Post('bachs/account-recovery')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payments.repair')
   async recoverBachsAccount(
     @CurrentOps() ops: OpsContext,

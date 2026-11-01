@@ -41,6 +41,7 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -136,6 +137,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('messages/:id/timeline')
+  @FreshCode()
   @OpsPermission('email.read')
   async timeline(
     @Param('id') id: string,
@@ -146,6 +148,7 @@ export class OpsEmailConsoleController {
 
   /** The email as sent, with personal links removed. Security email is never shown. */
   @Get('messages/:id/content')
+  @FreshCode()
   @OpsPermission('email.read')
   async content(
     @CurrentOps() ops: OpsContext,
@@ -163,6 +166,7 @@ export class OpsEmailConsoleController {
 
   @Post('messages/:id/reveal-recipient')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('private.view')
   async revealRecipient(
     @CurrentOps() ops: OpsContext,
@@ -180,6 +184,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('export.csv')
+  @FreshCode()
   @OpsPermission('email.export')
   async exportCsv(
     @CurrentOps() ops: OpsContext,
