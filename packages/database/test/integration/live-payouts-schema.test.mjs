@@ -156,6 +156,22 @@ test('live payouts schema: constraints', async (t) => {
       );
     for (const reason of ['reversal', 'in_debt', 'unexpected_payout'])
       await hold(reason);
+    // released_by only goes with released_at.
+    const heldId = randomUUID();
+    await q(
+      `INSERT INTO withdrawal_holds (id, profile_id, reason, issue_id) VALUES ($1, $2, 'reversal', $3)`,
+      [heldId, ADA, issueId],
+    );
+    await refuses('withdrawal_holds_release', () =>
+      q(`UPDATE withdrawal_holds SET released_by = $2 WHERE id = $1`, [
+        heldId,
+        randomUUID(),
+      ]),
+    );
+    await q(
+      `UPDATE withdrawal_holds SET released_at = now(), released_by = $2 WHERE id = $1`,
+      [heldId, randomUUID()],
+    );
     await refuses('withdrawal_holds_reason', () => hold('because'));
     await refuses('withdrawal_holds_issue_id_issues_id_fk', () =>
       hold('reversal', randomUUID()),
@@ -180,14 +196,15 @@ test('live payouts schema: constraints', async (t) => {
         account: 'acct_1',
         provider: 'bachs',
         amount: 500,
+        currency: 'NGN',
         transfer: `tr-${randomUUID()}`,
         ...overrides,
       };
       return q(
         `INSERT INTO provider_fee_credits
-           (account_reference, provider, amount_minor, transfer_reference, payout_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [v.account, v.provider, v.amount, v.transfer, payoutId],
+           (account_reference, provider, amount_minor, transfer_reference, payout_id, currency)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [v.account, v.provider, v.amount, v.transfer, payoutId, v.currency],
       );
     };
     await credit({ transfer: 'tr-one' });
@@ -197,6 +214,9 @@ test('live payouts schema: constraints', async (t) => {
     await refuses('provider_fee_credits_provider', () =>
       credit({ provider: 'bachs-live' }),
     );
+    await refuses('provider_fee_credits_currency_iso', () =>
+      credit({ currency: 'ngn' }),
+    );
     await refuses('provider_fee_credits_amount_positive', () =>
       credit({ amount: 0 }),
     );
@@ -205,6 +225,35 @@ test('live payouts schema: constraints', async (t) => {
     ).rows[0];
     assert.equal(row.used_by_payout_id, null);
     assert.ok(row.created_at);
+
+    // A credit is spent once: the first spend works, any later change is refused.
+    const spender = await payout();
+    const other = await payout();
+    const spend = (by) =>
+      q(
+        `UPDATE provider_fee_credits SET used_by_payout_id = $1 WHERE transfer_reference = 'tr-one'`,
+        [by],
+      );
+    await spend(spender);
+    await assert.rejects(() => spend(other), /spent/);
+    await assert.rejects(() => spend(null), /spent/);
+    await spend(spender); // writing the same value again changes nothing
+    // A spend by a payout in another currency is refused.
+    await credit({ transfer: 'tr-two' });
+    const usd = randomUUID();
+    await q(
+      `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)
+       VALUES ($1, $2, 'USD', 1000, 'REQUESTED', $3, 'f')`,
+      [usd, ADA, `k-${usd}`],
+    );
+    await assert.rejects(
+      () =>
+        q(
+          `UPDATE provider_fee_credits SET used_by_payout_id = $1 WHERE transfer_reference = 'tr-two'`,
+          [usd],
+        ),
+      /currency/,
+    );
   });
 
   await t.test('issues: new kinds and resolution outcomes', async () => {

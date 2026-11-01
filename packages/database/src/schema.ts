@@ -1052,6 +1052,10 @@ export const withdrawalHolds = pgTable(
       'withdrawal_holds_reason',
       sql`reason IN ('reversal', 'in_debt', 'unexpected_payout')`,
     ),
+    check(
+      'withdrawal_holds_release',
+      sql`released_by IS NULL OR released_at IS NOT NULL`,
+    ),
     index('withdrawal_holds_active')
       .on(table.profileId)
       .where(sql`released_at IS NULL`),
@@ -1064,6 +1068,7 @@ export const providerFeeCredits = pgTable(
   {
     accountReference: text('account_reference').notNull(),
     provider: text('provider').notNull(),
+    currency: currency(),
     amountMinor: minor('amount_minor').notNull(),
     transferReference: text('transfer_reference').primaryKey(),
     payoutId: uuid('payout_id')
@@ -1073,6 +1078,7 @@ export const providerFeeCredits = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    currencyCheck('provider_fee_credits'),
     check('provider_fee_credits_amount_positive', sql`amount_minor > 0`),
     check('provider_fee_credits_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
     index('provider_fee_credits_unspent')

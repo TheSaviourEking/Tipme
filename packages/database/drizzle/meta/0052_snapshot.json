@@ -1,5 +1,5 @@
 {
-  "id": "fc50cc7d-b177-4cff-827e-7e2f8b15fdd7",
+  "id": "915f54bc-a0fe-41c3-82d6-65118254f7e2",
   "prevId": "eca02865-b1ec-472c-97c7-8e083885c79e",
   "version": "7",
   "dialect": "postgresql",
@@ -4083,6 +4083,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "currency": {
+          "name": "currency",
+          "type": "char(3)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "amount_minor": {
           "name": "amount_minor",
           "type": "bigint",
@@ -4163,6 +4169,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "provider_fee_credits_currency_iso": {
+          "name": "provider_fee_credits_currency_iso",
+          "value": "currency ~ '^[A-Z]{3}$'"
+        },
         "provider_fee_credits_amount_positive": {
           "name": "provider_fee_credits_amount_positive",
           "value": "amount_minor > 0"
@@ -5958,6 +5968,10 @@
         "withdrawal_holds_reason": {
           "name": "withdrawal_holds_reason",
           "value": "reason IN ('reversal', 'in_debt', 'unexpected_payout')"
+        },
+        "withdrawal_holds_release": {
+          "name": "withdrawal_holds_release",
+          "value": "released_by IS NULL OR released_at IS NOT NULL"
         }
       },
       "isRLSEnabled": false
