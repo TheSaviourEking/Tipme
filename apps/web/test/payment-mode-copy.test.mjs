@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paymentModeCopy } from '../src/lib/payment-mode-copy.ts';
+import {
+  HOME_DESCRIPTION,
+  SITE_DESCRIPTION,
+  paymentModeCopy,
+} from '../src/lib/payment-mode-copy.ts';
 
-const testWords = /test|sandbox|no real money/i;
+const testWords =
+  /test|sandbox|no real money|not a promise of payment|non-transactional/i;
 
 // Closed and live copies run Bachs live: no page there may call it a test.
 for (const mode of ['closed', 'live']) {
@@ -54,4 +59,19 @@ test('only test and live copies show a pay button', () => {
   assert.equal(paymentModeCopy('live').payable, true);
   assert.equal(paymentModeCopy('live').formBadge, null);
   assert.equal(paymentModeCopy('live').receiptBanner, null);
+});
+
+test('metadata shown in every mode never claims a test or a preview without payments', () => {
+  assert.doesNotMatch(SITE_DESCRIPTION, testWords);
+  assert.doesNotMatch(HOME_DESCRIPTION, testWords);
+});
+
+// /about-preview, the demo pay form and demo links describe a test copy: reachable only there.
+test('preview pages and the demo pay form are for test copies only', () => {
+  assert.equal(paymentModeCopy('test').previewPages, true);
+  assert.equal(paymentModeCopy('test').homeDemo, 'form');
+  for (const mode of ['closed', 'live'])
+    assert.equal(paymentModeCopy(mode).previewPages, false, mode);
+  assert.equal(paymentModeCopy('closed').homeDemo, 'closed');
+  assert.equal(paymentModeCopy('live').homeDemo, 'example');
 });

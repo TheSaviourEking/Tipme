@@ -6,6 +6,13 @@ import type { PaymentMode } from './payment-mode';
 export type PaymentModeCopy = {
   /** Whether a supporter can pay: false hides the tip form and its pay button. */
   payable: boolean;
+  /** /about-preview and links to the fictional demo page: they describe a test copy only. */
+  previewPages: boolean;
+  /** The home page's panel beside fictional Ada: a working form only where no money is real. */
+  homeDemo: 'form' | 'closed' | 'example';
+  homeDemoCaption: string;
+  homeExampleTitle: string;
+  homeExampleBody: string;
   closedTitle: string;
   closedBody: string;
   formBadge: string | null;
@@ -35,9 +42,23 @@ const SIGN_UP =
 const CLARITY =
   'You see the full cost and what the person receives before you pay.';
 const PAY_STEP = 'Review the full amount and what they receive, then pay.';
+const EXAMPLE_TITLE = 'Tip the people you know';
+const EXAMPLE_BODY =
+  'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to thank.';
+
+/** Page descriptions prerendered for every mode, so they hold in all three. */
+export const SITE_DESCRIPTION =
+  'An appreciation-first way to recognize the people who make a difference.';
+export const HOME_DESCRIPTION =
+  'For the people who make your day, your work, your world a little better.';
 
 const TEST: PaymentModeCopy = {
   payable: true,
+  previewPages: true,
+  homeDemo: 'form',
+  homeDemoCaption: 'A fictional demo recipient. Go on, try the feeling.',
+  homeExampleTitle: EXAMPLE_TITLE,
+  homeExampleBody: EXAMPLE_BODY,
   closedTitle: CLOSED_TITLE,
   closedBody: CLOSED_BODY,
   formBadge: 'Test payments',
@@ -66,6 +87,11 @@ const TEST: PaymentModeCopy = {
 
 const LIVE: PaymentModeCopy = {
   payable: true,
+  previewPages: false,
+  homeDemo: 'example',
+  homeDemoCaption: 'A fictional demo recipient.',
+  homeExampleTitle: EXAMPLE_TITLE,
+  homeExampleBody: EXAMPLE_BODY,
   closedTitle: CLOSED_TITLE,
   closedBody: CLOSED_BODY,
   formBadge: null,
@@ -91,6 +117,7 @@ const LIVE: PaymentModeCopy = {
 const CLOSED: PaymentModeCopy = {
   ...LIVE,
   payable: false,
+  homeDemo: 'closed',
   profileSafety: `No account needed. ${CLOSED_TITLE}.`,
   homeRecipientNotice: `${CLOSED_TITLE}. You can create your page now.`,
   homeClarity: `${CLARITY} ${CLOSED_TITLE}.`,

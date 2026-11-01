@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthStage } from '@/components/account/auth-stage';
-import { getPaymentMode } from '@/lib/payment-mode-api';
-import { paymentModeCopy } from '@/lib/payment-mode-copy';
+import { ModeText } from '@/components/payment-mode-slot';
 import { SignUpFlow } from './sign-up-flow';
 
 export const metadata: Metadata = {
@@ -9,12 +8,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function SignUpPage() {
-  const copy = paymentModeCopy(await getPaymentMode());
+export default function SignUpPage() {
   return (
     <AuthStage
       title="Your page, in a minute."
-      lede={copy.signUpLede}
+      lede={<ModeText pick="signUpLede" />}
       promises={[
         'No card or bank details to start',
         'Your email stays private',

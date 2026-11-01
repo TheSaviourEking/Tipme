@@ -4,8 +4,7 @@ import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
 import { WebVitalsReporter } from '@/components/web-vitals-reporter';
-import { PaymentModeProvider } from '@/components/payment-mode-context';
-import { getPaymentMode } from '@/lib/payment-mode-api';
+import { SITE_DESCRIPTION } from '@/lib/payment-mode-copy';
 import '@tipme/ui/tokens.css';
 import '@tipme/ui/components.css';
 import './globals.css';
@@ -34,14 +33,12 @@ export const metadata: Metadata = {
     default: 'TipMe — A little thanks goes a long way',
     template: '%s | TipMe',
   },
-  description:
-    'An appreciation-first way to recognize the people who make a difference. Explore the non-transactional TipMe preview.',
+  description: SITE_DESCRIPTION,
   robots: { index: false, follow: false },
 };
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const mode = await getPaymentMode();
   return (
     // Font variables must be on <html>: the :root tokens in @tipme/ui resolve them there.
     <html lang="en" className={`${manrope.variable} ${dmSerif.variable}`}>
@@ -50,8 +47,8 @@ export default async function RootLayout({
           Skip to content
         </a>
         <Navigation />
-        <PaymentModeProvider mode={mode}>{children}</PaymentModeProvider>
-        <Footer mode={mode} />
+        {children}
+        <Footer />
         <WebVitalsReporter />
       </body>
     </html>

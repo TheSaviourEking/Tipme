@@ -19,7 +19,8 @@ import { amountOptions } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { usePaymentMode } from './payment-mode-context';
+import type { PaymentMode } from '@/lib/payment-mode';
+import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
 
 type QuoteState =
@@ -52,21 +53,8 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   return 'Something went wrong on our side. Please try again.';
 };
 
-/**
- * In place of the tip form while checkout is closed (Bachs live, live payments switched off):
- * said before a supporter chooses an amount, and no pay button anywhere.
- */
-export function TippingOpensSoon() {
-  const copy = paymentModeCopy('closed');
-  return (
-    <Card className="appreciation-card tips-not-ready">
-      <h2>{copy.closedTitle}</h2>
-      <p className="composer-description">{copy.closedBody}</p>
-    </Card>
-  );
-}
-
 export function AppreciationForm({
+  paymentMode,
   recipient,
   handle,
   compact = false,
@@ -74,6 +62,8 @@ export function AppreciationForm({
   celebration,
   tipAmounts,
 }: {
+  /** This copy's payment mode, read by the page on the server. */
+  paymentMode: PaymentMode;
   recipient: string;
   handle: string;
   /** This page's amounts (PR-012): the standard ones, or a Pro page's own. */
@@ -85,7 +75,7 @@ export function AppreciationForm({
   celebration?: { momentId: string; label: string };
 }) {
   const id = useId();
-  const copy = paymentModeCopy(usePaymentMode());
+  const copy = paymentModeCopy(paymentMode);
   // The API refused as not open (switched off since this page loaded): close the form.
   const [closed, setClosed] = useState(false);
   const options = amountOptions(tipAmounts);
@@ -274,7 +264,7 @@ export function AppreciationForm({
       </label>
     </>
   );
-  if (closed || !copy.payable) return <TippingOpensSoon />;
+  if (closed || !copy.payable) return <TippingOpensSoon announce={closed} />;
   return (
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}

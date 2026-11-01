@@ -2,10 +2,8 @@ import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Container } from '@tipme/ui';
-import {
-  AppreciationForm,
-  TippingOpensSoon,
-} from '@/components/appreciation-form';
+import { AppreciationForm } from '@/components/appreciation-form';
+import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import {
   RecipientIdentity,
@@ -79,7 +77,8 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   if ('movedTo' in profile)
     permanentRedirect(movedProfilePath(profile.movedTo, await searchParams));
   const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
-  const copy = paymentModeCopy(await getPaymentMode());
+  const mode = await getPaymentMode();
+  const copy = paymentModeCopy(mode);
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
@@ -118,6 +117,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
               <TipsNotReady recipient={firstName} />
             ) : (
               <AppreciationForm
+                paymentMode={mode}
                 recipient={firstName}
                 handle={profile.handle}
                 collapseExtras
@@ -148,7 +148,9 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           </div>
           <div className="profile-safety">
             <p>{copy.profileSafety}</p>
-            <Link href="/about-preview">Learn about this preview</Link>
+            {copy.previewPages && (
+              <Link href="/about-preview">Learn about this preview</Link>
+            )}
             <ReportPage handle={profile.handle} />
           </div>
         </section>

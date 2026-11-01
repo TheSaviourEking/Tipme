@@ -13,3 +13,37 @@ export function paymentMode(release: unknown): PaymentMode {
     return paymentsLive === true ? 'live' : 'closed';
   return 'closed';
 }
+
+/**
+ * Reads the mode at most once a minute while the API answers. A failed read (a build or cold
+ * start with no API, an outage) is closed and kept for a few seconds only, so it is never
+ * served for long; reads at the same moment share one request.
+ */
+export function createPaymentModeReader({
+  read,
+  now,
+  okMs = 60_000,
+  failedMs = 5_000,
+}: {
+  read: () => Promise<unknown>;
+  now: () => number;
+  okMs?: number;
+  failedMs?: number;
+}): () => Promise<PaymentMode> {
+  let kept: { mode: PaymentMode; until: number } | null = null;
+  let pending: Promise<PaymentMode> | null = null;
+  return () => {
+    if (kept && now() < kept.until) return Promise.resolve(kept.mode);
+    pending ??= read()
+      .then(
+        (release) => ({ mode: paymentMode(release), ms: okMs }),
+        () => ({ mode: 'closed' as const, ms: failedMs }),
+      )
+      .then(({ mode, ms }) => {
+        kept = { mode, until: now() + ms };
+        pending = null;
+        return mode;
+      });
+    return pending;
+  };
+}

@@ -1,10 +1,8 @@
 /** Marketing pieces shared by the home page and the PRD marketing routes. */
-import { getPaymentMode } from '@/lib/payment-mode-api';
-import { paymentModeCopy } from '@/lib/payment-mode-copy';
+import { ModeText } from './payment-mode-slot';
 
 /** The three steps of a tip, in order. */
-export async function HowItWorksSteps() {
-  const copy = paymentModeCopy(await getPaymentMode());
+export function HowItWorksSteps() {
   return (
     <ol className="steps">
       <li>
@@ -26,7 +24,9 @@ export async function HowItWorksSteps() {
       <li>
         <span>03</span>
         <h3>See the thought behind it.</h3>
-        <p>{copy.howItWorksPay}</p>
+        <p>
+          <ModeText pick="howItWorksPay" />
+        </p>
       </li>
     </ol>
   );

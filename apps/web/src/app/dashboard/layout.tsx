@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Container, Skeleton } from '@tipme/ui';
+import { PaymentModeScope } from '@/components/payment-mode-slot';
 import { DashboardShell } from './dashboard-shell';
 
 export const metadata: Metadata = {
@@ -24,7 +25,9 @@ export default function DashboardLayout({
         </main>
       }
     >
-      <DashboardShell>{children}</DashboardShell>
+      <PaymentModeScope>
+        <DashboardShell>{children}</DashboardShell>
+      </PaymentModeScope>
     </Suspense>
   );
 }

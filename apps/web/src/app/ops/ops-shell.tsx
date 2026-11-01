@@ -6,6 +6,7 @@ import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Skeleton } from '@tipme/ui';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
 import { PageUnavailable } from '@/components/page-unavailable';
+import { usePaymentMode } from '@/components/payment-mode-context';
 import {
   OpsAccessContext,
   PROVIDER_TEST_CONFIRM_PATH,
@@ -51,6 +52,7 @@ type State =
  */
 export function OpsShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const mode = usePaymentMode();
   const pathname = usePathname();
   const [state, setState] = useState<State>({ step: 'loading' });
 
@@ -81,7 +83,8 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
     router.replace('/dashboard');
   };
 
-  if (state.step === 'unavailable') return <PageUnavailable />;
+  if (state.step === 'unavailable')
+    return <PageUnavailable showDemo={mode === 'test'} />;
   return (
     <main id="main" tabIndex={-1} className="dashboard-page ops-page">
       <Container>

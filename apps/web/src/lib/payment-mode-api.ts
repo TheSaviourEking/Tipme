@@ -1,24 +1,27 @@
-import { cacheLife } from 'next/cache';
+import { connection } from 'next/server';
 import { API_ORIGIN } from './profiles-api';
-import { paymentMode, type PaymentMode } from './payment-mode';
+import { createPaymentModeReader, type PaymentMode } from './payment-mode';
+
+const readMode = createPaymentModeReader({
+  read: async () => {
+    const response = await fetch(`${API_ORIGIN}/health/release`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok)
+      throw new Error(`release lookup failed: ${response.status}`);
+    return ((await response.json()) as { data?: unknown }).data;
+  },
+  now: Date.now,
+});
 
 /**
  * This copy's payment mode, from the API's public /health/release (open past the preview gate).
- * Shared by every page for a minute, so pages never ask the API per request. A failure is
- * cached as 'closed' on purpose: a failed lookup that escaped the cache would leave a
- * prerendered page with no cache life, frozen at 'closed' until the next deploy.
+ * Read at request time only (never at build, where there is no API to ask), so callers render
+ * it inside a Suspense boundary (PaymentModeSlot). Each web instance asks the API at most once a
+ * minute; a failed read is closed and retried after a few seconds.
  */
 export async function getPaymentMode(): Promise<PaymentMode> {
-  'use cache';
-  cacheLife({ stale: 60, revalidate: 60, expire: 300 });
-  try {
-    const response = await fetch(`${API_ORIGIN}/health/release`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!response.ok) return 'closed';
-    const body = (await response.json()) as { data?: unknown };
-    return paymentMode(body.data);
-  } catch {
-    return 'closed';
-  }
+  await connection();
+  return readMode();
 }

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { paymentMode } from '../src/lib/payment-mode.ts';
+import {
+  createPaymentModeReader,
+  paymentMode,
+} from '../src/lib/payment-mode.ts';
 
 test('every provider and live switch maps to one payment mode', () => {
   const cases = [
@@ -30,4 +33,56 @@ test('an answer that cannot be read is closed', () => {
     { paymentProvider: 'bachs-live', paymentsLive: 'true' },
   ])
     assert.equal(paymentMode(release), 'closed', JSON.stringify(release));
+});
+
+test('a good answer is shared for a minute, a failed read for a few seconds only', async () => {
+  let clock = 0;
+  const answers = [];
+  const reads = [];
+  const read = createPaymentModeReader({
+    read: async () => {
+      reads.push(clock);
+      const next = answers.shift();
+      if (next instanceof Error) throw next;
+      return next;
+    },
+    now: () => clock,
+  });
+
+  // The build (or a cold start) cannot reach the API: closed, but only briefly.
+  answers.push(new Error('connect ECONNREFUSED'));
+  assert.equal(await read(), 'closed');
+  clock = 4_000;
+  assert.equal(await read(), 'closed');
+  assert.equal(reads.length, 1);
+  clock = 5_000;
+  answers.push({ paymentProvider: 'mock', paymentsLive: false });
+  assert.equal(await read(), 'test');
+  assert.equal(reads.length, 2);
+
+  // A good answer is reused for 60 seconds, then read again.
+  clock = 64_999;
+  assert.equal(await read(), 'test');
+  assert.equal(reads.length, 2);
+  clock = 65_000;
+  answers.push({ paymentProvider: 'bachs-live', paymentsLive: true });
+  assert.equal(await read(), 'live');
+  assert.equal(reads.length, 3);
+});
+
+test('requests at the same moment share one read', async () => {
+  let calls = 0;
+  const read = createPaymentModeReader({
+    read: async () => {
+      calls += 1;
+      return { paymentProvider: 'bachs-sandbox', paymentsLive: false };
+    },
+    now: () => 0,
+  });
+  assert.deepEqual(await Promise.all([read(), read(), read()]), [
+    'test',
+    'test',
+    'test',
+  ]);
+  assert.equal(calls, 1);
 });

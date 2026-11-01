@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TestModeOnly } from '@/components/payment-mode-slot';
 import { QuietScreen } from '@/components/quiet-screen';
 
 export default function NotFound() {
@@ -10,9 +11,11 @@ export default function NotFound() {
           <Link className="tm-button tm-button--primary" href="/">
             Go to TipMe
           </Link>
-          <Link className="text-link" href="/@ada">
-            See a demo page
-          </Link>
+          <TestModeOnly>
+            <Link className="text-link" href="/@ada">
+              See a demo page
+            </Link>
+          </TestModeOnly>
         </>
       }
     >
