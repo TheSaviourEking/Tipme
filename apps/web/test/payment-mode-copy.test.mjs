@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   HOME_DESCRIPTION,
@@ -67,6 +68,28 @@ test('metadata shown in every mode never claims a test or a preview without paym
   assert.doesNotMatch(HOME_DESCRIPTION, testWords);
   assert.doesNotMatch(SHARE_CARD_ALT, testWords);
   assert.doesNotMatch(SHARE_CARD_ALT, /preview|no real payments/i);
+});
+
+// Metadata reachable on closed and live copies: the shared site name, and /about-preview's
+// (it redirects home outside test mode, but its tags must still be neutral). Those modules need
+// the Next bundler to import, so the test reads their source.
+test('shared metadata never says preview', () => {
+  const metadata = readFileSync(
+    new URL('../src/lib/metadata.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(metadata, /siteName:\s*'TipMe'\s*[,}]/);
+  const about = readFileSync(
+    new URL('../src/app/about-preview/page.tsx', import.meta.url),
+    'utf8',
+  );
+  const start = about.indexOf('previewMetadata(') + 'previewMetadata('.length;
+  const tags = about.slice(start, about.indexOf(');', start));
+  // The path is a URL, not text a visitor reads.
+  assert.doesNotMatch(
+    tags.replace(/'\/about-preview'/, ''),
+    /preview|development/i,
+  );
 });
 
 // /about-preview, the demo pay form and demo links describe a test copy: reachable only there.

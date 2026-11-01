@@ -36,7 +36,7 @@ export function previewMetadata(
       title,
       description,
       url: path,
-      siteName: 'TipMe — development preview',
+      siteName: 'TipMe',
       type: 'website',
       images: [{ url: '/opengraph-image', type: 'image/png', ...shareCard }],
     },

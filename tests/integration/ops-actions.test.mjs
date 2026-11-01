@@ -122,7 +122,12 @@ test('resolving needs a reason; it records who resolved it and why', async () =>
   assert.equal((await call('POST', path, owner.cookie, {})).status, 400);
   const reason = 'Provider confirmed the amount by phone; nothing to book';
   assert.equal(
-    (await call('POST', path, owner.cookie, { reason })).status,
+    (
+      await call('POST', path, owner.cookie, {
+        reason,
+        outcome: 'resolved_by_provider',
+      })
+    ).status,
     200,
   );
   const resolved = await issueById(database.db, issue.id);
@@ -135,7 +140,7 @@ test('resolving needs a reason; it records who resolved it and why', async () =>
     (e) => e.action === 'issue.resolved' && e.subjectId === issue.id,
   );
   assert.equal(row.reason, reason);
-  assert.equal(row.permission, 'issues.resolve');
+  assert.equal(row.permission, 'payouts.resolve');
 
   const note = await call(
     'POST',

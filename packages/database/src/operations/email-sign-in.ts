@@ -22,7 +22,11 @@ import {
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { maskEmail, normaliseEmail } from './email-address.js';
+import {
+  emailChangedAtFor,
+  maskEmail,
+  normaliseEmail,
+} from './email-address.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
@@ -38,7 +42,8 @@ export type EmailCodePurpose =
   | 'email_change'
   | 'recovery_email'
   | 'recovery'
-  | 'recovery_new_email';
+  | 'recovery_new_email'
+  | 'payout_destination';
 
 const hmacOf = (secret: string, email: string, purpose: string, code: string) =>
   createHmac('sha256', secret)
@@ -108,6 +113,8 @@ export async function issueEmailCode(
   return 'sent';
 }
 
+export type EmailCodeCheck = 'ok' | 'invalid' | 'expired' | 'locked';
+
 /**
  * Checks a code against the latest one for the address and purpose. Wrong codes count towards a
  * 15-minute lockout after five. Must run in the caller's transaction, with whatever it unlocks.
@@ -123,7 +130,7 @@ export async function checkEmailCode(
     /** Leave a right code unspent: for checking it alongside another code. */
     keep?: boolean;
   },
-): Promise<'ok' | 'invalid' | 'expired' | 'locked'> {
+): Promise<EmailCodeCheck> {
   if (!/^\d{6}$/.test(input.code)) return 'invalid';
   if (await isLocked(tx, input.email, input.now)) return 'locked';
   const [latest] = await tx
@@ -405,6 +412,7 @@ export function changeEmail(
         .set({
           email,
           emailVerifiedAt: now,
+          emailChangedAt: emailChangedAtFor(email, now),
           // The sign-in address can't also be its own way back in.
           ...(me?.recoveryEmail?.toLowerCase() === email
             ? { recoveryEmail: null, recoveryEmailVerifiedAt: null }
@@ -483,7 +491,11 @@ export function setAccountEmail(
       if (owner && owner.id !== page.userId) return 'taken';
       await tx
         .update(users)
-        .set({ email, emailVerifiedAt: now })
+        .set({
+          email,
+          emailVerifiedAt: now,
+          emailChangedAt: emailChangedAtFor(email, now),
+        })
         .where(eq(users.id, page.userId));
       await recordAudit(tx, {
         staffUserId: null,

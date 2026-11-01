@@ -68,14 +68,39 @@ test('an unset or invalid PRODUCTION_PAYMENTS_LIVE is itself a problem', async (
   }
 });
 
-test('a low reserve is a problem; a missing reserve endpoint is not', async () => {
-  const low = await run({
+test('a low or unreadable reserve is printed, not a problem: the worker owns those alerts', async () => {
+  for (const body of [
+    { reserveLow: true, unreadable: false, stale: false },
+    { reserveLow: false, unreadable: true, stale: false },
+  ]) {
+    const notes = [];
+    const problems = await run(
+      {
+        'GET https://api.tipme.example/health/payments': {
+          status: 200,
+          body: { data: body },
+        },
+      },
+      'false',
+      { log: (m) => notes.push(m) },
+    );
+    assert.deepEqual(problems, []);
+    assert.match(
+      notes.join('\n'),
+      body.reserveLow ? /is low/i : /could not be read/i,
+    );
+  }
+});
+
+test('reserve checks that have stopped are a problem; a missing reserve endpoint is not', async () => {
+  const stopped = await run({
     'GET https://api.tipme.example/health/payments': {
       status: 200,
-      body: { data: { reserveLow: true } },
+      body: { data: { reserveLow: false, unreadable: false, stale: true } },
     },
   });
-  assert.match(low[0], /reserve is low/i);
+  assert.equal(stopped.length, 1);
+  assert.match(stopped[0], /reserve checks have stopped/i);
   const notes = [];
   const missing = await run(
     { 'GET https://api.tipme.example/health/payments': { status: 404 } },
@@ -84,6 +109,67 @@ test('a low reserve is a problem; a missing reserve endpoint is not', async () =
   );
   assert.deepEqual(missing, []);
   assert.match(notes.join('\n'), /reserve not watched yet/);
+});
+
+test('/health/payments answering 500 is a problem that names the answer, not a stopped worker', async () => {
+  const problems = await run({
+    'GET https://api.tipme.example/health/payments': { status: 500 },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /reserve status could not be read \(HTTP 500\)/);
+});
+
+test('/health/payments not answering in time is a problem, not a hang', async () => {
+  const started = Date.now();
+  const problems = await run(
+    {
+      'GET https://api.tipme.example/health/payments': (init) =>
+        new Promise((_, reject) =>
+          init.signal.addEventListener('abort', () =>
+            reject(new DOMException('timed out', 'TimeoutError')),
+          ),
+        ),
+    },
+    'false',
+    { timeoutMs: 50 },
+  );
+  assert.ok(Date.now() - started < 2000);
+  assert.equal(problems.length, 1);
+  assert.match(
+    problems[0],
+    /reserve status could not be read \(HTTP no answer/,
+  );
+});
+
+test('/health/payments answering 200 with unreadable JSON is a problem', async () => {
+  const problems = await run({
+    'GET https://api.tipme.example/health/payments': {
+      status: 200,
+      body: null,
+    },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /reserve status could not be read/);
+});
+
+test('a live state the record does not match is a problem; older APIs that do not say are not', async () => {
+  const problems = await run({
+    'GET https://api.tipme.example/health/payments': {
+      status: 200,
+      body: { data: { reserveLow: false, switchRecordMatches: false } },
+    },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /record of live payments/i);
+  assert.deepEqual(
+    await run({
+      'GET https://api.tipme.example/health/payments': {
+        status: 200,
+        body: { data: { reserveLow: false, switchRecordMatches: true } },
+      },
+    }),
+    [],
+  );
 });
 
 test('API not ready and web down are named', async () => {

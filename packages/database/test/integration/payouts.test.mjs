@@ -5,6 +5,7 @@ import {
   createPaymentIntent,
   createPayout,
   createQuote,
+  markPayoutInitiated,
   recordPayoutOutcome,
   recordProviderEvent,
   tipProof,
@@ -223,6 +224,44 @@ test('payouts and proof', async (t) => {
           })
         ).replayed,
         true,
+      );
+    },
+  );
+
+  await t.test(
+    'an adapter name is never written over the stored provider',
+    async () => {
+      await database.fresh();
+      const tip = await tipFor('ada');
+      const { payoutId } = await createPayout(database.db, {
+        profileId: ADA,
+        tipIds: [tip],
+        idempotencyKey: randomUUID(),
+      });
+      assert.equal(
+        await markPayoutInitiated(database.db, {
+          payoutId,
+          provider: 'bachs-live',
+          providerReference: `acct:${payoutId}`,
+        }),
+        'initiated',
+      );
+      const stored = async () =>
+        (await q('SELECT provider FROM payouts WHERE id = $1', [payoutId]))[0]
+          .provider;
+      assert.equal(await stored(), 'bachs');
+      await outcome(payoutId, 'paid', {
+        provider: 'bachs-sandbox',
+        providerReference: `acct:${payoutId}`,
+      });
+      assert.equal(await stored(), 'bachs');
+      assert.equal(
+        (
+          await q('SELECT provider FROM provider_events WHERE payout_id = $1', [
+            payoutId,
+          ])
+        )[0].provider,
+        'bachs',
       );
     },
   );

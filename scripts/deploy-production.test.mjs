@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  appendFileSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -462,6 +470,312 @@ test('production preflight refuses a missing CA file, database URL, confirm name
       assert.ok(!result.stderr.includes(value), 'a setting value was printed');
     assert.equal(composeCalls(read).length, 0, 'nothing ran');
   }
+});
+
+test('with payments on, a missing or plain-http alert address stops the deploy before anything runs', () => {
+  const secret = 'http://hooks.example.test/T0/B0/very-secret-token';
+  for (const [env, message] of [
+    [{ PAYMENTS_LIVE_ENABLED: 'true' }, /ALERT_WEBHOOK_URL is required/],
+    [
+      { PAYMENTS_LIVE_ENABLED: 'true', ALERT_WEBHOOK_URL: '' },
+      /ALERT_WEBHOOK_URL is required/,
+    ],
+    [
+      { PAYMENTS_LIVE_ENABLED: 'true', ALERT_WEBHOOK_URL: secret },
+      /ALERT_WEBHOOK_URL must be https/,
+    ],
+  ]) {
+    const { run, read, ship } = stageProduction({ env });
+    ship(A);
+    const result = run('deploy-production.sh', [A, 'true']);
+    assert.equal(result.status, 2, JSON.stringify(env));
+    assert.match(result.stderr, message);
+    assert.ok(!result.stderr.includes('very-secret-token'));
+    assert.equal(composeCalls(read).length, 0, 'nothing ran');
+  }
+});
+
+test('the alert address does not stop a deploy with payments off, or one that has it', () => {
+  for (const env of [
+    {},
+    { PAYMENTS_LIVE_ENABLED: 'false' },
+    {
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+    },
+  ]) {
+    const { run, ship } = stageProduction({ env });
+    ship(A);
+    const result = run(
+      'deploy-production.sh',
+      env.PAYMENTS_LIVE_ENABLED === 'true' ? [A, 'true'] : [A],
+    );
+    assert.equal(result.status, 0, result.stderr);
+  }
+});
+
+// Each of these reaches the app as true under Compose's own parsing (see the check below), so a
+// preflight that read them differently would let a live deploy past its checks.
+const UNCLEAR_SWITCH = [
+  'PAYMENTS_LIVE_ENABLED="true"',
+  "PAYMENTS_LIVE_ENABLED='true'",
+  'PAYMENTS_LIVE_ENABLED=false\nPAYMENTS_LIVE_ENABLED=true',
+  'PAYMENTS_LIVE_ENABLED=true\nPAYMENTS_LIVE_ENABLED=true',
+  'PAYMENTS_LIVE_ENABLED=true # switched',
+  'PAYMENTS_LIVE_ENABLED=true ',
+  'export PAYMENTS_LIVE_ENABLED=true',
+  'PAYMENTS_LIVE_ENABLED: true',
+  'PAYMENTS_LIVE_ENABLED:true',
+  'export PAYMENTS_LIVE_ENABLED: true',
+  'PAYMENTS_LIVE_ENABLED=false\nPAYMENTS_LIVE_ENABLED: true',
+];
+
+const withLines = (home, lines) =>
+  appendFileSync(join(home, 'production.env'), `${lines}\n`);
+
+test('the switch must be written exactly true or false, once: anything else stops the deploy', () => {
+  for (const lines of [
+    ...UNCLEAR_SWITCH,
+    'PAYMENTS_LIVE_ENABLED=',
+    'PAYMENTS_LIVE_ENABLED=TRUE',
+    'PAYMENTS_LIVE_ENABLED=1',
+    'PAYMENTS_LIVE_ENABLED=false # not yet',
+    'PAYMENTS_LIVE_ENABLED',
+    'PAYMENTS_LIVE_ENABLED = true',
+    'PAYMENTS_LIVE_ENABLED=true\r',
+  ]) {
+    // Either way: a line the preflight misreads as absent would pass a deploy expecting false.
+    for (const expected of ['true', 'false']) {
+      const { run, read, ship, home } = stageProduction({
+        env: { ALERT_WEBHOOK_URL: 'https://hooks.example.test/x' },
+      });
+      ship(A);
+      withLines(home, lines);
+      const result = run('deploy-production.sh', [A, expected]);
+      assert.equal(result.status, 2, `${lines} expecting ${expected}`);
+      assert.match(result.stderr, /PAYMENTS_LIVE_ENABLED/, lines);
+      assert.equal(composeCalls(read).length, 0, `nothing ran: ${lines}`);
+    }
+  }
+});
+
+test('the alert address must be there once: a duplicate stops a live deploy', () => {
+  const { run, read, ship, home } = stageProduction({
+    env: { PAYMENTS_LIVE_ENABLED: 'true' },
+  });
+  ship(A);
+  withLines(
+    home,
+    'ALERT_WEBHOOK_URL=https://hooks.example.test/a\nALERT_WEBHOOK_URL=',
+  );
+  const result = run('deploy-production.sh', [A, 'true']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /ALERT_WEBHOOK_URL/);
+  assert.equal(composeCalls(read).length, 0);
+});
+
+test(
+  'what the preflight refuses, real Compose reads as true: the reason for the rule',
+  { skip: spawnSync('docker', ['compose', 'version']).status !== 0 },
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tipme-compose-env-'));
+    const file = join(dir, 'compose.yml');
+    writeFileSync(
+      file,
+      'services:\n  x:\n    image: none\n    environment:\n      LIVE: ${PAYMENTS_LIVE_ENABLED:-false}\n',
+    );
+    for (const lines of UNCLEAR_SWITCH) {
+      const env = join(dir, 'test.env');
+      writeFileSync(env, `${lines}\n`);
+      const out = spawnSync(
+        'docker',
+        ['compose', '-f', file, '--env-file', env, 'config'],
+        { encoding: 'utf8' },
+      );
+      assert.equal(out.status, 0, out.stderr);
+      assert.match(out.stdout, /LIVE: "?true"?/, lines);
+    }
+  },
+);
+
+test('the deploy compares the switch with what it was told to expect, before any colour starts', () => {
+  const alert = { ALERT_WEBHOOK_URL: 'https://hooks.example.test/x' };
+  const cases = [
+    // [env file, deploy argument, stops]
+    ['true', undefined, true],
+    ['true', 'false', true],
+    ['false', 'true', true],
+    [undefined, 'true', true],
+    ['true', 'maybe', true],
+    ['false', undefined, false],
+    [undefined, undefined, false],
+    ['false', 'false', false],
+    [undefined, 'false', false],
+    ['true', 'true', false],
+  ];
+  for (const [value, expected, stops] of cases) {
+    const { run, read, ship } = stageProduction({
+      env: { ...alert, PAYMENTS_LIVE_ENABLED: value },
+    });
+    ship(A);
+    const result = run(
+      'deploy-production.sh',
+      expected === undefined ? [A] : [A, expected],
+    );
+    const label = JSON.stringify({ value, expected });
+    assert.equal(result.status, stops ? 2 : 0, `${label} ${result.stderr}`);
+    if (stops) {
+      assert.match(result.stderr, /live|PAYMENTS_LIVE_ENABLED/i, label);
+      assert.equal(composeCalls(read).length, 0, label);
+    }
+  }
+});
+
+test('a comment naming the switch, or a longer name holding it, is not a line that sets it', () => {
+  for (const lines of [
+    '# PAYMENTS_LIVE_ENABLED=true',
+    '  # PAYMENTS_LIVE_ENABLED: true',
+    'OLD_PAYMENTS_LIVE_ENABLED=true',
+    'PAYMENTS_LIVE_ENABLED_NOTE=true',
+  ]) {
+    const { run, ship, home } = stageProduction();
+    ship(A);
+    withLines(home, lines);
+    assert.equal(run('deploy-production.sh', [A]).status, 0, lines);
+  }
+});
+
+test('the alert address counts colon lines as duplicates too', () => {
+  const { run, ship, home } = stageProduction({
+    env: {
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/x',
+    },
+  });
+  ship(A);
+  withLines(home, 'ALERT_WEBHOOK_URL: https://elsewhere.example.test/y');
+  const result = run('deploy-production.sh', [A, 'true']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /ALERT_WEBHOOK_URL is set more than once/);
+  assert.doesNotMatch(result.stderr, /elsewhere|hooks\.example/);
+});
+
+test('the deploy also asks Compose what it read, and stops before anything starts if that differs', () => {
+  for (const [said, why] of [
+    ['true', 'Compose reads something else'],
+    ['true\n      PAYMENTS_LIVE_ENABLED: "false"', 'colours disagree'],
+    ['', 'Compose reads nothing for it'],
+  ]) {
+    const { run, read, ship } = stageProduction();
+    ship(A);
+    const result = run('deploy-production.sh', [A], {
+      FAKE_COMPOSE_LIVE: said,
+    });
+    assert.equal(result.status, 2, why);
+    assert.match(result.stderr, /Compose/, why);
+    assert.deepEqual(
+      composeCalls(read).filter((l) => !/ config\b/.test(l)),
+      [],
+      `nothing ran: ${why}`,
+    );
+  }
+  const { run, read, ship } = stageProduction();
+  ship(A);
+  assert.equal(
+    run('deploy-production.sh', [A], { FAKE_COMPOSE_FAILS: '1' }).status,
+    2,
+  );
+  assert.deepEqual(
+    composeCalls(read).filter((l) => !/ config\b/.test(l)),
+    [],
+  );
+});
+
+test('a Compose failure or its config output never reaches the deploy log', () => {
+  const { run, ship } = stageProduction();
+  ship(A);
+  const result = run('deploy-production.sh', [A], {
+    FAKE_COMPOSE_FAILS: '1',
+    FAKE_COMPOSE_NOISE: 'postgres://runtime:dummy-runtime-url@db.example.test',
+  });
+  assert.equal(result.status, 2);
+  assert.doesNotMatch(result.stdout + result.stderr, /dummy-runtime-url/);
+});
+
+test(
+  'with real Compose and nothing started: agrees on a plain line, and catches the shell overriding the file',
+  { skip: spawnSync('docker', ['compose', 'version']).status !== 0 },
+  () => {
+    const home = mkdtempSync(join(tmpdir(), 'tipme-compose-live-'));
+    mkdirSync(join(home, 'releases', A), { recursive: true });
+    copyFileSync(
+      join(import.meta.dirname, '..', 'deploy', 'compose.production.yml'),
+      join(home, 'releases', A, 'compose.production.yml'),
+    );
+    // Dummies for everything the real file demands, so only the switch is being tested.
+    const required = [
+      'API_HOST',
+      'AUTH_CODE_SECRET',
+      'DATABASE_ADMIN_URL',
+      'DATABASE_URL',
+      'MAIL_DEFAULT_PROVIDER',
+      'MAIL_FROM_DOMAIN',
+      'MAIL_SEAL_KEY',
+      'MIGRATION_DATABASE_URL',
+      'OPS_TOTP_KEY',
+      'PAYMENT_PROVIDER',
+      'POSTGRES_BACKUP_PASSWORD',
+      'POSTGRES_MIGRATOR_PASSWORD',
+      'POSTGRES_RUNTIME_PASSWORD',
+      'STATUS_TOKEN_SECRET',
+      'WEB_ORIGIN',
+      'WEB_REVALIDATE_SECRET',
+    ];
+    writeFileSync(
+      join(home, 'production.env'),
+      `${required.map((name) => `${name}=dummy`).join('\n')}\nPAYMENTS_LIVE_ENABLED=false\n`,
+    );
+    const lib = join(import.meta.dirname, '..', 'deploy', 'scripts', 'lib.sh');
+    const check = (extra = {}) =>
+      spawnSync(
+        'bash',
+        ['-c', `source "${lib}"; compose_agrees_on_live "$0" false`, A],
+        {
+          encoding: 'utf8',
+          env: {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME,
+            TIPME_STACK: 'production',
+            TIPME_HOME: home,
+            ...extra,
+          },
+        },
+      );
+    const agreed = check();
+    assert.equal(agreed.status, 0, agreed.stderr);
+    // Compose lets the shell win over the env file, which no reading of the file can see.
+    const overridden = check({ PAYMENTS_LIVE_ENABLED: 'true' });
+    assert.equal(overridden.status, 2);
+    assert.match(overridden.stderr, /Compose/);
+  },
+);
+
+test('deploying the version already running picks up a changed env file, with no downtime', () => {
+  const { run, read, ship, running, colours } = stageProduction();
+  ship(A);
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  assert.deepEqual(colours(), { blue: A, active: 'blue' });
+  const again = run('deploy-production.sh', [A]);
+  assert.equal(again.status, 0, again.stderr);
+  const after = colours();
+  assert.equal(after.active, 'green');
+  assert.equal(after.green, A);
+  assert.equal(running('api-green'), A);
+  assert.equal(running('api-blue'), '', 'the old colour stopped');
+  assert.equal(running('worker-a'), A);
+  assert.equal(read('releases/current').trim(), A);
+  // Still one entry: a rollback goes to the version before it, not to itself.
+  assert.deepEqual(read('releases/deployed').trim().split('\n'), [A]);
 });
 
 test('a missing edge-production network is refused before anything runs', () => {

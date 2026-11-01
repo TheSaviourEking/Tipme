@@ -7,8 +7,9 @@ import {
   createQuote,
   markAttemptInitiated,
   reconcileAttempts,
+  reconcilePayouts,
 } from '../../dist/index.js';
-import { useDatabase } from './helpers.mjs';
+import { ADA, useDatabase } from './helpers.mjs';
 
 const { createMockProvider } = await import('../../../payments/dist/index.js');
 const { Redis } = createRequire(
@@ -219,6 +220,106 @@ test('reconciliation', async (t) => {
         0,
       );
       assert.equal(await tipStatus(tipId), 'AWAITING_PAYMENT');
+    },
+  );
+
+  await t.test(
+    'a payout start with no answer and no lookup goes to staff once, and stays reserved',
+    async () => {
+      await database.fresh();
+      const payoutId = randomUUID();
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                              request_fingerprint, provider, start_uncertain_at, created_at)
+         VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'f', 'bachs',
+                 now() - interval '2 hours', now() - interval '2 hours')`,
+        [payoutId, ADA, randomUUID()],
+      );
+      const verifier = {
+        fetchPayoutStatus: async () => ({ status: 'pending' }),
+      };
+      for (let run = 0; run < 2; run += 1)
+        await reconcilePayouts({
+          db: database.db,
+          provider: verifier,
+          now: new Date(),
+          minAgeMs: 0,
+        });
+      assert.equal(
+        (await q(`SELECT 1 FROM issues WHERE kind = 'payout_unresolved'`))
+          .length,
+        1,
+      );
+      assert.equal(
+        (await q('SELECT status FROM payouts WHERE id = $1', [payoutId]))[0]
+          .status,
+        'REQUESTED',
+      );
+    },
+  );
+
+  await t.test(
+    'a queued payout that never started goes to staff, unless a hold explains it',
+    async () => {
+      await database.fresh();
+      const payoutId = randomUUID();
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                              request_fingerprint, provider, created_at)
+         VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'f', 'bachs', now() - interval '2 hours')`,
+        [payoutId, ADA, randomUUID()],
+      );
+      const issueId = randomUUID();
+      await q(
+        `INSERT INTO issues (id, kind, dedupe_key, severity, subject, summary, opened_at)
+         VALUES ($1, 'payment_reversed', $2, 'money', '{}', 'test', now())`,
+        [issueId, `test.${issueId}`],
+      );
+      await q(
+        `INSERT INTO withdrawal_holds (id, profile_id, reason, issue_id) VALUES ($1, $2, 'reversal', $3)`,
+        [randomUUID(), ADA, issueId],
+      );
+      const verifier = {
+        fetchPayoutStatus: async () => ({ status: 'pending' }),
+      };
+      const run = () =>
+        reconcilePayouts({
+          db: database.db,
+          provider: verifier,
+          now: new Date(),
+          minAgeMs: 0,
+        });
+      const unresolved = async () =>
+        (await q(`SELECT 1 FROM issues WHERE kind = 'payout_unresolved'`))
+          .length;
+      await run();
+      assert.equal(await unresolved(), 0);
+      await q(`UPDATE withdrawal_holds SET released_at = now()`);
+      await run();
+      assert.equal(await unresolved(), 1);
+    },
+  );
+
+  await t.test(
+    'a payout with no mark but a recorded step says which step it reached',
+    async () => {
+      await database.fresh();
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                              request_fingerprint, provider, start_step, created_at)
+         VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'f', 'bachs', 'payout', now() - interval '2 hours')`,
+        [randomUUID(), ADA, randomUUID()],
+      );
+      await reconcilePayouts({
+        db: database.db,
+        provider: { fetchPayoutStatus: async () => ({ status: 'pending' }) },
+        now: new Date(),
+        minAgeMs: 0,
+      });
+      const [issue] = await q(
+        `SELECT summary FROM issues WHERE kind = 'payout_unresolved'`,
+      );
+      assert.match(issue.summary, /payout itself/);
     },
   );
 

@@ -308,7 +308,9 @@ export function recentActivity(
                to_char(COALESCE(p.paid_at, p.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
                p.amount_minor::text,
                CASE p.status WHEN 'PAID' THEN 'sent' WHEN 'FAILED' THEN 'failed'
-                 WHEN 'PROCESSING' THEN 'processing' WHEN 'REVERSED' THEN 'reversed' ELSE 'requested' END,
+                 WHEN 'PROCESSING' THEN
+                   CASE WHEN p.provider_review_at IS NULL THEN 'processing' ELSE 'in_review' END
+                 WHEN 'REVERSED' THEN 'reversed' ELSE 'requested' END,
                NULL
           FROM payouts p WHERE p.profile_id = ${profileId}
       ) activity

@@ -111,7 +111,10 @@ export async function tipProof(
     const [payoutTxn] = await db
       .select({ id: ledgerTransactions.id })
       .from(ledgerTransactions)
-      .where(eq(ledgerTransactions.payoutId, payoutRow.payout.id));
+      // The payout itself: its fee is a separate cost line on the same payout.
+      .where(
+        eq(ledgerTransactions.operationKey, `payout.${payoutRow.payout.id}`),
+      );
     payout = {
       payoutId: payoutRow.payout.id,
       status: payoutRow.payout.status,

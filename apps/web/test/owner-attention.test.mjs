@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   isPaymentAttention,
   ownerAttention,
+  requirementWords,
 } from '../src/lib/owner-attention.ts';
 
 const ready = { emailVerified: true, pageState: 'live', suspended: false };
@@ -145,4 +146,47 @@ test('fix: the recovery email reminder is not a payment problem', () => {
       isPaymentAttention,
     ),
   );
+});
+
+test('a bank account still due is never counted as a detail, and leads to Get paid', () => {
+  const [item] = ownerAttention({
+    profile: ready,
+    payments: payments('ONBOARDING', {
+      requirementsDue: ['payout_destination'],
+    }),
+  });
+  assert.equal(item.action.href, '/dashboard/settings#get-paid');
+  assert.doesNotMatch(JSON.stringify(item), /payout_destination|detail/);
+
+  const [mixed] = ownerAttention({
+    profile: ready,
+    payments: payments('ONBOARDING', {
+      requirementsDue: ['payout_destination', 'individual.id_number'],
+    }),
+  });
+  assert.match(mixed.body, /1 more detail\./);
+  assert.equal(mixed.action.href, '/dashboard/settings#payments');
+});
+
+test("requirements read as plain words, never as the provider's field names", () => {
+  assert.deepEqual(
+    requirementWords([
+      'individual.id_number',
+      'individual.first_name',
+      'individual.last_name',
+      'individual.dob.year',
+      'individual.dob.month',
+      'business_profile.mcc',
+      'payout_destination',
+    ]),
+    ['your ID number', 'your name', 'your date of birth', 'business details'],
+  );
+  assert.deepEqual(requirementWords(['some.unknown_field']), ['other details']);
+  assert.deepEqual(requirementWords(['payout_destination']), []);
+});
+
+test("a business name is a business detail, not the person's name", () => {
+  assert.deepEqual(requirementWords(['business_name']), ['business details']);
+  assert.deepEqual(requirementWords(['company.name']), ['business details']);
+  assert.deepEqual(requirementWords(['individual.first_name']), ['your name']);
 });

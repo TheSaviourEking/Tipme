@@ -49,6 +49,16 @@ export const signInCode = codeMail({
     'You get this email because someone asked to sign in to TipMe with this address. If it wasn’t you, ignore it.',
 });
 
+export const payoutDestinationCode = codeMail({
+  id: 'payout_destination_code',
+  subject: 'Confirm your TipMe bank account',
+  heading: 'Confirm your bank account',
+  intro:
+    'Enter this code to save the bank account your TipMe withdrawals are paid to.',
+  reason:
+    'You get this email because someone asked to change the bank account on your TipMe account. If it wasn’t you, don’t share this code, and contact support@usetipme.xyz straight away.',
+});
+
 export const emailChangeCode = codeMail({
   id: 'email_change_code',
   subject: 'Confirm your new TipMe email',

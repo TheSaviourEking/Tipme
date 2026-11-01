@@ -1,4 +1,4 @@
-// The payment account card's words, by Bachs environment. A live copy pays real recipients, so
+// The payment account card's words, by payment environment. A live copy pays real recipients, so
 // its card never calls itself a test; null is before the account (and so its environment) loads.
 export type PaymentAccountCopy = {
   heading: string;
@@ -21,7 +21,7 @@ const SANDBOX: PaymentAccountCopy = {
 const LIVE: PaymentAccountCopy = {
   heading: 'Payments',
   intro:
-    'This is the account Bachs pays your tips into. You set it up with Bachs.',
+    'This is the account your tips are paid into. You’ll finish setting it up on our payment partner’s secure page.',
   ready: 'Ready to receive tips',
   setUp: 'Set up payments',
   verifyEmailFirst: 'Verify your email address first, then set up payments.',

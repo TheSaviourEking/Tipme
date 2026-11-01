@@ -9,6 +9,7 @@ import {
 } from './types/account-notices.js';
 import {
   emailChangeCode,
+  payoutDestinationCode,
   recoveryChangeCode,
   recoveryCode,
   recoveryEmailCode,
@@ -28,6 +29,7 @@ import {
   withdrawalPaid,
 } from './types/account-events.js';
 import { emailVerificationLink } from './types/email-verification-link.js';
+import { payoutDestinationChanged } from './types/payout-destination-changed.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
 import { providerTest } from './types/provider-test.js';
 import { recoveryLink } from './types/recovery-link.js';
@@ -46,6 +48,8 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     providerTest,
     signInCode,
     emailChangeCode,
+    payoutDestinationCode,
+    payoutDestinationChanged,
     welcome,
     newSignInNotice,
     emailChangedNotice,

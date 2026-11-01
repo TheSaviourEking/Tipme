@@ -119,6 +119,11 @@ export interface PublicProfile {
    * page says so before a supporter fills in the form. Absent from older APIs: treat as true.
    */
   acceptingTips?: boolean;
+  /**
+   * Whether this page may take tips at all on this copy right now (closed checkout, or a live copy
+   * limited to named pages). Checkout enforces the same rule. Older APIs send nothing.
+   */
+  tippingOpen?: boolean;
 }
 
 /** Changing the page's handle (PR-011); the old one keeps pointing at the page. */

@@ -123,22 +123,61 @@ test('a withdrawal needs a key, respects the balance and is confirmed by reconci
   const tooMuch = await withdraw((BigInt(before) + 1n).toString());
   assert.equal(tooMuch.status, 409);
   assert.equal((await tooMuch.json()).error.code, 'INSUFFICIENT_BALANCE');
+  const quote = (await (await get('/v1/me/withdrawal-quote', cookie)).json())
+    .data;
+  assert.equal(quote.state, 'ready');
+  assert.equal(quote.withdrawableMinor, before);
+  assert.equal(quote.feeMinor, '5000');
   const ok = await withdraw('100000');
   assert.equal(ok.status, 201);
   const { payoutId } = (await ok.json()).data;
+  // The request reaches no provider: it queues the job the worker starts the payout from.
+  const { rows: queued } = await database.pool.query(
+    `SELECT count(*)::int AS n FROM outbox_events
+      WHERE event_type = 'payouts.start' AND aggregate_id = $1`,
+    [payoutId],
+  );
+  assert.equal(queued[0].n, 1);
+  const { rows: payoutRows } = await database.pool.query(
+    'SELECT provider, provider_reference FROM payouts WHERE id = $1',
+    [payoutId],
+  );
+  assert.deepEqual(payoutRows, [
+    { provider: 'mock', provider_reference: null },
+  ]);
   const after = (await (await get('/v1/me/dashboard', cookie)).json()).data
     .availableMinor;
   assert.equal(BigInt(after), BigInt(before) - 100000n);
-  const { reconcilePayouts } =
+  assert.equal(
+    (await (await get('/v1/me/activity', cookie)).json()).data.find(
+      (row) => row.id === payoutId,
+    ).state,
+    'requested',
+  );
+  const { markPayoutInitiated, reconcilePayouts } =
     await import('../../packages/database/dist/index.js');
   const { createMockProvider } =
     await import('../../packages/payments/dist/index.js');
   const { Redis } = await import('./helpers.mjs');
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
   try {
+    // Started by hand here, as the worker's payouts.start handler does (live-payments Task 6).
+    const provider = createMockProvider({ redis, prefix: stack.prefix });
+    const { providerReference } = await provider.initiatePayout({
+      payoutId,
+      idempotencyKey: `payout.${payoutId}`,
+      amountMinor: 100000n,
+      currency: 'NGN',
+    });
+    await markPayoutInitiated(database.db, {
+      payoutId,
+      provider: 'mock',
+      providerReference,
+    });
+    await provider.settlePayout(providerReference);
     await reconcilePayouts({
       db: database.db,
-      provider: createMockProvider({ redis, prefix: stack.prefix }),
+      provider,
       now: new Date(),
       minAgeMs: 0,
     });

@@ -163,6 +163,17 @@ if [[ "$1 $2" == "image inspect" ]]; then grep -qx "$3" "$FAKE_IMAGES" 2>/dev/nu
 if [[ "$1 $2" == "image rm" ]]; then grep -vx "$3" "$FAKE_IMAGES" > "$FAKE_IMAGES.tmp"; mv "$FAKE_IMAGES.tmp" "$FAKE_IMAGES"; exit 0; fi
 [[ "$1" == "compose" ]] || exit 0
 last=\${!#}
+# config: what Compose read for the switch, in each colour, unless a test says it read otherwise.
+if [[ "$last" == "config" ]]; then
+  echo "\${FAKE_COMPOSE_NOISE-}"
+  [[ -z "$FAKE_COMPOSE_FAILS" ]] || { echo "\${FAKE_COMPOSE_NOISE-}" >&2; exit 1; }
+  if [[ -n "\${FAKE_COMPOSE_LIVE+x}" ]]; then said=$FAKE_COMPOSE_LIVE; else
+    said=$(grep -E '^PAYMENTS_LIVE_ENABLED=' "$TIPME_HOME/production.env" | cut -d= -f2-)
+    said=\${said:-false}
+  fi
+  [[ -z "$said" ]] || printf '    environment:\\n      PAYMENTS_LIVE_ENABLED: "%b"\\n' "$said"
+  exit 0
+fi
 if [[ " $* " == *" up "* ]]; then
   case "$last" in
     api-blue) v=$TIPME_BLUE_VERSION ;;

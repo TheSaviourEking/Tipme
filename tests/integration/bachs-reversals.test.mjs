@@ -9,8 +9,10 @@ import {
   markAttemptInitiated,
   openIssueFromEvent,
   recordProviderEvent,
+  resolveIssue,
   seedDemoProfiles,
   updatePaymentAccountStatus,
+  withdrawalQuote,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { ADA } from '../../packages/database/test/integration/helpers.mjs';
@@ -109,7 +111,8 @@ test('a Bachs refund or dispute on a paid tip opens one money issue and books no
       dedupeKey: alerts[0].dedupe_key,
       payload: alerts[0].payload,
     }),
-    'opened',
+    // The webhook opened it already, to tie the hold to it; the alert finds the same one.
+    'duplicate',
   );
   const issue = (
     await database.pool.query(
@@ -117,4 +120,83 @@ test('a Bachs refund or dispute on a paid tip opens one money issue and books no
     )
   ).rows;
   assert.deepEqual(issue, [{ kind: 'payment_reversed', severity: 'money' }]);
+});
+
+test('a reversal opens its issue and pauses that recipient’s withdrawals', async (t) => {
+  const database = await openTestDatabase();
+  t.after(() => database.close());
+  await database.reset();
+  await seedDemoProfiles(database.db);
+  const { db } = database;
+  await beginPaymentAccountCreation(db, {
+    profileId: ADA,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await updatePaymentAccountStatus(db, {
+    profileId: ADA,
+    provider: 'bachs',
+    environment: 'sandbox',
+    providerAccountReference: 'acct_ada123',
+    status: 'ACTIVE',
+    chargesEnabled: true,
+    payoutsEnabled: false,
+    feeCollector: 'platform',
+    requirementsDue: [],
+  });
+  const quote = await createQuote(db, {
+    handle: 'ada',
+    tipMinor: 100000n,
+    currency: 'NGN',
+  });
+  const { attemptId } = await createPaymentIntent(db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  await markAttemptInitiated(db, {
+    attemptId,
+    provider: 'bachs',
+    providerReference: REFERENCE,
+  });
+  const reversal = {
+    kind: 'reversal',
+    eventId: 'evt_refund_hold',
+    eventType: 'refund.created',
+    accountReference: 'acct_ada123',
+    providerReference: REFERENCE,
+    operationReference: attemptId,
+  };
+  const webhooks = new WebhookService({ db });
+  await webhooks.applyBachs(reversal, { environment: 'sandbox' });
+  const holds = () =>
+    database.pool
+      .query(
+        'SELECT reason, profile_id, issue_id, released_at FROM withdrawal_holds',
+      )
+      .then((r) => r.rows);
+  const [hold] = await holds();
+  assert.equal(hold.reason, 'reversal');
+  assert.equal(hold.profile_id, ADA);
+  const provider = {
+    name: 'bachs-sandbox',
+    capabilities: { connectedAccounts: true },
+  };
+  assert.deepEqual(await withdrawalQuote(db, { profileId: ADA, provider }), {
+    state: 'paused',
+    reason: 'reversal',
+  });
+
+  // Redelivered: still one hold. Redelivered after staff closed it: no hold comes back.
+  await webhooks.applyBachs(reversal, { environment: 'sandbox' });
+  assert.equal((await holds()).length, 1);
+  await resolveIssue(db, {
+    issueId: hold.issue_id,
+    staffUserId: randomUUID(),
+    reason: 'The provider settled the refund itself.',
+    outcome: 'resolved_by_provider',
+  });
+  await webhooks.applyBachs(reversal, { environment: 'sandbox' });
+  const after = await holds();
+  assert.equal(after.length, 1);
+  assert.ok(after[0].released_at);
 });

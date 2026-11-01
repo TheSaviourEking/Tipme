@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Container, Skeleton } from '@tipme/ui';
+import { PilotNotice } from '@/components/pilot-notice';
 import { PaymentModeScope } from '@/components/payment-mode-slot';
 import { StatusView } from './status-view';
 
@@ -23,7 +24,7 @@ export default function TipStatusPage() {
         </noscript>
         <Suspense fallback={<Skeleton label="Loading your tip" />}>
           <PaymentModeScope>
-            <StatusView />
+            <StatusView pilotNotice={<PilotNotice />} />
           </PaymentModeScope>
         </Suspense>
       </Container>

@@ -37,16 +37,38 @@ export const when = (iso: string) => dateTime.format(new Date(iso));
 export const PROVIDER_TEST_CONFIRM_PATH = '/ops/providers/confirm';
 export const PROVIDER_TEST_TOKEN_KEY = 'tipme.provider-test-token';
 
+/** How staff say a money issue was settled. TipMe changes no balance by it. */
+export const ISSUE_OUTCOME_CHOICES: Record<string, string> = {
+  resolved_by_provider: 'Settled by the provider',
+  recipient_owes: 'The recipient owes the money',
+  written_off: 'Written off by TipMe',
+  account_secured: 'The real owner has the account back',
+};
+/** Every outcome that can be shown. The last is only ever stated by the mark-failed tool. */
+export const ISSUE_OUTCOME_LABELS: Record<string, string> = {
+  ...ISSUE_OUTCOME_CHOICES,
+  staff_confirmed_absent: 'Staff confirmed the provider has no such payout',
+};
+
 export const ISSUE_KIND_LABELS: Record<string, string> = {
   payment_mismatch: 'Amount mismatch',
   payment_conflict: 'Payment after the tip ended',
   payment_unresolved: 'Payment unknown to the provider',
   payment_attempt_unresolved: 'Bachs checkout outcome unknown',
   payment_account_unresolved: 'Bachs recipient account outcome unknown',
+  payment_account_setup_failed: 'Manual payouts not set',
   payment_reversed: 'Refund or dispute reported',
   payment_settlement_currency: 'Settled in another currency',
   payout_failed: 'Withdrawal failed',
-  payout_conflict: 'Withdrawal paid after failing',
+  payout_conflict: 'Withdrawal conflict',
+  payout_unexpected: 'Unexpected payout',
+  payout_unresolved: 'Withdrawal outcome unknown',
+  payout_fee_short: 'Payout fee above what was covered',
+  payout_held: 'Withdrawal waiting on a hold',
+  account_takeover_reported: 'Reported account takeover',
+  provider_in_debt: 'Provider account in debt',
+  reserve_empty: 'Payment reserve empty',
+  provider_key_refused: 'Provider refused our key',
   provider_event_conflict: 'Conflicting provider event',
   stuck_tip: 'Tip stuck confirming',
   unmatched_event: 'Unmatched provider event',

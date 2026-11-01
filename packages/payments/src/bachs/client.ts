@@ -104,7 +104,7 @@ export class BachsApiClient {
       if (options.method === 'POST') {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
-          'the request may have reached Bachs but its response was not received',
+          'the request may have reached the payment provider but its response was not received',
           { cause: 'no_response' },
         );
       }
@@ -119,7 +119,7 @@ export class BachsApiClient {
       if (options.method === 'POST') {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
-          'Bachs accepted the request but its response could not be read',
+          'The payment provider accepted the request but its response could not be read',
           { cause: 'unreadable_response' },
         );
       }
@@ -134,7 +134,7 @@ export class BachsApiClient {
       ) {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
-          `Bachs returned HTTP ${response.status}`,
+          `The payment provider returned HTTP ${response.status}`,
           {
             cause: 'http_error',
             httpStatus: response.status,
@@ -152,11 +152,13 @@ export class BachsApiClient {
       if (options.method === 'POST') {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
-          'Bachs returned a successful response that could not be parsed',
+          'The payment provider returned a successful response that could not be parsed',
           { cause: 'unreadable_response' },
         );
       }
-      throw new BachsProtocolError('Bachs returned invalid JSON');
+      throw new BachsProtocolError(
+        'The payment provider returned invalid JSON',
+      );
     }
 
     const parsed = options.schema.safeParse(payload);
@@ -164,12 +166,12 @@ export class BachsApiClient {
       if (options.method === 'POST') {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
-          'Bachs returned a successful response with an invalid shape',
+          'The payment provider returned a successful response with an invalid shape',
           { cause: 'unexpected_shape' },
         );
       }
       throw new BachsProtocolError(
-        'Bachs returned an unexpected response shape',
+        'The payment provider returned an unexpected response shape',
       );
     }
 

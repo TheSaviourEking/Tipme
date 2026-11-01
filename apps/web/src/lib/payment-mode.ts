@@ -15,6 +15,19 @@ export function paymentMode(release: unknown): PaymentMode {
 }
 
 /**
+ * Live payments can be limited to named pages, so "live" alone doesn't say this page takes tips.
+ * Real money needs the API's yes for this page: anything else shows the closed state, the same as a
+ * closed copy, and checkout refuses it on the server regardless.
+ */
+export function profileTippingClosed(
+  mode: PaymentMode,
+  profile: { tippingOpen?: boolean },
+): boolean {
+  if (mode === 'test') return false;
+  return mode === 'closed' || profile.tippingOpen !== true;
+}
+
+/**
  * Reads the mode at most once a minute while the API answers. A failed read (a build or cold
  * start with no API, an outage) is closed and kept for a few seconds only, so it is never
  * served for long; reads at the same moment share one request.
