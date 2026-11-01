@@ -26,7 +26,7 @@ import {
   type FoundPayout,
   type PayoutStartLog,
 } from './payout-start.js';
-import { recordPayoutOutcomeIn, type PayoutFailure } from './payouts.js';
+import { failPayoutByStaff, type PayoutFailure } from './payouts.js';
 
 /*
  * What staff can do about a withdrawal the system can't settle by itself (permission
@@ -349,6 +349,17 @@ export async function applyReportedPayout(
   if (view.offers.applyReported !== input.reported || !('found' in answer))
     return refused(db, input, prepared, action, 'not_offered');
 
+  // Before the apply, which commits by itself: a crash after it still says who acted and why.
+  await guarded(() =>
+    staffAudit(
+      db,
+      input,
+      kase,
+      'payout.staff_apply_requested',
+      now,
+      input.reported,
+    ),
+  );
   const result = await applyFoundPayout(db, kase.payout, answer.found, now);
   if (result.outcome === 'uncertain')
     return refused(db, input, prepared, action, 'mismatch');
@@ -447,36 +458,23 @@ export async function markPayoutFailedAbsent(
         .for('update');
       const current = await loadCase(tx, input.issueId);
       if (!current || !offersFor(current, answer, now).markFailed) return false;
-      await recordPayoutOutcomeIn(tx, {
-        payoutId: kase.payout.id,
-        provider: kase.payout.provider ?? 'unknown',
-        providerEventId: `staff-absent.${kase.payout.id}`,
-        providerReference: null,
-        outcome: 'failed',
-        failureReason: 'other',
-        // Not the provider's word but its silence, and a person's: audited below.
-        signatureVerified: true,
-        payload: { source: 'staff', issueId: kase.issue.id },
-        now,
-      });
-      await tx
-        .update(payouts)
-        .set({ startUncertainAt: null })
-        .where(eq(payouts.id, kase.payout.id));
+      await failPayoutByStaff(tx, current.payout);
       await staffAudit(
         tx,
         input,
         kase,
         'payout.staff_marked_failed',
         now,
-        `start step ${kase.payout.startStep ?? 'none'}; dashboard checked`,
+        `start step ${current.payout.startStep ?? 'none'}; start attempted ${
+          current.payout.startUncertainAt?.toISOString() ?? 'never'
+        }; provider had none; dashboard checked`,
       );
       await markResolved(tx, {
         issueId: kase.issue.id,
         resolvedBy: input.staffUserId,
         staffUserId: input.staffUserId,
         reason: input.reason,
-        outcome: 'resolved_by_provider',
+        outcome: 'staff_confirmed_absent',
         now,
       });
       return true;

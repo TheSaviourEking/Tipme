@@ -417,7 +417,11 @@ export async function markResolved(
   await recordAudit(tx, {
     staffUserId: input.staffUserId,
     action: input.staffUserId ? 'issue.resolved' : 'issue.auto_resolved',
-    permission: input.staffUserId ? 'issues.resolve' : undefined,
+    permission: input.staffUserId
+      ? closed.severity === 'money'
+        ? 'payouts.resolve'
+        : 'issues.resolve'
+      : undefined,
     subjectType: 'issue',
     subjectId: input.issueId,
     reason: input.reason,
@@ -467,6 +471,11 @@ async function releaseHoldsIfClear(
       and(
         eq(withdrawalHolds.profileId, input.profileId),
         isNull(withdrawalHolds.releasedAt),
+        // Holds take no profile lock, so one may have been placed since the search above. A hold
+        // goes only once its own cause has closed, so a new one can't be released as it is placed.
+        sql`EXISTS (
+          SELECT 1 FROM issues i
+           WHERE i.id = ${withdrawalHolds.issueId} AND i.status <> 'open')`,
       ),
     )
     .returning({ id: withdrawalHolds.id });
@@ -474,7 +483,7 @@ async function releaseHoldsIfClear(
     await recordAudit(tx, {
       staffUserId: input.staffUserId,
       action: 'withdrawals.released',
-      permission: input.staffUserId ? 'issues.resolve' : undefined,
+      permission: input.staffUserId ? 'payouts.resolve' : undefined,
       subjectType: 'profile',
       subjectId: input.profileId,
       reason: 'None of the recipient’s money issues is open.',
@@ -653,7 +662,8 @@ export function relatedOpenIssues(
 
 /**
  * Staff resolve an open issue with a written reason (permission `issues.resolve`, audited). A money
- * issue also needs how it was settled, which is stored and changes no balance.
+ * issue also needs how it was settled, which is stored and changes no balance; the API also asks
+ * `payouts.resolve` for one.
  */
 export function resolveIssue(
   db: Database,
@@ -670,7 +680,11 @@ export function resolveIssue(
   return guarded(() =>
     db.transaction(async (tx) => {
       const [current] = await tx
-        .select({ severity: issues.severity, status: issues.status })
+        .select({
+          severity: issues.severity,
+          status: issues.status,
+          subject: issues.subject,
+        })
         .from(issues)
         .where(eq(issues.id, input.issueId));
       if (!current) throw new OperationError('ISSUE_NOT_FOUND');
@@ -680,6 +694,17 @@ export function resolveIssue(
         !input.outcome
       )
         throw new OperationError('ISSUE_OUTCOME_REQUIRED');
+      // Issues are never reopened and reconciliation won't raise the same one twice, so closing it
+      // now would leave the money reserved with nobody told. The tools, or the payout ending, do it.
+      if (current.status === 'open' && current.subject.payoutId) {
+        const [payout] = await tx
+          .select({ status: payouts.status })
+          .from(payouts)
+          .where(eq(payouts.id, current.subject.payoutId))
+          .for('share');
+        if (payout?.status === 'REQUESTED' || payout?.status === 'PROCESSING')
+          throw new OperationError('ISSUE_PAYOUT_UNFINISHED');
+      }
       const resolved = await markResolved(tx, {
         issueId: input.issueId,
         resolvedBy: input.staffUserId,

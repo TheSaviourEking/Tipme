@@ -7487,6 +7487,7 @@
                   "PAGE_SUSPENDED",
                   "ISSUE_RESOLVED",
                   "ISSUE_OUTCOME_REQUIRED",
+                  "ISSUE_PAYOUT_UNFINISHED",
                   "PREVIEW_REQUIRED",
                   "PROFILE_NOT_FOUND",
                   "RATE_LIMITED",

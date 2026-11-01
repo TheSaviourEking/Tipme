@@ -48,9 +48,11 @@ const failure = (code: string) =>
     ? 'This issue was already resolved.'
     : code === 'ISSUE_OUTCOME_REQUIRED'
       ? 'Choose how this money issue was settled.'
-      : code === 'FORBIDDEN'
-        ? 'Your role does not allow this.'
-        : 'That didn’t work. Please try again.';
+      : code === 'ISSUE_PAYOUT_UNFINISHED'
+        ? 'This withdrawal hasn’t finished. Use “Act on this withdrawal” below.'
+        : code === 'FORBIDDEN'
+          ? 'Your role does not allow this.'
+          : 'That didn’t work. Please try again.';
 
 function Section({
   title,
@@ -342,6 +344,10 @@ export default function IssuePage() {
       : evidence.attempts.at(-1)
         ? { attemptId: evidence.attempts.at(-1)!.id }
         : null;
+  const payoutUnfinished =
+    issue.subject.payoutId !== undefined &&
+    payout !== null &&
+    ['REQUESTED', 'PROCESSING'].includes(payout.status);
   const recoveryPending =
     evidence.recovery &&
     !evidence.recovery.cancelledAt &&
@@ -378,8 +384,9 @@ export default function IssuePage() {
       <Section title="Decide">
         <div className="ops-actions">
           {open &&
-            can(access, 'issues.resolve') &&
-            issue.severity === 'money' && (
+            can(access, 'payouts.resolve') &&
+            issue.severity === 'money' &&
+            !payoutUnfinished && (
               <ResolveMoneyIssue
                 onSubmit={(reason, outcome) =>
                   act(
@@ -472,10 +479,19 @@ export default function IssuePage() {
             />
           )}
         </div>
+        {open && issue.severity === 'money' && payoutUnfinished && (
+          <p className="tm-hint">
+            This can’t be closed by hand until the withdrawal has finished. Use
+            “Act on this withdrawal” below; a withdrawal that ends closes its
+            issue, or lets you resolve it here.
+          </p>
+        )}
         <p className="tm-hint">
-          Admin actions never send money or edit the ledger: no refunds or
-          adjustments. Choosing an outcome changes no balance. When the last of
-          a recipient’s money issues closes, their withdrawals resume.
+          The actions here send no money and never edit the ledger: no refunds
+          or adjustments, and an outcome changes no balance. The one thing that
+          can lead to a payout is Resume, below, which queues a start that was
+          never tried. When the last of a recipient’s money issues closes, their
+          withdrawals resume.
         </p>
       </Section>
 

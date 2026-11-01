@@ -42,10 +42,11 @@ const REFUSED = {
   not_open: 'This issue was already resolved. Nothing was done.',
 } as const;
 
+// A failed call may still have done its work, so only asking again can say.
 const failed = (code: string) =>
   code === 'FORBIDDEN'
     ? 'Your role does not allow this.'
-    : 'That didn’t work. Nothing was done. Please try again.';
+    : 'We got no clear answer. Ask the provider again to see what happened.';
 
 /** Asks the provider first; only what that answer allows is then offered. */
 export function PayoutIssueTools({
@@ -109,7 +110,7 @@ export function PayoutIssueTools({
         {busy ? 'Asking the provider…' : 'Ask the provider'}
       </Button>
       {error && (
-        <Notice tone="error" title="Not done">
+        <Notice tone="error" title="Check what happened">
           {error}
         </Notice>
       )}
@@ -166,6 +167,7 @@ function Answer({
       <div className="ops-actions">
         {offers.applyReported && (
           <ReasonAction
+            errorTitle="Check what happened"
             open={`Record it as ${offers.applyReported}…`}
             field="Why record this now?"
             submit={`Record as ${offers.applyReported}`}
@@ -180,6 +182,7 @@ function Answer({
         )}
         {offers.resume && (
           <ReasonAction
+            errorTitle="Check what happened"
             open="Resume this withdrawal…"
             field="Why resume it?"
             hint={
@@ -262,7 +265,7 @@ function MarkFailed({
         </span>
       </label>
       {error && (
-        <Notice tone="error" title="Not done">
+        <Notice tone="error" title="Check what happened">
           {error}
         </Notice>
       )}

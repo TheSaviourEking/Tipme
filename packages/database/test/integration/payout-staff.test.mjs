@@ -401,24 +401,6 @@ test('mark failed needs a definite absence past the wait and no payout step, the
   });
   assert.equal(unreadable.outcome, 'not_offered');
 
-  const conflict = await s.issueFor(
-    payoutId,
-    'payout_conflict',
-    `payout_conflict.mismatch.${payoutId}`,
-  );
-  const conflicted = await markPayoutFailedAbsent(s.db, {
-    ...base,
-    provider: resolver(fakeProvider()),
-    now: s.later(),
-  });
-  assert.equal(conflicted.outcome, 'not_offered');
-  await resolveIssue(s.db, {
-    issueId: conflict,
-    staffUserId: STAFF,
-    reason: REASON,
-    outcome: 'resolved_by_provider',
-  });
-
   const ledgerBefore = await s.ledgerRows();
   const done = await markPayoutFailedAbsent(s.db, {
     ...base,
@@ -435,6 +417,43 @@ test('mark failed needs a definite absence past the wait and no payout step, the
   );
   assert.equal(audit.length, 1);
   assert.equal(audit[0].permission, 'payouts.resolve');
+  // The time the start was tried outlives the mark being cleared.
+  assert.match(audit[0].reason, /start attempted \d{4}-\d{2}-\d{2}T/);
+
+  // It says what happened: a staff decision, with no provider event dressed up as signed.
+  assert.deepEqual(
+    await s.q(
+      `SELECT cause::text, provider_event_id FROM status_transitions
+        WHERE entity_id = $1 AND to_status = 'FAILED'`,
+      [payoutId],
+    ),
+    [{ cause: 'staff', provider_event_id: null }],
+  );
+  assert.equal(
+    (
+      await s.q('SELECT 1 FROM provider_events WHERE payout_id = $1', [
+        payoutId,
+      ])
+    ).length,
+    0,
+  );
+  assert.equal(
+    (
+      await s.q('SELECT resolution_outcome FROM issues WHERE id = $1', [
+        issueId,
+      ])
+    )[0].resolution_outcome,
+    'staff_confirmed_absent',
+  );
+  assert.equal(
+    (
+      await s.q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'payout.failed' AND aggregate_id = $1`,
+        [payoutId],
+      )
+    ).length,
+    1,
+  );
   const again = await markPayoutFailedAbsent(s.db, {
     ...base,
     provider: resolver(fakeProvider()),
@@ -442,6 +461,157 @@ test('mark failed needs a definite absence past the wait and no payout step, the
   });
   assert.equal(again.outcome, 'not_open');
   assert.equal(await s.available(), reserved + 100000n);
+
+  // If the provider later says it paid after all, that is still a conflict someone sees.
+  const late = await recordPayoutOutcome(s.db, {
+    payoutId,
+    provider: 'mock',
+    providerEventId: `late.${payoutId}`,
+    providerReference: 'ref_late',
+    outcome: 'paid',
+    signatureVerified: true,
+    payload: {},
+  });
+  assert.equal(late.outcome, 'conflict');
+  assert.equal(
+    (
+      await s.q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'payout.conflict' AND aggregate_id = $1`,
+        [payoutId],
+      )
+    ).length,
+    1,
+  );
+});
+
+test('an open conflict about the payout stops mark failed', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  await s.issueFor(
+    payoutId,
+    'payout_conflict',
+    `payout_conflict.mismatch.${payoutId}`,
+  );
+  const result = await markPayoutFailedAbsent(s.db, {
+    issueId,
+    reason: REASON,
+    staffUserId: STAFF,
+    dashboardVerified: true,
+    provider: resolver(fakeProvider()),
+    now: s.later(),
+  });
+  assert.equal(result.outcome, 'not_offered');
+  assert.equal(result.view.openConflict, true);
+  assert.equal(await s.statusOf(payoutId), 'REQUESTED');
+});
+
+test('a payout issue cannot be closed by hand while its payout is unfinished', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const refused = async (issueId) =>
+    assert.rejects(
+      resolveIssue(s.db, {
+        issueId,
+        staffUserId: STAFF,
+        reason: REASON,
+        outcome: 'written_off',
+      }),
+      (error) => error.code === 'ISSUE_PAYOUT_UNFINISHED',
+    );
+  const kinds = ['payout_unresolved', 'payout_held', 'payout_conflict'];
+  const opened = [];
+  for (const kind of kinds) opened.push(await s.issueFor(payoutId, kind));
+  // Queued; start tried with no answer; accepted by the provider.
+  for (const issueId of opened) await refused(issueId);
+  await s.q(
+    `UPDATE payouts SET start_uncertain_at = now(), start_step = 'payout' WHERE id = $1`,
+    [payoutId],
+  );
+  for (const issueId of opened) await refused(issueId);
+  await recordPayoutOutcome(s.db, {
+    payoutId,
+    provider: 'mock',
+    providerEventId: `processing.${payoutId}`,
+    providerReference: 'ref_accepted',
+    outcome: 'processing',
+    signatureVerified: true,
+    payload: {},
+  });
+  assert.equal(await s.statusOf(payoutId), 'PROCESSING');
+  for (const issueId of opened) await refused(issueId);
+  for (const issueId of opened)
+    assert.equal(await s.issueStatus(issueId), 'open');
+
+  // Finished, a person can close it.
+  await recordPayoutOutcome(s.db, {
+    payoutId,
+    provider: 'mock',
+    providerEventId: `paid.${payoutId}`,
+    providerReference: 'ref_accepted',
+    outcome: 'paid',
+    signatureVerified: true,
+    payload: {},
+  });
+  await resolveIssue(s.db, {
+    issueId: opened[2],
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'resolved_by_provider',
+  });
+  assert.equal(await s.issueStatus(opened[2]), 'resolved');
+});
+
+test('a hold whose cause is open survives a release triggered by closing another issue', async (t) => {
+  const s = await setup(t);
+  // Its cause isn't found by the recipient search, as a hold committed just after that search isn't.
+  const cause = await openIssue(s.db, {
+    dedupeKey: `unseen.${randomUUID()}`,
+    kind: 'payout_unexpected',
+    subject: { unmatchedId: randomUUID() },
+    now: new Date(),
+  });
+  await s.db.transaction((tx) =>
+    holdWithdrawals(tx, {
+      profileId: TOBI,
+      reason: 'unexpected_payout',
+      issueId: cause.id,
+    }),
+  );
+  const closing = await s.hold();
+  await resolveIssue(s.db, {
+    issueId: closing,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'written_off',
+  });
+  const held = await s.q(
+    'SELECT issue_id, released_at FROM withdrawal_holds ORDER BY created_at',
+  );
+  assert.equal(held.find((h) => h.issue_id === cause.id).released_at, null);
+  assert.ok(held.find((h) => h.issue_id === closing).released_at);
+});
+
+test('who applied and why is written before the apply', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  const provider = fakeProvider({
+    find: async () => ({ providerReference: 'ref_a', status: 'paid' }),
+  });
+  const done = await applyReportedPayout(s.db, {
+    issueId,
+    reported: 'paid',
+    reason: REASON,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.equal(done.outcome, 'applied');
+  const rows = await s.q(
+    `SELECT reason, seq FROM audit_events WHERE action IN ('payout.staff_apply_requested', 'payout.staff_applied') ORDER BY seq`,
+  );
+  assert.equal(rows.length, 2);
+  assert.match(rows[0].reason, /Checked it/);
 });
 
 test('a signed event naming the payout means "the provider has none" is not believed', async (t) => {

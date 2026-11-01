@@ -33,6 +33,7 @@ export type OperationErrorCode =
   | 'ISSUE_NOT_FOUND'
   | 'ISSUE_RESOLVED'
   | 'ISSUE_OUTCOME_REQUIRED'
+  | 'ISSUE_PAYOUT_UNFINISHED'
   | 'MARKET_ENTRY_NOT_FOUND';
 
 /** Expected business outcomes callers map to responses; never carries request values. */

@@ -63,6 +63,7 @@ export const transitionCause = pgEnum('transition_cause', [
   'provider_event',
   'system',
   'expiry',
+  'staff',
 ]);
 export const accountKind = pgEnum('account_kind', [
   'asset',
