@@ -56,6 +56,8 @@ const SHAPES = {
   rising: 4,
 };
 const OUTLINED = ['outline', 'ripple'];
+// One heart the eye lands on, rather than a scatter or a climb across the width.
+const SINGLE_FOCUS = ['large', 'dark', 'ripple'];
 
 test('every heart design renders for every colour it allows', () => {
   assert.deepEqual([...HEART_DESIGNS].sort(), Object.keys(SHAPES).sort());
@@ -182,6 +184,8 @@ test('each heart design reads on a phone: drawn geometry sits in the middle, cle
     assert.ok(art.n > 0, id);
     assert.ok(art.cx >= 224 && art.cx <= 896, `${id} centre x ${art.cx}`);
     assert.ok(art.cy >= 60 && art.cy <= 240, `${id} centre y ${art.cy}`);
+    if (SINGLE_FOCUS.includes(id))
+      assert.ok(Math.abs(art.cx - 560) < 60, `${id} off centre at ${art.cx}`);
     if (HEART_LAYOUTS[id].tile) {
       // Tiled hearts: plenty of them show in the phone's window, but never a solid mass.
       let inside = 0;
