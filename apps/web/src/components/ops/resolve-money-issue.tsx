@@ -80,9 +80,11 @@ export function ResolveMoneyIssue({
             the current bank belongs to the real owner, any withdrawal waiting
             is theirs (if not, mark it failed), and sessions were ended.
           </Notice>
-          <label className="tm-field">
-            <input type="checkbox" name="checked" required /> I checked the
-            current bank and the sign-in with the real owner.
+          <label className="ops-recovery__confirm">
+            <input type="checkbox" name="checked" required />
+            <span>
+              I checked the current bank and the sign-in with the real owner.
+            </span>
           </label>
         </>
       )}

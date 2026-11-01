@@ -394,7 +394,13 @@ test('/health/payments says low without revealing the amount', async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.deepEqual(await response.json(), {
-    data: { reserveLow: false, unreadable: false, stale: false, readAt: null },
+    data: {
+      reserveLow: false,
+      unreadable: false,
+      stale: false,
+      readAt: null,
+      switchRecordMatches: true,
+    },
   });
 
   const { check } = reserve();
@@ -404,6 +410,7 @@ test('/health/payments says low without revealing the amount', async () => {
     unreadable: false,
     stale: false,
     readAt: at(0).toISOString(),
+    switchRecordMatches: true,
   });
 
   await check(99_999n, 15 * MINUTE);
@@ -414,6 +421,7 @@ test('/health/payments says low without revealing the amount', async () => {
     unreadable: false,
     stale: false,
     readAt: at(15 * MINUTE).toISOString(),
+    switchRecordMatches: true,
   });
   for (const hidden of [
     '99999',
@@ -432,6 +440,7 @@ test('/health/payments says low without revealing the amount', async () => {
     unreadable: true,
     stale: false,
     readAt: at(30 * MINUTE).toISOString(),
+    switchRecordMatches: true,
   });
 });
 
@@ -452,6 +461,8 @@ test('/health/payments says stale when live payments are on and the checks have 
     unreadable: false,
     stale: true,
     readAt: null,
+    // Nothing recorded yet, and this copy says on.
+    switchRecordMatches: false,
   });
   const read = async (ms) => {
     await database.pool.query('DELETE FROM payment_reserve_readings');

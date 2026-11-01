@@ -55,7 +55,12 @@ test('staff freeze a reported takeover from Pages, the card remembers it, and re
     .check();
   await page.getByLabel('How was it resolved?').fill(REASON);
   await page.getByRole('button', { name: 'Resolve issue' }).click();
-  await expect(page.getByText('The issue is resolved.')).toBeVisible();
+  await expect(
+    page.getByText('The issue is resolved.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Resolve issue' })).toHaveCount(
+    0,
+  );
   await context.close();
 });
 
