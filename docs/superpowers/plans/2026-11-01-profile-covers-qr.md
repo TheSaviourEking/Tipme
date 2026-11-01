@@ -84,7 +84,12 @@ export function automaticCover(handle: string): 'scattered' | 'large' | 'dark'; 
 export type ResolvedCover =
   | { kind: 'photo'; path: string }
   | { kind: 'design'; design: string; colour?: string };
-export function resolveCover(p: { handle: string; coverPath: string | null; coverDesign: string | null; coverColour: string | null }): ResolvedCover;
+export function resolveCover(p: {
+  handle: string;
+  coverPath: string | null;
+  coverDesign: string | null;
+  coverColour: string | null;
+}): ResolvedCover;
 ```
 
 - `PublicProfile.cover?: ResolvedCover`; `MyProfile.cover?: ResolvedCover`, `MyProfile.coverChoice?: { design: string | null; colour: string | null; hasPhoto: boolean }`.
@@ -188,8 +193,18 @@ test('axe finds nothing on phone and desktop, in every payment state', ...);
 - Produces:
 
 ```ts
-export const QR_ART: readonly { id: string; name: string; kind: 'style' | 'card' | 'photo' }[]; // spec §7
-export function renderQrArt(input: { id: string; url: string; photo?: Buffer; preview: boolean; size: number }): Promise<Buffer>; // PNG
+export const QR_ART: readonly {
+  id: string;
+  name: string;
+  kind: 'style' | 'card' | 'photo';
+}[]; // spec §7
+export function renderQrArt(input: {
+  id: string;
+  url: string;
+  photo?: Buffer;
+  preview: boolean;
+  size: number;
+}): Promise<Buffer>; // PNG
 ```
 
 Rules from the generators that must survive: finder, separator, timing, format strips and alignment patterns stay solid; decoration keeps a clear gap around the code; mosaic forces each module's centre 3 of 7 sub-cells. Error correction: H for art with holes or fine shapes; otherwise Q. Preview burns in the "Preview" mark. Text marks use outlined paths, not server fonts.
