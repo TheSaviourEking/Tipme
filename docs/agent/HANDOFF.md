@@ -7,6 +7,7 @@
 - **Tests:** `tests/integration/live-stack.test.mjs` starts the real API and worker as production with `bachs-live`, with Bachs a local stand-in (`no-real-provider.mjs`). The 12 backup entries can't run without `tipme-postgres-1`; they must pass in CI on these migrations before the PR merges.
 - **Added in review:** `LIVE_CHECKOUT_HANDLES` (blank is nobody, `*` everyone; the server enforces it, and other pages show the closed state); a database-held withdrawals switch on the Overview (migration `0060_withdrawals_switch`); strict preflight comparing the env file with the deploy's expected state.
 - **Owner, 1 Nov:** kept the takeover freeze (built first, confirmed after) and asked for the withdrawals switch. Neither is legal or provider approval; D-06 stays open.
+- **Owner, 1 Nov:** D-02, D-03, D-04, D-06 and D-07 don't block launch; they stay OPEN as follow-ups, not approved. Technical checks stay blocking. The `AGENTS.md` hard stop on an approving ADR is unchanged and still a runbook blocker: the owner must resolve it.
 - **Rollback note:** a version from before this work refuses `PAYMENTS_LIVE_ENABLED=true` at startup; switch off first. The runbook's rollback section lists the same for the limited stage, freeze and switch.
 - Next: the owner's review and PR. The PR must say that activation stays an owner act.
 

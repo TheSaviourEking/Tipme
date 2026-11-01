@@ -4,7 +4,7 @@
 
 **When real money moves:** funding the reserve in section 3 moves the owner's own money to the payment partner. The first tip moves in section 5, and no stranger can pay until section 6 (the server enforces this with `LIVE_CHECKOUT_HANDLES`).
 
-**Nothing here approves live payments.** D-01 to D-08, D-10 and D-11 in `docs/00-DECISIONS.md` are open unless marked otherwise there. The code allows `PAYMENTS_LIVE_ENABLED=true` only on a production copy with `bachs-live` and every setting it needs. The setting stays `false` in every example, compose default and doc, and production keeps it `false` until the owner works through this page.
+**Nothing here approves live payments.** D-01 to D-08, D-10 and D-11 in `docs/00-DECISIONS.md` stay open. The owner decided on 1 Nov 2026 that D-02, D-03, D-04, D-06 and D-07 don't block launch: that is the owner's choice to go without them, not an approval of them. The code allows `PAYMENTS_LIVE_ENABLED=true` only on a production copy with `bachs-live` and every setting it needs. The setting stays `false` in every example, compose default and doc, and production keeps it `false` until the owner works through this page.
 
 Rules for this page:
 
@@ -20,16 +20,11 @@ Rules for this page:
 
 - [ ] **BLOCKING, the ADR:** `AGENTS.md` stops real payments until the processor and funds flow are approved in an ADR. No ADR says that yet: ADR-0004 and ADR-0007 say the opposite. The owner approves one, and its number goes in the acceptance. No agent writes the approval.
 - [ ] **BLOCKING, D-01:** launch jurisdiction and currency. The owner says what it is, and whether it blocks.
-- [ ] **BLOCKING, D-02:** company registration, legal agreements and regulator interpretation. Evidence: a legal opinion. Accepted in writing for a closed pilot, or resolved.
-- [ ] **BLOCKING, D-03:** the payment partner permits tipping, split and settlement. Evidence: its written confirmation, as Q4 decides. A selection or a live key is not that confirmation.
-- [ ] **BLOCKING, D-04:** custody or non-custody, and who owns the settlement account. Evidence: a signed funds-flow diagram.
 - [ ] **BLOCKING, D-05:** the remaining fee policy: refunds, chargebacks, and who bears the ₦50 payout fee (TipMe's reserve, as built). Reward cash stays `REWARD_CASH_BUDGET_MINOR_PER_MONTH=0`, and the worker refuses any other value, unless the owner decides otherwise and the config rule is lifted first.
-- [ ] **BLOCKING, D-06:** recipient verification, payout holds and the support model. Includes Q5: may the owner alone settle money issues?
-- [ ] **BLOCKING, D-07:** fraud, sanctions/AML and regional privacy obligations. Evidence: a compliance assessment.
 - [ ] **BLOCKING, D-08:** hosting, monitoring budget and who responds when an alert fires. The owner says whether it blocks.
 - [ ] **BLOCKING, D-10:** the first launch segment. The owner says whether it blocks.
 - [ ] **BLOCKING, D-11:** messaging providers and sender registration. The owner says whether it blocks.
-- [ ] **BLOCKING, holds need approval:** `docs/05-SECURITY.md` says payout holds need legal or provider approval. The owner kept the freeze and asked for the withdrawals switch (1 Nov), which decides that they exist. It isn't that approval. Record the approval, or the accepted risk.
+- [ ] **BLOCKING, launching without the follow-ups:** the owner's written acceptance of launching without the items under [Follow up after launch](#follow-up-after-launch-owner-accepted-1-nov-2026), dated and in `docs/00-DECISIONS.md`. The owner decided this in chat on 1 Nov 2026 (recorded there); the dated, signed line is still the owner's to write.
 - [ ] **BLOCKING, written acceptance:** the owner fills in the template under "Live pilot acceptance" in `docs/00-DECISIONS.md`. No agent writes or completes it.
 
 ### Risks the owner must accept or change
@@ -46,6 +41,17 @@ Each of these is open. Each has a line in the acceptance.
 - [ ] **BLOCKING, the pilot notice wording:** the owner has read "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" and approves it, or sends new wording.
 - [ ] **BLOCKING, Q7:** public launch or closed pilot.
 - [ ] **BLOCKING, the withdrawals switch:** read [Stopping withdrawals](#stopping-withdrawals), including what it doesn't stop. **Accept it.**
+
+## Follow up after launch (owner accepted, 1 Nov 2026)
+
+These don't block launch, by the owner's decision: "Bachs sort most of the compliance, they hold money. Let's skip them. Give a checklist and we'd circle to it later. They shouldn't block launch." They stay open and unticked, for the owner to come back to.
+
+- [ ] **D-02:** company registration, legal agreements and regulator interpretation. Evidence: a legal opinion. Accepted in writing for a closed pilot, or resolved.
+- [ ] **D-03:** the payment partner permits tipping, split and settlement. Evidence: its written confirmation, as Q4 decides. A selection or a live key is not that confirmation.
+- [ ] **D-04:** custody or non-custody, and who owns the settlement account. Evidence: a signed funds-flow diagram.
+- [ ] **D-06:** recipient verification, payout holds and the support model. Includes Q5: may the owner alone settle money issues?
+- [ ] **D-07:** fraud, sanctions/AML and regional privacy obligations. Evidence: a compliance assessment.
+- [ ] **holds need approval:** `docs/05-SECURITY.md` says payout holds need legal or provider approval. The owner kept the freeze and asked for the withdrawals switch (1 Nov), which decides that they exist. It isn't that approval. Record the approval, or the accepted risk.
 
 ## 2. Sandbox checks (staging, recorded in the ledger)
 

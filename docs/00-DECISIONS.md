@@ -21,12 +21,12 @@
 | ID | Decision | Required evidence | Owner | Status |
 |---|---|---|---|---|
 | D-01 | Initial launch jurisdiction, currency and eligible recipients | Business approval | Product | OPEN |
-| D-02 | Company registration, legal agreements and regulator interpretation | Legal opinion | Founder | OPEN |
-| D-03 | Payment processor permits tipping, split and settlement flow | Written provider confirmation | Payments | OPEN |
-| D-04 | Custody/non-custody and settlement account ownership | Signed funds-flow diagram | Finance/Legal | OPEN |
+| D-02 | Company registration, legal agreements and regulator interpretation | Legal opinion | Founder | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
+| D-03 | Payment processor permits tipping, split and settlement flow | Written provider confirmation | Payments | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
+| D-04 | Custody/non-custody and settlement account ownership | Signed funds-flow diagram | Finance/Legal | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | PARTLY DECIDED: flat 10% TipMe fee, provider paid from it, recipient gets 90% (ADR-0014); refunds and chargebacks OPEN |
-| D-06 | Recipient verification, payout holds and support model | Provider policy and risk plan | Risk | OPEN |
-| D-07 | Fraud, sanctions/AML and regional privacy obligations | Compliance assessment | Legal/Risk | OPEN |
+| D-06 | Recipient verification, payout holds and support model | Provider policy and risk plan | Risk | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
+| D-07 | Fraud, sanctions/AML and regional privacy obligations | Compliance assessment | Legal/Risk | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-08 | Hosting, monitoring budget and supported response coverage | Cost model + staffing | Engineering | OPEN |
 | D-09 | Exact logo/typography assets | Brand review | Design | OPEN |
 | D-10 | First launch segment and validated behavior | User interviews and pilots | Product | OPEN |
@@ -34,7 +34,7 @@
 
 > **Provider selections (26 Oct 2026):** Bachs is selected for the initial payment adapter, sandbox only; this is not written provider approval for live voluntary tips, connected accounts, settlement or payouts (D-03 remains OPEN). The product owner selected email OTP via Resend for launch and deferred phone OTP until after launch. D-11 remains open pending the Resend account, verified sender domain, provider terms, Nigerian deliverability/cost evidence, privacy/retention review and operational readiness. See ADR-0004.
 
-> **D-04 note (18 Oct 2026):** the user's intended model is custodial: the full tip is collected into a TipMe-controlled provider account, TipMe deducts its cut and forwards the rest to the recipient. This is **PROPOSED, pending legal opinion**; the PRD prefers provider collection and settlement. The PR-005 ledger is custody-neutral (ADR-0006), so either outcome needs sign-off, not a rebuild. No real money moves until D-04 is approved.
+> **D-04 note (18 Oct 2026):** the user's intended model is custodial: the full tip is collected into a TipMe-controlled provider account, TipMe deducts its cut and forwards the rest to the recipient. This is **PROPOSED, pending legal opinion**; the PRD prefers provider collection and settlement. The PR-005 ledger is custody-neutral (ADR-0006), so either outcome needs sign-off, not a rebuild. Real money was to wait for D-04's approval. On 1 Nov 2026 the owner chose not to wait for it (see "Launching without these" below); D-04 stays open and is not approved.
 
 > **PR-008 notes (19 Oct 2026), all PROPOSED:**
 > - **Paid plans** (future idea from the user): premium QR styles, custom backgrounds, deeper insights. Premium styles are marked "free in preview"; nothing is billed. Charging to keep personal details private is **not** planned: phone and email stay private by default and free (privacy by default; D-07).
@@ -95,23 +95,21 @@
 >     - Staff match a whole reference or that 6-character ending, so neither can rebuild a full provider reference.
 >     - Admin search is indexed and stops after 3 seconds.
 
+> **Launching without these: the owner's decision, 1 Nov 2026.** In the owner's words: "Most of this questions are unnecessary to be exact. Bachs sort most of the compliance, they hold money. Let's skip them. Give a checklist and we'd circle to it later. They shouldn't block launch." So the owner chooses to launch without a legal opinion or written Bachs confirmation, and states that Bachs handles compliance and holds the funds. That statement is the owner's and has not been checked against any agreement or legal advice. D-02, D-03, D-04, D-06 and D-07 stay OPEN: nothing here is approved or resolved, and the code-level rules stay. The follow-ups are listed in `docs/runbooks/live-activation.md`. The dated acceptance is the first line of the template below. `AGENTS.md`'s hard stop ("No real payments until processor and funds flow are approved in ADR") is unchanged.
+
 > **Live pilot acceptance (TEMPLATE, NOT ACCEPTED).** The code fence on live payments is gone (1 Nov 2026), and production keeps `PAYMENTS_LIVE_ENABLED=false`. Removing the fence decides nothing. Live payments stay unapproved until the owner completes the block below and works through `docs/runbooks/live-activation.md`. Only the owner fills this in; no agent writes an answer here.
 >
+> - Launching without D-02, D-03, D-04, D-06, D-07 and legal or provider approval of holds: accepted by / date:
 > - Accepted by / date:
 > - Scope (closed pilot, or public; Q7):
 > - ADR recording the approved processor and funds flow (AGENTS.md hard stop), its number:
 > - D-01 jurisdiction and currency:
-> - D-02 legal opinion, or accepted risk and why:
-> - D-03 the payment partner's written confirmation (Q4), and where it is kept:
-> - D-04 signed funds-flow diagram, and where it is kept:
 > - D-05 refunds, chargebacks, reward cash:
-> - D-06 verification, holds and support; may the owner alone settle money issues (Q5):
-> - D-07 compliance assessment, or accepted risk and why:
+> - May the owner alone settle money issues (Q5):
 > - D-08 hosting, monitoring budget and response coverage:
 > - D-10 first launch segment:
 > - D-11 messaging providers and sender registration:
 > - Do D-01, D-08, D-10 and D-11 block the pilot? (yes / no, and why):
-> - Holds on one person's say: legal or provider approval (`docs/05-SECURITY.md`), held or accepted risk:
 > - Stolen inbox (email sign-in plus a bank code to the same inbox adds a bank at once): accepted / changed:
 > - Stolen session and the 72-hour bank wait: accepted / changed:
 > - Slow recovery (24 hours, then the 72-hour bank wait): accepted / changed:
@@ -124,7 +122,7 @@
 > - Provider writes on production's accounts while payments are off (manual payouts, capabilities): accepted / changed:
 > - Reserve funded to, and who tops it up (Q6):
 
-> **Takeover freeze: confirmed by the owner, 1 Nov 2026 ("keep the freeze").** "Admin and money" above says payout holds stay out of admin until there are two staff. This freeze was built first, ahead of the owner's decision, and the owner confirmed it afterwards. Staff with `payouts.resolve` can freeze a page's withdrawals for a reported account takeover, with a written reason, audited. It moves no money and recalls nothing with the provider. While it stands the bank can't change and held payouts can't resume; release needs written confirmation that the bank and sign-in were checked. All other holds stay out of admin. **This is not legal or provider approval:** D-06 stays open, and the requirement in `docs/05-SECURITY.md` that payout holds have legal or provider approval stays an open line in the runbook.
+> **Takeover freeze: confirmed by the owner, 1 Nov 2026 ("keep the freeze").** "Admin and money" above says payout holds stay out of admin until there are two staff. This freeze was built first, ahead of the owner's decision, and the owner confirmed it afterwards. Staff with `payouts.resolve` can freeze a page's withdrawals for a reported account takeover, with a written reason, audited. It moves no money and recalls nothing with the provider. While it stands the bank can't change and held payouts can't resume; release needs written confirmation that the bank and sign-in were checked. All other holds stay out of admin. **This is not legal or provider approval:** D-06 stays open, and the requirement in `docs/05-SECURITY.md` that payout holds have legal or provider approval stays open, as a follow-up in the runbook.
 
 > **Withdrawals switch: the owner's decision, 1 Nov 2026 ("we should be able to switch of withdrawals toooo").** Staff with `payouts.resolve` can stop all withdrawals from the Overview with a written reason, audited and alerted, on every copy at once, with no deploy. It is independent of `PAYMENTS_LIVE_ENABLED`. While off, requests are refused and queued payouts wait, reserved; payouts already with the provider can't be recalled and keep settling. The same D-06 limit applies: this doesn't approve holds.
 
