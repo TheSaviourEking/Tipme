@@ -59,7 +59,11 @@ test('colours carry the mockup’s base and tone, neutral first', () => {
       ['rose', 'Rose', '#b83d62', '#c9547a'],
     ],
   );
-  assert.deepEqual(COVER_DARK, { base: '#24221f', tone: '#33302b' });
+  assert.deepEqual(COVER_DARK, {
+    base: '#24221f',
+    tone: '#33302b',
+    line: '#4a463f',
+  });
 });
 
 // Pinned on purpose. These come from FNV-1a over the lower-case handle, worked out separately

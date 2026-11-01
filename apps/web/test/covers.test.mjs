@@ -7,7 +7,6 @@ import {
   HEART_DESIGNS,
   HEART_LAYOUTS,
   coverView,
-  heartShapes,
 } from '../src/lib/cover-view.ts';
 
 // Sharp lives with the API, which already re-encodes uploads; the web app only needs it to look.
@@ -48,7 +47,18 @@ test('every cover image is at most 120 KB and 2240x600', async () => {
   }
 });
 
+const SHAPES = {
+  scattered: 2,
+  large: 1,
+  dark: 1,
+  outline: 2,
+  ripple: 5,
+  rising: 4,
+};
+const OUTLINED = ['outline', 'ripple'];
+
 test('every heart design renders for every colour it allows', () => {
+  assert.deepEqual([...HEART_DESIGNS].sort(), Object.keys(SHAPES).sort());
   for (const design of COVER_DESIGNS.filter((d) =>
     HEART_DESIGNS.includes(d.id),
   )) {
@@ -56,6 +66,7 @@ test('every heart design renders for every colour it allows', () => {
       ? COVER_COLOURS
       : [{ ...COVER_DARK, id: undefined }];
     for (const colour of colours) {
+      const label = `${design.id}/${colour.id}`;
       const view = coverView(
         {
           kind: 'design',
@@ -64,19 +75,19 @@ test('every heart design renders for every colour it allows', () => {
         },
         API,
       );
-      assert.equal(view.kind, 'hearts', `${design.id}/${colour.id}`);
-      assert.equal(view.base, colour.base);
-      assert.ok(view.shapes.length > 0);
-      assert.deepEqual(
-        view.shapes,
-        heartShapes(design.id, colour.tone, colour.line ?? colour.tone),
-      );
+      assert.equal(view.kind, 'hearts', label);
+      assert.equal(view.base, colour.base, label);
+      assert.equal(view.shapes.length, SHAPES[design.id], label);
       for (const shape of view.shapes) {
-        assert.match(shape.d, /^M/);
-        assert.ok(
-          shape.fill === colour.tone ||
-            shape.stroke === (colour.line ?? colour.tone),
-        );
+        assert.match(shape.d, /^M/, label);
+        if (OUTLINED.includes(design.id)) {
+          assert.equal(shape.stroke, colour.line, label);
+          assert.equal(shape.fill, undefined, label);
+          assert.ok(shape.strokeWidth > 0, label);
+        } else {
+          assert.equal(shape.fill, colour.tone, label);
+          assert.equal(shape.stroke, undefined, label);
+        }
       }
     }
   }
@@ -113,30 +124,93 @@ test('a pattern design is a file; a photo is vetted like an avatar; anything els
   );
 });
 
-/** Centre of a heart drawn by `translate(x y) scale(s) translate(-727 -50)`: 727, 50 is the middle of the path. */
-const centreOf = (transform) => {
-  const [, x, y] = transform
-    .match(/^translate\(([\d.-]+) ([\d.-]+)\) scale\(([\d.]+)\)/)
-    .map(Number);
-  return { x, y };
-};
+/** Draws a design's shapes in black on white at the artboard's own size, and reads the pixels. */
+async function rasterise(id, shapes) {
+  const { height, tile } = HEART_LAYOUTS[id];
+  const paths = shapes
+    .map(
+      (s) =>
+        `<path d="${s.d}" transform="${s.transform}" fill="${s.fill ? '#000' : 'none'}"` +
+        (s.stroke ? ` stroke="#000" stroke-width="${s.strokeWidth}"` : '') +
+        '/>',
+    )
+    .join('');
+  const body = tile
+    ? `<defs><pattern id="p" width="${tile.width}" height="${tile.height}" patternUnits="userSpaceOnUse">${paths}</pattern></defs><rect y="-20" width="1120" height="340" fill="url(#p)"/>`
+    : paths;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="300" viewBox="0 ${(height - 300) / 2} 1120 300"><rect y="-50" width="1120" height="400" fill="#fff"/>${body}</svg>`;
+  const { data } = await sharp(Buffer.from(svg))
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const dark = (x, y) => data[y * 1120 + x] < 170;
+  let n = 0,
+    sx = 0,
+    sy = 0,
+    x0 = 1120,
+    x1 = -1,
+    y0 = 300,
+    y1 = -1;
+  for (let y = 0; y < 300; y += 1)
+    for (let x = 0; x < 1120; x += 1)
+      if (dark(x, y)) {
+        n += 1;
+        sx += x;
+        sy += y;
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+  return { dark, n, cx: sx / n, cy: sy / n, x0, x1, y0, y1 };
+}
 
-test('each heart design has its focal point in the central 60% of the width, clear of the photo and the tipping panel', () => {
-  const [left, right] = [1120 * 0.2, 1120 * 0.8];
+// A phone shows the 1120 x 300 artboard in a 390 x 168 frame, sliced: the middle ~62%.
+const SEEN = 390 / (168 / 300);
+const [seenFrom, seenTo] = [(1120 - SEEN) / 2, (1120 + SEEN) / 2];
+
+test('each heart design reads on a phone: drawn geometry sits in the middle, clear of the photo and the tipping panel', async () => {
+  assert.ok(seenFrom > 200 && seenTo < 920);
   for (const id of HEART_DESIGNS) {
-    const { focus, tile } = HEART_LAYOUTS[id];
-    assert.ok(focus.x >= left && focus.x <= right, `${id} focus x ${focus.x}`);
-    assert.ok(focus.y >= 60 && focus.y <= 220, `${id} focus y ${focus.y}`);
-    if (tile) continue; // a tiled pattern has no single focal shape
-    // The declared focus is real: some shape of the design is centred on it (the rising
-    // hearts climb, so one of them), and every shape's heart lies inside the safe width.
-    const centres = heartShapes(id, '#000').map((s) => centreOf(s.transform));
-    assert.ok(
-      centres.some((c) => Math.hypot(c.x - focus.x, c.y - focus.y) <= 10),
-      `${id} has a heart at its focus`,
+    const view = coverView(
+      { kind: 'design', design: id, colour: 'neutral' },
+      API,
     );
-    for (const c of centres)
-      assert.ok(c.x >= left && c.x <= right, `${id} heart at ${c.x}`);
+    // The ripple's outer rings run off the edges on purpose; its focal shape is the inner heart.
+    const focal = id === 'ripple' ? view.shapes.slice(0, 1) : view.shapes;
+    const art = await rasterise(id, focal);
+    assert.ok(art.n > 0, id);
+    assert.ok(art.cx >= 224 && art.cx <= 896, `${id} centre x ${art.cx}`);
+    assert.ok(art.cy >= 60 && art.cy <= 240, `${id} centre y ${art.cy}`);
+    if (HEART_LAYOUTS[id].tile) {
+      // Tiled hearts: plenty of them show in the phone's window, but never a solid mass.
+      let inside = 0;
+      for (let y = 0; y < 300; y += 1)
+        for (let x = Math.ceil(seenFrom); x < seenTo; x += 1)
+          if (art.dark(x, y)) inside += 1;
+      const share = inside / (300 * (seenTo - seenFrom));
+      assert.ok(share > 0.01 && share < 0.4, `${id} covers ${share}`);
+      continue;
+    }
+    // Clear of the profile photo (lower left) and the tipping panel (lower right).
+    for (let y = 190; y < 300; y += 1)
+      for (let x = 0; x < 260; x += 1)
+        assert.ok(!art.dark(x, y), `${id} under the photo at ${x},${y}`);
+    for (let y = 120; y < 300; y += 1)
+      for (let x = 860; x < 1120; x += 1)
+        assert.ok(!art.dark(x, y), `${id} under the panel at ${x},${y}`);
+    if (id === 'large' || id === 'dark') {
+      // One big heart: whole, and filling a fair share of the width.
+      assert.ok(
+        art.x0 >= seenFrom && art.x1 <= seenTo,
+        `${id} heart ${art.x0}..${art.x1} fits the phone`,
+      );
+      assert.ok(
+        art.x1 - art.x0 >= 0.2 * 1120,
+        `${id} heart is ${art.x1 - art.x0} wide`,
+      );
+      assert.ok(art.y0 >= 0 && art.y1 <= 300, `${id} heart is whole`);
+    }
   }
 });
 

@@ -56,6 +56,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Cover artwork asks for quality 85 so the optimiser doesn't add a second visible lossy pass.
+  images: { qualities: [75, 85] },
   // Public profiles live at /@handle (PRD). A folder starting with "@" is a parallel-route slot
   // in the App Router, so /@handle is rewritten to the internal people/[handle] route. The legacy
   // /people/handle redirect lives in Proxy so the production launch gate runs before it.

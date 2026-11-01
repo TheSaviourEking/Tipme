@@ -255,7 +255,7 @@ const save = (name, bg, body, defs = '') =>
 {
   let b = '';
   const cx = 560,
-    cy = 330;
+    cy = 288;
   for (let i = 0; i < 44; i += 2) {
     const a = Math.PI + (i / 44) * Math.PI,
       c = Math.PI + ((i + 1) / 44) * Math.PI;

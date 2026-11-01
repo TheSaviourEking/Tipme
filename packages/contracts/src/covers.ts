@@ -95,7 +95,11 @@ export const COVER_COLOURS: readonly CoverColour[] = [
 ];
 
 /** The `dark` design's fixed colours: it takes no colour of its own. */
-export const COVER_DARK = { base: '#24221f', tone: '#33302b' } as const;
+export const COVER_DARK = {
+  base: '#24221f',
+  tone: '#33302b',
+  line: '#4a463f',
+} as const;
 
 const AUTOMATIC = ['scattered', 'large', 'dark'] as const;
 

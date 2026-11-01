@@ -24,27 +24,17 @@ export interface HeartShape {
 export interface HeartLayout {
   /** Height of the original artboard (all are 1120 wide); the drawing is centred in the frame. */
   height: number;
-  /** Where the eye lands, in the artboard's coordinates; kept in the central 60% of the width so a phone's crop shows it. */
-  focus: { x: number; y: number };
   /** A repeating tile the shapes sit in, or none when they are drawn once. */
   tile?: { width: number; height: number };
 }
 
 export const HEART_LAYOUTS: Readonly<Record<string, HeartLayout>> = {
-  scattered: {
-    height: 280,
-    focus: { x: 560, y: 140 },
-    tile: { width: 280, height: 210 },
-  },
-  large: { height: 280, focus: { x: 560, y: 140 } },
-  dark: { height: 280, focus: { x: 560, y: 140 } },
-  outline: {
-    height: 293,
-    focus: { x: 560, y: 146 },
-    tile: { width: 280, height: 210 },
-  },
-  ripple: { height: 293, focus: { x: 560, y: 146 } },
-  rising: { height: 293, focus: { x: 590, y: 135 } },
+  scattered: { height: 280, tile: { width: 280, height: 210 } },
+  large: { height: 280 },
+  dark: { height: 280 },
+  outline: { height: 293, tile: { width: 280, height: 210 } },
+  ripple: { height: 293 },
+  rising: { height: 293 },
 };
 
 export const HEART_DESIGNS: readonly string[] = Object.keys(HEART_LAYOUTS);
@@ -104,29 +94,23 @@ export function heartShapes(
   }
 }
 
-export type CoverView =
-  | { kind: 'image'; src: string; unoptimized: boolean }
-  | {
-      kind: 'hearts';
-      design: string;
-      base: string;
-      tone: string;
-      line: string;
-      shapes: HeartShape[];
-      layout: HeartLayout;
-    };
+export interface HeartsView {
+  kind: 'hearts';
+  design: string;
+  base: string;
+  tone: string;
+  line: string;
+  shapes: HeartShape[];
+  layout: HeartLayout;
+}
 
-/** What a page shows when its cover can't be used: the automatic look, in neutral. */
-export const FALLBACK_COVER: ResolvedCover = {
-  kind: 'design',
-  design: 'scattered',
-  colour: 'neutral',
-};
+export type CoverView =
+  { kind: 'image'; src: string; unoptimized: boolean } | HeartsView;
 
 const NEUTRAL =
   COVER_COLOURS.find((c) => c.id === 'neutral') ?? COVER_COLOURS[0];
 
-function hearts(design: string, colourId: string | undefined): CoverView {
+function hearts(design: string, colourId: string | undefined): HeartsView {
   const layout = HEART_LAYOUTS[design]!;
   const { colours } = COVER_DESIGNS.find((d) => d.id === design) ?? {
     colours: true,
@@ -134,9 +118,9 @@ function hearts(design: string, colourId: string | undefined): CoverView {
   const picked = colourId
     ? COVER_COLOURS.find((c) => c.id === colourId)
     : undefined;
-  // The dark design takes no colour of its own, so it has no outline colour either.
-  const dark = { ...COVER_DARK, line: COVER_DARK.tone };
-  const { base, tone, line } = !colours ? dark : (picked ?? NEUTRAL ?? dark);
+  const { base, tone, line } = !colours
+    ? COVER_DARK
+    : (picked ?? NEUTRAL ?? COVER_DARK);
   return {
     kind: 'hearts',
     design,
@@ -177,3 +161,6 @@ export function coverView(cover: ResolvedCover, apiOrigin: string): CoverView {
     };
   return hearts('scattered', 'neutral');
 }
+
+/** The automatic look, for when a cover's picture can't be shown. */
+export const fallbackHearts = (): HeartsView => hearts('scattered', 'neutral');
