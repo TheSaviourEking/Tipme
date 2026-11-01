@@ -11,6 +11,7 @@ import {
   phoneRecoveries,
   profiles,
   tips,
+  withdrawalHolds,
   type IssueKind,
   type IssueSeverity,
   type IssueSubject,
@@ -406,8 +407,13 @@ export async function markResolved(
       resolutionOutcome: input.outcome ?? null,
     })
     .where(and(eq(issues.id, input.issueId), eq(issues.status, 'open')))
-    .returning({ id: issues.id });
-  if (updated.length === 0) return false;
+    .returning({
+      id: issues.id,
+      severity: issues.severity,
+      subject: issues.subject,
+    });
+  const [closed] = updated;
+  if (!closed) return false;
   await recordAudit(tx, {
     staffUserId: input.staffUserId,
     action: input.staffUserId ? 'issue.resolved' : 'issue.auto_resolved',
@@ -417,7 +423,63 @@ export async function markResolved(
     reason: input.reason,
     now: input.now,
   });
+  if (closed.severity === 'money' && closed.subject.profileId)
+    await releaseHoldsIfClear(tx, {
+      profileId: closed.subject.profileId,
+      staffUserId: input.staffUserId,
+      now: input.now,
+    });
   return true;
+}
+
+/**
+ * The recipient's withdrawals resume once none of their money issues is open, however the last one
+ * closed. A payout waiting on the hold doesn't count: it is a result of the hold, not a cause, and
+ * it can only resume once the hold has gone. The profile lock makes two closes take turns, so
+ * neither misses the other.
+ */
+async function releaseHoldsIfClear(
+  tx: Tx,
+  input: { profileId: string; staffUserId: string | null; now: Date },
+): Promise<void> {
+  await tx
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.id, input.profileId))
+    .for('update');
+  const [other] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.status, 'open'),
+        eq(issues.severity, 'money'),
+        sql`${issues.kind} <> 'payout_held'`,
+        sql`${issues.subject}->>'profileId' = ${input.profileId}`,
+      ),
+    )
+    .limit(1);
+  if (other) return;
+  const released = await tx
+    .update(withdrawalHolds)
+    .set({ releasedAt: input.now, releasedBy: input.staffUserId })
+    .where(
+      and(
+        eq(withdrawalHolds.profileId, input.profileId),
+        isNull(withdrawalHolds.releasedAt),
+      ),
+    )
+    .returning({ id: withdrawalHolds.id });
+  if (released.length > 0)
+    await recordAudit(tx, {
+      staffUserId: input.staffUserId,
+      action: 'withdrawals.released',
+      permission: input.staffUserId ? 'issues.resolve' : undefined,
+      subjectType: 'profile',
+      subjectId: input.profileId,
+      reason: 'None of the recipient’s money issues is open.',
+      now: input.now,
+    });
 }
 
 /** Resolves issues whose cause has cleared (resolver `system`, audited). */
@@ -513,6 +575,7 @@ const view = (row: typeof issues.$inferSelect): IssueView => ({
   openedAt: row.openedAt.toISOString(),
   resolvedAt: row.resolvedAt?.toISOString() ?? null,
   resolvedBy: row.resolvedBy,
+  resolutionOutcome: (row.resolutionOutcome as OpsIssueOutcome | null) ?? null,
 });
 
 /** Newest first; `cursor` is the id of the last issue already shown. */
@@ -588,7 +651,10 @@ export function relatedOpenIssues(
   });
 }
 
-/** Staff resolve an open issue with a written reason (permission `issues.resolve`, audited). */
+/**
+ * Staff resolve an open issue with a written reason (permission `issues.resolve`, audited). A money
+ * issue also needs how it was settled, which is stored and changes no balance.
+ */
 export function resolveIssue(
   db: Database,
   input: {
@@ -603,20 +669,26 @@ export function resolveIssue(
     return Promise.reject(new OperationError('ISSUE_NOT_FOUND'));
   return guarded(() =>
     db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ severity: issues.severity, status: issues.status })
+        .from(issues)
+        .where(eq(issues.id, input.issueId));
+      if (!current) throw new OperationError('ISSUE_NOT_FOUND');
+      if (
+        current.status === 'open' &&
+        current.severity === 'money' &&
+        !input.outcome
+      )
+        throw new OperationError('ISSUE_OUTCOME_REQUIRED');
       const resolved = await markResolved(tx, {
         issueId: input.issueId,
         resolvedBy: input.staffUserId,
         staffUserId: input.staffUserId,
         reason: input.reason,
-        outcome: input.outcome,
+        outcome: current.severity === 'money' ? input.outcome : undefined,
         now: input.now ?? new Date(),
       });
-      if (resolved) return;
-      const [row] = await tx
-        .select({ status: issues.status })
-        .from(issues)
-        .where(eq(issues.id, input.issueId));
-      throw new OperationError(row ? 'ISSUE_RESOLVED' : 'ISSUE_NOT_FOUND');
+      if (!resolved) throw new OperationError('ISSUE_RESOLVED');
     }),
   );
 }

@@ -13,6 +13,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Logger } from '@tipme/observability';
 import type { Response } from 'express';
 import {
   messageReportSchema,
@@ -23,7 +24,7 @@ import {
   type MyTipDetail,
   type MyTipRow,
   type WeeklyReportData,
-  type WithdrawalQuote,
+  type WithdrawalQuoteResponse,
 } from '@tipme/contracts';
 import {
   dashboardSummary,
@@ -37,6 +38,8 @@ import {
   recentActivity,
   reportMessage,
   requestWithdrawal,
+  safeError,
+  withdrawalInReview,
   withdrawalQuote,
   withdrawalsAvailable,
   type PayoutReader,
@@ -53,6 +56,7 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ServerEvents } from '../analytics/server-events.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LOGGER } from '../tokens.js';
 
 const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
 
@@ -64,7 +68,19 @@ export class DashboardController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(WITHDRAWAL_PROVIDER_TOKEN) private readonly provider: PayoutReader,
     @Inject(ServerEvents) private readonly events: ServerEvents,
+    @Inject(LOGGER) private readonly logger: Logger,
   ) {}
+
+  /** A wrong key looks like an outage to the recipient; this is how staff tell them apart. */
+  private logReadFailure(during: 'quote' | 'request') {
+    return (failure: ReturnType<typeof safeError>) =>
+      this.logger.warn({
+        event: 'withdrawal.provider_read_failed',
+        during,
+        provider: this.provider.name,
+        ...failure,
+      });
+  }
 
   private profile(auth: AuthContext): Promise<string> {
     return myProfileId(this.database.db, auth.userId);
@@ -195,22 +211,28 @@ export class DashboardController {
   @Header('Cache-Control', 'private, no-store')
   async quoteWithdrawal(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<WithdrawalQuote>> {
-    const quote = await withdrawalQuote(this.database.db, {
-      profileId: await this.profile(auth),
-      provider: this.provider,
-    });
+  ): Promise<ApiDataResponse<WithdrawalQuoteResponse>> {
+    const profileId = await this.profile(auth);
+    const [quote, inReview] = await Promise.all([
+      withdrawalQuote(this.database.db, {
+        profileId,
+        provider: this.provider,
+        onReadFailure: this.logReadFailure('quote'),
+      }),
+      withdrawalInReview(this.database.db, profileId),
+    ]);
     return {
       data:
         quote.state === 'ready'
           ? {
               ...quote,
+              inReview,
               withdrawableMinor: quote.withdrawableMinor.toString(),
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
               feeMinor: quote.feeMinor.toString(),
             }
-          : quote,
+          : { ...quote, inReview },
     };
   }
 
@@ -235,6 +257,7 @@ export class DashboardController {
       amountMinor: BigInt(body.amountMinor),
       idempotencyKey: key,
       provider: this.provider,
+      onReadFailure: this.logReadFailure('request'),
     });
     await this.events.record(
       'payout_requested',

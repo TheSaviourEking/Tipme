@@ -9,7 +9,7 @@ import {
   withdrawalHolds,
 } from '../schema.js';
 import { markPayoutInitiated } from './attempts.js';
-import { guarded } from './errors.js';
+import { guarded, safeError } from './errors.js';
 import { openIssue } from './issues.js';
 import {
   holdWithdrawals,
@@ -53,29 +53,6 @@ export type PayoutStartLog = (entry: {
   transfer_ref?: string;
 }) => void;
 
-/** The name and allowlisted diagnostic only: an error's message may name an account. */
-function safeError(error: unknown): {
-  error: string;
-  cause?: string;
-  http_status?: number;
-  provider_code?: string;
-} {
-  const diagnostic =
-    error instanceof Error && 'diagnostic' in error
-      ? (error.diagnostic as
-          | { cause?: string; httpStatus?: number; providerCode?: string }
-          | undefined)
-      : undefined;
-  return {
-    error: error instanceof Error ? error.name : 'unknown',
-    ...(diagnostic?.cause ? { cause: diagnostic.cause } : {}),
-    ...(diagnostic?.httpStatus ? { http_status: diagnostic.httpStatus } : {}),
-    ...(diagnostic?.providerCode
-      ? { provider_code: diagnostic.providerCode }
-      : {}),
-  };
-}
-
 /** Which call an unknown start stopped at, for the staff issue. */
 export function startStepNote(step: string | null): string {
   if (step === 'fee')
@@ -118,7 +95,7 @@ export const isAmbiguousLookup = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AmbiguousPayoutError';
 
 /** The fields, by name, where what the provider says differs from what TipMe asked for. */
-async function differences(
+export async function differences(
   db: Database,
   payoutId: string,
   claims: PayoutClaims,
@@ -553,10 +530,24 @@ export async function startPayout(
   return 'started';
 }
 
-const noteStep = (db: Database, payoutId: string, step: 'fee' | 'payout') =>
-  guarded(() =>
-    db.update(payouts).set({ startStep: step }).where(eq(payouts.id, payoutId)),
+/**
+ * Noted before the call it names. It only takes on a payout still waiting: staff may have marked a
+ * start that stalled as failed, and then nothing may leave.
+ */
+async function noteStep(
+  db: Database,
+  payoutId: string,
+  step: 'fee' | 'payout',
+): Promise<void> {
+  const noted = await guarded(() =>
+    db
+      .update(payouts)
+      .set({ startStep: step })
+      .where(and(eq(payouts.id, payoutId), eq(payouts.status, 'REQUESTED')))
+      .returning({ id: payouts.id }),
   );
+  if (noted.length === 0) throw new Error('payout_no_longer_requested');
+}
 
 async function sendPayout(
   db: Database,

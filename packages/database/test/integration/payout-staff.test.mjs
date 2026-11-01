@@ -1,0 +1,594 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+import {
+  applyReportedPayout,
+  balanceOf,
+  createPaymentIntent,
+  createQuote,
+  holdWithdrawals,
+  markAttemptInitiated,
+  markPayoutFailedAbsent,
+  openIssue,
+  PAYOUT_NOT_FOUND_AFTER_MS,
+  readPayoutIssue,
+  recordPayoutOutcome,
+  recordProviderEvent,
+  requestWithdrawal,
+  resolveIssue,
+  resumeHeldPayout,
+  startPayout,
+  withdrawalQuote,
+} from '../../dist/index.js';
+import { TOBI, useDatabase } from './helpers.mjs';
+
+const STAFF = '00000000-0000-7000-8000-00000000abcd';
+const REASON = 'Checked it in the provider dashboard.';
+const MS = PAYOUT_NOT_FOUND_AFTER_MS;
+
+/** A provider whose reads are scripted and whose writes fail the test: staff tools never send. */
+function fakeProvider({ find = async () => null, fetch } = {}) {
+  const calls = { creates: 0 };
+  return {
+    calls,
+    name: 'mock',
+    capabilities: { connectedAccounts: false },
+    payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
+    payoutBalance: async () => ({ availableMinor: 100_000_000n }),
+    quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
+    coverPayoutFee: async () => ({ transferRef: 'transfer' }),
+    initiatePayout: async () => {
+      calls.creates += 1;
+      return { providerReference: 'mock_out_new', status: 'pending' };
+    },
+    findPayoutByReference: find,
+    fetchPayoutStatus: fetch ?? (async () => ({ status: 'not_found' })),
+  };
+}
+
+async function setup(t) {
+  const database = await useDatabase(t);
+  await database.fresh();
+  const { db } = database;
+  const q = (sql, params) =>
+    database.pool.query(sql, params).then((r) => r.rows);
+  const quote = await createQuote(db, {
+    handle: 'tobi',
+    tipMinor: 200000n,
+    currency: 'NGN',
+  });
+  const intent = await createPaymentIntent(db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  const reference = `mock_pay_${randomUUID()}`;
+  await markAttemptInitiated(db, {
+    attemptId: intent.attemptId,
+    provider: 'mock',
+    providerReference: reference,
+  });
+  await recordProviderEvent(db, {
+    provider: 'mock',
+    providerEventId: `evt_${randomUUID()}`,
+    eventType: 'payment.succeeded',
+    attemptId: intent.attemptId,
+    providerReference: reference,
+    amountMinor: 200000n,
+    currency: 'NGN',
+    providerFeeMinor: 3000n,
+    signatureVerified: true,
+    payload: {},
+  });
+  const withdraw = async () =>
+    (
+      await requestWithdrawal(db, {
+        profileId: TOBI,
+        amountMinor: 100000n,
+        idempotencyKey: randomUUID(),
+        provider: fakeProvider(),
+      })
+    ).payoutId;
+  const available = async () => (await balanceOf(db, TOBI)).availableMinor;
+  const issueFor = async (payoutId, kind = 'payout_unresolved', key) =>
+    (
+      await openIssue(db, {
+        dedupeKey: key ?? `${kind}.${payoutId}`,
+        kind,
+        subject: { payoutId },
+        now: new Date(),
+      })
+    ).id;
+  const hold = async (kind = 'payment_reversed', reason = 'reversal') => {
+    const issue = await openIssue(db, {
+      dedupeKey: `hold.${randomUUID()}`,
+      kind,
+      subject: { profileId: TOBI },
+      now: new Date(),
+    });
+    await db.transaction((tx) =>
+      holdWithdrawals(tx, { profileId: TOBI, reason, issueId: issue.id }),
+    );
+    return issue.id;
+  };
+  const ledgerRows = async () =>
+    (await q('SELECT count(*)::int AS n FROM ledger_entries'))[0].n;
+  const statusOf = async (payoutId) =>
+    (await q('SELECT status FROM payouts WHERE id = $1', [payoutId]))[0].status;
+  const issueStatus = async (id) =>
+    (await q('SELECT status FROM issues WHERE id = $1', [id]))[0].status;
+  const later = () => new Date(Date.now() + MS + 60_000);
+  return {
+    db,
+    q,
+    withdraw,
+    available,
+    issueFor,
+    hold,
+    ledgerRows,
+    statusOf,
+    issueStatus,
+    later,
+  };
+}
+
+const offers = (view) => view.offers;
+const resolver = (provider) => () => provider;
+
+test('the read says what the provider says, and changes nothing', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  const before = await s.ledgerRows();
+  const absent = await readPayoutIssue(s.db, {
+    issueId,
+    staffUserId: STAFF,
+    provider: resolver(fakeProvider()),
+    now: s.later(),
+  });
+  assert.equal(absent.read.state, 'absent');
+  assert.equal(absent.startStep, null);
+  assert.deepEqual(offers(absent), {
+    applyReported: null,
+    resume: true,
+    markFailed: true,
+  });
+
+  const paid = await readPayoutIssue(s.db, {
+    issueId,
+    staffUserId: STAFF,
+    provider: resolver(
+      fakeProvider({
+        find: async () => ({ providerReference: 'ref_1', status: 'paid' }),
+      }),
+    ),
+  });
+  assert.equal(paid.read.state, 'paid');
+  assert.deepEqual(offers(paid), {
+    applyReported: 'paid',
+    resume: false,
+    markFailed: false,
+  });
+
+  for (const find of [
+    async () => {
+      throw new Error('down');
+    },
+    async () => {
+      const error = new Error('two');
+      error.name = 'AmbiguousPayoutError';
+      throw error;
+    },
+  ]) {
+    const unclear = await readPayoutIssue(s.db, {
+      issueId,
+      staffUserId: STAFF,
+      provider: resolver(fakeProvider({ find })),
+      now: s.later(),
+    });
+    assert.ok(['uncertain', 'ambiguous'].includes(unclear.read.state));
+    assert.deepEqual(offers(unclear), {
+      applyReported: null,
+      resume: false,
+      markFailed: false,
+    });
+  }
+  assert.equal(await s.ledgerRows(), before);
+  assert.equal(await s.statusOf(payoutId), 'REQUESTED');
+  const audits = await s.q(
+    `SELECT permission FROM audit_events WHERE action = 'payout.staff_read'`,
+  );
+  assert.ok(audits.length >= 4);
+  assert.ok(audits.every((a) => a.permission === 'payouts.resolve'));
+});
+
+test('applying a paid read books it once and closes the issue', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  const provider = fakeProvider({
+    find: async () => ({ providerReference: 'ref_paid', status: 'paid' }),
+  });
+  // What staff saw was different from what the provider says now: nothing happens.
+  const stale = await applyReportedPayout(s.db, {
+    issueId,
+    reported: 'failed',
+    reason: REASON,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.equal(stale.outcome, 'not_offered');
+  assert.equal(await s.statusOf(payoutId), 'REQUESTED');
+
+  const done = await applyReportedPayout(s.db, {
+    issueId,
+    reported: 'paid',
+    reason: REASON,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.equal(done.outcome, 'applied');
+  assert.equal(await s.statusOf(payoutId), 'PAID');
+  assert.equal(await s.issueStatus(issueId), 'resolved');
+  assert.equal(provider.calls.creates, 0);
+  const audit = await s.q(
+    `SELECT reason, permission FROM audit_events WHERE action = 'payout.staff_applied'`,
+  );
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].permission, 'payouts.resolve');
+  assert.match(audit[0].reason, /Checked it/);
+});
+
+test('a read that differs from the request is never applied and opens a conflict', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  const provider = fakeProvider({
+    find: async () => ({
+      providerReference: 'ref_x',
+      status: 'paid',
+      amountMinor: 999n,
+    }),
+  });
+  const view = await readPayoutIssue(s.db, {
+    issueId,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.deepEqual(view.read.differing, ['amount']);
+  assert.equal(view.offers.applyReported, null);
+  const before = await s.ledgerRows();
+  const result = await applyReportedPayout(s.db, {
+    issueId,
+    reported: 'paid',
+    reason: REASON,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.equal(result.outcome, 'mismatch');
+  assert.equal(await s.statusOf(payoutId), 'REQUESTED');
+  assert.equal(await s.ledgerRows(), before);
+  assert.equal(
+    (await s.q(`SELECT 1 FROM issues WHERE kind = 'payout_conflict'`)).length,
+    1,
+  );
+});
+
+test('a reference the lookup disagrees with offers nothing, so a failure cannot release a paid twin', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  await s.q(`UPDATE payouts SET provider_reference = 'ref_one' WHERE id = $1`, [
+    payoutId,
+  ]);
+  const issueId = await s.issueFor(
+    payoutId,
+    'payout_conflict',
+    `payout_conflict.two_references.${payoutId}`,
+  );
+  const view = await readPayoutIssue(s.db, {
+    issueId,
+    staffUserId: STAFF,
+    provider: resolver(
+      fakeProvider({
+        fetch: async () => ({ status: 'failed', failureReason: 'other' }),
+        find: async () => ({ providerReference: 'ref_two', status: 'paid' }),
+      }),
+    ),
+  });
+  assert.equal(view.read.state, 'conflicting');
+  assert.deepEqual(offers(view), {
+    applyReported: null,
+    resume: false,
+    markFailed: false,
+  });
+});
+
+test('a held payout resumes only with no hold and no attempt, and only re-queues the job', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const provider = fakeProvider();
+  const issueId = await s.issueFor(payoutId, 'payout_held');
+  const holdIssue = await s.hold();
+  const held = await resumeHeldPayout(s.db, {
+    issueId,
+    reason: REASON,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.equal(held.outcome, 'not_offered');
+  assert.equal(held.view.holdActive, true);
+
+  // The held payout's own issue doesn't keep the hold in place: it could never resume otherwise.
+  await resolveIssue(s.db, {
+    issueId: holdIssue,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'written_off',
+  });
+  const jobs = () =>
+    s.q(
+      `SELECT dedupe_key FROM outbox_events WHERE event_type = 'payouts.start' AND aggregate_id = $1`,
+      [payoutId],
+    );
+  assert.equal((await jobs()).length, 1);
+  const resumed = await resumeHeldPayout(s.db, {
+    issueId,
+    reason: REASON,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.equal(resumed.outcome, 'resumed');
+  assert.equal((await jobs()).length, 2);
+  assert.equal(provider.calls.creates, 0);
+  assert.equal(await s.issueStatus(issueId), 'open');
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: fakeProvider() }),
+    'started',
+  );
+
+  // It has been attempted now: a further resume is refused.
+  const again = await resumeHeldPayout(s.db, {
+    issueId,
+    reason: REASON,
+    staffUserId: STAFF,
+    provider: resolver(provider),
+  });
+  assert.equal(again.outcome, 'not_offered');
+  assert.equal((await jobs()).length, 2);
+});
+
+test('mark failed needs a definite absence past the wait and no payout step, then releases once', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  const base = {
+    issueId,
+    reason: REASON,
+    staffUserId: STAFF,
+    dashboardVerified: true,
+  };
+  const reserved = await s.available();
+
+  const tooSoon = await markPayoutFailedAbsent(s.db, {
+    ...base,
+    provider: resolver(fakeProvider()),
+  });
+  assert.equal(tooSoon.outcome, 'not_offered');
+
+  await s.q(
+    `UPDATE payouts SET start_uncertain_at = now(), start_step = 'payout' WHERE id = $1`,
+    [payoutId],
+  );
+  const sent = await markPayoutFailedAbsent(s.db, {
+    ...base,
+    provider: resolver(fakeProvider()),
+    now: s.later(),
+  });
+  assert.equal(sent.outcome, 'not_offered');
+  assert.equal(sent.view.startStep, 'payout');
+  assert.equal(sent.view.offers.markFailed, false);
+
+  await s.q(`UPDATE payouts SET start_step = 'fee' WHERE id = $1`, [payoutId]);
+  const unreadable = await markPayoutFailedAbsent(s.db, {
+    ...base,
+    provider: resolver(
+      fakeProvider({
+        find: async () => {
+          throw new Error('down');
+        },
+      }),
+    ),
+    now: s.later(),
+  });
+  assert.equal(unreadable.outcome, 'not_offered');
+
+  const conflict = await s.issueFor(
+    payoutId,
+    'payout_conflict',
+    `payout_conflict.mismatch.${payoutId}`,
+  );
+  const conflicted = await markPayoutFailedAbsent(s.db, {
+    ...base,
+    provider: resolver(fakeProvider()),
+    now: s.later(),
+  });
+  assert.equal(conflicted.outcome, 'not_offered');
+  await resolveIssue(s.db, {
+    issueId: conflict,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'resolved_by_provider',
+  });
+
+  const ledgerBefore = await s.ledgerRows();
+  const done = await markPayoutFailedAbsent(s.db, {
+    ...base,
+    provider: resolver(fakeProvider()),
+    now: s.later(),
+  });
+  assert.equal(done.outcome, 'marked_failed');
+  assert.equal(await s.statusOf(payoutId), 'FAILED');
+  assert.equal(await s.available(), reserved + 100000n);
+  assert.equal(await s.ledgerRows(), ledgerBefore);
+  assert.equal(await s.issueStatus(issueId), 'resolved');
+  const audit = await s.q(
+    `SELECT permission, reason FROM audit_events WHERE action = 'payout.staff_marked_failed'`,
+  );
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].permission, 'payouts.resolve');
+  const again = await markPayoutFailedAbsent(s.db, {
+    ...base,
+    provider: resolver(fakeProvider()),
+    now: s.later(),
+  });
+  assert.equal(again.outcome, 'not_open');
+  assert.equal(await s.available(), reserved + 100000n);
+});
+
+test('a signed event naming the payout means "the provider has none" is not believed', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const issueId = await s.issueFor(payoutId);
+  await s.q(
+    `INSERT INTO unmatched_provider_events
+       (id, provider, provider_event_id, event_type, payload_hash, payload, reason)
+     VALUES ($1, 'bachs', 'evt_parked', 'payout.paid', 'h', $2, 'unknown_payout')`,
+    [randomUUID(), JSON.stringify({ operationReference: payoutId })],
+  );
+  const parked = await markPayoutFailedAbsent(s.db, {
+    issueId,
+    reason: REASON,
+    staffUserId: STAFF,
+    dashboardVerified: true,
+    provider: resolver(fakeProvider()),
+    now: s.later(),
+  });
+  assert.equal(parked.outcome, 'not_offered');
+  assert.equal(parked.view.parkedEvent, true);
+  assert.equal(await s.statusOf(payoutId), 'REQUESTED');
+});
+
+test('the tools act only on withdrawal issues', async (t) => {
+  const s = await setup(t);
+  const other = await s.hold();
+  await assert.rejects(
+    readPayoutIssue(s.db, {
+      issueId: other,
+      staffUserId: STAFF,
+      provider: resolver(fakeProvider()),
+    }),
+    (error) => error.code === 'ISSUE_NOT_FOUND',
+  );
+});
+
+test('a start marked failed while it was topping up the fee never sends the payout', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  await s.q(
+    `UPDATE payouts SET account_reference = 'acct_1', provider = 'bachs',
+       destination_id = NULL WHERE id = $1`,
+    [payoutId],
+  );
+  const [{ id: destinationId }] = await s.q(
+    `INSERT INTO payout_destinations (id, profile_id, provider, destination_reference, bank_code, bank_name, account_last4, status)
+     VALUES ($1, $2, 'bachs', 'dest_1', '058', 'Bank', '1234', 'usable') RETURNING id`,
+    [randomUUID(), TOBI],
+  );
+  await s.q(`UPDATE payouts SET destination_id = $1 WHERE id = $2`, [
+    destinationId,
+    payoutId,
+  ]);
+  const provider = {
+    ...fakeProvider(),
+    capabilities: { connectedAccounts: true },
+    coverPayoutFee: async () => {
+      await recordPayoutOutcome(s.db, {
+        payoutId,
+        provider: 'bachs',
+        providerEventId: `staff.${payoutId}`,
+        providerReference: null,
+        outcome: 'failed',
+        signatureVerified: true,
+        payload: {},
+      });
+      return { transferRef: 'tr_1' };
+    },
+  };
+  assert.equal(await startPayout(s.db, { payoutId, provider }), 'uncertain');
+  assert.equal(provider.calls.creates, 0);
+});
+
+test('a hold is never placed for an issue already closed', async (t) => {
+  const s = await setup(t);
+  const issue = await openIssue(s.db, {
+    dedupeKey: `closed.${randomUUID()}`,
+    kind: 'provider_in_debt',
+    subject: { profileId: TOBI },
+    now: new Date(),
+  });
+  await resolveIssue(s.db, {
+    issueId: issue.id,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'recipient_owes',
+  });
+  await s.db.transaction((tx) =>
+    holdWithdrawals(tx, {
+      profileId: TOBI,
+      reason: 'in_debt',
+      issueId: issue.id,
+    }),
+  );
+  assert.equal(
+    (await s.q('SELECT 1 FROM withdrawal_holds WHERE released_at IS NULL'))
+      .length,
+    0,
+  );
+});
+
+test('a money issue the system closes last still releases the hold', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const unresolved = await s.issueFor(payoutId);
+  const holdIssue = await s.hold();
+  await resolveIssue(s.db, {
+    issueId: holdIssue,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'written_off',
+  });
+  const active = async () =>
+    (await s.q('SELECT 1 FROM withdrawal_holds WHERE released_at IS NULL'))
+      .length;
+  assert.equal(await active(), 1);
+  // The payout reaches a final state: the detector closes its issue, with no person involved.
+  await recordPayoutOutcome(s.db, {
+    payoutId,
+    provider: 'mock',
+    providerEventId: `evt.${payoutId}`,
+    providerReference: 'ref_final',
+    outcome: 'paid',
+    signatureVerified: true,
+    payload: {},
+  });
+  const { autoResolveIssues } = await import('../../dist/index.js');
+  await autoResolveIssues(s.db, new Date());
+  assert.equal(await s.issueStatus(unresolved), 'resolved');
+  assert.equal(await active(), 0);
+});
+
+test('a failed balance read reaches the caller by name only, never with account data', async (t) => {
+  const s = await setup(t);
+  const failures = [];
+  const quote = await withdrawalQuote(s.db, {
+    profileId: TOBI,
+    provider: {
+      ...fakeProvider(),
+      payoutBalance: async () => {
+        throw new TypeError('acct_secret_123 was refused');
+      },
+    },
+    onReadFailure: (failure) => failures.push(failure),
+  });
+  assert.equal(quote.state, 'provider_unavailable');
+  assert.deepEqual(failures, [{ error: 'TypeError' }]);
+});

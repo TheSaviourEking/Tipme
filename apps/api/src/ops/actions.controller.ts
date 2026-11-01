@@ -13,6 +13,7 @@ import {
   opsBachsFeeBearerSchema,
   opsReasonSchema,
   opsRecheckSchema,
+  opsResolveIssueSchema,
   type ApiDataResponse,
   type OpsNoteRequest,
   type OpsBachsAccountRecoveryRequest,
@@ -21,6 +22,7 @@ import {
   type OpsReasonRequest,
   type OpsRecheckOutcome,
   type OpsRecheckRequest,
+  type OpsResolveIssueRequest,
 } from '@tipme/contracts';
 import {
   addIssueNote,
@@ -87,12 +89,14 @@ export class OpsActionsController {
   async resolve(
     @CurrentOps() ops: OpsContext,
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+    @Body(new ZodValidationPipe(opsResolveIssueSchema))
+    body: OpsResolveIssueRequest,
   ): Promise<ApiDataResponse<{ resolved: true }>> {
     await resolveIssue(this.database.db, {
       issueId: uuidParam(id),
       staffUserId: ops.userId,
       reason: body.reason,
+      ...(body.outcome ? { outcome: body.outcome } : {}),
     });
     return { data: { resolved: true } };
   }

@@ -37,6 +37,13 @@ export const when = (iso: string) => dateTime.format(new Date(iso));
 export const PROVIDER_TEST_CONFIRM_PATH = '/ops/providers/confirm';
 export const PROVIDER_TEST_TOKEN_KEY = 'tipme.provider-test-token';
 
+/** How staff say a money issue was settled. TipMe changes no balance by it. */
+export const ISSUE_OUTCOME_LABELS: Record<string, string> = {
+  resolved_by_provider: 'Settled by the provider',
+  recipient_owes: 'The recipient owes the money',
+  written_off: 'Written off by TipMe',
+};
+
 export const ISSUE_KIND_LABELS: Record<string, string> = {
   payment_mismatch: 'Amount mismatch',
   payment_conflict: 'Payment after the tip ended',

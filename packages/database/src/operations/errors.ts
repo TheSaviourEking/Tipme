@@ -32,6 +32,7 @@ export type OperationErrorCode =
   | 'EMAIL_VERIFICATION_REQUIRED'
   | 'ISSUE_NOT_FOUND'
   | 'ISSUE_RESOLVED'
+  | 'ISSUE_OUTCOME_REQUIRED'
   | 'MARKET_ENTRY_NOT_FOUND';
 
 /** Expected business outcomes callers map to responses; never carries request values. */
@@ -72,4 +73,27 @@ export async function guarded<T>(operation: () => Promise<T>): Promise<T> {
     if (error instanceof OperationError) throw error;
     throw new PersistenceError(sqlStateOf(error));
   }
+}
+
+/** The name and allowlisted diagnostic only: an error's message may name an account. */
+export function safeError(error: unknown): {
+  error: string;
+  cause?: string;
+  http_status?: number;
+  provider_code?: string;
+} {
+  const diagnostic =
+    error instanceof Error && 'diagnostic' in error
+      ? (error.diagnostic as
+          | { cause?: string; httpStatus?: number; providerCode?: string }
+          | undefined)
+      : undefined;
+  return {
+    error: error instanceof Error ? error.name : 'unknown',
+    ...(diagnostic?.cause ? { cause: diagnostic.cause } : {}),
+    ...(diagnostic?.httpStatus ? { http_status: diagnostic.httpStatus } : {}),
+    ...(diagnostic?.providerCode
+      ? { provider_code: diagnostic.providerCode }
+      : {}),
+  };
 }

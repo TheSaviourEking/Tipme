@@ -4778,6 +4778,274 @@
         "x-tipme-permission": "issues.view"
       }
     },
+    "/v1/ops/issues/{id}/payout-apply": {
+      "post": {
+        "operationId": "OpsPayoutIssues.apply",
+        "tags": [
+          "OpsPayoutIssues"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "reported": {
+                    "type": "string",
+                    "enum": [
+                      "paid",
+                      "failed"
+                    ]
+                  }
+                },
+                "required": [
+                  "reason",
+                  "reported"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
+      }
+    },
+    "/v1/ops/issues/{id}/payout-mark-failed": {
+      "post": {
+        "operationId": "OpsPayoutIssues.markFailed",
+        "tags": [
+          "OpsPayoutIssues"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "dashboardVerified": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "reason",
+                  "dashboardVerified"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
+      }
+    },
+    "/v1/ops/issues/{id}/payout-read": {
+      "post": {
+        "operationId": "OpsPayoutIssues.read",
+        "tags": [
+          "OpsPayoutIssues"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
+      }
+    },
+    "/v1/ops/issues/{id}/payout-resume": {
+      "post": {
+        "operationId": "OpsPayoutIssues.resume",
+        "tags": [
+          "OpsPayoutIssues"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
+      }
+    },
     "/v1/ops/issues/{id}/resolve": {
       "post": {
         "operationId": "OpsActions.resolve",
@@ -4805,6 +5073,14 @@
                     "type": "string",
                     "minLength": 10,
                     "maxLength": 500
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "resolved_by_provider",
+                      "recipient_owes",
+                      "written_off"
+                    ]
                   }
                 },
                 "required": [
@@ -7210,6 +7486,7 @@
                   "OPS_LOCKED",
                   "PAGE_SUSPENDED",
                   "ISSUE_RESOLVED",
+                  "ISSUE_OUTCOME_REQUIRED",
                   "PREVIEW_REQUIRED",
                   "PROFILE_NOT_FOUND",
                   "RATE_LIMITED",

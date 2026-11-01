@@ -8,7 +8,7 @@ import {
 import { z } from 'zod';
 import {
   applyPayoutSignal,
-  enqueueOutbox,
+  flagPaymentReversal,
   findBachsAttemptByOperationReference,
   findPaymentAccountByReference,
   updatePaymentAccountStatus,
@@ -236,7 +236,8 @@ export class WebhookService {
 
   /**
    * Refunds and disputes are not modelled yet (ADR-0004): each one raises a money issue for
-   * staff, once per Bachs event, and never changes a balance or the ledger.
+   * staff, once per Bachs event, and pauses that recipient's withdrawals. It never changes a
+   * balance or the ledger.
    */
   private async flagBachsReversal(
     event: Extract<NormalizedProviderEvent, { kind: 'reversal' }>,
@@ -244,15 +245,11 @@ export class WebhookService {
   ): Promise<string> {
     const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId) return this.unmatchedBachs(event);
-    await this.database.db.transaction((tx) =>
-      enqueueOutbox(tx, {
-        eventType: 'payment.reversed',
-        aggregateId: attemptId,
-        // Dedupe keys allow word characters, dots and dashes only.
-        dedupeSuffix: event.eventId.replace(/[^\w.-]/g, '_'),
-        payload: { attemptId, eventType: event.eventType },
-      }),
-    );
+    await flagPaymentReversal(this.database.db, {
+      attemptId,
+      eventId: event.eventId,
+      eventType: event.eventType,
+    });
     return 'reversal_flagged';
   }
 

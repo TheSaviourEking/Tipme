@@ -43,6 +43,76 @@ export const opsReasonSchema = z
   .strict();
 export type OpsReasonRequest = z.infer<typeof opsReasonSchema>;
 
+/** Resolving an issue: a money issue must also say how it was settled (the operation checks). */
+export const opsResolveIssueSchema = opsReasonSchema
+  .extend({
+    outcome: z
+      .enum(['resolved_by_provider', 'recipient_owes', 'written_off'])
+      .optional(),
+  })
+  .strict();
+export type OpsResolveIssueRequest = z.infer<typeof opsResolveIssueSchema>;
+
+/** Apply what the provider reports: names what staff saw, so a changed answer is not applied. */
+export const opsPayoutApplySchema = opsReasonSchema
+  .extend({ reported: z.enum(['paid', 'failed']) })
+  .strict();
+export type OpsPayoutApplyRequest = z.infer<typeof opsPayoutApplySchema>;
+
+export const opsPayoutMarkFailedSchema = opsReasonSchema
+  .extend({ dashboardVerified: z.literal(true) })
+  .strict();
+export type OpsPayoutMarkFailedRequest = z.infer<
+  typeof opsPayoutMarkFailedSchema
+>;
+
+/** What the provider said just now about a withdrawal issue, and what staff may do about it. */
+export interface OpsPayoutIssueView {
+  issueId: string;
+  issueStatus: 'open' | 'resolved';
+  payoutStatus: string;
+  startStep: 'fee' | 'payout' | null;
+  startAttemptedAt: string | null;
+  holdActive: boolean;
+  /** A signed event names this payout, so "the provider has none" isn't believed. */
+  parkedEvent: boolean;
+  /** Another open conflict is about this payout. */
+  openConflict: boolean;
+  /** The recipient has changed bank since; a resumed payout still goes to the recorded one. */
+  destinationReplaced: boolean;
+  read: {
+    state:
+      | 'paid'
+      | 'failed'
+      | 'pending'
+      | 'review'
+      | 'absent'
+      | 'uncertain'
+      | 'ambiguous'
+      | 'conflicting';
+    referenceTail: string | null;
+    /** The fields, by name, where it differs from what TipMe asked for. */
+    differing: string[];
+    failureReason: string | null;
+  };
+  offers: {
+    applyReported: 'paid' | 'failed' | null;
+    resume: boolean;
+    markFailed: boolean;
+  };
+}
+
+export interface OpsPayoutActionResult {
+  outcome:
+    | 'applied'
+    | 'resumed'
+    | 'marked_failed'
+    | 'mismatch'
+    | 'not_offered'
+    | 'not_open';
+  view: OpsPayoutIssueView;
+}
+
 export const ISSUE_KINDS = [
   'payment_mismatch',
   'payment_conflict',
@@ -100,6 +170,7 @@ export interface OpsIssue {
   openedAt: string;
   resolvedAt: string | null;
   resolvedBy: string | null;
+  resolutionOutcome: OpsIssueOutcome | null;
 }
 
 export const opsIssueListQuerySchema = z
@@ -194,6 +265,10 @@ export interface OpsIssueEvidence {
     referenceTail: string | null;
     createdAt: string;
     paidAt: string | null;
+    /** The last provider call a start noted before making it. */
+    startStep: 'fee' | 'payout' | null;
+    startAttemptedAt: string | null;
+    inProviderReview: boolean;
     history: {
       fromStatus: string | null;
       toStatus: string;

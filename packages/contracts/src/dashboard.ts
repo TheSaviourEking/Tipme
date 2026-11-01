@@ -83,6 +83,9 @@ export type WithdrawalQuote =
   | { state: 'paused'; reason: 'reversal' | 'in_debt' | 'unexpected_payout' }
   | { state: 'provider_unavailable' };
 
+/** The quote, and whether the provider itself is checking a withdrawal already under way. */
+export type WithdrawalQuoteResponse = WithdrawalQuote & { inReview: boolean };
+
 export interface NotificationView {
   id: string;
   kind: string;

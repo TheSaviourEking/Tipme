@@ -42,6 +42,9 @@ test('the owner enrols, works an issue (reveal, note, resolve) and sees it all i
 
   await page.getByRole('button', { name: 'Resolve…' }).click();
   await page
+    .getByLabel('How was it settled?')
+    .selectOption('resolved_by_provider');
+  await page
     .getByLabel('How was it resolved?')
     .fill(`Provider confirmed nothing was taken ${tag}`);
   await page.getByRole('button', { name: 'Resolve issue' }).click();

@@ -15,11 +15,14 @@ import {
   Skeleton,
   TextareaField,
 } from '@tipme/ui';
+import { PayoutIssueTools } from '@/components/ops/payout-issue-tools';
 import { ReasonAction } from '@/components/ops/reason-action';
+import { ResolveMoneyIssue } from '@/components/ops/resolve-money-issue';
 import { naira } from '@/lib/money';
 import {
   can,
   ISSUE_KIND_LABELS,
+  ISSUE_OUTCOME_LABELS,
   SEVERITY_LABELS,
   useOpsAccess,
   when,
@@ -43,9 +46,11 @@ const RECHECK: Record<OpsRecheckOutcome, string> = {
 const failure = (code: string) =>
   code === 'ISSUE_RESOLVED'
     ? 'This issue was already resolved.'
-    : code === 'FORBIDDEN'
-      ? 'Your role does not allow this.'
-      : 'That didn’t work. Please try again.';
+    : code === 'ISSUE_OUTCOME_REQUIRED'
+      ? 'Choose how this money issue was settled.'
+      : code === 'FORBIDDEN'
+        ? 'Your role does not allow this.'
+        : 'That didn’t work. Please try again.';
 
 function Section({
   title,
@@ -359,6 +364,8 @@ export default function IssuePage() {
             ` · resolved ${when(issue.resolvedAt)} by ${
               issue.resolvedBy === 'system' ? 'the system' : 'staff'
             }`}
+          {issue.resolutionOutcome &&
+            ` · ${ISSUE_OUTCOME_LABELS[issue.resolutionOutcome]}`}
         </span>
       </p>
       <p className="ops-summary">{issue.summary}</p>
@@ -370,21 +377,36 @@ export default function IssuePage() {
 
       <Section title="Decide">
         <div className="ops-actions">
-          {open && can(access, 'issues.resolve') && (
-            <ReasonAction
-              open="Resolve…"
-              variant="primary"
-              field="How was it resolved?"
-              submit="Resolve issue"
-              onSubmit={(reason) =>
-                act(
-                  `/v1/ops/issues/${issue.id}/resolve`,
-                  { reason },
-                  'The issue is resolved.',
-                )
-              }
-            />
-          )}
+          {open &&
+            can(access, 'issues.resolve') &&
+            issue.severity === 'money' && (
+              <ResolveMoneyIssue
+                onSubmit={(reason, outcome) =>
+                  act(
+                    `/v1/ops/issues/${issue.id}/resolve`,
+                    { reason, outcome },
+                    'The issue is resolved.',
+                  )
+                }
+              />
+            )}
+          {open &&
+            can(access, 'issues.resolve') &&
+            issue.severity !== 'money' && (
+              <ReasonAction
+                open="Resolve…"
+                variant="primary"
+                field="How was it resolved?"
+                submit="Resolve issue"
+                onSubmit={(reason) =>
+                  act(
+                    `/v1/ops/issues/${issue.id}/resolve`,
+                    { reason },
+                    'The issue is resolved.',
+                  )
+                }
+              />
+            )}
           {recheckTarget && can(access, 'payments.recheck') && (
             <ReasonAction
               open="Re-check with the provider…"
@@ -451,10 +473,28 @@ export default function IssuePage() {
           )}
         </div>
         <p className="tm-hint">
-          Admin actions never move money: no refunds, adjustments or payout
-          holds.
+          Admin actions never send money or edit the ledger: no refunds or
+          adjustments. Choosing an outcome changes no balance. When the last of
+          a recipient’s money issues closes, their withdrawals resume.
         </p>
       </Section>
+
+      {open &&
+        ['payout_unresolved', 'payout_conflict', 'payout_held'].includes(
+          issue.kind,
+        ) &&
+        issue.subject.payoutId &&
+        can(access, 'payouts.resolve') && (
+          <Section title="Act on this withdrawal">
+            <PayoutIssueTools
+              issueId={issue.id}
+              onChanged={(done) => {
+                setMessage(done);
+                void load();
+              }}
+            />
+          </Section>
+        )}
 
       {open &&
         (issue.kind === 'stuck_tip' ||
@@ -784,6 +824,22 @@ export default function IssuePage() {
                 payout.referenceTail ? `…${payout.referenceTail}` : null,
               ],
               ['Requested', when(payout.createdAt)],
+              [
+                'Last step tried',
+                payout.startStep === 'payout'
+                  ? 'The payout itself, so it may have reached the provider'
+                  : payout.startStep === 'fee'
+                    ? 'The fee top-up; the payout itself was not sent'
+                    : 'None recorded',
+              ],
+              [
+                'Start attempted',
+                payout.startAttemptedAt ? when(payout.startAttemptedAt) : null,
+              ],
+              [
+                'Provider review',
+                payout.inProviderReview ? 'In review at the provider' : 'No',
+              ],
             ]}
           />
         </Section>

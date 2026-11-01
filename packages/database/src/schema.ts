@@ -1291,6 +1291,7 @@ export const OPS_PERMISSIONS = [
   'fees.manage',
   'providers.manage',
   'recoveries.manage',
+  'payouts.resolve',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 

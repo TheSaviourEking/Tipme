@@ -118,6 +118,9 @@ export function issueEvidence(
           referenceTail: tail(row.providerReference),
           createdAt: row.createdAt.toISOString(),
           paidAt: iso(row.paidAt),
+          startStep: row.startStep as 'fee' | 'payout' | null,
+          startAttemptedAt: iso(row.startUncertainAt),
+          inProviderReview: row.providerReviewAt !== null,
           history: history.map((h) => ({
             fromStatus: h.fromStatus,
             toStatus: h.toStatus,

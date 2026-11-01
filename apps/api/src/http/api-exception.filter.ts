@@ -69,6 +69,7 @@ const messages: Record<ApiErrorCode, string> = {
   PAGE_SUSPENDED:
     'TipMe has paused your page, so it cannot go live. See the note on your dashboard.',
   ISSUE_RESOLVED: 'This issue is already resolved.',
+  ISSUE_OUTCOME_REQUIRED: 'Choose how this money issue was settled.',
   PREVIEW_REQUIRED:
     'This is a private preview. Please sign in with the preview password.',
   RATE_LIMITED: 'Too many requests. Please wait and retry.',
@@ -147,6 +148,7 @@ const operationErrors: Partial<
   ENROLMENT_INVALID: { status: 400, code: 'ENROLMENT_INVALID' },
   PAGE_SUSPENDED: { status: 409, code: 'PAGE_SUSPENDED' },
   ISSUE_RESOLVED: { status: 409, code: 'ISSUE_RESOLVED' },
+  ISSUE_OUTCOME_REQUIRED: { status: 422, code: 'ISSUE_OUTCOME_REQUIRED' },
   ISSUE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   EMAIL_VERIFICATION_REQUIRED: {
     status: 409,

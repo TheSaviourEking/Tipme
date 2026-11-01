@@ -4,6 +4,7 @@ import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { OpsAccessController } from './ops-access.controller.js';
 import { OpsIssuesController } from './issues.controller.js';
 import { OpsActionsController } from './actions.controller.js';
+import { OpsPayoutIssuesController } from './payout-issues.controller.js';
 import { OpsMetricsController } from './metrics.controller.js';
 import { OpsPagesController } from './pages.controller.js';
 import { OpsSearchController } from './search.controller.js';
@@ -23,6 +24,7 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsAccessController,
     OpsIssuesController,
     OpsActionsController,
+    OpsPayoutIssuesController,
     OpsMetricsController,
     OpsMarketController,
     OpsPagesController,

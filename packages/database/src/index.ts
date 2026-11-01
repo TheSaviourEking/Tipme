@@ -11,6 +11,7 @@ export * from './operations/intents.js';
 export * from './operations/provider-events.js';
 export * from './operations/payouts.js';
 export * from './operations/payout-start.js';
+export * from './operations/payout-staff.js';
 export * from './operations/proof.js';
 export * from './operations/outbox.js';
 export * from './operations/outbox-relay.js';

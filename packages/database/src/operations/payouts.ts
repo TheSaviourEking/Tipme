@@ -13,10 +13,12 @@ import {
   PAYOUT_START_EVENT,
   recordedProviderName,
 } from '@tipme/contracts';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  issues,
   paymentAccounts,
+  paymentAttempts,
   paymentIntents,
   payoutDestinations,
   payoutItems,
@@ -29,7 +31,7 @@ import {
   withdrawalHolds,
 } from '../schema.js';
 import { balanceIn } from './balance.js';
-import { guarded, OperationError } from './errors.js';
+import { guarded, OperationError, safeError } from './errors.js';
 import { openIssue } from './issues.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
@@ -165,10 +167,17 @@ export async function holdWithdrawals(
   tx: Tx,
   input: {
     profileId: string;
-    reason: 'in_debt' | 'unexpected_payout';
+    reason: 'reversal' | 'in_debt' | 'unexpected_payout';
     issueId: string;
   },
 ): Promise<void> {
+  // A redelivered cause finds its issue closed: staff already settled it, and nothing would ever
+  // release a hold placed now.
+  const [issue] = await tx
+    .select({ status: issues.status })
+    .from(issues)
+    .where(eq(issues.id, input.issueId));
+  if (issue?.status !== 'open') return;
   const [existing] = await tx
     .select({ id: withdrawalHolds.id })
     .from(withdrawalHolds)
@@ -180,6 +189,46 @@ export async function holdWithdrawals(
     );
   if (existing) return;
   await tx.insert(withdrawalHolds).values({ id: newId(), ...input });
+}
+
+/**
+ * The provider reports a refund or dispute on a paid tip: one issue per event for staff, and that
+ * recipient's withdrawals wait. No balance or ledger entry changes (ADR-0004). The issue is opened
+ * here, under the key the alert would give it, so the hold has one to name.
+ */
+export function flagPaymentReversal(
+  db: Database,
+  input: { attemptId: string; eventId: string; eventType: string; now?: Date },
+): Promise<void> {
+  // Dedupe keys allow word characters, dots and dashes only.
+  const suffix = input.eventId.replace(/[^\w.-]/g, '_');
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      await enqueueOutbox(tx, {
+        eventType: 'payment.reversed',
+        aggregateId: input.attemptId,
+        dedupeSuffix: suffix,
+        payload: { attemptId: input.attemptId, eventType: input.eventType },
+      });
+      const issue = await openIssue(tx, {
+        dedupeKey: `event.payment.reversed.${input.attemptId}.${suffix}`,
+        kind: 'payment_reversed',
+        subject: { attemptId: input.attemptId },
+        now: input.now ?? new Date(),
+      });
+      const [tip] = await tx
+        .select({ profileId: tips.profileId })
+        .from(paymentAttempts)
+        .innerJoin(tips, eq(tips.intentId, paymentAttempts.intentId))
+        .where(eq(paymentAttempts.id, input.attemptId));
+      if (tip)
+        await holdWithdrawals(tx, {
+          profileId: tip.profileId,
+          reason: 'reversal',
+          issueId: issue.id,
+        });
+    }),
+  );
 }
 
 const openFeeShortIssue = (tx: Tx, payoutId: string, now: Date) =>
@@ -263,197 +312,205 @@ const STATUS: Record<'processing' | 'paid' | 'failed', PayoutStatus> = {
   failed: 'FAILED',
 };
 
-/** Applies a verified provider message about a payout; `paid` settles the payable in the ledger. */
-export async function recordPayoutOutcome(
-  db: Database,
-  input: {
-    payoutId: string;
-    provider: string;
-    providerEventId: string;
-    /** Null when the provider refused the payout, so there is none to refer to. */
-    providerReference: string | null;
-    outcome: 'processing' | 'paid' | 'failed';
-    signatureVerified: true;
-    payload: unknown;
-    /** Why it failed, when the provider's answer says. A debt pauses withdrawals. */
-    failureReason?: PayoutFailure;
-    /** The fee the provider actually charged, when its answer says. */
-    actualFeeMinor?: bigint;
-    traceId?: string | null;
-    now?: Date;
-  },
-): Promise<{
+type PayoutOutcomeInput = {
+  payoutId: string;
+  provider: string;
+  providerEventId: string;
+  /** Null when the provider refused the payout, so there is none to refer to. */
+  providerReference: string | null;
+  outcome: 'processing' | 'paid' | 'failed';
+  signatureVerified: true;
+  payload: unknown;
+  /** Why it failed, when the provider's answer says. A debt pauses withdrawals. */
+  failureReason?: PayoutFailure;
+  /** The fee the provider actually charged, when its answer says. */
+  actualFeeMinor?: bigint;
+  traceId?: string | null;
+  now?: Date;
+};
+type PayoutOutcomeResult = {
   outcome: 'applied' | 'duplicate' | 'ignored' | 'conflict';
   payoutStatus: string;
-}> {
+};
+
+/** Applies a verified provider message about a payout; `paid` settles the payable in the ledger. */
+export function recordPayoutOutcome(
+  db: Database,
+  input: PayoutOutcomeInput,
+): Promise<PayoutOutcomeResult> {
+  return guarded(() =>
+    db.transaction((tx) => recordPayoutOutcomeIn(tx, input)),
+  );
+}
+
+/** The same, inside a caller's transaction. */
+export async function recordPayoutOutcomeIn(
+  tx: Tx,
+  input: PayoutOutcomeInput,
+): Promise<PayoutOutcomeResult> {
   const traceId = input.traceId ?? activeTraceId();
   // The stored name, whichever adapter (bachs-live, bachs-sandbox) reports it.
   const provider = recordedProviderName(input.provider);
-  return guarded(() =>
-    db.transaction(async (tx) => {
-      const [payout] = await tx
-        .select()
-        .from(payouts)
-        .where(eq(payouts.id, input.payoutId))
-        .for('update');
-      if (!payout) throw new OperationError('PAYOUT_NOT_FOUND');
-      const eventRowId = newId();
-      const stored = await tx
-        .insert(providerEvents)
-        .values({
-          id: eventRowId,
-          provider,
-          providerEventId: input.providerEventId,
-          eventType: `payout.${input.outcome}`,
-          signatureVerified: input.signatureVerified,
-          payloadHash: createHash('sha256')
-            .update(JSON.stringify(jsonSafe(input.payload)))
-            .digest('hex'),
-          payload: jsonSafe(input.payload),
-          payoutId: payout.id,
-        })
-        .onConflictDoNothing({
-          target: [providerEvents.provider, providerEvents.providerEventId],
-        })
-        .returning({ id: providerEvents.id });
-      if (stored.length === 0)
-        return { outcome: 'duplicate' as const, payoutStatus: payout.status };
+  const [payout] = await tx
+    .select()
+    .from(payouts)
+    .where(eq(payouts.id, input.payoutId))
+    .for('update');
+  if (!payout) throw new OperationError('PAYOUT_NOT_FOUND');
+  const eventRowId = newId();
+  const stored = await tx
+    .insert(providerEvents)
+    .values({
+      id: eventRowId,
+      provider,
+      providerEventId: input.providerEventId,
+      eventType: `payout.${input.outcome}`,
+      signatureVerified: input.signatureVerified,
+      payloadHash: createHash('sha256')
+        .update(JSON.stringify(jsonSafe(input.payload)))
+        .digest('hex'),
+      payload: jsonSafe(input.payload),
+      payoutId: payout.id,
+    })
+    .onConflictDoNothing({
+      target: [providerEvents.provider, providerEvents.providerEventId],
+    })
+    .returning({ id: providerEvents.id });
+  if (stored.length === 0)
+    return { outcome: 'duplicate' as const, payoutStatus: payout.status };
 
-      const to = STATUS[input.outcome];
-      const finish = async (
-        outcome: 'applied' | 'ignored' | 'conflict',
-        status: string,
-      ) => {
-        await tx
-          .update(providerEvents)
-          .set({
-            processedAt: input.now ?? new Date(),
-            processingOutcome: outcome,
-          })
-          .where(eq(providerEvents.id, eventRowId));
-        return { outcome, payoutStatus: status };
-      };
-      if (!canTransition(PAYOUT_TRANSITIONS, payout.status, to)) {
-        if (to === 'PAID' && payout.status === 'FAILED') {
-          // The provider says it paid after we recorded a failure (and released the tips):
-          // money may really have reached the recipient. Flag it for operations.
-          await enqueueOutbox(tx, {
-            eventType: 'payout.conflict',
-            aggregateId: payout.id,
-            dedupeSuffix: eventRowId,
-            payload: { payoutId: payout.id, profileId: payout.profileId },
-          });
-          return finish('conflict', payout.status);
-        }
-        return finish('ignored', payout.status);
-      }
-
-      const now = input.now ?? new Date();
-      await tx
-        .update(payouts)
-        .set({
-          status: to,
-          provider,
-          providerReference:
-            input.providerReference ?? payout.providerReference,
-          ...(to === 'PAID' ? { paidAt: now } : {}),
-        })
-        .where(eq(payouts.id, payout.id));
-      await recordTransition(tx, {
-        entityType: 'payout',
-        entityId: payout.id,
-        fromStatus: payout.status,
-        toStatus: to,
-        cause: 'provider_event',
-        providerEventId: eventRowId,
-        traceId,
+  const to = STATUS[input.outcome];
+  const finish = async (
+    outcome: 'applied' | 'ignored' | 'conflict',
+    status: string,
+  ) => {
+    await tx
+      .update(providerEvents)
+      .set({
+        processedAt: input.now ?? new Date(),
+        processingOutcome: outcome,
+      })
+      .where(eq(providerEvents.id, eventRowId));
+    return { outcome, payoutStatus: status };
+  };
+  if (!canTransition(PAYOUT_TRANSITIONS, payout.status, to)) {
+    if (to === 'PAID' && payout.status === 'FAILED') {
+      // The provider says it paid after we recorded a failure (and released the tips):
+      // money may really have reached the recipient. Flag it for operations.
+      await enqueueOutbox(tx, {
+        eventType: 'payout.conflict',
+        aggregateId: payout.id,
+        dedupeSuffix: eventRowId,
+        payload: { payoutId: payout.id, profileId: payout.profileId },
       });
-      if (
-        to !== 'FAILED' &&
-        payout.accountReference &&
-        input.actualFeeMinor !== undefined
-      )
-        await noteActualFee(tx, payout, input.actualFeeMinor, now);
-      if (to === 'PAID') {
-        await postLedgerTransaction(tx, {
-          operationType: 'payout',
-          operationKey: `payout.${payout.id}`,
-          currency: payout.currency,
-          payoutId: payout.id,
-          traceId,
-          lines: buildPayoutPosting({
-            amountMinor: payout.amountMinor,
-            profileId: payout.profileId,
-          }),
-        });
-        await enqueueOutbox(tx, {
-          eventType: 'payout.paid',
-          aggregateId: payout.id,
-          payload: {
-            payoutId: payout.id,
-            profileId: payout.profileId,
-            currency: payout.currency,
-            amountMinor: formatMinor(payout.amountMinor),
-          },
-        });
-        // A payout through an account costs TipMe the fee; the pretend provider has no such cost.
-        const feeMinor = input.actualFeeMinor ?? payout.feeMinor ?? 0n;
-        if (payout.accountReference && feeMinor > 0n) {
-          await postLedgerTransaction(tx, {
-            operationType: 'payout',
-            operationKey: `payout-fee.${payout.id}`,
-            currency: payout.currency,
-            payoutId: payout.id,
-            traceId,
-            lines: buildPayoutFeePosting({ feeMinor }),
-          });
-          // The top-up is used up only now: a payout that fails leaves it for the next one.
-          const spent = payout.feeTransferReference
-            ? await tx
-                .update(providerFeeCredits)
-                .set({ usedByPayoutId: payout.id })
-                .where(
-                  and(
-                    eq(
-                      providerFeeCredits.transferReference,
-                      payout.feeTransferReference,
-                    ),
-                    isNull(providerFeeCredits.usedByPayoutId),
-                  ),
-                )
-                .returning({ reference: providerFeeCredits.transferReference })
-            : [];
-          if (spent.length === 0) await openFeeShortIssue(tx, payout.id, now);
-        }
-      }
-      if (to === 'FAILED') {
-        // Release the tips so they can be paid out again.
-        await tx
-          .update(payoutItems)
-          .set({ active: false })
-          .where(eq(payoutItems.payoutId, payout.id));
-        await enqueueOutbox(tx, {
-          eventType: 'payout.failed',
-          aggregateId: payout.id,
-          payload: { payoutId: payout.id, profileId: payout.profileId },
-        });
-        if (input.failureReason === 'in_debt') {
-          const issue = await openIssue(tx, {
-            dedupeKey: `provider_in_debt.${payout.id}`,
-            kind: 'provider_in_debt',
-            subject: { payoutId: payout.id },
-            now,
-          });
-          await holdWithdrawals(tx, {
-            profileId: payout.profileId,
-            reason: 'in_debt',
-            issueId: issue.id,
-          });
-        }
-      }
-      return finish('applied', to);
-    }),
-  );
+      return finish('conflict', payout.status);
+    }
+    return finish('ignored', payout.status);
+  }
+
+  const now = input.now ?? new Date();
+  await tx
+    .update(payouts)
+    .set({
+      status: to,
+      provider,
+      providerReference: input.providerReference ?? payout.providerReference,
+      ...(to === 'PAID' ? { paidAt: now } : {}),
+    })
+    .where(eq(payouts.id, payout.id));
+  await recordTransition(tx, {
+    entityType: 'payout',
+    entityId: payout.id,
+    fromStatus: payout.status,
+    toStatus: to,
+    cause: 'provider_event',
+    providerEventId: eventRowId,
+    traceId,
+  });
+  if (
+    to !== 'FAILED' &&
+    payout.accountReference &&
+    input.actualFeeMinor !== undefined
+  )
+    await noteActualFee(tx, payout, input.actualFeeMinor, now);
+  if (to === 'PAID') {
+    await postLedgerTransaction(tx, {
+      operationType: 'payout',
+      operationKey: `payout.${payout.id}`,
+      currency: payout.currency,
+      payoutId: payout.id,
+      traceId,
+      lines: buildPayoutPosting({
+        amountMinor: payout.amountMinor,
+        profileId: payout.profileId,
+      }),
+    });
+    await enqueueOutbox(tx, {
+      eventType: 'payout.paid',
+      aggregateId: payout.id,
+      payload: {
+        payoutId: payout.id,
+        profileId: payout.profileId,
+        currency: payout.currency,
+        amountMinor: formatMinor(payout.amountMinor),
+      },
+    });
+    // A payout through an account costs TipMe the fee; the pretend provider has no such cost.
+    const feeMinor = input.actualFeeMinor ?? payout.feeMinor ?? 0n;
+    if (payout.accountReference && feeMinor > 0n) {
+      await postLedgerTransaction(tx, {
+        operationType: 'payout',
+        operationKey: `payout-fee.${payout.id}`,
+        currency: payout.currency,
+        payoutId: payout.id,
+        traceId,
+        lines: buildPayoutFeePosting({ feeMinor }),
+      });
+      // The top-up is used up only now: a payout that fails leaves it for the next one.
+      const spent = payout.feeTransferReference
+        ? await tx
+            .update(providerFeeCredits)
+            .set({ usedByPayoutId: payout.id })
+            .where(
+              and(
+                eq(
+                  providerFeeCredits.transferReference,
+                  payout.feeTransferReference,
+                ),
+                isNull(providerFeeCredits.usedByPayoutId),
+              ),
+            )
+            .returning({ reference: providerFeeCredits.transferReference })
+        : [];
+      if (spent.length === 0) await openFeeShortIssue(tx, payout.id, now);
+    }
+  }
+  if (to === 'FAILED') {
+    // Release the tips so they can be paid out again.
+    await tx
+      .update(payoutItems)
+      .set({ active: false })
+      .where(eq(payoutItems.payoutId, payout.id));
+    await enqueueOutbox(tx, {
+      eventType: 'payout.failed',
+      aggregateId: payout.id,
+      payload: { payoutId: payout.id, profileId: payout.profileId },
+    });
+    if (input.failureReason === 'in_debt') {
+      const issue = await openIssue(tx, {
+        dedupeKey: `provider_in_debt.${payout.id}`,
+        kind: 'provider_in_debt',
+        subject: { payoutId: payout.id },
+        now,
+      });
+      await holdWithdrawals(tx, {
+        profileId: payout.profileId,
+        reason: 'in_debt',
+        issueId: issue.id,
+      });
+    }
+  }
+  return finish('applied', to);
 }
 
 /**
@@ -592,6 +649,11 @@ function routeBlock(
   return null;
 }
 
+/** Told why a read failed, so wrong keys don't pass as an outage. Never carries account data. */
+export type ProviderReadFailureLog = (
+  failure: ReturnType<typeof safeError>,
+) => void;
+
 /**
  * Everything the provider must confirm for a payout. Any failed read is 'unavailable': a withdrawal
  * never falls back to the ledger alone, because the money leaves the provider's balance, not ours.
@@ -601,6 +663,7 @@ async function readProvider(
   provider: PayoutReader,
   accountRef: string,
   amountMinor: (availableMinor: bigint) => bigint,
+  onReadFailure?: ProviderReadFailureLog,
 ): Promise<
   | { state: 'ok'; availableMinor: bigint; feeMinor: bigint }
   | { state: 'setup_needed'; requirementsDue: string[] }
@@ -620,7 +683,8 @@ async function readProvider(
       'NGN',
     );
     return { state: 'ok', availableMinor, feeMinor };
-  } catch {
+  } catch (error) {
+    onReadFailure?.(safeError(error));
     return { state: 'unavailable' };
   }
 }
@@ -669,10 +733,35 @@ async function activeHold(
   return (hold?.reason as 'reversal' | 'in_debt' | 'unexpected_payout') ?? null;
 }
 
+/** Whether the provider itself is checking one of the recipient's unfinished payouts. */
+export function withdrawalInReview(
+  db: Database,
+  profileId: string,
+): Promise<boolean> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({ id: payouts.id })
+      .from(payouts)
+      .where(
+        and(
+          eq(payouts.profileId, profileId),
+          inArray(payouts.status, ['REQUESTED', 'PROCESSING']),
+          isNotNull(payouts.providerReviewAt),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  });
+}
+
 /** What the recipient can withdraw right now and, if nothing, why. Never moves money. */
 export async function withdrawalQuote(
   db: Database,
-  input: { profileId: string; provider: PayoutReader },
+  input: {
+    profileId: string;
+    provider: PayoutReader;
+    onReadFailure?: ProviderReadFailureLog;
+  },
 ): Promise<WithdrawalQuoteResult> {
   const { hold, route, foreign } = await guarded(async () => ({
     hold: await activeHold(db, input.profileId),
@@ -696,6 +785,7 @@ export async function withdrawalQuote(
     input.provider,
     route.accountReference ?? input.profileId,
     (available) => notNegative(lower(ledgerMinor, available - queuedMinor)),
+    input.onReadFailure,
   );
   if (read.state === 'unavailable') return { state: 'provider_unavailable' };
   if (read.state === 'setup_needed') return read;
@@ -729,6 +819,7 @@ export async function requestWithdrawal(
     idempotencyKey: string;
     provider: PayoutReader;
     traceId?: string | null;
+    onReadFailure?: ProviderReadFailureLog;
   },
 ): Promise<{
   payoutId: string;
@@ -783,6 +874,7 @@ export async function requestWithdrawal(
     input.provider,
     route.accountReference ?? input.profileId,
     () => input.amountMinor,
+    input.onReadFailure,
   );
   if (read.state === 'unavailable')
     throw new OperationError('PAYOUT_PROVIDER_UNAVAILABLE');
