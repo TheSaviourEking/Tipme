@@ -50,6 +50,11 @@ const messages: Record<ApiErrorCode, string> = {
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
+  QR_DESIGN_PRO_REQUIRED: 'Saving a Pro QR design is part of TipMe Pro.',
+  QR_ART_PHOTO_REQUIRED:
+    'The photo mosaic is made from your page photo. Add a photo to your page first.',
+  QR_ART_PHOTO_TOO_LARGE:
+    'Your page photo is too large for the photo mosaic. Upload a smaller photo and try again.',
   INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
   RECOVERY_PENDING:
@@ -131,6 +136,7 @@ const operationErrors: Partial<
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
+  QR_DESIGN_PRO_REQUIRED: { status: 403, code: 'QR_DESIGN_PRO_REQUIRED' },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },
   ENROLMENT_INVALID: { status: 400, code: 'ENROLMENT_INVALID' },

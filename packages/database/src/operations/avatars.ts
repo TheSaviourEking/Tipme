@@ -152,3 +152,24 @@ export function movePhotosToStore(
       (await moveRowsToStore(db, store, profileCovers, 'covers')),
   );
 }
+
+/** The owner's own photo bytes, live or not, for the photo-mosaic QR design. Null without one. */
+export function myAvatar(
+  db: Database,
+  userId: string,
+  store?: PhotoStore,
+): Promise<Buffer | null> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    const [row] = await db
+      .select({
+        bytes: profileAvatars.bytes,
+        objectKey: profileAvatars.objectKey,
+      })
+      .from(profileAvatars)
+      .where(eq(profileAvatars.profileId, profileId));
+    if (!row) return null;
+    if (row.bytes) return row.bytes;
+    return row.objectKey && store ? store.get(row.objectKey) : null;
+  });
+}

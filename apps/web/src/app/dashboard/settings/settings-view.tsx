@@ -387,7 +387,7 @@ function HandleChange() {
 
   if (profile.plan !== 'pro')
     return (
-      <Card className="settings-section">
+      <Card id="handle" className="settings-section">
         <h2 ref={heading} tabIndex={-1}>
           Your handle
         </h2>

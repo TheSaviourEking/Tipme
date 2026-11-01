@@ -86,6 +86,7 @@ export const apiConfigSchema = z
       .int()
       .min(1)
       .default(60),
+    RATE_LIMIT_QR_ART_PER_HOUR: z.coerce.number().int().min(1).default(600),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z

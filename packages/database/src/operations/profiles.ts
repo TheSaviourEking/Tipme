@@ -1,5 +1,7 @@
 import {
   MAX_HANDLE_CHANGE_EXTRA,
+  isProQrStyle,
+  shownQrStyle,
   MAX_HANDLE_CHANGE_GRANT,
   profilePatchSchema,
   resolveCover,
@@ -363,7 +365,7 @@ const toMine = async (
   phonePublic: row.profile.phonePublic,
   emailPublic: row.profile.emailPublic,
   pageState: row.profile.pageState as MyProfile['pageState'],
-  qrStyle: row.profile.qrStyle,
+  qrStyle: shownQrStyle(row.profile.qrStyle, row.profile.plan as PagePlan),
   phone: row.phone,
   email: row.email,
   emailVerified: row.emailVerifiedAt !== null,
@@ -401,7 +403,13 @@ export function updateMyProfile(
     if (!parsed.success) throw new OperationError('INVALID_INPUT');
     const row = await myRow(db, userId);
     const values = parsed.data;
-    await db
+    // Pro designs are saved by Pro pages only. Staff may have moved the page to Free since it
+    // was read, so the update below checks the plan again.
+    const proDesign =
+      values.qrStyle !== undefined && isProQrStyle(values.qrStyle);
+    if (proDesign && row.profile.plan !== 'pro')
+      throw new OperationError('QR_DESIGN_PRO_REQUIRED');
+    const updated = await db
       .update(profiles)
       .set({
         ...(values.displayName !== undefined
@@ -424,7 +432,15 @@ export function updateMyProfile(
           : {}),
         ...(values.qrStyle !== undefined ? { qrStyle: values.qrStyle } : {}),
       })
-      .where(eq(profiles.id, row.profile.id));
+      .where(
+        and(
+          eq(profiles.id, row.profile.id),
+          ...(proDesign ? [eq(profiles.plan, 'pro')] : []),
+        ),
+      )
+      .returning({ id: profiles.id });
+    if (updated.length === 0)
+      throw new OperationError('QR_DESIGN_PRO_REQUIRED');
     return toMine(db, await myRow(db, userId));
   });
 }

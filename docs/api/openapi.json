@@ -2674,7 +2674,41 @@
                   },
                   "qrStyle": {
                     "type": "string",
-                    "pattern": "^[a-z]{3,12}$"
+                    "enum": [
+                      "purple",
+                      "night",
+                      "clean",
+                      "heart",
+                      "jewel",
+                      "stitch",
+                      "keys",
+                      "petals",
+                      "chips",
+                      "coin",
+                      "heartshape",
+                      "liquid",
+                      "pillars",
+                      "diamond",
+                      "sparkle",
+                      "circles",
+                      "leaf",
+                      "dusk",
+                      "lagoon",
+                      "naira",
+                      "mosaic",
+                      "indigo",
+                      "woven",
+                      "danfo",
+                      "harmattan",
+                      "lagooncard",
+                      "citylights",
+                      "vinyl",
+                      "sunburst",
+                      "engraved",
+                      "contour",
+                      "geometry",
+                      "paper"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -2706,6 +2740,90 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/qr-art": {
+      "get": {
+        "operationId": "QrArt.catalogue",
+        "tags": [
+          "QrArt"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "qr_art",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/qr-art/{file}": {
+      "get": {
+        "operationId": "QrArt.image",
+        "tags": [
+          "QrArt"
+        ],
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "qr_art",
         "security": [
           {
             "session": []
@@ -7597,6 +7715,9 @@
                   "WITHDRAWAL_TOO_SMALL",
                   "WITHDRAWAL_UNAVAILABLE",
                   "PRO_REQUIRED",
+                  "QR_DESIGN_PRO_REQUIRED",
+                  "QR_ART_PHOTO_REQUIRED",
+                  "QR_ART_PHOTO_TOO_LARGE",
                   "INVALID_IMAGE",
                   "PHONE_TAKEN",
                   "RECOVERY_PENDING",

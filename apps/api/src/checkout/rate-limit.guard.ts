@@ -27,7 +27,8 @@ type RateLimitedRoute =
   | 'reports'
   | 'unsubscribe'
   | 'avatars'
-  | 'cover_designs';
+  | 'cover_designs'
+  | 'qr_art';
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -117,6 +118,11 @@ export class RateLimitGuard implements CanActivate {
       // mobile carriers share addresses, and saving is a deliberate step, not browsing.
       cover_designs: {
         limit: this.config.RATE_LIMIT_COVER_DESIGNS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // Each QR design is drawn on demand; the studio asks for a thumbnail of every design.
+      qr_art: {
+        limit: this.config.RATE_LIMIT_QR_ART_PER_HOUR,
         windowMs: 3_600_000,
       },
       auth_code: {

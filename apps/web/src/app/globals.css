@@ -3949,6 +3949,61 @@ html:has(.confirm-dialog[open]) {
   flex-shrink: 0;
 }
 
+.qr-style__thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--edge-hairline);
+  flex-shrink: 0;
+  background: #ffffff;
+}
+
+.qr-designs,
+.qr-formats {
+  margin-top: var(--space-4);
+}
+
+/* A Pro design's picture. A new one fades in over the old one's place in 240ms; nothing moves. */
+.qr-design__plate {
+  background: #ffffff;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-frame);
+  padding: var(--space-3);
+  max-width: 22rem;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+
+.qr-design__image {
+  width: 100%;
+  height: auto;
+  animation: qr-design-in var(--duration-component) var(--ease-physical);
+}
+
+.qr-design__error {
+  margin: 0;
+  text-align: center;
+}
+
+@keyframes qr-design-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.qr-locked {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  margin-bottom: var(--space-4);
+}
+
+.qr-locked h2,
+.qr-locked p {
+  margin: 0;
+}
+
 .qr-style__premium {
   display: block;
   color: var(--text-secondary);
@@ -3981,9 +4036,28 @@ html:has(.confirm-dialog[open]) {
   background: #ffffff;
 }
 
-.qr-stage:fullscreen canvas {
+.qr-stage:fullscreen canvas,
+.qr-stage:fullscreen .qr-stage__image {
   width: min(92vw, 92vh);
   height: auto;
+}
+
+/* The picture grows to fill the screen in 420ms, then the code stays completely still. */
+.qr-stage:fullscreen .qr-stage__image {
+  animation: qr-stage-grow var(--duration-spatial) var(--ease-physical);
+}
+
+@keyframes qr-stage-grow {
+  from {
+    transform: scale(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qr-design__image,
+  .qr-stage:fullscreen .qr-stage__image {
+    animation: none;
+  }
 }
 
 .print-card {
@@ -4027,6 +4101,226 @@ html:has(.confirm-dialog[open]) {
     max-width: none;
     width: 100%;
   }
+
+  /* A format prints at its own size on the page, still, with its colours kept. */
+  .qr-sheet {
+    max-width: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .qr-format,
+  .qr-format * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Print formats: layouts around the server's picture of the code. Still, on screen and on paper. */
+.qr-sheet {
+  width: 100%;
+  max-width: 24rem;
+}
+
+.qr-format {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: 1.5rem;
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid var(--edge-hairline);
+  font-family: var(--font-body, inherit);
+  break-inside: avoid;
+}
+
+.qr-format__code {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qr-format__plate {
+  width: 70%;
+  background: #ffffff;
+  border-radius: 1rem;
+  padding: 0.25rem;
+  box-sizing: border-box;
+}
+
+.qr-format__title,
+.qr-format__big {
+  margin: 0;
+  font-family: var(--font-editorial);
+  line-height: 1.05;
+}
+
+.qr-format__title {
+  font-size: 2rem;
+}
+
+.qr-format__big {
+  font-size: 3.5rem;
+  overflow-wrap: anywhere;
+}
+
+.qr-format__sub,
+.qr-format__link,
+.qr-format__small {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.qr-format__small {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.qr-format--counter,
+.qr-format--hang {
+  background: #7a32f9;
+  color: #ffffff;
+}
+
+.qr-format--hang {
+  border-radius: 1.5rem;
+  position: relative;
+  padding-top: 2.5rem;
+}
+
+.qr-format__hole {
+  position: absolute;
+  top: 0.9rem;
+  width: 2rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: var(--surface-base, #ffffff);
+  border: 1px solid #00000033;
+}
+
+.qr-format--poster {
+  align-items: flex-start;
+  text-align: left;
+  min-height: 30rem;
+}
+
+.qr-format__foot {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.qr-format__foot p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.qr-format__foot .qr-format__code {
+  width: 45%;
+  flex: none;
+}
+
+.qr-format--sticker {
+  position: relative;
+  aspect-ratio: 1;
+  justify-content: center;
+  border-radius: 50%;
+  background: #000000;
+  color: #ffffff;
+}
+
+.qr-format__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.qr-format--sticker .qr-format__plate {
+  width: 58%;
+  border-radius: 1.2rem;
+}
+
+.qr-format--ticket {
+  padding: 0;
+  border-radius: 1.1rem;
+  overflow: hidden;
+}
+
+.qr-format--ticket .qr-format__title {
+  align-self: stretch;
+  background: #4d16a8;
+  color: #ffffff;
+  padding: 1.25rem 1.5rem;
+  text-align: left;
+}
+
+.qr-format__perforated {
+  align-self: stretch;
+  border-top: 2px dashed #00000050;
+  padding: 1rem 2.5rem 0.5rem;
+}
+
+.qr-format--ticket .qr-format__link {
+  padding-bottom: 1rem;
+}
+
+.qr-format--receipt {
+  font-family: 'Courier New', monospace;
+  max-width: 17rem;
+  border-radius: 0;
+}
+
+.qr-format__rule {
+  align-self: stretch;
+  margin: 0;
+  border-top: 1px dashed #000000;
+  padding-top: 0.6rem;
+  font-weight: 700;
+}
+
+.qr-format--lock {
+  max-width: 15rem;
+  min-height: 28rem;
+  border: 8px solid #000000;
+  border-radius: 2.1rem;
+  background: #1f4d3a;
+  color: #ffffff;
+  padding-top: 2.75rem;
+}
+
+.qr-format--business {
+  flex-direction: row;
+  max-width: 24rem;
+  text-align: left;
+  background: #000000;
+  color: #ffffff;
+  border-radius: 0.75rem;
+}
+
+.qr-format__text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.qr-format--business .qr-format__big {
+  font-size: 2.5rem;
+}
+
+.qr-format--business .qr-format__plate {
+  width: 42%;
+  flex: none;
+  border-radius: 0.6rem;
+  padding: 0.125rem;
 }
 
 /* Notifications (PR-008 Task 9). */

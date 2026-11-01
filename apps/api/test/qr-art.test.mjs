@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import jsQR from 'jsqr';
+import { PRO_QR_STYLES } from '@tipme/contracts';
 import sharp from 'sharp';
 import {
   QR_ART,
@@ -613,4 +614,8 @@ test('it says when extra alignment patterns would land on a mosaic face, and ref
     size: 300,
   });
   assert.equal(await read(png), url);
+});
+
+test('the ids a page may save are exactly the drawn designs', () => {
+  assert.deepEqual([...PRO_QR_STYLES].sort(), QR_ART.map((a) => a.id).sort());
 });

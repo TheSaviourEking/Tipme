@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ResolvedCover } from './covers.js';
+import { qrStyleSchema } from './qr.js';
 
 /** Social links accepted on a recipient page: https only, on the named site. */
 export const SOCIAL_HOSTS = {
@@ -49,7 +50,7 @@ export const profilePatchSchema = z
     socialsPublic: z.boolean(),
     phonePublic: z.boolean(),
     emailPublic: z.boolean(),
-    qrStyle: z.string().regex(/^[a-z]{3,12}$/),
+    qrStyle: qrStyleSchema,
   })
   .partial()
   .strict();

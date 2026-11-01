@@ -4,6 +4,9 @@
 const API_ORIGIN =
   process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:4000';
 
+/** A path on the API, for images the browser asks for with the session cookie. */
+export const apiUrl = (path: string) => `${API_ORIGIN}${path}`;
+
 export type SessionResult<T> =
   | { ok: true; status: number; data: T }
   | { ok: false; status: number; code: string; fields?: string[] };

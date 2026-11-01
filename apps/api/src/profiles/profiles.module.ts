@@ -7,6 +7,7 @@ import { MeProfileController } from './me-profile.controller.js';
 import { PublicProfileController } from './public-profile.controller.js';
 import { AvatarController } from './avatar.controller.js';
 import { CoverController } from './cover.controller.js';
+import { QrArtController } from '../qr/qr-art.controller.js';
 import { photoStoreProvider } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { PaymentAccountsController } from './payment-accounts.controller.js';
@@ -20,6 +21,7 @@ import { MailModule } from '../mail/mail.module.js';
     PublicProfileController,
     AvatarController,
     CoverController,
+    QrArtController,
     PaymentAccountsController,
   ],
   providers: [
