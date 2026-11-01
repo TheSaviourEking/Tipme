@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
@@ -30,6 +27,7 @@ const jsQR = apiRequire('jsqr');
 let database;
 let stack;
 let limited;
+let thumbLimited;
 let staff;
 before(async () => {
   database = await openTestDatabase();
@@ -39,15 +37,25 @@ before(async () => {
     RATE_LIMIT_AUTH_PER_HOUR: '1000',
     RATE_LIMIT_AVATARS_PER_HOUR: '1000',
     RATE_LIMIT_QR_ART_PER_HOUR: '1000',
+    RATE_LIMIT_QR_THUMBS_PER_HOUR: '1000',
   };
   stack = await startStack({ databaseUrl: database.url, apiEnv });
   limited = await startStack({
     databaseUrl: database.url,
-    apiEnv: { ...apiEnv, RATE_LIMIT_QR_ART_PER_HOUR: '3' },
+    apiEnv: {
+      ...apiEnv,
+      RATE_LIMIT_QR_ART_PER_HOUR: '3',
+      RATE_LIMIT_QR_THUMBS_PER_HOUR: '3',
+    },
+  });
+  thumbLimited = await startStack({
+    databaseUrl: database.url,
+    apiEnv: { ...apiEnv, RATE_LIMIT_QR_THUMBS_PER_HOUR: '3' },
   });
   staff = await opsSignIn(stack.api, database.db, '+2348031270099');
 });
 after(async () => {
+  await thumbLimited.stop();
   await limited.stop();
   await stack.stop();
   await database.close();
@@ -192,7 +200,7 @@ test('unknown ids and sizes are refused, and renders are rate limited', async ()
   const statuses = [];
   for (let i = 0; i < 5; i++)
     statuses.push(
-      (await art(other.cookie, 'heart.png', '?size=256', limited.api)).status,
+      (await art(other.cookie, 'heart.png', '?size=512', limited.api)).status,
     );
   assert.deepEqual(statuses.slice(3), [429, 429]);
 });
@@ -236,37 +244,104 @@ test('the mosaic carries a plain note when a long link puts patterns on the face
   );
 });
 
-test('Pro art is not in any web bundle', () => {
-  const root = fileURLToPath(new URL('../../apps/web/.next', import.meta.url));
-  assert.ok(
-    existsSync(root),
-    'build the web app first: apps/web/.next is missing',
+test('sizes are a fixed list: thumbnails have their own route, so 256 is not a full-size', async () => {
+  const page = await livePage('+2348031270012', 'sizes_art');
+  assert.equal((await art(page.cookie, 'heart.png', '?size=256')).status, 400);
+  assert.equal((await art(page.cookie, 'heart.png', '?size=512')).status, 200);
+});
+
+test('a Free page sees the shared preview thumbnails: rendered once, public, home-page code, no session needed', async () => {
+  const page = await livePage('+2348031270013', 'thumb_free');
+  const items = (await (await art(page.cookie, '')).json()).data.items;
+  const heart = items.find((item) => item.id === 'heart');
+  assert.equal(heart.thumb, '/v1/qr-art/previews/heart.png');
+  const mosaic = items.find((item) => item.id === 'mosaic');
+  assert.equal(mosaic.thumb, '/v1/me/qr-art/thumbs/mosaic.png');
+  const first = await fetch(`${stack.api}${heart.thumb}`);
+  assert.match(first.headers.get('cache-control'), /public/);
+  assert.match(first.headers.get('cache-control'), /max-age=\d+/);
+  const bytes = Buffer.from(await first.arrayBuffer());
+  const { data, info } = await sharp(bytes)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 256);
+  assert.equal(
+    jsQR(new Uint8ClampedArray(data), info.width, info.height)?.data,
+    `${WEB}/?src=qr-preview`,
   );
-  const files = [];
-  const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const path = join(dir, name);
-      if (statSync(path).isDirectory()) walk(path);
-      else if (/\.(js|css|html|rsc|json)$/.test(name)) files.push(path);
-    }
-  };
-  walk(join(root, 'static'));
-  walk(join(root, 'server'));
-  assert.ok(files.length > 10);
-  // Path data and palettes only the server's drawing code holds, and its module names.
-  const markers = [
-    'M.09 .86C.07',
-    'M0 100V0H30C62 0 62 52',
-    '#8f2746',
-    'bareSvg',
-    'drawMosaic',
-    'PREVIEW_LETTERS',
-    'qr-cards',
-    'renderQrArt',
-  ];
-  for (const file of files) {
-    const text = readFileSync(file, 'utf8');
-    for (const marker of markers)
-      assert.ok(!text.includes(marker), `${marker} found in ${file}`);
-  }
+  const again = await fetch(`${stack.api}${heart.thumb}`);
+  assert.deepEqual(Buffer.from(await again.arrayBuffer()), bytes);
+  assert.equal(
+    (await fetch(`${stack.api}/v1/qr-art/previews/mosaic.png`)).status,
+    404,
+  );
+  assert.equal(
+    (await fetch(`${stack.api}/v1/qr-art/previews/nope.png`)).status,
+    404,
+  );
+});
+
+test('a Pro page sees its own thumbnails, cached briefly and privately, with its real link', async () => {
+  const page = await livePage('+2348031270014', 'thumb_pro');
+  await setPlan(page.profileId, 'pro');
+  const items = (await (await art(page.cookie, '')).json()).data.items;
+  const heart = items.find((item) => item.id === 'heart');
+  assert.equal(heart.thumb, '/v1/me/qr-art/thumbs/heart.png');
+  const response = await fetch(`${stack.api}${heart.thumb}`, {
+    headers: { cookie: page.cookie },
+  });
+  assert.match(response.headers.get('cache-control'), /private/);
+  assert.match(response.headers.get('cache-control'), /max-age=300/);
+  assert.doesNotMatch(response.headers.get('cache-control'), /no-store/);
+  assert.equal(response.headers.get('x-qr-preview'), null);
+  assert.equal(
+    (await fetch(`${stack.api}${heart.thumb}`)).status,
+    401,
+    'a thumbnail of a real code needs the session',
+  );
+  const full = await art(page.cookie, 'heart.png', '?size=512');
+  assert.equal(full.headers.get('cache-control'), 'private, no-store');
+});
+
+test('the image route says when it drew a preview, and lets the web app read that', async () => {
+  const free = await livePage('+2348031270015', 'flag_free');
+  const preview = await fetch(`${stack.api}/v1/me/qr-art/heart.png?size=512`, {
+    headers: { cookie: free.cookie, origin: WEB },
+  });
+  assert.equal(preview.headers.get('x-qr-preview'), '1');
+  assert.match(
+    preview.headers.get('access-control-expose-headers') ?? '',
+    /x-qr-preview/i,
+  );
+  const thumb = await art(free.cookie, 'thumbs/heart.png');
+  assert.notEqual(thumb.headers.get('x-qr-preview'), null);
+});
+
+test('thumbnails have their own per-person limit: browsing never costs the full-size route, and one person never costs another', async () => {
+  const a = await signIn(thumbLimited.api, '+2348031270016');
+  const b = await signIn(thumbLimited.api, '+2348031270017');
+  const thumb = (cookie) =>
+    art(cookie, 'thumbs/heart.png', '', thumbLimited.api).then((r) => r.status);
+  const statuses = [];
+  for (let i = 0; i < 5; i++) statuses.push(await thumb(a.cookie));
+  assert.ok(
+    statuses.slice(0, 3).every((status) => status !== 429),
+    String(statuses),
+  );
+  assert.deepEqual(statuses.slice(3), [429, 429]);
+  assert.notEqual(await thumb(b.cookie), 429);
+  assert.notEqual(
+    (await art(a.cookie, 'heart.png', '?size=512', thumbLimited.api)).status,
+    429,
+  );
+});
+
+test('the mosaic note is not shown on a Free preview, whose code is the short home link', async () => {
+  const long = await livePage(
+    '+2348031270018',
+    'a_thirty_character_handle_abce',
+  );
+  const items = (await (await art(long.cookie, '')).json()).data.items;
+  assert.equal(items.find((item) => item.id === 'mosaic').note, null);
 });

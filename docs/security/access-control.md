@@ -109,6 +109,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/mock-provider/checkout/{reference}` | – | – | yes |
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
 | POST | `/v1/profiles/{handle}/report` | – | `reports` | – |
+| GET | `/v1/qr-art/previews/{file}` | n/a (read) | – | – |
 | POST | `/v1/tip-intents` | – | `intents` | – |
 | POST | `/v1/tip-quotes` | – | `quotes` | – |
 | POST | `/v1/vitals` | – | `analytics` | – |
@@ -168,6 +169,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
 | PATCH | `/v1/me/profile` | yes | – | – |
+| GET | `/v1/me/qr-art` | n/a (read) | `qr_art` | – |
+| GET | `/v1/me/qr-art/{file}` | n/a (read) | `qr_art` | – |
+| GET | `/v1/me/qr-art/thumbs/{file}` | n/a (read) | `qr_thumb` | – |
 | GET | `/v1/me/recovery` | n/a (read) | – | – |
 | GET | `/v1/me/recovery-email` | n/a (read) | – | – |
 | POST | `/v1/me/recovery-email` | yes | `auth_verify` | – |
@@ -266,6 +270,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |
 | `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                        | Only the current photo of a live, active page                                                                      |
 | `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                       | Only the current cover of a live, active page                                                                      |
+| `GET /v1/qr-art/previews/{file}`                                                       | The marked preview of a Pro QR design, the same for every Free page   | Encodes only the TipMe home page and carries the Preview mark; fixed list of designs; drawn once and kept          |
 | `POST /v1/tip-quotes`, `POST /v1/tip-intents`                                          | A supporter tips without an account                                   | Rate-limited; amounts and fees computed on the server; idempotency key                                             |
 | `GET`, `POST /v1/mail/unsubscribe`                                                     | One-click unsubscribe from a mail app, with no session                | A signed token naming one person and one optional email type; GET only shows a page; rate-limited                  |
 | `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                    | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07 |

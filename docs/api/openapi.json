@@ -2784,9 +2784,9 @@
         ]
       }
     },
-    "/v1/me/qr-art/{file}": {
+    "/v1/me/qr-art/thumbs/{file}": {
       "get": {
-        "operationId": "QrArt.image",
+        "operationId": "QrArt.thumb",
         "tags": [
           "QrArt"
         ],
@@ -2802,11 +2802,89 @@
         ],
         "responses": {
           "200": {
-            "description": "Success.",
+            "description": "A 256 pixel picture for the design list: a marked preview on a Free page, the real code on a Pro page. Kept privately for five minutes.",
+            "headers": {
+              "X-Qr-Preview": {
+                "description": "Present (1) when the picture is a marked preview.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "qr_thumb",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/qr-art/{file}": {
+      "get": {
+        "operationId": "QrArt.image",
+        "tags": [
+          "QrArt"
+        ],
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                512,
+                1024,
+                1400
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One design as a PNG, never cached: a marked preview on a Free page, the real code on a Pro page.",
+            "headers": {
+              "X-Qr-Preview": {
+                "description": "Present (1) when the picture is a marked preview.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
@@ -7219,6 +7297,56 @@
         },
         "x-tipme-access": "public",
         "x-tipme-rate-limit": "reports"
+      }
+    },
+    "/v1/qr-art/previews/{file}": {
+      "get": {
+        "operationId": "QrArtPreview.preview",
+        "tags": [
+          "QrArtPreview"
+        ],
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The shared, public preview of a design: a 256 pixel picture marked Preview that leads to the TipMe home page. Kept for a day.",
+            "headers": {
+              "X-Qr-Preview": {
+                "description": "Always 1.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/release/runs": {

@@ -198,7 +198,7 @@ function PhotoSettings() {
   if (!('avatarPath' in profile)) return null;
   const photo = profile.avatarPath ?? null;
   return (
-    <Card className="settings-section">
+    <Card id="photo" className="settings-section">
       <h2>Your photo</h2>
       <p className="tm-hint">
         Optional. TipMe crops it to a square and removes hidden details such as
@@ -1319,12 +1319,43 @@ function DeletePage() {
   );
 }
 
+/** What Pro includes, for every plan. Nothing to buy here: staff arrange Pro for now. */
+function ProPlan() {
+  const { profile } = useRecipient();
+  const pro = profile.plan === 'pro';
+  return (
+    <Card id="pro" className="settings-section">
+      <h2>TipMe Pro</h2>
+      <p className="tm-hint">
+        {pro ? 'Your page is on TipMe Pro.' : 'Your page is on the Free plan.'}{' '}
+        Pro includes:
+      </p>
+      <ul className="settings-list">
+        <li>
+          Pro QR designs, and print formats such as a counter card, poster or
+          sticker
+        </li>
+        <li>Three changes to your handle</li>
+        <li>Your own tip amounts</li>
+        <li>No “Get your own TipMe page” link at the foot of your page</li>
+      </ul>
+      {!pro && (
+        <p className="tm-hint">
+          Pro isn’t something you can buy in the app yet. The TipMe team turns
+          it on for your page, and this page will show it when they do.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export function SettingsView() {
   return (
     <div className="settings-grid">
       <h1>Settings</h1>
       <PendingRecovery />
       <PageState />
+      <ProPlan />
       <PaymentAccountCard />
       <HandleChange />
       <PhotoSettings />

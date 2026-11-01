@@ -56,7 +56,21 @@ export default function PrintCardPage() {
   return (
     <div className="print-card">
       <h1 className="print-hide">Print your card</h1>
-      {proDesign ? (
+      {proDesign && art.ready && art.preview ? (
+        // The page was moved to Free after this screen loaded: the server drew a marked preview.
+        <div className="print-hide qr-locked" role="alert">
+          <p>
+            This page is on the Free plan now, so this design is only a preview
+            that leads to the TipMe home page. It can’t be printed.
+          </p>
+          <Link
+            className="tm-button tm-button--primary"
+            href="/dashboard/settings#pro"
+          >
+            See what Pro includes
+          </Link>
+        </div>
+      ) : proDesign ? (
         <>
           <p className="print-hide tm-hint">
             Choose a format, then print. The code is the same in each one, and
@@ -73,13 +87,24 @@ export default function PrintCardPage() {
                   checked={format === option.id}
                   onChange={() => setFormat(option.id)}
                 />
-                <span>{option.name}</span>
+                <span>
+                  {option.name}
+                  <small className="qr-style__premium">{option.size}</small>
+                </span>
               </label>
             ))}
           </fieldset>
           {art.error ? (
-            <p role="alert">{art.error}</p>
-          ) : art.url ? (
+            <div role="alert">
+              <p>{art.error.message}</p>
+              {(art.error.code === 'QR_ART_PHOTO_REQUIRED' ||
+                art.error.code === 'QR_ART_PHOTO_TOO_LARGE') && (
+                <Link href="/dashboard/settings#photo">
+                  Change your page photo
+                </Link>
+              )}
+            </div>
+          ) : art.ready && art.url ? (
             <QrFormat
               format={format}
               src={art.url}
@@ -88,9 +113,7 @@ export default function PrintCardPage() {
               label={label}
             />
           ) : (
-            <p role="status" className="print-hide">
-              Drawing your design…
-            </p>
+            <p className="print-hide">Drawing your design…</p>
           )}
         </>
       ) : (
@@ -109,7 +132,10 @@ export default function PrintCardPage() {
         </>
       )}
       <div className="print-hide qr-actions">
-        <Button onClick={print} disabled={proDesign && !art.url}>
+        <Button
+          onClick={print}
+          disabled={proDesign && !(art.ready && !art.preview)}
+        >
           Print
         </Button>
         <Link className="tm-button tm-button--secondary" href="/dashboard/qr">

@@ -57,7 +57,9 @@ export function shownQrStyle(stored: string, plan: PagePlan | undefined) {
 }
 
 /** Image sizes the art route draws, in pixels: a fixed list, so a request cannot ask for a huge one. */
-export const QR_ART_SIZES = [256, 512, 1024, 1400] as const;
+export const QR_ART_SIZES = [512, 1024, 1400] as const;
+/** The small picture in the design list, which has its own routes and limits. */
+export const QR_ART_THUMB_SIZE = 256;
 export type QrArtSize = (typeof QR_ART_SIZES)[number];
 
 export interface QrArtItem {
@@ -66,7 +68,9 @@ export interface QrArtItem {
   kind: 'style' | 'card' | 'photo';
   /** True on a Free page: the image is a marked preview that leads to the TipMe home page. */
   locked: boolean;
-  /** Plain words about this design for this page's link, or null. */
+  /** Where the list picture is: shared and public for a Free page, the page's own for a Pro one. */
+  thumb: string;
+  /** Plain words about this design for this page's link, or null. Never set on a preview. */
   note: string | null;
 }
 export interface QrArtCatalogue {

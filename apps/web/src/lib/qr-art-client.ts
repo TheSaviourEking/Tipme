@@ -7,41 +7,69 @@ import { apiUrl } from './session-client';
 
 export const artPath = (id: string, size: number) =>
   `/v1/me/qr-art/${id}.png?size=${size}`;
-export const artSrc = (id: string, size: number) => apiUrl(artPath(id, size));
+export const artSrc = (path: string) => apiUrl(path);
+
+export type ArtResult =
+  | {
+      blob: Blob;
+      /** The API drew a marked preview, whatever this page last believed about its plan. */
+      preview: boolean;
+    }
+  | { error: string; code: string };
 
 /** One design's PNG as a blob, or the API's own plain-words reason it could not be drawn. */
-export async function fetchArt(
-  id: string,
-  size: number,
-): Promise<{ blob: Blob } | { error: string }> {
+export async function fetchArt(id: string, size: number): Promise<ArtResult> {
   try {
-    const response = await fetch(artSrc(id, size), {
+    const response = await fetch(artSrc(artPath(id, size)), {
       credentials: 'include',
       cache: 'no-store',
     });
-    if (response.ok) return { blob: await response.blob() };
+    if (response.ok)
+      return {
+        blob: await response.blob(),
+        preview: response.headers.get('x-qr-preview') === '1',
+      };
     const body = (await response.json().catch(() => null)) as {
-      error?: { message?: string };
+      error?: { code?: string; message?: string };
     } | null;
     return {
       error:
         body?.error?.message ?? 'We couldn’t draw this design. Please retry.',
+      code: body?.error?.code ?? 'INTERNAL_ERROR',
     };
   } catch {
-    return { error: 'We couldn’t reach TipMe. Please check your connection.' };
+    return {
+      error: 'We couldn’t reach TipMe. Please check your connection.',
+      code: 'NETWORK',
+    };
   }
 }
 
+interface ArtState {
+  /** The design the picture and the error belong to. */
+  id: string | null;
+  url: string | null;
+  /** The picture before this one, kept under it while the new one fades in. */
+  previous: string | null;
+  version: number;
+  preview: boolean;
+  error: { id: string; message: string; code: string } | null;
+}
+
 /**
- * A design's image URL. The previous image stays in place until the next one has loaded, so the
- * panel never blanks; `version` changes when a new image arrives, to fade it in.
+ * A design's image. The previous picture stays in place until the next has loaded, so the panel
+ * never blanks. Everything is tagged with the design it belongs to: a picture or an error is only
+ * shown for its own design.
  */
 export function useArtImage(id: string | null, size: number) {
-  const [state, setState] = useState<{
-    url: string | null;
-    version: number;
-    error: string | null;
-  }>({ url: null, version: 0, error: null });
+  const [state, setState] = useState<ArtState>({
+    id: null,
+    url: null,
+    previous: null,
+    version: 0,
+    preview: false,
+    error: null,
+  });
   const current = useRef<string | null>(null);
   useEffect(() => {
     if (!id) return;
@@ -49,13 +77,23 @@ export function useArtImage(id: string | null, size: number) {
     void fetchArt(id, size).then((result) => {
       if (!live) return;
       if ('error' in result) {
-        setState((old) => ({ ...old, error: result.error }));
+        setState((old) => ({
+          ...old,
+          error: { id, message: result.error, code: result.code },
+        }));
         return;
       }
       const url = URL.createObjectURL(result.blob);
       const previous = current.current;
       current.current = url;
-      setState((old) => ({ url, version: old.version + 1, error: null }));
+      setState((old) => ({
+        id,
+        url,
+        previous: result.preview ? null : old.url,
+        version: old.version + 1,
+        preview: result.preview,
+        error: null,
+      }));
       if (previous) setTimeout(() => URL.revokeObjectURL(previous), 1000);
     });
     return () => {
@@ -68,5 +106,13 @@ export function useArtImage(id: string | null, size: number) {
     },
     [],
   );
-  return state;
+  const clearPrevious = () =>
+    setState((old) => (old.previous ? { ...old, previous: null } : old));
+  return {
+    ...state,
+    error: state.error && state.error.id === id ? state.error : null,
+    /** True when the picture on hand is this design's. */
+    ready: state.id === id && state.url !== null,
+    clearPrevious,
+  };
 }

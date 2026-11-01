@@ -11,9 +11,9 @@ const ACCEPTED = new Set(['image/jpeg', 'image/png', 'image/webp']);
 // Refuses "pixel bombs": small files that decode to enormous images. 25 MP covers any phone
 // photo, and the browser shrinks photos before sending them anyway.
 const MAX_INPUT_PIXELS = 25_000_000;
-// At most this many images are re-encoded at once in one API process, photos and covers
-// together: decoding runs on the thread pool every request shares, so a burst of uploads must
-// not slow everything else.
+// At most this many images are re-encoded or drawn at once in one API process: photos, covers
+// and QR designs together. Decoding runs on the thread pool every request shares, so a burst
+// must not slow everything else.
 const MAX_CONCURRENT = 2;
 let running = 0;
 const waiting: (() => void)[] = [];

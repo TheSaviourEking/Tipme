@@ -26,7 +26,10 @@ const sharp = createRequire(resolve('apps/api/package.json'))('sharp') as (
 
 /** What a phone would read from a screenshot of this element. */
 async function scan(element: Locator): Promise<string | undefined> {
-  const { data, info } = await sharp(await element.screenshot())
+  // A picture being swapped in is retried by the caller's poll, not a failure.
+  const shot = await element.screenshot().catch(() => null);
+  if (!shot) return undefined;
+  const { data, info } = await sharp(shot)
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -104,6 +107,14 @@ test('a Free page previews a Pro design with its mark, and cannot print, share o
   for (const name of ['Show full screen', 'Share image', 'Download image'])
     await expect(page.getByRole('button', { name })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Print card' })).toHaveCount(0);
+  // Upgrade leads to the Pro explanation, with no price and no billing.
+  await page.getByRole('link', { name: 'Upgrade to use this design' }).click();
+  await page.waitForURL(/\/dashboard\/settings#pro$/);
+  await expect(page.getByRole('heading', { name: 'TipMe Pro' })).toBeVisible();
+  await expect(page.getByText('Three changes to your handle')).toBeVisible();
+  await expect(page.locator('#pro')).not.toContainText(/₦|NGN|\$|per month/);
+  await page.goBack();
+  await page.getByRole('radio', { name: /Heart modules/ }).check();
   // A screenshot of it leads to the TipMe home page, never to the person's page.
   await expect
     .poll(() => scan(image))
@@ -112,7 +123,13 @@ test('a Free page previews a Pro design with its mark, and cannot print, share o
   await page.reload();
   await expect(page.getByRole('radio', { name: /Purple/ })).toBeChecked();
   await page.getByRole('radio', { name: /Heart modules/ }).check();
+  // Said where a screen reader is already listening, not only drawn on screen.
+  await expect(page.locator('p.settings-saved[role="status"]')).toContainText(
+    'Heart modules is a Pro design. This is a preview, and printing needs Pro.',
+  );
   await page.getByRole('button', { name: 'Use a free style instead' }).click();
+  // Focus is never lost: it moves to the style in use.
+  await expect(page.getByRole('radio', { name: /Purple/ })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Share image' })).toBeVisible();
   await page.getByRole('link', { name: 'Print card' }).click();
   await page.waitForURL(/\/dashboard\/qr\/print$/);
@@ -164,11 +181,50 @@ test('a Pro page saves a design, prints it in each format, and its printed code 
       .poll(() => scan(code), { message: format })
       .toBe(`http://127.0.0.1:3100/@${handle}?src=qr`);
   }
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // The sheet itself never animates, on screen or on paper.
+  await page.emulateMedia({ media: 'print' });
+  expect(
+    await page
+      .locator('.qr-format, .qr-format__code')
+      .evaluateAll((all) =>
+        all.map((el) => getComputedStyle(el).animationName),
+      ),
+  ).toEqual(['none', 'none']);
+  await page.emulateMedia({ media: 'screen', reducedMotion: 'reduce' });
   expect(
     await page
       .locator('.qr-format__code')
       .evaluate((el) => getComputedStyle(el).animationName),
   ).toBe('none');
+  await context.close();
+});
+
+test('@mobile the studio, a locked preview and the print formats fit a phone', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext({
+    viewport: { width: 360, height: 800 },
+  });
+  const page = await context.newPage();
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/qr');
+  await expect(page.getByRole('heading', { name: 'My QR code' })).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+  await page.getByRole('radio', { name: /Heart modules/ }).check();
+  await expect(
+    page.getByRole('link', { name: 'Upgrade to use this design' }),
+  ).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+  await makePagePro(browser, handle, testInfo);
+  await page.goto('/dashboard/qr');
+  await page.getByRole('radio', { name: /Heart modules/ }).check();
+  await expect(page.getByText('Style saved')).toBeVisible();
+  await page.goto('/dashboard/qr/print');
+  for (const format of ['Business card', 'Round sticker', 'Poster']) {
+    await page.getByRole('radio', { name: new RegExp(format) }).check();
+    await expect(page.locator('.qr-format__code')).toBeVisible();
+    expect(await fitsViewport(page)).toBe(true);
+  }
   await context.close();
 });

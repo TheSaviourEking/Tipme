@@ -86,7 +86,10 @@ export const apiConfigSchema = z
       .int()
       .min(1)
       .default(60),
-    RATE_LIMIT_QR_ART_PER_HOUR: z.coerce.number().int().min(1).default(600),
+    // Full-size designs (print, download, the studio's big picture), per address.
+    RATE_LIMIT_QR_ART_PER_HOUR: z.coerce.number().int().min(1).default(120),
+    // The small pictures in the design list, per signed-in person: a visit asks for up to thirty.
+    RATE_LIMIT_QR_THUMBS_PER_HOUR: z.coerce.number().int().min(1).default(600),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z

@@ -87,6 +87,8 @@ export async function createApp(
         : credentialed
           ? ['content-type', 'x-tipme-csrf', 'idempotency-key']
           : ['content-type', 'authorization', 'idempotency-key'],
+      // The art route says when it drew a marked preview.
+      exposedHeaders: ['x-qr-preview'],
       credentials: credentialed,
     });
   });

@@ -14,14 +14,14 @@ export interface FormatInput {
 }
 
 export const QR_FORMATS = [
-  { id: 'counter', name: 'Counter card' },
-  { id: 'poster', name: 'Poster' },
-  { id: 'sticker', name: 'Round sticker' },
-  { id: 'ticket', name: 'Ticket' },
-  { id: 'receipt', name: 'Receipt slip' },
-  { id: 'lock', name: 'Phone lock screen' },
-  { id: 'business', name: 'Business card' },
-  { id: 'hang', name: 'Hang tag' },
+  { id: 'counter', name: 'Counter card', size: 'Prints on A6' },
+  { id: 'poster', name: 'Poster', size: 'Prints on A6' },
+  { id: 'sticker', name: 'Round sticker', size: 'Prints 80 mm across' },
+  { id: 'ticket', name: 'Ticket', size: 'Prints on A6' },
+  { id: 'receipt', name: 'Receipt slip', size: 'Prints on A6' },
+  { id: 'lock', name: 'Phone lock screen', size: 'Prints on A6' },
+  { id: 'business', name: 'Business card', size: 'Prints 90 × 55 mm' },
+  { id: 'hang', name: 'Hang tag', size: 'Prints on A6' },
 ] as const;
 export type QrFormatId = (typeof QR_FORMATS)[number]['id'];
 
@@ -29,6 +29,10 @@ const Code = ({ src, label }: { src: string; label: string }) => (
   // eslint-disable-next-line @next/next/no-img-element -- a private, session-only image
   <img className="qr-format__code" src={src} alt={`QR code for ${label}`} />
 );
+
+/** The ring holds about 70 characters round, so a long name is cut with an ellipsis. */
+const ring = (name: string) =>
+  name.length > 12 ? `${name.slice(0, 11).trimEnd()}…` : name;
 
 const LAYOUTS: Record<QrFormatId, (input: FormatInput) => ReactNode> = {
   counter: ({ src, name, label }) => (
@@ -73,7 +77,7 @@ const LAYOUTS: Record<QrFormatId, (input: FormatInput) => ReactNode> = {
           letterSpacing="3"
         >
           <textPath href="#qr-ring">
-            {`Scan to tip ${name} on TipMe. Scan to tip ${name} on TipMe.`}
+            {`Scan to tip ${ring(name)} on TipMe. Scan to tip ${ring(name)} on TipMe.`}
           </textPath>
         </text>
       </svg>

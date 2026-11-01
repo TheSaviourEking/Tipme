@@ -50,11 +50,23 @@ export function QrStudio() {
   const [looking, setLooking] = useState<string | null>(null);
   const current = chosen ?? profile.qrStyle;
   const viewing = looking ?? current;
-  const design = isFree(viewing)
+  const isArt = !isFree(viewing);
+  // The list may not have loaded yet (or may have failed): the saved design still shows.
+  const design: QrArtItem | null = !isArt
     ? null
-    : (designs?.find((item) => item.id === viewing) ?? null);
+    : (designs?.find((item) => item.id === viewing) ?? {
+        id: viewing as QrArtItem['id'],
+        name: viewing.charAt(0).toUpperCase() + viewing.slice(1),
+        kind: 'style',
+        locked: !pro,
+        thumb: '',
+        note: null,
+      });
   const style = styleById(isFree(current) ? current : 'purple');
   const art = useArtImage(design ? design.id : null, 1024);
+  // What the API actually drew wins over what this page last believed about its plan.
+  const previewing =
+    design !== null && (art.ready ? art.preview : design.locked);
   const preview = useRef<HTMLCanvasElement>(null);
   const big = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -85,11 +97,18 @@ export function QrStudio() {
   }, []);
 
   const pick = (styleId: string) => {
-    setSaved('');
     if (isFree(styleId) || pro) {
       setLooking(null);
       void choose(styleId);
-    } else setLooking(styleId);
+      return;
+    }
+    // Said in the always-present status line, so a screen reader hears it too.
+    const name =
+      designs?.find((item) => item.id === styleId)?.name ?? 'This design';
+    setSaved(
+      `${name} is a Pro design. This is a preview, and printing needs Pro.`,
+    );
+    setLooking(styleId);
   };
 
   const choose = async (styleId: string) => {
@@ -102,6 +121,13 @@ export function QrStudio() {
     if (result.ok) {
       setProfile(result.data);
       setSaved('Style saved');
+    } else if (result.code === 'QR_DESIGN_PRO_REQUIRED') {
+      // The plan changed under an open page: show what is true, as a preview.
+      setChosen(null);
+      setLooking(styleId);
+      setSaved(
+        'Saving a Pro design is part of TipMe Pro, and this page is on the Free plan. You can still preview it.',
+      );
     } else {
       setChosen(null);
       setSaved('We couldn’t save the style. Please try again.');
@@ -113,6 +139,14 @@ export function QrStudio() {
     const result = await fetchArt(design.id, 1400);
     if ('error' in result) {
       setSaved(result.error);
+      return;
+    }
+    if (result.preview) {
+      // The page lost Pro since this screen loaded: nothing real to save.
+      setLooking(design.id);
+      setSaved(
+        'This page is on the Free plan now, so this design is only a preview.',
+      );
       return;
     }
     const download = document.createElement('a');
@@ -197,34 +231,59 @@ export function QrStudio() {
           />
         ) : (
           <div className="qr-design">
-            <div className="qr-design__plate">
+            <div
+              className="qr-design__plate"
+              aria-busy={!art.ready && !art.error}
+            >
               {art.error ? (
-                <p role="alert" className="qr-design__error">
-                  {art.error}
-                </p>
-              ) : art.url ? (
-                // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
-                <img
-                  key={art.version}
-                  className="qr-design__image"
-                  src={art.url}
-                  alt={
-                    design.locked
-                      ? `Preview of the ${design.name} QR design. It leads to the TipMe home page, not your page.`
-                      : `QR code for ${label}, ${design.name} design`
-                  }
-                />
+                <div role="alert" className="qr-design__error">
+                  <p>{art.error.message}</p>
+                  {(art.error.code === 'QR_ART_PHOTO_REQUIRED' ||
+                    art.error.code === 'QR_ART_PHOTO_TOO_LARGE') && (
+                    <Link href="/dashboard/settings#photo">
+                      Change your page photo
+                    </Link>
+                  )}
+                </div>
               ) : (
-                <p role="status" className="qr-design__error">
-                  Drawing your design…
-                </p>
+                <>
+                  {/* While the next picture loads, the last one stays; it fades out under the new one. */}
+                  {art.previous && (
+                    // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
+                    <img
+                      className="qr-design__image qr-design__image--under"
+                      src={art.previous}
+                      alt=""
+                    />
+                  )}
+                  {art.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
+                    <img
+                      key={art.version}
+                      className={`qr-design__image${art.previous ? ' qr-design__image--fade' : ''}`}
+                      src={art.url}
+                      onAnimationEnd={art.clearPrevious}
+                      alt={
+                        art.ready
+                          ? previewing
+                            ? `Preview of the ${design.name} QR design. It leads to the TipMe home page, not your page.`
+                            : `QR code for ${label}, ${design.name} design`
+                          : 'The last design, while the next one is drawn'
+                      }
+                    />
+                  ) : (
+                    <p className="qr-design__wait">Drawing your design…</p>
+                  )}
+                </>
               )}
             </div>
-            {design.note && <p className="tm-hint">{design.note}</p>}
+            {design.note && !previewing && (
+              <p className="tm-hint">{design.note}</p>
+            )}
           </div>
         )}
         <div>
-          {design?.locked && (
+          {previewing && design && (
             <div className="qr-locked">
               <h2>{design.name}</h2>
               <p>
@@ -233,11 +292,21 @@ export function QrStudio() {
               </p>
               <Link
                 className="tm-button tm-button--primary"
-                href="/dashboard/settings#handle"
+                href="/dashboard/settings#pro"
               >
                 Upgrade to use this design
               </Link>
-              <Button variant="secondary" onClick={() => setLooking(null)}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setLooking(null);
+                  setSaved('');
+                  // Leaving the locked panel puts focus on the style in use, so it is never lost.
+                  requestAnimationFrame(() =>
+                    document.getElementById(`${id}-${current}`)?.focus(),
+                  );
+                }}
+              >
                 Use a free style instead
               </Button>
             </div>
@@ -287,7 +356,7 @@ export function QrStudio() {
                   {/* eslint-disable-next-line @next/next/no-img-element -- a private image from the API */}
                   <img
                     className="qr-style__thumb"
-                    src={artSrc(option.id, 256)}
+                    src={artSrc(option.thumb)}
                     alt=""
                     loading="lazy"
                     width={40}
@@ -304,16 +373,16 @@ export function QrStudio() {
             </fieldset>
           )}
           {designsFailed && (
-            <p className="tm-hint">
-              The Pro designs aren’t available right now. Your free styles still
-              work.
+            <p role="alert" className="tm-hint">
+              The Pro designs couldn’t be loaded, so only your free styles are
+              listed. Please reload to try again.
             </p>
           )}
           <p role="status" className="settings-saved">
             {saved}
           </p>
           <p className="qr-link">{label}</p>
-          {!design?.locked && (
+          {!previewing && (
             <div className="qr-actions">
               <Link
                 className="tm-button tm-button--secondary"
@@ -334,11 +403,11 @@ export function QrStudio() {
         </div>
       </div>
       <div ref={stage} className="qr-stage">
-        {design && !design.locked && art.url ? (
+        {design && !previewing && art.ready ? (
           // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
           <img
             className="qr-stage__image"
-            src={art.url}
+            src={art.url ?? undefined}
             alt={`QR code for ${label}`}
           />
         ) : (

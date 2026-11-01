@@ -28,7 +28,8 @@ type RateLimitedRoute =
   | 'unsubscribe'
   | 'avatars'
   | 'cover_designs'
-  | 'qr_art';
+  | 'qr_art'
+  | 'qr_thumb';
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -125,6 +126,12 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_QR_ART_PER_HOUR,
         windowMs: 3_600_000,
       },
+      // The list pictures count against the signed-in person, not the address, so a shop's wifi
+      // or a carrier's shared address never runs out, and browsing never costs a print.
+      qr_thumb: {
+        limit: this.config.RATE_LIMIT_QR_THUMBS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
         windowMs: 3_600_000,
@@ -135,9 +142,13 @@ export class RateLimitGuard implements CanActivate {
         windowMs: 3_600_000,
       },
     }[route];
-    const ip = rateLimitSubject(
-      context.switchToHttp().getRequest<Request>().ip,
-    );
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { auth?: { userId: string } }>();
+    const ip =
+      route === 'qr_thumb' && request.auth
+        ? `user:${request.auth.userId}`
+        : rateLimitSubject(request.ip);
     const now = Date.now();
     const key = `rl:${this.config.QUEUE_PREFIX}:${route}:${ip}:${Math.floor(now / windowMs)}`;
     let count: number;

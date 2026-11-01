@@ -3975,13 +3975,28 @@ html:has(.confirm-dialog[open]) {
   place-items: center;
 }
 
+.qr-design__plate {
+  position: relative;
+}
+
 .qr-design__image {
+  grid-area: 1 / 1;
   width: 100%;
   height: auto;
+}
+
+/* A new real code fades in over the last one, which stays until it has loaded. A marked preview
+   is present from the first frame and never fades. */
+.qr-design__image--under {
+  position: relative;
+}
+
+.qr-design__image--fade {
   animation: qr-design-in var(--duration-component) var(--ease-physical);
 }
 
-.qr-design__error {
+.qr-design__error,
+.qr-design__wait {
   margin: 0;
   text-align: center;
 }
@@ -3990,6 +4005,13 @@ html:has(.confirm-dialog[open]) {
   from {
     opacity: 0;
   }
+}
+
+.settings-list {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--space-1);
 }
 
 .qr-locked {
@@ -4054,7 +4076,7 @@ html:has(.confirm-dialog[open]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .qr-design__image,
+  .qr-design__image--fade,
   .qr-stage:fullscreen .qr-stage__image {
     animation: none;
   }
@@ -4100,6 +4122,42 @@ html:has(.confirm-dialog[open]) {
   .print-card__canvas {
     max-width: none;
     width: 100%;
+  }
+
+  /* The business card and the sticker print at their real sizes, on pages of that size. */
+  @page business {
+    size: 90mm 55mm;
+    margin: 0;
+  }
+
+  @page sticker {
+    size: 80mm 80mm;
+    margin: 0;
+  }
+
+  .qr-sheet:has(.qr-format--business) {
+    page: business;
+  }
+
+  .qr-sheet:has(.qr-format--sticker) {
+    page: sticker;
+  }
+
+  .qr-format--business {
+    width: 90mm;
+    height: 55mm;
+    padding: 4mm;
+    border: 0;
+  }
+
+  .qr-format--business .qr-format__big {
+    font-size: 1.6rem;
+  }
+
+  .qr-format--sticker {
+    width: 80mm;
+    height: 80mm;
+    border: 0;
   }
 
   /* A format prints at its own size on the page, still, with its colours kept. */
@@ -4165,6 +4223,13 @@ html:has(.confirm-dialog[open]) {
 .qr-format__big {
   font-size: 3.5rem;
   overflow-wrap: anywhere;
+  /* A long name is cut after two lines rather than pushing the code off the sheet. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
 }
 
 .qr-format__sub,

@@ -54,6 +54,7 @@ const PUBLIC_REVIEWED = [
   'POST /v1/mail/unsubscribe',
   'GET /v1/profiles/{handle}',
   'POST /v1/profiles/{handle}/report',
+  'GET /v1/qr-art/previews/{file}',
   'POST /v1/tip-intents',
   'POST /v1/tip-quotes',
   'POST /v1/vitals',
