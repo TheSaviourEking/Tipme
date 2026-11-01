@@ -8,7 +8,12 @@ import type {
   WebhookVerification,
 } from '../provider.js';
 import { UnsupportedProviderCapabilityError } from '../provider.js';
-import { BachsApiClient, SANDBOX_API_ORIGIN } from './client.js';
+import {
+  BachsApiClient,
+  LIVE_API_ORIGIN,
+  SANDBOX_API_ORIGIN,
+  type BachsEnvironment,
+} from './client.js';
 import {
   BachsProtocolError,
   BachsRequestNotSentError,
@@ -101,8 +106,12 @@ const accountInputSchema = z.object({
 
 const urlInputSchema = z.string().url();
 
+export type { BachsEnvironment };
+
 export interface BachsProviderConfig {
   apiKey: string;
+  /** Required: the key's prefix must match it, and requests go only to its origin. */
+  environment: BachsEnvironment;
   /** Omitted for a read-only adapter (the worker): it then refuses every webhook. */
   webhookSecrets?: readonly string[];
   fetchImpl?: typeof fetch;
@@ -127,6 +136,10 @@ export interface BachsRecipientAccount {
 const LOCAL_CURRENCY: Readonly<Record<string, string>> = { NG: 'NGN' };
 
 export interface BachsProvider extends PaymentProvider<NormalizedProviderEvent> {
+  /** The PAYMENT_PROVIDER this adapter is. Rows still record provider 'bachs' (ADR-0004). */
+  readonly name: 'bachs-sandbox' | 'bachs-live';
+  /** Which Bachs this adapter talks to; recorded on payment accounts. */
+  readonly environment: BachsEnvironment;
   createRecipientAccount(input: {
     contactEmail: string;
     country: string;
@@ -378,7 +391,8 @@ export function createBachsProvider(
   }
 
   return {
-    name: 'bachs',
+    name: client.environment === 'live' ? 'bachs-live' : 'bachs-sandbox',
+    environment: client.environment,
     capabilities,
 
     async initializePayment(input) {
@@ -697,4 +711,4 @@ export function createBachsProvider(
   };
 }
 
-export { SANDBOX_API_ORIGIN };
+export { LIVE_API_ORIGIN, SANDBOX_API_ORIGIN };

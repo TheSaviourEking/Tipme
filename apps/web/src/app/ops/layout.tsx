@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Container, Skeleton } from '@tipme/ui';
+import { PaymentModeScope } from '@/components/payment-mode-slot';
 import { OpsShell } from './ops-shell';
 
 export const metadata: Metadata = {
@@ -20,7 +21,9 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
         </main>
       }
     >
-      <OpsShell>{children}</OpsShell>
+      <PaymentModeScope>
+        <OpsShell>{children}</OpsShell>
+      </PaymentModeScope>
     </Suspense>
   );
 }

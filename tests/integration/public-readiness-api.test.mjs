@@ -80,6 +80,7 @@ test('finishing payment setup refreshes the cached public page at once', async (
     bachsConfig,
     { db: database.db },
     {
+      environment: 'sandbox',
       async getRecipientAccount(reference) {
         return {
           accountReference: reference,

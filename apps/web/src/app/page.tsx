@@ -1,7 +1,14 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { ActionLink, Badge, Container } from '@tipme/ui';
+import { ActionLink, Badge, Card, Container, Skeleton } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
+import {
+  ModeText,
+  PaymentModeSlot,
+  TestModeOnly,
+} from '@/components/payment-mode-slot';
+import { TippingOpensSoon } from '@/components/tipping-opens-soon';
+import { HOME_DESCRIPTION } from '@/lib/payment-mode-copy';
 import { Arrow } from '@/components/brand';
 import { HowItWorksSteps } from '@/components/marketing';
 import { ViewTracker } from '@/components/view-tracker';
@@ -9,7 +16,7 @@ import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
   'TipMe — A little thanks goes a long way',
-  'For the people who make your day, your work, your world a little better. Explore TipMe’s non-transactional appreciation preview.',
+  HOME_DESCRIPTION,
   '/',
 );
 
@@ -63,12 +70,41 @@ export default function Home() {
               />
               <figcaption>
                 <strong>Ada Okafor</strong>
-                <span>A fictional demo recipient. Go on, try the feeling.</span>
+                <span>
+                  <ModeText pick="homeDemoCaption" />
+                </span>
               </figcaption>
             </figure>
           </div>
           <div className="home-hero__panel tip-instrument" id="try-it">
-            <AppreciationForm recipient="Ada" handle="ada" collapseExtras />
+            {/* Ada is fictional: a working form only on test copies, where no money is real. */}
+            <PaymentModeSlot
+              fallback={
+                <Card className="appreciation-card">
+                  <Skeleton label="Loading appreciation options" />
+                </Card>
+              }
+            >
+              {(mode, copy) =>
+                copy.homeDemo === 'form' ? (
+                  <AppreciationForm
+                    paymentMode={mode}
+                    recipient="Ada"
+                    handle="ada"
+                    collapseExtras
+                  />
+                ) : copy.homeDemo === 'closed' ? (
+                  <TippingOpensSoon />
+                ) : (
+                  <Card className="appreciation-card tips-not-ready">
+                    <h2>{copy.homeExampleTitle}</h2>
+                    <p className="composer-description">
+                      {copy.homeExampleBody}
+                    </p>
+                  </Card>
+                )
+              }
+            </PaymentModeSlot>
           </div>
         </section>
       </Container>
@@ -107,10 +143,15 @@ export default function Home() {
               <p>Copy your link or QR code and let people know it is yours.</p>
             </li>
           </ol>
-          <p className="recipient-start__notice">
-            Payments are in test mode. Real payments and payout setup are not
-            available until provider and funds-flow approvals are complete.
-          </p>
+          <PaymentModeSlot>
+            {(_mode, copy) =>
+              copy.homeRecipientNotice && (
+                <p className="recipient-start__notice">
+                  {copy.homeRecipientNotice}
+                </p>
+              )
+            }
+          </PaymentModeSlot>
           <ActionLink className="home-primary" href="/sign-up">
             Create your page <Arrow />
           </ActionLink>
@@ -177,9 +218,7 @@ export default function Home() {
               <li>
                 <h3>Clarity before commitment.</h3>
                 <p>
-                  You see the full cost and what the person receives before you
-                  pay. Payments are still in test mode; real payments are not
-                  available yet.
+                  <ModeText pick="homeClarity" />
                 </p>
               </li>
               <li>
@@ -197,13 +236,17 @@ export default function Home() {
               <ActionLink className="home-primary" href="/sign-up">
                 Create your page <Arrow />
               </ActionLink>
-              <Link className="text-link" href="/@ada">
-                See a demo page
-              </Link>
+              <TestModeOnly>
+                <Link className="text-link" href="/@ada">
+                  See a demo page
+                </Link>
+              </TestModeOnly>
             </div>
-            <Link href="/about-preview" className="preview-details">
-              What’s available in this preview?
-            </Link>
+            <TestModeOnly>
+              <Link href="/about-preview" className="preview-details">
+                What’s available in this preview?
+              </Link>
+            </TestModeOnly>
           </div>
         </Container>
       </section>

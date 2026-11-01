@@ -54,9 +54,10 @@ x-api-env: &api-env
   QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
   PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?set PAYMENT_PROVIDER (bachs-live in production)}
   PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
-  BACHS_SANDBOX_API_KEY: ${BACHS_SANDBOX_API_KEY:-}
-  BACHS_WEBHOOK_SECRET: ${BACHS_WEBHOOK_SECRET:-}
-  BACHS_PREVIOUS_WEBHOOK_SECRET: ${BACHS_PREVIOUS_WEBHOOK_SECRET:-}
+  # Config refuses bachs-live without the live key and webhook secret, so empty defaults are safe.
+  BACHS_LIVE_API_KEY: ${BACHS_LIVE_API_KEY:-}
+  BACHS_LIVE_WEBHOOK_SECRET: ${BACHS_LIVE_WEBHOOK_SECRET:-}
+  BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET: ${BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET:-}
   WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
   STATUS_TOKEN_SECRET: ${STATUS_TOKEN_SECRET:?}
   RATE_LIMIT_QUOTES_PER_MIN: ${RATE_LIMIT_QUOTES_PER_MIN:-30}
@@ -149,7 +150,8 @@ x-worker: &worker
     QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
     PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?set PAYMENT_PROVIDER (bachs-live in production)}
     PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
-    BACHS_SANDBOX_API_KEY: ${BACHS_SANDBOX_API_KEY:-}
+    # The worker reads statuses only: the live key, no webhook secrets. Config refuses bachs-live without it.
+    BACHS_LIVE_API_KEY: ${BACHS_LIVE_API_KEY:-}
     MAIL_SEAL_KEY: ${MAIL_SEAL_KEY:?}
     MAIL_DEFAULT_PROVIDER: ${MAIL_DEFAULT_PROVIDER:?set MAIL_DEFAULT_PROVIDER}
     ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
@@ -174,7 +176,8 @@ x-worker: &worker
     # The safety net when neither a webhook nor the open receipt confirmed a tip (as staging).
     RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-20000}
     RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-45000}
-    REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-25000000}
+    # 0 until D-05 decides cash rewards: the worker refuses any other value on production.
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-0}
   depends_on:
     redis: { condition: service_healthy }
   mem_limit: 512m

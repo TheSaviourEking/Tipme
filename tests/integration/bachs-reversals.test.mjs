@@ -82,9 +82,15 @@ test('a Bachs refund or dispute on a paid tip opens one money issue and books no
     providerReference: REFERENCE,
     operationReference: attemptId,
   };
-  assert.equal(await webhooks.applyBachs(reversal), 'reversal_flagged');
+  assert.equal(
+    await webhooks.applyBachs(reversal, { environment: 'sandbox' }),
+    'reversal_flagged',
+  );
   // Redelivery: still one alert.
-  assert.equal(await webhooks.applyBachs(reversal), 'reversal_flagged');
+  assert.equal(
+    await webhooks.applyBachs(reversal, { environment: 'sandbox' }),
+    'reversal_flagged',
+  );
   assert.equal(await ledgerRows(), before);
 
   const alerts = (

@@ -1,7 +1,11 @@
 import { isProductionCopy, parseConfig } from '@tipme/observability';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
+import { checkPaymentSettings, paymentSettingsShape } from '@tipme/payments';
 import { z } from 'zod';
+
+/** The pretend monthly cash reward budget outside production (D-05 pending). */
+const PRETEND_REWARD_CASH_BUDGET_MINOR = 25_000_000n;
 
 export const workerConfigSchema = z
   .object({
@@ -68,13 +72,8 @@ export const workerConfigSchema = z
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })
       .default('http://localhost:3000'),
-    // Sandbox only: selectable in test and password-protected preview, never production.
-    PAYMENT_PROVIDER: z.enum(['mock', 'bachs-sandbox']).default('mock'),
-    PAYMENTS_LIVE_ENABLED: z.literal('false').default('false'),
-    BACHS_SANDBOX_API_KEY: z
-      .string()
-      .regex(/^sk_sandbox_.+$/)
-      .optional(),
+    // Provider, live switch and Bachs API keys: one definition with the API (no webhook secrets).
+    ...paymentSettingsShape,
     // Anonymous analytics (PR-009). Unset: on in development and test, off in production (D-07).
     ANALYTICS_ENABLED: z
       .enum(['true', 'false'])
@@ -95,10 +94,8 @@ export const workerConfigSchema = z
     RECONCILE_INTERVAL_MS: z.coerce.number().int().min(100).default(60_000),
     RECONCILE_MIN_AGE_MS: z.coerce.number().int().min(0).default(120_000),
     // Monthly budget for TipMe's cash rewards, in minor units (pretend money; D-05 pending).
-    REWARD_CASH_BUDGET_MINOR_PER_MONTH: z.coerce
-      .bigint()
-      .min(0n)
-      .default(25_000_000n),
+    // Unset resolves below: 0 on a production copy, the pretend default everywhere else.
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH: z.coerce.bigint().min(0n).optional(),
     /** Test-only: simulated work so shutdown draining can be observed. */
     TRACE_PROBE_TEST_DELAY_MS: z.coerce
       .number()
@@ -129,6 +126,13 @@ export const workerConfigSchema = z
     checkMailSettings(config, context);
     // A production copy carries none of the rehearsal settings (messages name, never show, them).
     if (isProductionCopy(config)) {
+      // Reward cash posts to real recipients' balances, so it stays 0 until D-05 decides it.
+      if ((config.REWARD_CASH_BUDGET_MINOR_PER_MONTH ?? 0n) !== 0n)
+        context.addIssue({
+          code: 'custom',
+          path: ['REWARD_CASH_BUDGET_MINOR_PER_MONTH'],
+          message: 'must be 0 in production until D-05 decides cash rewards',
+        });
       if (config.PREVIEW_PASSWORD)
         context.addIssue({
           code: 'custom',
@@ -160,49 +164,14 @@ export const workerConfigSchema = z
           message: problem,
         });
     }
-    if (
-      config.PAYMENT_PROVIDER === 'mock' &&
-      config.NODE_ENV === 'production' &&
-      config.DEPLOYMENT_MODE !== 'preview'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PAYMENT_PROVIDER'],
-        message: 'mock not allowed in production',
-      });
-    }
-    if (config.PAYMENT_PROVIDER === 'bachs-sandbox') {
-      if (
-        config.NODE_ENV === 'production' &&
-        config.DEPLOYMENT_MODE !== 'preview'
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['PAYMENT_PROVIDER'],
-          message:
-            'Bachs sandbox is allowed only in test or password-protected preview',
-        });
-      }
-      if (!config.BACHS_SANDBOX_API_KEY) {
-        context.addIssue({
-          code: 'custom',
-          path: ['BACHS_SANDBOX_API_KEY'],
-          message: 'required for Bachs sandbox',
-        });
-      }
-    }
-    if (
-      config.BACHS_SANDBOX_API_KEY &&
-      config.NODE_ENV === 'production' &&
-      config.DEPLOYMENT_MODE !== 'preview'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['BACHS_SANDBOX_API_KEY'],
-        message: 'Bachs sandbox credentials are restricted to test or preview',
-      });
-    }
-  });
+    checkPaymentSettings(config, context, { webhooks: false });
+  })
+  .transform((config) => ({
+    ...config,
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH:
+      config.REWARD_CASH_BUDGET_MINOR_PER_MONTH ??
+      (isProductionCopy(config) ? 0n : PRETEND_REWARD_CASH_BUDGET_MINOR),
+  }));
 export type WorkerConfig = z.infer<typeof workerConfigSchema>;
 
 export const SERVICE_NAME = 'tipme-worker';

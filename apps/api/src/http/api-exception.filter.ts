@@ -86,6 +86,7 @@ const messages: Record<ApiErrorCode, string> = {
   PROVIDER_NOT_ALLOWED: 'This provider can’t be made active in production.',
   PAYMENT_START_REJECTED:
     'The payment provider refused to start this payment. Nothing was charged.',
+  TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   INTERNAL_ERROR: 'Something went wrong.',

@@ -12,6 +12,8 @@ import {
 } from '@tipme/ui';
 import { PagePricing } from '@/components/ops/page-pricing';
 import { ReasonAction } from '@/components/ops/reason-action';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
@@ -104,6 +106,7 @@ function MoveSignInEmail({ userId }: { userId: string }) {
 /** Free and Pro (PR-012): find a page by handle and change its plan. No billing; audited. */
 export default function OpsPagesPage() {
   const id = useId();
+  const copy = paymentModeCopy(usePaymentMode());
   const access = useOpsAccess();
   const params = useSearchParams();
   const [handle, setHandle] = useState(params.get('handle') ?? '');
@@ -182,7 +185,7 @@ export default function OpsPagesPage() {
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
         below NGN 1,000). The fee and withdrawal minimum are the same as Free.
-        There is no billing while payments are in test mode.
+        {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField

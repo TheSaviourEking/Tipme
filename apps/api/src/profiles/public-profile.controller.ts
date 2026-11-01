@@ -25,6 +25,7 @@ import {
   publicProfile,
   reportProfile,
 } from '@tipme/database';
+import { bachsEnvironment } from '@tipme/payments';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
@@ -47,10 +48,12 @@ export class PublicProfileController {
     @Param('handle') handle: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ApiDataResponse<PublicProfile | { movedTo: string }>> {
-    // New tips through Bachs need the owner's own ready account; checkout refuses them otherwise.
+    // New tips through Bachs need the owner's own ready account in this copy's environment;
+    // checkout refuses them otherwise.
+    const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
     const page = await publicProfile(this.database.db, handle, {
-      ...(this.config.PAYMENT_PROVIDER === 'bachs-sandbox'
-        ? { requiredAccount: { provider: 'bachs', environment: 'sandbox' } }
+      ...(environment
+        ? { requiredAccount: { provider: 'bachs', environment } }
         : {}),
     });
     if (page) return { data: page };

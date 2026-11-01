@@ -17,6 +17,10 @@ import { recordTransition } from './transitions.js';
 import { recordAudit } from './audit.js';
 import { quotedShare } from './reconcile.js';
 import {
+  bachsAccountEnvironment,
+  type PaymentAccountEnvironment,
+} from './payment-accounts.js';
+import {
   isScopedProviderReference,
   OPAQUE_PROVIDER_ID,
 } from './provider-ids.js';
@@ -380,11 +384,15 @@ export function markPayoutInitiated(
 
 /**
  * Finds a Bachs attempt from its signed webhook operation reference only when the connected
- * account matches the recipient's persisted sandbox account mapping.
+ * account matches the recipient's persisted account mapping in this copy's Bachs environment.
  */
 export function findBachsAttemptByOperationReference(
   db: Database,
-  input: { attemptId: string; accountReference: string },
+  input: {
+    attemptId: string;
+    accountReference: string;
+    environment: PaymentAccountEnvironment;
+  },
 ): Promise<string | null> {
   return guarded(async () => {
     const [row] = await db
@@ -399,7 +407,10 @@ export function findBachsAttemptByOperationReference(
         and(
           eq(paymentAccounts.profileId, paymentIntents.profileId),
           eq(paymentAccounts.provider, 'bachs'),
-          eq(paymentAccounts.environment, 'sandbox'),
+          eq(
+            paymentAccounts.environment,
+            bachsAccountEnvironment(input.environment),
+          ),
           eq(paymentAccounts.providerAccountReference, input.accountReference),
         ),
       )
@@ -418,6 +429,7 @@ export function findBachsAttemptByOperationReference(
 export function getUnknownBachsAttemptForOperations(
   db: Database,
   attemptId: string,
+  environment: PaymentAccountEnvironment,
 ): Promise<{
   attemptId: string;
   profileId: string;
@@ -449,7 +461,7 @@ export function getUnknownBachsAttemptForOperations(
         and(
           eq(paymentAccounts.profileId, paymentIntents.profileId),
           eq(paymentAccounts.provider, 'bachs'),
-          eq(paymentAccounts.environment, 'sandbox'),
+          eq(paymentAccounts.environment, bachsAccountEnvironment(environment)),
           eq(paymentAccounts.feeCollector, 'platform'),
           isNotNull(paymentAccounts.providerAccountReference),
         ),
@@ -478,6 +490,7 @@ export function attachUnknownBachsCheckoutForOperations(
   input: {
     issueId: string;
     attemptId: string;
+    environment: PaymentAccountEnvironment;
     providerReference: string;
     accountReference: string;
     amountMinor: bigint;
@@ -534,7 +547,10 @@ export function attachUnknownBachsCheckoutForOperations(
           and(
             eq(paymentAccounts.profileId, paymentIntents.profileId),
             eq(paymentAccounts.provider, 'bachs'),
-            eq(paymentAccounts.environment, 'sandbox'),
+            eq(
+              paymentAccounts.environment,
+              bachsAccountEnvironment(input.environment),
+            ),
             eq(paymentAccounts.feeCollector, 'platform'),
             eq(
               paymentAccounts.providerAccountReference,
@@ -584,7 +600,11 @@ export function attachUnknownBachsCheckoutForOperations(
 
 export function findBachsAttemptByReference(
   db: Database,
-  input: { providerReference: string; accountReference: string },
+  input: {
+    providerReference: string;
+    accountReference: string;
+    environment: PaymentAccountEnvironment;
+  },
 ): Promise<string | null> {
   return guarded(async () => {
     const [row] = await db
@@ -599,7 +619,10 @@ export function findBachsAttemptByReference(
         and(
           eq(paymentAccounts.profileId, paymentIntents.profileId),
           eq(paymentAccounts.provider, 'bachs'),
-          eq(paymentAccounts.environment, 'sandbox'),
+          eq(
+            paymentAccounts.environment,
+            bachsAccountEnvironment(input.environment),
+          ),
           eq(paymentAccounts.providerAccountReference, input.accountReference),
         ),
       )

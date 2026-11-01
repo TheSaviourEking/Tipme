@@ -306,8 +306,9 @@ e2e: the withdraw page shows each state above from the pretend provider's scenar
 
 - Modify: `apps/api/src/profiles/payment-accounts.controller.ts` (after creating or refreshing a Bachs account with `manual_payouts_at` null: `setManualPayouts`, then set it; a failure is retried at the next refresh and blocks withdrawals until done)
 - Create: `apps/api/src/profiles/payout-destination.controller.ts` (`GET /v1/payout-banks`, `POST /v1/me/payout-destination/resolve`, `GET /v1/me/payout-destination`, `PUT /v1/me/payout-destination`), `packages/database/src/operations/payout-destinations.ts`, `packages/mail/src/templates/types/payout-destination-changed.ts`, `apps/web/src/components/account/get-paid-card.tsx`
+- Modify: `apps/api/src/payments/webhook.service.ts` (`refreshBachsAccount`) and/or a worker job: a sweep that applies manual payouts to **every existing live payment account** with `manual_payouts_at` null, not only newly created ones (the account webhook refresh covers accounts that receive events; the worker job covers quiet ones). A failure is retried at the next sweep and keeps withdrawals blocked for that account.
 - Modify: the Settings page to include the card
-- Test: `tests/integration/payout-destination-api.test.mjs`, `tests/e2e/get-paid.spec.ts`
+- Test: `tests/integration/payout-destination-api.test.mjs`, `tests/e2e/get-paid.spec.ts`; the sweep: an existing live account with `manual_payouts_at` null gets manual payouts set on the next refresh or job run, and a failed attempt leaves it null (add to Step 1).
 
 **Interfaces:**
 
@@ -415,6 +416,12 @@ Copy (owner reviews before activation): "TipMe is in a pilot. Payments are real 
 **Interfaces:**
 
 - Produces: `recordLiveSwitch(db, { live, provider, version, now? }): Promise<'recorded' | 'unchanged'>`; `currentLiveSwitch(db)`.
+
+Preconditions before the switch (in addition to the checklist below):
+
+- No live payment account has `manual_payouts_at` null (Task 8's sweep has run; check with a query and record the count).
+- `REWARD_CASH_BUDGET_MINOR_PER_MONTH` is resolved (D-05): production keeps it at 0 unless the owner has decided otherwise, and the worker refuses any other value until the config rule is lifted.
+- Remove the temporary `PAYMENTS_LIVE_ENABLED=true` fence in `packages/payments/src/settings.ts` (`LIVE_PAYMENTS_FENCED` and its check), update the `production/bachs-live/true` row of the settings matrix test and the API and worker config tests, and update `tests/release/read-only.spec.ts`'s `paymentsLive` expectation for a live copy.
 
 Runbook: the activation checklist from live-pilot §6.8 as amended by the launch design §6.9 (Aiven restore drill in place of the off-site copy): owner's written acceptance in `docs/00-DECISIONS.md` with Bachs's confirmation as Q4 decides; reserve funded above ₦1,000 (target ₦20,000); restore drill recorded; live webhook verified with a real delivery (Ops → provider events); set `PAYMENTS_LIVE_ENABLED=true`, set repository variable `PRODUCTION_PAYMENTS_LIVE=true`, deploy; smoke test: tip ₦1,000 to the owner's page with a real card, see it confirmed, withdraw ₦1,000, see it reach the bank, see the ₦50 cover transfer and the fee line in Ops. Switching off: `false`, redeploy; in-flight tips and payouts finish through reconciliation.
 

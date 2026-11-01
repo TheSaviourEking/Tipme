@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ActionLink, Container } from '@tipme/ui';
 import { Arrow } from '@/components/brand';
 import { HowItWorksSteps } from '@/components/marketing';
+import { TestModeOnly } from '@/components/payment-mode-slot';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
@@ -47,9 +48,11 @@ export default function ForCreators() {
                 <ActionLink className="home-primary" href="/sign-up">
                   Create your page <Arrow />
                 </ActionLink>
-                <Link className="text-link" href="/@ada">
-                  Meet a demo creator <Arrow diagonal />
-                </Link>
+                <TestModeOnly>
+                  <Link className="text-link" href="/@ada">
+                    Meet a demo creator <Arrow diagonal />
+                  </Link>
+                </TestModeOnly>
               </div>
             </div>
           </article>

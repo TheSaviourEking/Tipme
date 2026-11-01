@@ -301,13 +301,17 @@ test('point-in-time recovery is expected unless switched off (staging keeps only
   );
 });
 
-// A production copy: DEPLOYMENT_MODE=production and NODE_ENV=production. Every current
-// PAYMENT_PROVIDER value is refused there until the live provider exists, so the base reports
-// that one setting and each test checks its own setting is named too.
+// A production copy: DEPLOYMENT_MODE=production and NODE_ENV=production, with the live provider
+// (payments switched off) and dummy live credentials. Each test adds one setting and checks it
+// is named.
 const productionBase = {
   ...valid,
   DEPLOYMENT_MODE: 'production',
   NODE_ENV: 'production',
+  PAYMENT_PROVIDER: 'bachs-live',
+  BACHS_LIVE_API_KEY: 'sk_live_dummy_key_value',
+  BACHS_LIVE_WEBHOOK_SECRET: 'l'.repeat(32),
+  WEB_ORIGIN: 'https://usetipme.xyz',
   MAIL_DEFAULT_PROVIDER: 'ses',
   SES_CONFIGURATION_SET: 'tipme-tracked',
   SES_CONFIGURATION_SET_UNTRACKED: 'tipme-untracked',
@@ -324,8 +328,67 @@ const productionIssues = (extra) => {
   }
 };
 
-test('the production base reports only the payment provider', () => {
-  assert.equal(productionIssues({}), 'Invalid configuration: PAYMENT_PROVIDER');
+test('the production base loads', () => {
+  assert.equal(productionIssues({}), '');
+  const config = loadApiConfig(productionBase);
+  assert.equal(config.PAYMENT_PROVIDER, 'bachs-live');
+  assert.equal(config.PAYMENTS_LIVE_ENABLED, false);
+});
+
+test('production refuses mock and sandbox, and sandbox credentials beside bachs-live', () => {
+  assert.match(
+    productionIssues({ PAYMENT_PROVIDER: 'mock' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.match(
+    productionIssues({ PAYMENT_PROVIDER: 'bachs-sandbox' }),
+    /PAYMENT_PROVIDER/,
+  );
+  assert.match(
+    productionIssues({ BACHS_SANDBOX_API_KEY: 'sk_sandbox_test' }),
+    /BACHS_SANDBOX_API_KEY/,
+  );
+});
+
+test('production refuses live payments until payouts land (Task 12); other copies refuse bachs-live', () => {
+  assert.match(
+    productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
+    /PAYMENTS_LIVE_ENABLED/,
+  );
+  assert.match(
+    productionIssues({ BACHS_LIVE_API_KEY: undefined }),
+    /BACHS_LIVE_API_KEY/,
+  );
+  assert.match(
+    productionIssues({ BACHS_LIVE_WEBHOOK_SECRET: undefined }),
+    /BACHS_LIVE_WEBHOOK_SECRET/,
+  );
+  assert.throws(
+    () => loadApiConfig({ ...productionBase, NODE_ENV: 'test' }),
+    /PAYMENT_PROVIDER/,
+  );
+});
+
+test('bachs-live on a production copy needs a public https web address', () => {
+  // Bachs sends supporters back to WEB_ORIGIN; unset, it would default to localhost.
+  for (const WEB_ORIGIN of [undefined, 'http://localhost:3000']) {
+    const issues = productionIssues({ WEB_ORIGIN });
+    assert.match(issues, /WEB_ORIGIN/, String(WEB_ORIGIN));
+  }
+  assert.match(
+    productionIssues({ WEB_ORIGIN: 'https://localhost' }),
+    /WEB_ORIGIN/,
+  );
+  assert.match(
+    productionIssues({ WEB_ORIGIN: 'http://usetipme.xyz' }),
+    /WEB_ORIGIN/,
+  );
+  assert.equal(productionIssues({ WEB_ORIGIN: 'https://usetipme.xyz' }), '');
+  assert.equal(
+    loadApiConfig({ ...productionBase, WEB_ORIGIN: 'https://usetipme.xyz' })
+      .WEB_ORIGIN,
+    'https://usetipme.xyz',
+  );
 });
 
 test('production refuses a preview password', () => {

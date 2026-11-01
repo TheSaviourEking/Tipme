@@ -18,6 +18,9 @@ import { formatDemoAmount } from '@/lib/demo-amount';
 import { amountOptions } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
+import type { PaymentMode } from '@/lib/payment-mode';
+import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
 
 type QuoteState =
@@ -51,6 +54,7 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
 };
 
 export function AppreciationForm({
+  paymentMode,
   recipient,
   handle,
   compact = false,
@@ -58,6 +62,8 @@ export function AppreciationForm({
   celebration,
   tipAmounts,
 }: {
+  /** This copy's payment mode, read by the page on the server. */
+  paymentMode: PaymentMode;
   recipient: string;
   handle: string;
   /** This page's amounts (PR-012): the standard ones, or a Pro page's own. */
@@ -69,6 +75,9 @@ export function AppreciationForm({
   celebration?: { momentId: string; label: string };
 }) {
   const id = useId();
+  const copy = paymentModeCopy(paymentMode);
+  // The API refused as not open (switched off since this page loaded): close the form.
+  const [closed, setClosed] = useState(false);
   const options = amountOptions(tipAmounts);
   const presets = options.presets;
   const [joining, setJoining] = useState(false);
@@ -101,6 +110,7 @@ export function AppreciationForm({
     if (request !== latestQuote.current) return null;
     draftKey.current = null;
     if (!result.ok) {
+      if (result.code === 'TIPPING_NOT_OPEN') setClosed(true);
       setQuote({
         kind: 'failed',
         amount: minor,
@@ -200,6 +210,10 @@ export function AppreciationForm({
       return;
     }
     setSubmitting(false);
+    if (result.code === 'TIPPING_NOT_OPEN') {
+      setClosed(true);
+      return;
+    }
     if (
       result.code === 'QUOTE_EXPIRED' ||
       result.code === 'QUOTE_ALREADY_USED'
@@ -250,13 +264,14 @@ export function AppreciationForm({
       </label>
     </>
   );
+  if (closed || !copy.payable) return <TippingOpensSoon announce={closed} />;
   return (
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}
     >
       <div className="composer-topline">
         <span className="eyebrow">A little appreciation</span>
-        <Badge>Test payments</Badge>
+        {copy.formBadge && <Badge>{copy.formBadge}</Badge>}
       </div>
       {/* No browser form restoration: after Back, the controls must match React's state. */}
       <form onSubmit={submit} noValidate autoComplete="off">
@@ -438,8 +453,12 @@ export function AppreciationForm({
           <Arrow />
         </Button>
         <p className="composer-disclaimer">
-          TipMe is in test mode: no real money moves yet.
-          <br />
+          {copy.formDisclaimer && (
+            <>
+              {copy.formDisclaimer}
+              <br />
+            </>
+          )}
           You’ll confirm on the payment provider’s page next.
         </p>
       </form>

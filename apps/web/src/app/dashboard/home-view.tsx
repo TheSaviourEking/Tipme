@@ -14,6 +14,8 @@ import { PageCard } from '@/components/dashboard/page-card';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { change, naira } from '@/lib/money';
 import { recipientReturned, track } from '@/lib/analytics';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { isPaymentAttention } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
@@ -46,6 +48,7 @@ function Tile({
 
 export default function DashboardHome() {
   const { profile, attention, paymentsNeedSetup } = useRecipient();
+  const copy = paymentModeCopy(usePaymentMode());
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activity, setActivity] = useState<ActivityRow[] | null>(null);
   const [latestWeek, setLatestWeek] = useState<{
@@ -199,7 +202,7 @@ export default function DashboardHome() {
                     <p>
                       {paymentTodo
                         ? paymentTodo.body
-                        : 'Supporters can tip you. No real money moves in test mode.'}
+                        : copy.dashboardPaymentStep}
                     </p>
                   </div>
                   <span>

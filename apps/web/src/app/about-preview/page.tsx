@@ -1,11 +1,27 @@
+import { redirect } from 'next/navigation';
 import { ActionLink, Container } from '@tipme/ui';
+import { PaymentModeSlot } from '@/components/payment-mode-slot';
 import { previewMetadata } from '@/lib/metadata';
 export const metadata = previewMetadata(
   'About this preview',
   'What TipMe’s development preview does—and what it does not do.',
   '/about-preview',
 );
+/**
+ * Describes a test copy (no real payments, fictional demo). A closed or live copy runs Bachs
+ * live, so there it sends visitors home instead of saying it is test money.
+ */
 export default function AboutPreview() {
+  return (
+    <PaymentModeSlot>
+      {(_mode, copy) =>
+        copy.previewPages ? <AboutPreviewText /> : redirect('/')
+      }
+    </PaymentModeSlot>
+  );
+}
+
+function AboutPreviewText() {
   return (
     <main id="main" tabIndex={-1}>
       <Container className="prose-page">

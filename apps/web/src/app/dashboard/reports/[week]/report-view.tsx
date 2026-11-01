@@ -8,12 +8,15 @@ import { useRecipient } from '@/components/account/recipient-context';
 import { naira } from '@/lib/money';
 import { track } from '@/lib/analytics';
 import { apiFetch } from '@/lib/session-client';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { drawWeekCard } from '@/lib/week-card';
 import { shareableWeek } from '@/lib/week-share';
 
 export default function WeeklyReportPage() {
   const { week } = useParams<{ week: string }>();
   const { profile } = useRecipient();
+  const copy = paymentModeCopy(usePaymentMode());
   const [report, setReport] = useState<WeeklyReportData | null>(null);
   const [missing, setMissing] = useState(false);
   useEffect(() => {
@@ -28,7 +31,7 @@ export default function WeeklyReportPage() {
   const share = async () => {
     if (!report) return;
     const canvas = document.createElement('canvas');
-    drawWeekCard(canvas, shareableWeek(report, profile));
+    drawWeekCard(canvas, shareableWeek(report, profile), copy.weekCardSuffix);
     track('report_shared', { surface: 'report' });
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, 'image/png'),

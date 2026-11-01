@@ -6,3 +6,4 @@ export * from './bachs/provider.js';
 export * from './mock/mock-provider.js';
 export * from './mock/scenario.js';
 export * from './mock/simulator.js';
+export * from './settings.js';

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ActionLink, Container } from '@tipme/ui';
 import { Arrow } from '@/components/brand';
 import { HowItWorksSteps } from '@/components/marketing';
+import { TestModeOnly } from '@/components/payment-mode-slot';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
@@ -31,14 +32,17 @@ export default function HowItWorks() {
             needed to say thanks.
           </p>
           <HowItWorksSteps />
-          <div className="page-actions">
-            <ActionLink href="/@ada">
-              Try it with a demo profile <Arrow />
-            </ActionLink>
-            <Link className="text-link" href="/about-preview">
-              What this preview can and cannot do
-            </Link>
-          </div>
+          {/* The fictional demo and the preview notes exist on test copies only. */}
+          <TestModeOnly>
+            <div className="page-actions">
+              <ActionLink href="/@ada">
+                Try it with a demo profile <Arrow />
+              </ActionLink>
+              <Link className="text-link" href="/about-preview">
+                What this preview can and cannot do
+              </Link>
+            </div>
+          </TestModeOnly>
         </Container>
       </section>
     </main>
