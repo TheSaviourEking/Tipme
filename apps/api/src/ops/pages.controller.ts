@@ -9,10 +9,12 @@ import {
 } from '@nestjs/common';
 import {
   opsFeeFreeGrantSchema,
+  opsHandleChangesGrantSchema,
   opsPageFeeSchema,
   opsPagePlanSchema,
   type ApiDataResponse,
   type OpsFeeFreeGrantRequest,
+  type OpsHandleChangesGrantRequest,
   type OpsPage,
   type OpsPageFeeRequest,
   type OpsPagePlanRequest,
@@ -20,6 +22,7 @@ import {
 } from '@tipme/contracts';
 import {
   grantFeeFreeTips,
+  grantHandleChanges,
   opsPageByHandle,
   pagePricing,
   setAccountFee,
@@ -77,6 +80,26 @@ export class OpsPagesController {
     // The public page's amounts change with the plan.
     if (changed) this.revalidator.revalidate(handleLower);
     return { data: page };
+  }
+
+  /** More handle changes for one page; no public effect, so nothing to refresh. */
+  @Post(':handle/handle-changes')
+  @HttpCode(200)
+  @OpsPermission('pages.plan')
+  async handleChanges(
+    @CurrentOps() ops: OpsContext,
+    @Param('handle') handle: string,
+    @Body(new ZodValidationPipe(opsHandleChangesGrantSchema))
+    body: OpsHandleChangesGrantRequest,
+  ): Promise<ApiDataResponse<{ allowed: number }>> {
+    return {
+      data: await grantHandleChanges(this.database.db, {
+        staffId: ops.userId,
+        handle,
+        extra: body.extra,
+        reason: body.reason,
+      }),
+    };
   }
 
   @Get(':profileId/pricing')

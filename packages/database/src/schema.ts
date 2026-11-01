@@ -525,6 +525,10 @@ export const profiles = pgTable(
     minTipMinor: minor('min_tip_minor'),
     // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
     customFeeBps: integer('custom_fee_bps'),
+    // Handle changes made so far (never reset), and how many staff have allowed beyond the
+    // standard allowance. Only Pro pages can make one.
+    handleChangesUsed: integer('handle_changes_used').notNull().default(0),
+    handleChangesExtra: integer('handle_changes_extra').notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [
@@ -533,6 +537,10 @@ export const profiles = pgTable(
       sql`page_state IN ('live', 'not_live', 'deleted')`,
     ),
     check('profiles_plan', sql`plan IN ('free', 'pro')`),
+    check(
+      'profiles_handle_changes',
+      sql`handle_changes_used >= 0 AND handle_changes_extra >= 0`,
+    ),
     check(
       'profiles_custom_fee_bps',
       sql`custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 0 AND 10000`,

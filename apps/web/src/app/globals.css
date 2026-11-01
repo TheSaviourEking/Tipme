@@ -2702,6 +2702,129 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   gap: var(--space-4);
 }
 
+.confirm-dialog {
+  /* The site's reset removes the margin that centres a modal dialog. */
+  margin: auto;
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+  padding: var(--space-6);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-raised-2);
+  animation: confirm-dialog-in var(--duration-component) var(--ease-physical);
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+  animation: confirm-dialog-dim var(--duration-component) var(--ease-physical);
+}
+
+/* 160ms out: two-thirds of the entry, the time ConfirmDialog waits. */
+.confirm-dialog[data-leaving] {
+  animation: confirm-dialog-out calc(var(--duration-component) * 2 / 3)
+    var(--ease-physical) forwards;
+}
+
+.confirm-dialog[data-leaving]::backdrop {
+  animation: confirm-dialog-dim calc(var(--duration-component) * 2 / 3)
+    var(--ease-physical) reverse forwards;
+}
+
+/* Page scroll stays put behind it, without the layout shifting. */
+html:has(.confirm-dialog[open]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+.confirm-dialog h2 {
+  margin: 0 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog__body {
+  display: grid;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog__body p {
+  margin: 0;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+/* On a phone it is a sheet rising from the bottom. */
+@media (max-width: 30rem) {
+  .confirm-dialog {
+    margin: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    border-width: 1px 0 0;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+    animation: confirm-dialog-sheet var(--duration-spatial) var(--ease-physical);
+  }
+
+  .confirm-dialog[data-leaving] {
+    animation-name: confirm-dialog-sheet-out;
+  }
+}
+
+.handle-saved {
+  animation: confirm-dialog-dim var(--duration-component) var(--ease-physical);
+}
+
+@keyframes confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes confirm-dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes confirm-dialog-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-dialog-sheet {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes confirm-dialog-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog,
+  .confirm-dialog::backdrop,
+  .confirm-dialog[data-leaving],
+  .confirm-dialog[data-leaving]::backdrop,
+  .handle-saved {
+    animation: none;
+  }
+}
+
 /* Pro tip amounts (PR-012): up to four amounts, two per row, one per row on narrow screens. */
 .tip-amount-fields {
   display: grid;

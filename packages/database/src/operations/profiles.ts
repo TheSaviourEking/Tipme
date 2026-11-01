@@ -1,4 +1,5 @@
 import {
+  MAX_HANDLE_CHANGE_GRANT,
   profilePatchSchema,
   type HandleStatus,
   type MyProfile,
@@ -17,7 +18,7 @@ import {
   normaliseHandle,
   tipAmountsProblem,
 } from '@tipme/domain';
-import { and, asc, count, eq, gt, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   emailTokens,
@@ -50,8 +51,16 @@ import {
 } from './payment-accounts.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
-/** Old handles a page keeps pointing at itself (PR-011). */
-export const MAX_HANDLE_ALIASES = 5;
+/** Handle changes a Pro page gets in total, including switching back; staff can allow more. */
+export const PRO_HANDLE_CHANGES = 3;
+
+const handleChangesOf = (row: {
+  handleChangesUsed: number;
+  handleChangesExtra: number;
+}) => ({
+  used: row.handleChangesUsed,
+  allowed: PRO_HANDLE_CHANGES + row.handleChangesExtra,
+});
 
 /** Whether the user has claimed a page yet. */
 export function hasProfile(db: Database, userId: string): Promise<boolean> {
@@ -268,6 +277,7 @@ const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   plan: row.plan as PagePlan,
   pageState: row.pageState as OpsPage['pageState'],
   suspended: row.status === 'suspended',
+  handleChanges: handleChangesOf(row),
 });
 
 /**
@@ -355,6 +365,7 @@ const toMine = async (
   plan: row.profile.plan as PagePlan,
   tipAmounts: tipAmountsOf(row.profile),
   avatarPath: row.profile.avatarPath,
+  handleChanges: handleChangesOf(row.profile),
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
@@ -439,9 +450,11 @@ export function setPageState(
 }
 
 /**
- * Changes the page's handle (PR-011). The old one becomes an alias that keeps pointing here, so
- * printed QR codes still work; a page keeps at most 5. Going back to one of its own old handles
- * swaps the two, and a change of case alone changes nothing.
+ * Changes the page's handle. Only a Pro page can, PRO_HANDLE_CHANGES times in total plus what staff
+ * allowed; the count never resets and is checked under the row lock, so two changes at once can't
+ * both take the last one. The old handle becomes an alias that keeps pointing here, so printed QR
+ * codes still work. Going back to one of its own old handles swaps the two, and counts. A change of
+ * case alone changes nothing and counts nothing.
  */
 export function renameHandle(
   db: Database,
@@ -459,6 +472,9 @@ export function renameHandle(
             handle: profiles.handle,
             handleLower: profiles.handleLower,
             pageState: profiles.pageState,
+            plan: profiles.plan,
+            handleChangesUsed: profiles.handleChangesUsed,
+            handleChangesExtra: profiles.handleChangesExtra,
           })
           .from(profiles)
           .where(eq(profiles.userId, input.userId))
@@ -468,6 +484,10 @@ export function renameHandle(
         // Handles are stored normalised (as when claimed), so a change of case is no change.
         if (wanted === row.handleLower)
           return { previous: row.handleLower, handle: wanted };
+        if (row.plan !== 'pro')
+          throw new OperationError('HANDLE_CHANGE_PRO_REQUIRED');
+        const { used, allowed } = handleChangesOf(row);
+        if (used >= allowed) throw new OperationError('HANDLE_CHANGE_LIMIT');
         if (isReservedHandle(wanted)) throw new OperationError('HANDLE_TAKEN');
         const reclaimed = await tx
           .delete(handleAliases)
@@ -478,22 +498,18 @@ export function renameHandle(
             ),
           )
           .returning({ handle: handleAliases.handleLower });
-        if (!reclaimed[0]) {
-          if (await isTaken(tx, wanted, now))
-            throw new OperationError('HANDLE_TAKEN');
-          const [kept] = await tx
-            .select({ n: count() })
-            .from(handleAliases)
-            .where(eq(handleAliases.profileId, row.id));
-          if ((kept?.n ?? 0) >= MAX_HANDLE_ALIASES)
-            throw new OperationError('HANDLE_RENAME_LIMIT');
-        }
+        if (!reclaimed[0] && (await isTaken(tx, wanted, now)))
+          throw new OperationError('HANDLE_TAKEN');
         await tx
           .insert(handleAliases)
           .values({ handleLower: row.handleLower, profileId: row.id });
         await tx
           .update(profiles)
-          .set({ handle: wanted, handleLower: wanted })
+          .set({
+            handle: wanted,
+            handleLower: wanted,
+            handleChangesUsed: used + 1,
+          })
           .where(eq(profiles.id, row.id));
         return { previous: row.handleLower, handle: wanted };
       });
@@ -503,6 +519,50 @@ export function renameHandle(
         throw new OperationError('HANDLE_TAKEN');
       throw error;
     }
+  });
+}
+
+/**
+ * Staff allow a page more handle changes (permission `pages.plan`), with a reason; audited as
+ * `page.handle_changes_granted`. Adds to what it has. `handle` may be one of its old handles, as in
+ * the Pages lookup. It is an allowance only: a Free page still can't change its handle.
+ */
+export function grantHandleChanges(
+  db: Database,
+  input: { staffId: string; handle: string; extra: number; reason: string },
+): Promise<{ allowed: number }> {
+  const { extra } = input;
+  if (!Number.isInteger(extra) || extra < 1 || extra > MAX_HANDLE_CHANGE_GRANT)
+    return Promise.reject(new OperationError('INVALID_INPUT'));
+  return guarded(async () => {
+    const page = await opsPageByHandle(db, input.handle);
+    if (!page) throw new OperationError('NO_PAGE');
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(profiles)
+        .set({
+          handleChangesExtra: sql`${profiles.handleChangesExtra} + ${extra}`,
+        })
+        .where(
+          and(
+            eq(profiles.id, page.profileId),
+            ne(profiles.pageState, 'deleted'),
+          ),
+        )
+        .returning();
+      if (!row) throw new OperationError('NO_PAGE');
+      const { allowed } = handleChangesOf(row);
+      await recordAudit(tx, {
+        staffUserId: input.staffId,
+        action: 'page.handle_changes_granted',
+        permission: 'pages.plan',
+        subjectType: 'profile',
+        subjectId: row.id,
+        // The audit row has no field for the number, and it must say how many were allowed.
+        reason: `${input.reason} (+${extra}, ${allowed} allowed)`,
+      });
+      return { allowed };
+    });
   });
 }
 

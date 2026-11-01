@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
+  HandleStatus,
   PendingEmailRecovery,
   RecoveryEmailStatus,
   MyProfile,
@@ -13,6 +14,7 @@ import type {
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Avatar } from '@/components/avatar';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { hasAvatar } from '@/lib/avatar-source';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
@@ -248,50 +250,156 @@ function PhotoSettings() {
 
 const renameErrors: Record<string, string> = {
   HANDLE_TAKEN: 'That handle is taken. Please choose another.',
-  HANDLE_RENAME_LIMIT:
-    'Your page already keeps 5 old handles. You can switch back to one of them.',
+  HANDLE_CHANGE_PRO_REQUIRED: 'Handle changes are part of TipMe Pro.',
+  HANDLE_CHANGE_LIMIT: 'You’ve used all your handle changes.',
   VALIDATION_FAILED:
     'Use 3 to 30 letters, numbers or underscores, with no spaces.',
 };
 
+const changesLeft = (n: number) =>
+  n === 0 ? 'no changes left' : `${n} ${n === 1 ? 'change' : 'changes'} left`;
+
+/**
+ * Free pages keep the handle they claimed; Pro pages get a counted number of changes, and at the
+ * end the form gives way to how to reach the team. The server decides all of this.
+ */
 function HandleChange() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
   const host = useSiteHost();
   // An API older than PR-011 does not send it (the web app deploys first).
   const previous = profile.previousHandles ?? [];
+  // Nor does an API older than the handle rule send the count: no number to show, but it can go on.
+  const counted = profile.handleChanges;
+  const left = counted ? Math.max(0, counted.allowed - counted.used) : null;
   const [handle, setHandle] = useState(profile.handle);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
-  const save = async (event: FormEvent) => {
+  const savedMessage = useRef<HTMLParagraphElement>(null);
+  const closeConfirm = useCallback(() => setConfirming(null), []);
+  const wanted = handle.trim().replace(/^@/, '').toLowerCase();
+
+  // Keyboard and screen reader users land on the outcome once the dialog has gone.
+  useEffect(() => {
+    if (saved) savedMessage.current?.focus();
+  }, [saved]);
+  useEffect(() => {
+    if (error) document.getElementById(`${id}-handle`)?.focus();
+  }, [error, id]);
+
+  /** Only asks to confirm a handle that can work; the server still has the last word. */
+  const review = async (event: FormEvent) => {
     event.preventDefault();
-    setBusy(true);
+    if (busy) return;
     setError('');
     setSaved(false);
+    if (wanted.length < 3) {
+      setError(renameErrors.VALIDATION_FAILED!);
+      return;
+    }
+    setBusy(true);
+    const check = await apiFetch<{ status: HandleStatus }>(
+      `/v1/handles/${encodeURIComponent(wanted)}/availability`,
+    );
+    setBusy(false);
+    const status = check.ok ? check.data.status : 'available';
+    if (status === 'invalid') setError(renameErrors.VALIDATION_FAILED!);
+    else if (
+      status === 'reserved' ||
+      (status === 'taken' && !previous.includes(wanted))
+    )
+      setError(renameErrors.HANDLE_TAKEN!);
+    else setConfirming(wanted);
+  };
+
+  const save = async (next: string) => {
+    setBusy(true);
     const result = await apiFetch<MyProfile>('/v1/me/handle', {
       method: 'PUT',
-      body: { handle: handle.trim().replace(/^@/, '') },
+      body: { handle: next },
     });
-    setBusy(false);
     if (result.ok) {
+      setBusy(false);
+      setConfirming(null);
       setProfile(result.data);
       setHandle(result.data.handle);
       setSaved(true);
       return;
     }
+    // The count or plan moved since this screen loaded: show what is true now.
+    if (
+      result.code === 'HANDLE_CHANGE_LIMIT' ||
+      result.code === 'HANDLE_CHANGE_PRO_REQUIRED'
+    ) {
+      const fresh = await apiFetch<MyProfile>('/v1/me/profile');
+      if (fresh.ok) setProfile(fresh.data);
+    }
+    setBusy(false);
+    setConfirming(null);
     setError(
       renameErrors[result.code] ?? 'We couldn’t change that. Please try again.',
     );
   };
+
+  const oldHandles = previous.length > 0 && (
+    <p className="tm-hint">
+      Old handles that lead here: {previous.map((old) => `@${old}`).join(', ')}
+    </p>
+  );
+  const savedNotice = saved && (
+    <p
+      key={profile.handle}
+      ref={savedMessage}
+      role="status"
+      tabIndex={-1}
+      className="tm-hint handle-saved"
+    >
+      Saved. Your page is now at {host}/@{profile.handle}.
+    </p>
+  );
+
+  if (profile.plan !== 'pro')
+    return (
+      <Card className="settings-section">
+        <h2>Your handle</h2>
+        <p className="tm-hint">
+          Your page is at {host}/@{profile.handle}. Handle changes are part of
+          TipMe Pro.
+        </p>
+        {oldHandles}
+      </Card>
+    );
+
+  if (left === 0)
+    return (
+      <Card className="settings-section">
+        <h2>Your handle</h2>
+        {savedNotice}
+        <p>
+          You’ve used all your handle changes.{' '}
+          <a href="mailto:support@usetipme.xyz">Contact the TipMe team</a> to
+          change it again.
+        </p>
+        {oldHandles}
+      </Card>
+    );
+
   return (
     <Card className="settings-section">
       <h2>Your handle</h2>
       <p className="tm-hint">
-        Your old links and printed QR codes keep working: they lead to your new
-        handle, and nobody else can take them.
+        {left !== null && <strong>{changesLeft(left)}. </strong>}
+        Switching back to an old handle counts as a change. Your old links and
+        printed QR codes keep working: they lead to your new handle, and nobody
+        else can take them.
       </p>
-      <form className="settings-form" onSubmit={save} noValidate>
+      <form
+        className="settings-form"
+        onSubmit={(event) => void review(event)}
+        noValidate
+      >
         <InputField
           id={`${id}-handle`}
           label="Handle"
@@ -302,28 +410,38 @@ function HandleChange() {
           onChange={(e) => {
             setHandle(e.target.value);
             setSaved(false);
+            setError('');
           }}
           error={error || undefined}
         />
-        {previous.length > 0 && (
-          <p className="tm-hint">
-            Old handles that lead here:{' '}
-            {previous.map((old) => `@${old}`).join(', ')}
-          </p>
-        )}
-        {saved && (
-          <p role="status" className="tm-hint">
-            Saved. Your page is now at {host}/@{profile.handle}.
-          </p>
-        )}
+        {oldHandles}
+        {savedNotice}
+        {/* Stays enabled while checking: a disabled button would drop keyboard focus. */}
         <Button
           type="submit"
-          disabled={busy || handle.trim().toLowerCase() === profile.handle}
+          disabled={wanted === profile.handle}
           aria-busy={busy}
         >
           Change handle
         </Button>
       </form>
+      {confirming && (
+        <ConfirmDialog
+          title={`Change your handle to @${confirming}?`}
+          confirm="Yes, change it"
+          busy={busy}
+          onConfirm={() => void save(confirming)}
+          onCancel={closeConfirm}
+        >
+          <p>
+            Your page moves to {host}/@{confirming}. Old links and printed QR
+            codes keep working.
+          </p>
+          {left !== null && (
+            <p>You’ll have {changesLeft(left - 1)} after this.</p>
+          )}
+        </ConfirmDialog>
+      )}
     </Card>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { OpsPage } from '@tipme/contracts';
+import { MAX_HANDLE_CHANGE_GRANT, type OpsPage } from '@tipme/contracts';
 import {
   Badge,
   Button,
@@ -10,7 +10,7 @@ import {
   Notice,
   TextareaField,
 } from '@tipme/ui';
-import { PagePricing } from '@/components/ops/page-pricing';
+import { PagePricing, ValueWithReason } from '@/components/ops/page-pricing';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
@@ -103,6 +103,62 @@ function MoveSignInEmail({ userId }: { userId: string }) {
   );
 }
 
+/** How many handle changes a page has used and may use; staff can allow more, with a reason. */
+function HandleChanges({
+  page,
+  used,
+  allowed,
+  onGranted,
+}: {
+  page: OpsPage;
+  used: number;
+  allowed: number;
+  onGranted: () => Promise<void>;
+}) {
+  const [done, setDone] = useState('');
+  const grant = async (extra: number, reason: string) => {
+    setDone('');
+    const result = await apiFetch<{ allowed: number }>(
+      `/v1/ops/pages/${encodeURIComponent(page.handle)}/handle-changes`,
+      { method: 'POST', body: { extra, reason } },
+    );
+    if (!result.ok)
+      return result.code === 'VALIDATION_FAILED'
+        ? 'Check the values: a reason of at least 10 characters is needed.'
+        : 'That didn’t work. Please try again.';
+    await onGranted();
+    setDone(`@${page.handle} can now make ${result.data.allowed} in total.`);
+    return null;
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Handle changes</h2>
+      <p>
+        Handle changes:{' '}
+        <strong>
+          {used} of {allowed} used
+        </strong>
+        {page.plan === 'pro' ? '' : ' (only Pro pages can make them)'}
+      </p>
+      {done && (
+        <Notice tone="success" title="Allowed">
+          {done}
+        </Notice>
+      )}
+      <ValueWithReason
+        label="More changes to allow"
+        hint={`Whole number, 1 to ${MAX_HANDLE_CHANGE_GRANT}. Added to what the page has now.`}
+        submit="Allow more changes"
+        parse={(raw) => {
+          const n = /^\d{1,2}$/.test(raw.trim()) ? Number(raw) : 0;
+          return n >= 1 && n <= MAX_HANDLE_CHANGE_GRANT ? n : null;
+        }}
+        onSubmit={grant}
+      />
+    </Card>
+  );
+}
+
 /** Free and Pro (PR-012): find a page by handle and change its plan. No billing; audited. */
 export default function OpsPagesPage() {
   const id = useId();
@@ -184,7 +240,8 @@ export default function OpsPagesPage() {
       <h1>Pages</h1>
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
-        below NGN 1,000). The fee and withdrawal minimum are the same as Free.
+        below NGN 1,000) and change their handle. The fee and withdrawal minimum
+        are the same as Free.
         {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
@@ -228,6 +285,18 @@ export default function OpsPagesPage() {
             onSubmit={(reason) => changePlan(page, reason)}
           />
         </Card>
+      )}
+      {page?.handleChanges && (
+        <HandleChanges
+          key={`handle-changes-${page.profileId}`}
+          page={page}
+          used={page.handleChanges.used}
+          allowed={page.handleChanges.allowed}
+          onGranted={async () => {
+            const result = await fetchPage(page.handle);
+            if (result.ok) setPage(result.data);
+          }}
+        />
       )}
       {page?.userId && can(access, 'recoveries.manage') && (
         <MoveSignInEmail key={page.userId} userId={page.userId} />

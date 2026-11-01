@@ -67,6 +67,11 @@ export const deleteAccountSchema = z
 export type PageState = 'live' | 'not_live' | 'deleted';
 export type HandleStatus = 'available' | 'taken' | 'reserved' | 'invalid';
 
+export interface HandleChanges {
+  used: number;
+  allowed: number;
+}
+
 export interface MyProfile {
   handle: string;
   /**
@@ -96,6 +101,11 @@ export interface MyProfile {
   avatarPath?: string | null;
   /** The amounts the page shows now (the standard ones on Free). Optional, as `plan`. */
   tipAmounts?: TipAmounts;
+  /**
+   * Handle changes counted so far and allowed in total (Pro pages only can use them). Optional
+   * until the release after this one: the web app deploys before the API.
+   */
+  handleChanges?: HandleChanges;
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
@@ -121,7 +131,7 @@ export interface PublicProfile {
   acceptingTips?: boolean;
 }
 
-/** Changing the page's handle (PR-011); the old one keeps pointing at the page. */
+/** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */
 export const renameHandleSchema = claimHandleSchema;
 
 // Free and Pro (PR-012). Free pages show the standard amounts; staff can make a page Pro, and

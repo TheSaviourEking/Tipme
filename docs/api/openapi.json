@@ -5429,6 +5429,81 @@
         "x-tipme-permission": "pages.plan"
       }
     },
+    "/v1/ops/pages/{handle}/handle-changes": {
+      "post": {
+        "operationId": "OpsPages.handleChanges",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "extra": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  }
+                },
+                "required": [
+                  "reason",
+                  "extra"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.plan"
+      }
+    },
     "/v1/ops/pages/{profileId}/fee": {
       "post": {
         "operationId": "OpsPages.fee",
@@ -7150,7 +7225,8 @@
                   "CODE_INVALID",
                   "SIGN_IN_LOCKED",
                   "HANDLE_TAKEN",
-                  "HANDLE_RENAME_LIMIT",
+                  "HANDLE_CHANGE_PRO_REQUIRED",
+                  "HANDLE_CHANGE_LIMIT",
                   "ALREADY_HAS_PAGE",
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",

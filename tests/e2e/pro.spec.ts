@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
-import { enrolOwner } from './ops-helpers';
+import { enrolOwner, makePagePro } from './ops-helpers';
 
 // Free and Pro (PR-012): staff make a page Pro, the recipient chooses their own amounts and
 // minimum, and supporters see the exact amount they will pay.
@@ -73,4 +73,120 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
     visitor.getByText(/Enter an amount of NGN 2,000 or more/),
   ).toBeVisible();
   await expectAccessible(visitor);
+});
+
+test('a Free page sees no handle form; Pro changes it with a confirmation, up to the limit, and staff can allow more', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  await expect(
+    page.getByText('Handle changes are part of TipMe Pro'),
+  ).toBeVisible();
+  await expect(page.getByLabel('Handle')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Change handle' })).toHaveCount(
+    0,
+  );
+
+  const staff = await makePagePro(browser, handle, testInfo);
+  await page.reload();
+  await expect(page.getByText('3 changes left')).toBeVisible();
+
+  // Cancelling changes nothing, and focus goes back where it was.
+  const first = `${handle}_a`;
+  await page.getByLabel('Handle').fill(`@${first.toUpperCase()}`);
+  const change = page.getByRole('button', { name: 'Change handle' });
+  await change.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText(`@${first}`);
+  await expect(dialog).toContainText(
+    'Old links and printed QR codes keep working',
+  );
+  await expect(dialog).toContainText('2 changes left');
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await expectAccessible(page);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(change).toBeFocused();
+  await expect(page.getByText('3 changes left')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Handle')).toHaveValue(handle);
+
+  // Escape cancels too, and the page stays where it was scrolled to.
+  await page.getByLabel('Handle').fill(first);
+  const scrolled = await page.evaluate(() => scrollY);
+  await change.click();
+  await expect(dialog).toBeVisible();
+  expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(change).toBeFocused();
+  expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+  await expect(page.getByText('3 changes left')).toBeVisible();
+
+  // With reduced motion it opens and closes without moving.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await change.click();
+  await expect(dialog).toBeVisible();
+  expect(
+    await dialog.evaluate((element) => getComputedStyle(element).animationName),
+  ).toBe('none');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+  // Confirming changes it.
+  await change.click();
+  await dialog.getByRole('button', { name: 'Yes, change it' }).click();
+  await expect(dialog).toHaveCount(0);
+  const host = new URL(page.url()).host;
+  await expect(
+    page.getByText(`Saved. Your page is now at ${host}/@${first}.`),
+  ).toBeFocused();
+  await expect(page.getByText('2 changes left')).toBeVisible();
+
+  // The next two, the last one saying so.
+  const second = `${handle}_b`;
+  await page.getByLabel('Handle').fill(second);
+  await change.click();
+  await expect(dialog).toContainText('1 change left');
+  await dialog.getByRole('button', { name: 'Yes, change it' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('1 change left')).toBeVisible();
+  // Switching back to an old handle counts.
+  await page.getByLabel('Handle').fill(first);
+  await change.click();
+  await expect(dialog).toContainText('no changes left');
+  await dialog.getByRole('button', { name: 'Yes, change it' }).click();
+  await expect(
+    page.getByText(`Saved. Your page is now at ${host}/@${first}.`),
+  ).toBeVisible();
+
+  // At the limit the form is replaced by how to reach the team.
+  await expect(
+    page.getByText(
+      'You’ve used all your handle changes. Contact the TipMe team to change it again.',
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Contact the TipMe team' }),
+  ).toHaveAttribute('href', 'mailto:support@usetipme.xyz');
+  await expect(page.getByLabel('Handle')).toHaveCount(0);
+  await expectAccessible(page);
+
+  // Staff allow one more, with a reason.
+  await staff.getByLabel('Handle').fill(first);
+  await staff.getByRole('button', { name: 'Find page' }).click();
+  await expect(staff.getByText('Handle changes: 3 of 3 used')).toBeVisible();
+  await staff.getByLabel('More changes to allow').fill('1');
+  await staff
+    .locator('form', { has: staff.getByLabel('More changes to allow') })
+    .getByLabel('Reason')
+    .fill('Changed their business name, confirmed by support');
+  await staff.getByRole('button', { name: 'Allow more changes' }).click();
+  await expect(staff.getByText('Handle changes: 3 of 4 used')).toBeVisible();
+  await expectAccessible(staff);
+  await page.reload();
+  await expect(page.getByText('1 change left')).toBeVisible();
 });

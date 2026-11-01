@@ -454,6 +454,8 @@ export interface OpsPage {
   plan: 'free' | 'pro';
   pageState: 'live' | 'not_live' | 'deleted';
   suspended: boolean;
+  /** Optional until the release after the handle rule (the web deploys before the API). */
+  handleChanges?: { used: number; allowed: number };
 }
 
 /** Making a page Pro or Free again: always with a written reason (audited). */
@@ -461,6 +463,15 @@ export const opsPagePlanSchema = opsReasonSchema
   .extend({ plan: z.enum(['free', 'pro']) })
   .strict();
 export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
+
+/** Staff allow a page more handle changes, on top of what it has: small, deliberate steps. */
+export const MAX_HANDLE_CHANGE_GRANT = 10;
+export const opsHandleChangesGrantSchema = opsReasonSchema
+  .extend({ extra: z.number().int().min(1).max(MAX_HANDLE_CHANGE_GRANT) })
+  .strict();
+export type OpsHandleChangesGrantRequest = z.infer<
+  typeof opsHandleChangesGrantSchema
+>;
 
 /** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
 export interface OpsPagePricing {

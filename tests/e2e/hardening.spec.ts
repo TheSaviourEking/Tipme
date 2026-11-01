@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, signUpRecipient, tipAsVisitor } from './helpers';
+import { makePagePro } from './ops-helpers';
 import { API_ORIGIN } from './stack';
 
 // PR-011: a recipient reports a message, renames their page (old links and QR codes keep working),
@@ -39,9 +40,14 @@ test('a renamed page keeps its old link and QR code working, and nobody can take
 }, testInfo) => {
   const { handle } = await signUpRecipient(page, testInfo);
   const renamed = `${handle}_n`;
+  await makePagePro(browser, handle, testInfo);
   await page.goto('/dashboard/settings');
   await page.getByLabel('Handle').fill(renamed);
   await page.getByRole('button', { name: 'Change handle' }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Yes, change it' })
+    .click();
   await expect(
     page.getByText(
       `Saved. Your page is now at ${new URL(page.url()).host}/@${renamed}.`,
