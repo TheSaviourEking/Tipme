@@ -1,4 +1,4 @@
-import { desc, eq, lt, sql } from 'drizzle-orm';
+import { eq, lt, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { paymentReserveReadings } from '../schema.js';
 import { guarded } from './errors.js';
@@ -184,7 +184,8 @@ export function latestReserveReading(
     const [row] = await db
       .select()
       .from(paymentReserveReadings)
-      .orderBy(desc(paymentReserveReadings.readAt))
+      // NULLS LAST as in the index's definition: a bare DESC would not use it and sorts the table.
+      .orderBy(sql`${paymentReserveReadings.readAt} DESC NULLS LAST`)
       .limit(1);
     return row
       ? {

@@ -69,6 +69,9 @@ const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
 const PAYOUT_SETUP_JOB = 'payment-accounts.payout-setup';
 const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
+// A long sweep (a backlog, or a slow provider) must not run beside the next one. Under the interval
+// so a run lost with its worker costs at most one missed turn.
+const PAYOUT_SETUP_LOCK_TTL_MS = 14 * 60_000;
 const PAYMENT_RESERVE_JOB = 'payments.reserve';
 const PAYMENT_RESERVE_INTERVAL_MS = 15 * 60_000;
 // A reserve check takes seconds (the provider client gives up within 10 s, so does the alert). The
@@ -439,11 +442,28 @@ export async function startJobWorker(
           }
           if (job.name === PAYOUT_SETUP_JOB) {
             if (!payoutSetupProvider) return 'skipped';
-            const swept = await sweepPayoutSetup(database.db, {
-              provider: payoutSetupProvider,
-              log: (entry) => logger.warn({ ...entry, ...fields }),
+            const swept = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${PAYOUT_SETUP_JOB}`,
+                ttlMs: PAYOUT_SETUP_LOCK_TTL_MS,
+              },
+              () =>
+                sweepPayoutSetup(database.db, {
+                  provider: payoutSetupProvider,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                }),
+            );
+            if (!swept.ran) {
+              logger.info({ event: 'payout_setup.skipped_running', ...fields });
+              processed.add(1, { outcome: 'payout_setup_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'payout_setup.swept',
+              ...swept.value,
+              ...fields,
             });
-            logger.info({ event: 'payout_setup.swept', ...swept, ...fields });
             processed.add(1, { outcome: 'payout_setup' });
             return 'swept';
           }

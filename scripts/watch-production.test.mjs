@@ -111,6 +111,47 @@ test('reserve checks that have stopped are a problem; a missing reserve endpoint
   assert.match(notes.join('\n'), /reserve not watched yet/);
 });
 
+test('/health/payments answering 500 is a problem that names the answer, not a stopped worker', async () => {
+  const problems = await run({
+    'GET https://api.tipme.example/health/payments': { status: 500 },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /reserve status could not be read \(HTTP 500\)/);
+});
+
+test('/health/payments not answering in time is a problem, not a hang', async () => {
+  const started = Date.now();
+  const problems = await run(
+    {
+      'GET https://api.tipme.example/health/payments': (init) =>
+        new Promise((_, reject) =>
+          init.signal.addEventListener('abort', () =>
+            reject(new DOMException('timed out', 'TimeoutError')),
+          ),
+        ),
+    },
+    'false',
+    { timeoutMs: 50 },
+  );
+  assert.ok(Date.now() - started < 2000);
+  assert.equal(problems.length, 1);
+  assert.match(
+    problems[0],
+    /reserve status could not be read \(HTTP no answer/,
+  );
+});
+
+test('/health/payments answering 200 with unreadable JSON is a problem', async () => {
+  const problems = await run({
+    'GET https://api.tipme.example/health/payments': {
+      status: 200,
+      body: null,
+    },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /reserve status could not be read/);
+});
+
 test('API not ready and web down are named', async () => {
   const problems = await run({
     'GET https://api.tipme.example/health/ready': { status: 503 },

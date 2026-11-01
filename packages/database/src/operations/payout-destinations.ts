@@ -1,5 +1,5 @@
 import { recordedProviderName } from '@tipme/contracts';
-import { and, asc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   issues,
@@ -483,6 +483,8 @@ export async function refreshPendingDestination(
     profileId: string;
     accountReference: string | null;
     log?: PayoutSetupLog | undefined;
+    /** Told when the provider read fails, for a caller pacing many reads. */
+    onReadFailure?: ((error: unknown) => void) | undefined;
   },
 ): Promise<boolean> {
   if (!input.accountReference) return false;
@@ -506,6 +508,7 @@ export async function refreshPendingDestination(
       provider: 'bachs',
       error: errorName(error),
     });
+    input.onReadFailure?.(error);
     return false;
   }
 }
@@ -513,9 +516,23 @@ export async function refreshPendingDestination(
 const SWEEP_PAGE = 100;
 
 /**
+ * Pending banks read per run. These reads use the same provider key as real payouts, so a backlog
+ * must never spend that key's limit. The sweep runs every 15 minutes, and a bank not reached waits
+ * for a later run: each run picks at random, so no bank waits behind others for good.
+ */
+export const PAYOUT_SWEEP_MAX_DESTINATION_READS = 100;
+/** This many 429s together: the provider key is at its limit, so the pending reads end for this run. */
+export const PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW = 3;
+
+/** The provider adapter's HTTP status, read by shape (ADR-0004: its types stay in its package). */
+const isRateLimited = (error: unknown) =>
+  (error as { statusCode?: unknown } | null)?.statusCode === 429;
+
+/**
  * This many manual-payouts failures together look like the provider being down, so the account
- * phase ends there. Reading banks under review always runs after it: those are reads, few, and a
- * stop there could leave a good bank behind unreadable ones on every run.
+ * phase ends there. Reading banks under review always runs after it: failures alone don't stop
+ * those reads, which could leave a good bank behind unreadable ones on every run. Only the
+ * provider key's own limit does (below).
  */
 export const PAYOUT_SWEEP_MAX_FAILURES_IN_A_ROW = 5;
 
@@ -531,11 +548,14 @@ export async function sweepPayoutSetup(
     provider: PayoutSetupProvider;
     log?: PayoutSetupLog;
     maxFailuresInARow?: number;
+    maxDestinationReads?: number;
   },
 ): Promise<{
   checked: number;
   failed: number;
   destinationsSettled: number;
+  destinationReadsFailed: number;
+  destinationReadsStopped: boolean;
   stoppedEarly: boolean;
 }> {
   const environment = bachsAccountEnvironment(input.provider.environment);
@@ -545,6 +565,8 @@ export async function sweepPayoutSetup(
     checked: 0,
     failed: 0,
     destinationsSettled: 0,
+    destinationReadsFailed: 0,
+    destinationReadsStopped: false,
     stoppedEarly: false,
   };
   const stop = () => {
@@ -607,53 +629,61 @@ export async function sweepPayoutSetup(
     if (page.length < SWEEP_PAGE) break;
   }
 
-  let afterDestination: string | null = null;
-  for (;;) {
-    const pending: {
-      id: string;
-      profileId: string;
-      accountReference: string | null;
-    }[] = await guarded(() =>
-      db
-        .select({
-          id: payoutDestinations.id,
-          profileId: payoutDestinations.profileId,
-          accountReference: paymentAccounts.providerAccountReference,
-        })
-        .from(payoutDestinations)
-        .innerJoin(
-          paymentAccounts,
-          and(
-            eq(paymentAccounts.profileId, payoutDestinations.profileId),
-            eq(paymentAccounts.provider, payoutDestinations.provider),
-            eq(paymentAccounts.environment, environment),
-          ),
-        )
-        .where(
-          and(
-            eq(payoutDestinations.provider, stored),
-            eq(payoutDestinations.status, 'pending_review'),
-            isNull(payoutDestinations.replacedAt),
-            afterDestination
-              ? gt(payoutDestinations.id, afterDestination)
-              : undefined,
-          ),
-        )
-        .orderBy(asc(payoutDestinations.id))
-        .limit(SWEEP_PAGE),
-    );
-    for (const row of pending)
-      if (
-        await refreshPendingDestination(db, input.provider, {
-          profileId: row.profileId,
-          accountReference: row.accountReference,
-          log: input.log,
-        })
+  const pending: {
+    id: string;
+    profileId: string;
+    accountReference: string | null;
+  }[] = await guarded(() =>
+    db
+      .select({
+        id: payoutDestinations.id,
+        profileId: payoutDestinations.profileId,
+        accountReference: paymentAccounts.providerAccountReference,
+      })
+      .from(payoutDestinations)
+      .innerJoin(
+        paymentAccounts,
+        and(
+          eq(paymentAccounts.profileId, payoutDestinations.profileId),
+          eq(paymentAccounts.provider, payoutDestinations.provider),
+          eq(paymentAccounts.environment, environment),
+        ),
       )
-        totals.destinationsSettled += 1;
-    const last = pending.at(-1);
-    if (!last || pending.length < SWEEP_PAGE) break;
-    afterDestination = last.id;
+      .where(
+        and(
+          eq(payoutDestinations.provider, stored),
+          eq(payoutDestinations.status, 'pending_review'),
+          isNull(payoutDestinations.replacedAt),
+        ),
+      )
+      .orderBy(sql`random()`)
+      .limit(input.maxDestinationReads ?? PAYOUT_SWEEP_MAX_DESTINATION_READS),
+  );
+  let limitedInARow = 0;
+  for (const row of pending) {
+    let limited = false;
+    if (
+      await refreshPendingDestination(db, input.provider, {
+        profileId: row.profileId,
+        accountReference: row.accountReference,
+        log: input.log,
+        onReadFailure: (error) => {
+          totals.destinationReadsFailed += 1;
+          limited = isRateLimited(error);
+        },
+      })
+    )
+      totals.destinationsSettled += 1;
+    limitedInARow = limited ? limitedInARow + 1 : 0;
+    if (limitedInARow >= PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW) {
+      totals.destinationReadsStopped = true;
+      input.log?.({
+        event: 'payout_setup.destination_reads_stopped',
+        provider: 'bachs',
+        error: 'rate_limited',
+      });
+      break;
+    }
   }
   return totals;
 }

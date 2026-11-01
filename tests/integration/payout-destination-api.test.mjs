@@ -1691,6 +1691,111 @@ test('dead accounts stop the account phase, and a bank under review still settle
   assert.equal(row.status, 'usable');
 });
 
+/** Banks under review on `count` new accounts. */
+async function pendingBanks(database, count) {
+  await moreAccounts(database, count);
+  const { rows } = await database.pool.query(
+    `SELECT id FROM profiles WHERE handle LIKE 'sweep_%' ORDER BY handle`,
+  );
+  for (const [index, { id }] of rows.entries())
+    await setPayoutDestination(database.db, {
+      sealing,
+      profileId: id,
+      provider: 'bachs',
+      destinationRef: `pd_${index}`,
+      bankCode: '058',
+      bankName: 'Guaranty Trust Bank',
+      last4: '6789',
+      status: 'pending_review',
+    });
+  await database.pool.query(
+    `UPDATE payment_accounts SET manual_payouts_at = now(),
+       payout_capabilities_requested_at = now()`,
+  );
+}
+
+test('a sweep reads at most its cap of pending banks, and every bank gets its turn across runs', async (t) => {
+  const database = await setUp(t);
+  await pendingBanks(database, 3);
+  assert.ok(ops.PAYOUT_SWEEP_MAX_DESTINATION_READS >= 1);
+  const seen = new Set();
+  for (let run = 0; run < 60; run += 1) {
+    const reads = [];
+    await sweepPayoutSetup(database.db, {
+      provider: fakeBachs({
+        payoutDestinationStatus: async (_account, ref) => {
+          reads.push(ref);
+          return 'pending_review';
+        },
+      }),
+      maxDestinationReads: 1,
+    });
+    assert.equal(reads.length, 1);
+    seen.add(reads[0]);
+  }
+  assert.deepEqual([...seen].sort(), ['pd_0', 'pd_1', 'pd_2']);
+});
+
+test('consecutive 429s stop the pending reads, since they share a key with payouts', async (t) => {
+  const database = await setUp(t);
+  const banks = ops.PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW + 3;
+  await pendingBanks(database, banks);
+  let reads = 0;
+  const logged = [];
+  const swept = await sweepPayoutSetup(database.db, {
+    provider: fakeBachs({
+      payoutDestinationStatus: async () => {
+        reads += 1;
+        throw Object.assign(new Error('limited'), {
+          name: 'BachsApiError',
+          statusCode: 429,
+        });
+      },
+    }),
+    log: (entry) => logged.push(entry),
+  });
+  assert.equal(reads, ops.PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW);
+  assert.equal(swept.destinationReadsFailed, reads);
+  assert.equal(swept.destinationReadsStopped, true);
+  assert.ok(
+    logged.some(
+      (entry) =>
+        entry.event === 'payout_setup.destination_reads_stopped' &&
+        entry.error === 'rate_limited',
+    ),
+  );
+});
+
+test('a 429 between good reads, or another failure, does not stop the pending reads', async (t) => {
+  const database = await setUp(t);
+  await pendingBanks(database, 5);
+  let reads = 0;
+  const swept = await sweepPayoutSetup(database.db, {
+    provider: fakeBachs({
+      payoutDestinationStatus: async () => {
+        reads += 1;
+        if (reads % 2)
+          throw Object.assign(new Error('limited'), { statusCode: 429 });
+        return 'pending_review';
+      },
+    }),
+  });
+  assert.equal(reads, 5);
+  assert.equal(swept.destinationReadsStopped, false);
+  assert.equal(swept.destinationReadsFailed, 3);
+  reads = 0;
+  const down = await sweepPayoutSetup(database.db, {
+    provider: fakeBachs({
+      payoutDestinationStatus: async () => {
+        reads += 1;
+        throw Object.assign(new Error('down'), { statusCode: 500 });
+      },
+    }),
+  });
+  assert.equal(reads, 5);
+  assert.equal(down.destinationReadsStopped, false);
+});
+
 test('banks that can not be read never stop the others being read', async (t) => {
   const database = await setUp(t);
   await moreAccounts(database, 2);

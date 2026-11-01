@@ -5,6 +5,7 @@ import { InMemorySpanExporter } from '../../packages/observability/dist/testing.
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
   checkReserve,
+  latestReserveReading,
   purgeReserveReadings,
 } from '../../packages/database/dist/index.js';
 import { PaymentsHealthController } from '../../apps/api/dist/health/payments-health.controller.js';
@@ -658,6 +659,40 @@ test('the run lock works on real Redis: an overlapping run is skipped, and the l
   } finally {
     await redis.del(key);
     redis.disconnect();
+  }
+});
+
+test('the latest reading is found through its index, without sorting the table', async () => {
+  await database.pool.query('DELETE FROM payment_reserve_readings');
+  // Capture the statement the operation really sends, then ask Postgres how it would run it.
+  const sent = [];
+  const query = database.pool.query;
+  database.pool.query = function capture(...args) {
+    const text = typeof args[0] === 'string' ? args[0] : args[0]?.text;
+    if (text?.includes('payment_reserve_readings'))
+      sent.push({ text, values: args[0]?.values ?? args[1] ?? [] });
+    return query.apply(this, args);
+  };
+  try {
+    await latestReserveReading(database.db);
+  } finally {
+    database.pool.query = query;
+  }
+  assert.equal(sent.length, 1);
+  const { text, values } = sent[0];
+  const client = await database.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL enable_seqscan = off');
+    // EXPLAIN takes no parameters: write them in (here only the row limit).
+    const literal = text.replace(/\$(\d+)/g, (_, n) => String(values[n - 1]));
+    const { rows } = await client.query(`EXPLAIN ${literal}`);
+    const plan = rows.map((row) => row['QUERY PLAN']).join('\n');
+    assert.match(plan, /payment_reserve_readings_read_at/);
+    assert.doesNotMatch(plan, /Sort/);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
   }
 });
 
