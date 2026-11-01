@@ -9,7 +9,7 @@ import type {
   WebhookVerification,
 } from '../provider.js';
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
-import { attemptKey, paymentKey, payoutKey } from './keys.js';
+import { attemptKey, paymentKey, payoutIdKey, payoutKey } from './keys.js';
 import type { Scenario } from './scenario.js';
 
 /** Same rounding as FEE_POLICY_V1's estimated processing fee (150 bps, half up). */
@@ -82,6 +82,22 @@ export function createMockProvider(options: {
   const { redis } = options;
   const secret = options.secret ?? '';
   const prefix = options.prefix ?? 'default';
+
+  const readPayout: PayoutPort['fetchPayoutStatus'] = async (
+    providerReference,
+  ) => {
+    const status = await redis.hget(
+      payoutKey(prefix, providerReference),
+      'status',
+    );
+    if (status === null) return { status: 'not_found' };
+    if (status === 'failed') return { status, failureReason: 'other' };
+    return {
+      status: PAYOUT_STATUSES.has(status)
+        ? (status as 'paid' | 'pending' | 'review')
+        : 'pending',
+    };
+  };
 
   return {
     name: 'mock',
@@ -212,6 +228,7 @@ export function createMockProvider(options: {
         throw new Error(
           'Mock payout idempotency key was reused with different payout details',
         );
+      await redis.set(payoutIdKey(prefix, payoutId), reference, 'NX');
       // The payout now exists, but its answer is lost; the same key finds it later.
       if (result === 0 && chosen === 'payout-timeout')
         throw new UncertainProviderOutcomeError(
@@ -222,17 +239,18 @@ export function createMockProvider(options: {
       return { providerReference: reference, status };
     },
 
-    async fetchPayoutStatus(providerReference) {
-      const status = await redis.hget(
-        payoutKey(prefix, providerReference),
-        'status',
-      );
-      if (status === null) return { status: 'not_found' };
-      if (status === 'failed') return { status, failureReason: 'other' };
+    fetchPayoutStatus: readPayout,
+
+    async findPayoutByReference(_accountRef, payoutId) {
+      const providerReference = await redis.get(payoutIdKey(prefix, payoutId));
+      if (!providerReference) return null;
+      const { status, failureReason } = await readPayout(providerReference);
+      // The id always points at a stored payout, unless the pretend ledger was wiped under it.
+      if (status === 'not_found') return null;
       return {
-        status: PAYOUT_STATUSES.has(status)
-          ? (status as 'paid' | 'pending' | 'review')
-          : 'pending',
+        providerReference,
+        status,
+        ...(failureReason ? { failureReason } : {}),
       };
     },
 
@@ -291,6 +309,8 @@ export function createMockProvider(options: {
     },
 
     async setManualPayouts() {},
+
+    async requestPayoutCapabilities() {},
 
     async chooseScenario(reference, scenario) {
       const key = paymentKey(prefix, reference);

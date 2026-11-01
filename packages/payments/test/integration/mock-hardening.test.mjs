@@ -188,4 +188,40 @@ test('the pretend provider offers the rest of the payout port', async () => {
     await mock.coverPayoutFee(fee),
   );
   await mock.setManualPayouts('mock_account');
+  await mock.requestPayoutCapabilities('mock_account');
+});
+
+test('the pretend provider finds a payout by reference, even after a timeout', async () => {
+  const mock = createMockProvider({ redis, prefix: prefix() });
+  const input = payoutInput('payout-timeout');
+  assert.equal(
+    await mock.findPayoutByReference(input.accountRef, input.payoutId),
+    null,
+  );
+  await assert.rejects(
+    mock.initiatePayout(input),
+    UncertainProviderOutcomeError,
+  );
+  const found = await mock.findPayoutByReference(
+    input.accountRef,
+    input.payoutId,
+  );
+  assert.equal(found.status, 'pending');
+  await mock.settlePayout(found.providerReference);
+  assert.deepEqual(
+    await mock.findPayoutByReference(input.accountRef, input.payoutId),
+    { providerReference: found.providerReference, status: 'paid' },
+  );
+
+  const failed = payoutInput('payout-failed');
+  const started = await mock.initiatePayout(failed);
+  await mock.settlePayout(started.providerReference);
+  assert.deepEqual(
+    await mock.findPayoutByReference(failed.accountRef, failed.payoutId),
+    {
+      providerReference: started.providerReference,
+      status: 'failed',
+      failureReason: 'other',
+    },
+  );
 });

@@ -20,7 +20,7 @@ import {
   UncertainProviderOutcomeError,
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
-import { createBachsPayouts } from './payouts.js';
+import { PAYOUT_CONFIGURATION, createBachsPayouts } from './payouts.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
 const checkoutCreatedSchema = z.object({
@@ -673,6 +673,7 @@ export function createBachsProvider(
                 bank_transfer: { requested: true },
               },
             },
+            ...PAYOUT_CONFIGURATION,
           },
           responsibilities: {
             fees: { collector: 'platform' },

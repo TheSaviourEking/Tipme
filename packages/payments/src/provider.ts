@@ -129,6 +129,8 @@ export interface PayoutPort {
     status: 'active' | 'restricted' | 'missing';
     requirementsDue: string[];
   }>;
+  /** Adds what paying out needs to an account made without it. The state comes from payoutCapability. */
+  requestPayoutCapabilities(accountRef: string): Promise<void>;
   listBanks(country: 'NG'): Promise<{ code: string; name: string }[]>;
   /** Null when the number did not resolve: the recipient then types the account name. */
   resolveBankAccount(input: {
@@ -178,6 +180,19 @@ export interface PayoutPort {
     status: 'paid' | 'failed' | 'pending' | 'review' | 'not_found';
     failureReason?: PayoutFailureReason;
   }>;
+  /**
+   * Finds the payout a lost answer may have created. Null only when the provider definitely has
+   * none; anything else raises UncertainProviderOutcomeError. The account is required because a
+   * provider searches the caller's own payouts: without it, the answer would be a false "none".
+   */
+  findPayoutByReference(
+    accountRef: string,
+    payoutId: string,
+  ): Promise<{
+    providerReference: string;
+    status: 'paid' | 'failed' | 'pending' | 'review';
+    failureReason?: PayoutFailureReason;
+  } | null>;
 }
 
 /** The provider definitely refused a payout or fee transfer: no money moved for this request. */

@@ -548,6 +548,12 @@ test('account creation requests NGN methods and trusts returned fee responsibili
         bank_transfer: { requested: true },
       },
     },
+    recipient: {
+      capabilities: {
+        payouts: { requested: true },
+        transfers: { requested: true },
+      },
+    },
   });
   assert.deepEqual(requestBody.responsibilities, {
     fees: { collector: 'platform' },

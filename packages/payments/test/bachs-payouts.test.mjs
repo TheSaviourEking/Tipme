@@ -486,24 +486,31 @@ test('an account number resolves to its name, or to null when it does not match'
   );
 });
 
-test('the payout capability reads the account, and a missing account says so', async () => {
-  const account = (payouts) =>
-    jsonResponse({
-      id: ACCOUNT,
-      capabilities: payouts ? { payouts } : {},
-      requirements: { currently_due: ['payout_destination'] },
-    });
+test('the payout capability needs both payouts and transfers active', async () => {
+  const status = (value) => (value ? { status: value } : undefined);
   const cases = [
-    [{ status: 'active' }, 'active'],
-    [{ status: 'restricted' }, 'restricted'],
-    [{ status: 'pending' }, 'restricted'],
-    [{ status: 'unrequested' }, 'missing'],
-    [undefined, 'missing'],
+    ['active', 'active', 'active'],
+    ['active', 'restricted', 'restricted'],
+    ['restricted', 'active', 'restricted'],
+    ['pending', 'active', 'restricted'],
+    ['active', undefined, 'missing'],
+    [undefined, 'active', 'missing'],
+    ['unrequested', 'active', 'missing'],
+    [undefined, undefined, 'missing'],
   ];
-  for (const [payouts, status] of cases) {
-    const { provider, calls } = fake(account(payouts));
+  for (const [payouts, transfers, expected] of cases) {
+    const { provider, calls } = fake(
+      jsonResponse({
+        id: ACCOUNT,
+        capabilities: {
+          payouts: status(payouts),
+          transfers: status(transfers),
+        },
+        requirements: { currently_due: ['payout_destination'] },
+      }),
+    );
     assert.deepEqual(await provider.payoutCapability(ACCOUNT), {
-      status,
+      status: expected,
       requirementsDue: ['payout_destination'],
     });
     assert.equal(calls[0].path, `/v1/accounts/${ACCOUNT}`);
@@ -513,6 +520,172 @@ test('the payout capability reads the account, and a missing account says so', a
     status: 'missing',
     requirementsDue: [],
   });
+});
+
+test('requirements due name only what blocks payouts or transfers', async () => {
+  const { provider } = fake(
+    jsonResponse({
+      id: ACCOUNT,
+      capabilities: { payouts: { status: 'restricted' } },
+      requirements: {
+        currently_due: ['payout_destination', 'business_profile.url'],
+        entries: [
+          {
+            field: 'payout_destination',
+            status: 'currently_due',
+            restricts_capabilities: ['payouts'],
+          },
+          {
+            field: 'persons.name',
+            status: 'past_due',
+            restricts_capabilities: ['transfers'],
+          },
+          {
+            field: 'business_profile.url',
+            status: 'currently_due',
+            restricts_capabilities: ['ngn_card_collection'],
+          },
+          {
+            field: 'persons.id_number',
+            status: 'pending_verification',
+            restricts_capabilities: ['payouts'],
+          },
+        ],
+      },
+    }),
+  );
+  assert.deepEqual((await provider.payoutCapability(ACCOUNT)).requirementsDue, [
+    'payout_destination',
+    'persons.name',
+  ]);
+});
+
+test('an existing account can ask for the payout capabilities', async () => {
+  const { provider, calls } = fake(
+    jsonResponse({ id: ACCOUNT, capabilities: {} }),
+  );
+  await provider.requestPayoutCapabilities(ACCOUNT);
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(calls[0].path, `/v1/accounts/${ACCOUNT}`);
+  assert.deepEqual(calls[0].body, {
+    configuration: {
+      recipient: {
+        capabilities: {
+          payouts: { requested: true },
+          transfers: { requested: true },
+        },
+      },
+    },
+  });
+  // The account object's write is not the account acting: it names the account in the path.
+  assert.equal(calls[0].headers['X-Account-Id'], undefined);
+  assert.equal(
+    calls[0].headers['Idempotency-Key'],
+    `payout-capabilities.${ACCOUNT}`,
+  );
+
+  const timedOut = fake(() => {
+    throw new DOMException('timed out', 'TimeoutError');
+  });
+  await assert.rejects(
+    timedOut.provider.requestPayoutCapabilities(ACCOUNT),
+    UncertainProviderOutcomeError,
+  );
+});
+
+test('a payout is found by its reference, scoped to its account', async () => {
+  const cases = [
+    ['pending', { status: 'pending' }],
+    ['processing', { status: 'pending' }],
+    ['completed', { status: 'paid' }],
+    ['failed', { status: 'failed', failureReason: 'in_debt' }],
+    ['something_new', { status: 'review' }],
+  ];
+  for (const [status, expected] of cases) {
+    const { provider, calls } = fake(
+      jsonResponse({
+        total: 1,
+        items: [
+          payoutBody({
+            status,
+            ...(status === 'failed'
+              ? { failure_reason: 'ORGANIZATION_IN_DEBT' }
+              : {}),
+          }),
+        ],
+      }),
+    );
+    assert.deepEqual(await provider.findPayoutByReference(ACCOUNT, 'p1'), {
+      providerReference: `${ACCOUNT}:pay_4Xr9dLc0mNv7Kq2B`,
+      ...expected,
+    });
+    assert.equal(calls[0].method, 'GET');
+    assert.equal(calls[0].path, '/v1/payouts?reference=p1');
+    // Without it Bachs searches the platform's payouts and truthfully finds nothing.
+    assert.equal(calls[0].headers['X-Account-Id'], ACCOUNT);
+    assert.equal(calls[0].headers['Idempotency-Key'], undefined);
+  }
+});
+
+test('only a definite empty answer means no payout exists', async () => {
+  const { provider } = fake(jsonResponse({ total: 0, items: [] }));
+  assert.equal(await provider.findPayoutByReference(ACCOUNT, 'p1'), null);
+});
+
+test('more than one match is uncertain, never a pick', async () => {
+  for (const body of [
+    { total: 2, items: [payoutBody(), payoutBody({ id: 'pay_2' })] },
+    { total: 2, items: [payoutBody()] },
+    { items: [payoutBody(), payoutBody({ id: 'pay_2' })] },
+  ]) {
+    const { provider } = fake(jsonResponse(body));
+    await assert.rejects(
+      provider.findPayoutByReference(ACCOUNT, 'p1'),
+      UncertainProviderOutcomeError,
+    );
+  }
+});
+
+test('anything but a clear answer from the lookup is uncertain', async () => {
+  for (const answer of [
+    () => {
+      throw new DOMException('timed out', 'TimeoutError');
+    },
+    () => {
+      throw new TypeError('fetch failed');
+    },
+    () => jsonResponse({ error_code: 'INTERNAL_SERVER_ERROR' }, 500),
+    () => jsonResponse({ error_code: 'BAD_GATEWAY' }, 502),
+    () => jsonResponse({ error_code: 'NOT_FOUND' }, 404),
+    () => jsonResponse({ error_code: 'TOO_MANY_REQUESTS' }, 429),
+    () => new Response('not json', { status: 200 }),
+    () => jsonResponse({ unexpected: true }),
+    // Says some exist but lists none.
+    () => jsonResponse({ total: 1, items: [] }),
+    // Not the payout that was asked about.
+    () => jsonResponse({ total: 1, items: [payoutBody({ reference: 'p2' })] }),
+    () => jsonResponse({ total: 1, items: [payoutBody({ reference: null })] }),
+  ]) {
+    const { provider } = fake(answer);
+    await assert.rejects(
+      provider.findPayoutByReference(ACCOUNT, 'p1'),
+      (error) => {
+        assert.ok(error instanceof UncertainProviderOutcomeError);
+        assert.doesNotMatch(error.message, /bachs/i);
+        return true;
+      },
+    );
+  }
+});
+
+test('a lookup with a reference Bachs could not hold is refused before sending', async () => {
+  const { provider, calls } = fake(jsonResponse({ total: 0, items: [] }));
+  await assert.rejects(provider.findPayoutByReference(ACCOUNT, 'has space'));
+  await assert.rejects(provider.findPayoutByReference('bad:ref', 'p1'));
+  await assert.rejects(
+    provider.findPayoutByReference(ACCOUNT, 'x'.repeat(129)),
+  );
+  assert.equal(calls.length, 0);
 });
 
 test('the adapter advertises payouts and keeps its environment name', () => {

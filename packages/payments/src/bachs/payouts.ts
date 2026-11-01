@@ -10,6 +10,7 @@ import {
   BachsApiError,
   BachsProtocolError,
   BachsRequestNotSentError,
+  BachsTransportError,
   UncertainProviderOutcomeError,
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
@@ -28,6 +29,18 @@ const identifierSchema = z
   .max(200)
   .regex(/^[^\s:]+$/);
 
+// Paying out draws on two `recipient` capabilities, and no configuration is ever applied by
+// itself: https://docs.bachs.io/connect/capabilities.md
+const PAYOUT_CAPABILITIES = ['payouts', 'transfers'] as const;
+export const PAYOUT_CONFIGURATION = {
+  recipient: {
+    capabilities: {
+      payouts: { requested: true },
+      transfers: { requested: true },
+    },
+  },
+} as const;
+
 // https://docs.bachs.io/connect/payouts.md
 const payoutSchema = z.object({
   id: identifierSchema,
@@ -35,7 +48,14 @@ const payoutSchema = z.object({
   amount: z.string(),
   currency: z.string().min(1).max(32),
   destination: z.string().nullable().optional(),
+  reference: z.string().nullable().optional(),
   failure_reason: z.string().nullable().optional(),
+});
+
+// GET /v1/payouts?reference=: https://docs.bachs.io/api-reference/payouts/list-payouts.md
+const payoutListSchema = z.object({
+  total: z.number().int().nonnegative().optional(),
+  items: z.array(payoutSchema),
 });
 
 // https://docs.bachs.io/api-reference/transfers/create-a-transfer.md
@@ -85,7 +105,20 @@ const destinationSchema = z.object({
 const accountCapabilitySchema = z.object({
   capabilities: z.record(z.string(), z.unknown()).nullable().optional(),
   requirements: z
-    .object({ currently_due: z.array(z.string()).optional() })
+    .object({
+      currently_due: z.array(z.string()).optional(),
+      // https://docs.bachs.io/connect/requirements.md ("What a field blocks")
+      entries: z
+        .array(
+          z.object({
+            field: z.string(),
+            status: z.string(),
+            restricts_capabilities: z.array(z.string()).nullable().optional(),
+          }),
+        )
+        .nullable()
+        .optional(),
+    })
     .passthrough()
     .nullable()
     .optional(),
@@ -216,6 +249,38 @@ async function moneyWrite<T>(
   }
 }
 
+/** A merchant account owes more than a recipient: only what blocks paying out is listed. */
+function payoutRequirements(
+  requirements: z.infer<typeof accountCapabilitySchema>['requirements'],
+): string[] {
+  if (!requirements?.entries) return requirements?.currently_due ?? [];
+  return requirements.entries
+    .filter(
+      (entry) =>
+        (entry.status === 'currently_due' || entry.status === 'past_due') &&
+        PAYOUT_CAPABILITIES.some((name) =>
+          entry.restricts_capabilities?.includes(name),
+        ),
+    )
+    .map((entry) => entry.field);
+}
+
+function payoutState(payout: z.infer<typeof payoutSchema>): {
+  status: 'paid' | 'failed' | 'pending' | 'review';
+  failureReason?: PayoutFailureReason;
+} {
+  const status = payout.status.toLowerCase();
+  if (status === 'completed') return { status: 'paid' };
+  if (status === 'failed')
+    return {
+      status: 'failed',
+      failureReason: payoutFailureReason(payout.failure_reason ?? ''),
+    };
+  if (status === 'pending' || status === 'processing')
+    return { status: 'pending' };
+  return { status: 'review' };
+}
+
 export function createBachsPayouts(
   client: BachsApiClient,
   apiKey: string,
@@ -262,22 +327,39 @@ export function createBachsPayouts(
           return { status: 'missing', requirementsDue: [] };
         throw error;
       }
-      const capability = account.capabilities?.['payouts'];
-      const status =
-        typeof capability === 'object' &&
-        capability !== null &&
-        'status' in capability
+      const statuses = PAYOUT_CAPABILITIES.map((name) => {
+        const capability = account.capabilities?.[name];
+        return typeof capability === 'object' &&
+          capability !== null &&
+          'status' in capability
           ? capability.status
           : undefined;
+      });
       return {
-        status:
-          status === 'active'
+        status: statuses.some(
+          (status) => status === undefined || status === 'unrequested',
+        )
+          ? 'missing'
+          : statuses.every((status) => status === 'active')
             ? 'active'
-            : status === undefined || status === 'unrequested'
-              ? 'missing'
-              : 'restricted',
-        requirementsDue: account.requirements?.currently_due ?? [],
+            : 'restricted',
+        requirementsDue: payoutRequirements(account.requirements),
       };
+    },
+
+    // POST /v1/accounts/{id}: naming a persona applies it to an account without it, and leaves
+    // what it already holds alone: https://docs.bachs.io/connect/capabilities.md
+    async requestPayoutCapabilities(accountRef) {
+      checkedIdentifier(accountRef, 'account reference');
+      const operation = `payout-capabilities.${accountRef}`;
+      await client.request({
+        method: 'POST',
+        path: `/v1/accounts/${encodeURIComponent(accountRef)}`,
+        idempotencyKey: operation,
+        operationReference: operation,
+        body: { configuration: PAYOUT_CONFIGURATION },
+        schema: accountCapabilitySchema,
+      });
     },
 
     // GET /v1/reference/banks: https://docs.bachs.io/api-reference/reference/list-banks.md
@@ -421,7 +503,7 @@ export function createBachsPayouts(
       );
       const idempotencyKey = checkedKey(input.idempotencyKey);
       // Bachs allows letters, digits, `.`, `-` and `_` in a reference.
-      if (!/^[\w.-]{1,200}$/.test(input.payoutId))
+      if (!/^[\w.-]{1,128}$/.test(input.payoutId))
         throw refused('Invalid payout id');
       const amount = checkedAmount(input.amountMinor, input.currency);
       const payout = await moneyWrite(idempotencyKey, PAYOUT_REFUSALS, () =>
@@ -480,16 +562,63 @@ export function createBachsPayouts(
           return { status: 'not_found' };
         throw error;
       }
-      const status = payout.status.toLowerCase();
-      if (status === 'completed') return { status: 'paid' };
-      if (status === 'failed')
-        return {
-          status: 'failed',
-          failureReason: payoutFailureReason(payout.failure_reason ?? ''),
-        };
-      if (status === 'pending' || status === 'processing')
-        return { status: 'pending' };
-      return { status: 'review' };
+      return payoutState(payout);
+    },
+
+    // GET /v1/payouts?reference=, at most one by the docs. The reference schema says 128 at most:
+    // https://docs.bachs.io/api-reference/payouts/list-payouts.md
+    async findPayoutByReference(accountRef, payoutId) {
+      const account = checkedIdentifier(accountRef, 'account reference');
+      if (!/^[\w.-]{1,128}$/.test(payoutId)) throw refused('Invalid payout id');
+      const operation = `payout-lookup.${payoutId}`;
+      let list: z.infer<typeof payoutListSchema>;
+      try {
+        list = await client.request({
+          method: 'GET',
+          path: `/v1/payouts?reference=${encodeURIComponent(payoutId)}`,
+          accountReference: account,
+          schema: payoutListSchema,
+        });
+      } catch (error) {
+        if (!(
+          error instanceof BachsApiError ||
+          error instanceof BachsProtocolError ||
+          error instanceof BachsTransportError
+        ))
+          throw error;
+        // A null here could release money that has left, so no failed read may look like one.
+        throw new UncertainProviderOutcomeError(
+          operation,
+          'the payment provider could not say whether the payout exists',
+          error instanceof BachsApiError
+            ? {
+                cause: 'http_error',
+                httpStatus: error.statusCode,
+                ...(error.providerCode
+                  ? { providerCode: error.providerCode }
+                  : {}),
+              }
+            : {
+                cause:
+                  error instanceof BachsProtocolError
+                    ? 'unexpected_shape'
+                    : 'no_response',
+              },
+        );
+      }
+      const total = list.total ?? list.items.length;
+      if (total === 0 && list.items.length === 0) return null;
+      const payout = list.items[0];
+      if (
+        total !== 1 ||
+        list.items.length !== 1 ||
+        payout?.reference !== payoutId
+      )
+        throw unexpected(operation);
+      return {
+        providerReference: `${account}:${payout.id}`,
+        ...payoutState(payout),
+      };
     },
   };
 }
