@@ -955,8 +955,11 @@ export const payouts = pgTable(
     // The provider's fee for this payout, in minor units of the payout currency.
     feeMinor: minor('fee_minor'),
     feeTransferReference: text('fee_transfer_reference'),
-    // Set when the provider call's outcome was unknown, so the payout is looked up, not retried.
+    // Written and committed before any provider write, and cleared only by a definite answer: if
+    // the answer never comes (timeout, crash) the payout is looked up, never sent again.
     startUncertainAt: timestamp('start_uncertain_at', { withTimezone: true }),
+    // While the provider itself is checking this payout; the recipient is told so.
+    providerReviewAt: timestamp('provider_review_at', { withTimezone: true }),
     // The provider's connected account the payout was requested on, recorded at request time.
     accountReference: text('account_reference'),
     createdAt: createdAt(),

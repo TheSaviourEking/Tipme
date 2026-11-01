@@ -176,6 +176,7 @@ function normalizeEvent(
     if (!accountReference || !withdrawalId || withdrawalId.includes(':'))
       return undefined;
     const failureReason = nullableString(data['failure_reason']);
+    const stated = nullableString(data['status'])?.toLowerCase();
     return {
       kind: 'payout',
       eventId: event.id,
@@ -186,6 +187,12 @@ function normalizeEvent(
       status: event.type === 'payout.paid' ? 'paid' : 'failed',
       ...(event.type === 'payout.failed' && failureReason
         ? { failureReason: payoutFailureReason(failureReason) }
+        : {}),
+      ...(event.type === 'payout.paid' &&
+      stated &&
+      stated !== 'paid' &&
+      stated !== 'completed'
+        ? { contradicted: true as const }
         : {}),
     };
   }

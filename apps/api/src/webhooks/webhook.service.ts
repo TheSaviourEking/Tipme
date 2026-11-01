@@ -7,6 +7,7 @@ import {
 } from '@tipme/payments';
 import { z } from 'zod';
 import {
+  applyPayoutSignal,
   enqueueOutbox,
   findBachsAttemptByOperationReference,
   findPaymentAccountByReference,
@@ -80,11 +81,15 @@ export class WebhookService {
   async applyBachs(
     event: NormalizedProviderEvent,
     bachs: Pick<BachsProvider, 'environment'> &
-      Partial<Pick<BachsProvider, 'getRecipientAccount' | 'verifyTransaction'>>,
+      Partial<
+        Pick<
+          BachsProvider,
+          'getRecipientAccount' | 'verifyTransaction' | 'fetchPayoutStatus'
+        >
+      >,
   ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
-    // Nothing starts a Bachs payout yet, so there is none to match: routed in the payouts task.
-    if (event.kind === 'payout') return 'ignored';
+    if (event.kind === 'payout') return this.applyBachsPayout(event, bachs);
     const { environment } = bachs;
     if (event.kind === 'account') return this.refreshBachsAccount(event, bachs);
     if (event.kind === 'reversal')
@@ -134,6 +139,49 @@ export class WebhookService {
       }
       throw error;
     }
+  }
+
+  /**
+   * A payout event for an account of ours. One TipMe has no reference for yet may be answering a
+   * start still in flight, so it is parked for reconciliation rather than called unexpected.
+   */
+  private async applyBachsPayout(
+    event: Extract<NormalizedProviderEvent, { kind: 'payout' }>,
+    bachs: Pick<BachsProvider, 'environment'> &
+      Partial<Pick<BachsProvider, 'fetchPayoutStatus'>>,
+  ): Promise<string> {
+    const { db } = this.database;
+    const account = await findPaymentAccountByReference(db, {
+      provider: 'bachs',
+      environment: bachs.environment,
+      providerAccountReference: event.accountReference,
+    });
+    if (!account) return this.unmatchedBachs(event);
+    const payoutId = await findPayoutByReference(
+      db,
+      'bachs',
+      event.providerReference,
+    );
+    if (!payoutId) {
+      await recordUnmatchedEvent(db, {
+        provider: 'bachs',
+        providerEventId: event.eventId,
+        eventType: event.eventType,
+        payload: event,
+        reason: 'unknown_payout',
+      });
+      return 'parked';
+    }
+    return applyPayoutSignal(db, {
+      payoutId,
+      providerReference: event.providerReference,
+      eventId: event.eventId,
+      status: event.status,
+      contradicted: event.contradicted === true,
+      reader: bachs,
+      payload: event,
+      now: new Date(),
+    });
   }
 
   private async unmatched(

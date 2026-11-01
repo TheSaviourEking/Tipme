@@ -53,6 +53,8 @@ export type NormalizedProviderEvent =
       accountReference: string;
       status: 'paid' | 'failed';
       failureReason?: PayoutFailureReason;
+      /** The signed event disagrees with itself: only a read of the payout may decide. */
+      contradicted?: true;
     }
   | {
       kind: 'ignored';
@@ -174,11 +176,14 @@ export interface PayoutPort {
   }): Promise<{
     providerReference: string;
     status: 'pending' | 'processing' | 'review';
+    /** What the provider actually charged, when it says. It can differ from the quote. */
+    feeMinor?: bigint;
   }>;
   /** Server-to-server payout status: the authority for payout reconciliation. */
   fetchPayoutStatus(providerReference: string): Promise<{
     status: 'paid' | 'failed' | 'pending' | 'review' | 'not_found';
     failureReason?: PayoutFailureReason;
+    feeMinor?: bigint;
   }>;
   /**
    * Finds the payout a lost answer may have created. Null means the provider has none right now;
@@ -194,6 +199,7 @@ export interface PayoutPort {
     providerReference: string;
     status: 'paid' | 'failed' | 'pending' | 'review';
     failureReason?: PayoutFailureReason;
+    feeMinor?: bigint;
   } | null>;
 }
 

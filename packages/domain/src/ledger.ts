@@ -83,6 +83,19 @@ export function buildPayoutPosting({
   ];
 }
 
+/** The provider's fee on a payout is TipMe's cost, paid from its balance: never the recipient's. */
+export function buildPayoutFeePosting({
+  feeMinor,
+}: {
+  feeMinor: bigint;
+}): LedgerLine[] {
+  if (feeMinor <= 0n) throw new RangeError('payout fee must be positive');
+  return [
+    line('provider_fee_expense', 'debit', feeMinor),
+    line('provider_clearing', 'credit', feeMinor),
+  ];
+}
+
 /** A cash reward from TipMe: its own promotional cost, owed to the recipient like a tip. */
 export function buildRewardPosting({
   amountMinor,

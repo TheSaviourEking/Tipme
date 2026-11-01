@@ -47,6 +47,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payout_conflict: 'money',
   payout_unexpected: 'money',
   payout_unresolved: 'money',
+  payout_fee_short: 'money',
+  payout_held: 'money',
   provider_in_debt: 'money',
   provider_event_conflict: 'money',
   stuck_tip: 'info',
@@ -82,6 +84,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The provider paid out money for ${page} that TipMe did not ask for. Withdrawals for them are on hold until it is checked.`;
     case 'payout_unresolved':
       return `A withdrawal for ${page} has an unknown outcome. Find it at the provider and verify it; do not start it again.`;
+    case 'payout_fee_short':
+      return `The provider charged more for a withdrawal for ${page} than TipMe covered, so their balance there is short by the difference. Top it up.`;
+    case 'payout_held':
+      return `A withdrawal for ${page} was not started because their withdrawals went on hold first. Nothing was sent, and the money stays reserved.`;
     case 'provider_in_debt':
       return `The provider reports ${page}’s account owes it money. Withdrawals for them are on hold until it is settled.`;
     case 'provider_event_conflict':
@@ -168,7 +174,7 @@ export async function openIssue(
     subject: IssueSubject;
     now: Date;
   },
-): Promise<boolean> {
+): Promise<{ id: string; opened: boolean }> {
   const { subject, handle, rehearsal } = await completeSubject(
     tx,
     input.subject,
@@ -187,7 +193,14 @@ export async function openIssue(
     })
     .onConflictDoNothing({ target: issues.dedupeKey })
     .returning({ id: issues.id });
-  return inserted.length > 0;
+  if (inserted[0]) return { id: inserted[0].id, opened: true };
+  // Already there (open or not): a hold in the same transaction still needs to point at it.
+  const [existing] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(eq(issues.dedupeKey, input.dedupeKey));
+  if (!existing) throw new OperationError('ISSUE_NOT_FOUND');
+  return { id: existing.id, opened: false };
 }
 
 /** One issue per outbox alert, keyed by the alert's dedupe key, so redelivery changes nothing. */
@@ -210,12 +223,14 @@ export function openIssueFromEvent(
     if (id) subject[key] = id;
   }
   return guarded(async () =>
-    (await openIssue(db, {
-      dedupeKey: `event.${input.dedupeKey}`,
-      kind,
-      subject,
-      now: input.now ?? new Date(),
-    }))
+    (
+      await openIssue(db, {
+        dedupeKey: `event.${input.dedupeKey}`,
+        kind,
+        subject,
+        now: input.now ?? new Date(),
+      })
+    ).opened
       ? 'opened'
       : 'duplicate',
   );
@@ -243,26 +258,32 @@ export function runIssueDetectors(
        LIMIT 500`);
     for (const row of stuck.rows)
       if (
-        await openIssue(db, {
-          dedupeKey: `stuck_tip.${row.id}`,
-          kind: 'stuck_tip',
-          subject: { tipId: row.id },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `stuck_tip.${row.id}`,
+            kind: 'stuck_tip',
+            subject: { tipId: row.id },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     const unmatched = await db.execute<{ id: string }>(sql`
       SELECT u.id FROM unmatched_provider_events u
        WHERE NOT EXISTS (SELECT 1 FROM issues i WHERE i.dedupe_key = 'unmatched.' || u.id)
+         -- Parked for reconciliation, which applies it or opens payout_unexpected.
+         AND NOT (u.provider = 'bachs' AND u.reason = 'unknown_payout')
        LIMIT 500`);
     for (const row of unmatched.rows)
       if (
-        await openIssue(db, {
-          dedupeKey: `unmatched.${row.id}`,
-          kind: 'unmatched_event',
-          subject: { unmatchedId: row.id },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `unmatched.${row.id}`,
+            kind: 'unmatched_event',
+            subject: { unmatchedId: row.id },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     // Either Bachs environment: a copy holds only its own environment's accounts, and the
@@ -284,12 +305,14 @@ export function runIssueDetectors(
       .limit(500);
     for (const row of unknownAccounts)
       if (
-        await openIssue(db, {
-          dedupeKey: `payment_account_unresolved.${row.id}`,
-          kind: 'payment_account_unresolved',
-          subject: { profileId: row.profileId },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `payment_account_unresolved.${row.id}`,
+            kind: 'payment_account_unresolved',
+            subject: { profileId: row.profileId },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     const unknownAttempts = await db
@@ -315,12 +338,14 @@ export function runIssueDetectors(
       .limit(500);
     for (const row of unknownAttempts)
       if (
-        await openIssue(db, {
-          dedupeKey: `payment_attempt_unresolved.${row.id}`,
-          kind: 'payment_attempt_unresolved',
-          subject: { attemptId: row.id, tipId: row.tipId },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `payment_attempt_unresolved.${row.id}`,
+            kind: 'payment_attempt_unresolved',
+            subject: { attemptId: row.id, tipId: row.tipId },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     const recoveries = await db
@@ -336,12 +361,14 @@ export function runIssueDetectors(
       .limit(500);
     for (const row of recoveries)
       if (
-        await openIssue(db, {
-          dedupeKey: `recovery.${row.id}`,
-          kind: 'pending_recovery',
-          subject: { recoveryId: row.id, userId: row.userId },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `recovery.${row.id}`,
+            kind: 'pending_recovery',
+            subject: { recoveryId: row.id, userId: row.userId },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     return { opened };
@@ -426,6 +453,11 @@ export function autoResolveIssues(
               AND a.provider = 'bachs'
               AND a.status = 'UNKNOWN'
               AND a.provider_account_reference IS NULL)
+      UNION ALL
+      SELECT i.id, 'The withdrawal was found at the provider or reached a final state.'
+        FROM issues i JOIN payouts p ON p.id = (i.subject->>'payoutId')::uuid
+       WHERE i.status = 'open' AND i.kind IN ('payout_unresolved', 'payout_held')
+         AND (p.provider_reference IS NOT NULL OR p.status NOT IN ('REQUESTED', 'PROCESSING'))
       UNION ALL
       -- Raised after its release check finished (the misreported tip never confirms).
       SELECT i.id, 'The release check that raised it has finished.'

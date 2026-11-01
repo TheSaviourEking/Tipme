@@ -49,6 +49,8 @@ const payoutSchema = z.object({
   currency: z.string().min(1).max(32),
   destination: z.string().nullable().optional(),
   reference: z.string().nullable().optional(),
+  // The amount plus the fee actually charged, which an account's own pricing can change.
+  total_debited: z.string().nullable().optional(),
   failure_reason: z.string().nullable().optional(),
 });
 
@@ -156,6 +158,8 @@ const TRANSFER_REFUSALS: Readonly<Record<string, PayoutFailureReason>> = {
 /** Bachs's failure text is free-form: only ever an allowlisted reason leaves the adapter. */
 export function payoutFailureReason(text: string): PayoutFailureReason {
   if (/debt/i.test(text)) return 'in_debt';
+  // "Insufficient account balance" is about money, not about where it was going.
+  if (/insufficient|balance/i.test(text)) return 'other';
   if (/destination|bank|account|beneficiary/i.test(text)) return 'destination';
   return 'other';
 }
@@ -265,20 +269,38 @@ function payoutRequirements(
     .map((entry) => entry.field);
 }
 
+/** Absent when Bachs does not say or the figure makes no sense: the payout itself still stands. */
+function chargedFee(
+  payout: z.infer<typeof payoutSchema>,
+): { feeMinor: bigint } | Record<string, never> {
+  if (!payout.total_debited || payout.currency !== 'NGN') return {};
+  try {
+    const feeMinor =
+      decimalToMinor(payout.total_debited, 'NGN') -
+      decimalToMinor(payout.amount, 'NGN');
+    return feeMinor >= 0n ? { feeMinor } : {};
+  } catch {
+    return {};
+  }
+}
+
 function payoutState(payout: z.infer<typeof payoutSchema>): {
   status: 'paid' | 'failed' | 'pending' | 'review';
   failureReason?: PayoutFailureReason;
+  feeMinor?: bigint;
 } {
   const status = payout.status.toLowerCase();
-  if (status === 'completed') return { status: 'paid' };
+  const fee = chargedFee(payout);
+  if (status === 'completed') return { status: 'paid', ...fee };
   if (status === 'failed')
     return {
       status: 'failed',
       failureReason: payoutFailureReason(payout.failure_reason ?? ''),
+      ...fee,
     };
   if (status === 'pending' || status === 'processing')
-    return { status: 'pending' };
-  return { status: 'review' };
+    return { status: 'pending', ...fee };
+  return { status: 'review', ...fee };
 }
 
 export function createBachsPayouts(
@@ -542,6 +564,7 @@ export function createBachsPayouts(
                 status === 'failed'
               ? 'processing'
               : 'review',
+        ...chargedFee(payout),
       };
     },
 

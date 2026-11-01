@@ -49,6 +49,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payout_conflict: 'Withdrawal paid after failing',
   payout_unexpected: 'Unexpected payout',
   payout_unresolved: 'Withdrawal outcome unknown',
+  payout_fee_short: 'Payout fee above what was covered',
+  payout_held: 'Withdrawal waiting on a hold',
   provider_in_debt: 'Provider account in debt',
   provider_event_conflict: 'Conflicting provider event',
   stuck_tip: 'Tip stuck confirming',

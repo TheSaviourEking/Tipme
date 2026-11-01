@@ -1,5 +1,10 @@
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
-import { JOB_NAMES, JOB_QUEUE, traceCarrierSchema } from '@tipme/contracts';
+import {
+  JOB_NAMES,
+  JOB_QUEUE,
+  PAYOUT_START_EVENT,
+  traceCarrierSchema,
+} from '@tipme/contracts';
 import {
   createErrorReporter,
   createLogger,
@@ -46,6 +51,7 @@ import {
   DOMAIN_EVENT_NAMES,
   handleDomainEvent,
 } from './handlers/domain-events.js';
+import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
@@ -176,13 +182,13 @@ export async function startJobWorker(
   });
   const analyticsEnabled =
     config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
-  // Reconciliation asks the provider (never charges); it shares the fail-fast Redis client.
-  // The worker only asks the provider for statuses; without a secret it can never accept webhooks.
+  // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
+  // a secret the worker can never accept webhooks. It shares the fail-fast Redis client.
   const mockProvider = createMockProvider({
     redis: markers,
     prefix: config.QUEUE_PREFIX,
   });
-  // Read-only: the worker only asks Bachs for statuses, so it never holds a webhook secret.
+  // The worker never holds a webhook secret.
   const bachsProvider = workerBachsProvider(config);
   const defaultProvider = mockProvider;
   const providerFor = (name: string): BachsProvider | MockProvider => {
@@ -322,6 +328,7 @@ export async function startJobWorker(
               payouts_checked: payoutResult.checked,
               payouts_applied: payoutResult.applied,
               payouts_errors: payoutResult.errors,
+              payouts_unresolved: payoutResult.unresolved,
               expired: expiry.expired,
               expired_paid: expiry.paid,
               expire_errors: expiry.errors,
@@ -393,6 +400,15 @@ export async function startJobWorker(
             });
             processed.add(1, { outcome: 'rolled_up' });
             return 'rolled_up';
+          }
+          if (job.name === PAYOUT_START_EVENT) {
+            const outcome = await handlePayoutStart(job.data, {
+              db: database.db,
+              provider: providerFor,
+            });
+            logger.info({ event: 'payout.start', outcome, ...fields });
+            processed.add(1, { outcome: `payout_${outcome}` });
+            return outcome;
           }
           if (DOMAIN_EVENT_NAMES.has(job.name)) {
             const outcome = await handleDomainEvent(job.name, job.data, {

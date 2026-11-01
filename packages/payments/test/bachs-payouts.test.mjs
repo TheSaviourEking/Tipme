@@ -90,6 +90,8 @@ test('a payout posts the exact decimal amount with the account and payout.<id> k
   assert.deepEqual(result, {
     providerReference: `${ACCOUNT}:pay_4Xr9dLc0mNv7Kq2B`,
     status: 'pending',
+    // `total_debited` less the amount: the fee actually charged.
+    feeMinor: 5000n,
   });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].method, 'POST');
@@ -142,10 +144,10 @@ test('payout statuses map pending, processing, completed, failed and review', as
   ];
   for (const [status, expected] of cases) {
     const { provider, calls } = fake(jsonResponse(payoutBody({ status })));
-    assert.deepEqual(
-      await provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`),
-      expected,
-    );
+    assert.deepEqual(await provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`), {
+      ...expected,
+      feeMinor: 5000n,
+    });
     assert.equal(calls[0].method, 'GET');
     assert.equal(calls[0].path, '/v1/payouts/pay_1');
     assert.equal(calls[0].headers['X-Account-Id'], ACCOUNT);
@@ -175,6 +177,8 @@ test('a failed payout names only an allowlisted reason, never the provider text'
   const cases = [
     ['Account ORGANIZATION_IN_DEBT', 'in_debt'],
     ['Destination bank rejected the account', 'destination'],
+    ['Insufficient account balance', 'other'],
+    ['Invalid account number', 'destination'],
     ['Something else went wrong', 'other'],
   ];
   for (const [failure_reason, failureReason] of cases) {
@@ -184,7 +188,17 @@ test('a failed payout names only an allowlisted reason, never the provider text'
     assert.deepEqual(await provider.fetchPayoutStatus(`${ACCOUNT}:pay_1`), {
       status: 'failed',
       failureReason,
+      feeMinor: 5000n,
     });
+  }
+});
+
+test('an unreadable or missing total_debited reports no fee, and does not lose the payout', async () => {
+  for (const total_debited of [undefined, null, 'lots', '1400.00']) {
+    const { provider } = fake(jsonResponse(payoutBody({ total_debited }), 200));
+    const result = await provider.initiatePayout(payoutInput);
+    assert.equal(result.feeMinor, undefined, String(total_debited));
+    assert.equal(result.status, 'pending');
   }
 });
 
@@ -618,6 +632,7 @@ test('a payout is found by its reference, scoped to its account', async () => {
     assert.deepEqual(await provider.findPayoutByReference(ACCOUNT, 'p1'), {
       providerReference: `${ACCOUNT}:pay_4Xr9dLc0mNv7Kq2B`,
       ...expected,
+      feeMinor: 5000n,
     });
     assert.equal(calls[0].method, 'GET');
     assert.equal(calls[0].path, '/v1/payouts?reference=p1');
@@ -804,6 +819,15 @@ test('payout.paid and payout.failed webhooks normalize to payout events', () => 
     payoutEvent('payout.failed', { failure_reason: 'ORGANIZATION_IN_DEBT' }),
   );
   assert.equal(inDebt.event.failureReason, 'in_debt');
+});
+
+test('a payout.paid whose own status disagrees is marked as contradicted', () => {
+  const says = (data) => verify(payoutEvent('payout.paid', data)).event;
+  assert.equal(says({}).contradicted, undefined);
+  assert.equal(says({ status: 'completed' }).contradicted, undefined);
+  assert.equal(says({ status: 'paid' }).contradicted, undefined);
+  assert.equal(says({ status: 'failed' }).contradicted, true);
+  assert.equal(says({ status: 'pending' }).contradicted, true);
 });
 
 test('a payout webhook names the connected account over the platform', () => {

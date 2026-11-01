@@ -675,21 +675,25 @@ test('withdrawals through the provider', async (t) => {
   );
 
   await t.test(
-    'the same key after the bank account changed is another request, not a replay',
+    'the same key after the bank account changed replays the payout, which keeps its destination',
     async () => {
-      await ready();
+      const destinationId = await ready();
       const key = randomUUID();
-      await withdraw(bachsLike(), 100000n, key);
+      const first = await withdraw(bachsLike(), 100000n, key);
       await q(
         'UPDATE payout_destinations SET replaced_at = now() WHERE profile_id = $1',
         [TOBI.id],
       );
       await seedDestination();
-      assert.equal(
-        await errorCode(withdraw(bachsLike(), 100000n, key)),
-        'IDEMPOTENCY_CONFLICT',
-      );
+      const replay = await withdraw(bachsLike(), 100000n, key);
+      assert.equal(replay.replayed, true);
+      assert.equal(replay.payoutId, first.payoutId);
       assert.equal(await payoutCount(), 1);
+      const [row] = await q(
+        'SELECT destination_id FROM payouts WHERE id = $1',
+        [first.payoutId],
+      );
+      assert.equal(row.destination_id, destinationId);
     },
   );
 

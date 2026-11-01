@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   FEE_POLICY_V1,
+  buildPayoutFeePosting,
   buildPayoutPosting,
   canTransition,
   formatMinor,
@@ -13,7 +14,7 @@ import {
   recordedProviderName,
 } from '@tipme/contracts';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { Database, Tx } from '../client.js';
 import {
   paymentAccounts,
   paymentIntents,
@@ -22,12 +23,14 @@ import {
   payouts,
   profiles,
   providerEvents,
+  providerFeeCredits,
   tipQuotes,
   tips,
   withdrawalHolds,
 } from '../schema.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError } from './errors.js';
+import { openIssue } from './issues.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
@@ -153,6 +156,97 @@ export async function createPayout(
   );
 }
 
+/** Why a payout failed, as allowlisted by the payments package. */
+export type PayoutFailure = 'in_debt' | 'destination' | 'other';
+
+/** Pauses a recipient's withdrawals, once per issue. Requests check this under the profile lock. */
+export async function holdWithdrawals(
+  tx: Tx,
+  input: {
+    profileId: string;
+    reason: 'in_debt' | 'unexpected_payout';
+    issueId: string;
+  },
+): Promise<void> {
+  const [existing] = await tx
+    .select({ id: withdrawalHolds.id })
+    .from(withdrawalHolds)
+    .where(
+      and(
+        eq(withdrawalHolds.issueId, input.issueId),
+        isNull(withdrawalHolds.releasedAt),
+      ),
+    );
+  if (existing) return;
+  await tx.insert(withdrawalHolds).values({ id: newId(), ...input });
+}
+
+const openFeeShortIssue = (tx: Tx, payoutId: string, now: Date) =>
+  openIssue(tx, {
+    dedupeKey: `payout_fee_short.${payoutId}`,
+    kind: 'payout_fee_short',
+    subject: { payoutId },
+    now,
+  });
+
+/**
+ * The fee the provider actually charged becomes the payout's cost. Above what the top-up covered,
+ * the difference came out of the recipient's money at the provider, so a person has to look.
+ */
+async function noteActualFee(
+  tx: Tx,
+  payout: { id: string; feeTransferReference: string | null },
+  feeMinor: bigint,
+  now: Date,
+): Promise<void> {
+  await tx.update(payouts).set({ feeMinor }).where(eq(payouts.id, payout.id));
+  const [credit] = payout.feeTransferReference
+    ? await tx
+        .select({ amountMinor: providerFeeCredits.amountMinor })
+        .from(providerFeeCredits)
+        .where(
+          eq(providerFeeCredits.transferReference, payout.feeTransferReference),
+        )
+    : [];
+  if (feeMinor > (credit?.amountMinor ?? 0n))
+    await openFeeShortIssue(tx, payout.id, now);
+}
+
+/** Records the fee an answer from the provider reported. Only a payout through an account has one. */
+export function recordPayoutFee(
+  db: Database,
+  input: { payoutId: string; feeMinor: bigint; now: Date },
+): Promise<void> {
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const [payout] = await tx
+        .select()
+        .from(payouts)
+        .where(eq(payouts.id, input.payoutId))
+        .for('update');
+      if (!payout?.accountReference || payout.status === 'FAILED') return;
+      await noteActualFee(tx, payout, input.feeMinor, input.now);
+    }),
+  );
+}
+
+/** Whether the provider itself is checking this payout, which the recipient is told. */
+export function setPayoutReview(
+  db: Database,
+  input: { payoutId: string; inReview: boolean; now: Date },
+): Promise<void> {
+  return guarded(async () => {
+    await db
+      .update(payouts)
+      .set({
+        providerReviewAt: input.inReview
+          ? sql`COALESCE(${payouts.providerReviewAt}, ${input.now.toISOString()}::timestamptz)`
+          : null,
+      })
+      .where(eq(payouts.id, input.payoutId));
+  });
+}
+
 const STATUS: Record<'processing' | 'paid' | 'failed', PayoutStatus> = {
   processing: 'PROCESSING',
   paid: 'PAID',
@@ -166,10 +260,15 @@ export async function recordPayoutOutcome(
     payoutId: string;
     provider: string;
     providerEventId: string;
-    providerReference: string;
+    /** Null when the provider refused the payout, so there is none to refer to. */
+    providerReference: string | null;
     outcome: 'processing' | 'paid' | 'failed';
     signatureVerified: true;
     payload: unknown;
+    /** Why it failed, when the provider's answer says. A debt pauses withdrawals. */
+    failureReason?: PayoutFailure;
+    /** The fee the provider actually charged, when its answer says. */
+    actualFeeMinor?: bigint;
     traceId?: string | null;
     now?: Date;
   },
@@ -178,6 +277,8 @@ export async function recordPayoutOutcome(
   payoutStatus: string;
 }> {
   const traceId = input.traceId ?? activeTraceId();
+  // The stored name, whichever adapter (bachs-live, bachs-sandbox) reports it.
+  const provider = recordedProviderName(input.provider);
   return guarded(() =>
     db.transaction(async (tx) => {
       const [payout] = await tx
@@ -191,7 +292,7 @@ export async function recordPayoutOutcome(
         .insert(providerEvents)
         .values({
           id: eventRowId,
-          provider: input.provider,
+          provider,
           providerEventId: input.providerEventId,
           eventType: `payout.${input.outcome}`,
           signatureVerified: input.signatureVerified,
@@ -242,8 +343,9 @@ export async function recordPayoutOutcome(
         .update(payouts)
         .set({
           status: to,
-          provider: input.provider,
-          providerReference: input.providerReference,
+          provider,
+          providerReference:
+            input.providerReference ?? payout.providerReference,
           ...(to === 'PAID' ? { paidAt: now } : {}),
         })
         .where(eq(payouts.id, payout.id));
@@ -256,6 +358,12 @@ export async function recordPayoutOutcome(
         providerEventId: eventRowId,
         traceId,
       });
+      if (
+        to !== 'FAILED' &&
+        payout.accountReference &&
+        input.actualFeeMinor !== undefined
+      )
+        await noteActualFee(tx, payout, input.actualFeeMinor, now);
       if (to === 'PAID') {
         await postLedgerTransaction(tx, {
           operationType: 'payout',
@@ -278,6 +386,35 @@ export async function recordPayoutOutcome(
             amountMinor: formatMinor(payout.amountMinor),
           },
         });
+        // A payout through an account costs TipMe the fee; the pretend provider has no such cost.
+        const feeMinor = input.actualFeeMinor ?? payout.feeMinor ?? 0n;
+        if (payout.accountReference && feeMinor > 0n) {
+          await postLedgerTransaction(tx, {
+            operationType: 'payout',
+            operationKey: `payout-fee.${payout.id}`,
+            currency: payout.currency,
+            payoutId: payout.id,
+            traceId,
+            lines: buildPayoutFeePosting({ feeMinor }),
+          });
+          // The top-up is used up only now: a payout that fails leaves it for the next one.
+          const spent = payout.feeTransferReference
+            ? await tx
+                .update(providerFeeCredits)
+                .set({ usedByPayoutId: payout.id })
+                .where(
+                  and(
+                    eq(
+                      providerFeeCredits.transferReference,
+                      payout.feeTransferReference,
+                    ),
+                    isNull(providerFeeCredits.usedByPayoutId),
+                  ),
+                )
+                .returning({ reference: providerFeeCredits.transferReference })
+            : [];
+          if (spent.length === 0) await openFeeShortIssue(tx, payout.id, now);
+        }
       }
       if (to === 'FAILED') {
         // Release the tips so they can be paid out again.
@@ -290,6 +427,19 @@ export async function recordPayoutOutcome(
           aggregateId: payout.id,
           payload: { payoutId: payout.id, profileId: payout.profileId },
         });
+        if (input.failureReason === 'in_debt') {
+          const issue = await openIssue(tx, {
+            dedupeKey: `provider_in_debt.${payout.id}`,
+            kind: 'provider_in_debt',
+            subject: { payoutId: payout.id },
+            now,
+          });
+          await holdWithdrawals(tx, {
+            profileId: payout.profileId,
+            reason: 'in_debt',
+            issueId: issue.id,
+          });
+        }
       }
       return finish('applied', to);
     }),
@@ -578,14 +728,14 @@ export async function requestWithdrawal(
   const traceId = input.traceId ?? activeTraceId();
   const route = await guarded(() => payoutRoute(db, input));
   const destinationId = route.destination?.id ?? null;
-  // The pretend provider's payouts have no bank, and keep the key they always had.
+  // Not the bank account: a retry after a bank change replays the payout in flight, which keeps the
+  // destination it recorded. The new account is for the next withdrawal.
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify([
         'withdrawal',
         input.profileId,
         input.amountMinor.toString(),
-        ...(destinationId ? [destinationId] : []),
       ]),
     )
     .digest('hex');

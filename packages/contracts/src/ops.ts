@@ -55,6 +55,8 @@ export const ISSUE_KINDS = [
   'payout_conflict',
   'payout_unexpected',
   'payout_unresolved',
+  'payout_fee_short',
+  'payout_held',
   'provider_in_debt',
   'provider_event_conflict',
   'stuck_tip',
