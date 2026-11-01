@@ -155,7 +155,8 @@ export interface PayoutPort {
   }>;
   /**
    * Where a destination's review stands now. An add can replay an old answer (its key is fixed), and
-   * review can end long after it. A destination the provider no longer has is 'rejected'.
+   * review can end long after it. Only a stated rejection is 'rejected'; a failed read, including
+   * not found, throws and says nothing about the destination.
    */
   payoutDestinationStatus(
     accountRef: string,

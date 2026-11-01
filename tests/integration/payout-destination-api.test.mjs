@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { PaymentAccountsController } from '../../apps/api/dist/profiles/payment-accounts.controller.js';
 import { PayoutDestinationController } from '../../apps/api/dist/profiles/payout-destination.controller.js';
+import { RateLimitGuard } from '../../apps/api/dist/checkout/rate-limit.guard.js';
 import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js';
+import * as ops from '../../packages/database/dist/index.js';
 import {
   beginPaymentAccountCreation,
   createPaymentIntent,
@@ -24,6 +26,7 @@ import {
   queuedMail,
 } from '../../packages/database/dist/test-support.js';
 import { TOBI } from '../../packages/database/test/integration/helpers.mjs';
+import { createHash, randomBytes } from 'node:crypto';
 import { browserHeaders, startStack, uniquePrefix } from './helpers.mjs';
 
 const sealing = mailSealing(Buffer.alloc(32, 7));
@@ -673,7 +676,10 @@ test('a rejected destination shows as rejected and can be replaced', async (t) =
   const controller = controllerFor(database, provider);
   const rejected = await addBank(database, controller);
   assert.equal(rejected.data.status, 'rejected');
-  assert.equal((await controller.current(auth)).data.status, 'rejected');
+  assert.equal(
+    (await controller.current(auth)).data.destination.status,
+    'rejected',
+  );
   assert.equal(
     (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
     'no_destination',
@@ -730,7 +736,7 @@ test('a destination under review becomes usable when the provider says so, by an
     },
   };
   assert.equal(
-    (await controllerFor(database, down).current(auth)).data.status,
+    (await controllerFor(database, down).current(auth)).data.destination.status,
     'pending_review',
   );
 
@@ -757,7 +763,7 @@ test('a read never brings a replaced or rejected account back', async (t) => {
   });
   await sweepPayoutSetup(database.db, { provider });
   const { data } = await controllerFor(database, provider).current(auth);
-  assert.equal(data.status, 'rejected');
+  assert.equal(data.destination.status, 'rejected');
 });
 
 test("a bank added on the provider's hosted page is not usable: only this card makes one", async (t) => {
@@ -920,6 +926,16 @@ test('through HTTP: signed-in and CSRF only, and the request log holds no accoun
     last4: '6789',
   });
 
+  const read = await send(
+    'GET',
+    '/v1/me/payout-destination',
+    undefined,
+    cookie,
+  );
+  assert.equal(read.status, 200);
+  assert.match(read.headers.get('cache-control') ?? '', /no-store/);
+  assert.equal((await read.json()).data.destination.status, 'usable');
+
   // A bad number's validation error names the field, never the value.
   const bad = await send(
     'POST',
@@ -956,4 +972,471 @@ test('the worker runs the sweep on a copy that runs the provider', async (t) => 
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   assert.ok(stack.logs.some((entry) => entry.event === 'payout_setup.swept'));
+});
+
+const HOLD_HOURS = 72;
+const ATTACKER = 'attacker@example.test';
+
+const assertHeld = async (promise) =>
+  assert.rejects(promise, (error) => {
+    assert.equal(error.getStatus?.() ?? error.status, 409);
+    assert.match(
+      JSON.stringify(error.getResponse?.() ?? error.code),
+      /BANK_CHANGE_HELD/,
+    );
+    return true;
+  });
+
+async function moveEmailByChange(database) {
+  await ops.requestEmailChangeCode(database.db, sealing, {
+    userId: TOBI_USER,
+    email: ATTACKER,
+    secret: SECRET,
+  });
+  const code = (await queuedMail(database.db, sealing, { limit: 50 })).find(
+    (mail) => mail.type === 'email_change_code',
+  ).data.code;
+  const moved = await ops.changeEmail(database.db, sealing, {
+    userId: TOBI_USER,
+    email: ATTACKER,
+    code,
+    secret: SECRET,
+    keepSessionId: randomUUID(),
+  });
+  assert.equal(moved.status, 'ok');
+}
+
+const changedAt = async ({ rows }) =>
+  (
+    await rows(`SELECT email_changed_at AS at FROM users WHERE id = $1`, [
+      TOBI_USER,
+    ])
+  )[0].at;
+
+test('the wait is one named period of 72 hours', () => {
+  assert.equal(ops.BANK_CHANGE_HOLD_MS, HOLD_HOURS * 3_600_000);
+});
+
+test('a stolen session: after an email change no code, no bank, and the old bank still pays', async (t) => {
+  const database = await setUp(t);
+  await seedPaidTip(database);
+  const provider = fakeBachs();
+  const controller = controllerFor(database, provider);
+  await addBank(database, controller);
+  const added = provider.named('addPayoutDestination').length;
+  await database.pool.query(`DELETE FROM email_codes`);
+  await moveEmailByChange(database);
+
+  await assertHeld(controller.requestCode(auth));
+  assert.equal(
+    (await queuedMail(database.db, sealing, { limit: 50 })).filter(
+      (mail) => mail.type === 'payout_destination_code' && mail.to === ATTACKER,
+    ).length,
+    0,
+  );
+  await assertHeld(
+    controller.update(auth, {
+      bankCode: '058',
+      accountNumber: '9999999999',
+      accountName: 'ATTACKER',
+      emailCode: '123456',
+    }),
+  );
+  assert.equal(provider.named('addPayoutDestination').length, added);
+
+  const { data } = await controller.current(auth);
+  assert.equal(data.destination.last4, '6789');
+  assert.equal(
+    new Date(data.bankChangesFrom).getTime(),
+    (await changedAt(database)).getTime() + HOLD_HOURS * 3_600_000,
+  );
+
+  const { payoutId } = await requestWithdrawal(database.db, {
+    profileId: TOBI,
+    amountMinor: 200000n,
+    idempotencyKey: randomUUID(),
+    provider,
+  });
+  const [row] = await database.rows(
+    `SELECT d.account_last4 AS last4 FROM payouts p
+       JOIN payout_destinations d ON d.id = p.destination_id WHERE p.id = $1`,
+    [payoutId],
+  );
+  assert.equal(row.last4, '6789');
+});
+
+test('the wait applies to a first add, is checked again in the save, and ends', async (t) => {
+  const database = await setUp(t);
+  const controller = controllerFor(database, fakeBachs());
+  const code = await freshCode(database, controller);
+  await moveEmailByChange(database);
+  // A code issued before the move, for an address no longer the account's, is no way round.
+  await assertHeld(
+    controller.update(auth, {
+      bankCode: '058',
+      accountNumber: NUMBER,
+      accountName: 'TOBI ADEYEMI',
+      emailCode: code,
+    }),
+  );
+  const direct = {
+    sealing,
+    profileId: TOBI,
+    provider: 'bachs',
+    destinationRef: 'pd_1',
+    bankCode: '058',
+    bankName: 'Guaranty Trust Bank',
+    last4: '6789',
+    status: 'usable',
+  };
+  await assert.rejects(setPayoutDestination(database.db, direct), {
+    code: 'BANK_CHANGE_HELD',
+  });
+
+  const set = (hours) =>
+    database.pool.query(
+      `UPDATE users SET email_changed_at = now() - make_interval(hours => $1) WHERE id = $2`,
+      [hours, TOBI_USER],
+    );
+  await set(HOLD_HOURS - 1);
+  await assert.rejects(setPayoutDestination(database.db, direct), {
+    code: 'BANK_CHANGE_HELD',
+  });
+  await set(HOLD_HOURS + 1);
+  assert.equal((await controller.current(auth)).data.bankChangesFrom, null);
+  const { data } = await addBank(database, controller);
+  assert.equal(data.status, 'usable');
+});
+
+test('every path that changes a sign-in email starts the wait; repeating the same address does not', async (t) => {
+  const database = await setUp(t);
+  const verifyToken = async (email) => {
+    const token = randomBytes(32).toString('base64url');
+    await database.pool.query(
+      `INSERT INTO email_tokens (token_sha256, user_id, email, purpose, expires_at)
+       VALUES ($1, $2, $3, 'verify', now() + interval '1 hour')`,
+      [createHash('sha256').update(token).digest('hex'), TOBI_USER, email],
+    );
+    return token;
+  };
+  const clear = () =>
+    database.pool.query(`UPDATE users SET email_changed_at = NULL`);
+  const paths = {
+    changeEmail: () => moveEmailByChange(database),
+    confirmEmail: async () =>
+      assert.equal(
+        await ops.confirmEmail(database.db, {
+          token: await verifyToken('legacy-a@example.test'),
+        }),
+        'confirmed',
+      ),
+    confirmEmailForUser: async () =>
+      assert.equal(
+        (
+          await ops.confirmEmailForUser(database.db, {
+            token: await verifyToken('legacy-b@example.test'),
+          })
+        ).status,
+        'confirmed',
+      ),
+    setAccountEmail: async () =>
+      assert.equal(
+        await ops.setAccountEmail(database.db, {
+          handle: 'tobi',
+          email: 'scripted@example.test',
+          reason: 'Support case proven by the owner',
+        }),
+        'set',
+      ),
+    'recovery completion (user or staff)': async () => {
+      await database.pool.query(
+        `INSERT INTO email_recoveries
+           (id, user_id, new_email, started_by, effective_at, created_at)
+         VALUES ($1, $2, 'recovered@example.test', 'staff', now() - interval '1 minute', now())`,
+        [randomUUID(), TOBI_USER],
+      );
+      assert.equal(
+        await ops.completeDueRecoveries(database.db, sealing, new Date()),
+        1,
+      );
+    },
+  };
+  for (const [name, run] of Object.entries(paths)) {
+    await clear();
+    await run();
+    assert.ok(await changedAt(database), `${name} must start the wait`);
+  }
+
+  await clear();
+  assert.equal(
+    await ops.setAccountEmail(database.db, {
+      handle: 'tobi',
+      email: 'recovered@example.test',
+      reason: 'Support case proven by the owner',
+    }),
+    'set',
+  );
+  assert.equal(await changedAt(database), null, 'same address, no change');
+});
+
+test('a read that says not found is unknown: never rejected, and a good account stays', async (t) => {
+  const database = await setUp(t);
+  const logs = [];
+  let read = async () => 'usable';
+  const provider = fakeBachs({
+    payoutDestinationStatus: (...args) => read(...args),
+  });
+  const controller = controllerFor(database, provider, logs);
+  await addBank(database, controller);
+  read = async () => {
+    throw new Error('not found');
+  };
+  const { data } = await addBank(database, controller, {
+    accountNumber: '9999999999',
+  });
+  assert.equal(data.status, 'pending_review');
+  assert.ok(logs.some((entry) => entry.step === 'read'));
+  read = async () => 'usable';
+  assert.equal(
+    (await controller.current(auth)).data.destination.status,
+    'usable',
+  );
+});
+
+test('a rejected replacement is refused and the usable account stays current, with no notice', async (t) => {
+  const database = await setUp(t);
+  let read = async () => 'usable';
+  const provider = fakeBachs({
+    payoutDestinationStatus: (...args) => read(...args),
+  });
+  const controller = controllerFor(database, provider);
+  await addBank(database, controller);
+  read = async () => 'rejected';
+  await assert.rejects(
+    addBank(database, controller, { accountNumber: '9999999999' }),
+    (error) => {
+      assert.equal(error.getStatus?.() ?? 422, 422);
+      assert.match(
+        JSON.stringify(error.getResponse?.() ?? error.code),
+        /PAYOUT_DESTINATION_REFUSED/,
+      );
+      return true;
+    },
+  );
+  assert.deepEqual(
+    await database.rows(
+      `SELECT account_last4 AS last4, status, replaced_at FROM payout_destinations`,
+    ),
+    [{ last4: '6789', status: 'usable', replaced_at: null }],
+  );
+  assert.equal((await notices(database)).length, 0);
+  assert.equal(
+    (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
+    'ready',
+  );
+});
+
+test('a pending replacement still takes the slot', async (t) => {
+  const database = await setUp(t);
+  let read = async () => 'usable';
+  const provider = fakeBachs({
+    payoutDestinationStatus: (...args) => read(...args),
+  });
+  const controller = controllerFor(database, provider);
+  await addBank(database, controller);
+  read = async () => 'pending_review';
+  const { data } = await addBank(database, controller, {
+    accountNumber: '9999999999',
+  });
+  assert.deepEqual(data, {
+    status: 'pending_review',
+    bankName: 'Guaranty Trust Bank',
+    last4: '9999',
+  });
+  assert.equal((await notices(database)).length, 1);
+});
+
+test('a failed read records pending, whatever the add replayed', async (t) => {
+  const database = await setUp(t);
+  const provider = fakeBachs({
+    payoutDestinationStatus: async () => {
+      throw new Error('down');
+    },
+  });
+  const { data } = await addBank(database, controllerFor(database, provider));
+  assert.equal(data.status, 'pending_review');
+});
+
+test('sending a rejected account again never raises it, read or no read', async (t) => {
+  const database = await setUp(t);
+  let read = async () => 'rejected';
+  const provider = fakeBachs({
+    payoutDestinationStatus: (...args) => read(...args),
+  });
+  const controller = controllerFor(database, provider);
+  assert.equal((await addBank(database, controller)).data.status, 'rejected');
+  read = async () => {
+    throw new Error('down');
+  };
+  assert.equal((await addBank(database, controller)).data.status, 'rejected');
+  read = async () => 'usable';
+  assert.equal((await addBank(database, controller)).data.status, 'rejected');
+});
+
+test('no onboarding link until manual payouts are recorded', async (t) => {
+  const database = await setUp(t, { manual: false });
+  await database.pool.query(
+    `UPDATE payment_accounts SET status = 'ONBOARDING', charges_enabled = false`,
+  );
+  const links = [];
+  const pending = async (reference) => ({
+    accountReference: reference,
+    active: false,
+    ngnCardCollectionStatus: 'pending',
+    bankTransferStatus: 'pending',
+    feeCollector: 'platform',
+    requirementsDue: ['payout_destination'],
+    holdsLocalCurrency: true,
+  });
+  const createOnboardingLink = async () => {
+    links.push('made');
+    return 'https://hosted.example/x';
+  };
+  const failing = fakeBachs({
+    setManualPayouts: async () => {
+      throw new Error('down');
+    },
+    getRecipientAccount: pending,
+    createOnboardingLink,
+  });
+  await assert.rejects(onboard(database, failing), { status: 503 });
+  assert.deepEqual(links, []);
+
+  const working = fakeBachs({
+    getRecipientAccount: pending,
+    createOnboardingLink,
+  });
+  const { data } = await onboard(database, working);
+  assert.equal(data.onboardingUrl, 'https://hosted.example/x');
+  assert.ok(await manualAt(database));
+});
+
+test('resolving needs a confirmed email and a payment account', async (t) => {
+  const database = await setUp(t);
+  const provider = fakeBachs();
+  const controller = controllerFor(database, provider);
+  const body = { bankCode: '058', accountNumber: NUMBER };
+  await database.pool.query(`DELETE FROM payment_accounts`);
+  await assert.rejects(controller.resolve(auth, body), { status: 409 });
+  await database.pool.query(
+    `UPDATE users SET email_verified_at = NULL WHERE id = $1`,
+    [TOBI_USER],
+  );
+  await assert.rejects(controller.resolve(auth, body), { status: 409 });
+  assert.equal(provider.named('resolveBankAccount').length, 0);
+});
+
+/** The rate limit guard, on a fake Redis that counts or breaks. */
+function guardFor(route, { broken = false } = {}) {
+  const counts = new Map();
+  const redis = {
+    multi() {
+      let key;
+      const chain = {
+        incr: (k) => ((key = k), chain),
+        expire: () => chain,
+        exec: async () => {
+          if (broken) throw new Error('redis down');
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+          return [
+            [null, counts.get(key)],
+            [null, 1],
+          ];
+        },
+      };
+      return chain;
+    },
+  };
+  const guard = new RateLimitGuard(
+    { get: () => route },
+    redis,
+    {
+      QUEUE_PREFIX: 'guard-test',
+      RATE_LIMIT_BANK_RESOLVE_PER_HOUR: 100000,
+      RATE_LIMIT_BANK_READ_PER_MIN: 3,
+      RATE_LIMIT_AUTH_PER_HOUR: 100000,
+    },
+    { warn() {}, info() {}, error() {} },
+  );
+  const call = (ip, userId = TOBI_USER) =>
+    guard.canActivate({
+      getHandler: () => undefined,
+      switchToHttp: () => ({
+        getRequest: () => ({ ip, auth: { userId } }),
+      }),
+    });
+  return { call, counts };
+}
+
+test('resolving is limited to 10 a day per person, however many addresses they use', async () => {
+  const { call } = guardFor('bank_resolve');
+  for (let i = 0; i < 10; i += 1) assert.equal(await call(`10.0.0.${i}`), true);
+  await assert.rejects(
+    call('10.0.1.1'),
+    (error) => error.retryAfterSeconds > 0,
+  );
+  assert.equal(await call('10.0.1.2', 'someone-else'), true);
+});
+
+test('resolving has its own bucket, apart from sign-in', async () => {
+  const { call, counts } = guardFor('bank_resolve');
+  await call('10.0.0.1');
+  const keys = [...counts.keys()];
+  assert.ok(keys.length >= 2);
+  assert.ok(keys.every((key) => key.includes(':bank_resolve:')));
+});
+
+test('if Redis errors, resolving fails closed and sign-in stays open', async () => {
+  await assert.rejects(
+    guardFor('bank_resolve', { broken: true }).call('10.0.0.1'),
+    {
+      status: 503,
+    },
+  );
+  assert.equal(
+    await guardFor('auth_verify', { broken: true }).call('10.0.0.1'),
+    true,
+  );
+  assert.equal(
+    await guardFor('bank_read', { broken: true }).call('10.0.0.1'),
+    true,
+  );
+});
+
+test('reads are limited per person', async () => {
+  const { call } = guardFor('bank_read');
+  for (let i = 0; i < 3; i += 1) await call('10.0.0.1');
+  await assert.rejects(call('10.0.0.9'));
+  assert.equal(await call('10.0.0.1', 'someone-else'), true);
+});
+
+test('the bank list is cached; a failure is not', async (t) => {
+  const database = await setUp(t);
+  let fail = true;
+  const provider = fakeBachs();
+  const list = provider.listBanks;
+  provider.listBanks = async (...args) => {
+    if (fail) throw new Error('down');
+    return list(...args);
+  };
+  const controller = controllerFor(database, provider);
+  await assert.rejects(controller.banks(), { status: 503 });
+  fail = false;
+  await controller.banks();
+  await controller.banks();
+  await addBank(database, controller);
+  assert.equal(provider.named('listBanks').length, 1);
+  t.mock.method(Date, 'now', () => new Date().getTime() + 25 * 3_600_000);
+  await controller.banks();
+  assert.equal(provider.named('listBanks').length, 2);
 });

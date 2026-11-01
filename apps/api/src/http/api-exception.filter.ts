@@ -55,7 +55,9 @@ const messages: Record<ApiErrorCode, string> = {
   PAYOUT_DESTINATION_REFUSED:
     'The payment provider could not accept this bank account.',
   PAYOUT_PROVIDER_UNAVAILABLE:
-    'We can’t check your balance with our payment partner right now. Try again in a few minutes.',
+    'We can’t reach our payment partner right now. Try again in a few minutes.',
+  BANK_CHANGE_HELD:
+    'Your sign-in email changed recently, so your bank account can’t be added or changed yet.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
@@ -142,6 +144,11 @@ const operationErrors: Partial<
     status: 409,
     code: 'PAYOUT_DESTINATION_NEEDED',
   },
+  PAYOUT_DESTINATION_REFUSED: {
+    status: 422,
+    code: 'PAYOUT_DESTINATION_REFUSED',
+  },
+  BANK_CHANGE_HELD: { status: 409, code: 'BANK_CHANGE_HELD' },
   PAYOUT_PROVIDER_UNAVAILABLE: {
     status: 503,
     code: 'PAYOUT_PROVIDER_UNAVAILABLE',

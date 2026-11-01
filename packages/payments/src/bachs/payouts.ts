@@ -494,20 +494,15 @@ export function createBachsPayouts(
     async payoutDestinationStatus(accountRef, destinationRef) {
       checkedIdentifier(accountRef, 'account reference');
       checkedIdentifier(destinationRef, 'payout destination');
-      try {
-        return destinationStatus(
-          await client.request({
-            method: 'GET',
-            path: `/v1/payouts/destinations/${encodeURIComponent(destinationRef)}`,
-            accountReference: accountRef,
-            schema: destinationSchema,
-          }),
-        );
-      } catch (error) {
-        if (error instanceof BachsApiError && error.statusCode === 404)
-          return 'rejected';
-        throw error;
-      }
+      // A 404 throws like any failed read: it can mean a lagging read, not a rejected account.
+      return destinationStatus(
+        await client.request({
+          method: 'GET',
+          path: `/v1/payouts/destinations/${encodeURIComponent(destinationRef)}`,
+          accountReference: accountRef,
+          schema: destinationSchema,
+        }),
+      );
     },
 
     payoutBalance(accountRef, currency) {

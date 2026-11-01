@@ -29,6 +29,29 @@ export const needsBankAccount = (requirementsDue: readonly string[]) =>
 export const onboardingRequirements = (requirementsDue: readonly string[]) =>
   requirementsDue.filter((item) => item !== BANK_ACCOUNT_REQUIREMENT);
 
+const REQUIREMENT_WORDS: readonly (readonly [RegExp, string])[] = [
+  [/id_number|national_id|\bnin\b|\bbvn\b/i, 'your ID number'],
+  [/document|verification|selfie/i, 'your ID document'],
+  [/dob|birth/i, 'your date of birth'],
+  [/name/i, 'your name'],
+  [/address/i, 'your address'],
+  [/phone/i, 'your phone number'],
+  [/email/i, 'your email'],
+  [/business|company/i, 'business details'],
+  [/tos|terms|agreement/i, 'accepting the terms'],
+];
+
+/** What setup still wants, in words: the provider's field names are never shown. */
+export const requirementWords = (requirementsDue: readonly string[]) => [
+  ...new Set(
+    onboardingRequirements(requirementsDue).map(
+      (item) =>
+        REQUIREMENT_WORDS.find(([pattern]) => pattern.test(item))?.[1] ??
+        'other details',
+    ),
+  ),
+];
+
 /**
  * Everything that stops the owner earning, most urgent first, in their words. Owners otherwise
  * find out only when a supporter is turned away ("Not sent yet"), which they never see.

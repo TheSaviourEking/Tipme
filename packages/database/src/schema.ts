@@ -93,6 +93,8 @@ export const users = pgTable(
     recoveryEmailVerifiedAt: timestamp('recovery_email_verified_at', {
       withTimezone: true,
     }),
+    // When the sign-in address last moved. Bank changes wait after it (BANK_CHANGE_HOLD_MS).
+    emailChangedAt: timestamp('email_changed_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: createdAt(),
   },

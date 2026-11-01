@@ -1,5 +1,5 @@
 {
-  "id": "6181cea0-106a-4105-9c7f-af5594743424",
+  "id": "f529dc80-491d-4bab-baa7-2fa6d979e60a",
   "prevId": "8f6c80f0-3142-479d-9fa6-19bef947f42c",
   "version": "7",
   "dialect": "postgresql",
@@ -5992,6 +5992,12 @@
         },
         "recovery_email_verified_at": {
           "name": "recovery_email_verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_changed_at": {
+          "name": "email_changed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

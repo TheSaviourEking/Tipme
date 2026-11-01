@@ -160,10 +160,10 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | PUT | `/v1/me/page/state` | yes | – | – |
 | GET | `/v1/me/payment-account` | n/a (read) | – | – |
 | POST | `/v1/me/payment-account/onboarding` | yes | `intents` | – |
-| GET | `/v1/me/payout-destination` | n/a (read) | – | – |
+| GET | `/v1/me/payout-destination` | n/a (read) | `bank_read` | – |
 | PUT | `/v1/me/payout-destination` | yes | `auth_verify` | – |
 | POST | `/v1/me/payout-destination/code` | yes | `auth_code` | – |
-| POST | `/v1/me/payout-destination/resolve` | yes | `auth_verify` | – |
+| POST | `/v1/me/payout-destination/resolve` | yes | `bank_resolve` | – |
 | PUT | `/v1/me/phone` | yes | `auth_verify` | – |
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
@@ -187,7 +187,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/me/tips/{tipId}/message/report` | yes | – | – |
 | GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
-| GET | `/v1/payout-banks` | n/a (read) | – | – |
+| GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
 #### Signed-in staff, before an admin grant
 

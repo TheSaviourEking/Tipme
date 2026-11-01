@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   Inject,
   Post,
@@ -13,6 +14,7 @@ import type {
   PayoutBank,
   PayoutBankResolveRequest,
   PayoutBankResolveResponse,
+  PayoutDestinationState,
   PayoutDestinationUpdateRequest,
   PayoutDestinationView,
 } from '@tipme/contracts';
@@ -25,6 +27,7 @@ import {
   getBachsAccountRecoveryTarget,
   getPaymentAccountRecipient,
   getPayoutDestination,
+  payoutBankChangesFrom,
   refreshPendingDestination,
   requestPayoutDestinationCode,
   setPayoutDestination,
@@ -52,6 +55,10 @@ import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { LOGGER } from '../tokens.js';
 
+// Banks rarely change, and each read of the list is a provider call that shares a rate limit with
+// payouts. A refused or new bank code is the provider's to answer, so a day's staleness is harmless.
+const BANK_LIST_TTL_MS = 24 * 60 * 60 * 1000;
+
 type DestinationProvider = Pick<
   PayoutPort,
   | 'listBanks'
@@ -70,6 +77,8 @@ type DestinationProvider = Pick<
 @Controller('v1')
 @UseGuards(SessionGuard, CsrfGuard)
 export class PayoutDestinationController {
+  private banksCache: { banks: PayoutBank[]; at: number } | null = null;
+
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
@@ -80,6 +89,7 @@ export class PayoutDestinationController {
   ) {}
 
   @Get('payout-banks')
+  @RateLimit('bank_read')
   async banks(): Promise<ApiDataResponse<PayoutBank[]>> {
     return { data: await this.listBanks() };
   }
@@ -87,13 +97,17 @@ export class PayoutDestinationController {
   @Post('me/payout-destination/resolve')
   @HttpCode(200)
   // Each lookup costs a provider call, and repeated ones could map strangers' accounts to names.
-  @RateLimit('auth_verify')
+  @RateLimit('bank_resolve')
   async resolve(
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(payoutBankResolveSchema))
     body: PayoutBankResolveRequest,
   ): Promise<ApiDataResponse<PayoutBankResolveResponse>> {
-    await this.recipient(auth.userId);
+    const { profileId, verifiedEmail } = await this.recipient(auth.userId);
+    if (!verifiedEmail)
+      throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
+    const { reference } = await this.accountRoute(profileId);
+    if (!reference) throw new CodedHttpException(409, 'PAYOUT_SETUP_NEEDED');
     const resolved = await this.calling('resolve', () =>
       this.provider.resolveBankAccount(body),
     );
@@ -117,6 +131,8 @@ export class PayoutDestinationController {
     );
     if (status === 'no_email')
       throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
+    if (status === 'held')
+      throw new CodedHttpException(409, 'BANK_CHANGE_HELD');
     if (status === 'rate_limited')
       throw new CodedHttpException(429, 'TOO_MANY_CODES');
     if (status === 'locked')
@@ -125,9 +141,11 @@ export class PayoutDestinationController {
   }
 
   @Get('me/payout-destination')
+  @Header('Cache-Control', 'no-store')
+  @RateLimit('bank_read')
   async current(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<PayoutDestinationView | null>> {
+  ): Promise<ApiDataResponse<PayoutDestinationState>> {
     const { profileId } = await this.recipient(auth.userId);
     const { reference } = await this.accountRoute(profileId);
     await refreshPendingDestination(this.database.db, this.provider, {
@@ -135,7 +153,15 @@ export class PayoutDestinationController {
       accountReference: reference,
       log: (entry) => this.logger.warn(entry),
     });
-    return { data: await this.view(profileId) };
+    const changesFrom = await payoutBankChangesFrom(this.database.db, {
+      userId: auth.userId,
+    });
+    return {
+      data: {
+        destination: await this.view(profileId),
+        bankChangesFrom: changesFrom?.toISOString() ?? null,
+      },
+    };
   }
 
   @Put('me/payout-destination')
@@ -166,6 +192,8 @@ export class PayoutDestinationController {
       throw new CodedHttpException(429, 'SIGN_IN_LOCKED');
     if (checked === 'no_email')
       throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
+    if (checked === 'held')
+      throw new CodedHttpException(409, 'BANK_CHANGE_HELD');
     if (checked !== 'ok') throw new CodedHttpException(400, 'CODE_INVALID');
 
     const added = await this.calling('add', () =>
@@ -175,8 +203,9 @@ export class PayoutDestinationController {
         bankCode: body.bankCode,
       }),
     );
-    // The add's key is fixed per account number, so its answer can be an old one replayed.
-    let status = added.status;
+    // The add's key is fixed per account number, so its answer can be an old one replayed: it
+    // never decides. Unread means under review, and the sweep or the next visit reads it again.
+    let status: PayoutDestinationView['status'] = 'pending_review';
     try {
       status = await this.provider.payoutDestinationStatus(
         reference,
@@ -212,8 +241,15 @@ export class PayoutDestinationController {
     );
   }
 
-  private listBanks(): Promise<PayoutBank[]> {
-    return this.calling('banks', () => this.provider.listBanks('NG'));
+  private async listBanks(): Promise<PayoutBank[]> {
+    const now = Date.now();
+    if (this.banksCache && now - this.banksCache.at < BANK_LIST_TTL_MS)
+      return this.banksCache.banks;
+    const banks = await this.calling('banks', () =>
+      this.provider.listBanks('NG'),
+    );
+    if (banks.length > 0) this.banksCache = { banks, at: now };
+    return banks;
   }
 
   /** The account destinations hang from; the pretend provider has none, so the profile stands in. */

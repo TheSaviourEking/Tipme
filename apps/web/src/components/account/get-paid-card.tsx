@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import type {
   PayoutBank,
   PayoutBankResolveResponse,
+  PayoutDestinationState,
   PayoutDestinationView,
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
@@ -26,6 +27,8 @@ function messageFor(code: string): string {
       return 'Too many tries. Please wait a while and try again.';
     case 'EMAIL_VERIFICATION_REQUIRED':
       return 'Confirm your email first: we send a code there before saving a bank account.';
+    case 'BANK_CHANGE_HELD':
+      return 'Your sign-in email changed recently, so your bank account can’t be added or changed yet.';
     case 'PAYOUT_SETUP_NEEDED':
       return 'Set up your payment account first, then add your bank account.';
     case 'PAYOUT_DESTINATION_REFUSED':
@@ -46,6 +49,7 @@ export function GetPaidCard() {
     | {
         kind: 'ready';
         destination: PayoutDestinationView | null;
+        bankChangesFrom: string | null;
         banks: PayoutBank[];
       }
   >({ kind: 'loading' });
@@ -60,17 +64,19 @@ export function GetPaidCard() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [resent, setResent] = useState(false);
 
   const load = useCallback(async () => {
     const [destination, banks] = await Promise.all([
-      apiFetch<PayoutDestinationView | null>('/v1/me/payout-destination'),
+      apiFetch<PayoutDestinationState>('/v1/me/payout-destination'),
       apiFetch<PayoutBank[]>('/v1/payout-banks'),
     ]);
     setState(
       destination.ok && banks.ok
         ? {
             kind: 'ready',
-            destination: destination.data,
+            destination: destination.data.destination,
+            bankChangesFrom: destination.data.bankChangesFrom,
             banks: banks.data,
           }
         : { kind: 'failed' },
@@ -100,6 +106,7 @@ export function GetPaidCard() {
     setTypedName('');
     setCode('');
     setError('');
+    setResent(false);
   };
 
   const accountName =
@@ -143,6 +150,8 @@ export function GetPaidCard() {
       setError(messageFor(result.code));
       return;
     }
+    setResent(step === 'code');
+    setCode('');
     setStep('code');
   };
 
@@ -165,6 +174,8 @@ export function GetPaidCard() {
     setBusy(false);
     if (!result.ok) {
       setCode('');
+      setResent(false);
+      if (result.code === 'BANK_CHANGE_HELD') void load();
       setError(
         result.code === 'CODE_INVALID' || result.code === 'SIGN_IN_LOCKED'
           ? messageFor(result.code)
@@ -204,9 +215,10 @@ export function GetPaidCard() {
       </Card>
     );
 
-  const { destination, banks } = state;
+  const { destination, banks, bankChangesFrom } = state;
   const showForm =
-    changing || !destination || destination.status === 'rejected';
+    !bankChangesFrom &&
+    (changing || !destination || destination.status === 'rejected');
 
   return (
     <Card id="get-paid" className="settings-section">
@@ -228,7 +240,20 @@ export function GetPaidCard() {
           The payment provider can’t pay to this account. Please add another.
         </p>
       )}
-      {!showForm && (
+      {bankChangesFrom && (
+        <Notice title="Bank changes are paused for now">
+          You changed your sign-in email recently, so for your security your
+          bank account can’t be added or changed until{' '}
+          {new Date(bankChangesFrom).toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })}
+          .
+          {destination?.status === 'usable' &&
+            ` Withdrawals keep going to ${destination.bankName} ••${destination.last4}.`}
+        </Notice>
+      )}
+      {!showForm && !bankChangesFrom && (
         <Button variant="secondary" onClick={() => setChanging(true)}>
           Change bank account
         </Button>
@@ -329,6 +354,25 @@ export function GetPaidCard() {
               <Button type="submit" disabled={busy}>
                 {busy ? 'Saving…' : 'Save bank account'}
               </Button>
+              {resent && <p role="status">We’ve sent a new code.</p>}
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void sendCode()}
+              >
+                Send a new code
+              </Button>
+              {!changing && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={resetForm}
+                >
+                  Cancel
+                </Button>
+              )}
             </>
           )}
           {error && (
@@ -346,7 +390,7 @@ export function GetPaidCard() {
                 resetForm();
               }}
             >
-              Keep my current account
+              {step === 'code' ? 'Cancel' : 'Keep my current account'}
             </Button>
           )}
         </form>

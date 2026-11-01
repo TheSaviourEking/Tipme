@@ -87,3 +87,54 @@ test('a number the bank does not know: the name is typed instead', async ({
   await card.getByRole('button', { name: 'Email me a code' }).click();
   await expect(card.getByText('Enter the name on the account.')).toBeVisible();
 });
+
+test('the code step offers a new code and a way out', async ({
+  page,
+}, testInfo) => {
+  const { email } = await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#get-paid');
+  const card = page.locator('#get-paid');
+  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await card.getByLabel('Account number').fill('0123456789');
+  await card.getByRole('button', { name: 'Check account' }).click();
+  await card.getByRole('button', { name: 'Email me a code' }).click();
+  await expect(card.getByLabel('6-digit code')).toBeVisible();
+  await bankCode(page, email, 0);
+
+  await card.getByRole('button', { name: 'Send a new code' }).click();
+  await expect(card.getByText('We’ve sent a new code.')).toBeVisible();
+  await bankCode(page, email, 1);
+
+  await card.getByRole('button', { name: 'Cancel' }).click();
+  await expect(card.getByLabel('6-digit code')).toBeHidden();
+  await expect(card.getByLabel('Account number')).toHaveValue('');
+});
+
+test('after an email change the card says when, and offers no form', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.route('**/v1/me/payout-destination', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          destination: {
+            status: 'usable',
+            bankName: 'Pretend Bank',
+            last4: '6789',
+          },
+          bankChangesFrom: '2030-03-04T12:00:00.000Z',
+        },
+      },
+    }),
+  );
+  await page.goto('/dashboard/settings#get-paid');
+  const card = page.locator('#get-paid');
+  await expect(card.getByText(/until .*2030/)).toBeVisible();
+  await expect(card.getByText(/keep going to/)).toBeVisible();
+  await expect(card.getByLabel('Account number')).toBeHidden();
+  await expect(
+    card.getByRole('button', { name: 'Change bank account' }),
+  ).toBeHidden();
+  await expectAccessible(page);
+});

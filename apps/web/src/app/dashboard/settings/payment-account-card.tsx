@@ -11,6 +11,7 @@ import { apiFetch } from '@/lib/session-client';
 import {
   needsBankAccount,
   onboardingRequirements,
+  requirementWords,
 } from '@/lib/owner-attention';
 import {
   paymentAccountCopy,
@@ -170,7 +171,7 @@ export function PaymentAccountCard() {
           {onboardingRequirements(account.requirementsDue).length > 0 && (
             <p className="tm-hint">
               Still needed:{' '}
-              {onboardingRequirements(account.requirementsDue).join(', ')}
+              {requirementWords(account.requirementsDue).join(', ')}
             </p>
           )}
           {needsBankAccount(account.requirementsDue) && (

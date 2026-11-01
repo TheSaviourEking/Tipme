@@ -215,9 +215,10 @@ export class PaymentAccountsController {
       feeCollector: remoteAccount.feeCollector,
       requirementsDue: remoteAccount.requirementsDue,
     });
-    // Before any onboarding link, so a bank entered there can never be paid to on a schedule. A
-    // failure blocks withdrawals only, and the next visit, event or sweep tries again.
-    await ensurePayoutSetup(this.database.db, {
+    // A bank entered on the hosted page could be paid to on a provider schedule, with no code and no
+    // record here, so no link goes out below until this is recorded. Tips aren't held up by it; the
+    // next visit, event or sweep tries again.
+    const setup = await ensurePayoutSetup(this.database.db, {
       profileId: recipient.profileId,
       provider,
       log: (entry) => this.logger.warn(entry),
@@ -228,6 +229,9 @@ export class PaymentAccountsController {
     if (account.status === 'ACTIVE')
       return { data: { status: 'ACTIVE', chargesEnabled: true } };
     if (account.status !== 'ONBOARDING' && account.status !== 'RESTRICTED')
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+
+    if (!setup.manualPayouts)
       throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
 
     const page = new URL(

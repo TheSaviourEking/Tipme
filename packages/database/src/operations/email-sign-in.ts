@@ -22,7 +22,11 @@ import {
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { maskEmail, normaliseEmail } from './email-address.js';
+import {
+  emailChangedAtFor,
+  maskEmail,
+  normaliseEmail,
+} from './email-address.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
@@ -408,6 +412,7 @@ export function changeEmail(
         .set({
           email,
           emailVerifiedAt: now,
+          emailChangedAt: emailChangedAtFor(email, now),
           // The sign-in address can't also be its own way back in.
           ...(me?.recoveryEmail?.toLowerCase() === email
             ? { recoveryEmail: null, recoveryEmailVerifiedAt: null }
@@ -486,7 +491,11 @@ export function setAccountEmail(
       if (owner && owner.id !== page.userId) return 'taken';
       await tx
         .update(users)
-        .set({ email, emailVerifiedAt: now })
+        .set({
+          email,
+          emailVerifiedAt: now,
+          emailChangedAt: emailChangedAtFor(email, now),
+        })
         .where(eq(users.id, page.userId));
       await recordAudit(tx, {
         staffUserId: null,

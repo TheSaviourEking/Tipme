@@ -471,12 +471,9 @@ test('reading a destination asks for it on the account, and is_usable decides', 
   }
 });
 
-test('a destination the provider no longer has is unusable; an outage is not an answer', async () => {
+test('a not-found read is no answer: only a stated rejection rejects', async () => {
   const gone = fake(jsonResponse({ detail: 'Not found' }, 404));
-  assert.equal(
-    await gone.provider.payoutDestinationStatus(ACCOUNT, 'pd_1'),
-    'rejected',
-  );
+  await assert.rejects(gone.provider.payoutDestinationStatus(ACCOUNT, 'pd_1'));
   const down = fake(jsonResponse({ detail: 'Oops' }, 500));
   await assert.rejects(down.provider.payoutDestinationStatus(ACCOUNT, 'pd_1'));
 });

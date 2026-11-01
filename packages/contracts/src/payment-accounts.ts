@@ -68,3 +68,9 @@ export type PayoutDestinationView = {
   bankName: string;
   last4: string;
 };
+
+export type PayoutDestinationState = {
+  destination: PayoutDestinationView | null;
+  /** ISO time a bank can next be added or changed, after a sign-in email change; null if now. */
+  bankChangesFrom: string | null;
+};

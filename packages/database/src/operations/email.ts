@@ -10,7 +10,7 @@ import {
 } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { normaliseEmail } from './email-address.js';
+import { emailChangedAtFor, normaliseEmail } from './email-address.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { writePretendMessage } from './pretend-outbox.js';
@@ -107,7 +107,11 @@ export function confirmEmail(
     if (!row) return 'invalid';
     await db
       .update(users)
-      .set({ email: row.email, emailVerifiedAt: now })
+      .set({
+        email: row.email,
+        emailVerifiedAt: now,
+        emailChangedAt: emailChangedAtFor(row.email, now),
+      })
       .where(eq(users.id, row.userId));
     return 'confirmed';
   });
@@ -357,7 +361,11 @@ export function confirmEmailForUser(
     if (!row) return { status: 'invalid' as const, handle: null };
     await db
       .update(users)
-      .set({ email: row.email, emailVerifiedAt: now })
+      .set({
+        email: row.email,
+        emailVerifiedAt: now,
+        emailChangedAt: emailChangedAtFor(row.email, now),
+      })
       .where(eq(users.id, row.userId));
     const [page] = await db
       .select({ handle: profiles.handleLower })

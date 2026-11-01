@@ -25,13 +25,41 @@ export type PayoutDestinationStatus = 'usable' | 'pending_review' | 'rejected';
 
 const STATUSES = new Set<string>(['usable', 'pending_review', 'rejected']);
 
+/**
+ * How long a bank can't be added or changed after the sign-in email moves. A stolen session could
+ * otherwise move the address, then have the bank code and the notice sent to itself, and take the
+ * balance before the owner reads anything: a payout can't be cancelled. Withdrawals to the bank
+ * already on the account carry on.
+ */
+export const BANK_CHANGE_HOLD_MS = 72 * 60 * 60 * 1000;
+
+const heldUntil = (changedAt: Date | null, now: Date): Date | null => {
+  if (!changedAt) return null;
+  const until = new Date(changedAt.getTime() + BANK_CHANGE_HOLD_MS);
+  return until > now ? until : null;
+};
+
+/** When this person can next add or change a bank; null when they can now. */
+export function payoutBankChangesFrom(
+  db: Database,
+  input: { userId: string; now?: Date },
+): Promise<Date | null> {
+  return guarded(async () => {
+    const [user] = await db
+      .select({ changedAt: users.emailChangedAt })
+      .from(users)
+      .where(eq(users.id, input.userId));
+    return heldUntil(user?.changedAt ?? null, input.now ?? new Date());
+  });
+}
+
 /** The verified address a bank-account code goes to. A code proves that inbox, nothing else. */
-async function verifiedEmailOf(
+async function codeOwner(
   db: Pick<Database, 'select'>,
   userId: string,
-): Promise<string | null> {
+): Promise<{ email: string | null; changedAt: Date | null }> {
   const [user] = await db
-    .select({ email: users.email })
+    .select({ email: users.email, changedAt: users.emailChangedAt })
     .from(users)
     .where(
       and(
@@ -40,7 +68,10 @@ async function verifiedEmailOf(
         isNull(users.deletedAt),
       ),
     );
-  return user?.email?.toLowerCase() ?? null;
+  return {
+    email: user?.email?.toLowerCase() ?? null,
+    changedAt: user?.changedAt ?? null,
+  };
 }
 
 /** Sends a code to the account's own verified address; the caller never names one. */
@@ -48,12 +79,15 @@ export function requestPayoutDestinationCode(
   db: Database,
   sealing: MailSealing,
   input: { userId: string; secret: string; now?: Date },
-): Promise<{ status: 'sent' | 'rate_limited' | 'locked' | 'no_email' }> {
+): Promise<{
+  status: 'sent' | 'rate_limited' | 'locked' | 'no_email' | 'held';
+}> {
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
-      const email = await verifiedEmailOf(tx, input.userId);
+      const { email, changedAt } = await codeOwner(tx, input.userId);
       if (!email) return { status: 'no_email' as const };
+      if (heldUntil(changedAt, now)) return { status: 'held' as const };
       return {
         status: await issueEmailCode(tx, sealing, {
           email,
@@ -75,12 +109,13 @@ export function requestPayoutDestinationCode(
 export function spendPayoutDestinationCode(
   db: Database,
   input: { userId: string; code: string; secret: string; now?: Date },
-): Promise<EmailCodeCheck | 'no_email'> {
+): Promise<EmailCodeCheck | 'no_email' | 'held'> {
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
-      const email = await verifiedEmailOf(tx, input.userId);
+      const { email, changedAt } = await codeOwner(tx, input.userId);
       if (!email) return 'no_email' as const;
+      if (heldUntil(changedAt, now)) return 'held' as const;
       return checkEmailCode(tx, {
         email,
         purpose: 'payout_destination',
@@ -123,11 +158,21 @@ export function setPayoutDestination(
   return guarded(() =>
     db.transaction(async (tx) => {
       const [profile] = await tx
-        .select({ id: profiles.id })
+        .select({ userId: profiles.userId })
         .from(profiles)
         .where(eq(profiles.id, input.profileId))
         .for('update');
       if (!profile) throw new OperationError('NO_PAGE');
+      // Shared: an email change in progress finishes first, and is seen here.
+      if (profile.userId) {
+        const [owner] = await tx
+          .select({ changedAt: users.emailChangedAt })
+          .from(users)
+          .where(eq(users.id, profile.userId))
+          .for('share');
+        if (heldUntil(owner?.changedAt ?? null, now))
+          throw new OperationError('BANK_CHANGE_HELD');
+      }
       const [current] = await tx
         .select()
         .from(payoutDestinations)
@@ -140,13 +185,18 @@ export function setPayoutDestination(
         )
         .for('update');
       // The same account sent again: the provider's newest word on it, and nothing has changed.
+      // Rejected is permanent (provider docs), so nothing raises a rejected row.
       if (current?.destinationReference === input.destinationRef) {
-        await tx
-          .update(payoutDestinations)
-          .set({ status: input.status })
-          .where(eq(payoutDestinations.id, current.id));
+        if (current.status !== 'rejected')
+          await tx
+            .update(payoutDestinations)
+            .set({ status: input.status })
+            .where(eq(payoutDestinations.id, current.id));
         return { replaced: false };
       }
+      // A refused number must not strand an account that works.
+      if (input.status === 'rejected' && current?.status === 'usable')
+        throw new OperationError('PAYOUT_DESTINATION_REFUSED');
       if (current)
         await tx
           .update(payoutDestinations)
@@ -326,7 +376,7 @@ export async function ensurePayoutSetup(
     provider: PayoutSetupProvider;
     log?: PayoutSetupLog;
   },
-): Promise<void> {
+): Promise<{ manualPayouts: boolean }> {
   const environment = bachsAccountEnvironment(input.provider.environment);
   const [account] = await guarded(() =>
     db
@@ -343,13 +393,20 @@ export async function ensurePayoutSetup(
         ),
       ),
   );
-  if (!account) return;
+  if (!account) return { manualPayouts: false };
   await applyPayoutSetup(db, input.provider, account, input.log);
   await refreshPendingDestination(db, input.provider, {
     profileId: input.profileId,
     accountReference: account.providerAccountReference,
     log: input.log,
   });
+  const [after] = await guarded(() =>
+    db
+      .select({ at: paymentAccounts.manualPayoutsAt })
+      .from(paymentAccounts)
+      .where(eq(paymentAccounts.id, account.id)),
+  );
+  return { manualPayouts: Boolean(after?.at) };
 }
 
 /** Asks where a pending destination's review stands. A failed read changes nothing. */
