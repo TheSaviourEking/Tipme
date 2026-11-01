@@ -24,7 +24,7 @@ Rules for this page:
 - [ ] **BLOCKING, D-08:** hosting, monitoring budget and who responds when an alert fires. The owner says whether it blocks.
 - [ ] **BLOCKING, D-10:** the first launch segment. The owner says whether it blocks.
 - [ ] **BLOCKING, D-11:** messaging providers and sender registration. The owner says whether it blocks.
-- [ ] **BLOCKING, launching without the follow-ups:** the owner's written acceptance of launching without the items under [Follow up after launch](#follow-up-after-launch-owner-accepted-1-nov-2026), dated and in `docs/00-DECISIONS.md`. The owner decided this in chat on 1 Nov 2026 (recorded there); the dated, signed line is still the owner's to write.
+- [ ] **BLOCKING, launching without the follow-ups:** the owner's written acceptance of launching without the items under [Follow up after launch](#follow-up-after-launch-owner-decided-1-nov-2026-signed-acceptance-below), dated and in `docs/00-DECISIONS.md`. The owner decided this in chat on 1 Nov 2026 (recorded there); the dated, signed line is still the owner's to write.
 - [ ] **BLOCKING, written acceptance:** the owner fills in the template under "Live pilot acceptance" in `docs/00-DECISIONS.md`. No agent writes or completes it.
 
 ### Risks the owner must accept or change
@@ -42,7 +42,7 @@ Each of these is open. Each has a line in the acceptance.
 - [ ] **BLOCKING, Q7:** public launch or closed pilot.
 - [ ] **BLOCKING, the withdrawals switch:** read [Stopping withdrawals](#stopping-withdrawals), including what it doesn't stop. **Accept it.**
 
-## Follow up after launch (owner accepted, 1 Nov 2026)
+## Follow up after launch (owner decided, 1 Nov 2026; signed acceptance below)
 
 These don't block launch, by the owner's decision: "Bachs sort most of the compliance, they hold money. Let's skip them. Give a checklist and we'd circle to it later. They shouldn't block launch." They stay open and unticked, for the owner to come back to.
 
@@ -136,7 +136,7 @@ With `PAYMENTS_LIVE_ENABLED=false` and `bachs-live` deployed. Run every query as
 
 Only with every BLOCKING line above done.
 
-This deploys **the version already running**, so the switch changes one thing and needs no build and no staging pass. Run these on the server, with `<sha>` from `cat /srv/tipme-production/releases/current`:
+This deploys **the version already running**, so the switch changes one thing and needs no build and no staging pass. **This direct deploy skips the workflow's `production` environment approval:** nobody else is asked, so whoever runs it is the only check. Run these on the server, with `<sha>` from `cat /srv/tipme-production/releases/current`:
 
 1. In `/srv/tipme-production/production.env` set exactly these two lines, once each, with no quotes, spaces or comments. The deploy refuses anything else:
    ```
@@ -200,7 +200,8 @@ Ops → Overview → **Switch off all withdrawals…**, with a written reason. N
 **While off:**
 
 - New withdrawals are refused (`WITHDRAWALS_SWITCHED_OFF`). Recipients see "Withdrawals are paused for now. Your balance is safe." before they type an amount.
-- Queued withdrawals don't start. They stay reserved, with no failure and no money released, and start when it's back on. Those with an open issue or a hold stay with staff.
+- Queued withdrawals don't start. They stay reserved, with no failure and no money released, and start when it's back on, except those with an open issue.
+- A queued withdrawal on an account that has had **any** hold since it was requested is never sent automatically, even once the hold has ended. It has a `payout_held` issue from the moment the hold lands, so a person resumes it or marks it failed from there, on or off (Resume itself waits until it's back on).
 - If the switch can't be read, nothing new starts.
 
 **It doesn't stop:**
@@ -215,10 +216,10 @@ Ops → Overview → **Switch off all withdrawals…**, with a written reason. N
 
 1. Switch off, with what you know so far as the reason.
 2. See the Overview say **Withdrawals are OFF**, and the alert arrive.
-3. Look at what's already with the provider: issues inbox, and the provider's dashboard. Those will still settle.
+3. **Wait about a minute** after switching off before treating what's with the provider as final: a start already past the check can still arrive. Then look at what's there: issues inbox, and the provider's dashboard. Those will still settle.
 4. Decide about tips: [switch off](#switching-off) if they are affected too.
 5. Tell the affected recipients.
-6. When it's understood, switch back on with why it's safe. **Queued withdrawals start at once,** so check them first in the provider's and TipMe's records.
+6. When it's understood, switch back on with why it's safe. **Queued withdrawals with no open issue start at once,** so check them first in the provider's and TipMe's records.
 
 ## Rolling back the code
 

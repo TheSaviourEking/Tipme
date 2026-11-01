@@ -1283,7 +1283,7 @@ export const parkedPayoutChecks = pgTable('parked_payout_checks', {
 
 /**
  * Staff's switch for all withdrawals, one row, read on every request and start so a change takes
- * effect at once with no deploy. No row is on: nobody has ever switched it. Each change is audited.
+ * effect at once with no deploy. Seeded on, with no change time; no row at all reads as off. Each change is audited.
  */
 export const withdrawalsSwitch = pgTable(
   'withdrawals_switch',
@@ -1291,7 +1291,7 @@ export const withdrawalsSwitch = pgTable(
     id: text('id').primaryKey().default('global'),
     paused: boolean('paused').notNull(),
     changedBy: uuid('changed_by'),
-    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    changedAt: timestamp('changed_at', { withTimezone: true }),
   },
   () => [check('withdrawals_switch_one_row', sql`id = 'global'`)],
 );

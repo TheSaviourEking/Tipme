@@ -34,7 +34,9 @@
 
 > **Provider selections (26 Oct 2026):** Bachs is selected for the initial payment adapter, sandbox only; this is not written provider approval for live voluntary tips, connected accounts, settlement or payouts (D-03 remains OPEN). The product owner selected email OTP via Resend for launch and deferred phone OTP until after launch. D-11 remains open pending the Resend account, verified sender domain, provider terms, Nigerian deliverability/cost evidence, privacy/retention review and operational readiness. See ADR-0004.
 
-> **D-04 note (18 Oct 2026):** the user's intended model is custodial: the full tip is collected into a TipMe-controlled provider account, TipMe deducts its cut and forwards the rest to the recipient. This is **PROPOSED, pending legal opinion**; the PRD prefers provider collection and settlement. The PR-005 ledger is custody-neutral (ADR-0006), so either outcome needs sign-off, not a rebuild. Real money was to wait for D-04's approval. On 1 Nov 2026 the owner chose not to wait for it (see "Launching without these" below); D-04 stays open and is not approved.
+> **D-04 note (18 Oct 2026):** the user's intended model is custodial: the full tip is collected into a TipMe-controlled provider account, TipMe deducts its cut and forwards the rest to the recipient. This is **PROPOSED, pending legal opinion**; the PRD prefers provider collection and settlement. The PR-005 ledger is custody-neutral (ADR-0006), so either outcome needs sign-off, not a rebuild. No real money moves until D-04 is approved.
+>
+> **1 Nov 2026:** the owner's decision of this date (see "Launching without these" below) supersedes that sentence for launch, unless the owner's ADR says otherwise. D-04 stays open and is not approved.
 
 > **PR-008 notes (19 Oct 2026), all PROPOSED:**
 > - **Paid plans** (future idea from the user): premium QR styles, custom backgrounds, deeper insights. Premium styles are marked "free in preview"; nothing is billed. Charging to keep personal details private is **not** planned: phone and email stay private by default and free (privacy by default; D-07).

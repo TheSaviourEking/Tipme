@@ -159,6 +159,16 @@ BEGIN
 END
 $$;
 
+-- The app changes the withdrawals switch and never removes it. A deleted row reads as off, with no
+-- audit line or alert.
+DO $$
+BEGIN
+  IF to_regclass('public.withdrawals_switch') IS NOT NULL THEN
+    EXECUTE 'REVOKE DELETE ON TABLE public.withdrawals_switch FROM tipme_runtime';
+  END IF;
+END
+$$;
+
 ALTER DEFAULT PRIVILEGES FOR ROLE tipme_migrator IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tipme_runtime;
 ALTER DEFAULT PRIVILEGES FOR ROLE tipme_migrator IN SCHEMA public

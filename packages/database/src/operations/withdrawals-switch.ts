@@ -12,7 +12,11 @@ export interface WithdrawalsSwitchState {
   changedAt: Date | null;
 }
 
-/** The switch as it stands. No row is on. A failed read throws: callers must not read that as on. */
+/**
+ * The switch as it stands. The migration seeds its row and the runtime role can't delete it, so no
+ * row means something is wrong, and reads as off. A failed read throws: callers must not read that
+ * as on.
+ */
 export function withdrawalsSwitchState(
   db: Database | Tx,
 ): Promise<WithdrawalsSwitchState> {
@@ -23,7 +27,7 @@ export function withdrawalsSwitchState(
         changedAt: withdrawalsSwitch.changedAt,
       })
       .from(withdrawalsSwitch);
-    return row ?? { paused: false, changedAt: null };
+    return row ?? { paused: true, changedAt: null };
   });
 }
 
@@ -40,8 +44,9 @@ export async function withdrawalsSwitchedOff(db: Database): Promise<boolean> {
  * Staff switch all withdrawals off or on. It takes effect at the next request or job, on every copy,
  * since each reads this row. Off stops new requests and starts only: payouts already with the
  * provider can't be recalled, and carry on being tracked. Queued payouts stay reserved and are
- * queued again here when it comes back on, except those a person must decide on (an open issue, or a
- * hold, whose own job check would stop them anyway). Setting the state it already has changes nothing.
+ * queued again here when it comes back on, except those with an open issue, which a person decides.
+ * A hold needs no check here: placing one opens that issue, and for a request that raced it the job's
+ * own check stops the money and opens it then. Setting the state it already has changes nothing.
  */
 export function setWithdrawalsPaused(
   db: Database,
@@ -101,10 +106,6 @@ export function setWithdrawalsPaused(
                 SELECT 1 FROM issues i
                  WHERE i.status = 'open'
                    AND i.subject->>'payoutId' = ${payouts.id}::text)`,
-              sql`NOT EXISTS (
-                SELECT 1 FROM withdrawal_holds h
-                 WHERE h.profile_id = ${payouts.profileId}
-                   AND h.released_at IS NULL)`,
             ),
           );
         for (const payout of waiting)

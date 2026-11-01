@@ -24,6 +24,7 @@ shipped "$version" || {
   echo "tipme-app:$version is not loaded, or its files are not in $RELEASES/$version: ship it with the deploy-production workflow first." >&2
   exit 2
 }
+compose_agrees_on_live "$version" "$expected_live"
 
 echo "==> Queue"
 # --no-recreate: started if absent, never restarted (a changed Compose file would recreate it).

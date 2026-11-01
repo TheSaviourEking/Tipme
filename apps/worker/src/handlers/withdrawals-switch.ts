@@ -16,7 +16,7 @@ export async function handleWithdrawalsSwitchChanged(
   const paused = (data as { state?: unknown } | null)?.state !== 'on';
   const text = paused
     ? 'Withdrawals were switched OFF for everyone by staff. New withdrawals are refused and queued ones wait. The reason is in the audit log.'
-    : 'Withdrawals were switched back ON by staff. Queued ones start now. The reason is in the audit log.';
+    : 'Withdrawals were switched back ON by staff. Queued ones start now, except any with an issue or a hold since they were requested, which wait for staff. The reason is in the audit log.';
   if (!deps.url) {
     deps.log?.({ event: 'withdrawals.switch_alert_unrouted', text });
     return 'unrouted';

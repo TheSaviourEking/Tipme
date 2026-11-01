@@ -4,11 +4,14 @@ import { test } from 'node:test';
 import {
   createPaymentIntent,
   createQuote,
+  freezeWithdrawals,
   markAttemptInitiated,
+  markPayoutFailedAbsent,
   recordPayoutOutcome,
   recordProviderEvent,
   reconcilePayouts,
   requestWithdrawal,
+  resolveIssue,
   resumeHeldPayout,
   openIssue,
   setWithdrawalsPaused,
@@ -328,4 +331,234 @@ test('each change is audited with its reason and raises one alert; setting the s
   const state = await withdrawalsSwitchState(s.db);
   assert.equal(state.paused, false);
   assert.ok(state.changedAt instanceof Date);
+});
+
+// A queued withdrawal that a hold has touched is a person's to decide, whatever became of the hold.
+const secure = (s, issueId) =>
+  resolveIssue(s.db, {
+    issueId,
+    staffUserId: STAFF,
+    reason: REASON,
+    outcome: 'account_secured',
+    bankAndSignInChecked: true,
+  });
+const freeze = (s) =>
+  freezeWithdrawals(s.db, {
+    profileId: TOBI,
+    staffUserId: STAFF,
+    reason: REASON,
+  });
+const heldIssues = (s, payoutId) =>
+  s.q(
+    `SELECT id FROM issues WHERE status = 'open' AND kind = 'payout_held' AND subject->>'payoutId' = $1`,
+    [payoutId],
+  );
+const payoutStatus = async (s, payoutId) =>
+  (await s.q('SELECT status FROM payouts WHERE id = $1', [payoutId]))[0].status;
+/** A hold written straight to the table, so no code that places a hold has raised anything. */
+const rawHold = async (s, { released, reason = 'reversal' }) => {
+  const { id: issueId } = await openIssue(s.db, {
+    dedupeKey: `raw_hold.${randomUUID()}`,
+    kind: 'payment_reversed',
+    subject: { profileId: TOBI },
+    now: new Date(),
+  });
+  await s.q(
+    `INSERT INTO withdrawal_holds (id, profile_id, reason, issue_id, released_at)
+     VALUES ($1, $2, $3, $4, ${released ? 'now()' : 'NULL'})`,
+    [randomUUID(), TOBI, reason, issueId],
+  );
+};
+
+test('off, a thief queues, staff freeze and release, on: never sent, and a person is asked', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  await s.pause(true);
+  const fake = provider();
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: fake }),
+    'switched_off',
+  );
+  const { issueId } = await freeze(s);
+  // At once, not when it next runs: nothing would run while withdrawals are off.
+  assert.equal((await heldIssues(s, payoutId)).length, 1);
+  await secure(s, issueId);
+  const before = (await s.startJobs(payoutId)).length;
+  await s.pause(false);
+  assert.equal((await s.startJobs(payoutId)).length, before);
+  // Even a job still out there, redelivered.
+  assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+  assert.equal(fake.calls.creates, 0);
+  assert.equal((await heldIssues(s, payoutId)).length, 1);
+  assert.equal(await payoutStatus(s, payoutId), 'REQUESTED');
+});
+
+test('the job refuses on a released hold alone, and opens the issue, however the hold came to be', async (t) => {
+  for (const reason of ['reversal', 'in_debt', 'account_takeover']) {
+    const s = await setup(t);
+    const payoutId = await s.withdraw();
+    await rawHold(s, { released: true, reason });
+    assert.equal((await heldIssues(s, payoutId)).length, 0);
+    const fake = provider();
+    assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+    assert.equal(fake.calls.creates, 0);
+    assert.equal((await heldIssues(s, payoutId)).length, 1, reason);
+  }
+});
+
+test('switching on with a hold no issue knows about: its job opens the issue and sends nothing', async (t) => {
+  for (const released of [true, false]) {
+    const s = await setup(t);
+    const payoutId = await s.withdraw();
+    await s.pause(true);
+    await rawHold(s, { released });
+    const fake = provider();
+    await s.pause(false);
+    assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+    assert.equal(fake.calls.creates, 0);
+    assert.equal((await heldIssues(s, payoutId)).length, 1);
+  }
+});
+
+test('the hold is asked before the switch: a held job says so while off, and raises its issue', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  await s.pause(true);
+  await rawHold(s, { released: false });
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: provider() }),
+    'held',
+  );
+  assert.equal((await heldIssues(s, payoutId)).length, 1);
+});
+
+test('a hold landing opens an issue for each unstarted payout, and not for one already attempted', async (t) => {
+  const s = await setup(t);
+  const first = await s.withdraw();
+  const second = await s.withdraw();
+  const sent = await s.withdraw();
+  await startPayout(s.db, { payoutId: sent, provider: provider() });
+  const attempted = await s.withdraw();
+  await s.q(
+    'UPDATE payouts SET start_uncertain_at = now(), start_step = $2 WHERE id = $1',
+    [attempted, 'payout'],
+  );
+  const { issueId } = await freeze(s);
+  assert.equal((await heldIssues(s, first)).length, 1);
+  assert.equal((await heldIssues(s, second)).length, 1);
+  assert.equal((await heldIssues(s, sent)).length, 0);
+  assert.equal((await heldIssues(s, attempted)).length, 0);
+  // They wait for the hold; they don't keep it in place.
+  await secure(s, issueId);
+  assert.equal(
+    (
+      await s.q(
+        'SELECT 1 FROM withdrawal_holds WHERE profile_id = $1 AND released_at IS NULL',
+        [TOBI],
+      )
+    ).length,
+    0,
+  );
+});
+
+test('the release notice\'s "mark it failed" is there, before the switch is back on, and returns the money', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  await s.pause(true);
+  await startPayout(s.db, { payoutId, provider: provider() });
+  const { issueId } = await freeze(s);
+  await secure(s, issueId);
+  const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+  const result = await markPayoutFailedAbsent(s.db, {
+    issueId: heldIssue,
+    reason: REASON,
+    staffUserId: STAFF,
+    dashboardVerified: true,
+    provider: () => provider(),
+    now: new Date(Date.now() + 31 * 60 * 1000),
+  });
+  assert.equal(result.outcome, 'marked_failed');
+  assert.equal(await payoutStatus(s, payoutId), 'FAILED');
+  assert.equal((await heldIssues(s, payoutId)).length, 0);
+  // Switching on leaves it failed.
+  const fake = provider();
+  const before = (await s.startJobs(payoutId)).length;
+  await s.pause(false);
+  assert.equal((await s.startJobs(payoutId)).length, before);
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: fake }),
+    'already',
+  );
+  assert.equal(fake.calls.creates, 0);
+});
+
+test('a person may decide it is theirs: Resume sends it once, but a hold placed after that stops it again', async (t) => {
+  const s = await setup(t);
+  const payoutId = await s.withdraw();
+  const { issueId } = await freeze(s);
+  await secure(s, issueId);
+  const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+  const resume = () =>
+    resumeHeldPayout(s.db, {
+      issueId: heldIssue,
+      reason: REASON,
+      staffUserId: STAFF,
+      provider: () => provider(),
+    });
+  assert.equal((await resume()).outcome, 'resumed');
+  // Its job has not run, and another hold comes and goes.
+  await rawHold(s, { released: true });
+  const fake = provider();
+  assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+  assert.equal(fake.calls.creates, 0);
+  // Decided again, after that hold.
+  assert.equal((await resume()).outcome, 'resumed');
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: fake }),
+    'started',
+  );
+  assert.equal(fake.calls.creates, 1);
+});
+
+test('a hold that ended before the request has no bearing on it', async (t) => {
+  const s = await setup(t);
+  const { issueId } = await freeze(s);
+  await secure(s, issueId);
+  const payoutId = await s.withdraw();
+  const fake = provider();
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: fake }),
+    'started',
+  );
+  assert.equal(fake.calls.creates, 1);
+});
+
+test('the row is seeded on, and with no row at all everything reads as off', async (t) => {
+  const s = await setup(t);
+  assert.deepEqual(
+    await s.q(
+      'SELECT id, paused, changed_by, changed_at FROM withdrawals_switch',
+    ),
+    [{ id: 'global', paused: false, changed_by: null, changed_at: null }],
+  );
+  const payoutId = await s.withdraw();
+  await s.q('DELETE FROM withdrawals_switch');
+  assert.deepEqual(await withdrawalsSwitchState(s.db), {
+    paused: true,
+    changedAt: null,
+  });
+  const fake = provider();
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: fake }),
+    'switched_off',
+  );
+  assert.equal(fake.calls.creates, 0);
+  await assert.rejects(s.withdraw(), { code: 'WITHDRAWALS_SWITCHED_OFF' });
+  // Switching on puts the row back and picks up what was waiting.
+  assert.equal((await s.pause(false)).changed, true);
+  assert.equal((await withdrawalsSwitchState(s.db)).paused, false);
+  assert.equal(
+    await startPayout(s.db, { payoutId, provider: fake }),
+    'started',
+  );
 });

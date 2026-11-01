@@ -57,6 +57,23 @@ compose_for() {
     docker compose -f "$RELEASES/$version/compose.staging.yml" --env-file "$ENV_FILE" "$@"
 }
 
+# What Compose itself reads for the switch, for this version: it alone sees a value from the shell,
+# which beats the env file. `config` starts nothing and needs no daemon. Its output and errors hold
+# settings, so neither is shown. Every service must say the expected value, and something must.
+compose_agrees_on_live() {
+  local version=$1 expected=$2 config said
+  if ! config=$(compose_for "$version" config 2>/dev/null); then
+    echo "Compose could not read this version's config, so PAYMENTS_LIVE_ENABLED can't be confirmed. Nothing was started." >&2
+    exit 2
+  fi
+  said=$(printf '%s\n' "$config" |
+    sed -nE 's/^[[:space:]]+PAYMENTS_LIVE_ENABLED:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | sort -u)
+  if [[ "$said" != "$expected" ]]; then
+    echo "Compose does not read PAYMENTS_LIVE_ENABLED as $expected, which this deploy expects: look for it in the deploy shell's environment and in $ENV_FILE. Nothing was started." >&2
+    exit 2
+  fi
+}
+
 # A version can run only if Actions shipped both its image and its deploy files.
 shipped() {
   local version=$1
@@ -125,35 +142,39 @@ preflight_production() {
 }
 
 # How many lines set this name, however they are written. Compose takes the last one and also reads
-# `export NAME=`, while `setting` takes the first, so more than one means the two could disagree.
-setting_lines() { grep -cE "^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=" "$ENV_FILE" || true; }
+# `export NAME=` and `NAME: value`, while `setting` takes the first, so more than one means the two
+# could disagree.
+setting_lines() { grep -cE "^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*[=:]" "$ENV_FILE" || true; }
+
+# Every line but a comment with this exact name in it, whatever surrounds it.
+lines_naming() { grep -E "(^|[^A-Za-z0-9_])$1([^A-Za-z0-9_]|\$)" "$ENV_FILE" | grep -vE '^[[:space:]]*#' || true; }
 
 # Stops a deploy before anything starts when the switch isn't clearly what this deploy was told to
 # expect, or the worker would refuse it after the new API is already serving
-# (apps/worker/src/config.ts keeps that rule). Compose strips quotes and comments and reads the
-# last duplicate, so anything but one plain true or false is refused rather than interpreted. Only
-# the worker holds the alert address, so it is checked here and not in the API's config. The address
-# is a credential: messages name settings only. No line at all is false, Compose's default.
+# (apps/worker/src/config.ts keeps that rule). Compose has more ways to read a line than we can list
+# (quotes, comments, `export`, `NAME: true`, the last duplicate), so any line naming the switch that
+# isn't exactly NAME=true or NAME=false is refused rather than interpreted. Only the worker holds the
+# alert address, so it is checked here and not in the API's config. The address is a credential:
+# messages name settings only. No line at all is false, Compose's default.
 preflight_live_payments() {
   local expected=${1:-false} value=false name address
   if [[ "$expected" != true && "$expected" != false ]]; then
     echo "The expected live state must be true or false." >&2
     exit 2
   fi
-  case "$(setting_lines PAYMENTS_LIVE_ENABLED)" in
-    0) ;;
-    1)
-      value=$(grep -E '^PAYMENTS_LIVE_ENABLED=' "$ENV_FILE" | cut -d= -f2- || true)
-      if [[ "$value" != true && "$value" != false ]]; then
-        echo "PAYMENTS_LIVE_ENABLED must be written exactly PAYMENTS_LIVE_ENABLED=true or =false in $ENV_FILE: no quotes, spaces, comments or export." >&2
-        exit 2
-      fi
-      ;;
-    *)
-      echo "PAYMENTS_LIVE_ENABLED is set more than once in $ENV_FILE: keep one line." >&2
+  local line
+  line=$(lines_naming PAYMENTS_LIVE_ENABLED)
+  if [[ "$line" == *$'\n'* ]]; then
+    echo "PAYMENTS_LIVE_ENABLED is set more than once in $ENV_FILE: keep one line." >&2
+    exit 2
+  fi
+  if [[ -n "$line" ]]; then
+    if [[ "$line" != PAYMENTS_LIVE_ENABLED=true && "$line" != PAYMENTS_LIVE_ENABLED=false ]]; then
+      echo "PAYMENTS_LIVE_ENABLED must be written exactly PAYMENTS_LIVE_ENABLED=true or =false in $ENV_FILE: no quotes, spaces, colons, comments or export." >&2
       exit 2
-      ;;
-  esac
+    fi
+    value=${line#PAYMENTS_LIVE_ENABLED=}
+  fi
   if [[ "$value" != "$expected" ]]; then
     echo "$ENV_FILE says PAYMENTS_LIVE_ENABLED=$value, but this deploy expects live=$expected (the repository variable PRODUCTION_PAYMENTS_LIVE, or the second argument here). Nothing was started." >&2
     exit 2

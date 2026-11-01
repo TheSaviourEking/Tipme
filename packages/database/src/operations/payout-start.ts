@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   paymentAccounts,
@@ -306,18 +306,27 @@ async function claimStart(
   // An earlier attempt may have reached the provider. Never send it again; only ask.
   if (payout.startUncertainAt) return { kind: 'read', payout, starter };
 
-  // Off: it stays queued and reserved, with no failure, and is queued again when switched on. A
-  // read that fails throws, so the job retries and nothing leaves on a guess.
-  if ((await withdrawalsSwitchState(tx)).paused)
-    return { kind: 'done', outcome: 'switched_off' };
-
+  // Any hold in force since this was requested, even one since released: a release clears the
+  // account for new withdrawals, not for one a thief may have queued before it. It takes a person,
+  // whose Resume counts for the holds that ended before it. Asked before the switch, so a job that
+  // runs while off still raises the issue.
   const [hold] = await tx
     .select({ id: withdrawalHolds.id })
     .from(withdrawalHolds)
     .where(
       and(
         eq(withdrawalHolds.profileId, payout.profileId),
-        isNull(withdrawalHolds.releasedAt),
+        or(
+          isNull(withdrawalHolds.releasedAt),
+          gte(withdrawalHolds.createdAt, payout.createdAt),
+          gte(withdrawalHolds.releasedAt, payout.createdAt),
+        ),
+        sql`NOT EXISTS (
+          SELECT 1 FROM audit_events a
+           WHERE a.action = 'payout.staff_resumed'
+             AND a.subject_type = 'payout'
+             AND a.subject_id = ${payout.id}
+             AND a.created_at >= ${withdrawalHolds.releasedAt})`,
       ),
     )
     .limit(1);
@@ -330,6 +339,11 @@ async function claimStart(
     });
     return { kind: 'done', outcome: 'held' };
   }
+
+  // Off: it stays queued and reserved, with no failure, and is queued again when switched on. A
+  // read that fails throws, so the job retries and nothing leaves on a guess.
+  if ((await withdrawalsSwitchState(tx)).paused)
+    return { kind: 'done', outcome: 'switched_off' };
 
   let route: { accountRef: string; destinationRef: string } | null = null;
   if (starter.capabilities?.connectedAccounts !== false) {

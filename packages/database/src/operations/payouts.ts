@@ -194,6 +194,28 @@ export async function holdWithdrawals(
     );
   if (existing) return;
   await tx.insert(withdrawalHolds).values({ id: newId(), ...input });
+  // Each payout not yet started is a person's to decide from now on, and they need its issue to do
+  // it: while withdrawals are switched off no job runs to raise it. The start job's own check is
+  // what stops the money, including for a request that raced this.
+  const unstarted = await tx
+    .select({ id: payouts.id })
+    .from(payouts)
+    .where(
+      and(
+        eq(payouts.profileId, input.profileId),
+        eq(payouts.status, 'REQUESTED'),
+        isNull(payouts.providerReference),
+        isNull(payouts.startStep),
+        isNull(payouts.startUncertainAt),
+      ),
+    );
+  for (const payout of unstarted)
+    await openIssue(tx, {
+      dedupeKey: `payout_held.${payout.id}`,
+      kind: 'payout_held',
+      subject: { payoutId: payout.id },
+      now: new Date(),
+    });
 }
 
 /**
