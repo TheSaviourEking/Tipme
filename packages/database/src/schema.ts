@@ -1289,7 +1289,7 @@ export const parkedPayoutChecks = pgTable('parked_payout_checks', {
  * `provider` is the adapter name (bachs-live or bachs-sandbox), so sandbox readings never count
  * for live.
  */
-/** Each time live payments changed on this copy: the API records one at boot. Append-only. */
+/** Each time live payments changed on this copy: the API records one at boot. */
 export const livePaymentSwitches = pgTable(
   'live_payment_switches',
   {
