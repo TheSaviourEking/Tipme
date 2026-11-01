@@ -42,14 +42,23 @@ const hintOf = (email: string) => {
 /** Sign-in code emails to this address that have arrived so far, newest first. */
 async function codeEmails(page: Page, email: string): Promise<string[]> {
   const inbox = await page.context().newPage();
-  await inbox.goto('/dev/inbox');
-  const mails = await inbox
-    .getByRole('article')
-    .filter({ hasText: hintOf(email) })
-    .filter({ hasText: 'Your TipMe sign-in code' })
-    .allTextContents();
-  await inbox.close();
-  return mails;
+  try {
+    await inbox.goto('/dev/inbox');
+    // The list is fetched after hydration; reading it earlier looks like an empty inbox.
+    await expect(
+      inbox
+        .getByRole('article')
+        .first()
+        .or(inbox.getByText('Nothing has been sent yet.')),
+    ).toBeVisible({ timeout: 10_000 });
+    return await inbox
+      .getByRole('article')
+      .filter({ hasText: hintOf(email) })
+      .filter({ hasText: 'Your TipMe sign-in code' })
+      .allTextContents();
+  } finally {
+    await inbox.close();
+  }
 }
 
 /** Signs in with an email code, reading the code from the pretend inbox. */

@@ -1,3 +1,12 @@
+# Current task — production release-check LCP (1 November 2026)
+
+- Branch/worktree: `fix/home-lcp` / `.worktrees/home-lcp`, based on `origin/main` at `26c324e`; changes are uncommitted.
+- In run `41289039816`, the final relevant deploy job successfully shipped `26c324e` and then failed the read-only check: 2 tests passed, the preview-only test skipped, and `/` LCP failed at 2936 ms against the 2000 ms budget. Other recorded deploy attempts failed at `Ship and deploy`.
+- Moved the browser Sentry SDK out of the initial client imports in `instrumentation-client.ts` and `global-error.tsx`. Early browser and error-boundary exceptions are buffered (maximum 10) and replayed once Sentry initializes after `load`; initialization failures log only a fixed, provider-safe warning.
+- Verified: Sentry's 477,910-byte SDK chunk is absent from the 13 initial homepage script chunks; local throttled LCP (150 ms latency, 1.6 Mbps, 4x CPU) was 872–932 ms across five cold contexts. Web build with a dummy DSN, typecheck, lint, formatting and all 90 web tests passed.
+- No deployment or payment operation was initiated by this code task; the code changes are uncommitted with no push or PR. The local branch is based on `main`, while `origin/dev` is at `25eca34`; align with the normal dev-to-main release flow before opening a PR.
+- Next exact step: review the patch and select a dev-based branch/PR path; after owner merge and deployment, rerun the read-only production release check. Do not change the LCP threshold or enable live payments.
+
 # Current task — staging reusable-workflow permission fix (1 November 2026)
 
 - **Correction (1 Nov):** #75/#76 granted only `statuses: read`, and staging run `41275075923` still had a startup failure on `main` with them. `record-tested-tree` in `ci.yml` requests `statuses: write`, and GitHub validates every job of a called workflow, even skipped ones. The caller now grants `statuses: write`, and `scripts/workflow-contracts.test.mjs` checks every CI job, not only `changes`. It takes effect only once on `main`, because `workflow_run` uses `main`'s file.
