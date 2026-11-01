@@ -186,9 +186,11 @@ function Answer({
             open="Resume this withdrawal…"
             field="Why resume it?"
             hint={
-              view.destinationReplaced
-                ? 'The recipient has changed their bank since asking; it still goes to the bank recorded with the withdrawal. Recorded in the audit log.'
-                : 'No create was ever tried. Recorded in the audit log with your name and the time.'
+              view.takeoverReported
+                ? 'This account had a reported takeover. This withdrawal may be the thief’s, going to the thief’s bank. Check the bank recorded with it first; if in doubt, don’t resume it. Recorded in the audit log.'
+                : view.destinationReplaced
+                  ? 'The recipient has changed their bank since asking; it still goes to the bank recorded with the withdrawal. Recorded in the audit log.'
+                  : 'No create was ever tried. Recorded in the audit log with your name and the time.'
             }
             submit="Resume withdrawal"
             onSubmit={(reason) => act('payout-resume', { reason })}

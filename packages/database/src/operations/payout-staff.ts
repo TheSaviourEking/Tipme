@@ -84,6 +84,16 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(payouts)
     .where(eq(payouts.id, payoutId));
   if (!payout) return null;
+  const [takeover] = await db
+    .select({ id: withdrawalHolds.id })
+    .from(withdrawalHolds)
+    .where(
+      and(
+        eq(withdrawalHolds.profileId, payout.profileId),
+        eq(withdrawalHolds.reason, 'account_takeover'),
+      ),
+    )
+    .limit(1);
   const [hold] = await db
     .select({ id: withdrawalHolds.id })
     .from(withdrawalHolds)
@@ -126,6 +136,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
     issue,
     payout,
     holdActive: Boolean(hold),
+    takeoverReported: Boolean(takeover),
     parkedEvent: Boolean(parked),
     openConflict: Boolean(conflict),
     destinationReplaced: Boolean(destination?.replacedAt),
@@ -236,6 +247,7 @@ function viewOf(kase: Case, answer: Answer, now: Date): OpsPayoutIssueView {
     startStep: kase.payout.startStep as 'fee' | 'payout' | null,
     startAttemptedAt: kase.payout.startUncertainAt?.toISOString() ?? null,
     holdActive: kase.holdActive,
+    takeoverReported: kase.takeoverReported,
     parkedEvent: kase.parkedEvent,
     openConflict: kase.openConflict,
     destinationReplaced: kase.destinationReplaced,

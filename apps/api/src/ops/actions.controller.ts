@@ -101,6 +101,9 @@ export class OpsActionsController {
       staffUserId: ops.userId,
       reason: body.reason,
       ...(body.outcome ? { outcome: body.outcome } : {}),
+      ...(body.bankAndSignInChecked !== undefined
+        ? { bankAndSignInChecked: body.bankAndSignInChecked }
+        : {}),
     });
     return { data: { resolved: true } };
   }

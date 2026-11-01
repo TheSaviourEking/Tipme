@@ -6,8 +6,11 @@ import { InMemorySpanExporter } from '../../packages/observability/dist/testing.
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
   DEMO_PROFILES,
+  mailSealing,
   seedDemoProfiles,
+  setPayoutDestination,
   withdrawalQuote,
+  withdrawalsFrozen,
 } from '../../packages/database/dist/index.js';
 import {
   WEB,
@@ -127,6 +130,7 @@ test('resolving the issue with account_secured releases the freeze, audited; a l
     {
       reason: 'Owner has the account back and a new sign-in.',
       outcome: 'account_secured',
+      bankAndSignInChecked: true,
     },
   );
   assert.equal(resolved.status, 200, await resolved.clone().text());
@@ -174,4 +178,148 @@ test('it is staff only, needs payouts.resolve, a written reason, and a real page
       `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
     );
   }
+});
+
+const resolve = (issueId, body) =>
+  post(`/v1/ops/issues/${issueId}/resolve`, owner.cookie, {
+    reason: 'Owner proved who they are, and the account is theirs.',
+    ...body,
+  });
+
+test('releasing a freeze needs written confirmation that bank and sign-in were checked, and says so in the audit', async () => {
+  const { issueId } = (await (await freeze()).json()).data;
+  for (const body of [
+    { outcome: 'account_secured' },
+    { outcome: 'account_secured', bankAndSignInChecked: false },
+    { outcome: 'written_off', bankAndSignInChecked: true },
+  ]) {
+    assert.notEqual((await resolve(issueId, body)).status, 200);
+    const [hold] = await rows('SELECT released_at FROM withdrawal_holds');
+    assert.equal(hold.released_at, null, JSON.stringify(body));
+  }
+  const done = await resolve(issueId, {
+    outcome: 'account_secured',
+    bankAndSignInChecked: true,
+  });
+  assert.equal(done.status, 200);
+  const [audit] = await rows(
+    `SELECT reason FROM audit_events WHERE action = 'issue.resolved' AND subject_id = $1`,
+    [issueId],
+  );
+  assert.match(audit.reason, /^Current bank and sign-in checked\. /);
+});
+
+test('account_secured is only for a takeover: other money issues refuse it', async () => {
+  const [{ id }] = await rows(
+    `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
+     VALUES ($1, $2, 'payout_failed', 'money', $3, 'x', now()) RETURNING id`,
+    [randomUUID(), `test.${randomUUID()}`, { profileId: TOBI }],
+  );
+  assert.notEqual(
+    (await resolve(id, { outcome: 'account_secured' })).status,
+    200,
+  );
+});
+
+test('while frozen the bank cannot change, under the profile lock; after release it can', async () => {
+  const bank = {
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+    profileId: TOBI,
+    provider: 'bachs',
+    destinationRef: `pd_${randomUUID().slice(0, 8)}`,
+    bankCode: '058',
+    bankName: 'Guaranty Trust Bank',
+    last4: '6789',
+    status: 'usable',
+  };
+  assert.equal(
+    await withdrawalsFrozen(database.db, { profileId: TOBI }),
+    false,
+  );
+  const { issueId } = (await (await freeze()).json()).data;
+  assert.equal(await withdrawalsFrozen(database.db, { profileId: TOBI }), true);
+  await assert.rejects(setPayoutDestination(database.db, bank), {
+    code: 'WITHDRAWALS_PAUSED',
+  });
+  await resolve(issueId, {
+    outcome: 'account_secured',
+    bankAndSignInChecked: true,
+  });
+  assert.equal(
+    await withdrawalsFrozen(database.db, { profileId: TOBI }),
+    false,
+  );
+  await setPayoutDestination(database.db, bank);
+});
+
+test('closing the takeover issue while another money issue is open keeps the hold until that closes too', async () => {
+  const { issueId } = (await (await freeze()).json()).data;
+  const [{ id: other }] = await rows(
+    `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
+     VALUES ($1, $2, 'payout_failed', 'money', $3, 'x', now()) RETURNING id`,
+    [randomUUID(), `test.${randomUUID()}`, { profileId: TOBI }],
+  );
+  await resolve(issueId, {
+    outcome: 'account_secured',
+    bankAndSignInChecked: true,
+  });
+  assert.equal(
+    (await rows('SELECT released_at FROM withdrawal_holds'))[0].released_at,
+    null,
+  );
+  await resolve(other, { outcome: 'resolved_by_provider' });
+  assert.ok(
+    (await rows('SELECT released_at FROM withdrawal_holds'))[0].released_at,
+  );
+});
+
+test('a second report while frozen keeps its written reason in the audit, and the screen can read the freeze', async () => {
+  const state = async () =>
+    (
+      await (
+        await fetch(`${stack.api}/v1/ops/pages/${TOBI}/withdrawal-freeze`, {
+          headers: { cookie: owner.cookie },
+        })
+      ).json()
+    ).data;
+  assert.deepEqual(await state(), { issueId: null });
+  const { issueId } = (await (await freeze()).json()).data;
+  assert.deepEqual(await state(), { issueId });
+  const second = 'A second person rang about the same account.';
+  await freeze(owner.cookie, TOBI, second);
+  const [audit] = await rows(
+    `SELECT reason, subject_id FROM audit_events
+      WHERE action = 'withdrawals.freeze_reported_again' ORDER BY created_at DESC, id DESC LIMIT 1`,
+  );
+  assert.equal(audit.reason, second);
+  assert.equal(audit.subject_id, TOBI);
+});
+
+test('staff can end all of an account’s sessions, audited; not a staff account, and only with the permission', async () => {
+  const person = await signIn(stack.api, '+2348031110023');
+  const me = () =>
+    fetch(`${stack.api}/v1/me/profile`, { headers: { cookie: person.cookie } });
+  assert.notEqual((await me()).status, 401);
+  const [{ user_id: userId }] = await rows(
+    `SELECT id AS user_id FROM users WHERE phone_e164 = '+2348031110023'`,
+  );
+  const end = (id = userId, cookie = owner.cookie, reason = REASON) =>
+    post(`/v1/ops/accounts/${id}/end-sessions`, cookie, { reason });
+  assert.equal((await end(userId, person.cookie)).status, 404);
+  assert.equal((await end(userId, owner.cookie, 'short')).status, 400);
+  assert.equal((await end(randomUUID())).status, 404);
+  const response = await end();
+  assert.equal(response.status, 200);
+  assert.equal((await me()).status, 401);
+  const [audit] = await rows(
+    `SELECT reason, permission, subject_id FROM audit_events
+      WHERE action = 'account.sessions_ended' ORDER BY created_at DESC, id DESC LIMIT 1`,
+  );
+  assert.equal(audit.reason, REASON);
+  assert.equal(audit.permission, 'recoveries.manage');
+  assert.equal(audit.subject_id, userId);
+  const [{ id: staffId }] = await rows(
+    `SELECT id FROM users WHERE phone_e164 = '+2348031110021'`,
+  );
+  assert.equal((await end(staffId)).status, 409);
 });

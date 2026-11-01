@@ -54,6 +54,8 @@ export const opsResolveIssueSchema = opsReasonSchema
         'account_secured',
       ])
       .optional(),
+    // Closing a reported takeover: staff confirm they checked the current bank and the sign-in.
+    bankAndSignInChecked: z.boolean().optional(),
   })
   .strict();
 export type OpsResolveIssueRequest = z.infer<typeof opsResolveIssueSchema>;
@@ -79,6 +81,8 @@ export interface OpsPayoutIssueView {
   startStep: 'fee' | 'payout' | null;
   startAttemptedAt: string | null;
   holdActive: boolean;
+  /** This recipient has had a reported takeover: the bank on this withdrawal may be the thief's. */
+  takeoverReported: boolean;
   /** A signed event names this payout, so "the provider has none" isn't believed. */
   parkedEvent: boolean;
   /** Another open conflict is about this payout. */
@@ -472,6 +476,17 @@ export interface OpsHealth {
   reserve?: OpsPaymentReserve | null;
   /** Null until live payments have ever been switched on. Optional as above. */
   liveSwitch?: OpsLiveSwitch | null;
+  /** Optional as above. */
+  liveNow?: OpsLiveNow;
+}
+
+/** What the API answering now was started with, from its own config: the truth for this moment. */
+export interface OpsLiveNow {
+  live: boolean;
+  provider: string;
+  /** test: a test provider. closed: live provider, switched off. Else who may take real tips. */
+  checkout: 'test' | 'closed' | 'nobody' | 'named' | 'everyone';
+  handles: string[];
 }
 
 /** Latest change of live payments on this copy; the API records one at boot when it differs. */
@@ -598,6 +613,11 @@ export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
 export interface OpsWithdrawalFreeze {
   state: 'frozen' | 'already_frozen';
   issueId: string;
+}
+
+/** Whether a page's withdrawals are frozen now, and the issue that holds them. */
+export interface OpsWithdrawalFreezeState {
+  issueId: string | null;
 }
 
 /** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */

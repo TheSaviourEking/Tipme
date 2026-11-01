@@ -684,6 +684,7 @@ export function resolveIssue(
     staffUserId: string;
     reason: string;
     outcome?: OpsIssueOutcome;
+    bankAndSignInChecked?: boolean;
     now?: Date;
   },
 ): Promise<void> {
@@ -693,6 +694,7 @@ export function resolveIssue(
     db.transaction(async (tx) => {
       const [current] = await tx
         .select({
+          kind: issues.kind,
           severity: issues.severity,
           status: issues.status,
           subject: issues.subject,
@@ -700,6 +702,16 @@ export function resolveIssue(
         .from(issues)
         .where(eq(issues.id, input.issueId));
       if (!current) throw new OperationError('ISSUE_NOT_FOUND');
+      // Releasing a freeze sends the next withdrawal to the current bank, which may be the thief's.
+      const takeover = current.kind === 'account_takeover_reported';
+      if (
+        current.status === 'open' &&
+        (takeover
+          ? input.outcome !== 'account_secured' ||
+            input.bankAndSignInChecked !== true
+          : input.outcome === 'account_secured')
+      )
+        throw new OperationError('ISSUE_OUTCOME_REQUIRED');
       if (
         current.status === 'open' &&
         current.severity === 'money' &&
@@ -721,7 +733,9 @@ export function resolveIssue(
         issueId: input.issueId,
         resolvedBy: input.staffUserId,
         staffUserId: input.staffUserId,
-        reason: input.reason,
+        reason: takeover
+          ? `Current bank and sign-in checked. ${input.reason}`
+          : input.reason,
         outcome: current.severity === 'money' ? input.outcome : undefined,
         now: input.now ?? new Date(),
       });

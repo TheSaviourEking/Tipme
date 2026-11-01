@@ -99,6 +99,12 @@ export async function checkProduction({
         problems.push(
           'The payment reserve checks have stopped: no reading for over 45 minutes with live payments on. Check the worker.',
         );
+      // The record of switches failed to write, or a deploy failed partway: the Overview's history
+      // is wrong, and only this route can say so without the API holding an alert address.
+      if (reserve.switchRecordMatches === false)
+        problems.push(
+          'The record of live payments disagrees with what the API is running. Check the API log for live_switch.record_failed, and the last deploy.',
+        );
     }
   }
 

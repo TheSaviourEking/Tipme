@@ -388,10 +388,13 @@ export default function IssuePage() {
             issue.severity === 'money' &&
             !payoutUnfinished && (
               <ResolveMoneyIssue
+                takeover={issue.kind === 'account_takeover_reported'}
                 onSubmit={(reason, outcome) =>
                   act(
                     `/v1/ops/issues/${issue.id}/resolve`,
-                    { reason, outcome },
+                    issue.kind === 'account_takeover_reported'
+                      ? { reason, outcome, bankAndSignInChecked: true }
+                      : { reason, outcome },
                     'The issue is resolved.',
                   )
                 }

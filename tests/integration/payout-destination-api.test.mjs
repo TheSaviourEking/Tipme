@@ -1796,6 +1796,49 @@ test('a 429 between good reads, or another failure, does not stop the pending re
   assert.equal(down.destinationReadsStopped, false);
 });
 
+test('a sweep sets up at most its cap of accounts, oldest tried first, and the rest wait for the next run', async (t) => {
+  const database = await setUp(t, { manual: false });
+  await moreAccounts(database, 3);
+  const first = await sweepPayoutSetup(database.db, {
+    provider: fakeBachs(),
+    maxAccounts: 2,
+  });
+  assert.equal(first.checked, 2);
+  assert.equal(first.accountsCapped, true);
+  const second = await sweepPayoutSetup(database.db, {
+    provider: fakeBachs(),
+    maxAccounts: 2,
+  });
+  assert.equal(second.checked, 2);
+  assert.equal(second.accountsCapped, false);
+  assert.ok(ops.PAYOUT_SWEEP_MAX_ACCOUNTS >= 1);
+});
+
+test('consecutive 429s stop the account phase, on the capability read too', async (t) => {
+  const database = await setUp(t, { manual: false });
+  await moreAccounts(database, ops.PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW + 3);
+  const logged = [];
+  const limited = async () => {
+    throw Object.assign(new Error('limited'), { statusCode: 429 });
+  };
+  const swept = await sweepPayoutSetup(database.db, {
+    provider: fakeBachs({
+      payoutCapability: limited,
+      setManualPayouts: async () => undefined,
+    }),
+    log: (entry) => logged.push(entry),
+  });
+  assert.equal(swept.checked, ops.PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW);
+  assert.equal(swept.stoppedEarly, true);
+  assert.ok(
+    logged.some(
+      (entry) =>
+        entry.event === 'payout_setup.sweep_stopped' &&
+        entry.error === 'rate_limited',
+    ),
+  );
+});
+
 test('banks that can not be read never stop the others being read', async (t) => {
   const database = await setUp(t);
   await moreAccounts(database, 2);

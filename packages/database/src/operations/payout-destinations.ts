@@ -17,6 +17,7 @@ import {
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { markResolved, openIssue } from './issues.js';
+import { withdrawalsFrozen } from './payouts.js';
 import type { MailSealing } from './mail-queue.js';
 import {
   bachsAccountEnvironment,
@@ -165,6 +166,9 @@ export function setPayoutDestination(
         .where(eq(profiles.id, input.profileId))
         .for('update');
       if (!profile) throw new OperationError('NO_PAGE');
+      // Whoever is signed in may be the thief. Checked under the same lock the freeze takes.
+      if (await withdrawalsFrozen(tx, { profileId: input.profileId }))
+        throw new OperationError('WITHDRAWALS_PAUSED');
       // Shared: an email change in progress finishes first, and is seen here.
       if (profile.userId) {
         const [owner] = await tx
@@ -311,6 +315,10 @@ export type PayoutSetupLog = (entry: {
   error: string;
 }) => void;
 
+/** The provider adapter's HTTP status, read by shape (ADR-0004: its types stay in its package). */
+const isRateLimited = (error: unknown) =>
+  (error as { statusCode?: unknown } | null)?.statusCode === 429;
+
 const errorName = (error: unknown) =>
   error instanceof Error ? error.name : typeof error;
 
@@ -334,9 +342,20 @@ async function applyPayoutSetup(
   provider: PayoutSetupProvider,
   account: SetupRow,
   log?: PayoutSetupLog,
-): Promise<{ failed: number; manualFailed: boolean; manualTried: boolean }> {
+): Promise<{
+  failed: number;
+  manualFailed: boolean;
+  manualTried: boolean;
+  rateLimited: boolean;
+}> {
   const reference = account.providerAccountReference;
-  if (!reference) return { failed: 0, manualFailed: false, manualTried: false };
+  if (!reference)
+    return {
+      failed: 0,
+      manualFailed: false,
+      manualTried: false,
+      rateLimited: false,
+    };
   await guarded(() =>
     db
       .update(paymentAccounts)
@@ -345,8 +364,10 @@ async function applyPayoutSetup(
   );
   let failed = 0;
   let manualFailed = false;
+  let rateLimited = false;
   const failure = (event: string, error: unknown) => {
     failed += 1;
+    rateLimited ||= isRateLimited(error);
     log?.({ event, provider: 'bachs', error: errorName(error) });
   };
   if (!account.payoutCapabilitiesRequestedAt) {
@@ -374,7 +395,12 @@ async function applyPayoutSetup(
       await tellStaffSetupFailed(db, account, log);
     }
   }
-  return { failed, manualFailed, manualTried: !account.manualPayoutsAt };
+  return {
+    failed,
+    manualFailed,
+    manualTried: !account.manualPayoutsAt,
+    rateLimited,
+  };
 }
 
 const setupIssueKey = (accountId: string) =>
@@ -521,12 +547,13 @@ const SWEEP_PAGE = 100;
  * for a later run: each run picks at random, so no bank waits behind others for good.
  */
 export const PAYOUT_SWEEP_MAX_DESTINATION_READS = 100;
-/** This many 429s together: the provider key is at its limit, so the pending reads end for this run. */
+/**
+ * Accounts set up per run, and so about three provider calls each. The rest wait for a later run,
+ * least recently tried first, and a backlog can't outlast the sweep's lock.
+ */
+export const PAYOUT_SWEEP_MAX_ACCOUNTS = 100;
+/** This many 429s together: the provider key is at its limit, so that phase ends for this run. */
 export const PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW = 3;
-
-/** The provider adapter's HTTP status, read by shape (ADR-0004: its types stay in its package). */
-const isRateLimited = (error: unknown) =>
-  (error as { statusCode?: unknown } | null)?.statusCode === 429;
 
 /**
  * This many manual-payouts failures together look like the provider being down, so the account
@@ -549,6 +576,7 @@ export async function sweepPayoutSetup(
     log?: PayoutSetupLog;
     maxFailuresInARow?: number;
     maxDestinationReads?: number;
+    maxAccounts?: number;
   },
 ): Promise<{
   checked: number;
@@ -556,6 +584,7 @@ export async function sweepPayoutSetup(
   destinationsSettled: number;
   destinationReadsFailed: number;
   destinationReadsStopped: boolean;
+  accountsCapped: boolean;
   stoppedEarly: boolean;
 }> {
   const environment = bachsAccountEnvironment(input.provider.environment);
@@ -567,18 +596,21 @@ export async function sweepPayoutSetup(
     destinationsSettled: 0,
     destinationReadsFailed: 0,
     destinationReadsStopped: false,
+    accountsCapped: false,
     stoppedEarly: false,
   };
-  const stop = () => {
+  const stop = (error: 'rate_limited' | 'repeated_failures') => {
     totals.stoppedEarly = true;
     input.log?.({
       event: 'payout_setup.sweep_stopped',
       provider: 'bachs',
-      error: 'repeated_failures',
+      error,
     });
   };
   const runStart = new Date();
   let inARow = 0;
+  const maxAccounts = input.maxAccounts ?? PAYOUT_SWEEP_MAX_ACCOUNTS;
+  let accountsLimitedInARow = 0;
   accounts: for (;;) {
     // Each account tried is stamped past runStart, so this drains and ends.
     const page: SetupRow[] = await guarded(() =>
@@ -611,18 +643,23 @@ export async function sweepPayoutSetup(
         .limit(SWEEP_PAGE),
     );
     for (const account of page) {
+      if (totals.checked >= maxAccounts) {
+        totals.accountsCapped = true;
+        break accounts;
+      }
       totals.checked += 1;
-      const { failed, manualFailed, manualTried } = await applyPayoutSetup(
-        db,
-        input.provider,
-        account,
-        input.log,
-      );
+      const { failed, manualFailed, manualTried, rateLimited } =
+        await applyPayoutSetup(db, input.provider, account, input.log);
       totals.failed += failed;
       if (manualFailed) inARow += 1;
       else if (manualTried) inARow = 0;
+      accountsLimitedInARow = rateLimited ? accountsLimitedInARow + 1 : 0;
+      if (accountsLimitedInARow >= PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW) {
+        stop('rate_limited');
+        break accounts;
+      }
       if (inARow >= limit) {
-        stop();
+        stop('repeated_failures');
         break accounts;
       }
     }

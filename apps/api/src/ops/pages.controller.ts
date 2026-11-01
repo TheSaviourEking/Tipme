@@ -20,6 +20,7 @@ import {
   type OpsPagePricing,
   type OpsReasonRequest,
   type OpsWithdrawalFreeze,
+  type OpsWithdrawalFreezeState,
 } from '@tipme/contracts';
 import {
   freezeWithdrawals,
@@ -28,6 +29,7 @@ import {
   pagePricing,
   setAccountFee,
   setPagePlan,
+  withdrawalFreezeIssue,
 } from '@tipme/database';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -92,6 +94,19 @@ export class OpsPagesController {
     const pricing = await pagePricing(this.database.db, profileId);
     if (!pricing) throw new CodedHttpException(404, 'NOT_FOUND');
     return { data: pricing };
+  }
+
+  @Get(':profileId/withdrawal-freeze')
+  @OpsPermission('payouts.resolve')
+  async freezeState(
+    @Param('profileId') profileId: string,
+  ): Promise<ApiDataResponse<OpsWithdrawalFreezeState>> {
+    if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
+    return {
+      data: {
+        issueId: await withdrawalFreezeIssue(this.database.db, { profileId }),
+      },
+    };
   }
 
   /** A reported account takeover: stops withdrawals until the issue it opens is resolved. */

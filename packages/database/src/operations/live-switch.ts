@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { livePaymentSwitches } from '../schema.js';
+import { recordAudit } from './audit.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 
@@ -61,12 +62,24 @@ export function recordLiveSwitch(
         .orderBy(...LATEST)
         .limit(1);
       if ((latest?.live ?? false) === input.live) return 'unchanged';
+      const id = newId();
+      const switchedAt = input.now ?? new Date();
       await tx.insert(livePaymentSwitches).values({
-        id: newId(),
+        id,
         live: input.live,
         provider: input.provider,
         version: input.version,
-        switchedAt: input.now ?? new Date(),
+        switchedAt,
+      });
+      // The audit log can't be edited, which the table above can. The env file, not a person in
+      // the app, makes this change, so the actor is the system.
+      await recordAudit(tx, {
+        staffUserId: null,
+        action: input.live ? 'payments.live_on' : 'payments.live_off',
+        subjectType: 'live_payment_switch',
+        subjectId: id,
+        reason: `Started as ${input.provider}, version ${input.version}.`,
+        now: switchedAt,
       });
       return 'recorded';
     }),

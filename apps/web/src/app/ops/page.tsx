@@ -9,7 +9,7 @@ import type {
 import { Notice, Skeleton } from '@tipme/ui';
 import { Funnel, Tile } from '@/components/ops/charts';
 import { change, naira } from '@/lib/money';
-import { liveSwitchText } from '@/lib/live-switch-view';
+import { liveSwitchView } from '@/lib/live-switch-view';
 import { reserveView } from '@/lib/payment-reserve';
 import { apiFetch } from '@/lib/session-client';
 
@@ -77,7 +77,9 @@ export default function OpsOverviewPage() {
     // An API older than the reserve alert sends none.
     reserve = null,
     liveSwitch = null,
+    liveNow,
   } = health.metrics;
+  const live = liveSwitchView(liveNow, liveSwitch);
   const reserveNow = reserveView(reserve, openedAt);
   const tips = change(
     String(money.tipCount.thisWeek),
@@ -92,9 +94,18 @@ export default function OpsOverviewPage() {
       <h1>Overview</h1>
       <p className="tm-hint">
         This week (from Monday, Lagos time) against all of last week.
-        {liveSwitch?.live ? '' : ' Test money only.'}
+        {live.testMoney ? ' Test money only.' : ''}
       </p>
-      <p>{liveSwitchText(liveSwitch)}</p>
+      {live.current && <p data-testid="live-now">{live.current}</p>}
+      {live.history && <p className="tm-hint">{live.history}</p>}
+      {live.disagrees && (
+        <Notice tone="error" title="The record of live payments disagrees">
+          This API’s setting and the last recorded change don’t match: a record
+          that failed to write, or a deploy that failed partway. The first line
+          above is what this API is doing now. Check the API log and the last
+          deploy.
+        </Notice>
+      )}
       {!health.collecting && (
         <Notice tone="neutral" title="Anonymous collection is off">
           The funnel stays empty until the privacy decision (D-07) turns it on.

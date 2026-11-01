@@ -152,6 +152,26 @@ test('/health/payments answering 200 with unreadable JSON is a problem', async (
   assert.match(problems[0], /reserve status could not be read/);
 });
 
+test('a live state the record does not match is a problem; older APIs that do not say are not', async () => {
+  const problems = await run({
+    'GET https://api.tipme.example/health/payments': {
+      status: 200,
+      body: { data: { reserveLow: false, switchRecordMatches: false } },
+    },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /record of live payments/i);
+  assert.deepEqual(
+    await run({
+      'GET https://api.tipme.example/health/payments': {
+        status: 200,
+        body: { data: { reserveLow: false, switchRecordMatches: true } },
+      },
+    }),
+    [],
+  );
+});
+
 test('API not ready and web down are named', async () => {
   const problems = await run({
     'GET https://api.tipme.example/health/ready': { status: 503 },

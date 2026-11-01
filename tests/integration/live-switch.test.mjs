@@ -44,6 +44,31 @@ test('switching on records one row with the provider and version', async () => {
   });
 });
 
+test('each recorded switch is also in the audit log, with the system as its actor', async () => {
+  const count = async () =>
+    (
+      await database.pool.query(
+        `SELECT reason, staff_user_id FROM audit_events WHERE action = 'payments.live_on' ORDER BY created_at DESC, id DESC`,
+      )
+    ).rows;
+  const before = (await count()).length;
+  await recordLiveSwitch(database.db, ON);
+  await recordLiveSwitch(database.db, ON);
+  const after = await count();
+  assert.equal(after.length, before + 1);
+  assert.equal(after[0].staff_user_id, null);
+  assert.match(after[0].reason, /bachs-live/);
+  assert.match(after[0].reason, /aaaaaaa1/);
+  const { rows: off } = await database.pool.query(
+    `SELECT count(*)::int AS n FROM audit_events WHERE action = 'payments.live_off'`,
+  );
+  await recordLiveSwitch(database.db, OFF);
+  const { rows: offAfter } = await database.pool.query(
+    `SELECT count(*)::int AS n FROM audit_events WHERE action = 'payments.live_off'`,
+  );
+  assert.equal(offAfter[0].n, off[0].n + 1);
+});
+
 test('a copy that has never been on records nothing: there was no switch', async () => {
   assert.equal(await recordLiveSwitch(database.db, OFF), 'unchanged');
   assert.deepEqual(await rows(), []);
@@ -150,21 +175,33 @@ test('the staff Overview shows the latest switch, and a real boot of a closed co
   try {
     assert.deepEqual(await rows(), []);
     const owner = await opsSignIn(stack.api, database.db, '+2348031110011');
-    const overview = async () =>
+    const metrics = async () =>
       (
         await (
           await fetch(`${stack.api}/v1/ops/metrics/health`, {
             headers: { cookie: owner.cookie },
           })
         ).json()
-      ).data.metrics.liveSwitch;
+      ).data.metrics;
+    const overview = async () => (await metrics()).liveSwitch;
     assert.equal(await overview(), null);
+    // What this API is doing now comes from its own config, whatever the record says.
+    assert.deepEqual((await metrics()).liveNow, {
+      live: false,
+      provider: 'mock',
+      checkout: 'test',
+      handles: [],
+    });
     const now = new Date('2026-11-01T09:00:00Z');
     await recordLiveSwitch(database.db, { ...ON, now });
     assert.deepEqual(await overview(), {
       ...ON,
       switchedAt: now.toISOString(),
     });
+    assert.equal((await metrics()).liveNow.live, false);
+    // The public health route says the two disagree, for the watcher, and nothing more.
+    const health = await (await fetch(`${stack.api}/health/payments`)).json();
+    assert.equal(health.data.switchRecordMatches, false);
   } finally {
     await stack.stop();
   }

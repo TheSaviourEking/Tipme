@@ -59,4 +59,9 @@ export interface PaymentsHealth {
   unreadable: boolean;
   stale: boolean;
   readAt: string | null;
+  /**
+   * False when this API's live state isn't what the record of switches says: a failed record, or
+   * a deploy that failed partway. The watcher raises it. Older APIs send nothing.
+   */
+  switchRecordMatches?: boolean;
 }

@@ -227,8 +227,19 @@ export function freezeWithdrawals(
             isNull(withdrawalHolds.releasedAt),
           ),
         );
-      if (existing)
+      if (existing) {
+        // A second report: its written reason is evidence, though it changes nothing else.
+        await recordAudit(tx, {
+          staffUserId: input.staffUserId,
+          action: 'withdrawals.freeze_reported_again',
+          permission: 'payouts.resolve',
+          subjectType: 'profile',
+          subjectId: input.profileId,
+          reason: input.reason,
+          now,
+        });
         return { state: 'already_frozen' as const, issueId: existing.issueId };
+      }
       const issue = await openIssue(tx, {
         // A takeover can be reported again after the last one closed.
         dedupeKey: `account_takeover.${input.profileId}.${newId()}`,
@@ -253,6 +264,34 @@ export function freezeWithdrawals(
       return { state: 'frozen' as const, issueId: issue.id };
     }),
   );
+}
+
+/** The issue holding this page's takeover freeze, or null when it isn't frozen. */
+export function withdrawalFreezeIssue(
+  db: Database | Tx,
+  input: { profileId: string },
+): Promise<string | null> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({ issueId: withdrawalHolds.issueId })
+      .from(withdrawalHolds)
+      .where(
+        and(
+          eq(withdrawalHolds.profileId, input.profileId),
+          eq(withdrawalHolds.reason, 'account_takeover'),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      );
+    return row?.issueId ?? null;
+  });
+}
+
+/** Whether a reported takeover has this page's withdrawals, and so its bank, frozen. */
+export async function withdrawalsFrozen(
+  db: Database | Tx,
+  input: { profileId: string },
+): Promise<boolean> {
+  return (await withdrawalFreezeIssue(db, input)) !== null;
 }
 
 /**

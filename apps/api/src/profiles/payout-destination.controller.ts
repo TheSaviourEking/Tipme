@@ -29,6 +29,7 @@ import {
   getPayoutDestination,
   payoutBankChangesFrom,
   refreshPendingDestination,
+  withdrawalsFrozen,
   requestPayoutDestinationCode,
   setPayoutDestination,
   spendPayoutDestinationCode,
@@ -176,6 +177,8 @@ export class PayoutDestinationController {
       throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
     const { profileId } = recipient;
     // Everything that can be refused without spending the code is refused first.
+    if (await withdrawalsFrozen(this.database.db, { profileId }))
+      throw new CodedHttpException(409, 'WITHDRAWALS_PAUSED');
     const { reference } = await this.accountRoute(profileId);
     if (!reference) throw new CodedHttpException(409, 'PAYOUT_SETUP_NEEDED');
     const bank = (await this.listBanks()).find(
