@@ -148,7 +148,8 @@ jobs:
         env:
           WEB: ${{ vars.PRODUCTION_WEB_URL }}
           API: ${{ vars.PRODUCTION_API_URL }}
-        run: pnpm release:check --web "$WEB" --api "$API" --expect-version "$VERSION" --expect-provider bachs-live
+          EXPECT_LIVE: ${{ vars.PRODUCTION_PAYMENTS_LIVE || 'false' }}
+        run: pnpm release:check --web "$WEB" --api "$API" --expect-version "$VERSION" --expect-provider bachs-live --expect-live "$EXPECT_LIVE"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

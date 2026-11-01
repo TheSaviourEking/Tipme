@@ -44,8 +44,8 @@ const sandboxCredentials = {
 
 const cases = [
   // [mode, nodeEnv, provider, live, ok]
-  // Refused until live payouts land: remove this fence with the one in settings.ts (Task 12).
-  ['production', 'production', 'bachs-live', 'true', false],
+  // The one combination that takes real money, and only with every setting it needs (below).
+  ['production', 'production', 'bachs-live', 'true', true],
   ['production', 'production', 'bachs-live', 'false', true],
   ['production', 'production', 'bachs-sandbox', 'false', false],
   ['production', 'production', 'mock', 'false', false],
@@ -84,10 +84,13 @@ const production = {
 test('PAYMENTS_LIVE_ENABLED is a real true or false', () => {
   const parsed = schema(true).parse({ ...production, ...liveCredentials });
   assert.equal(parsed.PAYMENTS_LIVE_ENABLED, false);
-  // 'true' parses to a real boolean; the temporary fence (Task 12) then refuses it by name.
-  assert.deepEqual(
-    paths({ ...production, ...liveCredentials, PAYMENTS_LIVE_ENABLED: 'true' }),
-    ['PAYMENTS_LIVE_ENABLED'],
+  assert.equal(
+    schema(true).parse({
+      ...production,
+      ...liveCredentials,
+      PAYMENTS_LIVE_ENABLED: 'true',
+    }).PAYMENTS_LIVE_ENABLED,
+    true,
   );
   assert.deepEqual(
     paths({ ...production, ...liveCredentials, PAYMENTS_LIVE_ENABLED: 'yes' }),
@@ -95,9 +98,49 @@ test('PAYMENTS_LIVE_ENABLED is a real true or false', () => {
   );
 });
 
-test('PAYMENTS_LIVE_ENABLED=true is refused on every copy, naming the setting and Task 12', () => {
+test('PAYMENTS_LIVE_ENABLED=true is safe only with every other setting it needs', () => {
+  const on = { ...production, PAYMENTS_LIVE_ENABLED: 'true' };
+  // Everything it needs: accepted.
+  assert.deepEqual(paths({ ...on, ...liveCredentials }), []);
+  // The worker holds the key and no webhook secrets.
+  assert.deepEqual(paths({ ...on, BACHS_LIVE_API_KEY: LIVE_KEY }, false), []);
+  // Each missing or misplaced setting is refused by name.
+  const refused = [
+    [{}, ['BACHS_LIVE_API_KEY', 'BACHS_LIVE_WEBHOOK_SECRET']],
+    [{ BACHS_LIVE_API_KEY: LIVE_KEY }, ['BACHS_LIVE_WEBHOOK_SECRET']],
+    [{ BACHS_LIVE_WEBHOOK_SECRET: LIVE_SECRET }, ['BACHS_LIVE_API_KEY']],
+    [
+      { ...liveCredentials, BACHS_LIVE_API_KEY: 'sk_sandbox_dummy' },
+      ['BACHS_LIVE_API_KEY'],
+    ],
+    [
+      { ...liveCredentials, BACHS_SANDBOX_API_KEY: 'sk_sandbox_dummy' },
+      ['BACHS_SANDBOX_API_KEY'],
+    ],
+    [
+      { ...liveCredentials, BACHS_WEBHOOK_SECRET: 'b'.repeat(32) },
+      ['BACHS_SANDBOX_API_KEY'],
+    ],
+  ];
+  for (const [extra, expected] of refused)
+    assert.ok(
+      expected.every((name) => paths({ ...on, ...extra }).includes(name)),
+      JSON.stringify([extra, paths({ ...on, ...extra })]),
+    );
+  // Every other copy and provider is refused however complete its settings are.
   for (const env of [
-    { ...production, ...liveCredentials },
+    {
+      DEPLOYMENT_MODE: 'preview',
+      NODE_ENV: 'production',
+      PAYMENT_PROVIDER: 'bachs-live',
+      ...liveCredentials,
+    },
+    {
+      DEPLOYMENT_MODE: 'production',
+      NODE_ENV: 'test',
+      PAYMENT_PROVIDER: 'bachs-live',
+      ...liveCredentials,
+    },
     {
       DEPLOYMENT_MODE: 'preview',
       NODE_ENV: 'production',
@@ -109,18 +152,30 @@ test('PAYMENTS_LIVE_ENABLED=true is refused on every copy, naming the setting an
       NODE_ENV: 'test',
       PAYMENT_PROVIDER: 'mock',
     },
-  ]) {
-    const found = issues({ ...env, PAYMENTS_LIVE_ENABLED: 'true' });
-    assert.ok(
-      found.some(
-        (i) =>
-          i.path.join('.') === 'PAYMENTS_LIVE_ENABLED' &&
-          /live payouts land/.test(i.message) &&
-          /Task 12/.test(i.message),
-      ),
-      JSON.stringify(found),
+    { ...production, PAYMENT_PROVIDER: 'mock' },
+  ])
+    assert.notDeepEqual(
+      paths({ ...env, PAYMENTS_LIVE_ENABLED: 'true' }),
+      [],
+      JSON.stringify(env),
     );
-  }
+});
+
+test('PAYMENTS_LIVE_ENABLED defaults to false, and only the exact word true turns it on', () => {
+  assert.equal(
+    schema(true).parse({ ...production, ...liveCredentials })
+      .PAYMENTS_LIVE_ENABLED,
+    false,
+  );
+  for (const value of ['TRUE', '1', 'on', ' true'])
+    assert.deepEqual(
+      paths({
+        ...production,
+        ...liveCredentials,
+        PAYMENTS_LIVE_ENABLED: value,
+      }),
+      ['PAYMENTS_LIVE_ENABLED'],
+    );
 });
 
 test('bachs-live needs its live key and webhook secret', () => {
@@ -200,8 +255,7 @@ test('turning payments on needs bachs-live, and messages never show values', () 
   });
   assert.deepEqual(
     found.map((issue) => issue.path.join('.')),
-    // The provider rule, then the temporary fence (Task 12).
-    ['PAYMENTS_LIVE_ENABLED', 'PAYMENTS_LIVE_ENABLED'],
+    ['PAYMENTS_LIVE_ENABLED'],
   );
   const all = JSON.stringify(
     issues({ ...production, ...sandboxCredentials, ...liveCredentials }),

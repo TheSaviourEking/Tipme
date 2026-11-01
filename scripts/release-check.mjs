@@ -21,6 +21,9 @@ const { values } = parseArgs({
     'expect-version': { type: 'string' },
     // Fails the check when the copy reports another payment provider (production: bachs-live).
     'expect-provider': { type: 'string' },
+    // Whether this copy should take real money (true|false): production passes its
+    // PRODUCTION_PAYMENTS_LIVE. Without it the suite expects false, which fails on a live copy.
+    'expect-live': { type: 'string' },
     // Local copies only: accept a self-signed certificate.
     insecure: { type: 'boolean', default: false },
   },
@@ -60,6 +63,16 @@ try {
 console.log(
   `Release check against ${web} (API ${api}): version ${info.version}, kind ${info.kind}, mode ${info.deploymentMode}, payments ${info.paymentProvider ?? 'mock'}.`,
 );
+const expectLive = values['expect-live'];
+if (expectLive !== undefined && !['true', 'false'].includes(expectLive))
+  stop('--expect-live must be true or false.');
+if (expectLive !== undefined && String(info.paymentsLive) !== expectLive)
+  stop(
+    expectLive === 'true'
+      ? 'this copy does not take real payments, expected it to.'
+      : 'this copy takes real payments, expected it not to.',
+    1,
+  );
 // A copy that takes real payments runs the read-only check only: --full would create tips.
 if (info.paymentsLive && values.full)
   stop('--full refused: this copy takes real payments.', 1);
@@ -139,6 +152,7 @@ const result = spawnSync(
       RELEASE_FULL: values.full ? '1' : '0',
       RELEASE_HANDLE: values.handle ?? '',
       RELEASE_EXPECT_VERSION: values['expect-version'] ?? '',
+      RELEASE_EXPECT_LIVE: expectLive ?? 'false',
       RELEASE_INSECURE: values.insecure ? '1' : '0',
       RELEASE_PAYMENT_PROVIDER: paymentProvider,
       RELEASE_BACHS_HANDLE: bachsHandle,

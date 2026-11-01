@@ -281,10 +281,21 @@ test('production refuses mock and sandbox, and live payments need bachs-live and
     productionIssues({ PAYMENT_PROVIDER: 'bachs-sandbox' }),
     /PAYMENT_PROVIDER/,
   );
-  // Live payments stay fenced until payouts land (Task 12).
+  // Live payments need the alert address and the key; complete settings pass.
+  assert.equal(
+    productionIssues({
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+    }),
+    '',
+  );
   assert.match(
-    productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
-    /PAYMENTS_LIVE_ENABLED/,
+    productionIssues({
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+      BACHS_LIVE_API_KEY: undefined,
+    }),
+    /BACHS_LIVE_API_KEY/,
   );
   assert.match(
     productionIssues({ BACHS_LIVE_API_KEY: undefined }),
@@ -432,17 +443,10 @@ test('with live payments on, production will not start without an alert route; w
   // Off (as today, while checkout is closed): no address needed, the worker only warns.
   assert.equal(productionIssues({}), '');
   assert.equal(productionIssues({ PAYMENTS_LIVE_ENABLED: 'false' }), '');
-  // On: the address is required (the fence names PAYMENTS_LIVE_ENABLED as well until Task 12).
-  assert.match(
+  // On: the address is required, and it is the only thing missing here.
+  assert.equal(
     productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
-    /ALERT_WEBHOOK_URL/,
-  );
-  assert.doesNotMatch(
-    productionIssues({
-      PAYMENTS_LIVE_ENABLED: 'true',
-      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
-    }),
-    /ALERT_WEBHOOK_URL/,
+    'Invalid configuration: ALERT_WEBHOOK_URL',
   );
   // The message names the setting, never a value.
   assert.doesNotMatch(

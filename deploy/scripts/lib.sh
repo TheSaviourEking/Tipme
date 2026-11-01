@@ -124,6 +124,24 @@ preflight_production() {
   fi
 }
 
+# A deploy that switches payments on must not reach the workers before finding out the worker will
+# refuse it (apps/worker/src/config.ts keeps that rule): the new API would already be serving. Only
+# the worker holds the address, so it is checked here rather than in the API's config. The address
+# is a credential: messages name the setting only.
+preflight_live_payments() {
+  [[ "$(setting PAYMENTS_LIVE_ENABLED || true)" == true ]] || return 0
+  local address
+  address=$(setting ALERT_WEBHOOK_URL || true)
+  if [[ -z "$address" ]]; then
+    echo "ALERT_WEBHOOK_URL is required in $ENV_FILE once PAYMENTS_LIVE_ENABLED=true: the worker refuses to start without it." >&2
+    exit 2
+  fi
+  if [[ "$address" != https://* ]]; then
+    echo "ALERT_WEBHOOK_URL must be https in $ENV_FILE." >&2
+    exit 2
+  fi
+}
+
 # Each role password present, safe inside a URL, and different from the others (one shared
 # password would collapse the roles' separation).
 role_passwords() {

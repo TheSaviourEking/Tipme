@@ -62,13 +62,6 @@ export function isLiveProvider(name: string): name is 'bachs-live' {
 }
 
 /**
- * TEMPORARY FENCE: live payments cannot be switched on until live payouts, manual payout
- * schedules, the reserve alert and the pilot notice exist (live-payments plan, Tasks 3-9, 11).
- * Task 12 removes this constant and its one check below, and updates the settings matrix test.
- */
-const LIVE_PAYMENTS_FENCED = true;
-
-/**
  * Validation shared by both configs (use inside their superRefine). `webhooks` is true where
  * the webhook secrets are read (the API); the worker needs the Bachs API key alone.
  */
@@ -103,11 +96,6 @@ export function checkPaymentSettings(
   }
   if (s.PAYMENTS_LIVE_ENABLED && !isLiveProvider(provider))
     issue('PAYMENTS_LIVE_ENABLED', 'requires the bachs-live provider');
-  if (s.PAYMENTS_LIVE_ENABLED && LIVE_PAYMENTS_FENCED)
-    issue(
-      'PAYMENTS_LIVE_ENABLED',
-      'PAYMENTS_LIVE_ENABLED=true is not available until live payouts land (live-payments plan, Task 12)',
-    );
   if (
     production &&
     (s.BACHS_SANDBOX_API_KEY ||

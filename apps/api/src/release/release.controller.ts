@@ -41,7 +41,7 @@ export class ReleaseInfoController {
         kind: this.config.RELEASE_KIND,
         version: this.config.GIT_SHA ?? 'unknown',
         deploymentMode: this.config.DEPLOYMENT_MODE,
-        // The read-only release check expects false on every copy (live payments are fenced until Task 12).
+        // True only on a production copy with bachs-live: the release check compares it to what it was told to expect.
         paymentsLive: this.config.PAYMENTS_LIVE_ENABLED,
         analytics:
           this.config.ANALYTICS_ENABLED ??

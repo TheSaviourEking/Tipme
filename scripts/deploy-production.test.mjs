@@ -464,6 +464,45 @@ test('production preflight refuses a missing CA file, database URL, confirm name
   }
 });
 
+test('with payments on, a missing or plain-http alert address stops the deploy before anything runs', () => {
+  const secret = 'http://hooks.example.test/T0/B0/very-secret-token';
+  for (const [env, message] of [
+    [{ PAYMENTS_LIVE_ENABLED: 'true' }, /ALERT_WEBHOOK_URL is required/],
+    [
+      { PAYMENTS_LIVE_ENABLED: 'true', ALERT_WEBHOOK_URL: '' },
+      /ALERT_WEBHOOK_URL is required/,
+    ],
+    [
+      { PAYMENTS_LIVE_ENABLED: 'true', ALERT_WEBHOOK_URL: secret },
+      /ALERT_WEBHOOK_URL must be https/,
+    ],
+  ]) {
+    const { run, read, ship } = stageProduction({ env });
+    ship(A);
+    const result = run('deploy-production.sh', [A]);
+    assert.equal(result.status, 2, JSON.stringify(env));
+    assert.match(result.stderr, message);
+    assert.ok(!result.stderr.includes('very-secret-token'));
+    assert.equal(composeCalls(read).length, 0, 'nothing ran');
+  }
+});
+
+test('the alert address does not stop a deploy with payments off, or one that has it', () => {
+  for (const env of [
+    {},
+    { PAYMENTS_LIVE_ENABLED: 'false' },
+    {
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+    },
+  ]) {
+    const { run, ship } = stageProduction({ env });
+    ship(A);
+    const result = run('deploy-production.sh', [A]);
+    assert.equal(result.status, 0, result.stderr);
+  }
+});
+
 test('a missing edge-production network is refused before anything runs', () => {
   const { run, read, ship } = stageProduction();
   ship(A);

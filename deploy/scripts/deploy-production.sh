@@ -16,6 +16,7 @@ version=${1:?usage: deploy-production.sh <version>}
 [[ "$version" =~ ^[0-9a-f]{7,40}$ ]] || { echo "Not a version (git sha): $version" >&2; exit 2; }
 take_lock
 preflight
+preflight_live_payments
 shipped "$version" || {
   echo "tipme-app:$version is not loaded, or its files are not in $RELEASES/$version: ship it with the deploy-production workflow first." >&2
   exit 2
