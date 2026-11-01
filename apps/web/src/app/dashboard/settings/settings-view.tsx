@@ -256,6 +256,9 @@ const renameErrors: Record<string, string> = {
     'Use 3 to 30 letters, numbers or underscores, with no spaces.',
 };
 
+/** Long enough for a slow phone connection; a modal can't wait on a request for ever. */
+const HANDLE_REQUEST_TIMEOUT_MS = 15_000;
+
 const changesLeft = (n: number) =>
   n === 0 ? 'no changes left' : `${n} ${n === 1 ? 'change' : 'changes'} left`;
 
@@ -275,9 +278,12 @@ function HandleChange() {
   const [handle, setHandle] = useState(profile.handle);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Counts each error, so the same message a second time still moves focus to it.
+  const [errorCount, setErrorCount] = useState(0);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const savedMessage = useRef<HTMLParagraphElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const closeConfirm = useCallback(() => setConfirming(null), []);
   const wanted = handle.trim().replace(/^@/, '').toLowerCase();
 
@@ -285,9 +291,15 @@ function HandleChange() {
   useEffect(() => {
     if (saved) savedMessage.current?.focus();
   }, [saved]);
+  // The field, or the heading when the card has just swapped to one with no form.
   useEffect(() => {
-    if (error) document.getElementById(`${id}-handle`)?.focus();
-  }, [error, id]);
+    if (errorCount > 0)
+      (document.getElementById(`${id}-handle`) ?? heading.current)?.focus();
+  }, [errorCount, id]);
+  const fail = (message: string) => {
+    setError(message);
+    setErrorCount((count) => count + 1);
+  };
 
   /** Only asks to confirm a handle that can work; the server still has the last word. */
   const review = async (event: FormEvent) => {
@@ -296,21 +308,22 @@ function HandleChange() {
     setError('');
     setSaved(false);
     if (wanted.length < 3) {
-      setError(renameErrors.VALIDATION_FAILED!);
+      fail(renameErrors.VALIDATION_FAILED!);
       return;
     }
     setBusy(true);
     const check = await apiFetch<{ status: HandleStatus }>(
       `/v1/handles/${encodeURIComponent(wanted)}/availability`,
+      { timeoutMs: HANDLE_REQUEST_TIMEOUT_MS },
     );
     setBusy(false);
     const status = check.ok ? check.data.status : 'available';
-    if (status === 'invalid') setError(renameErrors.VALIDATION_FAILED!);
+    if (status === 'invalid') fail(renameErrors.VALIDATION_FAILED!);
     else if (
       status === 'reserved' ||
       (status === 'taken' && !previous.includes(wanted))
     )
-      setError(renameErrors.HANDLE_TAKEN!);
+      fail(renameErrors.HANDLE_TAKEN!);
     else setConfirming(wanted);
   };
 
@@ -319,27 +332,39 @@ function HandleChange() {
     const result = await apiFetch<MyProfile>('/v1/me/handle', {
       method: 'PUT',
       body: { handle: next },
+      timeoutMs: HANDLE_REQUEST_TIMEOUT_MS,
     });
+    const succeeded = (mine: MyProfile) => {
+      setProfile(mine);
+      setHandle(mine.handle);
+      setSaved(true);
+    };
     if (result.ok) {
       setBusy(false);
       setConfirming(null);
-      setProfile(result.data);
-      setHandle(result.data.handle);
-      setSaved(true);
+      succeeded(result.data);
       return;
     }
-    // The count or plan moved since this screen loaded: show what is true now.
-    if (
-      result.code === 'HANDLE_CHANGE_LIMIT' ||
-      result.code === 'HANDLE_CHANGE_PRO_REQUIRED'
-    ) {
-      const fresh = await apiFetch<MyProfile>('/v1/me/profile');
-      if (fresh.ok) setProfile(fresh.data);
-    }
+    // Refused for a reason, or the outcome is unknown (a lost connection, a timeout, a 5xx): either
+    // way, show what is true now. Only a request that failed validation changed nothing for sure.
+    const fresh =
+      result.code === 'VALIDATION_FAILED'
+        ? null
+        : await apiFetch<MyProfile>('/v1/me/profile', {
+            timeoutMs: HANDLE_REQUEST_TIMEOUT_MS,
+          });
     setBusy(false);
     setConfirming(null);
-    setError(
-      renameErrors[result.code] ?? 'We couldn’t change that. Please try again.',
+    if (fresh?.ok && fresh.data.handle === next) {
+      succeeded(fresh.data);
+      return;
+    }
+    if (fresh?.ok) setProfile(fresh.data);
+    fail(
+      renameErrors[result.code] ??
+        (fresh?.ok
+          ? 'We couldn’t change that. Please try again.'
+          : 'We couldn’t tell whether that went through. Reload this page to see your handle.'),
     );
   };
 
@@ -363,8 +388,10 @@ function HandleChange() {
   if (profile.plan !== 'pro')
     return (
       <Card className="settings-section">
-        <h2>Your handle</h2>
-        <p className="tm-hint">
+        <h2 ref={heading} tabIndex={-1}>
+          Your handle
+        </h2>
+        <p className="tm-hint" role={error ? 'alert' : undefined}>
           Your page is at {host}/@{profile.handle}. Handle changes are part of
           TipMe Pro.
         </p>
@@ -375,9 +402,11 @@ function HandleChange() {
   if (left === 0)
     return (
       <Card className="settings-section">
-        <h2>Your handle</h2>
+        <h2 ref={heading} tabIndex={-1}>
+          Your handle
+        </h2>
         {savedNotice}
-        <p>
+        <p role={error ? 'alert' : undefined}>
           You’ve used all your handle changes.{' '}
           <a href="mailto:support@usetipme.xyz">Contact the TipMe team</a> to
           change it again.

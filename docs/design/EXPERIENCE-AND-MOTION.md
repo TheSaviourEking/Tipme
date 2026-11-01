@@ -29,12 +29,12 @@ If an animation serves none of these, remove it.
 
 Use the existing tokens. Don't add a duration without a decision-log entry.
 
-| Role | Token | Value | Used for |
-|---|---|---|---|
-| Tactile | `--duration-tactile` | 150ms | Press, release, toggle, hover, focus |
-| Component | `--duration-component` | 240ms | Disclosure, dialog, toast, field error, tab change |
-| Spatial | `--duration-spatial` | 420ms | Page arrival, panel entry, shared-element move |
-| Acknowledgement | `--duration-appreciation` | 760ms | The confirmed thank-you only |
+| Role            | Token                     | Value | Used for                                           |
+| --------------- | ------------------------- | ----- | -------------------------------------------------- |
+| Tactile         | `--duration-tactile`      | 150ms | Press, release, toggle, hover, focus               |
+| Component       | `--duration-component`    | 240ms | Disclosure, dialog, toast, field error, tab change |
+| Spatial         | `--duration-spatial`      | 420ms | Page arrival, panel entry, shared-element move     |
+| Acknowledgement | `--duration-appreciation` | 760ms | The confirmed thank-you only                       |
 
 - **Easing:** `--ease-physical` for nearly everything. `--ease-spring` only for the acknowledgement and a selected key settling. No bounce on anything to do with money.
 - **Exits** take about two-thirds of the entry time, because people have already moved on.
@@ -44,16 +44,16 @@ Use the existing tokens. Don't add a duration without a decision-log entry.
 
 ## 4. Touch and press
 
-| Element | Behaviour |
-|---|---|
-| Raised button or key | Press moves it 1–2px toward the canvas and reduces its shadow in 100ms. Release takes 150ms. |
-| Amount key selected | Purple fill arrives in 150ms and the dot appears at the same moment. The total updates at once, with no fade. |
-| Busy button | The label stays and a quiet indicator appears after 300ms, so fast actions never flicker. The button keeps its width. |
-| Field error | Text appears in 240ms with a colour change. No shaking. Focus moves to the field. |
-| Switch or segmented control | The thumb or pill slides in 150ms, with the text changing immediately. |
-| Copy link | The label changes to "Link copied." for 2 seconds. The button keeps its width. |
-| Vibration | One 10ms tick on confirmed thanks only, where the device supports it. Never for errors or routine taps. |
-| Sound | None. |
+| Element                     | Behaviour                                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Raised button or key        | Press moves it 1–2px toward the canvas and reduces its shadow in 100ms. Release takes 150ms.                          |
+| Amount key selected         | Purple fill arrives in 150ms and the dot appears at the same moment. The total updates at once, with no fade.         |
+| Busy button                 | The label stays and a quiet indicator appears after 300ms, so fast actions never flicker. The button keeps its width. |
+| Field error                 | Text appears in 240ms with a colour change. No shaking. Focus moves to the field.                                     |
+| Switch or segmented control | The thumb or pill slides in 150ms, with the text changing immediately.                                                |
+| Copy link                   | The label changes to "Link copied." for 2 seconds. The button keeps its width.                                        |
+| Vibration                   | One 10ms tick on confirmed thanks only, where the device supports it. Never for errors or routine taps.               |
+| Sound                       | None.                                                                                                                 |
 
 Hover effects are subtle and never carry information. Everything must also work by touch and keyboard.
 
@@ -98,13 +98,13 @@ Hover effects are subtle and never carry information. Everything must also work 
 
 The one place TipMe is allowed to perform, once per confirmed tip:
 
-| Time | What happens |
-|---|---|
-| 0ms | The purple canvas and final text are in place and readable. The name and amount are never delayed. |
-| 0–420ms | The photo scales from 0.92 to 1 with `--ease-spring`. |
+| Time      | What happens                                                                                                                                                          |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0ms       | The purple canvas and final text are in place and readable. The name and amount are never delayed.                                                                    |
+| 0–420ms   | The photo scales from 0.92 to 1 with `--ease-spring`.                                                                                                                 |
 | 200–760ms | One heart rises from behind the photo, and up to five small hearts drift outward and fade. They're drawn as SVG in TipMe's own shape, with nothing covering the text. |
-| 760ms | Everything settles and stays still. |
-| After | The receipt card rises 12px and fades in over 240ms. |
+| 760ms     | Everything settles and stays still.                                                                                                                                   |
+| After     | The receipt card rises 12px and fades in over 240ms.                                                                                                                  |
 
 With reduced motion, the final composition appears at once. No looping and no sound. A reload shows the settled screen.
 
@@ -152,7 +152,7 @@ With reduced motion, the final composition appears at once. No looping and no so
 
 ### 7.8 Handle change confirmation
 
-The dialog fades in over 240ms with the content rising 8px, and the background dims. Focus moves to the dialog and returns to the Change handle button on closing. Escape cancels. On a phone it's a sheet rising from the bottom. On success the new handle crossfades in, with a confirmation line.
+The dialog fades in over 240ms with the content rising 8px, and the background dims. Focus moves to Cancel, because the change spends an allowance that can't be given back, and returns to the Change handle button on closing. Escape cancels. On a phone it's a sheet rising from the bottom. On success the new handle crossfades in, with a confirmation line.
 
 ### 7.9 Dialogs, toasts and menus
 

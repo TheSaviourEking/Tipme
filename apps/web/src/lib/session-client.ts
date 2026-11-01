@@ -16,13 +16,18 @@ export async function apiFetch<T>(
     /** A file sent as it is (a photo upload, PR-013), with its own content type. */
     file?: Blob;
     headers?: Record<string, string>;
+    /** Gives up after this long, as a network failure; the outcome of a write is then unknown. */
+    timeoutMs?: number;
   } = {},
 ): Promise<SessionResult<T>> {
   const method = init.method ?? 'GET';
+  const abort = init.timeoutMs ? new AbortController() : undefined;
+  if (abort) setTimeout(() => abort.abort(), init.timeoutMs);
   let response: Response;
   try {
     response = await fetch(`${API_ORIGIN}${path}`, {
       method,
+      ...(abort ? { signal: abort.signal } : {}),
       credentials: 'include',
       cache: 'no-store',
       headers: {

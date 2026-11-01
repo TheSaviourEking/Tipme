@@ -325,3 +325,139 @@ test('staff can allow more, with a reason, and it is audited', async () => {
   assert.equal(recipient.status, 404, 'the admin stays hidden');
   assert.deepEqual((await mine(cookie)).handleChanges, { used: 4, allowed: 6 });
 });
+
+test('staff can allow at most 20 extra changes on a page in total', async () => {
+  const cookie = await proPage('+2348031270020', 'cap_page');
+  const reason = 'Long-standing partner page';
+  assert.deepEqual(await json(await grant('cap_page', { extra: 10, reason })), {
+    allowed: 13,
+  });
+  assert.deepEqual(await json(await grant('cap_page', { extra: 10, reason })), {
+    allowed: 23,
+  });
+  // The 21st extra change, in the smallest grant there is: refused, nothing changes or is recorded.
+  const refused = await grant('cap_page', { extra: 1, reason });
+  assert.equal(refused.status, 400);
+  assert.equal(await code(refused), 'VALIDATION_FAILED');
+  assert.deepEqual((await mine(cookie)).handleChanges, {
+    used: 0,
+    allowed: 23,
+  });
+  const { rows } = await database.pool.query(
+    `SELECT count(*)::int AS n FROM audit_events
+      WHERE action = 'page.handle_changes_granted'
+        AND subject_id = (SELECT id::text FROM profiles WHERE handle_lower = 'cap_page')`,
+  );
+  assert.equal(rows[0].n, 2);
+  // The database holds the same line, whatever a later release does.
+  await assert.rejects(
+    database.pool.query(
+      `UPDATE profiles SET handle_changes_extra = 21 WHERE handle_lower = 'cap_page'`,
+    ),
+    (error) =>
+      error.code === '23514' && error.constraint === 'profiles_handle_changes',
+  );
+});
+
+test('a change that loses a race for the handle uses up nothing', async () => {
+  const cookie = await proPage('+2348031270021', 'lost_race');
+  const other = await signIn(stack.api, '+2348031270022');
+  const { rows: users } = await database.pool.query(
+    `SELECT id FROM users WHERE phone_e164 = '+2348031270022'`,
+  );
+  // Someone else is mid-way through claiming the handle: their transaction holds its lock and
+  // their row isn't visible yet, so the rename passes its check and then waits on the lock.
+  const claimer = await database.pool.connect();
+  let attempt;
+  try {
+    await claimer.query('BEGIN');
+    await claimer.query(
+      `SELECT pg_advisory_xact_lock(hashtext('tipme.handle:lost_race_x'))`,
+    );
+    attempt = rename(cookie, 'lost_race_x');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await claimer.query(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state)
+       VALUES (gen_random_uuid(), $1, 'lost_race_x', 'lost_race_x', 'lost_race_x', 'not_live')`,
+      [users[0].id],
+    );
+    await claimer.query('COMMIT');
+  } finally {
+    claimer.release();
+  }
+  const refused = await attempt;
+  assert.equal(refused.status, 409);
+  assert.equal(await code(refused), 'HANDLE_TAKEN');
+  const profile = await mine(cookie);
+  assert.equal(profile.handle, 'lost_race');
+  assert.deepEqual(profile.handleChanges, { used: 0, allowed: 3 });
+  assert.deepEqual(profile.previousHandles, []);
+  assert.equal((await mine(other.cookie)).handle, 'lost_race_x');
+});
+
+test('deleting a page holds all its old handles, however many, and a first claim still works after', async () => {
+  const handles = Array.from({ length: 8 }, (_, i) => `gone_${i}`);
+  const cookie = await proPage('+2348031270023', handles[0]);
+  assert.equal(
+    (
+      await grant(handles[0], {
+        extra: 4,
+        reason: 'Long-standing partner page',
+      })
+    ).status,
+    200,
+  );
+  for (const handle of handles.slice(1))
+    assert.equal((await rename(cookie, handle)).status, 200, handle);
+  assert.equal((await mine(cookie)).previousHandles.length, 7);
+  assert.equal(
+    (await call('DELETE', '/v1/me/account', cookie, { confirm: 'DELETE' }))
+      .status,
+    204,
+  );
+
+  const { rows: aliases } = await database.pool.query(
+    `SELECT count(*)::int AS n FROM handle_aliases WHERE handle_lower LIKE 'gone_%'`,
+  );
+  assert.equal(aliases[0].n, 0, 'they stop leading to the deleted page');
+  const { rows: holds } = await database.pool.query(
+    `SELECT handle_lower FROM handle_holds
+      WHERE handle_lower LIKE 'gone_%' AND until > now() + interval '89 days'
+      ORDER BY handle_lower`,
+  );
+  assert.deepEqual(
+    holds.map((row) => row.handle_lower),
+    handles,
+  );
+
+  // Held: nobody can take them. A first claim of another handle is untouched.
+  const nearby = await signIn(stack.api, '+2348031270024');
+  for (const handle of handles) {
+    const grab = await call('POST', '/v1/me/page', nearby.cookie, { handle });
+    assert.equal(grab.status, 409, handle);
+    assert.equal(await code(grab), 'HANDLE_TAKEN');
+  }
+  assert.equal(
+    (await call('POST', '/v1/me/page', nearby.cookie, { handle: 'gone_new' }))
+      .status,
+    201,
+  );
+
+  // Once a hold ends the handle is an ordinary first claim: a Free page, with its own count.
+  await database.pool.query(
+    `UPDATE handle_holds SET until = now() - interval '1 day' WHERE handle_lower = 'gone_0'`,
+  );
+  const later = await signIn(stack.api, '+2348031270025');
+  assert.equal(
+    (await call('POST', '/v1/me/page', later.cookie, { handle: 'gone_0' }))
+      .status,
+    201,
+  );
+  const profile = await mine(later.cookie);
+  assert.equal(profile.plan, 'free');
+  assert.deepEqual(profile.handleChanges, { used: 0, allowed: 3 });
+  assert.equal(
+    await code(await rename(later.cookie, 'gone_0_next')),
+    'HANDLE_CHANGE_PRO_REQUIRED',
+  );
+});

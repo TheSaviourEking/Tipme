@@ -466,6 +466,8 @@ export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
 
 /** Staff allow a page more handle changes, on top of what it has: small, deliberate steps. */
 export const MAX_HANDLE_CHANGE_GRANT = 10;
+/** The most extra changes one page can hold in total; each leaves a name held for good. */
+export const MAX_HANDLE_CHANGE_EXTRA = 20;
 export const opsHandleChangesGrantSchema = opsReasonSchema
   .extend({ extra: z.number().int().min(1).max(MAX_HANDLE_CHANGE_GRANT) })
   .strict();

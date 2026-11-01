@@ -526,7 +526,7 @@ export const profiles = pgTable(
     // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
     customFeeBps: integer('custom_fee_bps'),
     // Handle changes made so far (never reset), and how many staff have allowed beyond the
-    // standard allowance. Only Pro pages can make one.
+    // standard allowance, at most MAX_HANDLE_CHANGE_EXTRA. Only Pro pages can make one.
     handleChangesUsed: integer('handle_changes_used').notNull().default(0),
     handleChangesExtra: integer('handle_changes_extra').notNull().default(0),
     createdAt: createdAt(),
@@ -539,7 +539,7 @@ export const profiles = pgTable(
     check('profiles_plan', sql`plan IN ('free', 'pro')`),
     check(
       'profiles_handle_changes',
-      sql`handle_changes_used >= 0 AND handle_changes_extra >= 0`,
+      sql`handle_changes_used >= 0 AND handle_changes_extra BETWEEN 0 AND 20`,
     ),
     check(
       'profiles_custom_fee_bps',
@@ -769,7 +769,8 @@ export const handleHolds = pgTable('handle_holds', {
 
 /**
  * A page's previous handles (PR-011): they keep pointing at the page so printed QR codes still
- * work, and nobody else can claim them. At most 5 per page; released as 90-day holds on deletion.
+ * work, and nobody else can claim them. Their number is bounded by the page's handle changes (the
+ * Pro allowance plus what staff allowed); released as 90-day holds on deletion.
  */
 export const handleAliases = pgTable(
   'handle_aliases',

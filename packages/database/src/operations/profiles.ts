@@ -1,4 +1,5 @@
 import {
+  MAX_HANDLE_CHANGE_EXTRA,
   MAX_HANDLE_CHANGE_GRANT,
   profilePatchSchema,
   type HandleStatus,
@@ -18,7 +19,7 @@ import {
   normaliseHandle,
   tipAmountsProblem,
 } from '@tipme/domain';
-import { and, asc, eq, gt, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   emailTokens,
@@ -524,8 +525,9 @@ export function renameHandle(
 
 /**
  * Staff allow a page more handle changes (permission `pages.plan`), with a reason; audited as
- * `page.handle_changes_granted`. Adds to what it has. `handle` may be one of its old handles, as in
- * the Pages lookup. It is an allowance only: a Free page still can't change its handle.
+ * `page.handle_changes_granted`. Adds to what it has, up to MAX_HANDLE_CHANGE_EXTRA in total; beyond
+ * that nothing changes (INVALID_INPUT). `handle` may be one of its old handles, as in the Pages
+ * lookup. It is an allowance only: a Free page still can't change its handle.
  */
 export function grantHandleChanges(
   db: Database,
@@ -547,10 +549,13 @@ export function grantHandleChanges(
           and(
             eq(profiles.id, page.profileId),
             ne(profiles.pageState, 'deleted'),
+            lte(profiles.handleChangesExtra, MAX_HANDLE_CHANGE_EXTRA - extra),
           ),
         )
         .returning();
-      if (!row) throw new OperationError('NO_PAGE');
+      // The page was there a moment ago, so this is the cap (a page deleted in that moment is
+      // refused all the same).
+      if (!row) throw new OperationError('INVALID_INPUT');
       const { allowed } = handleChangesOf(row);
       await recordAudit(tx, {
         staffUserId: input.staffId,

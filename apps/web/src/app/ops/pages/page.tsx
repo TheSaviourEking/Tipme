@@ -1,7 +1,11 @@
 'use client';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { MAX_HANDLE_CHANGE_GRANT, type OpsPage } from '@tipme/contracts';
+import {
+  MAX_HANDLE_CHANGE_EXTRA,
+  MAX_HANDLE_CHANGE_GRANT,
+  type OpsPage,
+} from '@tipme/contracts';
 import {
   Badge,
   Button,
@@ -124,7 +128,7 @@ function HandleChanges({
     );
     if (!result.ok)
       return result.code === 'VALIDATION_FAILED'
-        ? 'Check the values: a reason of at least 10 characters is needed.'
+        ? `Check the values: a reason of at least 10 characters is needed, and a page can have at most ${MAX_HANDLE_CHANGE_EXTRA} extra changes in total.`
         : 'That didn’t work. Please try again.';
     await onGranted();
     setDone(`@${page.handle} can now make ${result.data.allowed} in total.`);
@@ -147,7 +151,7 @@ function HandleChanges({
       )}
       <ValueWithReason
         label="More changes to allow"
-        hint={`Whole number, 1 to ${MAX_HANDLE_CHANGE_GRANT}. Added to what the page has now.`}
+        hint={`Whole number, 1 to ${MAX_HANDLE_CHANGE_GRANT}. Added to what the page has now, up to ${MAX_HANDLE_CHANGE_EXTRA} extra in total.`}
         submit="Allow more changes"
         parse={(raw) => {
           const n = /^\d{1,2}$/.test(raw.trim()) ? Number(raw) : 0;
