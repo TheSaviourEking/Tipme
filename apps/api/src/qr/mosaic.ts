@@ -6,6 +6,7 @@ import type { QrGrid } from './render.js';
 // dark or light and the ring around them left as the picture. Function modules and the quiet zone
 // aren't the picture at all, because a reader finds the code by them.
 
+const MAX_PHOTO_PIXELS = 25_000_000;
 const SUB = 7;
 const CENTRE = [2, 3, 4];
 const INK = [28, 20, 16] as const;
@@ -22,6 +23,14 @@ export class QrArtPhotoRequiredError extends Error {
   }
 }
 
+/** Thrown when the photo is an image, but too many pixels to decode: told apart from having none. */
+export class QrArtPhotoTooLargeError extends Error {
+  constructor() {
+    super('The photo is too large for the mosaic');
+    this.name = 'QrArtPhotoTooLargeError';
+  }
+}
+
 /** The mosaic as an opaque image of `size` pixels, carrying none of the photo's metadata. */
 export async function drawMosaic(
   grid: QrGrid,
@@ -33,8 +42,13 @@ export async function drawMosaic(
   const across = cells * SUB;
   let picture: Buffer;
   try {
+    // Read from the header alone, so an oversized photo is named before anything is decoded.
+    const { width, height } = await sharp(photo, {
+      limitInputPixels: false,
+    }).metadata();
+    if (width * height > MAX_PHOTO_PIXELS) throw new QrArtPhotoTooLargeError();
     picture = await sharp(photo, {
-      limitInputPixels: 25_000_000,
+      limitInputPixels: MAX_PHOTO_PIXELS,
       failOn: 'error',
     })
       .timeout({ seconds: 5 })
@@ -43,7 +57,8 @@ export async function drawMosaic(
       .removeAlpha()
       .raw()
       .toBuffer();
-  } catch {
+  } catch (error) {
+    if (error instanceof QrArtPhotoTooLargeError) throw error;
     throw new QrArtPhotoRequiredError();
   }
   const out = Buffer.alloc(across * across * 3, 255);

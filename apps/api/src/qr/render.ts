@@ -2,9 +2,14 @@ import QRCode from 'qrcode';
 import sharp, { type OverlayOptions, type Sharp } from 'sharp';
 import { QR_ART, type QrArtId } from './catalogue.js';
 import { CARD_PANEL, cardFrame, type CardCover } from './covers-for-cards.js';
-import { MOSAIC_QUIET, QrArtPhotoRequiredError, drawMosaic } from './mosaic.js';
+import {
+  MOSAIC_QUIET,
+  QrArtPhotoRequiredError,
+  QrArtPhotoTooLargeError,
+  drawMosaic,
+} from './mosaic.js';
 
-export { QR_ART, QrArtPhotoRequiredError };
+export { QR_ART, QrArtPhotoRequiredError, QrArtPhotoTooLargeError };
 
 // Draws the Pro QR designs on the server, so the browser never holds the drawing code. Every mark
 // is an outlined path: the API image has no fonts to rely on. Function modules (finder, separator,
@@ -12,7 +17,12 @@ export { QR_ART, QrArtPhotoRequiredError };
 // finds and reads the code by them; the design only reshapes the data modules.
 
 const MIN_SIZE = 64;
-const MAX_SIZE = 2400;
+// The card frames' own size: anything larger would only blur their artwork.
+const MAX_SIZE = 1400;
+const MAX_URL_LENGTH = 300;
+// The H-level version the mosaic uses first reaches this many modules at version 7, where a row of
+// extra alignment patterns crosses the middle of the picture.
+export const MOSAIC_FACE_ALIGNMENT_MODULES = 45;
 const f = (n: number) => +n.toFixed(3);
 const rng = (seed: number) => () =>
   (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
@@ -234,6 +244,13 @@ const RECIPES: Record<QrArtId, Recipe> = {
   paper: card('paper', '#4d16a8', round()),
 };
 
+/** The link to encode. A preview needs the web origin from config, and ignores `url`. */
+export type QrArtLink = LinkOptions &
+  (
+    | { preview: false; url: string; previewOrigin?: string }
+    | { preview: true; previewOrigin: string; url?: string }
+  );
+
 const SIL = 69;
 const SIL_MARGIN = 2;
 const SIL_GAP = 2;
@@ -404,30 +421,64 @@ function recipeFor(id: string): Recipe {
   return RECIPES[id as QrArtId];
 }
 
-/** What a preview encodes, whatever it is handed: the home page of the same site. */
-function encodedUrl(url: string, preview: boolean): string {
+interface LinkOptions {
+  /** Permits plain http on this machine only, for local runs and tests. Never set in production. */
+  allowLocalHttp?: boolean;
+}
+
+/** Every link is checked here, before the encoder, which is slow on long mixed text. */
+function checkedLink(link: unknown, options: LinkOptions): URL {
+  const refuse = () => new RangeError('A QR design needs a plain web link');
+  if (
+    typeof link !== 'string' ||
+    link.length > MAX_URL_LENGTH ||
+    // eslint-disable-next-line no-control-regex -- control characters are what it looks for
+    /[\u0000-\u001f\u007f]/.test(link)
+  )
+    throw refuse();
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(link);
   } catch {
-    throw new RangeError('A QR design needs a web link');
+    throw refuse();
   }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')
-    throw new RangeError('A QR design needs a web link');
-  return preview ? `${parsed.origin}/?src=qr-preview` : url;
+  const localHttp =
+    options.allowLocalHttp === true &&
+    parsed.protocol === 'http:' &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+  if (
+    (parsed.protocol !== 'https:' && !localHttp) ||
+    parsed.username ||
+    parsed.password
+  )
+    throw refuse();
+  return parsed;
+}
+
+function pageLink(url: unknown, options: LinkOptions): string {
+  const parsed = checkedLink(url, options);
+  // Encoded exactly as a browser would write it, so nothing odd is carried into the code.
+  if (parsed.href !== url)
+    throw new RangeError('A QR design needs a plain web link');
+  return parsed.href;
+}
+
+/** A preview leads home on the origin it is told, and never looks at the page's own link. */
+function encodedUrl(input: QrArtLink): string {
+  if (!input.preview) return pageLink(input.url, input);
+  const parsed = checkedLink(input.previewOrigin, input);
+  if (parsed.origin !== input.previewOrigin)
+    throw new RangeError('A QR preview needs the web origin');
+  return `${parsed.origin}/?src=qr-preview`;
 }
 
 const ecOf = (recipe: Recipe) =>
   recipe.type === 'bare' ? recipe.ec : recipe.type === 'card' ? 'Q' : 'H';
 
 /** Where a design puts its code on the image, in parts of the image's width. For tests of the code. */
-export function qrArtLayout(input: {
-  id: string;
-  url: string;
-  preview: boolean;
-}) {
+export function qrArtLayout(input: QrArtLink & { id: string }) {
   const recipe = recipeFor(input.id);
-  const grid = makeGrid(encodedUrl(input.url, input.preview), ecOf(recipe));
+  const grid = makeGrid(encodedUrl(input), ecOf(recipe));
   const n = grid.n;
   let module: number;
   let start: number;
@@ -454,19 +505,28 @@ export function qrArtLayout(input: {
   };
 }
 
+/**
+ * How a link would sit in the mosaic. From version 7 extra alignment patterns land on the face.
+ * Advice for the route: nothing here refuses a link, because the policy is the owner's to choose.
+ */
+export function qrMosaicFit(url: string, options: LinkOptions = {}) {
+  const { version, n } = makeGrid(pageLink(url, options), ecOf(RECIPES.mosaic));
+  return {
+    version,
+    modules: n,
+    alignmentOnFace: n >= MOSAIC_FACE_ALIGNMENT_MODULES,
+  };
+}
+
 /** One QR design as a PNG of `size` pixels, carrying no metadata. */
-export async function renderQrArt(input: {
-  id: string;
-  url: string;
-  photo?: Buffer;
-  preview: boolean;
-  size: number;
-}): Promise<Buffer> {
+export async function renderQrArt(
+  input: QrArtLink & { id: string; photo?: Buffer; size: number },
+): Promise<Buffer> {
   const { id, photo, preview, size } = input;
   const recipe = recipeFor(id);
   if (!Number.isInteger(size) || size < MIN_SIZE || size > MAX_SIZE)
     throw new RangeError('QR size out of range');
-  const grid = makeGrid(encodedUrl(input.url, preview), ecOf(recipe));
+  const grid = makeGrid(encodedUrl(input), ecOf(recipe));
   const overlays: OverlayOptions[] = [];
   let image: Sharp;
   if (recipe.type === 'mosaic') {
