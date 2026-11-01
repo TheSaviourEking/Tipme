@@ -1,5 +1,6 @@
 # Current task — staging reusable-workflow permission fix (1 November 2026)
 
+- **Correction (1 Nov):** #75/#76 granted only `statuses: read`, and staging run `41275075923` still had a startup failure on `main` with them. `record-tested-tree` in `ci.yml` requests `statuses: write`, and GitHub validates every job of a called workflow, even skipped ones. The caller now grants `statuses: write`, and `scripts/workflow-contracts.test.mjs` checks every CI job, not only `changes`. It takes effect only once on `main`, because `workflow_run` uses `main`'s file.
 - Branch/worktree: `chore/sync-main-into-dev-after-75` / `.worktrees/sync-main-dev`, from `origin/dev` at `c92bb38`.
 - Failure: staging runs `41270562653` and `41270824881` stopped at workflow validation, before jobs started. The reusable CI `changes` job requests `statuses: read`, but the staging caller granted only `contents: read` and `pull-requests: read`.
 - Fix implemented: grant `statuses: read` at the reusable-workflow call and enforce the caller/callee permission contract with `scripts/workflow-contracts.test.mjs`. The regression was observed failing with the missing permission before the fix and passing after it.

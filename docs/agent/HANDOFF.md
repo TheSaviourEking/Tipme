@@ -1,5 +1,6 @@
 # Current handoff — staging workflow cannot call reusable CI (1 November 2026)
 
+- **Correction (1 Nov):** #75/#76 granted only `statuses: read`, and staging run `41275075923` still had a startup failure on `main` with them. `record-tested-tree` in `ci.yml` requests `statuses: write`, and GitHub validates every job of a called workflow, even skipped ones. The caller now grants `statuses: write`, and `scripts/workflow-contracts.test.mjs` checks every CI job, not only `changes`. It takes effect only once on `main`, because `workflow_run` uses `main`'s file.
 - Branch/worktree: `chore/sync-main-into-dev-after-75` / `.worktrees/sync-main-dev`, based on `origin/dev` commit `c92bb38` and merging `origin/main` commit `6b8db24`.
 - Root cause: `.github/workflows/ci.yml` gives its `changes` job `statuses: read` so it can inspect tested-tree statuses. `.github/workflows/deploy-staging.yml` calls that workflow but omitted `statuses: read`; GitHub rejects a called workflow that requests more permission than its caller grants. Staging therefore had a startup failure before any job or deployment ran.
 - Minimal fix: add `statuses: read` to the staging `checks` caller job. The regression test compares requested and granted permission levels and was observed failing with `[['statuses', 'read']]` before the fix, then passing.
