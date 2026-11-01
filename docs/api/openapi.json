@@ -2213,6 +2213,215 @@
         ]
       }
     },
+    "/v1/me/payout-destination": {
+      "get": {
+        "operationId": "PayoutDestination.current",
+        "tags": [
+          "PayoutDestination"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "PayoutDestination.update",
+        "tags": [
+          "PayoutDestination"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bankCode": {
+                    "type": "string",
+                    "pattern": "^[\\w-]{1,20}$"
+                  },
+                  "accountNumber": {
+                    "type": "string",
+                    "pattern": "^\\d{10}$"
+                  },
+                  "accountName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "emailCode": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  }
+                },
+                "required": [
+                  "bankCode",
+                  "accountNumber",
+                  "accountName",
+                  "emailCode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/payout-destination/code": {
+      "post": {
+        "operationId": "PayoutDestination.requestCode",
+        "tags": [
+          "PayoutDestination"
+        ],
+        "responses": {
+          "202": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_code",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/payout-destination/resolve": {
+      "post": {
+        "operationId": "PayoutDestination.resolve",
+        "tags": [
+          "PayoutDestination"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bankCode": {
+                    "type": "string",
+                    "pattern": "^[\\w-]{1,20}$"
+                  },
+                  "accountNumber": {
+                    "type": "string",
+                    "pattern": "^\\d{10}$"
+                  }
+                },
+                "required": [
+                  "bankCode",
+                  "accountNumber"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/phone": {
       "put": {
         "operationId": "Notifications.changePhone",
@@ -6873,6 +7082,42 @@
         "x-tipme-permission": "recoveries.cancel"
       }
     },
+    "/v1/payout-banks": {
+      "get": {
+        "operationId": "PayoutDestination.banks",
+        "tags": [
+          "PayoutDestination"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/profiles/{handle}": {
       "get": {
         "operationId": "PublicProfile.profile",
@@ -7476,6 +7721,7 @@
                   "WITHDRAWALS_PAUSED",
                   "PAYOUT_SETUP_NEEDED",
                   "PAYOUT_DESTINATION_NEEDED",
+                  "PAYOUT_DESTINATION_REFUSED",
                   "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "INVALID_IMAGE",

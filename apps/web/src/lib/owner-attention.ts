@@ -18,6 +18,17 @@ export type AttentionItem = {
 
 const SETTINGS = '/dashboard/settings';
 
+// The provider's name for a bank account still due. Recipients add it on the Get paid card, where
+// it takes an email code, so it is never sent to the hosted page and never shown as this word.
+const BANK_ACCOUNT_REQUIREMENT = 'payout_destination';
+
+export const needsBankAccount = (requirementsDue: readonly string[]) =>
+  requirementsDue.includes(BANK_ACCOUNT_REQUIREMENT);
+
+/** What the payment account's own setup still wants, without the bank account. */
+export const onboardingRequirements = (requirementsDue: readonly string[]) =>
+  requirementsDue.filter((item) => item !== BANK_ACCOUNT_REQUIREMENT);
+
 /**
  * Everything that stops the owner earning, most urgent first, in their words. Owners otherwise
  * find out only when a supporter is turned away ("Not sent yet"), which they never see.
@@ -68,15 +79,20 @@ export function ownerAttention({
             },
       );
     else if (!(status === 'ACTIVE' && payments.chargesEnabled)) {
-      const left = payments.requirementsDue.length;
+      const left = onboardingRequirements(payments.requirementsDue).length;
       items.push({
         id: 'finish_payments',
         title: 'Finish setting up payments',
         body:
           left > 0
             ? `Supporters can’t tip you yet. Your payment account needs ${left} more ${left === 1 ? 'detail' : 'details'}.`
-            : 'Supporters can’t tip you until your payment account is complete.',
-        action: { href: `${SETTINGS}#payments`, label: 'Continue setup' },
+            : needsBankAccount(payments.requirementsDue)
+              ? 'Your payment account still needs the bank account you want to be paid to.'
+              : 'Supporters can’t tip you until your payment account is complete.',
+        action:
+          left === 0 && needsBankAccount(payments.requirementsDue)
+            ? { href: `${SETTINGS}#get-paid`, label: 'Add your bank account' }
+            : { href: `${SETTINGS}#payments`, label: 'Continue setup' },
         navHref: SETTINGS,
       });
     }

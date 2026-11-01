@@ -38,7 +38,8 @@ export type EmailCodePurpose =
   | 'email_change'
   | 'recovery_email'
   | 'recovery'
-  | 'recovery_new_email';
+  | 'recovery_new_email'
+  | 'payout_destination';
 
 const hmacOf = (secret: string, email: string, purpose: string, code: string) =>
   createHmac('sha256', secret)
@@ -108,6 +109,8 @@ export async function issueEmailCode(
   return 'sent';
 }
 
+export type EmailCodeCheck = 'ok' | 'invalid' | 'expired' | 'locked';
+
 /**
  * Checks a code against the latest one for the address and purpose. Wrong codes count towards a
  * 15-minute lockout after five. Must run in the caller's transaction, with whatever it unlocks.
@@ -123,7 +126,7 @@ export async function checkEmailCode(
     /** Leave a right code unspent: for checking it alongside another code. */
     keep?: boolean;
   },
-): Promise<'ok' | 'invalid' | 'expired' | 'locked'> {
+): Promise<EmailCodeCheck> {
   if (!/^\d{6}$/.test(input.code)) return 'invalid';
   if (await isLocked(tx, input.email, input.now)) return 'locked';
   const [latest] = await tx

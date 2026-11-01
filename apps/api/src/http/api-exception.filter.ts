@@ -52,6 +52,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
   PAYOUT_SETUP_NEEDED: 'Finish setting up how you get paid to withdraw.',
   PAYOUT_DESTINATION_NEEDED: 'Add the bank account you want to be paid to.',
+  PAYOUT_DESTINATION_REFUSED:
+    'The payment provider could not accept this bank account.',
   PAYOUT_PROVIDER_UNAVAILABLE:
     'We can’t check your balance with our payment partner right now. Try again in a few minutes.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',

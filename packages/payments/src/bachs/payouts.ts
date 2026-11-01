@@ -334,6 +334,15 @@ function payoutState(payout: z.infer<typeof payoutSchema>): {
   return { status: 'review', ...fee };
 }
 
+/** Read `is_usable`, not `status`: https://docs.bachs.io/guides/payouts/destinations.md */
+function destinationStatus(
+  destination: z.infer<typeof destinationSchema>,
+): 'usable' | 'pending_review' | 'rejected' {
+  const status = destination.status.toLowerCase();
+  if (status === 'approved' && destination.is_usable === true) return 'usable';
+  return status === 'rejected' ? 'rejected' : 'pending_review';
+}
+
 export function createBachsPayouts(
   client: BachsApiClient,
   apiKey: string,
@@ -472,17 +481,33 @@ export function createBachsPayouts(
         },
         schema: destinationSchema,
       });
-      const status = destination.status.toLowerCase();
-      const usable = status === 'approved' && destination.is_usable === true;
+      const status = destinationStatus(destination);
       return {
         destinationRef: destination.id,
-        usable,
-        status: usable
-          ? 'usable'
-          : status === 'rejected'
-            ? 'rejected'
-            : 'pending_review',
+        usable: status === 'usable',
+        status,
       };
+    },
+
+    // GET /v1/payouts/destinations/{id} with X-Account-Id:
+    // https://docs.bachs.io/api-reference/payouts/get-payout-destination.md
+    async payoutDestinationStatus(accountRef, destinationRef) {
+      checkedIdentifier(accountRef, 'account reference');
+      checkedIdentifier(destinationRef, 'payout destination');
+      try {
+        return destinationStatus(
+          await client.request({
+            method: 'GET',
+            path: `/v1/payouts/destinations/${encodeURIComponent(destinationRef)}`,
+            accountReference: accountRef,
+            schema: destinationSchema,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof BachsApiError && error.statusCode === 404)
+          return 'rejected';
+        throw error;
+      }
     },
 
     payoutBalance(accountRef, currency) {

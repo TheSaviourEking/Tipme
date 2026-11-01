@@ -29,6 +29,7 @@ import {
   runWeeklyReports,
   reconcileAttempts,
   reconcilePayouts,
+  sweepPayoutSetup,
   runIssueDetectors,
   lagosDaysBefore,
   purgeAnalytics,
@@ -61,6 +62,8 @@ const WEEKLY_REPORTS_JOB = 'reports.weekly';
 const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
+const PAYOUT_SETUP_JOB = 'payment-accounts.payout-setup';
+const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
 /** A release check takes minutes: anything still tagged after this was left behind. */
 const REHEARSAL_GRACE_MS = 2 * 3_600_000;
 const ANALYTICS_RETENTION_MS = 90 * 86_400_000;
@@ -235,6 +238,17 @@ export async function startJobWorker(
           logger,
         })
       : null;
+  // Only the provider this copy actually runs: a mock copy's sandbox reader answers old tips only.
+  const payoutSetupProvider =
+    bachsProvider?.name === config.PAYMENT_PROVIDER ? bachsProvider : null;
+  const payoutSetupSchedule = payoutSetupProvider
+    ? ensureSchedule({
+        queue,
+        id: PAYOUT_SETUP_JOB,
+        every: PAYOUT_SETUP_INTERVAL_MS,
+        logger,
+      })
+    : null;
   queue.on('error', () => undefined);
 
   const meter = getMeter(SERVICE_NAME);
@@ -401,6 +415,16 @@ export async function startJobWorker(
             processed.add(1, { outcome: 'rolled_up' });
             return 'rolled_up';
           }
+          if (job.name === PAYOUT_SETUP_JOB) {
+            if (!payoutSetupProvider) return 'skipped';
+            const swept = await sweepPayoutSetup(database.db, {
+              provider: payoutSetupProvider,
+              log: (entry) => logger.warn({ ...entry, ...fields }),
+            });
+            logger.info({ event: 'payout_setup.swept', ...swept, ...fields });
+            processed.add(1, { outcome: 'payout_setup' });
+            return 'swept';
+          }
           if (job.name === PAYOUT_START_EVENT) {
             const outcome = await handlePayoutStart(job.data, {
               db: database.db,
@@ -537,6 +561,7 @@ export async function startJobWorker(
       await weeklySchedule.stop();
       await monthlySchedule.stop();
       await analyticsSchedule.stop();
+      await payoutSetupSchedule?.stop();
       await rehearsalSchedule?.stop();
       await relay.stop();
       await mailDelivery.stop();

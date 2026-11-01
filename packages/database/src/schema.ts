@@ -157,7 +157,7 @@ export const emailCodes = pgTable(
   (table) => [
     check(
       'email_codes_purpose',
-      sql`purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email')`,
+      sql`purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email', 'payout_destination')`,
     ),
     index('email_codes_email_created').on(table.email, table.createdAt),
   ],

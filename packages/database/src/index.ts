@@ -17,6 +17,7 @@ export * from './operations/outbox.js';
 export * from './operations/outbox-relay.js';
 export * from './operations/attempts.js';
 export * from './operations/payment-accounts.js';
+export * from './operations/payout-destinations.js';
 export * from './operations/unmatched.js';
 export * from './operations/reconcile.js';
 export * from './operations/tip-status.js';

@@ -153,6 +153,14 @@ export interface PayoutPort {
     usable: boolean;
     status: 'usable' | 'pending_review' | 'rejected';
   }>;
+  /**
+   * Where a destination's review stands now. An add can replay an old answer (its key is fixed), and
+   * review can end long after it. A destination the provider no longer has is 'rejected'.
+   */
+  payoutDestinationStatus(
+    accountRef: string,
+    destinationRef: string,
+  ): Promise<'usable' | 'pending_review' | 'rejected'>;
   payoutBalance(
     accountRef: string,
     currency: 'NGN',

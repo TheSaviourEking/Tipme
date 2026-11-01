@@ -386,6 +386,13 @@
       "when": 1793541064055,
       "tag": "0054_payouts_resolve_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1793542432672,
+      "tag": "0055_payout_destination_code",
+      "breakpoints": true
     }
   ]
 }

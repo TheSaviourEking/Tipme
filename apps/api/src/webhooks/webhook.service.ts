@@ -10,6 +10,7 @@ import {
   applyPayoutSignal,
   flagPaymentReversal,
   findBachsAttemptByOperationReference,
+  ensurePayoutSetup,
   findPaymentAccountByReference,
   updatePaymentAccountStatus,
   findBachsAttemptByReference,
@@ -260,7 +261,17 @@ export class WebhookService {
   private async refreshBachsAccount(
     event: Extract<NormalizedProviderEvent, { kind: 'account' }>,
     accounts: Pick<BachsProvider, 'environment'> &
-      Partial<Pick<BachsProvider, 'getRecipientAccount'>>,
+      Partial<
+        Pick<
+          BachsProvider,
+          | 'getRecipientAccount'
+          | 'name'
+          | 'setManualPayouts'
+          | 'payoutCapability'
+          | 'requestPayoutCapabilities'
+          | 'payoutDestinationStatus'
+        >
+      >,
   ): Promise<string> {
     const { db } = this.database;
     const { environment } = accounts;
@@ -286,6 +297,25 @@ export class WebhookService {
       feeCollector: remote.feeCollector,
       requirementsDue: remote.requirementsDue,
     });
+    // A failure here is left for the worker's sweep: retrying the delivery would not help it.
+    if (
+      accounts.name &&
+      accounts.setManualPayouts &&
+      accounts.payoutCapability &&
+      accounts.requestPayoutCapabilities &&
+      accounts.payoutDestinationStatus
+    )
+      await ensurePayoutSetup(db, {
+        profileId: known.profileId,
+        provider: {
+          name: accounts.name,
+          environment,
+          setManualPayouts: accounts.setManualPayouts,
+          payoutCapability: accounts.payoutCapability,
+          requestPayoutCapabilities: accounts.requestPayoutCapabilities,
+          payoutDestinationStatus: accounts.payoutDestinationStatus,
+        },
+      });
     return 'account_refreshed';
   }
 

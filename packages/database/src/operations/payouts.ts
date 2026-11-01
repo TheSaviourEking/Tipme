@@ -616,6 +616,8 @@ async function payoutRoute(
   /** Whether this provider pays through a connected account at all. */
   accountless: boolean;
   accountReference: string | null;
+  /** The provider will no longer pay this account out by itself. */
+  manualPayouts: boolean;
   destination: {
     id: string;
     bankName: string;
@@ -630,7 +632,10 @@ async function payoutRoute(
     accountless || !environment
       ? []
       : await db
-          .select({ reference: paymentAccounts.providerAccountReference })
+          .select({
+            reference: paymentAccounts.providerAccountReference,
+            manualPayoutsAt: paymentAccounts.manualPayoutsAt,
+          })
           .from(paymentAccounts)
           .where(
             and(
@@ -657,6 +662,7 @@ async function payoutRoute(
   return {
     accountless,
     accountReference: account?.reference ?? null,
+    manualPayouts: Boolean(account?.manualPayoutsAt),
     destination: destination ?? null,
   };
 }
@@ -670,6 +676,9 @@ function routeBlock(
   | { state: 'destination_pending' }
   | null {
   if (!route.accountless && !route.accountReference)
+    return { state: 'setup_needed', requirementsDue: [] };
+  // Otherwise the provider could pay the balance out itself while a withdrawal also spends it.
+  if (!route.accountless && !route.manualPayouts)
     return { state: 'setup_needed', requirementsDue: [] };
   if (route.destination?.status === 'pending_review')
     return { state: 'destination_pending' };

@@ -16,6 +16,7 @@ import type {
 import { bachsOnboardingRequestSchema } from '@tipme/contracts';
 import {
   beginPaymentAccountCreation,
+  ensurePayoutSetup,
   getPaymentAccountForProfile,
   getPaymentAccountRecipient,
   markPaymentAccountCreationFailed,
@@ -213,6 +214,13 @@ export class PaymentAccountsController {
       payoutsEnabled: false,
       feeCollector: remoteAccount.feeCollector,
       requirementsDue: remoteAccount.requirementsDue,
+    });
+    // Before any onboarding link, so a bank entered there can never be paid to on a schedule. A
+    // failure blocks withdrawals only, and the next visit, event or sweep tries again.
+    await ensurePayoutSetup(this.database.db, {
+      profileId: recipient.profileId,
+      provider,
+      log: (entry) => this.logger.warn(entry),
     });
     // The public page says whether tips can be taken; this may have just changed the answer.
     // Webhook and staff updates rely on the page cache's 30-second backstop.

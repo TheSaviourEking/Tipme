@@ -450,6 +450,37 @@ test('a destination retry keeps its key, and the key does not reveal the account
   assert.doesNotMatch(first, new RegExp(ACCOUNT_NUMBER));
 });
 
+test('reading a destination asks for it on the account, and is_usable decides', async () => {
+  for (const [answer, status] of [
+    [{ id: 'pd_1', status: 'approved', is_usable: true }, 'usable'],
+    [{ id: 'pd_1', status: 'approved', is_usable: false }, 'pending_review'],
+    [
+      { id: 'pd_1', status: 'pending_review', is_usable: false },
+      'pending_review',
+    ],
+    [{ id: 'pd_1', status: 'rejected', is_usable: false }, 'rejected'],
+  ]) {
+    const { provider, calls } = fake(jsonResponse(answer));
+    assert.equal(
+      await provider.payoutDestinationStatus(ACCOUNT, 'pd_1'),
+      status,
+    );
+    assert.equal(calls[0].method, 'GET');
+    assert.equal(calls[0].path, '/v1/payouts/destinations/pd_1');
+    assert.equal(calls[0].headers['X-Account-Id'], ACCOUNT);
+  }
+});
+
+test('a destination the provider no longer has is unusable; an outage is not an answer', async () => {
+  const gone = fake(jsonResponse({ detail: 'Not found' }, 404));
+  assert.equal(
+    await gone.provider.payoutDestinationStatus(ACCOUNT, 'pd_1'),
+    'rejected',
+  );
+  const down = fake(jsonResponse({ detail: 'Oops' }, 500));
+  await assert.rejects(down.provider.payoutDestinationStatus(ACCOUNT, 'pd_1'));
+});
+
 test('the bank list comes from the reference endpoint', async () => {
   const { provider, calls } = fake(
     jsonResponse({

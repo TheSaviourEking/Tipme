@@ -146,3 +146,23 @@ test('fix: the recovery email reminder is not a payment problem', () => {
     ),
   );
 });
+
+test('a bank account still due is never counted as a detail, and leads to Get paid', () => {
+  const [item] = ownerAttention({
+    profile: ready,
+    payments: payments('ONBOARDING', {
+      requirementsDue: ['payout_destination'],
+    }),
+  });
+  assert.equal(item.action.href, '/dashboard/settings#get-paid');
+  assert.doesNotMatch(JSON.stringify(item), /payout_destination|detail/);
+
+  const [mixed] = ownerAttention({
+    profile: ready,
+    payments: payments('ONBOARDING', {
+      requirementsDue: ['payout_destination', 'individual.id_number'],
+    }),
+  });
+  assert.match(mixed.body, /1 more detail\./);
+  assert.equal(mixed.action.href, '/dashboard/settings#payments');
+});

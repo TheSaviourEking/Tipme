@@ -9,6 +9,10 @@ import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { apiFetch } from '@/lib/session-client';
 import {
+  needsBankAccount,
+  onboardingRequirements,
+} from '@/lib/owner-attention';
+import {
   paymentAccountCopy,
   type PaymentAccountCopy,
 } from '@/lib/payment-account-copy';
@@ -163,9 +167,15 @@ export function PaymentAccountCard() {
               ? 'Finish setting up your payment account to receive tips.'
               : 'Tips can’t be paid until you set up your payment account.'}
           </p>
-          {account.requirementsDue.length > 0 && (
+          {onboardingRequirements(account.requirementsDue).length > 0 && (
             <p className="tm-hint">
-              Still needed: {account.requirementsDue.join(', ')}
+              Still needed:{' '}
+              {onboardingRequirements(account.requirementsDue).join(', ')}
+            </p>
+          )}
+          {needsBankAccount(account.requirementsDue) && (
+            <p className="tm-hint">
+              Your bank account goes under <a href="#get-paid">Get paid</a>.
             </p>
           )}
           {error && (
