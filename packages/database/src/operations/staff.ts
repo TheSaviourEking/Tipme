@@ -93,6 +93,57 @@ export async function lockStaffAdmin(tx: Tx): Promise<void> {
   );
 }
 
+/**
+ * Refuses a change that would leave no active owner, locking the owner rows so a writer outside
+ * the staff-admin lock can't take the other owner away before this transaction commits.
+ */
+export async function assertNotLastOwner(
+  tx: Tx,
+  userId: string,
+): Promise<void> {
+  const owners = await tx
+    .select({ userId: staff.userId })
+    .from(staff)
+    .where(and(eq(staff.roleId, 'owner'), isNull(staff.revokedAt)))
+    .for('update');
+  if (!owners.some((owner) => owner.userId !== userId))
+    throw new OperationError('LAST_OWNER');
+}
+
+/** Uses up any open enrolment code. */
+export async function voidEnrolments(
+  tx: Tx,
+  userId: string,
+  now: Date,
+): Promise<void> {
+  await tx
+    .update(staffEnrolments)
+    .set({ usedAt: now })
+    .where(
+      and(eq(staffEnrolments.userId, userId), isNull(staffEnrolments.usedAt)),
+    );
+}
+
+/**
+ * Replaces any open enrolment code with a new one, valid for 30 minutes. Only its SHA-256 is
+ * stored; the caller hands the code to the person and nowhere else.
+ */
+export async function issueEnrolment(
+  tx: Tx,
+  userId: string,
+  now: Date,
+): Promise<{ code: string; expiresAt: Date }> {
+  await voidEnrolments(tx, userId, now);
+  const code = Array.from(randomBytes(10), (byte) => BASE32[byte & 31]).join(
+    '',
+  );
+  const expiresAt = new Date(now.getTime() + ENROLMENT_TTL_MS);
+  await tx
+    .insert(staffEnrolments)
+    .values({ codeSha256: sha256(code), userId, expiresAt });
+  return { code, expiresAt };
+}
+
 const AUDIT_CHANGE_MARKER = '[change:';
 
 /** The server's record of a change, after the person's reason. `change` is data, encoded as JSON. */
@@ -294,6 +345,19 @@ export function grantOwner(
           ),
         );
       const userId = existing?.id ?? newId();
+      const [previous] = existing
+        ? await tx
+            .select({ roleId: staff.roleId, revokedAt: staff.revokedAt })
+            .from(staff)
+            .where(eq(staff.userId, userId))
+        : [];
+      // Break-glass may restore anyone, but must not itself be what leaves no owner.
+      if (
+        role !== 'owner' &&
+        previous?.roleId === 'owner' &&
+        !previous.revokedAt
+      )
+        await assertNotLastOwner(tx, userId);
       // The person running this names the address; signing in still needs a code sent to it.
       if (!existing)
         await tx
@@ -311,27 +375,9 @@ export function grantOwner(
           set: { roleId: role, grantedAt: now, revokedAt: null },
         });
       await dropOpsAccess(tx, userId, now);
-      await tx
-        .update(staffEnrolments)
-        .set({ usedAt: now })
-        .where(
-          and(
-            eq(staffEnrolments.userId, userId),
-            isNull(staffEnrolments.usedAt),
-          ),
-        );
-      const enrolmentCode = Array.from(
-        randomBytes(10),
-        (byte) => BASE32[byte & 31],
-      ).join('');
-      await tx.insert(staffEnrolments).values({
-        codeSha256: sha256(enrolmentCode),
-        userId,
-        expiresAt: new Date(now.getTime() + ENROLMENT_TTL_MS),
-      });
-      // An owner's adjustments mean nothing now, and must not return if they are later demoted.
-      const cleared =
-        role === 'owner' ? await clearOverrides(tx, userId) : null;
+      const { code: enrolmentCode } = await issueEnrolment(tx, userId, now);
+      // Neither built-in role uses adjustments, and they must not return on a later move.
+      const cleared = await clearOverrides(tx, userId);
       await recordAudit(tx, {
         staffUserId: null,
         action:
@@ -340,10 +386,12 @@ export function grantOwner(
             : 'staff.release_check_granted',
         subjectType: 'user',
         subjectId: userId,
-        ...(cleared &&
-        cleared.clearedAdditions.length + cleared.clearedRemovals.length > 0
-          ? { reason: withAuditChange('Granted from the server', cleared) }
-          : {}),
+        reason: withAuditChange('Granted from the server', {
+          from: previous?.roleId ?? null,
+          to: role,
+          restored: Boolean(previous?.revokedAt),
+          ...cleared,
+        }),
         now,
       });
       if (input.sealing)

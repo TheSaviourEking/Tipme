@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   OPS_PERMISSIONS,
@@ -6,21 +6,34 @@ import {
   roles,
   staff,
   staffPermissionOverrides,
+  staffTotp,
   users,
 } from '../schema.js';
+import { mailOwner } from './account-mail.js';
 import { recordAudit } from './audit.js';
+import {
+  maskEmail,
+  normaliseEmail,
+  normaliseStaffEmail,
+} from './email-address.js';
+import { verifiedOwner } from './email-sign-in.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { enqueueMail, type MailSealing } from './mail-queue.js';
 import {
+  assertNotLastOwner,
   clearOverrides,
   composeAccess,
+  dropOpsAccess,
   ignoresAdjustments,
+  issueEnrolment,
   lockStaffAdmin,
   looksLikeAuditChange,
   readOverrides,
   readRolePermissions,
   readStaffAccess,
   type StaffAccess,
+  voidEnrolments,
   withAuditChange,
 } from './staff.js';
 
@@ -362,8 +375,9 @@ export function updateRole(
 }
 
 /**
- * Deletes a role nobody is on. A revoked staff row still names its role (the person's history
- * stays), so a role that anyone has ever held and been removed from also counts as in use.
+ * Deletes a role nobody has held. A removed person's staff row still names their role (it is their
+ * history, and role_id is required), so such a role stays and the refusal says why; it can still
+ * be renamed or emptied.
  */
 export function deleteRole(
   db: Database,
@@ -377,12 +391,14 @@ export function deleteRole(
       if (role.system) throw new OperationError('ROLE_PROTECTED');
       const permissions = (await readRolePermissions(tx, input.roleId)).sort();
       mustHold(actor.held, permissions);
-      const [holder] = await tx
-        .select({ userId: staff.userId })
+      const holders = await tx
+        .select({ revokedAt: staff.revokedAt })
         .from(staff)
-        .where(eq(staff.roleId, input.roleId))
-        .limit(1);
-      if (holder) throw new OperationError('ROLE_IN_USE');
+        .where(eq(staff.roleId, input.roleId));
+      if (holders.some((holder) => !holder.revokedAt))
+        throw new OperationError('ROLE_IN_USE');
+      if (holders.length > 0)
+        throw new OperationError('ROLE_HAS_FORMER_HOLDERS');
       await tx
         .delete(rolePermissions)
         .where(eq(rolePermissions.roleId, input.roleId));
@@ -543,25 +559,13 @@ export function changeRole(
       const previous = await roleOrThrow(tx, target.roleId);
       if (input.roleId === 'release_check' || target.roleId === 'release_check')
         throw new OperationError('ROLE_PROTECTED');
+      if (target.roleId === 'owner' && input.roleId !== 'owner')
+        await assertNotLastOwner(tx, userId);
       if (
         (input.roleId === 'owner' || target.roleId === 'owner') &&
         actor.roleId !== 'owner'
       )
         throw new OperationError('PERMISSION_NOT_HELD');
-      if (target.roleId === 'owner' && input.roleId !== 'owner') {
-        const [other] = await tx
-          .select({ userId: staff.userId })
-          .from(staff)
-          .where(
-            and(
-              eq(staff.roleId, 'owner'),
-              isNull(staff.revokedAt),
-              ne(staff.userId, userId),
-            ),
-          )
-          .limit(1);
-        if (!other) throw new OperationError('LAST_OWNER');
-      }
       const next = await readRolePermissions(tx, input.roleId);
       const after = composeAccess(
         input.roleId,
@@ -603,6 +607,285 @@ export function changeRole(
         }),
       });
       return { ...after, permissions: [...after.permissions].sort() };
+    });
+  });
+}
+
+export interface StaffPerson {
+  userId: string;
+  email: string | null;
+  roleId: string;
+  roleName: string;
+  grantedAt: string;
+  /** False until their authenticator is confirmed; until then they count for nothing. */
+  enrolled: boolean;
+  permissions: string[];
+  additions: string[];
+  removals: string[];
+}
+
+/** Everyone with staff access now, oldest first; removed people are left out. */
+export function activeStaffList(db: Database): Promise<StaffPerson[]> {
+  return guarded(async () => {
+    const rows = await db
+      .select({
+        userId: staff.userId,
+        email: users.email,
+        roleId: staff.roleId,
+        roleName: roles.name,
+        grantedAt: staff.grantedAt,
+        confirmedAt: staffTotp.confirmedAt,
+      })
+      .from(staff)
+      .innerJoin(users, eq(users.id, staff.userId))
+      .innerJoin(roles, eq(roles.id, staff.roleId))
+      .leftJoin(staffTotp, eq(staffTotp.userId, staff.userId))
+      .where(isNull(staff.revokedAt))
+      .orderBy(staff.grantedAt);
+    const people: StaffPerson[] = [];
+    for (const { confirmedAt, grantedAt, ...row } of rows) {
+      const access = composeAccess(
+        row.roleId,
+        await readRolePermissions(db, row.roleId),
+        await readOverrides(db, row.userId),
+      );
+      people.push({
+        ...row,
+        grantedAt: grantedAt.toISOString(),
+        enrolled: Boolean(confirmedAt),
+        permissions: [...access.permissions].sort(),
+        additions: access.additions,
+        removals: access.removals,
+      });
+    }
+    return people;
+  });
+}
+
+/**
+ * Adds a person by email and emails them a one-time enrolment link. An address proven on an account
+ * uses that account; an address only claimed never does, since nobody has shown they own it. An
+ * address whose mailbox matches any staff row is refused, removed people included: one person holds
+ * one staff account, and bringing someone back is a deliberate `grant-owner`. The enrolment code
+ * goes only into the email, sealed at rest.
+ */
+export function addStaff(
+  db: Database,
+  input: {
+    actorId: string;
+    email: string;
+    roleId: string;
+    reason: string;
+    sealing: MailSealing;
+    now?: Date;
+  },
+): Promise<{ userId: string; roleId: string; enrolmentExpiresAt: string }> {
+  return guarded(async () => {
+    const reason = checkedReason(input.reason);
+    const email = normaliseEmail(input.email);
+    if (!email) throw new OperationError('INVALID_INPUT');
+    const now = input.now ?? new Date();
+    return db.transaction(async (tx) => {
+      const actor = await authorise(tx, input.actorId);
+      const role = await roleOrThrow(tx, input.roleId);
+      if (role.id === 'release_check')
+        throw new OperationError('ROLE_PROTECTED');
+      if (role.id === 'owner' && actor.roleId !== 'owner')
+        throw new OperationError('PERMISSION_NOT_HELD');
+      const permissions =
+        role.id === 'owner'
+          ? [...OPS_PERMISSIONS]
+          : await readRolePermissions(tx, role.id);
+      mustHold(actor.held, permissions);
+      const mailbox = normaliseStaffEmail(email);
+      const everyone = await tx
+        .select({ email: users.email })
+        .from(staff)
+        .innerJoin(users, eq(users.id, staff.userId));
+      if (
+        everyone.some(
+          (person) =>
+            person.email && normaliseStaffEmail(person.email) === mailbox,
+        )
+      )
+        throw new OperationError('STAFF_EMAIL_TAKEN');
+      const [existing] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(verifiedOwner(email));
+      const userId = existing?.id ?? newId();
+      // Signing in still needs a code sent to the address, as with grant-owner.
+      if (!existing)
+        await tx
+          .insert(users)
+          .values({ id: userId, email, emailVerifiedAt: now });
+      await tx
+        .insert(staff)
+        .values({ userId, roleId: role.id, grantedAt: now });
+      await dropOpsAccess(tx, userId, now);
+      const enrolment = await issueEnrolment(tx, userId, now);
+      await enqueueMail(tx, input.sealing, {
+        type: 'staff_invitation',
+        to: email,
+        userId,
+        data: { code: enrolment.code, kind: 'invited' },
+        dedupeKey: `staff_invitation.${newId()}`,
+        expiresAt: enrolment.expiresAt,
+        now,
+      });
+      await recordAudit(tx, {
+        staffUserId: actor.id,
+        action: 'staff.added',
+        permission: MANAGE,
+        subjectType: 'user',
+        subjectId: userId,
+        reason: withAuditChange(reason, {
+          role: { id: role.id, name: role.name },
+          permissions: permissions.sort(),
+          email: maskEmail(email),
+          account: existing ? 'existing' : 'new',
+        }),
+        now,
+      });
+      return {
+        userId,
+        roleId: role.id,
+        enrolmentExpiresAt: enrolment.expiresAt.toISOString(),
+      };
+    });
+  });
+}
+
+/**
+ * Removes a person at once: the staff row is revoked (their history stays), admin sessions end, and
+ * their authenticator, open enrolment code and adjustments go, so nothing returns if they ever come
+ * back. As with a role change, the actor must hold everything the person loses, and only an owner
+ * removes an owner. The last-owner rule answers first, whoever asks.
+ */
+export function removeStaff(
+  db: Database,
+  input: {
+    actorId: string;
+    userId: string;
+    reason: string;
+    /** Absent only where no mail key is at hand: the notice is then skipped. */
+    sealing?: MailSealing;
+    now?: Date;
+  },
+): Promise<void> {
+  return guarded(async () => {
+    const reason = checkedReason(input.reason);
+    const now = input.now ?? new Date();
+    await db.transaction(async (tx) => {
+      const actor = await authorise(tx, input.actorId);
+      const { id: userId, access } = await targetOrThrow(
+        tx,
+        actor.id,
+        input.userId,
+      );
+      if (access.roleId === 'owner') {
+        await assertNotLastOwner(tx, userId);
+        if (actor.roleId !== 'owner')
+          throw new OperationError('PERMISSION_NOT_HELD');
+      }
+      mustHold(actor.held, access.permissions);
+      const role = await roleOrThrow(tx, access.roleId);
+      const removed = await tx
+        .update(staff)
+        .set({ revokedAt: now })
+        .where(and(eq(staff.userId, userId), isNull(staff.revokedAt)))
+        .returning({ userId: staff.userId });
+      if (removed.length === 0) throw new OperationError('STAFF_CHANGED');
+      await dropOpsAccess(tx, userId, now);
+      await voidEnrolments(tx, userId, now);
+      const cleared = await clearOverrides(tx, userId);
+      if (input.sealing)
+        await mailOwner(tx, input.sealing, {
+          userId,
+          type: 'staff_access_notice',
+          data: { change: 'removed' },
+          dedupeKey: `staff_access_notice.${userId}.${now.getTime()}`,
+          now,
+        });
+      await recordAudit(tx, {
+        staffUserId: actor.id,
+        action: 'staff.removed',
+        permission: MANAGE,
+        subjectType: 'user',
+        subjectId: userId,
+        reason: withAuditChange(reason, {
+          role: { id: role.id, name: role.name },
+          losses: [...access.permissions].sort(),
+          ...cleared,
+        }),
+        now,
+      });
+    });
+  });
+}
+
+/**
+ * For a lost phone: removes the authenticator, ends admin sessions and emails a new one-time link.
+ * Owners only. Refused for an account with no proven email, which would be left with no way back
+ * in; `grant-owner` prints the code for those.
+ */
+export function resetAuthenticator(
+  db: Database,
+  input: {
+    actorId: string;
+    userId: string;
+    reason: string;
+    sealing: MailSealing;
+    now?: Date;
+  },
+): Promise<{ enrolmentExpiresAt: string }> {
+  return guarded(async () => {
+    const reason = checkedReason(input.reason);
+    const now = input.now ?? new Date();
+    return db.transaction(async (tx) => {
+      const actor = await authorise(tx, input.actorId);
+      if (actor.roleId !== 'owner')
+        throw new OperationError('PERMISSION_NOT_HELD');
+      const { id: userId } = await targetOrThrow(tx, actor.id, input.userId);
+      const [account] = await tx
+        .select({ email: users.email })
+        .from(users)
+        .where(
+          and(
+            eq(users.id, userId),
+            isNotNull(users.emailVerifiedAt),
+            isNull(users.deletedAt),
+          ),
+        );
+      if (!account?.email) throw new OperationError('STAFF_NO_EMAIL');
+      const [authenticator] = await tx
+        .select({ userId: staffTotp.userId })
+        .from(staffTotp)
+        .where(eq(staffTotp.userId, userId));
+      await dropOpsAccess(tx, userId, now);
+      const enrolment = await issueEnrolment(tx, userId, now);
+      await enqueueMail(tx, input.sealing, {
+        type: 'staff_invitation',
+        to: account.email,
+        userId,
+        data: { code: enrolment.code, kind: 'reset' },
+        dedupeKey: `staff_invitation.${newId()}`,
+        expiresAt: enrolment.expiresAt,
+        now,
+      });
+      await recordAudit(tx, {
+        staffUserId: actor.id,
+        action: 'staff.authenticator_reset',
+        permission: MANAGE,
+        subjectType: 'user',
+        subjectId: userId,
+        reason: withAuditChange(reason, {
+          authenticatorRemoved: Boolean(authenticator),
+          linkSentTo: maskEmail(account.email),
+        }),
+        now,
+      });
+      return { enrolmentExpiresAt: enrolment.expiresAt.toISOString() };
     });
   });
 }

@@ -1,13 +1,14 @@
 'use client';
 import QRCode from 'qrcode';
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { OpsEnrolment } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { ENROL_LINK_KEY, ENROL_LINK_PREFIX } from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
 const problems: Record<string, string> = {
   ENROLMENT_INVALID:
-    'That enrolment code is not right or has expired. Run pnpm ops:grant-owner again for a new one.',
+    'That enrolment code is not right or has expired. Ask an owner for a new one, or run pnpm ops:grant-owner again.',
   CODE_INVALID:
     'That code didn’t work. Wait for the next code in your app and try again.',
   OPS_LOCKED: 'Too many wrong codes. Admin access is locked for 15 minutes.',
@@ -32,9 +33,37 @@ function CodeField({ id }: { id: string }) {
   );
 }
 
-/** First visit: the enrolment code from `pnpm ops:grant-owner`, then the app's first code. */
+/** The code from an emailed link, in this address bar or kept through sign-in; '' if none. */
+function linkedEnrolmentCode(): string {
+  let hash = location.hash;
+  try {
+    if (!hash.startsWith(ENROL_LINK_PREFIX))
+      hash = sessionStorage.getItem(ENROL_LINK_KEY) ?? '';
+  } catch {
+    // Storage blocked: the person can open the link again.
+  }
+  return hash.startsWith(ENROL_LINK_PREFIX)
+    ? hash.slice(ENROL_LINK_PREFIX.length)
+    : '';
+}
+
+/**
+ * First visit: the enrolment code from the emailed link or `pnpm ops:grant-owner`, then the app's
+ * first code.
+ */
 export function OpsEnrol({ onDone }: { onDone: () => void }) {
   const id = useId();
+  // This step only renders after the client has asked for the admin state, never on the server.
+  const [linkedCode] = useState(linkedEnrolmentCode);
+  useEffect(() => {
+    if (location.hash.startsWith(ENROL_LINK_PREFIX))
+      history.replaceState(null, '', location.pathname + location.search);
+    try {
+      sessionStorage.removeItem(ENROL_LINK_KEY);
+    } catch {
+      // Storage blocked: nothing was kept.
+    }
+  }, []);
   const [enrolment, setEnrolment] = useState<
     (OpsEnrolment & { qr: string }) | null
   >(null);
@@ -104,7 +133,8 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
             id={`${id}-enrolment`}
             name="enrolmentCode"
             label="Enrolment code"
-            hint="The 10-character code printed by pnpm ops:grant-owner."
+            hint="The 10-character code from your email link, or printed by pnpm ops:grant-owner."
+            defaultValue={linkedCode}
             autoComplete="off"
             autoCapitalize="characters"
             maxLength={10}

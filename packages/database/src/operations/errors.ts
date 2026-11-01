@@ -44,7 +44,10 @@ export type OperationErrorCode =
   | 'STAFF_NOT_FOUND'
   | 'STAFF_PROTECTED'
   | 'STAFF_CHANGED'
-  | 'LAST_OWNER';
+  | 'LAST_OWNER'
+  | 'ROLE_HAS_FORMER_HOLDERS'
+  | 'STAFF_EMAIL_TAKEN'
+  | 'STAFF_NO_EMAIL';
 
 /** Expected business outcomes callers map to responses; never carries request values. */
 export class OperationError extends Error {

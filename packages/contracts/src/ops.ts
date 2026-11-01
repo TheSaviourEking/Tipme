@@ -928,3 +928,30 @@ export interface OpsRoleUpdated {
   role: OpsRole;
   affected: OpsRoleImpact['affected'];
 }
+
+export const opsAddStaffSchema = opsReasonSchema
+  .extend({
+    email: z.string().trim().min(3).max(254),
+    roleId: z.string().min(1).max(100),
+  })
+  .strict();
+export type OpsAddStaffRequest = z.infer<typeof opsAddStaffSchema>;
+
+/** The enrolment code goes only to the person, by email. */
+export interface OpsStaffAdded {
+  userId: string;
+  roleId: string;
+  enrolmentExpiresAt: string;
+}
+
+export interface OpsStaffPerson {
+  userId: string;
+  email: string | null;
+  roleId: string;
+  roleName: string;
+  grantedAt: string;
+  enrolled: boolean;
+  permissions: string[];
+  additions: string[];
+  removals: string[];
+}

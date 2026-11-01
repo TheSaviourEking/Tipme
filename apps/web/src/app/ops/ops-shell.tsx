@@ -8,6 +8,8 @@ import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
 import { PageUnavailable } from '@/components/page-unavailable';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import {
+  ENROL_LINK_KEY,
+  ENROL_LINK_PREFIX,
   OpsAccessContext,
   PROVIDER_TEST_CONFIRM_PATH,
   PROVIDER_TEST_TOKEN_KEY,
@@ -64,6 +66,14 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
         if (pathname === PROVIDER_TEST_CONFIRM_PATH && location.hash) {
           try {
             sessionStorage.setItem(PROVIDER_TEST_TOKEN_KEY, location.hash);
+          } catch {
+            // Storage blocked: the link can simply be opened again once signed in.
+          }
+        }
+        // The same for an emailed enrolment link: most people open it signed out.
+        if (location.hash.startsWith(ENROL_LINK_PREFIX)) {
+          try {
+            sessionStorage.setItem(ENROL_LINK_KEY, location.hash);
           } catch {
             // Storage blocked: the link can simply be opened again once signed in.
           }

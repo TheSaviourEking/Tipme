@@ -76,3 +76,7 @@ export const SEVERITY_LABELS: Record<string, string> = {
   account: 'Account',
   info: 'Info',
 };
+
+/** An emailed enrolment link: `/ops#enrol=<code>`. The fragment never reaches a server or a log. */
+export const ENROL_LINK_PREFIX = '#enrol=';
+export const ENROL_LINK_KEY = 'tipme.enrol-link';

@@ -33,7 +33,13 @@ const messages: Record<ApiErrorCode, string> = {
   ROLE_PROTECTED: 'This built-in role can’t be changed.',
   STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
   STAFF_CHANGED: 'This person’s role just changed. Check it and try again.',
-  LAST_OWNER: 'The last active owner can’t be demoted.',
+  LAST_OWNER: 'The last active owner can’t be removed or demoted.',
+  ROLE_HAS_FORMER_HOLDERS:
+    'People who were removed held this role, and their history keeps it, so it can’t be deleted. You can rename it or untick its permissions.',
+  STAFF_EMAIL_TAKEN:
+    'That email belongs to someone who is or was staff. A removed person comes back through grant-owner.',
+  STAFF_NO_EMAIL:
+    'This person has no verified email to send a link to. Use grant-owner on the server.',
   VALIDATION_FAILED: 'The request was not valid.',
   UNAUTHORIZED: 'Unauthorized.',
   NOT_FOUND: 'Not found.',
@@ -73,7 +79,7 @@ const messages: Record<ApiErrorCode, string> = {
   PROFILE_NOT_FOUND: 'That profile does not exist.',
   FORBIDDEN: 'Your admin role does not allow this.',
   ENROLMENT_INVALID:
-    'That enrolment code is not right or has expired. Ask for a new one with pnpm ops:grant-owner.',
+    'That enrolment code is not right or has expired. Ask an owner for a new one, or use pnpm ops:grant-owner.',
   OPS_LOCKED: 'Too many wrong codes. Admin access is locked for 15 minutes.',
   PAGE_SUSPENDED:
     'TipMe has paused your page, so it cannot go live. See the note on your dashboard.',
@@ -177,6 +183,9 @@ const operationErrors: Partial<
   STAFF_PROTECTED: { status: 409, code: 'STAFF_PROTECTED' },
   STAFF_CHANGED: { status: 409, code: 'STAFF_CHANGED' },
   LAST_OWNER: { status: 409, code: 'LAST_OWNER' },
+  ROLE_HAS_FORMER_HOLDERS: { status: 409, code: 'ROLE_HAS_FORMER_HOLDERS' },
+  STAFF_EMAIL_TAKEN: { status: 409, code: 'STAFF_EMAIL_TAKEN' },
+  STAFF_NO_EMAIL: { status: 409, code: 'STAFF_NO_EMAIL' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },
   QUOTE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },

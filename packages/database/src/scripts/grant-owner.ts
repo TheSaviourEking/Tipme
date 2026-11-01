@@ -5,7 +5,8 @@ import { mailSealing } from '../operations/mail-queue.js';
 import { phoneHint } from '../operations/phone.js';
 import { runAgainstLocalDatabase } from './run.js';
 
-// pnpm ops:grant-owner --email <address>: the only way to make someone staff (ADR-0010).
+// pnpm ops:grant-owner --email <address>: the server-side way in if every owner is locked out, or to
+// bring back someone removed (ADR-0010). Everyone else is added from /ops/staff.
 // Prints a one-time enrolment code for registering an authenticator in /ops (30 minutes).
 const { values } = parseArgs({
   options: {

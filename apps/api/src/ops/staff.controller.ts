@@ -10,6 +10,7 @@ import {
   Put,
 } from '@nestjs/common';
 import {
+  opsAddStaffSchema,
   opsChangeRoleSchema,
   opsPersonalAccessSchema,
   opsReasonSchema,
@@ -17,6 +18,7 @@ import {
   opsRoleImpactSchema,
   opsRoleUpdateSchema,
   type ApiDataResponse,
+  type OpsAddStaffRequest,
   type OpsChangeRoleRequest,
   type OpsEffectiveAccess,
   type OpsPersonalAccessRequest,
@@ -27,33 +29,99 @@ import {
   type OpsRoleImpactRequest,
   type OpsRoleUpdateRequest,
   type OpsRoleUpdated,
+  type OpsStaffAdded,
+  type OpsStaffPerson,
 } from '@tipme/contracts';
 import {
+  activeStaffList,
+  addStaff,
   changeRole,
   createRole,
   deleteRole,
   effectiveAccess,
   listRoles,
+  type MailSealing,
   OperationError,
+  removeStaff,
+  resetAuthenticator,
   roleImpact,
   setPersonalAccess,
   updateRole,
 } from '@tipme/database';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { uuidParam } from './actions.controller.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 /**
- * Custom roles and per-person access. The operations hold every authorisation rule and re-check
+ * People, custom roles and per-person access. The operations hold every authorisation rule and re-check
  * the actor, so this only passes the signed-in staff member through.
  */
 @Controller('v1/ops/staff')
 export class OpsStaffController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {}
+
+  @Get()
+  @OpsPermission('staff.manage')
+  async people(): Promise<ApiDataResponse<OpsStaffPerson[]>> {
+    return { data: await activeStaffList(this.database.db) };
+  }
+
+  @Post()
+  @HttpCode(201)
+  @OpsPermission('staff.manage')
+  async addPerson(
+    @CurrentOps() ops: OpsContext,
+    @Body(new ZodValidationPipe(opsAddStaffSchema)) body: OpsAddStaffRequest,
+  ): Promise<ApiDataResponse<OpsStaffAdded>> {
+    return {
+      data: await addStaff(this.database.db, {
+        ...body,
+        actorId: ops.userId,
+        sealing: this.sealing,
+      }),
+    };
+  }
+
+  @Post(':userId/remove')
+  @HttpCode(200)
+  @OpsPermission('staff.manage')
+  async removePerson(
+    @CurrentOps() ops: OpsContext,
+    @Param('userId') userId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ removed: true }>> {
+    await removeStaff(this.database.db, {
+      ...body,
+      actorId: ops.userId,
+      userId: uuidParam(userId),
+      sealing: this.sealing,
+    });
+    return { data: { removed: true } };
+  }
+
+  @Post(':userId/reset-authenticator')
+  @HttpCode(200)
+  @OpsPermission('staff.manage')
+  async resetPersonAuthenticator(
+    @CurrentOps() ops: OpsContext,
+    @Param('userId') userId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ enrolmentExpiresAt: string }>> {
+    return {
+      data: await resetAuthenticator(this.database.db, {
+        ...body,
+        actorId: ops.userId,
+        userId: uuidParam(userId),
+        sealing: this.sealing,
+      }),
+    };
+  }
 
   @Get('roles')
   @OpsPermission('staff.manage')
