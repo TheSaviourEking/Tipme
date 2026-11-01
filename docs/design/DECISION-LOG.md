@@ -155,3 +155,10 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - Tone is encouraging, not alarming: the neutral notice, not the error tone, because nothing has gone wrong yet; the owner has a step left.
 - When payments need the owner's own provider account, the first-day checklist shows the real payment step instead of "Coming later".
 - Withdraw says up front when the balance cannot be paid out yet, and shows no amount form.
+
+## 2026-11-01 — Experience and motion
+
+- `EXPERIENCE-AND-MOTION.md` sets how screens move, on the existing motion tokens, with no new runtime dependency. Drafted at the owner's request; its specifics await the owner's review.
+- Money never performs: balances don't count up, and no animation implies a payment or withdrawal has progressed past its recorded state.
+- The Appreciation Moment plays once per confirmed tip, and is the only celebration. A paid withdrawal is deliberately quiet, because it's the person's own money.
+- No parallax or scroll-tied animation on money screens; the home page alone may use one-time section entrances.

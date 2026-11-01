@@ -19,6 +19,7 @@
 - Controls at least 44px; keyboard, reduced motion and 320px reflow work.
 - Test containers: throwaway Postgres and Redis on their own ports, not 5434/5435/6380/6381. Report every failing test by name with its error. Backup tests need `tipme-postgres-1`; don't call their failure a macOS issue.
 - New visual decisions go in `docs/design/DECISION-LOG.md`.
+- Motion, transitions and scrolling follow `docs/design/EXPERIENCE-AND-MOTION.md`, built with the screen and tested as it says.
 
 ## Review Focus
 

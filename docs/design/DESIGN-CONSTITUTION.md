@@ -27,4 +27,4 @@ This is one system, not three themes. The board in `reference/` is the fidelity 
 
 ## Required reading
 
-Frontend work must also read the anatomy, token/material, component, motion, responsive, iconography, and visual-quality documents in this directory. Record new visual rulings in `DECISION-LOG.md` rather than silently inventing variants.
+Frontend work must also read the anatomy, token/material, component, motion, experience, responsive, iconography, and visual-quality documents in this directory. Record new visual rulings in `DECISION-LOG.md` rather than silently inventing variants.
