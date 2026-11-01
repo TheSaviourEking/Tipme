@@ -3639,6 +3639,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 }
 
 .bell > .tm-button {
+  position: relative;
   min-width: 44px;
   padding-inline: 0.6rem;
   text-decoration: none;
@@ -3656,6 +3657,26 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   border-radius: var(--radius-card);
   background: var(--surface-raised);
   box-shadow: var(--shadow-instrument);
+  max-height: min(70dvh, 32rem);
+  overflow-y: auto;
+}
+
+/* The bar wraps on small screens, leaving the bell anywhere in it: anchor to the whole bar. */
+@media (max-width: 48rem) {
+  .dashboard-bar {
+    position: relative;
+  }
+
+  .bell {
+    position: static;
+  }
+
+  .bell__panel {
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: auto;
+  }
 }
 
 .bell__panel h2 {
