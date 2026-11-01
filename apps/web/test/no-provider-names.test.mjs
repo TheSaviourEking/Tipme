@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { extname, join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 // Owner rule (1 Nov 2026): users never see a payment provider's name. TipMe's own words say
 // "our payment partner". Staff screens (/ops) and test-only screens may name providers.
@@ -18,13 +19,9 @@ const exempt = [
   'apps/web/src/app/dev/',
   'apps/web/src/app/preview-login/',
 ];
-// Provider ids the code compares and never shows. Each allowed literal is listed explicitly.
-const allowedIds = [
-  "'bachs-live'",
-  "'bachs-sandbox'",
-  '"bachs-live"',
-  '"bachs-sandbox"',
-];
+// Provider ids the code compares and never shows, matched against a literal's whole text. These
+// are the only provider-id literals in the scanned files today.
+const allowedIds = new Set(['bachs-live', 'bachs-sandbox']);
 // Staff-only text is out of scope on purpose: /ops, ops-client.ts and operator summaries such as
 // packages/database/src/operations/issues.ts may name providers.
 const extraFiles = [
@@ -43,19 +40,46 @@ function sourceFiles(dir) {
   });
 }
 
-// Drops comments only: block comments, and // at a line start or after whitespace (so the // in
-// https:// stays). Everything else is scanned as plain text, so quotes, apostrophes in JSX text and
-// regex literals cannot shift anything.
-export function stripComments(code) {
-  return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
-}
+const kinds = {
+  '.ts': ts.ScriptKind.TS,
+  '.tsx': ts.ScriptKind.TSX,
+  '.js': ts.ScriptKind.JS,
+  '.jsx': ts.ScriptKind.JSX,
+  '.mjs': ts.ScriptKind.JS,
+};
 
-// Every provider name left in the text. `\b` already skips identifiers such as
-// BachsPaymentAccountStatus; the listed provider-id literals are removed first.
-export function visibleProviderNames(code) {
-  let text = stripComments(code);
-  for (const id of allowedIds) text = text.split(id).join('');
-  return [...text.matchAll(/.*\bbachs\b.*/gi)].map((m) => m[0].trim());
+// The text a user could read: string and template literals, JSX text and string JSX attributes.
+// The TypeScript parser drops comments and never reads identifiers as text, so neither can hide
+// or cause a hit, and a '//' or '/*' inside a string cannot swallow code.
+export function visibleProviderNames(code, ext = '.tsx') {
+  if (!(ext in kinds))
+    return code.split('\n').filter((line) => /\bbachs\b/i.test(line));
+  const source = ts.createSourceFile(
+    `file${ext}`,
+    code,
+    ts.ScriptTarget.Latest,
+    true,
+    kinds[ext],
+  );
+  const hits = [];
+  const check = (text) => {
+    if (/\bbachs\b/i.test(text) && !allowedIds.has(text))
+      hits.push(text.trim());
+  };
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node) ||
+      ts.isJsxText(node)
+    )
+      check(node.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return hits;
 }
 
 test('the guard catches names in strings and JSX text, next to expressions too', () => {
@@ -66,6 +90,9 @@ test('the guard catches names in strings and JSX text, next to expressions too',
     '<p>Powered by Bachs {x}</p>',
     '<p>{count} tips via Bachs</p>',
     '<p>{a} Bachs {b}</p>',
+    "const sep = ' // '; const label = 'Bachs';",
+    "const a = '/*'; const m = 'Bachs'; const b = '*/';",
+    '<p title="Bachs">x</p>',
     '<p>\n  Paid by\n  {name} through Bachs\n</p>',
     "<p>We can't pay you</p>;\nconst m = 'Bachs';",
     "const r = /['\"]/; const m = 'Bachs';",
@@ -83,6 +110,8 @@ test('the guard allows identifiers, provider ids and comments', () => {
     '{/* Bachs */}',
     "fetch('https://x.io'); // it's Bachs",
     'const bachsAccount = 1;',
+    'const k = `bachs-live`;',
+    "const s = 'a'; /* Bachs */ // Bachs here\nconst t = 1;",
   ])
     assert.equal(visibleProviderNames(code).length, 0, code);
 });
@@ -92,7 +121,10 @@ test('no user-readable source text names a payment provider', () => {
   for (const file of [...roots.flatMap(sourceFiles), ...extraFiles]) {
     const rel = relative(repoRoot, file).split(sep).join('/');
     if (exempt.some((e) => rel.startsWith(e))) continue;
-    for (const hit of visibleProviderNames(readFileSync(file, 'utf8')))
+    for (const hit of visibleProviderNames(
+      readFileSync(file, 'utf8'),
+      extname(file),
+    ))
       offenders.push(`${rel}: ${hit}`);
   }
   assert.deepEqual(offenders, []);
