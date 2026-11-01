@@ -14,6 +14,7 @@ import {
   Notice,
   TextareaField,
 } from '@tipme/ui';
+import { PageImages } from '@/components/ops/page-images';
 import { PagePricing, ValueWithReason } from '@/components/ops/page-pricing';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -289,6 +290,17 @@ export default function OpsPagesPage() {
             onSubmit={(reason) => changePlan(page, reason)}
           />
         </Card>
+      )}
+      {page?.images && can(access, 'pages.suspend') && (
+        <PageImages
+          key={`images-${page.profileId}`}
+          page={page}
+          images={page.images}
+          onRemoved={async () => {
+            const result = await fetchPage(page.handle);
+            if (result.ok) setPage(result.data);
+          }}
+        />
       )}
       {page?.handleChanges && (
         <HandleChanges

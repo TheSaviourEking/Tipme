@@ -10,7 +10,8 @@ const DESCRIPTIONS: Record<string, string> = {
   'issues.view': 'See issues and their evidence, add notes',
   'market.edit': 'Add and change market observations',
   'pages.plan': 'Move a page between Free and Pro, with a reason',
-  'pages.suspend': 'Pause and restore recipient pages',
+  'pages.suspend':
+    'Pause and restore recipient pages, and review or remove their images',
   'payments.recheck': 'Ask the provider about a payment or withdrawal',
   'private.view': 'Reveal private details, with a reason',
   'recoveries.cancel': 'Cancel a pending phone recovery',

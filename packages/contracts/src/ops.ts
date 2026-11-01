@@ -456,7 +456,13 @@ export interface OpsPage {
   suspended: boolean;
   /** Optional until the release after the handle rule (the web deploys before the API). */
   handleChanges?: { used: number; allowed: number };
+  /** Which images staff can review. Optional, as `handleChanges`. */
+  images?: { hasCover: boolean; hasPhoto: boolean };
 }
+
+/** A page's image, as staff review and remove it. */
+export const OPS_PAGE_IMAGES = ['cover', 'photo'] as const;
+export type OpsPageImage = (typeof OPS_PAGE_IMAGES)[number];
 
 /** Making a page Pro or Free again: always with a written reason (audited). */
 export const opsPagePlanSchema = opsReasonSchema

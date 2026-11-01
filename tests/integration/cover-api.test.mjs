@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
@@ -11,8 +11,10 @@ import {
   mailSealing,
   movePhotosToStore,
   removeCover,
+  setAvatar,
   setCover,
 } from '../../packages/database/dist/index.js';
+import { hasImageSignature } from '../../apps/api/dist/profiles/image-upload.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
 
@@ -122,15 +124,44 @@ function memoryStore() {
   return {
     endpoint: 'memory://',
     objects,
+    beforePut: null,
     async put(key, webp) {
+      await this.beforePut?.(key, webp);
       objects.set(key, Buffer.from(webp));
     },
     async get(key) {
       return objects.get(key) ?? null;
     },
+    beforeRemove: null,
     async remove(key) {
+      await this.beforeRemove?.(key);
       objects.delete(key);
     },
+  };
+}
+const coverRow = async (profileId) =>
+  (
+    await database.pool.query(
+      'SELECT version, object_key FROM profile_covers WHERE profile_id = $1',
+      [profileId],
+    )
+  ).rows[0];
+const pageRow = async (profileId) =>
+  (
+    await database.pool.query(
+      'SELECT cover_path, cover_version, xmin::text AS xmin FROM profiles WHERE id = $1',
+      [profileId],
+    )
+  ).rows[0];
+/** Holds every upload at the store until `n` have arrived, so all of them really overlap. */
+function overlap(store, n) {
+  let arrived = 0;
+  let release;
+  const all = new Promise((resolve) => (release = resolve));
+  store.beforePut = async () => {
+    arrived += 1;
+    if (arrived === n) release();
+    await all;
   };
 }
 const fakeWebp = (label) => Buffer.from(`RIFF0000WEBPVP8 ${label}`);
@@ -491,4 +522,294 @@ test('moving photos to the object store also moves covers', async () => {
     0,
     'running it again moves nothing',
   );
+});
+
+test('an upload in flight when the account is deleted leaves nothing behind', async () => {
+  await livePage('+2348031290011', 'cover_race');
+  const { profileId, userId } = await userAndPage('cover_race');
+  const store = memoryStore();
+  store.beforePut = async () => {
+    store.beforePut = null;
+    await deleteAccount(database.db, {
+      userId,
+      sealing: mailSealing(Buffer.alloc(32, 7)),
+      photos: store,
+    });
+  };
+  await assert.rejects(
+    setCover(database.db, userId, fakeWebp('late'), store),
+    (error) => error.code === 'NO_PAGE',
+  );
+  assert.equal(store.objects.size, 0, 'the late object was removed');
+  assert.equal(await coverRow(profileId), undefined);
+  assert.equal((await pageRow(profileId)).cover_path, null);
+});
+
+test('concurrent first uploads leave one row, one object and no orphans', async () => {
+  await livePage('+2348031290012', 'cover_double');
+  const { profileId, userId } = await userAndPage('cover_double');
+  const store = memoryStore();
+  overlap(store, 4);
+  await Promise.all(
+    [1, 2, 3, 4].map((n) =>
+      setCover(database.db, userId, fakeWebp(`upload ${n}`), store),
+    ),
+  );
+  const row = await coverRow(profileId);
+  assert.deepEqual([...store.objects.keys()], [row.object_key]);
+  assert.equal(row.version, 4);
+});
+
+test('concurrent first photos leave one object too', async () => {
+  await livePage('+2348031290013', 'photo_double');
+  const { profileId, userId } = await userAndPage('photo_double');
+  const store = memoryStore();
+  overlap(store, 4);
+  await Promise.all(
+    [1, 2, 3, 4].map((n) =>
+      setAvatar(database.db, userId, fakeWebp(`upload ${n}`), store),
+    ),
+  );
+  const { rows } = await database.pool.query(
+    'SELECT object_key FROM profile_avatars WHERE profile_id = $1',
+    [profileId],
+  );
+  assert.deepEqual([...store.objects.keys()], [rows[0].object_key]);
+});
+
+test('a failed object removal is logged, with no key or page id in the log', async (t) => {
+  await livePage('+2348031290014', 'cover_logged');
+  const { profileId, userId } = await userAndPage('cover_logged');
+  const store = memoryStore();
+  await setCover(database.db, userId, fakeWebp('one'), store);
+  store.beforeRemove = async () => {
+    throw new Error('bucket unavailable');
+  };
+  const warn = t.mock.method(console, 'warn', () => undefined);
+  await setCover(database.db, userId, fakeWebp('two'), store);
+  assert.equal(warn.mock.callCount(), 1);
+  const line = warn.mock.calls[0].arguments.join(' ');
+  assert.match(line, /photo_object\.remove_failed/);
+  assert.match(line, /covers/);
+  assert.equal(line.includes(profileId), false, line);
+});
+
+test('a failed upload to the store changes nothing, and the old cover stays', async () => {
+  await livePage('+2348031290015', 'cover_failput');
+  const { profileId, userId } = await userAndPage('cover_failput');
+  const store = memoryStore();
+  const first = await setCover(database.db, userId, fakeWebp('one'), store);
+  store.beforePut = async () => {
+    store.beforePut = null;
+    throw new Error('upload failed');
+  };
+  await assert.rejects(setCover(database.db, userId, fakeWebp('two'), store));
+  assert.equal(
+    (await coverRow(profileId)).version,
+    versionOf(first.cover.path),
+  );
+  assert.deepEqual([...store.objects.values()], [fakeWebp('one')]);
+});
+
+test('the object is written before its row, and the old one removed after the commit', async () => {
+  await livePage('+2348031290016', 'cover_order2');
+  const { profileId, userId } = await userAndPage('cover_order2');
+  const store = memoryStore();
+  await setCover(database.db, userId, fakeWebp('one'), store);
+  const oldRow = await coverRow(profileId);
+  let rowAtPut;
+  const rowsAtRemove = [];
+  store.beforePut = async () => {
+    rowAtPut = await coverRow(profileId);
+  };
+  store.beforeRemove = async () => {
+    rowsAtRemove.push(await coverRow(profileId));
+  };
+  await setCover(database.db, userId, fakeWebp('two'), store);
+  assert.equal(rowAtPut.object_key, oldRow.object_key, 'row not changed yet');
+  assert.equal(rowsAtRemove.length, 1, 'only the old object goes');
+  assert.notEqual(
+    rowsAtRemove[0].object_key,
+    oldRow.object_key,
+    'the new row is committed before the old object goes',
+  );
+});
+
+test('a moved row is read only when its turn comes, so a newer cover wins', async () => {
+  await livePage('+2348031290017', 'cover_move_a');
+  await livePage('+2348031290018', 'cover_move_b');
+  const a = await userAndPage('cover_move_a');
+  const b = await userAndPage('cover_move_b');
+  await setCover(database.db, a.userId, fakeWebp('old a'));
+  await setCover(database.db, b.userId, fakeWebp('old b'));
+  const store = memoryStore();
+  const puts = [];
+  let replaced = false;
+  store.beforePut = async (_key, webp) => {
+    puts.push(webp.toString());
+    if (replaced) return;
+    replaced = true;
+    const other = webp.toString().endsWith('old a') ? b : a;
+    await setCover(database.db, other.userId, fakeWebp('newer'));
+    puts.length = 0;
+  };
+  await movePhotosToStore(database.db, store);
+  assert.equal(
+    puts.some((label) => label.endsWith('old a') || label.endsWith('old b')),
+    false,
+    puts.join(),
+  );
+  assert.ok(puts.some((label) => label.endsWith('newer')));
+});
+
+test(
+  'a body sent in chunks is stopped at the limit',
+  { timeout: 15_000 },
+  async () => {
+    const cookie = await livePage('+2348031290019', 'cover_chunks');
+    // Its own connection, no declared length, and one write that ends just past the limit, so the
+    // server has read everything when it answers.
+    const status = await new Promise((resolve, reject) => {
+      const request = httpRequest(`${stack.api}/v1/me/cover`, {
+        method: 'PUT',
+        agent: false,
+        headers: { ...browserHeaders(cookie), 'content-type': 'image/jpeg' },
+      });
+      request.on('response', (response) => {
+        resolve(response.statusCode);
+        request.destroy();
+      });
+      request.on('error', reject);
+      request.flushHeaders();
+      request.write(Buffer.alloc(5 * 1024 * 1024 + 1, 1));
+    });
+    assert.equal(status, 413);
+  },
+);
+
+test('XMP and colour profiles are dropped too', async () => {
+  const cookie = await livePage('+2348031290020', 'cover_xmp');
+  const original = await sharp({
+    create: { width: 800, height: 600, channels: 3, background: '#7A32F9' },
+  })
+    .withXmp(
+      '<x:xmpmeta xmlns:x="adobe:ns:meta/"><secret>SecretXmp</secret></x:xmpmeta>',
+    )
+    .withIccProfile('p3')
+    .jpeg()
+    .toBuffer();
+  const before = await sharp(original).metadata();
+  assert.ok(before.xmp && before.icc, 'the test photo has both');
+  const { cover } = (await (await upload(cookie, original)).json()).data;
+  const bytes = Buffer.from(
+    await (await fetch(`${stack.api}${cover.path}`)).arrayBuffer(),
+  );
+  const after = await sharp(bytes).metadata();
+  assert.equal(after.xmp, undefined);
+  assert.equal(after.icc, undefined);
+  assert.equal(bytes.includes(Buffer.from('SecretXmp')), false);
+});
+
+test('only JPEG, PNG and WebP signatures reach the decoder', async () => {
+  const png = await sharp({
+    create: { width: 2, height: 2, channels: 3, background: '#000' },
+  });
+  for (const format of ['jpeg', 'png', 'webp'])
+    assert.equal(
+      hasImageSignature(await png.clone()[format]().toBuffer()),
+      true,
+      format,
+    );
+  for (const format of ['gif', 'tiff', 'avif'])
+    assert.equal(
+      hasImageSignature(await png.clone()[format]().toBuffer()),
+      false,
+      format,
+    );
+  for (const other of [
+    Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    Buffer.from('RIFF0000WAVEfmt '),
+    Buffer.alloc(0),
+    Buffer.from([0xff, 0xd8]),
+  ])
+    assert.equal(hasImageSignature(other), false);
+  // Through the API, a disguised file gets the same plain refusal as before.
+  const cookie = await livePage('+2348031290021', 'cover_magic');
+  const big = Buffer.concat([
+    Buffer.from('<svg xmlns="http://www.w3.org/2000/svg">'),
+    Buffer.alloc(1024 * 1024, 0x20),
+    Buffer.from('</svg>'),
+  ]);
+  const refused = await upload(cookie, big);
+  assert.equal(refused.status, 400);
+  assert.equal((await refused.json()).error.code, 'INVALID_IMAGE');
+});
+
+test('the owner can see their own cover while the page is not live or is paused', async () => {
+  const cookie = await livePage('+2348031290022', 'cover_owner');
+  const own = () =>
+    fetch(`${stack.api}/v1/me/cover`, { headers: browserHeaders(cookie) });
+  assert.equal((await own()).status, 404, 'no cover yet');
+  const { cover } = (await (await upload(cookie, await photo())).json()).data;
+  await fetch(`${stack.api}/v1/me/page/state`, {
+    method: 'PUT',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ state: 'not_live' }),
+  });
+  assert.equal((await fetch(`${stack.api}${cover.path}`)).status, 404);
+  const notLive = await own();
+  assert.equal(notLive.status, 200);
+  assert.equal(notLive.headers.get('content-type'), 'image/webp');
+  assert.equal(notLive.headers.get('cache-control'), 'private, no-store');
+  assert.equal(notLive.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(
+    notLive.headers.get('content-security-policy'),
+    "default-src 'none'",
+  );
+  assert.equal(
+    (await sharp(Buffer.from(await notLive.arrayBuffer())).metadata()).width,
+    2240,
+  );
+  await database.pool.query(
+    `UPDATE profiles SET status = 'suspended', suspended_reason = 'Under review' WHERE handle_lower = 'cover_owner'`,
+  );
+  assert.equal((await own()).status, 200, 'paused');
+  // Signed out, or someone else: never this cover.
+  assert.equal((await fetch(`${stack.api}/v1/me/cover`)).status, 401);
+  const other = await livePage('+2348031290023', 'cover_stranger');
+  assert.equal(
+    (
+      await fetch(`${stack.api}/v1/me/cover`, {
+        headers: browserHeaders(other),
+      })
+    ).status,
+    404,
+  );
+});
+
+test('nothing changed: no write and no page refresh', async () => {
+  const cookie = await livePage('+2348031290024', 'cover_same');
+  const { profileId } = await userAndPage('cover_same');
+  await chooseDesign(cookie, { design: 'ripple', colour: 'rose' });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  revalidations = [];
+  const before = await pageRow(profileId);
+  const again = await chooseDesign(cookie, {
+    design: 'ripple',
+    colour: 'rose',
+  });
+  assert.equal(again.status, 200);
+  assert.equal((await again.json()).data.coverChoice.design, 'ripple');
+  const nothing = await fetch(`${stack.api}/v1/me/cover`, {
+    method: 'DELETE',
+    headers: browserHeaders(cookie),
+  });
+  assert.equal(nothing.status, 200);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(revalidations, []);
+  assert.equal((await pageRow(profileId)).xmin, before.xmin, 'no write');
+  // A real change still counts.
+  await chooseDesign(cookie, { design: 'ripple', colour: 'sun' });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(revalidations, ['cover_same']);
 });

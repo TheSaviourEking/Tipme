@@ -175,3 +175,61 @@ test('a design choice accepts the catalogue and nothing else', () => {
   assert.equal(ok({}), false);
   assert.equal(ok({ design: 'large', extra: 1 }), false);
 });
+
+/** Runs `work` with `ids` taken out of a catalogue, as deleting their entries would. */
+function without(catalogue, ids, work) {
+  const original = [...catalogue];
+  const kept = original.filter((entry) => !ids.includes(entry.id));
+  catalogue.splice(0, catalogue.length, ...kept);
+  try {
+    work();
+  } finally {
+    catalogue.splice(0, catalogue.length, ...original);
+  }
+}
+
+const HANDLES = Array.from({ length: 60 }, (_, i) => `page_${i}`);
+
+test('removing any design from the catalogue never breaks a page', () => {
+  const removals = [
+    ...COVER_DESIGNS.map((design) => [design.id]),
+    ['scattered', 'large'],
+    ['scattered', 'large', 'dark'],
+  ];
+  for (const ids of removals)
+    without(COVER_DESIGNS, ids, () => {
+      for (const handle of HANDLES) {
+        const auto = automaticCover(handle);
+        assert.ok(
+          COVER_DESIGNS.some((d) => d.id === auto),
+          `${ids}: ${auto}`,
+        );
+        for (const coverDesign of [null, ids[0]]) {
+          const cover = resolveCover(page({ handle, coverDesign }));
+          assert.ok(!ids.includes(cover.design), `${ids}: ${cover.design}`);
+        }
+      }
+    });
+});
+
+test('removing an automatic design moves only the pages that had it', () => {
+  const before = new Map(HANDLES.map((h) => [h, automaticCover(h)]));
+  without(COVER_DESIGNS, ['dark'], () => {
+    for (const handle of HANDLES)
+      if (before.get(handle) !== 'dark')
+        assert.equal(automaticCover(handle), before.get(handle), handle);
+  });
+});
+
+test('removing any colour from the catalogue never offers a missing one', () => {
+  for (const { id } of [...COVER_COLOURS])
+    without(COVER_COLOURS, [id], () => {
+      const cover = resolveCover(
+        page({ coverDesign: 'ripple', coverColour: id }),
+      );
+      assert.ok(
+        COVER_COLOURS.some((c) => c.id === cover.colour),
+        id,
+      );
+    });
+});

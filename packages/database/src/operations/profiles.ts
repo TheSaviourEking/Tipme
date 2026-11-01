@@ -44,6 +44,7 @@ import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { mailOwner } from './account-mail.js';
+import { removeObjects } from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
@@ -281,6 +282,10 @@ const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   pageState: row.pageState as OpsPage['pageState'],
   suspended: row.status === 'suspended',
   handleChanges: handleChangesOf(row),
+  images: {
+    hasCover: row.coverPath !== null,
+    hasPhoto: row.avatarPath !== null,
+  },
 });
 
 /**
@@ -844,8 +849,7 @@ export function deleteAccount(
       return { handle: row?.handleLower ?? '' };
     });
     // After the commit: an account's photos must not outlive it in the bucket.
-    for (const key of photoKeys)
-      await input.photos?.remove(key).catch(() => undefined);
+    await removeObjects(input.photos, photoKeys);
     return result;
   });
 }

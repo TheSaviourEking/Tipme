@@ -5,7 +5,7 @@ import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import { profileCovers, profiles } from '../schema.js';
 import { guarded } from './errors.js';
-import { myPageId, removeObjects } from './page-images.js';
+import { lockLivePage, myPageId, removeObjects } from './page-images.js';
 import { getMyProfile } from './profiles.js';
 
 // Page covers. Stored and served exactly as page photos are (see avatars.ts): the bytes are
@@ -30,6 +30,7 @@ export function setCover(
     let previous: string | null = null;
     try {
       await db.transaction(async (tx) => {
+        await lockLivePage(tx, profileId);
         const [old] = await tx
           .select({ objectKey: profileCovers.objectKey })
           .from(profileCovers)
@@ -68,50 +69,70 @@ export function setCover(
   });
 }
 
-/** Removes the page's uploaded cover: its URL stops working, and any chosen design shows again. */
+/**
+ * Removes the page's uploaded cover: its URL stops working, and any chosen design shows again.
+ * `changed` is false when there was no cover, so the caller has nothing to refresh.
+ */
 export function removeCover(
   db: Database,
   userId: string,
   store?: PhotoStore,
-): Promise<MyProfile> {
+): Promise<{ profile: MyProfile; changed: boolean }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const removed = await db.transaction(async (tx) => {
+      await lockLivePage(tx, profileId);
       const rows = await tx
         .delete(profileCovers)
         .where(eq(profileCovers.profileId, profileId))
         .returning({ objectKey: profileCovers.objectKey });
-      await tx
-        .update(profiles)
-        .set({ coverPath: null })
-        .where(eq(profiles.id, profileId));
+      if (rows.length)
+        await tx
+          .update(profiles)
+          .set({ coverPath: null })
+          .where(eq(profiles.id, profileId));
       return rows;
     });
     await removeObjects(
       store,
       removed.flatMap((r) => (r.objectKey ? [r.objectKey] : [])),
     );
-    return getMyProfile(db, userId);
+    return {
+      profile: await getMyProfile(db, userId),
+      changed: removed.length > 0,
+    };
   });
 }
 
 /**
  * Records the chosen design and colour, already checked against the catalogue by
  * `coverDesignChoiceSchema`. An uploaded cover is left alone: it keeps winning until it's removed,
- * and then this choice shows. `design: null` clears the choice.
+ * and then this choice shows. `design: null` clears the choice. Choosing what's already chosen
+ * writes nothing, and `changed` tells the caller there is nothing to refresh.
  */
 export function setCoverDesign(
   db: Database,
   userId: string,
   choice: CoverDesignChoice,
-): Promise<MyProfile> {
+): Promise<{ profile: MyProfile; changed: boolean }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
-    await db
+    const design = choice.design;
+    const colour = choice.colour ?? null;
+    const updated = await db
       .update(profiles)
-      .set({ coverDesign: choice.design, coverColour: choice.colour ?? null })
-      .where(eq(profiles.id, profileId));
-    return getMyProfile(db, userId);
+      .set({ coverDesign: design, coverColour: colour })
+      .where(
+        and(
+          eq(profiles.id, profileId),
+          sql`(${profiles.coverDesign} IS DISTINCT FROM ${design} OR ${profiles.coverColour} IS DISTINCT FROM ${colour})`,
+        ),
+      )
+      .returning({ id: profiles.id });
+    return {
+      profile: await getMyProfile(db, userId),
+      changed: updated.length > 0,
+    };
   });
 }
 
@@ -140,6 +161,27 @@ export function coverFor(
           eq(profiles.status, 'active'),
         ),
       );
+    if (!row) return null;
+    if (row.bytes) return row.bytes;
+    return row.objectKey && store ? store.get(row.objectKey) : null;
+  });
+}
+
+/** The owner's own cover, for their preview: whatever the page's state. Never public. */
+export function myCover(
+  db: Database,
+  userId: string,
+  store?: PhotoStore,
+): Promise<Buffer | null> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    const [row] = await db
+      .select({
+        bytes: profileCovers.bytes,
+        objectKey: profileCovers.objectKey,
+      })
+      .from(profileCovers)
+      .where(eq(profileCovers.profileId, profileId));
     if (!row) return null;
     if (row.bytes) return row.bytes;
     return row.objectKey && store ? store.get(row.objectKey) : null;

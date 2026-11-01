@@ -5,7 +5,12 @@ import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import { profileAvatars, profileCovers, profiles } from '../schema.js';
 import { guarded } from './errors.js';
-import { moveRowsToStore, myPageId, removeObjects } from './page-images.js';
+import {
+  lockLivePage,
+  moveRowsToStore,
+  myPageId,
+  removeObjects,
+} from './page-images.js';
 import { getMyProfile } from './profiles.js';
 
 // Profile photos (PR-013). The bytes stored here are always the server's own re-encoding
@@ -35,6 +40,7 @@ export function setAvatar(
     let previous: string | null = null;
     try {
       await db.transaction(async (tx) => {
+        await lockLivePage(tx, profileId);
         const [old] = await tx
           .select({ objectKey: profileAvatars.objectKey })
           .from(profileAvatars)
@@ -82,6 +88,7 @@ export function removeAvatar(
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const removed = await db.transaction(async (tx) => {
+      await lockLivePage(tx, profileId);
       const rows = await tx
         .delete(profileAvatars)
         .where(eq(profileAvatars.profileId, profileId))

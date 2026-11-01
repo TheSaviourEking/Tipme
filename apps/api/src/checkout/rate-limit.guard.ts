@@ -26,7 +26,8 @@ type RateLimitedRoute =
   | 'analytics'
   | 'reports'
   | 'unsubscribe'
-  | 'avatars';
+  | 'avatars'
+  | 'cover_designs';
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -110,6 +111,12 @@ export class RateLimitGuard implements CanActivate {
       // Photo and cover uploads (PR-013): each one is a full decode and re-encode.
       avatars: {
         limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // Each change writes and asks the web app to refresh the page. Generous and per address:
+      // mobile carriers share addresses, and saving is a deliberate step, not browsing.
+      cover_designs: {
+        limit: this.config.RATE_LIMIT_COVER_DESIGNS_PER_HOUR,
         windowMs: 3_600_000,
       },
       auth_code: {

@@ -2,23 +2,30 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
+  Res,
 } from '@nestjs/common';
 import {
+  OPS_PAGE_IMAGES,
   opsFeeFreeGrantSchema,
   opsHandleChangesGrantSchema,
   opsPageFeeSchema,
   opsPagePlanSchema,
+  opsReasonSchema,
   type ApiDataResponse,
   type OpsFeeFreeGrantRequest,
   type OpsHandleChangesGrantRequest,
   type OpsPage,
   type OpsPageFeeRequest,
+  type OpsPageImage,
   type OpsPagePlanRequest,
   type OpsPagePricing,
+  type OpsReasonRequest,
 } from '@tipme/contracts';
 import {
   grantFeeFreeTips,
@@ -27,15 +34,32 @@ import {
   pagePricing,
   setAccountFee,
   setPagePlan,
+  staffRemovePageImage,
+  staffViewPageImage,
+  type MailSealing,
+  type PhotoStore,
 } from '@tipme/database';
+import type { Response } from 'express';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
+import { sendPrivateImage } from '../profiles/image-upload.js';
+import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const uuidOf = (value: string) => {
+  if (!UUID.test(value)) throw new CodedHttpException(404, 'NOT_FOUND');
+  return value;
+};
+const imageOf = (value: string): OpsPageImage => {
+  const image = OPS_PAGE_IMAGES.find((known) => known === value);
+  if (!image) throw new CodedHttpException(404, 'NOT_FOUND');
+  return image;
+};
 
 /**
  * Free and Pro (PR-012): staff look a page up and change its plan. Staff also set one page's
@@ -47,6 +71,10 @@ export class OpsPagesController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Optional()
+    @Inject(PHOTO_STORE)
+    private readonly photos: PhotoStore | null = null,
   ) {}
 
   @Get(':handle')
@@ -80,6 +108,55 @@ export class OpsPagesController {
     // The public page's amounts change with the plan.
     if (changed) this.revalidator.revalidate(handleLower);
     return { data: page };
+  }
+
+  /**
+   * Staff review a page's image, whatever the page's state: a paused page's cover is exactly what
+   * they may need to see. Each view is audited, and nothing is cached.
+   */
+  @Get(':profileId/images/:image')
+  @OpsPermission('pages.suspend')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async image(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Param('image') image: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    sendPrivateImage(
+      response,
+      await staffViewPageImage(
+        this.database.db,
+        {
+          staffUserId: ops.userId,
+          profileId: uuidOf(profileId),
+          image: imageOf(image),
+        },
+        this.photos ?? undefined,
+      ),
+    );
+  }
+
+  /** Takes down one image and leaves the page up: pausing stops the person's tips too. */
+  @Post(':profileId/images/:image/remove')
+  @HttpCode(200)
+  @OpsPermission('pages.suspend')
+  async removeImage(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Param('image') image: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ removed: boolean }>> {
+    const { handle, changed } = await staffRemovePageImage(this.database.db, {
+      staffUserId: ops.userId,
+      profileId: uuidOf(profileId),
+      image: imageOf(image),
+      reason: body.reason,
+      sealing: this.sealing,
+      store: this.photos ?? undefined,
+    });
+    if (changed) this.revalidator.revalidate(handle);
+    return { data: { removed: changed } };
   }
 
   /** More handle changes for one page; no public effect, so nothing to refresh. */

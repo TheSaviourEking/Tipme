@@ -30,6 +30,6 @@ import { MailModule } from '../mail/mail.module.js';
     ServerEvents,
     photoStoreProvider,
   ],
-  exports: [ProfileRevalidator],
+  exports: [ProfileRevalidator, photoStoreProvider],
 })
 export class ProfilesModule {}

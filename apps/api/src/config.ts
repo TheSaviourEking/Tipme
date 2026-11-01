@@ -81,6 +81,11 @@ export const apiConfigSchema = z
     RATE_LIMIT_REPORTS_PER_HOUR: z.coerce.number().int().min(1).default(10),
     RATE_LIMIT_UNSUBSCRIBE_PER_MIN: z.coerce.number().int().min(1).default(600),
     RATE_LIMIT_AVATARS_PER_HOUR: z.coerce.number().int().min(1).default(20),
+    RATE_LIMIT_COVER_DESIGNS_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(60),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z

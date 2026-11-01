@@ -1459,6 +1459,40 @@
           }
         ]
       },
+      "get": {
+        "operationId": "Cover.own",
+        "tags": [
+          "Cover"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
       "put": {
         "operationId": "Cover.upload",
         "tags": [
@@ -1564,6 +1598,7 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "cover_designs",
         "security": [
           {
             "session": []
@@ -5856,6 +5891,138 @@
           }
         ],
         "x-tipme-permission": "fees.manage"
+      }
+    },
+    "/v1/ops/pages/{profileId}/images/{image}": {
+      "get": {
+        "operationId": "OpsPages.image",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "image",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
+      }
+    },
+    "/v1/ops/pages/{profileId}/images/{image}/remove": {
+      "post": {
+        "operationId": "OpsPages.removeImage",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "image",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
       }
     },
     "/v1/ops/pages/{profileId}/plan": {

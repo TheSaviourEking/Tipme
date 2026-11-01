@@ -32,6 +32,21 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 sharp.cache(false);
 
+/**
+ * Whether the bytes start like a JPEG, PNG or WebP. Checked before the decoder sees them: otherwise
+ * sharp's other loaders (SVG, TIFF, GIF) parse whatever arrives, outside the re-encoding timeout,
+ * while holding a slot. The decoder still decides whether it's a real image.
+ */
+export function hasImageSignature(bytes: Buffer): boolean {
+  const starts = (signature: number[], at = 0) =>
+    signature.every((byte, i) => bytes[at + i] === byte);
+  return (
+    starts([0xff, 0xd8, 0xff]) ||
+    starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+    (starts([0x52, 0x49, 0x46, 0x46]) && starts([0x57, 0x45, 0x42, 0x50], 8))
+  );
+}
+
 /** The request body, read here (no parser handles images), refused past `MAX_BYTES`. */
 export async function readUpload(request: Request): Promise<Buffer> {
   const type = (request.headers['content-type'] ?? '').split(';')[0]!.trim();
@@ -47,7 +62,10 @@ export async function readUpload(request: Request): Promise<Buffer> {
       throw new CodedHttpException(413, 'PAYLOAD_TOO_LARGE');
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks);
+  const body = Buffer.concat(chunks);
+  if (!hasImageSignature(body))
+    throw new CodedHttpException(400, 'INVALID_IMAGE');
+  return body;
 }
 
 /**
@@ -93,6 +111,20 @@ export function sendImage(response: Response, bytes: Buffer | null): void {
     .status(200)
     .setHeader('Content-Type', 'image/webp')
     .setHeader('Cache-Control', 'public, max-age=3600, immutable')
+    .setHeader('Content-Security-Policy', "default-src 'none'")
+    .end(bytes);
+}
+
+/** An image only its owner or staff may see, whatever the page's state: never stored by a cache. */
+export function sendPrivateImage(
+  response: Response,
+  bytes: Buffer | null,
+): void {
+  if (!bytes) throw new CodedHttpException(404, 'NOT_FOUND');
+  response
+    .status(200)
+    .setHeader('Content-Type', 'image/webp')
+    .setHeader('Cache-Control', 'private, no-store')
     .setHeader('Content-Security-Policy', "default-src 'none'")
     .end(bytes);
 }

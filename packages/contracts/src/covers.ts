@@ -59,7 +59,6 @@ export const COVER_COLOURS: readonly CoverColour[] = [
 /** The `dark` design's fixed colours: it takes no colour of its own. */
 export const COVER_DARK = { base: '#24221f', tone: '#33302b' } as const;
 
-const DEFAULT_COLOUR = 'neutral';
 const AUTOMATIC = ['scattered', 'large', 'dark'] as const;
 
 const designById = (id: string) => COVER_DESIGNS.find((d) => d.id === id);
@@ -68,16 +67,22 @@ const colourById = (id: string) => COVER_COLOURS.find((c) => c.id === id);
 /**
  * The design a page gets when its owner chose nothing: 32-bit FNV-1a over the lower-case handle.
  * Runs alike in server and browser and is worked out, never stored. Changing this restyles every
- * such page, so test/covers.test.mjs pins some results.
+ * such page, so test/covers.test.mjs pins some results. If its design has left the catalogue, the
+ * next automatic one is used, so other pages keep theirs; with none left, the catalogue's first.
  */
-export function automaticCover(handle: string): 'scattered' | 'large' | 'dark' {
+export function automaticCover(handle: string): string {
   const lower = handle.toLowerCase();
   let hash = 0x811c9dc5;
   for (let i = 0; i < lower.length; i += 1) {
     hash ^= lower.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193);
   }
-  return AUTOMATIC[(hash >>> 0) % AUTOMATIC.length]!;
+  const start = (hash >>> 0) % AUTOMATIC.length;
+  for (let step = 0; step < AUTOMATIC.length; step += 1) {
+    const id = AUTOMATIC[(start + step) % AUTOMATIC.length]!;
+    if (designById(id)) return id;
+  }
+  return COVER_DESIGNS[0]?.id ?? AUTOMATIC[start]!;
 }
 
 export type ResolvedCover =
@@ -93,13 +98,17 @@ export function resolveCover(p: {
 }): ResolvedCover {
   if (p.coverPath) return { kind: 'photo', path: p.coverPath };
   const chosen = p.coverDesign ? designById(p.coverDesign) : undefined;
-  const design = chosen ?? designById(automaticCover(p.handle))!;
-  if (!design.colours) return { kind: 'design', design: design.id };
-  const colour = chosen && p.coverColour ? colourById(p.coverColour) : null;
+  const id = chosen?.id ?? automaticCover(p.handle);
+  if (!(chosen ?? designById(id))?.colours)
+    return { kind: 'design', design: id };
+  const picked =
+    chosen && p.coverColour ? colourById(p.coverColour) : undefined;
+  // Neutral by default; the first colour if neutral itself has been removed.
+  const colour = picked ?? colourById('neutral') ?? COVER_COLOURS[0];
   return {
     kind: 'design',
-    design: design.id,
-    colour: colour?.id ?? DEFAULT_COLOUR,
+    design: id,
+    ...(colour ? { colour: colour.id } : {}),
   };
 }
 

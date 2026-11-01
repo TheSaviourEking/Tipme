@@ -20,6 +20,7 @@ import {
 } from '@tipme/contracts';
 import {
   coverFor,
+  myCover,
   removeCover,
   setCover,
   setCoverDesign,
@@ -40,6 +41,7 @@ import {
   readUpload,
   reencodeTo,
   sendImage,
+  sendPrivateImage,
   withSlot,
 } from './image-upload.js';
 import { PHOTO_STORE } from './photo-store.provider.js';
@@ -59,6 +61,20 @@ export class CoverController {
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
   ) {}
+
+  /** The owner's preview, which has to work before the page is live and while it's paused. */
+  @Get('me/cover')
+  @UseGuards(SessionGuard)
+  @Header('X-Content-Type-Options', 'nosniff')
+  async own(
+    @CurrentUser() auth: AuthContext,
+    @Res() response: Response,
+  ): Promise<void> {
+    sendPrivateImage(
+      response,
+      await myCover(this.database.db, auth.userId, this.photos ?? undefined),
+    );
+  }
 
   @Put('me/cover')
   @UseGuards(SessionGuard, CsrfGuard)
@@ -84,25 +100,30 @@ export class CoverController {
   async remove(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<MyProfile>> {
-    const updated = await removeCover(
+    const { profile, changed } = await removeCover(
       this.database.db,
       auth.userId,
       this.photos ?? undefined,
     );
-    this.revalidator.revalidate(updated.handle);
-    return { data: updated };
+    if (changed) this.revalidator.revalidate(profile.handle);
+    return { data: profile };
   }
 
   @Put('me/cover-design')
   @UseGuards(SessionGuard, CsrfGuard)
+  @RateLimit('cover_designs')
   async chooseDesign(
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(coverDesignChoiceSchema))
     body: CoverDesignChoice,
   ): Promise<ApiDataResponse<MyProfile>> {
-    const updated = await setCoverDesign(this.database.db, auth.userId, body);
-    this.revalidator.revalidate(updated.handle);
-    return { data: updated };
+    const { profile, changed } = await setCoverDesign(
+      this.database.db,
+      auth.userId,
+      body,
+    );
+    if (changed) this.revalidator.revalidate(profile.handle);
+    return { data: profile };
   }
 
   /** Public, but only for live pages. */

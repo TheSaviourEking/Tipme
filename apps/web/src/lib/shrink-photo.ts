@@ -2,6 +2,9 @@
 // 3–8 MB becomes about 200 KB, so it uploads in seconds on a slow mobile connection. The server
 // still re-encodes whatever arrives; this only saves the person's data and time.
 
+/** Covers show up to 2240 px wide, so they keep more than a profile photo's 1024 px. */
+export const COVER_SHRINK_MAX = 2560;
+
 /** The size that fits within `max` on the longest side, never larger than the original. */
 export function fitWithin(
   width: number,
@@ -16,13 +19,13 @@ export function fitWithin(
 }
 
 /**
- * A JPEG at most 1024 px on its longest side. If the browser cannot decode the file, the file
+ * A JPEG at most `max` px on its longest side. If the browser cannot decode the file, the file
  * is sent as it is and the server decides (it refuses anything that is not a real photo).
  */
-export async function shrinkPhoto(file: File): Promise<Blob> {
+export async function shrinkPhoto(file: Blob, max = 1024): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(file);
-    const { width, height } = fitWithin(bitmap.width, bitmap.height, 1024);
+    const { width, height } = fitWithin(bitmap.width, bitmap.height, max);
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
