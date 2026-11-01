@@ -41,7 +41,7 @@ const messages: Record<ApiErrorCode, string> = {
   STAFF_EMAIL_LOCKED:
     'Staff can’t change their sign-in email here. Contact the owner, who can have it changed.',
   STAFF_PHONE_LOCKED:
-    'Staff can’t change their phone number here. Contact the owner, who can have it changed.',
+    'Staff can’t change their phone number here. Ask an owner.',
   STAFF_CANNOT_DELETE:
     'Staff accounts can’t be deleted. Ask an owner to remove your staff access first.',
   STAFF_ALREADY_ENROLLED:

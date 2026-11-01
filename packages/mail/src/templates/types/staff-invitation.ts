@@ -52,7 +52,10 @@ export const staffInvitation = defineMailType({
   },
 });
 
-/** To whoever invited them and to owners. A masked address: enough to recognise. */
+/**
+ * To whoever invited them and to owners: a masked address, enough to recognise. Also to the person,
+ * in their own words (`own`), so a decline from a stolen session is not silent.
+ */
 export const staffInvitationDeclined = defineMailType({
   id: 'staff_invitation_declined',
   category: 'security',
@@ -62,6 +65,7 @@ export const staffInvitationDeclined = defineMailType({
     .object({
       personHint: z.string().max(260),
       roleName: z.string().max(100),
+      own: z.literal(true).optional(),
     })
     .strict(),
   sample: { personHint: 'a•••@example.com', roleName: 'Support' },
@@ -73,11 +77,14 @@ export const staffInvitationDeclined = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: `${data.personHint} declined their invitation to the admin area (role: ${data.roleName}). They have no admin access, and they can be invited again.`,
+            text: data.own
+              ? `You declined your invitation to the admin area (role: ${data.roleName}). You have no admin access. If this wasn’t you, someone else may be signed in to your account: tell whoever invited you.`
+              : `${data.personHint} declined their invitation to the admin area (role: ${data.roleName}). They have no admin access, and they can be invited again.`,
           },
         ],
-        reason:
-          'You get this email because you invited this person or you are a TipMe owner.',
+        reason: data.own
+          ? 'You get this email because a TipMe admin invitation to this address was declined.'
+          : 'You get this email because you invited this person or you are a TipMe owner.',
       },
       ctx,
     ),

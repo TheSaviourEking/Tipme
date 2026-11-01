@@ -30,6 +30,7 @@ import {
   completeRecovery,
   confirmEmailForUser,
   getMyProfile,
+  isActiveStaff,
   listNotifications,
   markRead,
   pendingRecoveries,
@@ -219,9 +220,13 @@ export class NotificationsController {
   @UseGuards(SessionGuard)
   @RateLimit('auth_code')
   async phoneCode(
+    @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(phoneSchema)) body: z.infer<typeof phoneSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
     await this.assertLegacyAllowed();
+    // The change would be refused, so no text is sent for it.
+    if (await isActiveStaff(this.database.db, auth.userId))
+      throw new CodedHttpException(409, 'STAFF_PHONE_LOCKED');
     await requestSignInCode(this.database.db, {
       phone: body.phone,
       purpose: 'change_phone',

@@ -41,6 +41,7 @@ import {
   clearOverrides,
   composeAccess,
   dropOpsAccess,
+  isUnenrolledInvitee,
   ignoresAdjustments,
   issueEnrolment,
   lockStaffAdmin,
@@ -975,7 +976,11 @@ export function resendInvitation(
         .select({ confirmedAt: staffTotp.confirmedAt })
         .from(staffTotp)
         .where(eq(staffTotp.userId, userId));
-      if (authenticator?.confirmedAt)
+      // Someone mid-reset has no confirmed authenticator but did enrol: that link is the owner's reset.
+      if (
+        authenticator?.confirmedAt ||
+        !(await isUnenrolledInvitee(tx, userId))
+      )
         throw new OperationError('STAFF_ALREADY_ENROLLED');
       const to = await provenEmailOrThrow(tx, userId);
       // Also drops an authenticator started on the old link and never confirmed.

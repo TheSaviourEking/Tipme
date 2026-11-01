@@ -154,11 +154,19 @@ export async function isUnenrolledInvitee(
   return Boolean(row) && !row?.enrolledAt;
 }
 
-/** Tells whoever invited them, and every owner who can act, that an invitation was turned down. */
+/**
+ * Tells whoever invited them, and every owner who can act, that an invitation was turned down; and,
+ * when it was declined rather than deleted away, the person, so a stolen session can't do it silently.
+ */
 async function mailInvitationDeclined(
   tx: Tx,
   sealing: MailSealing,
-  input: { userId: string; roleName: string; now: Date },
+  input: {
+    userId: string;
+    via: 'declined' | 'account_deleted';
+    roleName: string;
+    now: Date;
+  },
 ): Promise<void> {
   const [person] = await tx
     .select({ email: users.email })
@@ -205,6 +213,18 @@ async function mailInvitationDeclined(
         dedupeKey: `staff_invitation_declined.${input.userId}.${recipient.userId}.${newId()}`,
         now: input.now,
       });
+  if (input.via === 'declined')
+    await mailOwner(tx, sealing, {
+      userId: input.userId,
+      type: 'staff_invitation_declined',
+      data: {
+        personHint: person?.email ? maskEmail(person.email) : 'Someone',
+        roleName: input.roleName,
+        own: true,
+      },
+      dedupeKey: `staff_invitation_declined.${input.userId}.own.${newId()}`,
+      now: input.now,
+    });
 }
 
 /**
@@ -233,7 +253,13 @@ export async function revokeUnenrolled(
       ),
     )
     .returning({ roleId: staff.roleId });
-  if (!row) throw new OperationError('STAFF_ALREADY_ENROLLED');
+  // A confirmation got in first: refused in the terms of what was asked for.
+  if (!row)
+    throw new OperationError(
+      via === 'account_deleted'
+        ? 'STAFF_CANNOT_DELETE'
+        : 'STAFF_ALREADY_ENROLLED',
+    );
   const [role] = await tx
     .select({ id: roles.id, name: roles.name })
     .from(roles)
@@ -254,6 +280,7 @@ export async function revokeUnenrolled(
   });
   await mailInvitationDeclined(tx, input.sealing, {
     userId,
+    via,
     roleName: role?.name ?? row.roleId,
     now,
   });
@@ -617,6 +644,28 @@ export function grantOwner(
   );
 }
 
+/**
+ * Takes a person's rows in the order everything that ends their access does: account, then staff,
+ * and only then enrolment links and the authenticator. The account is only shared, as the writes
+ * naming it would share it anyway: taken late, that share would wait on a decline or deletion
+ * already holding the account and waiting on these rows.
+ */
+async function lockPersonForAuthenticator(
+  tx: Tx,
+  userId: string,
+): Promise<void> {
+  await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .for('key share');
+  await tx
+    .select({ userId: staff.userId })
+    .from(staff)
+    .where(eq(staff.userId, userId))
+    .for('update');
+}
+
 /** Uses up the enrolment code and stores a new sealed authenticator secret (not yet confirmed). */
 export function startTotpEnrolment(
   db: Database,
@@ -625,6 +674,7 @@ export function startTotpEnrolment(
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
+      await lockPersonForAuthenticator(tx, input.userId);
       if (!(await isActiveStaff(tx, input.userId)))
         throw new OperationError('ENROLMENT_INVALID');
       const used = await tx
@@ -713,6 +763,7 @@ export async function checkStaffCode(
     confirmed: boolean;
   },
 ): Promise<CodeCheck | 'not_enrolled'> {
+  await lockPersonForAuthenticator(tx, input.userId);
   // Lock first, then read the lockout: parallel guesses queue here and each sees the lockout
   // set by the ones before it (final review fix).
   const [row] = await tx
