@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { mockWebhookSchema, type MockWebhook } from '@tipme/contracts';
 import type { Redis } from 'ioredis';
+import { UncertainProviderOutcomeError } from '../bachs/errors.js';
 import type {
   PaymentProvider,
+  PayoutPort,
   TransactionStatus,
   WebhookVerification,
 } from '../provider.js';
@@ -30,9 +32,16 @@ const PAYOUT_STATUSES: ReadonlySet<string> = new Set([
   'paid',
   'failed',
   'pending',
+  'review',
 ]);
 
-export interface MockProvider extends PaymentProvider<MockWebhook> {
+/** Enough that a pretend balance never limits a withdrawal: the ledger decides. */
+const PRETEND_BALANCE_MINOR = 100_000_000_000n;
+
+export interface MockProvider
+  extends
+    Omit<PaymentProvider<MockWebhook>, keyof PayoutPort>,
+    Omit<PayoutPort, 'initiatePayout'> {
   initializePayment(input: {
     attemptId: string;
     amountMinor: bigint;
@@ -44,8 +53,11 @@ export interface MockProvider extends PaymentProvider<MockWebhook> {
     idempotencyKey: string;
     amountMinor: bigint;
     currency: string;
+    /** Bachs needs these; the pretend payout has no real account or bank to reach. */
+    accountRef?: string;
+    destinationRef?: string;
     scenario?: Scenario;
-  }): Promise<{ providerReference: string }>;
+  }): ReturnType<PayoutPort['initiatePayout']>;
   markStatus(reference: string, status: TransactionStatus): Promise<void>;
   /**
    * Sets the scenario the pretend checkout page chose. Only the first choice counts (false after
@@ -73,6 +85,13 @@ export function createMockProvider(options: {
 
   return {
     name: 'mock',
+    capabilities: {
+      hostedCheckout: true,
+      connectedAccounts: false,
+      platformFees: false,
+      payouts: true,
+      lookupByOperationReference: true,
+    },
 
     async initializePayment({ attemptId, amountMinor, currency, scenario }) {
       // Like a real provider's unique merchant reference: one payment per attempt, however
@@ -162,6 +181,8 @@ export function createMockProvider(options: {
       scenario,
     }) {
       const reference = `mock_out_${idempotencyKey}`;
+      const chosen = scenario ?? 'payout-paid';
+      const status = chosen === 'payout-review' ? 'review' : 'pending';
       const result = await redis.eval(
         `if redis.call('EXISTS', KEYS[1]) == 0 then
            redis.call('HSET', KEYS[1], unpack(ARGV))
@@ -183,15 +204,22 @@ export function createMockProvider(options: {
         'currency',
         currency,
         'scenario',
-        scenario ?? 'payout-paid',
+        chosen,
         'status',
-        'pending',
+        status,
       );
       if (result === -1)
         throw new Error(
           'Mock payout idempotency key was reused with different payout details',
         );
-      return { providerReference: reference };
+      // The payout now exists, but its answer is lost; the same key finds it later.
+      if (result === 0 && chosen === 'payout-timeout')
+        throw new UncertainProviderOutcomeError(
+          idempotencyKey,
+          'the request may have reached the payment provider but its response was not received',
+          { cause: 'no_response' },
+        );
+      return { providerReference: reference, status };
     },
 
     async fetchPayoutStatus(providerReference) {
@@ -200,9 +228,10 @@ export function createMockProvider(options: {
         'status',
       );
       if (status === null) return { status: 'not_found' };
+      if (status === 'failed') return { status, failureReason: 'other' };
       return {
         status: PAYOUT_STATUSES.has(status)
-          ? (status as 'paid' | 'failed' | 'pending')
+          ? (status as 'paid' | 'pending' | 'review')
           : 'pending',
       };
     },
@@ -212,12 +241,56 @@ export function createMockProvider(options: {
         payoutKey(prefix, reference),
         'scenario',
       );
-      if (scenario) {
+      // A payout in review has no outcome to play out.
+      if (scenario && scenario !== 'payout-review') {
         await redis.hset(payoutKey(prefix, reference), {
           status: scenario === 'payout-failed' ? 'failed' : 'paid',
         });
       }
     },
+
+    async payoutCapability() {
+      return { status: 'active', requirementsDue: [] };
+    },
+
+    async listBanks() {
+      return [
+        { code: '058', name: 'Pretend Guaranty Bank' },
+        { code: '101', name: 'Pretend Providus Bank' },
+      ];
+    },
+
+    async resolveBankAccount({ accountNumber }) {
+      return accountNumber.endsWith('0000')
+        ? null
+        : { accountName: 'PRETEND ACCOUNT HOLDER' };
+    },
+
+    async addPayoutDestination(accountRef, { accountNumber, bankCode }) {
+      return {
+        destinationRef: `mock_dest_${accountRef}_${bankCode}_${accountNumber.slice(-4)}`,
+        usable: true,
+        status: 'usable',
+      };
+    },
+
+    async payoutBalance() {
+      return { availableMinor: PRETEND_BALANCE_MINOR };
+    },
+
+    async platformBalance() {
+      return { availableMinor: PRETEND_BALANCE_MINOR };
+    },
+
+    async quotePayoutFee() {
+      return { feeMinor: 5000n, exact: false };
+    },
+
+    async coverPayoutFee({ idempotencyKey }) {
+      return { transferRef: `mock_transfer_${idempotencyKey}` };
+    },
+
+    async setManualPayouts() {},
 
     async chooseScenario(reference, scenario) {
       const key = paymentKey(prefix, reference);

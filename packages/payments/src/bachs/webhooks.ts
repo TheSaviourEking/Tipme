@@ -5,6 +5,7 @@ import type {
   WebhookVerification,
 } from '../provider.js';
 import { decimalToMinor } from './money.js';
+import { payoutFailureReason } from './payouts.js';
 
 const SIGNATURE_V2_HEADER = 'x-bachs-signature-v2';
 const LEGACY_SIGNATURE_HEADER = 'x-bachs-signature';
@@ -17,6 +18,8 @@ const SUPPORTED_EVENT_TYPES = new Set([
   'checkout.completed',
   'account.updated',
   'capability.updated',
+  'payout.paid',
+  'payout.failed',
 ]);
 
 const eventEnvelopeSchema = z.object({
@@ -165,6 +168,25 @@ function normalizeEvent(
       eventId: event.id,
       eventType: event.type,
       accountReference,
+    };
+  }
+  // https://docs.bachs.io/guides/webhooks/events/payout-paid.md and payout-failed.md
+  if (event.type === 'payout.paid' || event.type === 'payout.failed') {
+    const withdrawalId = nullableString(data['withdrawal_id']);
+    if (!accountReference || !withdrawalId || withdrawalId.includes(':'))
+      return undefined;
+    const failureReason = nullableString(data['failure_reason']);
+    return {
+      kind: 'payout',
+      eventId: event.id,
+      eventType: event.type,
+      // The same account-scoped reference initiatePayout returned.
+      providerReference: `${accountReference}:${withdrawalId}`,
+      accountReference,
+      status: event.type === 'payout.paid' ? 'paid' : 'failed',
+      ...(event.type === 'payout.failed' && failureReason
+        ? { failureReason: payoutFailureReason(failureReason) }
+        : {}),
     };
   }
   const checkoutId = nullableString(data['checkout_id']);

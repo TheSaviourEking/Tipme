@@ -254,9 +254,9 @@ export function claimReceiptCheck(
 
 /** What payout reconciliation needs from a provider. */
 export interface PayoutVerifier {
-  fetchPayoutStatus(
-    providerReference: string,
-  ): Promise<{ status: 'paid' | 'failed' | 'pending' | 'not_found' }>;
+  fetchPayoutStatus(providerReference: string): Promise<{
+    status: 'paid' | 'failed' | 'pending' | 'review' | 'not_found';
+  }>;
 }
 
 /**

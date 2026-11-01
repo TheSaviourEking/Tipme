@@ -3,11 +3,11 @@ import type {
   FeePaidBy,
   NormalizedProviderEvent,
   PaymentProvider,
+  PayoutPort,
   ProviderCapabilities,
   TransactionStatus,
   WebhookVerification,
 } from '../provider.js';
-import { UnsupportedProviderCapabilityError } from '../provider.js';
 import {
   BachsApiClient,
   LIVE_API_ORIGIN,
@@ -20,6 +20,7 @@ import {
   UncertainProviderOutcomeError,
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
+import { createBachsPayouts } from './payouts.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
 const checkoutCreatedSchema = z.object({
@@ -135,7 +136,10 @@ export interface BachsRecipientAccount {
 /** The currency a recipient is paid in, by Bachs account country. TipMe takes naira only. */
 const LOCAL_CURRENCY: Readonly<Record<string, string>> = { NG: 'NGN' };
 
-export interface BachsProvider extends PaymentProvider<NormalizedProviderEvent> {
+export interface BachsProvider
+  extends
+    Omit<PaymentProvider<NormalizedProviderEvent>, keyof PayoutPort>,
+    PayoutPort {
   /** The PAYMENT_PROVIDER this adapter is. Rows still record provider 'bachs' (ADR-0004). */
   readonly name: 'bachs-sandbox' | 'bachs-live';
   /** Which Bachs this adapter talks to; recorded on payment accounts. */
@@ -165,7 +169,7 @@ const capabilities: ProviderCapabilities = {
   hostedCheckout: true,
   connectedAccounts: true,
   platformFees: true,
-  payouts: false,
+  payouts: true,
   lookupByOperationReference: false,
 };
 
@@ -701,13 +705,7 @@ export function createBachsProvider(
     getRecipientAccount: getAccount,
     holdLocalCurrency,
 
-    async initiatePayout() {
-      throw new UnsupportedProviderCapabilityError('payouts');
-    },
-
-    async fetchPayoutStatus() {
-      throw new UnsupportedProviderCapabilityError('payout status lookup');
-    },
+    ...createBachsPayouts(client, config.apiKey),
   };
 }
 

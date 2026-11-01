@@ -83,6 +83,8 @@ export class WebhookService {
       Partial<Pick<BachsProvider, 'getRecipientAccount' | 'verifyTransaction'>>,
   ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
+    // Nothing starts a Bachs payout yet, so there is none to match: routed in the payouts task.
+    if (event.kind === 'payout') return 'ignored';
     const { environment } = bachs;
     if (event.kind === 'account') return this.refreshBachsAccount(event, bachs);
     if (event.kind === 'reversal')
