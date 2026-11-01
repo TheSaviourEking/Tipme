@@ -18,14 +18,24 @@ const exempt = [
   'apps/web/src/app/dev/',
   'apps/web/src/app/preview-login/',
 ];
-// API provider ids are compared, never shown: 'bachs-sandbox' and 'bachs-live'.
-const providerId = /(['"`])bachs-(?:sandbox|live)\1/gi;
+// Provider ids the code compares and never shows. Each allowed literal is listed explicitly.
+const allowedIds = [
+  "'bachs-live'",
+  "'bachs-sandbox'",
+  '"bachs-live"',
+  '"bachs-sandbox"',
+];
+// Staff-only text is out of scope on purpose: /ops, ops-client.ts and operator summaries such as
+// packages/database/src/operations/issues.ts may name providers.
+const extraFiles = [
+  join(repoRoot, 'apps/api/src/http/api-exception.filter.ts'),
+];
 
 function sourceFiles(dir) {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return sourceFiles(path);
-    return /\.(ts|tsx|js|jsx|mjs)$/.test(name) &&
+    return /\.(ts|tsx|js|jsx|mjs|json|md|mdx)$/.test(name) &&
       !/\.test\.[a-z]+$/.test(name) &&
       !path.includes(`${sep}__tests__${sep}`)
       ? [path]
@@ -33,67 +43,57 @@ function sourceFiles(dir) {
   });
 }
 
-// Drops comments but keeps string contents; a quote inside a comment or a // inside a string
-// (https://...) must not confuse it, so strings are walked as units.
+// Drops comments only: block comments, and // at a line start or after whitespace (so the // in
+// https:// stays). Everything else is scanned as plain text, so quotes, apostrophes in JSX text and
+// regex literals cannot shift anything.
 export function stripComments(code) {
-  let out = '';
-  for (let i = 0; i < code.length;) {
-    const c = code[i];
-    const next = code[i + 1];
-    if (c === '/' && next === '/') {
-      while (i < code.length && code[i] !== '\n') i++;
-    } else if (c === '/' && next === '*') {
-      const end = code.indexOf('*/', i + 2);
-      i = end === -1 ? code.length : end + 2;
-    } else if (c === '"' || c === "'" || c === '`') {
-      let j = i + 1;
-      while (j < code.length && code[j] !== c) j += code[j] === '\\' ? 2 : 1;
-      out += code.slice(i, j + 1);
-      i = j + 1;
-    } else {
-      out += c;
-      i++;
-    }
-  }
-  return out;
+  return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
 }
 
-// Lines that carry a provider name inside quotes or as JSX text. Identifiers have no quote or
-// tag boundary around them, so they never match.
+// Every provider name left in the text. `\b` already skips identifiers such as
+// BachsPaymentAccountStatus; the listed provider-id literals are removed first.
 export function visibleProviderNames(code) {
-  const text = stripComments(code).replace(providerId, '');
-  const hits = [];
-  for (const m of text.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g))
-    if (/\bbachs\b/i.test(m[2])) hits.push(m[2]);
-  for (const m of text.matchAll(/>([^<>{}]*)</g))
-    if (/\bbachs\b/i.test(m[1])) hits.push(m[1].trim());
-  return hits;
+  let text = stripComments(code);
+  for (const id of allowedIds) text = text.split(id).join('');
+  return [...text.matchAll(/.*\bbachs\b.*/gi)].map((m) => m[0].trim());
 }
 
-test('the guard sees names in strings and JSX text, not in identifiers or comments', () => {
-  assert.equal(visibleProviderNames("const a = 'Pay via Bachs';").length, 1);
-  assert.equal(visibleProviderNames('const a = `Bachs ${x}`;').length, 1);
-  assert.equal(visibleProviderNames('<p>Set up with Bachs</p>').length, 1);
-  assert.equal(visibleProviderNames("if (p === 'bachs-live') {}").length, 0);
-  assert.equal(
-    visibleProviderNames('// Bachs\n/* Bachs */ const t: BachsStatus = 1;')
-      .length,
-    0,
-  );
-  assert.equal(
-    visibleProviderNames("fetch('https://x.io'); // it's Bachs").length,
-    0,
-  );
+test('the guard catches names in strings and JSX text, next to expressions too', () => {
+  for (const code of [
+    "const a = 'Pay via Bachs';",
+    'const a = `Bachs ${x}`;',
+    '<p>Set up with Bachs</p>',
+    '<p>Powered by Bachs {x}</p>',
+    '<p>{count} tips via Bachs</p>',
+    '<p>{a} Bachs {b}</p>',
+    '<p>\n  Paid by\n  {name} through Bachs\n</p>',
+    "<p>We can't pay you</p>;\nconst m = 'Bachs';",
+    "const r = /['\"]/; const m = 'Bachs';",
+    "fetch('https://x.io'); const m = 'Bachs';",
+  ])
+    assert.equal(visibleProviderNames(code).length, 1, code);
+});
+
+test('the guard allows identifiers, provider ids and comments', () => {
+  for (const code of [
+    "if (p === 'bachs-live') {}",
+    'const k = "bachs-sandbox";',
+    'const t: BachsStatus = 1; import { BachsPaymentAccountStatus } from "x";',
+    '// Bachs\n/* Bachs */ const a = 1;',
+    '{/* Bachs */}',
+    "fetch('https://x.io'); // it's Bachs",
+    'const bachsAccount = 1;',
+  ])
+    assert.equal(visibleProviderNames(code).length, 0, code);
 });
 
 test('no user-readable source text names a payment provider', () => {
   const offenders = [];
-  for (const root of roots)
-    for (const file of sourceFiles(root)) {
-      const rel = relative(repoRoot, file).split(sep).join('/');
-      if (exempt.some((e) => rel.startsWith(e))) continue;
-      for (const hit of visibleProviderNames(readFileSync(file, 'utf8')))
-        offenders.push(`${rel}: ${hit}`);
-    }
+  for (const file of [...roots.flatMap(sourceFiles), ...extraFiles]) {
+    const rel = relative(repoRoot, file).split(sep).join('/');
+    if (exempt.some((e) => rel.startsWith(e))) continue;
+    for (const hit of visibleProviderNames(readFileSync(file, 'utf8')))
+      offenders.push(`${rel}: ${hit}`);
+  }
   assert.deepEqual(offenders, []);
 });

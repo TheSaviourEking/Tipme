@@ -78,7 +78,7 @@ test('shared metadata never says preview', () => {
     new URL('../src/lib/metadata.ts', import.meta.url),
     'utf8',
   );
-  assert.match(metadata, /siteName: 'TipMe',/);
+  assert.match(metadata, /siteName:\s*'TipMe'\s*[,}]/);
   const about = readFileSync(
     new URL('../src/app/about-preview/page.tsx', import.meta.url),
     'utf8',
