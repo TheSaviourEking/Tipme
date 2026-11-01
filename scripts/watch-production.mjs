@@ -87,6 +87,10 @@ export async function checkProduction({
       problems.push(
         `The payment reserve could not be read (${answer(payments.status)}).`,
       );
+    else if (reserve.unreadable)
+      problems.push(
+        'The payment reserve could not be read by the worker: check the payment provider and the worker.',
+      );
     else if (reserve.reserveLow)
       problems.push('The payment reserve is low: top it up.');
   }

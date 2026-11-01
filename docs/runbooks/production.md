@@ -46,6 +46,8 @@ The `deploy-production` workflow (hand-run, from `main` only) and `watch-product
 
 **Repository secret:** `ALERT_WEBHOOK_URL` (Slack incoming webhook) for the watcher's alerts.
 
+The worker posts payment reserve alerts to the same kind of webhook: set `ALERT_WEBHOOK_URL` in the server's production env file too (a secret; blank means the alert is only written to the worker log), and optionally `BACHS_RESERVE_ALERT_MINOR` (kobo; blank means 100000, which is ₦1,000). It reads the reserve every 15 minutes, alerts at the first low or unreadable reading and again every 6 hours while it lasts, and shows the latest reading on the staff Overview. `GET /health/payments` tells the watcher low or not, with no amount.
+
 ## 3. The edge (once, then only through deploys)
 
 - **The move** (one-off, about a minute of staging downtime): `staging-setup.md` → "Move an existing staging server to the edge Caddy". After it, staging and production share the edge.

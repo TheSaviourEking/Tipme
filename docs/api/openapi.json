@@ -99,6 +99,37 @@
         "x-tipme-access": "public"
       }
     },
+    "/health/payments": {
+      "get": {
+        "operationId": "PaymentsHealth.payments",
+        "tags": [
+          "PaymentsHealth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/health/ready": {
       "get": {
         "operationId": "Health.ready",

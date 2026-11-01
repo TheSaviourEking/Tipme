@@ -91,6 +91,15 @@ export const workerConfigSchema = z
       .string()
       .regex(/^[0-9a-f]{7,40}$/)
       .optional(),
+    // The payment reserve is "low" below this many kobo (default 100000 = ₦1,000).
+    BACHS_RESERVE_ALERT_MINOR: z
+      .string()
+      .regex(/^[0-9]{1,15}$/)
+      .default('100000')
+      .transform((value) => BigInt(value)),
+    // Where reserve alerts go: a Slack-compatible incoming webhook. Optional; it is a secret
+    // (the address is the credential), so it is never logged or put in a message.
+    ALERT_WEBHOOK_URL: z.url({ protocol: /^https?$/ }).optional(),
     RECONCILE_INTERVAL_MS: z.coerce.number().int().min(100).default(60_000),
     RECONCILE_MIN_AGE_MS: z.coerce.number().int().min(0).default(120_000),
     // Monthly budget for TipMe's cash rewards, in minor units (pretend money; D-05 pending).

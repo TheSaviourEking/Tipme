@@ -86,6 +86,18 @@ test('a low reserve is a problem; a missing reserve endpoint is not', async () =
   assert.match(notes.join('\n'), /reserve not watched yet/);
 });
 
+test('a reserve that could not be read is reported as unreadable, not as low', async () => {
+  const problems = await run({
+    'GET https://api.tipme.example/health/payments': {
+      status: 200,
+      body: { data: { reserveLow: true, unreadable: true } },
+    },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /could not be read/i);
+  assert.doesNotMatch(problems[0], /is low/i);
+});
+
 test('API not ready and web down are named', async () => {
   const problems = await run({
     'GET https://api.tipme.example/health/ready': { status: 503 },

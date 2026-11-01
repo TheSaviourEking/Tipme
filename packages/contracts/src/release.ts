@@ -45,3 +45,16 @@ export type RetentionBlock =
   | 'wal-gap'
   | 'archive-missing'
   | 'other';
+
+/**
+ * GET /health/payments: whether the platform's payment reserve is running low, for the watcher.
+ * Public, so it carries no amount, provider or detail. A reserve that could not be read cannot be
+ * confirmed fine, so it also says `reserveLow: true`, with `unreadable` to tell the two apart.
+ * `readAt` is when the worker last read it (null before the first read, e.g. on a copy that does
+ * not run a Bachs provider): an old time means the worker has stopped checking.
+ */
+export interface PaymentsHealth {
+  reserveLow: boolean;
+  unreadable: boolean;
+  readAt: string | null;
+}

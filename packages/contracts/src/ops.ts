@@ -406,6 +406,21 @@ export interface OpsWeekMoney {
   lastWeek: string;
 }
 
+/**
+ * The latest read of the platform's payment reserve, for staff only (the public health route says
+ * only low or not). `availableMinor` and `low` are null when the balance could not be read.
+ */
+export interface OpsPaymentReserve {
+  /** The adapter name, e.g. bachs-live. Staff screens may name providers. */
+  provider: string;
+  currency: string;
+  availableMinor: string | null;
+  /** The alert level: below this the reserve is low. */
+  thresholdMinor: string;
+  low: boolean | null;
+  readAt: string;
+}
+
 /** Overall health. Money and reliability come from the money tables; the funnel from events. */
 export interface OpsHealth {
   weekStarts: { thisWeek: string; lastWeek: string };
@@ -442,6 +457,9 @@ export interface OpsHealth {
   /** Real-user web vitals, mobile, last 28 days (PR-011). Optional for the same reason as
    *  `MyProfile.previousHandles`: an older API does not send it. */
   webVitals?: WebVitalSummary[];
+  /** Null before the first read (a copy without a payment provider reserve). Optional for the
+   *  same reason as `webVitals`. */
+  reserve?: OpsPaymentReserve | null;
 }
 
 /** How people find recipients' pages, over the last `days` days (Lagos). */

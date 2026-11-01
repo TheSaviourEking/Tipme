@@ -393,6 +393,13 @@
       "when": 1793549576649,
       "tag": "0055_payout_destination_code",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793551752281,
+      "tag": "0056_payment_reserve",
+      "breakpoints": true
     }
   ]
 }

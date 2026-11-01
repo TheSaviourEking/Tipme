@@ -172,6 +172,9 @@ services:
       RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-20000}
       RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-45000}
       REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-25000000}
+      # Payment reserve alerts (sandbox money here): below this many kobo, to the webhook if set.
+      BACHS_RESERVE_ALERT_MINOR: ${BACHS_RESERVE_ALERT_MINOR:-100000}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

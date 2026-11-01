@@ -1281,6 +1281,47 @@ export const parkedPayoutChecks = pgTable('parked_payout_checks', {
   }).notNull(),
 });
 
+/**
+ * One read of the platform's payment reserve (the balance that covers payout fees), taken every
+ * 15 minutes by the worker. A read that failed has no amount: `available_minor` and `low` are then
+ * both null ("unknown"), never a guess. `alerted_at` is when staff were told about this reading;
+ * it is how an alert is told once per low spell and again every 6 hours, across restarts.
+ * `provider` is the adapter name (bachs-live or bachs-sandbox), so sandbox readings never count
+ * for live.
+ */
+export const paymentReserveReadings = pgTable(
+  'payment_reserve_readings',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    currency: currency(),
+    availableMinor: minor('available_minor'),
+    thresholdMinor: minor('threshold_minor').notNull(),
+    low: boolean('low'),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
+  },
+  (table) => [
+    currencyCheck('payment_reserve_readings'),
+    check(
+      'payment_reserve_readings_provider',
+      sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
+    ),
+    // Unknown is both null together; a known balance says low or not, matching the threshold.
+    check(
+      'payment_reserve_readings_known',
+      sql`(available_minor IS NULL AND low IS NULL)
+        OR (available_minor IS NOT NULL AND low IS NOT NULL AND low = (available_minor < threshold_minor))`,
+    ),
+    index('payment_reserve_readings_latest').on(
+      table.provider,
+      table.currency,
+      table.readAt.desc(),
+    ),
+    index('payment_reserve_readings_read_at').on(table.readAt.desc()),
+  ],
+);
+
 // ---- Staff access and audit (PR-009, ADR-0010) ----
 
 export const OPS_PERMISSIONS = [

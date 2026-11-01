@@ -178,6 +178,9 @@ x-worker: &worker
     # The safety net when neither a webhook nor the open receipt confirmed a tip (as staging).
     RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-20000}
     RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-45000}
+    # The payment reserve is low below this many kobo (100000 = ₦1,000); alerts go to the webhook.
+    BACHS_RESERVE_ALERT_MINOR: ${BACHS_RESERVE_ALERT_MINOR:-100000}
+    ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     # 0 until D-05 decides cash rewards: the worker refuses any other value on production.
     REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-0}
   depends_on:

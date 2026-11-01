@@ -25,7 +25,7 @@ Status: money is pretend. Nothing here approves real payments (`docs/00-DECISION
 5. **Public routes that change state are rate-limited** per client address (a /64 for IPv6), in Redis. The exceptions are the pretend-only routes (mock checkout, diagnostics, the weekly-report trigger), which are refused in production; the test lists them so a new one is reviewed too. If Redis is down the limiter lets requests through and logs the failure (availability over throttling; see the threat model).
 6. **No route returns phone numbers, emails or supporter messages to staff by default.** A message is revealed only through the `private.view` permission with a written reason, and every reveal is audited. The same reveal also shows the recipient's full phone number and email.
 7. **CORS** allows only the web app's origin. Credentials are allowed only on `/v1/auth/`, `/v1/me/`, `/v1/ops/`, `/v1/handles/` and `/v1/dev/` (and on every route in a private preview, where the preview cookie must travel). Checkout never sends them.
-8. **Private previews** (staging) put a password gate in front of the web app and the API; only health, release info, backup health and signed webhooks pass without it.
+8. **Private previews** (staging) put a password gate in front of the web app and the API; only health, release info, backup health, payment reserve health and signed webhooks pass without it.
 9. **Every privileged change is audited** (who, what, when, why) in an append-only table. Admin actions never move money: there are no refunds, adjustments or payout holds in the admin yet.
 
 ## Staff roles and permissions
@@ -85,6 +85,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/health` | n/a (read) | – | – |
 | GET | `/health/backups` | n/a (read) | – | – |
 | GET | `/health/live` | n/a (read) | – | – |
+| GET | `/health/payments` | n/a (read) | – | – |
 | GET | `/health/ready` | n/a (read) | – | – |
 | GET | `/health/release` | n/a (read) | – | – |
 | POST | `/v1/auth/code` | yes | `auth_code` | – |
@@ -264,6 +265,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `GET /health`, `/health/live`, `/health/ready`                                         | Load balancers and uptime checks                                      | Reveal only "up/down"                                                                                              |
 | `GET /health/release`                                                                  | The release check and the watcher read the deployed version and mode  | No secrets; says nothing about people                                                                              |
 | `GET /health/backups`                                                                  | The 15-minute watcher reads backup ages                               | Ages and counts only, no file names; cached 30 s                                                                   |
+| `GET /health/payments`                                                                 | The production watcher reads whether the reserve is low               | Low or not and when read: no amount, provider or error                                                             |
 | `GET /v1/profiles/{handle}`                                                            | The public tipping page                                               | Only live, active pages; nothing else answers differently from "not found"                                         |
 | `POST /v1/profiles/{handle}/report`                                                    | Anyone can report a page                                              | A reason from a fixed list; always answers the same; rate-limited                                                  |
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |

@@ -357,3 +357,52 @@ test('a preview copy keeps the default cash reward budget', () => {
     25_000_000n,
   );
 });
+
+const reserveBase = {
+  REDIS_URL: 'redis://127.0.0.1:6379',
+  DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+  MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+  MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+  NODE_ENV: 'test',
+};
+
+test('the reserve alert level is ₦1,000 unless set, and the alert route is optional', () => {
+  const config = loadWorkerConfig(reserveBase);
+  assert.equal(config.BACHS_RESERVE_ALERT_MINOR, 100000n);
+  assert.equal(config.ALERT_WEBHOOK_URL, undefined);
+  const set = loadWorkerConfig({
+    ...reserveBase,
+    BACHS_RESERVE_ALERT_MINOR: '250000',
+    ALERT_WEBHOOK_URL: 'https://hooks.example.test/services/T0/B0/token',
+  });
+  assert.equal(set.BACHS_RESERVE_ALERT_MINOR, 250000n);
+  assert.equal(
+    set.ALERT_WEBHOOK_URL,
+    'https://hooks.example.test/services/T0/B0/token',
+  );
+  // An empty value (common in .env files) means not set.
+  const blank = loadWorkerConfig({
+    ...reserveBase,
+    BACHS_RESERVE_ALERT_MINOR: '',
+    ALERT_WEBHOOK_URL: '',
+  });
+  assert.equal(blank.BACHS_RESERVE_ALERT_MINOR, 100000n);
+  assert.equal(blank.ALERT_WEBHOOK_URL, undefined);
+});
+
+test('a bad reserve level or alert route is refused by name, never by value', () => {
+  for (const bad of ['abc', '-1', '1.5', '1e5'])
+    assert.throws(
+      () =>
+        loadWorkerConfig({ ...reserveBase, BACHS_RESERVE_ALERT_MINOR: bad }),
+      { message: 'Invalid configuration: BACHS_RESERVE_ALERT_MINOR' },
+      bad,
+    );
+  const secret = 'ftp://hooks.example.test/services/T0/B0/very-secret-token';
+  assert.throws(
+    () => loadWorkerConfig({ ...reserveBase, ALERT_WEBHOOK_URL: secret }),
+    (error) =>
+      error.message === 'Invalid configuration: ALERT_WEBHOOK_URL' &&
+      !String(error.stack).includes('very-secret-token'),
+  );
+});

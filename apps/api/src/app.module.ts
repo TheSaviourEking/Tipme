@@ -13,6 +13,7 @@ import { PretendInboxModule } from './dev/pretend-inbox.controller.js';
 import { MockCheckoutModule } from './checkout/mock-checkout.module.js';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module.js';
 import { HealthController } from './health/health.controller.js';
+import { PaymentsHealthController } from './health/payments-health.controller.js';
 import {
   ReleaseInfoController,
   ReleaseRunsController,
@@ -52,6 +53,7 @@ export class AppModule {
       ],
       controllers: [
         HealthController,
+        PaymentsHealthController,
         ReleaseInfoController,
         ReleaseRunsController,
       ],

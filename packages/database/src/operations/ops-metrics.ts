@@ -1,8 +1,13 @@
-import type { OpsHealth, OpsVisibility } from '@tipme/contracts';
+import type {
+  OpsHealth,
+  OpsPaymentReserve,
+  OpsVisibility,
+} from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { webVitalsSummary } from './analytics.js';
 import { guarded } from './errors.js';
+import { latestReserveReading } from './payment-reserve.js';
 
 const ZONE = 'Africa/Lagos';
 const SHARING_EVENTS = [
@@ -180,6 +185,7 @@ export function healthMetrics(
         tipsCompleted: int(funnel['completed']),
       },
       webVitals: await webVitalsSummary(db, { now: input.now, days: 28 }),
+      reserve: await reserveSummary(db),
     };
   });
 }
@@ -269,4 +275,19 @@ export function visibilityMetrics(
       })),
     };
   });
+}
+
+/** The latest reserve reading as staff see it: amounts as text, times as ISO. */
+async function reserveSummary(db: Database): Promise<OpsPaymentReserve | null> {
+  const reading = await latestReserveReading(db);
+  return reading
+    ? {
+        provider: reading.provider,
+        currency: reading.currency,
+        availableMinor: reading.availableMinor?.toString() ?? null,
+        thresholdMinor: reading.thresholdMinor.toString(),
+        low: reading.low,
+        readAt: reading.readAt.toISOString(),
+      }
+    : null;
 }

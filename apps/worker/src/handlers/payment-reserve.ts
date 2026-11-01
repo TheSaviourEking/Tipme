@@ -1,0 +1,75 @@
+import type { Database, ReserveReader } from '@tipme/database';
+import { checkReserve } from '@tipme/database';
+
+const ALERT_TIMEOUT_MS = 10_000;
+
+export type PaymentReserveOutcome = 'ok' | 'low' | 'unreadable';
+
+export type PaymentReserveLog = (entry: {
+  event: string;
+  text?: string;
+}) => void;
+
+/**
+ * Posts alert text to the alert route as {"text": ...} (Slack-compatible), the same shape the
+ * watchers use. Without a route the text goes to the log, so a copy with none still says it. A
+ * failure throws a fixed message: the address is a credential and an HTTP client's error can
+ * quote it, so nothing from the failure is kept.
+ */
+export function webhookAlert(options: {
+  url: string | undefined;
+  fetchImpl?: typeof fetch;
+  log?: PaymentReserveLog;
+}): (text: string) => Promise<void> {
+  const { url, fetchImpl = fetch, log } = options;
+  return async (text) => {
+    if (!url) {
+      log?.({ event: 'reserve.alert_unrouted', text });
+      return;
+    }
+    let status: number;
+    try {
+      const response = await fetchImpl(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+        // A redirect would send the text somewhere the route did not name.
+        redirect: 'error',
+        signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
+      });
+      status = response.status;
+    } catch {
+      throw new Error('alert_route_unreachable');
+    }
+    if (status < 200 || status >= 300)
+      throw new Error(`alert_route_refused_${status}`);
+  };
+}
+
+/**
+ * One reserve check: reads the platform balance, records it, and tells staff when it is low or
+ * unreadable (once, then every 6 hours). Overlap is stopped by the caller. A failed read or alert
+ * is a normal outcome, never a throw, so the queue does not retry it into more provider calls.
+ */
+export async function handlePaymentReserve(deps: {
+  db: Database;
+  provider: ReserveReader;
+  thresholdMinor: bigint;
+  alertWebhookUrl: string | undefined;
+  log: PaymentReserveLog;
+  fetchImpl?: typeof fetch;
+  now?: Date;
+}): Promise<PaymentReserveOutcome> {
+  const result = await checkReserve(deps.db, {
+    provider: deps.provider,
+    thresholdMinor: deps.thresholdMinor,
+    alert: webhookAlert({
+      url: deps.alertWebhookUrl,
+      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+      log: deps.log,
+    }),
+    ...(deps.now ? { now: deps.now } : {}),
+  });
+  if (result.alertFailed) deps.log({ event: 'reserve.alert_failed' });
+  return result.low === null ? 'unreadable' : result.low ? 'low' : 'ok';
+}
