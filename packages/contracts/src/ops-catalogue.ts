@@ -51,7 +51,7 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
   'audit.view': {
     description: 'Read the audit log',
     group: 'numbers',
-    sensitive: false,
+    sensitive: true,
   },
   'email.export': {
     description: 'Download the email log as a spreadsheet',

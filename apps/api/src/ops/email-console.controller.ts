@@ -193,7 +193,7 @@ export class OpsEmailConsoleController {
     await recordAudit(db, {
       staffUserId: ops.userId,
       action: 'email.exported',
-      permission: 'issues.view',
+      permission: 'email.export',
       subjectType: 'mail_export',
       subjectId: query.kind,
     });

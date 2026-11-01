@@ -167,6 +167,13 @@ test('the export contains no full address and is audited', async (t) => {
     `SELECT count(*)::int AS n FROM audit_events WHERE action = 'email.exported'`,
   );
   assert.equal(rows[0].n, 2);
+  const permissions = await pool.query(
+    `SELECT DISTINCT permission FROM audit_events WHERE action = 'email.exported'`,
+  );
+  assert.deepEqual(
+    permissions.rows.map((r) => r.permission),
+    ['email.export'],
+  );
 });
 
 test('a CSV cell can never be read as a spreadsheet formula', async (t) => {

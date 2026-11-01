@@ -23,12 +23,16 @@ test('every route names a permission in the catalogue', () => {
 });
 
 test('every catalogue entry has a description and group; money and private ones are sensitive', () => {
-  assert.deepEqual(Object.keys(OPS_CATALOGUE).sort(), [...OPS_PERMISSIONS].sort());
+  assert.deepEqual(
+    Object.keys(OPS_CATALOGUE).sort(),
+    [...OPS_PERMISSIONS].sort(),
+  );
   for (const [name, entry] of Object.entries(OPS_CATALOGUE)) {
     assert.ok(entry.description.length > 10, name);
     assert.ok(OPS_PERMISSION_GROUPS.includes(entry.group), name);
   }
   for (const name of [
+    'audit.view',
     'payouts.resolve',
     'payments.repair',
     'fees.manage',

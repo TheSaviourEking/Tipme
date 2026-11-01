@@ -576,7 +576,7 @@ export class OpsActionsController {
     return recordAudit(this.database.db, {
       staffUserId: ops.userId,
       action,
-      permission: 'payments.recheck',
+      permission: 'payments.repair',
       subjectType: 'provider_recovery',
       subjectId,
       reason,
