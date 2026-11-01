@@ -68,10 +68,10 @@ test('each route names the permission it needs', () => {
     summary: 'issues.view',
     series: 'issues.view',
     messages: 'issues.view',
-    timeline: 'issues.view',
-    content: 'issues.view',
+    timeline: 'email.read',
+    content: 'email.read',
     revealRecipient: 'private.view',
-    exportCsv: 'issues.view',
+    exportCsv: 'email.export',
   };
   for (const [method, permission] of Object.entries(expected))
     assert.equal(

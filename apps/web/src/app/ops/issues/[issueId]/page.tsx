@@ -500,7 +500,7 @@ export default function IssuePage() {
         (issue.kind === 'stuck_tip' ||
           issue.kind === 'payment_settlement_currency') &&
         issue.subject.tipId &&
-        can(access, 'payments.recheck') && (
+        can(access, 'payments.repair') && (
           <Section title="Bachs took the money but not the fee details">
             <p>
               Use this only when Bachs shows the payment succeeded but never
@@ -535,7 +535,7 @@ export default function IssuePage() {
       {open &&
         issue.kind === 'payment_attempt_unresolved' &&
         issue.subject.attemptId &&
-        can(access, 'payments.recheck') && (
+        can(access, 'payments.repair') && (
           <Section title="Recover an unknown Bachs checkout">
             <p>
               Enter a checkout ID you found in Bachs Dashboard. TipMe checks it
@@ -587,7 +587,7 @@ export default function IssuePage() {
       {open &&
         issue.kind === 'payment_account_unresolved' &&
         issue.subject.profileId &&
-        can(access, 'payments.recheck') && (
+        can(access, 'payments.repair') && (
           <Section title="Recover an unknown Bachs recipient account">
             <p>
               TipMe fetches the account status from Bachs before linking it.

@@ -167,7 +167,7 @@ export class OpsActionsController {
   /** Verifies a dashboard-found checkout before linking it; unknown/mismatched IDs stay unlinked. */
   @Post('bachs/checkout-recovery')
   @HttpCode(200)
-  @OpsPermission('payments.recheck')
+  @OpsPermission('payments.repair')
   async recoverBachsCheckout(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsBachsCheckoutRecoverySchema))
@@ -324,7 +324,7 @@ export class OpsActionsController {
    */
   @Post('bachs/fee-bearer-confirmation')
   @HttpCode(200)
-  @OpsPermission('payments.recheck')
+  @OpsPermission('payments.repair')
   async confirmBachsFeeBearer(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsBachsFeeBearerSchema))
@@ -425,7 +425,7 @@ export class OpsActionsController {
 
   @Post('bachs/account-recovery')
   @HttpCode(200)
-  @OpsPermission('payments.recheck')
+  @OpsPermission('payments.repair')
   async recoverBachsAccount(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsBachsAccountRecoverySchema))

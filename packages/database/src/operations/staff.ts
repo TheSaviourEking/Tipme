@@ -4,6 +4,7 @@ import { and, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   OPS_PERMISSIONS,
+  type OpsPermission,
   opsLockouts,
   opsSessions,
   rolePermissions,
@@ -36,7 +37,7 @@ export const RELEASE_CHECK_PERMISSIONS = [
   'issues.resolve',
   'analytics.view',
   'audit.view',
-] as const;
+] as const satisfies readonly OpsPermission[];
 export type StaffRole = 'owner' | 'release_check';
 
 /** The Owner role holds every permission; safe to run any number of times. */

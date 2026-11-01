@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import { OPS_PERMISSIONS } from '../../packages/contracts/dist/index.js';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
@@ -90,7 +91,7 @@ test('the full flow opens a grant with every Owner permission, and it is audited
   const data = (await me.json()).data;
   assert.equal(data.state, 'granted');
   assert.equal(data.role, 'owner');
-  assert.equal(data.permissions.length, 15);
+  assert.equal(data.permissions.length, OPS_PERMISSIONS.length);
   const audit = (
     await (await call('GET', '/v1/ops/audit', owner.cookie)).json()
   ).data;

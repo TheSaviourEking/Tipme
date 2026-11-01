@@ -69,11 +69,13 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
     region.current?.focus();
     region.current?.scrollIntoView({ block: 'nearest' });
   }, []);
+  const canRead = can(access, 'email.read');
   useEffect(() => {
+    if (!canRead) return;
     void apiFetch<OpsMailTimelineEvent[]>(
       `/v1/ops/email/messages/${row.id}/timeline`,
     ).then((result) => setTimeline(result.ok ? result.data : []));
-  }, [row.id]);
+  }, [row.id, canRead]);
   return (
     <div ref={region} tabIndex={-1} role="region" aria-label="This email">
       <Card className="settings-section">
@@ -102,7 +104,7 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
             }}
           />
         )}
-        {timeline === null ? (
+        {!canRead ? null : timeline === null ? (
           <Skeleton />
         ) : (
           <ol className="ops-list">
@@ -117,7 +119,7 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
             ))}
           </ol>
         )}
-        {content === null ? (
+        {!canRead ? null : content === null ? (
           <Button
             variant="secondary"
             onClick={() =>
@@ -158,6 +160,7 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
 }
 
 export default function EmailConsolePage() {
+  const access = useOpsAccess();
   const id = useId();
   const [period, setPeriod] = useState('this_month');
   const [type, setType] = useState('');
@@ -424,14 +427,16 @@ export default function EmailConsolePage() {
           />
         </div>
       </div>
-      <div className="ops-actions">
-        <Button variant="secondary" onClick={() => download('messages')}>
-          Export emails (CSV)
-        </Button>
-        <Button variant="secondary" onClick={() => download('summary')}>
-          Export numbers (CSV)
-        </Button>
-      </div>
+      {can(access, 'email.export') && (
+        <div className="ops-actions">
+          <Button variant="secondary" onClick={() => download('messages')}>
+            Export emails (CSV)
+          </Button>
+          <Button variant="secondary" onClick={() => download('summary')}>
+            Export numbers (CSV)
+          </Button>
+        </div>
+      )}
       {exportFailed && (
         <Notice tone="error" title="The export didn’t finish">
           There may be too many emails. Choose a shorter period or add a filter.

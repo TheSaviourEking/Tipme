@@ -386,6 +386,13 @@
       "when": 1793539756076,
       "tag": "0054_payouts_resolve_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1793540764793,
+      "tag": "0055_ops_catalogue_permissions",
+      "breakpoints": true
     }
   ]
 }

@@ -136,7 +136,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('messages/:id/timeline')
-  @OpsPermission('issues.view')
+  @OpsPermission('email.read')
   async timeline(
     @Param('id') id: string,
   ): Promise<ApiDataResponse<OpsMailTimelineEvent[]>> {
@@ -146,7 +146,7 @@ export class OpsEmailConsoleController {
 
   /** The email as sent, with personal links removed. Security email is never shown. */
   @Get('messages/:id/content')
-  @OpsPermission('issues.view')
+  @OpsPermission('email.read')
   async content(
     @CurrentOps() ops: OpsContext,
     @Param('id') id: string,
@@ -180,7 +180,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('export.csv')
-  @OpsPermission('issues.view')
+  @OpsPermission('email.export')
   async exportCsv(
     @CurrentOps() ops: OpsContext,
     @Query(new ZodValidationPipe(opsMailExportQuerySchema))

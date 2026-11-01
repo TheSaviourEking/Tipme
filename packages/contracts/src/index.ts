@@ -12,3 +12,4 @@ export * from './dashboard.js';
 export * from './ops.js';
 export * from './analytics.js';
 export * from './release.js';
+export * from './ops-catalogue.js';

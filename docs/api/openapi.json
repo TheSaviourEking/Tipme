@@ -3657,7 +3657,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "payments.recheck"
+        "x-tipme-permission": "payments.repair"
       }
     },
     "/v1/ops/bachs/checkout-recovery": {
@@ -3738,7 +3738,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "payments.recheck"
+        "x-tipme-permission": "payments.repair"
       }
     },
     "/v1/ops/bachs/fee-bearer-confirmation": {
@@ -3813,7 +3813,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "payments.recheck"
+        "x-tipme-permission": "payments.repair"
       }
     },
     "/v1/ops/email/export.csv": {
@@ -3943,7 +3943,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": "email.export"
       }
     },
     "/v1/ops/email/messages": {
@@ -4117,7 +4117,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": "email.read"
       }
     },
     "/v1/ops/email/messages/{id}/reveal-recipient": {
@@ -4233,7 +4233,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": "email.read"
       }
     },
     "/v1/ops/email/series": {

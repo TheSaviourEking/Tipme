@@ -1,6 +1,8 @@
 import {
   ISSUE_KINDS,
   ISSUE_OUTCOMES,
+  OPS_PERMISSIONS,
+  type OpsPermission,
   type OpsIssueKind as IssueKind,
   type OpsIssueSeverity as IssueSeverity,
   type OpsIssueSubject as IssueSubject,
@@ -1276,24 +1278,9 @@ export const parkedPayoutChecks = pgTable('parked_payout_checks', {
 
 // ---- Staff access and audit (PR-009, ADR-0010) ----
 
-export const OPS_PERMISSIONS = [
-  'issues.view',
-  'issues.resolve',
-  'pages.suspend',
-  'recoveries.cancel',
-  'analytics.view',
-  'market.edit',
-  'audit.view',
-  'payments.recheck',
-  'private.view',
-  'pages.plan',
-  'search.view',
-  'fees.manage',
-  'providers.manage',
-  'recoveries.manage',
-  'payouts.resolve',
-] as const;
-export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
+// The list lives in @tipme/contracts (OPS_CATALOGUE) so every app reads one source.
+export { OPS_PERMISSIONS };
+export type { OpsPermission };
 
 /** A role is a named set of permissions, so new roles need no code change. Only `owner` is seeded. */
 export const roles = pgTable('roles', {

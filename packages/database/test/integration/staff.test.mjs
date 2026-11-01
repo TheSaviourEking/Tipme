@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
+import { OPS_PERMISSIONS } from '@tipme/contracts';
 import { totpAt } from '@tipme/domain';
 import {
   changePhone,
@@ -109,7 +110,7 @@ test('staff access', async (t) => {
       );
       assert.equal(
         (await staffPermissions(database.db, userId)).size,
-        15,
+        OPS_PERMISSIONS.length,
         'Owner holds every permission',
       );
       await assert.rejects(
