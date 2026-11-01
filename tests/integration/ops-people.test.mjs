@@ -8,6 +8,7 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import {
   MAIL_SEAL_KEY,
+  OPS_TOTP_KEY,
   WEB,
   browserHeaders,
   opsSignIn,
@@ -84,9 +85,44 @@ const lastAudit = async (action, subjectId) =>
 const changeIn = (reason) =>
   JSON.parse(reason.slice(reason.indexOf('[change: ') + 9, -1));
 
-/** A second owner, for tests that need one; signed in by nobody. */
-const anotherOwner = async () =>
-  (await ops.grantOwner(database.db, { email: newEmail() })).userId;
+const TOTP_KEY = Buffer.from(OPS_TOTP_KEY, 'base64');
+
+/** The data of the newest email of this type to this person, as the mail worker would open it. */
+async function sealedMail(userId, type) {
+  const [row] = await rows(
+    `SELECT data_sealed, to_hint FROM mail_messages WHERE user_id = $1 AND type = $2
+       ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [userId, type],
+  );
+  return {
+    toHint: row.to_hint,
+    ...JSON.parse(ops.openSecret(sealing.key, row.data_sealed)),
+  };
+}
+
+/** Sets up an authenticator the way /ops does, from an enrolment code. */
+async function confirmAuthenticator(userId, enrolmentCode) {
+  const { secret } = await ops.startTotpEnrolment(database.db, {
+    userId,
+    enrolmentCode,
+    key: TOTP_KEY,
+  });
+  const { status } = await ops.confirmTotpEnrolment(database.db, {
+    userId,
+    code: await totpClock(secret)(),
+    key: TOTP_KEY,
+  });
+  assert.equal(status, 'ok');
+}
+
+/** A second owner who has enrolled; signed in by nobody. */
+async function anotherOwner(email = newEmail()) {
+  const { userId, enrolmentCode } = await ops.grantOwner(database.db, {
+    email,
+  });
+  await confirmAuthenticator(userId, enrolmentCode);
+  return userId;
+}
 
 /** Someone on a fresh role holding staff.manage plus `permissions`. */
 async function manager(permissions = []) {
@@ -104,6 +140,10 @@ async function manager(permissions = []) {
     reason: REASON,
     sealing,
   });
+  await confirmAuthenticator(
+    userId,
+    (await sealedMail(userId, 'staff_invitation')).code,
+  );
   return userId;
 }
 
@@ -351,7 +391,7 @@ test('name+tag@gmail.com and n.a.m.e@gmail.com are refused when name@gmail.com i
     );
   assert.deepEqual(await rows(`SELECT count(*)::int AS n FROM users`), before);
 
-  // Removed staff count too: coming back is a decision for grant-owner, not a fresh invitation.
+  // A removed person's variant is refused too: only their exact address brings them back.
   await ops.removeStaff(database.db, {
     actorId: ownerId,
     userId,
@@ -579,6 +619,10 @@ test('only an owner can create an owner, and nobody hands out what they do not h
     reason: REASON,
   });
   const strong = (await person(every.id)).userId;
+  await confirmAuthenticator(
+    strong,
+    (await sealedMail(strong, 'staff_invitation')).code,
+  );
   await assert.rejects(
     ops.addStaff(database.db, {
       actorId: strong,
@@ -918,4 +962,838 @@ test('only an owner resets an authenticator, never their own, and never without 
     [phoneOnly],
   );
   assert.equal(open, 1, 'the refused reset changed nothing');
+});
+
+const attempt = (promise) =>
+  promise.then(
+    () => 'ok',
+    (error) => error.code,
+  );
+
+test('a stolen recipient session cannot move a staff account: the whole chain', async () => {
+  const victim = await enrolled('owner');
+  const attacker = newEmail();
+  const [before] = await rows(
+    `SELECT u.email, s.role_id, s.revoked_at, t.confirmed_at FROM users u
+       JOIN staff s ON s.user_id = u.id JOIN staff_totp t ON t.user_id = u.id WHERE u.id = $1`,
+    [victim.userId],
+  );
+  // Only the recipient session: the attacker has no authenticator and no mailbox.
+  const stolen = victim.cookie.split('; ')[0];
+  const asked = await call('POST', '/v1/me/email/code', stolen, {
+    email: attacker,
+  });
+  assert.equal(asked.status, 409);
+  const body = await asked.json();
+  assert.equal(body.error.code, 'STAFF_EMAIL_LOCKED');
+  assert.match(body.error.message, /owner/i);
+  const moved = await call('POST', '/v1/me/email/confirm', stolen, {
+    email: attacker,
+    code: '123456',
+  });
+  assert.equal(moved.status, 409);
+  assert.equal(await errorCode(moved), 'STAFF_EMAIL_LOCKED');
+
+  const [after] = await rows(
+    `SELECT u.email, s.role_id, s.revoked_at, t.confirmed_at FROM users u
+       JOIN staff s ON s.user_id = u.id JOIN staff_totp t ON t.user_id = u.id WHERE u.id = $1`,
+    [victim.userId],
+  );
+  assert.deepEqual(after, before);
+  assert.equal((await call('GET', '/v1/ops/audit', victim.cookie)).status, 200);
+  // A reset still goes to the real person.
+  await ops.resetAuthenticator(database.db, {
+    actorId: ownerId,
+    userId: victim.userId,
+    reason: REASON,
+    sealing,
+  });
+  const { toHint } = await sealedMail(victim.userId, 'staff_invitation');
+  assert.equal(toHint, `a•••@${victim.email.split('@')[1]}`);
+});
+
+test('a change code from before someone became staff cannot move them afterwards', async () => {
+  const email = newEmail();
+  const attacker = newEmail();
+  const session = await emailSignIn(email);
+  assert.equal(
+    (
+      await call('POST', '/v1/me/email/code', session.cookie, {
+        email: attacker,
+      })
+    ).status,
+    202,
+  );
+  const mail = await inboxMail(attacker, '');
+  await person(auditRole.id, email);
+  const moved = await call('POST', '/v1/me/email/confirm', session.cookie, {
+    email: attacker,
+    code: /\b(\d{6})\b/.exec(mail.body)[1],
+  });
+  assert.equal(moved.status, 409);
+  assert.equal(await errorCode(moved), 'STAFF_EMAIL_LOCKED');
+  const [{ email: kept }] = await rows(
+    `SELECT email FROM users WHERE id = $1`,
+    [session.userId],
+  );
+  assert.equal(kept, email);
+});
+
+test('a confirmation link from before someone became staff cannot move them either', async () => {
+  for (const confirm of [
+    async (token) => ops.confirmEmail(database.db, { token }),
+    async (token) =>
+      (await ops.confirmEmailForUser(database.db, { token })).status,
+  ]) {
+    const email = newEmail();
+    const { userId } = await emailSignIn(email);
+    await ops.startEmailVerification(database.db, {
+      sealing,
+      userId,
+      email: newEmail(),
+      webOrigin: WEB,
+    });
+    const { token } = await sealedMail(userId, 'email_verification_link');
+    await person(auditRole.id, email);
+    assert.equal(await confirm(token), 'staff_account');
+    const [row] = await rows(`SELECT email FROM users WHERE id = $1`, [userId]);
+    assert.equal(row.email, email);
+  }
+});
+
+test('ops:set-email stays the server route for staff, and logs what moved', async () => {
+  const [{ handle, user_id: userId }] = await rows(
+    `SELECT handle_lower AS handle, user_id FROM profiles
+       WHERE user_id NOT IN (SELECT user_id FROM staff) ORDER BY handle_lower LIMIT 1`,
+  );
+  const first = newEmail();
+  assert.equal(
+    await ops.setAccountEmail(database.db, {
+      handle,
+      email: first,
+      reason: REASON,
+    }),
+    'set',
+  );
+  await person(auditRole.id, first);
+  const next = newEmail();
+  assert.equal(
+    await ops.setAccountEmail(database.db, {
+      handle,
+      email: next,
+      reason: REASON,
+    }),
+    'set',
+  );
+  const audit = await lastAudit('account.email_set_by_script', userId);
+  assert.equal(audit.staff_user_id, null);
+  assert.ok(audit.reason.startsWith(REASON));
+  const change = changeIn(audit.reason);
+  assert.equal(change.staff, true);
+  assert.equal(change.from, `a•••@${first.split('@')[1]}`);
+  assert.equal(change.to, `a•••@${next.split('@')[1]}`);
+  // A link emailed to the old address dies with the move.
+  const [{ open }] = await rows(
+    `SELECT count(*)::int AS open FROM staff_enrolments WHERE user_id = $1 AND used_at IS NULL`,
+    [userId],
+  );
+  assert.equal(open, 0);
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+/** Takes a person through the real email recovery up to its 24-hour hold. */
+async function recoveryInHold(email, newAddress) {
+  const session = await emailSignIn(email);
+  const recovery = newEmail();
+  await call('POST', '/v1/me/recovery-email/code', session.cookie, {
+    email: recovery,
+  });
+  const set = await call('POST', '/v1/me/recovery-email', session.cookie, {
+    email: recovery,
+    code: /\b(\d{6})\b/.exec(
+      (await inboxMail(recovery, 'recovery email')).body,
+    )[1],
+  });
+  assert.equal(set.status, 200);
+  await call('POST', '/v1/auth/email-recovery/start', undefined, { email });
+  const code = /\b(\d{6})\b/.exec(
+    (await inboxMail(recovery, 'recovery code')).body,
+  )[1];
+  assert.equal(
+    (
+      await call('POST', '/v1/auth/email-recovery/propose', undefined, {
+        email,
+        code,
+        newEmail: newAddress,
+      })
+    ).status,
+    202,
+  );
+  const confirmed = await call(
+    'POST',
+    '/v1/auth/email-recovery/confirm',
+    undefined,
+    {
+      email,
+      newEmail: newAddress,
+      code: /\b(\d{6})\b/.exec((await inboxMail(newAddress, '')).body)[1],
+    },
+  );
+  assert.equal(confirmed.status, 200);
+  return session;
+}
+const pendingRecoveries = async (userId) =>
+  (
+    await rows(
+      `SELECT 1 FROM email_recoveries WHERE user_id = $1 AND cancelled_at IS NULL AND completed_at IS NULL`,
+      [userId],
+    )
+  ).length;
+const later = () => new Date(Date.now() + 25 * 3600_000);
+
+test('inviting someone cancels recoveries waiting on them, so their address stays', async () => {
+  const email = newEmail();
+  const session = await recoveryInHold(email, newEmail());
+  assert.equal(await pendingRecoveries(session.userId), 1);
+  await person(auditRole.id, email);
+  assert.equal(await pendingRecoveries(session.userId), 0);
+  assert.equal(
+    changeIn((await lastAudit('staff.added', session.userId)).reason)
+      .recoveriesCancelled,
+    1,
+  );
+  await ops.completeDueRecoveries(database.db, sealing, later());
+  const [row] = await rows(`SELECT email FROM users WHERE id = $1`, [
+    session.userId,
+  ]);
+  assert.equal(row.email, email);
+});
+
+test('completing a recovery is refused for active staff, however the staff row appeared', async () => {
+  const email = newEmail();
+  const session = await recoveryInHold(email, newEmail());
+  // grant-owner is the path that doesn't go through addStaff's cancelling.
+  await ops.grantOwner(database.db, { email });
+  await ops.completeDueRecoveries(database.db, sealing, later());
+  const [row] = await rows(`SELECT email FROM users WHERE id = $1`, [
+    session.userId,
+  ]);
+  assert.equal(row.email, email);
+  assert.equal(await pendingRecoveries(session.userId), 0);
+  assert.ok(await lastAudit('account.recovery_refused_staff', session.userId));
+  const [{ open }] = await rows(
+    `SELECT count(*)::int AS open FROM staff_enrolments WHERE user_id = $1 AND used_at IS NULL`,
+    [session.userId],
+  );
+  assert.equal(open, 1, 'the enrolment link survives: nothing moved');
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId: session.userId,
+    reason: REASON,
+  });
+});
+
+test('a phone recovery due for active staff is cancelled, not completed', async () => {
+  const email = newEmail();
+  const { userId } = await emailSignIn(email);
+  const newPhone = `+234803667${phone++}`;
+  // Phone sign-in is legacy and has no route to reach a hold from here, so the row is set up directly.
+  await rows(
+    `INSERT INTO phone_recoveries (id, user_id, new_phone_e164, effective_at)
+       VALUES (gen_random_uuid(), $1, $2, now() - interval '1 hour')`,
+    [userId, newPhone],
+  );
+  await ops.grantOwner(database.db, { email });
+  const result = await call('POST', '/v1/auth/code', undefined, {
+    phone: newPhone,
+  });
+  assert.equal(result.status, 202);
+  const code = /\b(\d{6})\b/.exec(
+    (await (await fetch(`${stack.api}/v1/dev/inbox`)).json()).data[0].body,
+  )[1];
+  const verified = await call('POST', '/v1/auth/verify', undefined, {
+    phone: newPhone,
+    code,
+  });
+  assert.equal(verified.status, 200);
+  const [row] = await rows(`SELECT phone_e164 FROM users WHERE id = $1`, [
+    userId,
+  ]);
+  assert.notEqual(row.phone_e164, newPhone);
+  const [recovery] = await rows(
+    `SELECT cancelled_at, completed_at FROM phone_recoveries WHERE user_id = $1`,
+    [userId],
+  );
+  assert.ok(recovery.cancelled_at);
+  assert.equal(recovery.completed_at, null);
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+test('a request waiting when its owner lost their authenticator does not run', async () => {
+  const [a, c] = [await anotherOwner(), await anotherOwner()];
+  await ops.resetAuthenticator(database.db, {
+    actorId: a,
+    userId: c,
+    reason: REASON,
+    sealing,
+  });
+  assert.equal(
+    await attempt(
+      ops.removeStaff(database.db, { actorId: c, userId: a, reason: REASON }),
+    ),
+    'PERMISSION_NOT_HELD',
+  );
+  assert.equal(await ops.staffRole(database.db, a), 'owner');
+});
+
+test('two owners resetting each other at once leave one able to act', async () => {
+  const [a, c] = [await anotherOwner(), await anotherOwner()];
+  const results = await Promise.allSettled([
+    ops.resetAuthenticator(database.db, {
+      actorId: a,
+      userId: c,
+      reason: REASON,
+      sealing,
+    }),
+    ops.resetAuthenticator(database.db, {
+      actorId: c,
+      userId: a,
+      reason: REASON,
+      sealing,
+    }),
+  ]);
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+  assert.equal(
+    results.find((r) => r.status === 'rejected').reason.code,
+    'PERMISSION_NOT_HELD',
+  );
+  const [{ left }] = await rows(
+    `SELECT count(*)::int AS left FROM staff_totp WHERE user_id = ANY($1) AND confirmed_at IS NOT NULL`,
+    [[a, c]],
+  );
+  assert.equal(left, 1);
+});
+
+test('an owner who never enrolled does not count: grant-owner --role release_check is refused', async () => {
+  const email = newEmail();
+  const sole = await anotherOwner(email);
+  // Started enrolling and never confirmed: a row exists, and still doesn't count.
+  const { userId: never, enrolmentCode: neverCode } = await ops.grantOwner(
+    database.db,
+    { email: newEmail() },
+  );
+  await ops.startTotpEnrolment(database.db, {
+    userId: never,
+    enrolmentCode: neverCode,
+    key: TOTP_KEY,
+  });
+  const boss = await manager();
+  await asSoleOwner(sole, async () => {
+    await rows(`UPDATE staff SET revoked_at = NULL WHERE user_id = $1`, [
+      never,
+    ]);
+    assert.equal(
+      await attempt(
+        ops.grantOwner(database.db, { email, role: 'release_check' }),
+      ),
+      'LAST_OWNER',
+    );
+    assert.equal(await ops.staffRole(database.db, sole), 'owner');
+    // A manager can't take them away by removal either.
+    assert.equal(
+      await attempt(
+        ops.removeStaff(database.db, {
+          actorId: boss,
+          userId: sole,
+          reason: REASON,
+        }),
+      ),
+      'LAST_OWNER',
+    );
+    // The enrolled owner can still clear away one who never enrolled.
+    await ops.removeStaff(database.db, {
+      actorId: sole,
+      userId: never,
+      reason: REASON,
+    });
+  });
+});
+
+test('a staff account cannot be deleted, and a deleted account never counts as an owner', async () => {
+  const someone = await enrolled();
+  const refused = await call(
+    'DELETE',
+    '/v1/me/account',
+    someone.cookie.split('; ')[0],
+    {
+      confirm: 'DELETE',
+    },
+  );
+  const attemptBody = await refused.text();
+  assert.equal(refused.status, 409, attemptBody);
+  assert.equal(JSON.parse(attemptBody).error.code, 'STAFF_CANNOT_DELETE');
+  const [{ deleted_at: stillThere }] = await rows(
+    `SELECT deleted_at FROM users WHERE id = $1`,
+    [someone.userId],
+  );
+  assert.equal(stillThere, null);
+
+  // Removed first, deletion works; and an account deleted before this rule (no route reaches that
+  // now, so set directly) neither counts as the other owner nor can act.
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId: someone.userId,
+    reason: REASON,
+  });
+  assert.equal(
+    await attempt(
+      ops.deleteAccount(database.db, { userId: someone.userId, sealing }),
+    ),
+    'ok',
+  );
+  const email = newEmail();
+  const sole = await anotherOwner(email);
+  const gone = await anotherOwner();
+  await rows(
+    `UPDATE users SET deleted_at = now(), email = NULL, email_verified_at = NULL WHERE id = $1`,
+    [gone],
+  );
+  await asSoleOwner(sole, async () => {
+    await rows(`UPDATE staff SET revoked_at = NULL WHERE user_id = $1`, [gone]);
+    assert.equal(
+      await attempt(
+        ops.grantOwner(database.db, { email, role: 'release_check' }),
+      ),
+      'LAST_OWNER',
+    );
+    assert.equal(
+      await attempt(
+        ops.removeStaff(database.db, {
+          actorId: gone,
+          userId: sole,
+          reason: REASON,
+        }),
+      ),
+      'PERMISSION_NOT_HELD',
+    );
+  });
+  await rows(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [gone]);
+});
+
+test('grant-owner still makes the first owner, and brings back a sole owner who lost their phone', async () => {
+  const email = newEmail();
+  const sole = await anotherOwner(email);
+  await asSoleOwner(sole, async () => {
+    await rows(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
+      sole,
+    ]);
+    // Nobody is an owner at all: a fresh install, as far as this is concerned.
+    const first = await ops.grantOwner(database.db, { email: newEmail() });
+    assert.equal(await ops.staffRole(database.db, first.userId), 'owner');
+    await rows(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
+      first.userId,
+    ]);
+    await rows(`UPDATE staff SET revoked_at = NULL WHERE user_id = $1`, [sole]);
+    // Lost phone: same account, new link, and it works.
+    const again = await ops.grantOwner(database.db, { email });
+    assert.equal(again.userId, sole);
+    await confirmAuthenticator(sole, again.enrolmentCode);
+  });
+});
+
+test('a removed person comes back on their exact address, with a fresh link and a restore in the log', async () => {
+  const email = newEmail();
+  const { userId } = await person(auditRole.id, email);
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+  const other = await ops.createRole(database.db, {
+    actorId: ownerId,
+    name: `Rehired ${uniquePrefix()}`,
+    description: '',
+    permissions: ['analytics.view'],
+    reason: REASON,
+  });
+  const back = await ops.addStaff(database.db, {
+    actorId: ownerId,
+    email,
+    roleId: other.id,
+    reason: REASON,
+    sealing,
+  });
+  assert.equal(back.userId, userId);
+  assert.equal(await ops.staffRole(database.db, userId), other.id);
+  const change = changeIn((await lastAudit('staff.added', userId)).reason);
+  assert.equal(change.restored, true);
+  const session = await emailSignIn(email);
+  const me = await call('GET', '/v1/ops/me', session.cookie);
+  assert.deepEqual((await me.json()).data, { state: 'needs_enrolment' });
+  await confirmAuthenticator(
+    userId,
+    (await sealedMail(userId, 'staff_invitation')).code,
+  );
+  assert.deepEqual(
+    [...(await ops.staffPermissions(database.db, userId))],
+    ['analytics.view'],
+  );
+
+  // Usual rules: a manager can't restore someone into a role beyond them, or as an owner.
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+  const weak = await manager();
+  for (const roleId of [other.id, 'owner'])
+    assert.equal(
+      await attempt(
+        ops.addStaff(database.db, {
+          actorId: weak,
+          email,
+          roleId,
+          reason: REASON,
+          sealing,
+        }),
+      ),
+      'PERMISSION_NOT_HELD',
+    );
+  assert.equal(await ops.staffRole(database.db, userId), null);
+});
+
+test('a removed release_check account can come back on a normal role', async () => {
+  const email = newEmail();
+  const { userId } = await ops.grantOwner(database.db, {
+    email,
+    role: 'release_check',
+  });
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+  await ops.addStaff(database.db, {
+    actorId: ownerId,
+    email,
+    roleId: auditRole.id,
+    reason: REASON,
+    sealing,
+  });
+  assert.equal(await ops.staffRole(database.db, userId), auditRole.id);
+});
+
+test('a lapsed invitation can be sent again, and only the new link works', async () => {
+  const email = newEmail();
+  const { userId } = await person(auditRole.id, email);
+  const old = (await sealedMail(userId, 'staff_invitation')).code;
+  await assert.rejects(
+    ops.resendInvitation(database.db, {
+      actorId: await manager(),
+      userId,
+      reason: REASON,
+      sealing,
+    }),
+    refusedWith('PERMISSION_NOT_HELD'),
+  );
+  const able = await manager(['audit.view']);
+  const resent = await ops.resendInvitation(database.db, {
+    actorId: able,
+    userId,
+    reason: REASON,
+    sealing,
+  });
+  assert.equal(resent.delivery, 'queued');
+  const code = (await sealedMail(userId, 'staff_invitation')).code;
+  assert.notEqual(code, old);
+  assert.equal(
+    await lastAudit('staff.invitation_resent', userId).then(
+      (r) => r.staff_user_id,
+    ),
+    able,
+  );
+  await assert.rejects(
+    ops.startTotpEnrolment(database.db, {
+      userId,
+      enrolmentCode: old,
+      key: TOTP_KEY,
+    }),
+    refusedWith('ENROLMENT_INVALID'),
+  );
+  await confirmAuthenticator(userId, code);
+  // Enrolled now: this is no longer an invitation, and a reset is an owner's call.
+  assert.equal(
+    await attempt(
+      ops.resendInvitation(database.db, {
+        actorId: ownerId,
+        userId,
+        reason: REASON,
+        sealing,
+      }),
+    ),
+    'STAFF_ALREADY_ENROLLED',
+  );
+  const route = await call(
+    'POST',
+    `/v1/ops/staff/${(await person()).userId}/resend-invitation`,
+    owner.cookie,
+    { reason: REASON },
+  );
+  assert.equal(route.status, 200);
+  assert.equal((await route.json()).data.delivery, 'queued');
+});
+
+test('grant-owner refuses a mailbox that is staff on another account, and names it masked', async () => {
+  const name = `n${uniquePrefix().replace(/\W/g, '')}`;
+  const { userId } = await person(auditRole.id, `${name}@gmail.com`);
+  const before = await rows(`SELECT count(*)::int AS n FROM users`);
+  const variant = `${name[0]}.${name.slice(1)}+x@googlemail.com`;
+  await assert.rejects(
+    ops.grantOwner(database.db, { email: variant }),
+    (error) => {
+      assert.equal(error.code, 'STAFF_EMAIL_TAKEN');
+      assert.equal(error.detail, `${name[0]}•••@gmail.com`);
+      return true;
+    },
+  );
+  // A removed match counts too; the exact address still restores.
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+  assert.equal(
+    await attempt(ops.grantOwner(database.db, { email: variant })),
+    'STAFF_EMAIL_TAKEN',
+  );
+  assert.deepEqual(await rows(`SELECT count(*)::int AS n FROM users`), before);
+  const back = await ops.grantOwner(database.db, {
+    email: `${name}@gmail.com`,
+  });
+  assert.equal(back.userId, userId);
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+test('moving an account voids its open enrolment link', async () => {
+  const email = newEmail();
+  const { userId, enrolmentCode } = await ops.grantOwner(database.db, {
+    email,
+  });
+  const [row] = await rows(
+    `SELECT 1 FROM staff_enrolments WHERE user_id = $1 AND used_at IS NULL`,
+    [userId],
+  );
+  assert.ok(row);
+  await ops.dropOpsAccess(database.db, userId);
+  assert.equal(
+    await attempt(
+      ops.startTotpEnrolment(database.db, {
+        userId,
+        enrolmentCode,
+        key: TOTP_KEY,
+      }),
+    ),
+    'ENROLMENT_INVALID',
+  );
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+test('a reset clears a lockout, so the new link can be used at once', async () => {
+  const someone = await enrolled();
+  await rows(
+    `INSERT INTO ops_lockouts (user_id, failures, locked_until) VALUES ($1, 0, now() + interval '15 minutes')
+       ON CONFLICT (user_id) DO UPDATE SET locked_until = EXCLUDED.locked_until`,
+    [someone.userId],
+  );
+  await ops.resetAuthenticator(database.db, {
+    actorId: ownerId,
+    userId: someone.userId,
+    reason: REASON,
+    sealing,
+  });
+  await confirmAuthenticator(
+    someone.userId,
+    (await sealedMail(someone.userId, 'staff_invitation')).code,
+  );
+});
+
+test("an invitation that can't or didn't go out is reported as such", async () => {
+  const blocked = newEmail();
+  await rows(
+    `INSERT INTO mail_suppressions (address_hmac, reason) VALUES ($1, 'hard_bounce')`,
+    [ops.addressHmac(sealing, blocked)],
+  );
+  const added = await ops.addStaff(database.db, {
+    actorId: ownerId,
+    email: blocked,
+    roleId: auditRole.id,
+    reason: REASON,
+    sealing,
+  });
+  assert.equal(added.delivery, 'suppressed');
+  const fine = await ops.addStaff(database.db, {
+    actorId: ownerId,
+    email: newEmail(),
+    roleId: auditRole.id,
+    reason: REASON,
+    sealing,
+  });
+  assert.equal(fine.delivery, 'queued');
+  const list = await ops.activeStaffList(database.db);
+  const find = (id) => list.find((row) => row.userId === id);
+  assert.ok(find(fine.userId).invitation.linkOpen);
+  assert.ok(find(fine.userId).invitation.status);
+  await rows(
+    `UPDATE mail_messages SET status = 'failed' WHERE user_id = $1 AND type = 'staff_invitation'`,
+    [fine.userId],
+  );
+  assert.equal(
+    (await ops.activeStaffList(database.db)).find(
+      (r) => r.userId === fine.userId,
+    ).invitation.status,
+    'failed',
+  );
+  // Past its 30 minutes the link is reported closed.
+  await rows(
+    `UPDATE staff_enrolments SET expires_at = now() - interval '1 minute' WHERE user_id = $1`,
+    [fine.userId],
+  );
+  assert.equal(
+    (await ops.activeStaffList(database.db)).find(
+      (r) => r.userId === fine.userId,
+    ).invitation.linkOpen,
+    false,
+  );
+  // Nothing to report for someone enrolled.
+  assert.equal(find(ownerId).invitation, null);
+});
+
+test('a recovery proposed before someone became staff cannot be confirmed afterwards', async () => {
+  const email = newEmail();
+  const newAddress = newEmail();
+  const session = await emailSignIn(email);
+  const recovery = newEmail();
+  await call('POST', '/v1/me/recovery-email/code', session.cookie, {
+    email: recovery,
+  });
+  await call('POST', '/v1/me/recovery-email', session.cookie, {
+    email: recovery,
+    code: /\b(\d{6})\b/.exec(
+      (await inboxMail(recovery, 'recovery email')).body,
+    )[1],
+  });
+  await call('POST', '/v1/auth/email-recovery/start', undefined, { email });
+  const code = /\b(\d{6})\b/.exec(
+    (await inboxMail(recovery, 'recovery code')).body,
+  )[1];
+  await call('POST', '/v1/auth/email-recovery/propose', undefined, {
+    email,
+    code,
+    newEmail: newAddress,
+  });
+  const mail = await inboxMail(newAddress, '');
+  // grant-owner: the path that doesn't cancel what is waiting.
+  const { userId } = await ops.grantOwner(database.db, { email });
+  const confirmed = await call(
+    'POST',
+    '/v1/auth/email-recovery/confirm',
+    undefined,
+    {
+      email,
+      newEmail: newAddress,
+      code: /\b(\d{6})\b/.exec(mail.body)[1],
+    },
+  );
+  assert.equal(confirmed.status, 400);
+  const [{ effective_at: effectiveAt }] = await rows(
+    `SELECT effective_at FROM email_recoveries WHERE user_id = $1`,
+    [userId],
+  );
+  assert.equal(effectiveAt, null);
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+test('inviting someone cancels a phone recovery waiting on them too', async () => {
+  const email = newEmail();
+  const { userId } = await emailSignIn(email);
+  // Phone sign-in is legacy and has no route to reach a hold from here, so the row is set up directly.
+  await rows(
+    `INSERT INTO phone_recoveries (id, user_id, new_phone_e164, effective_at)
+       VALUES (gen_random_uuid(), $1, $2, now() + interval '1 hour')`,
+    [userId, `+234803668${phone++}`],
+  );
+  await person(auditRole.id, email);
+  const [row] = await rows(
+    `SELECT cancelled_at FROM phone_recoveries WHERE user_id = $1`,
+    [userId],
+  );
+  assert.ok(row.cancelled_at);
+  assert.equal(
+    changeIn((await lastAudit('staff.added', userId)).reason)
+      .recoveriesCancelled,
+    1,
+  );
+});
+
+test('only an owner sends an invitation again to an owner', async () => {
+  const every = await ops.createRole(database.db, {
+    actorId: ownerId,
+    name: `All ${uniquePrefix()}`,
+    description: '',
+    permissions: ops.OPS_PERMISSIONS,
+    reason: REASON,
+  });
+  const strong = (await person(every.id)).userId;
+  await confirmAuthenticator(
+    strong,
+    (await sealedMail(strong, 'staff_invitation')).code,
+  );
+  const invited = await person('owner');
+  assert.equal(
+    await attempt(
+      ops.resendInvitation(database.db, {
+        actorId: strong,
+        userId: invited.userId,
+        reason: REASON,
+        sealing,
+      }),
+    ),
+    'PERMISSION_NOT_HELD',
+  );
+  assert.equal(
+    (
+      await ops.resendInvitation(database.db, {
+        actorId: ownerId,
+        userId: invited.userId,
+        reason: REASON,
+        sealing,
+      })
+    ).delivery,
+    'queued',
+  );
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId: invited.userId,
+    reason: REASON,
+  });
 });

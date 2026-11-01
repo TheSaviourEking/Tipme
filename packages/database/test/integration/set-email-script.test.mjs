@@ -59,5 +59,8 @@ test('is audited with the reason', async (t) => {
   const [audit] = await rows(
     `SELECT reason, subject_id FROM audit_events WHERE action = 'account.email_set_by_script'`,
   );
-  assert.deepEqual(audit, { reason, subject_id: ADA.userId });
+  assert.deepEqual(audit, {
+    reason: `${reason} [change: {"from":null,"to":"a•••@example.com","staff":false}]`,
+    subject_id: ADA.userId,
+  });
 });

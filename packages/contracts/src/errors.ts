@@ -63,6 +63,9 @@ export const apiErrorCodes = [
   'ROLE_HAS_FORMER_HOLDERS',
   'STAFF_EMAIL_TAKEN',
   'STAFF_NO_EMAIL',
+  'STAFF_EMAIL_LOCKED',
+  'STAFF_CANNOT_DELETE',
+  'STAFF_ALREADY_ENROLLED',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];

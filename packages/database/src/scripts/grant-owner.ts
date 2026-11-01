@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import { maskEmail } from '../operations/email-address.js';
+import { OperationError } from '../operations/errors.js';
 import { grantOwner } from '../operations/staff.js';
 import { mailSealing } from '../operations/mail-queue.js';
 import { phoneHint } from '../operations/phone.js';
@@ -36,6 +37,12 @@ if (
         ...(sealKey
           ? { sealing: mailSealing(Buffer.from(sealKey, 'base64')) }
           : {}),
+      }).catch((error: unknown) => {
+        if (error instanceof OperationError && error.detail)
+          console.error(
+            `Not changed: that mailbox is already staff on ${error.detail}. Name that exact address instead.`,
+          );
+        throw error;
       });
       console.log(
         `Owner granted to the account on ${email ? maskEmail(email) : phoneHint(phone!.replace(/\D/g, ''))}.`,

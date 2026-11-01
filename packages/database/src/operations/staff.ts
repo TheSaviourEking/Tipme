@@ -16,7 +16,11 @@ import {
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { normaliseEmail } from './email-address.js';
+import {
+  maskEmail,
+  normaliseEmail,
+  normaliseStaffEmail,
+} from './email-address.js';
 import { guarded, OperationError } from './errors.js';
 import { mailOwner } from './account-mail.js';
 import type { MailSealing } from './mail-queue.js';
@@ -94,8 +98,9 @@ export async function lockStaffAdmin(tx: Tx): Promise<void> {
 }
 
 /**
- * Refuses a change that would leave no active owner, locking the owner rows so a writer outside
- * the staff-admin lock can't take the other owner away before this transaction commits.
+ * Refuses a change that would leave nobody able to act as owner. Only an owner who is active, has
+ * a confirmed authenticator and a live account counts. Locks those rows, so a writer outside the
+ * staff-admin lock can't take the other owner away before this transaction commits.
  */
 export async function assertNotLastOwner(
   tx: Tx,
@@ -104,15 +109,41 @@ export async function assertNotLastOwner(
   const owners = await tx
     .select({ userId: staff.userId })
     .from(staff)
-    .where(and(eq(staff.roleId, 'owner'), isNull(staff.revokedAt)))
-    .for('update');
+    .innerJoin(staffTotp, eq(staffTotp.userId, staff.userId))
+    .innerJoin(users, eq(users.id, staff.userId))
+    .where(
+      and(
+        eq(staff.roleId, 'owner'),
+        isNull(staff.revokedAt),
+        isNotNull(staffTotp.confirmedAt),
+        isNull(users.deletedAt),
+      ),
+    )
+    .for('update', { of: staff });
   if (!owners.some((owner) => owner.userId !== userId))
     throw new OperationError('LAST_OWNER');
 }
 
+/**
+ * For anything that moves a person's sign-in address: holds the account row and says whether they
+ * are active staff. addStaff takes the same row lock, so the two can't cross. An emailed authenticator
+ * reset goes to this address, so a recipient session must never be able to change it (ADR-0010).
+ */
+export async function lockedActiveStaff(
+  tx: Tx,
+  userId: string,
+): Promise<boolean> {
+  await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .for('update');
+  return isActiveStaff(tx, userId);
+}
+
 /** Uses up any open enrolment code. */
 export async function voidEnrolments(
-  tx: Tx,
+  tx: Database | Tx,
   userId: string,
   now: Date,
 ): Promise<void> {
@@ -125,8 +156,9 @@ export async function voidEnrolments(
 }
 
 /**
- * Replaces any open enrolment code with a new one, valid for 30 minutes. Only its SHA-256 is
- * stored; the caller hands the code to the person and nowhere else.
+ * Replaces any open enrolment code with a new one, valid for 30 minutes, and clears a lockout so
+ * it can be used at once. Only its SHA-256 is stored; the caller hands the code to the person and
+ * nowhere else.
  */
 export async function issueEnrolment(
   tx: Tx,
@@ -141,6 +173,7 @@ export async function issueEnrolment(
   await tx
     .insert(staffEnrolments)
     .values({ codeSha256: sha256(code), userId, expiresAt });
+  await tx.delete(opsLockouts).where(eq(opsLockouts.userId, userId));
   return { code, expiresAt };
 }
 
@@ -287,14 +320,16 @@ export function staffRole(
 }
 
 /**
- * Removes the authenticator and ends every admin grant. Runs on any number move (phone change,
- * completed recovery) so a moved account must be granted again; a no-op for non-staff.
+ * Voids open enrolment links, removes the authenticator and ends every admin grant. Runs on any
+ * number move (phone change, completed recovery) so a moved account must be granted again; a no-op
+ * for non-staff. Links go first, so one being used right now can't leave its secret behind.
  */
 export async function dropOpsAccess(
   tx: Database | Tx,
   userId: string,
   now: Date = new Date(),
 ): Promise<void> {
+  await voidEnrolments(tx, userId, now);
   await tx.delete(staffTotp).where(eq(staffTotp.userId, userId));
   await tx
     .update(opsSessions)
@@ -344,6 +379,22 @@ export function grantOwner(
             isNull(users.deletedAt),
           ),
         );
+      if (email) {
+        // One person, one staff account: naming a variant must not quietly make a second one.
+        const mailbox = normaliseStaffEmail(email);
+        const staffAccounts = await tx
+          .select({ userId: staff.userId, email: users.email })
+          .from(staff)
+          .innerJoin(users, eq(users.id, staff.userId));
+        const match = staffAccounts.find(
+          (person) =>
+            person.userId !== existing?.id &&
+            person.email &&
+            normaliseStaffEmail(person.email) === mailbox,
+        );
+        if (match?.email)
+          throw new OperationError('STAFF_EMAIL_TAKEN', maskEmail(match.email));
+      }
       const userId = existing?.id ?? newId();
       const [previous] = existing
         ? await tx

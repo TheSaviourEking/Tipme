@@ -21,6 +21,7 @@ import {
   type OpsAddStaffRequest,
   type OpsChangeRoleRequest,
   type OpsEffectiveAccess,
+  type OpsEnrolmentLinkSent,
   type OpsPersonalAccessRequest,
   type OpsReasonRequest,
   type OpsRole,
@@ -43,6 +44,7 @@ import {
   type MailSealing,
   OperationError,
   removeStaff,
+  resendInvitation,
   resetAuthenticator,
   roleImpact,
   setPersonalAccess,
@@ -105,6 +107,24 @@ export class OpsStaffController {
     return { data: { removed: true } };
   }
 
+  @Post(':userId/resend-invitation')
+  @HttpCode(200)
+  @OpsPermission('staff.manage')
+  async resendPersonInvitation(
+    @CurrentOps() ops: OpsContext,
+    @Param('userId') userId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<OpsEnrolmentLinkSent>> {
+    return {
+      data: await resendInvitation(this.database.db, {
+        ...body,
+        actorId: ops.userId,
+        userId: uuidParam(userId),
+        sealing: this.sealing,
+      }),
+    };
+  }
+
   @Post(':userId/reset-authenticator')
   @HttpCode(200)
   @OpsPermission('staff.manage')
@@ -112,7 +132,7 @@ export class OpsStaffController {
     @CurrentOps() ops: OpsContext,
     @Param('userId') userId: string,
     @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
-  ): Promise<ApiDataResponse<{ enrolmentExpiresAt: string }>> {
+  ): Promise<ApiDataResponse<OpsEnrolmentLinkSent>> {
     return {
       data: await resetAuthenticator(this.database.db, {
         ...body,

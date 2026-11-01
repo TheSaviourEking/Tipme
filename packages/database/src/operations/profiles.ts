@@ -39,6 +39,7 @@ import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
+import { lockedActiveStaff } from './staff.js';
 import { mailOwner } from './account-mail.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
@@ -619,6 +620,12 @@ export function deleteAccount(
   const photoKeys: string[] = [];
   return guarded(async () => {
     const result = await db.transaction(async (tx) => {
+      // A deleted owner would still hold a staff row. Removal comes first, by someone else.
+      if (
+        !input.rehearsalCleanup &&
+        (await lockedActiveStaff(tx, input.userId))
+      )
+        throw new OperationError('STAFF_CANNOT_DELETE');
       const [row] = await tx
         .select({
           id: profiles.id,

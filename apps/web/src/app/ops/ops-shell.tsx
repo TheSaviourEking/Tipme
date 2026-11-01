@@ -10,6 +10,7 @@ import { usePaymentMode } from '@/components/payment-mode-context';
 import {
   ENROL_LINK_KEY,
   ENROL_LINK_PREFIX,
+  clearEnrolLink,
   OpsAccessContext,
   PROVIDER_TEST_CONFIRM_PATH,
   PROVIDER_TEST_TOKEN_KEY,
@@ -79,7 +80,11 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
           }
         }
         router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
-      } else setState(next);
+      } else {
+        // Only the enrolment step has a use for the code, and it clears it itself.
+        if (next.step !== 'needs_enrolment') clearEnrolLink();
+        setState(next);
+      }
     },
     [router, pathname],
   );

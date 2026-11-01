@@ -3,7 +3,11 @@ import QRCode from 'qrcode';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { OpsEnrolment } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
-import { ENROL_LINK_KEY, ENROL_LINK_PREFIX } from '@/lib/ops-client';
+import {
+  ENROL_LINK_KEY,
+  ENROL_LINK_PREFIX,
+  clearEnrolLink,
+} from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
 const problems: Record<string, string> = {
@@ -55,15 +59,7 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
   const id = useId();
   // This step only renders after the client has asked for the admin state, never on the server.
   const [linkedCode] = useState(linkedEnrolmentCode);
-  useEffect(() => {
-    if (location.hash.startsWith(ENROL_LINK_PREFIX))
-      history.replaceState(null, '', location.pathname + location.search);
-    try {
-      sessionStorage.removeItem(ENROL_LINK_KEY);
-    } catch {
-      // Storage blocked: nothing was kept.
-    }
-  }, []);
+  useEffect(clearEnrolLink, []);
   const [enrolment, setEnrolment] = useState<
     (OpsEnrolment & { qr: string }) | null
   >(null);

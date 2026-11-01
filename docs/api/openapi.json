@@ -7552,6 +7552,75 @@
         "x-tipme-permission": "staff.manage"
       }
     },
+    "/v1/ops/staff/{userId}/resend-invitation": {
+      "post": {
+        "operationId": "OpsStaff.resendPersonInvitation",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
     "/v1/ops/staff/{userId}/reset-authenticator": {
       "post": {
         "operationId": "OpsStaff.resetPersonAuthenticator",
@@ -8409,6 +8478,9 @@
                   "ROLE_HAS_FORMER_HOLDERS",
                   "STAFF_EMAIL_TAKEN",
                   "STAFF_NO_EMAIL",
+                  "STAFF_EMAIL_LOCKED",
+                  "STAFF_CANNOT_DELETE",
+                  "STAFF_ALREADY_ENROLLED",
                   "INTERNAL_ERROR"
                 ]
               },

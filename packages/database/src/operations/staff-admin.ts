@@ -1,10 +1,25 @@
-import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  emailRecoveries,
+  mailMessages,
+  mailSuppressions,
   OPS_PERMISSIONS,
+  phoneRecoveries,
   rolePermissions,
   roles,
   staff,
+  staffEnrolments,
   staffPermissionOverrides,
   staffTotp,
   users,
@@ -19,7 +34,7 @@ import {
 import { verifiedOwner } from './email-sign-in.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { enqueueMail, type MailSealing } from './mail-queue.js';
+import { addressHmac, enqueueMail, type MailSealing } from './mail-queue.js';
 import {
   assertNotLastOwner,
   clearOverrides,
@@ -33,7 +48,6 @@ import {
   readRolePermissions,
   readStaffAccess,
   type StaffAccess,
-  voidEnrolments,
   withAuditChange,
 } from './staff.js';
 
@@ -120,6 +134,7 @@ function mustHold(held: Set<string>, permissions: Iterable<string>): void {
  * of the change before it: two people can't each pass a check the other is about to invalidate,
  * and an actor who just lost staff.manage can't finish a change already in flight. The actor's
  * access is read here rather than trusted from the route, so an approval run later re-checks it.
+ * Nobody acts without a confirmed authenticator on a live account.
  */
 async function authorise(
   tx: Tx,
@@ -130,6 +145,19 @@ async function authorise(
   const actor = id ? await readStaffAccess(tx, id) : null;
   if (!id || !actor?.permissions.has(MANAGE))
     throw new OperationError('PERMISSION_NOT_HELD');
+  // A request that waited on the lock may have lost its authenticator or account meanwhile.
+  const [able] = await tx
+    .select({ userId: staffTotp.userId })
+    .from(staffTotp)
+    .innerJoin(users, eq(users.id, staffTotp.userId))
+    .where(
+      and(
+        eq(staffTotp.userId, id),
+        isNotNull(staffTotp.confirmedAt),
+        isNull(users.deletedAt),
+      ),
+    );
+  if (!able) throw new OperationError('PERMISSION_NOT_HELD');
   return { id, held: actor.permissions, roleId: actor.roleId };
 }
 
@@ -611,6 +639,87 @@ export function changeRole(
   });
 }
 
+export type InvitationDelivery = 'queued' | 'suppressed';
+
+export interface InvitationState {
+  /** The email's state (queued, sent, failed, suppressed, bounced...), or 'none' if never emailed. */
+  status: string;
+  /** Whether an unused, unexpired link exists; false means it needs sending again. */
+  linkOpen: boolean;
+}
+
+/** Replaces any open link with a new one and emails it; says if the address is known not to work. */
+async function sendEnrolmentLink(
+  tx: Tx,
+  sealing: MailSealing,
+  input: { userId: string; to: string; kind: 'invited' | 'reset'; now: Date },
+): Promise<{ enrolmentExpiresAt: string; delivery: InvitationDelivery }> {
+  const enrolment = await issueEnrolment(tx, input.userId, input.now);
+  await enqueueMail(tx, sealing, {
+    type: 'staff_invitation',
+    to: input.to,
+    userId: input.userId,
+    data: { code: enrolment.code, kind: input.kind },
+    dedupeKey: `staff_invitation.${newId()}`,
+    expiresAt: enrolment.expiresAt,
+    now: input.now,
+  });
+  const [suppressed] = await tx
+    .select({ reason: mailSuppressions.reason })
+    .from(mailSuppressions)
+    .where(eq(mailSuppressions.addressHmac, addressHmac(sealing, input.to)));
+  return {
+    enrolmentExpiresAt: enrolment.expiresAt.toISOString(),
+    delivery: suppressed ? 'suppressed' : 'queued',
+  };
+}
+
+/** The proven address of a staff member, or a refusal: a link has nowhere else to go. */
+async function provenEmailOrThrow(tx: Tx, userId: string): Promise<string> {
+  const [account] = await tx
+    .select({ email: users.email })
+    .from(users)
+    .where(
+      and(
+        eq(users.id, userId),
+        isNotNull(users.emailVerifiedAt),
+        isNull(users.deletedAt),
+      ),
+    );
+  if (!account?.email) throw new OperationError('STAFF_NO_EMAIL');
+  return account.email;
+}
+
+async function invitationState(
+  db: Database,
+  userId: string,
+  now: Date,
+): Promise<InvitationState> {
+  const [mail] = await db
+    .select({ status: mailMessages.status })
+    .from(mailMessages)
+    .where(
+      and(
+        eq(mailMessages.userId, userId),
+        eq(mailMessages.type, 'staff_invitation'),
+      ),
+    )
+    .orderBy(desc(mailMessages.createdAt), desc(mailMessages.id))
+    .limit(1);
+  const [link] = await db
+    .select({ userId: staffEnrolments.userId })
+    .from(staffEnrolments)
+    .where(
+      and(
+        eq(staffEnrolments.userId, userId),
+        isNull(staffEnrolments.usedAt),
+        gt(staffEnrolments.expiresAt, now),
+      ),
+    )
+    .limit(1);
+  return { status: mail?.status ?? 'none', linkOpen: Boolean(link) };
+}
+
 export interface StaffPerson {
   userId: string;
   email: string | null;
@@ -619,6 +728,8 @@ export interface StaffPerson {
   grantedAt: string;
   /** False until their authenticator is confirmed; until then they count for nothing. */
   enrolled: boolean;
+  /** How the newest link is doing, while they haven't enrolled; null once they have. */
+  invitation: InvitationState | null;
   permissions: string[];
   additions: string[];
   removals: string[];
@@ -643,6 +754,7 @@ export function activeStaffList(db: Database): Promise<StaffPerson[]> {
       .where(isNull(staff.revokedAt))
       .orderBy(staff.grantedAt);
     const people: StaffPerson[] = [];
+    const now = new Date();
     for (const { confirmedAt, grantedAt, ...row } of rows) {
       const access = composeAccess(
         row.roleId,
@@ -653,6 +765,9 @@ export function activeStaffList(db: Database): Promise<StaffPerson[]> {
         ...row,
         grantedAt: grantedAt.toISOString(),
         enrolled: Boolean(confirmedAt),
+        invitation: confirmedAt
+          ? null
+          : await invitationState(db, row.userId, now),
         permissions: [...access.permissions].sort(),
         additions: access.additions,
         removals: access.removals,
@@ -664,9 +779,10 @@ export function activeStaffList(db: Database): Promise<StaffPerson[]> {
 
 /**
  * Adds a person by email and emails them a one-time enrolment link. An address proven on an account
- * uses that account; an address only claimed never does, since nobody has shown they own it. An
- * address whose mailbox matches any staff row is refused, removed people included: one person holds
- * one staff account, and bringing someone back is a deliberate `grant-owner`. The enrolment code
+ * uses that account; an address only claimed never does, since nobody has shown they own it. One
+ * person holds one staff account, so a mailbox matching active staff is refused. One matching only
+ * a removed person restores that same account, and only on their exact address. Any recovery
+ * waiting on the account is cancelled: a staff member's address doesn't move. The enrolment code
  * goes only into the email, sealed at rest.
  */
 export function addStaff(
@@ -679,7 +795,12 @@ export function addStaff(
     sealing: MailSealing;
     now?: Date;
   },
-): Promise<{ userId: string; roleId: string; enrolmentExpiresAt: string }> {
+): Promise<{
+  userId: string;
+  roleId: string;
+  enrolmentExpiresAt: string;
+  delivery: InvitationDelivery;
+}> {
   return guarded(async () => {
     const reason = checkedReason(input.reason);
     const email = normaliseEmail(input.email);
@@ -699,38 +820,85 @@ export function addStaff(
       mustHold(actor.held, permissions);
       const mailbox = normaliseStaffEmail(email);
       const everyone = await tx
-        .select({ email: users.email })
+        .select({
+          userId: staff.userId,
+          email: users.email,
+          verifiedAt: users.emailVerifiedAt,
+          revokedAt: staff.revokedAt,
+        })
         .from(staff)
         .innerJoin(users, eq(users.id, staff.userId));
+      const matches = everyone.filter(
+        (person) =>
+          person.email && normaliseStaffEmail(person.email) === mailbox,
+      );
+      const removed = matches.find(
+        (person) =>
+          person.revokedAt &&
+          person.verifiedAt &&
+          person.email?.toLowerCase() === email,
+      );
       if (
-        everyone.some(
-          (person) =>
-            person.email && normaliseStaffEmail(person.email) === mailbox,
-        )
+        matches.some((person) => !person.revokedAt) ||
+        (matches.length > 0 && !removed)
       )
         throw new OperationError('STAFF_EMAIL_TAKEN');
-      const [existing] = await tx
-        .select({ id: users.id })
-        .from(users)
-        .where(verifiedOwner(email));
-      const userId = existing?.id ?? newId();
+      const [proven] = removed
+        ? [{ id: removed.userId }]
+        : await tx
+            .select({ id: users.id })
+            .from(users)
+            .where(verifiedOwner(email));
+      // Recovery rows before the account row: the order completing a recovery takes them in.
+      let recoveriesCancelled = 0;
+      if (proven) {
+        const open = (table: typeof emailRecoveries | typeof phoneRecoveries) =>
+          and(
+            eq(table.userId, proven.id),
+            isNull(table.cancelledAt),
+            isNull(table.completedAt),
+          );
+        const emails = await tx
+          .update(emailRecoveries)
+          .set({ cancelledAt: now })
+          .where(open(emailRecoveries))
+          .returning({ id: emailRecoveries.id });
+        const phones = await tx
+          .update(phoneRecoveries)
+          .set({ cancelledAt: now })
+          .where(open(phoneRecoveries))
+          .returning({ id: phoneRecoveries.id });
+        recoveriesCancelled = emails.length + phones.length;
+        const [held] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, proven.id), verifiedOwner(email)))
+          .for('update');
+        // A recovery finished while this waited: the address is no longer theirs.
+        if (!held) throw new OperationError('STAFF_CHANGED');
+      }
+      const userId = proven?.id ?? newId();
       // Signing in still needs a code sent to the address, as with grant-owner.
-      if (!existing)
+      if (!proven)
         await tx
           .insert(users)
           .values({ id: userId, email, emailVerifiedAt: now });
-      await tx
-        .insert(staff)
-        .values({ userId, roleId: role.id, grantedAt: now });
+      if (removed)
+        await tx
+          .update(staff)
+          .set({ roleId: role.id, grantedAt: now, revokedAt: null })
+          .where(eq(staff.userId, userId));
+      else
+        await tx
+          .insert(staff)
+          .values({ userId, roleId: role.id, grantedAt: now });
       await dropOpsAccess(tx, userId, now);
-      const enrolment = await issueEnrolment(tx, userId, now);
-      await enqueueMail(tx, input.sealing, {
-        type: 'staff_invitation',
-        to: email,
+      // Removal clears these; a row revoked before that rule might still hold some.
+      const cleared = removed ? await clearOverrides(tx, userId) : {};
+      const link = await sendEnrolmentLink(tx, input.sealing, {
         userId,
-        data: { code: enrolment.code, kind: 'invited' },
-        dedupeKey: `staff_invitation.${newId()}`,
-        expiresAt: enrolment.expiresAt,
+        to: email,
+        kind: 'invited',
         now,
       });
       await recordAudit(tx, {
@@ -743,15 +911,77 @@ export function addStaff(
           role: { id: role.id, name: role.name },
           permissions: permissions.sort(),
           email: maskEmail(email),
-          account: existing ? 'existing' : 'new',
+          account: proven ? 'existing' : 'new',
+          restored: Boolean(removed),
+          recoveriesCancelled,
+          delivery: link.delivery,
+          ...cleared,
         }),
         now,
       });
-      return {
+      return { userId, roleId: role.id, ...link };
+    });
+  });
+}
+
+/**
+ * Sends a new invitation to someone who hasn't enrolled, voiding the old link. Whoever could have
+ * invited them can: the actor holds their whole access, only an owner does this for an owner, and
+ * release_check stays with the server command.
+ */
+export function resendInvitation(
+  db: Database,
+  input: {
+    actorId: string;
+    userId: string;
+    reason: string;
+    sealing: MailSealing;
+    now?: Date;
+  },
+): Promise<{ enrolmentExpiresAt: string; delivery: InvitationDelivery }> {
+  return guarded(async () => {
+    const reason = checkedReason(input.reason);
+    const now = input.now ?? new Date();
+    return db.transaction(async (tx) => {
+      const actor = await authorise(tx, input.actorId);
+      const { id: userId, access } = await targetOrThrow(
+        tx,
+        actor.id,
+        input.userId,
+      );
+      if (access.roleId === 'release_check')
+        throw new OperationError('ROLE_PROTECTED');
+      if (access.roleId === 'owner' && actor.roleId !== 'owner')
+        throw new OperationError('PERMISSION_NOT_HELD');
+      mustHold(actor.held, access.permissions);
+      const [authenticator] = await tx
+        .select({ confirmedAt: staffTotp.confirmedAt })
+        .from(staffTotp)
+        .where(eq(staffTotp.userId, userId));
+      if (authenticator?.confirmedAt)
+        throw new OperationError('STAFF_ALREADY_ENROLLED');
+      const to = await provenEmailOrThrow(tx, userId);
+      // Also drops an authenticator started on the old link and never confirmed.
+      await dropOpsAccess(tx, userId, now);
+      const link = await sendEnrolmentLink(tx, input.sealing, {
         userId,
-        roleId: role.id,
-        enrolmentExpiresAt: enrolment.expiresAt.toISOString(),
-      };
+        to,
+        kind: 'invited',
+        now,
+      });
+      await recordAudit(tx, {
+        staffUserId: actor.id,
+        action: 'staff.invitation_resent',
+        permission: MANAGE,
+        subjectType: 'user',
+        subjectId: userId,
+        reason: withAuditChange(reason, {
+          linkSentTo: maskEmail(to),
+          delivery: link.delivery,
+        }),
+        now,
+      });
+      return link;
     });
   });
 }
@@ -797,7 +1027,6 @@ export function removeStaff(
         .returning({ userId: staff.userId });
       if (removed.length === 0) throw new OperationError('STAFF_CHANGED');
       await dropOpsAccess(tx, userId, now);
-      await voidEnrolments(tx, userId, now);
       const cleared = await clearOverrides(tx, userId);
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
@@ -838,7 +1067,7 @@ export function resetAuthenticator(
     sealing: MailSealing;
     now?: Date;
   },
-): Promise<{ enrolmentExpiresAt: string }> {
+): Promise<{ enrolmentExpiresAt: string; delivery: InvitationDelivery }> {
   return guarded(async () => {
     const reason = checkedReason(input.reason);
     const now = input.now ?? new Date();
@@ -847,30 +1076,16 @@ export function resetAuthenticator(
       if (actor.roleId !== 'owner')
         throw new OperationError('PERMISSION_NOT_HELD');
       const { id: userId } = await targetOrThrow(tx, actor.id, input.userId);
-      const [account] = await tx
-        .select({ email: users.email })
-        .from(users)
-        .where(
-          and(
-            eq(users.id, userId),
-            isNotNull(users.emailVerifiedAt),
-            isNull(users.deletedAt),
-          ),
-        );
-      if (!account?.email) throw new OperationError('STAFF_NO_EMAIL');
+      const to = await provenEmailOrThrow(tx, userId);
       const [authenticator] = await tx
         .select({ userId: staffTotp.userId })
         .from(staffTotp)
         .where(eq(staffTotp.userId, userId));
       await dropOpsAccess(tx, userId, now);
-      const enrolment = await issueEnrolment(tx, userId, now);
-      await enqueueMail(tx, input.sealing, {
-        type: 'staff_invitation',
-        to: account.email,
+      const link = await sendEnrolmentLink(tx, input.sealing, {
         userId,
-        data: { code: enrolment.code, kind: 'reset' },
-        dedupeKey: `staff_invitation.${newId()}`,
-        expiresAt: enrolment.expiresAt,
+        to,
+        kind: 'reset',
         now,
       });
       await recordAudit(tx, {
@@ -881,11 +1096,12 @@ export function resetAuthenticator(
         subjectId: userId,
         reason: withAuditChange(reason, {
           authenticatorRemoved: Boolean(authenticator),
-          linkSentTo: maskEmail(account.email),
+          linkSentTo: maskEmail(to),
+          delivery: link.delivery,
         }),
         now,
       });
-      return { enrolmentExpiresAt: enrolment.expiresAt.toISOString() };
+      return link;
     });
   });
 }

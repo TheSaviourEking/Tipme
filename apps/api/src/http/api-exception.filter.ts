@@ -37,7 +37,13 @@ const messages: Record<ApiErrorCode, string> = {
   ROLE_HAS_FORMER_HOLDERS:
     'People who were removed held this role, and their history keeps it, so it can’t be deleted. You can rename it or untick its permissions.',
   STAFF_EMAIL_TAKEN:
-    'That email belongs to someone who is or was staff. A removed person comes back through grant-owner.',
+    'That mailbox already belongs to staff (dots and +tags count as the same address). To bring back someone removed, use their exact address.',
+  STAFF_EMAIL_LOCKED:
+    'Staff can’t change their sign-in email here. Ask an owner to do it for you.',
+  STAFF_CANNOT_DELETE:
+    'Staff accounts can’t be deleted. Ask an owner to remove your staff access first.',
+  STAFF_ALREADY_ENROLLED:
+    'This person has already set up their authenticator. An owner can reset it instead.',
   STAFF_NO_EMAIL:
     'This person has no verified email to send a link to. Use grant-owner on the server.',
   VALIDATION_FAILED: 'The request was not valid.',
@@ -186,6 +192,9 @@ const operationErrors: Partial<
   ROLE_HAS_FORMER_HOLDERS: { status: 409, code: 'ROLE_HAS_FORMER_HOLDERS' },
   STAFF_EMAIL_TAKEN: { status: 409, code: 'STAFF_EMAIL_TAKEN' },
   STAFF_NO_EMAIL: { status: 409, code: 'STAFF_NO_EMAIL' },
+  STAFF_EMAIL_LOCKED: { status: 409, code: 'STAFF_EMAIL_LOCKED' },
+  STAFF_CANNOT_DELETE: { status: 409, code: 'STAFF_CANNOT_DELETE' },
+  STAFF_ALREADY_ENROLLED: { status: 409, code: 'STAFF_ALREADY_ENROLLED' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },
   QUOTE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },

@@ -80,3 +80,14 @@ export const SEVERITY_LABELS: Record<string, string> = {
 /** An emailed enrolment link: `/ops#enrol=<code>`. The fragment never reaches a server or a log. */
 export const ENROL_LINK_PREFIX = '#enrol=';
 export const ENROL_LINK_KEY = 'tipme.enrol-link';
+
+/** Takes an enrolment code out of the address bar and this tab's storage, whatever happened next. */
+export function clearEnrolLink(): void {
+  if (location.hash.startsWith(ENROL_LINK_PREFIX))
+    history.replaceState(null, '', location.pathname + location.search);
+  try {
+    sessionStorage.removeItem(ENROL_LINK_KEY);
+  } catch {
+    // Storage blocked: nothing was kept.
+  }
+}

@@ -26,7 +26,14 @@ import { maskEmail, normaliseEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
-import { dropOpsAccess, isActiveStaff } from './staff.js';
+import {
+  dropOpsAccess,
+  isActiveStaff,
+  lockedActiveStaff,
+  looksLikeAuditChange,
+  voidEnrolments,
+  withAuditChange,
+} from './staff.js';
 
 export const EMAIL_CODE_TTL_MS = 10 * 60_000;
 export const EMAIL_CODES_PER_HOUR = 3;
@@ -325,31 +332,33 @@ export function requestEmailChangeCode(
   db: Database,
   sealing: MailSealing,
   input: { userId: string; email: string; secret: string; now?: Date },
-): Promise<{ status: 'sent' | 'rate_limited' | 'locked' }> {
+): Promise<{ status: 'sent' | 'rate_limited' | 'locked' | 'staff_account' }> {
   const email = normaliseEmail(input.email);
   if (!email) return Promise.resolve({ status: 'sent' });
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => ({
-      status: await issueEmailCode(tx, sealing, {
-        email,
-        purpose: 'email_change',
-        mailType: 'email_change_code',
-        secret: input.secret,
-        userId: input.userId,
-        now,
-      }),
+      status: (await isActiveStaff(tx, input.userId))
+        ? ('staff_account' as const)
+        : await issueEmailCode(tx, sealing, {
+            email,
+            purpose: 'email_change',
+            mailType: 'email_change_code',
+            secret: input.secret,
+            userId: input.userId,
+            now,
+          }),
     })),
   );
 }
 
 export type EmailChangeResult =
   | { status: 'ok'; email: string; handle: string | null }
-  | { status: 'invalid' | 'expired' | 'locked' | 'taken' };
+  | { status: 'invalid' | 'expired' | 'locked' | 'taken' | 'staff_account' };
 
 /**
- * Moves the account to a proven new address: the old address is told, every other session ends,
- * and staff access must be set up again, as when a phone number changes.
+ * Moves the account to a proven new address: the old address is told and every other session ends.
+ * Refused for active staff: an owner's reset is emailed here, so moving it is a server-side decision.
  */
 export function changeEmail(
   db: Database,
@@ -368,6 +377,8 @@ export function changeEmail(
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx): Promise<EmailChangeResult> => {
+      if (await lockedActiveStaff(tx, input.userId))
+        return { status: 'staff_account' };
       const checked = await checkEmailCode(tx, {
         email,
         purpose: 'email_change',
@@ -441,17 +452,8 @@ export function changeEmail(
             ne(sessions.id, input.keepSessionId),
           ),
         );
-      const wasStaff = await isActiveStaff(tx, input.userId);
+      // Not staff (checked above), but a removed person's leftovers must not survive the move.
       await dropOpsAccess(tx, input.userId, now);
-      if (wasStaff)
-        await enqueueMail(tx, sealing, {
-          type: 'staff_access_notice',
-          to: email,
-          userId: input.userId,
-          data: { change: 'removed' },
-          dedupeKey: `staff_access_notice.${input.userId}.${now.getTime()}`,
-          now,
-        });
       const [page] = await tx
         .select({ handle: profiles.handleLower })
         .from(profiles)
@@ -467,7 +469,8 @@ export function setAccountEmail(
   input: { handle: string; email: string; reason: string; now?: Date },
 ): Promise<'set' | 'taken' | 'not_found' | 'invalid'> {
   const email = normaliseEmail(input.email);
-  if (!email) return Promise.resolve('invalid');
+  if (!email || looksLikeAuditChange(input.reason))
+    return Promise.resolve('invalid');
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -481,16 +484,27 @@ export function setAccountEmail(
         .from(users)
         .where(verifiedOwner(email));
       if (owner && owner.id !== page.userId) return 'taken';
+      // The one route that may move a staff account: whoever runs it vouches, and it's logged.
+      const isStaff = await lockedActiveStaff(tx, page.userId);
+      const [before] = await tx
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, page.userId));
       await tx
         .update(users)
         .set({ email, emailVerifiedAt: now })
         .where(eq(users.id, page.userId));
+      if (isStaff) await voidEnrolments(tx, page.userId, now);
       await recordAudit(tx, {
         staffUserId: null,
         action: 'account.email_set_by_script',
         subjectType: 'user',
         subjectId: page.userId,
-        reason: input.reason,
+        reason: withAuditChange(input.reason, {
+          from: before?.email ? maskEmail(before.email) : null,
+          to: maskEmail(email),
+          staff: isStaff,
+        }),
         now,
       });
       return 'set';

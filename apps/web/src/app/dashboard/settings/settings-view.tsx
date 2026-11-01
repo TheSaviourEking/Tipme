@@ -20,6 +20,9 @@ import { PaymentAccountCard } from './payment-account-card';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 
+const STAFF_EMAIL_LOCKED_NOTE =
+  'Staff can’t change their sign-in email here. Ask an owner to do it for you.';
+
 function PageState() {
   const { profile, setProfile } = useRecipient();
   const host = useSiteHost();
@@ -958,7 +961,12 @@ function ContactDetails() {
       if (result.ok) {
         setEmailStep('code');
         setEmailNote(`We sent a code to ${email.trim()}.`);
-      } else setEmailNote('Check the email address and try again.');
+      } else
+        setEmailNote(
+          result.code === 'STAFF_EMAIL_LOCKED'
+            ? STAFF_EMAIL_LOCKED_NOTE
+            : 'Check the email address and try again.',
+        );
       return;
     }
     const result = await apiFetch<{ email: string }>('/v1/me/email/confirm', {
@@ -985,9 +993,11 @@ function ContactDetails() {
       setEmailNote(
         result.code === 'EMAIL_TAKEN'
           ? 'That email belongs to another account. Try a different one.'
-          : result.code === 'SIGN_IN_LOCKED'
-            ? 'Too many wrong codes. Please wait 15 minutes and try again.'
-            : 'That code isn’t right or has expired.',
+          : result.code === 'STAFF_EMAIL_LOCKED'
+            ? STAFF_EMAIL_LOCKED_NOTE
+            : result.code === 'SIGN_IN_LOCKED'
+              ? 'Too many wrong codes. Please wait 15 minutes and try again.'
+              : 'That code isn’t right or has expired.',
       );
     }
   };
@@ -1144,7 +1154,9 @@ function DeletePage() {
     setError(
       result.code === 'HAS_BALANCE'
         ? 'You can’t delete your page while money is still confirming or in your balance.'
-        : 'We couldn’t delete your page. Please try again.',
+        : result.code === 'STAFF_CANNOT_DELETE'
+          ? 'Staff accounts can’t be deleted. Ask an owner to remove your staff access first.'
+          : 'We couldn’t delete your page. Please try again.',
     );
   };
   return (

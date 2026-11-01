@@ -457,7 +457,7 @@ test('staff access', async (t) => {
   );
 
   await t.test(
-    'a completed phone recovery removes ops access too',
+    'a phone recovery that comes due on active staff is cancelled, and their access stays',
     async () => {
       await database.fresh();
       const { userId } = await enrolledOwner(database.db);
@@ -470,8 +470,14 @@ test('staff access', async (t) => {
       const [user] = await q('SELECT phone_e164 FROM users WHERE id = $1', [
         userId,
       ]);
-      assert.equal(user.phone_e164, '+2348035550122');
-      assert.equal(await database.count('staff_totp'), 0);
+      assert.notEqual(user.phone_e164, '+2348035550122');
+      assert.equal(await database.count('staff_totp'), 1);
+      const [recovery] = await q(
+        'SELECT cancelled_at, completed_at FROM phone_recoveries WHERE user_id = $1',
+        [userId],
+      );
+      assert.ok(recovery.cancelled_at);
+      assert.equal(recovery.completed_at, null);
     },
   );
 });

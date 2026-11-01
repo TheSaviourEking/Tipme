@@ -47,12 +47,21 @@ export type OperationErrorCode =
   | 'LAST_OWNER'
   | 'ROLE_HAS_FORMER_HOLDERS'
   | 'STAFF_EMAIL_TAKEN'
-  | 'STAFF_NO_EMAIL';
+  | 'STAFF_NO_EMAIL'
+  | 'STAFF_EMAIL_LOCKED'
+  | 'STAFF_CANNOT_DELETE'
+  | 'STAFF_ALREADY_ENROLLED';
 
-/** Expected business outcomes callers map to responses; never carries request values. */
+/**
+ * Expected business outcomes callers map to responses; never carries request values. `detail` is
+ * for a server operator's console (masked data only) and never reaches an API response.
+ */
 export class OperationError extends Error {
   override readonly name = 'OperationError';
-  constructor(readonly code: OperationErrorCode) {
+  constructor(
+    readonly code: OperationErrorCode,
+    readonly detail?: string,
+  ) {
     super(code);
   }
 }

@@ -942,6 +942,15 @@ export interface OpsStaffAdded {
   userId: string;
   roleId: string;
   enrolmentExpiresAt: string;
+  /** 'suppressed': the address is known not to accept mail, so the link won't arrive. */
+  delivery: OpsInvitationDelivery;
+}
+
+export type OpsInvitationDelivery = 'queued' | 'suppressed';
+
+export interface OpsEnrolmentLinkSent {
+  enrolmentExpiresAt: string;
+  delivery: OpsInvitationDelivery;
 }
 
 export interface OpsStaffPerson {
@@ -951,6 +960,8 @@ export interface OpsStaffPerson {
   roleName: string;
   grantedAt: string;
   enrolled: boolean;
+  /** The newest link's email state and whether it can still be used; null once enrolled. */
+  invitation: { status: string; linkOpen: boolean } | null;
   permissions: string[];
   additions: string[];
   removals: string[];
