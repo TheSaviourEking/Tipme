@@ -1,3 +1,12 @@
+# Current task — staging reusable-workflow permission fix (1 November 2026)
+
+- Branch/worktree: `fix/staging-reusable-workflow-permissions` / `.worktrees/staging-workflow-fix`, from `origin/main` at `62d68aa`.
+- Failure: staging runs `41270562653` and `41270824881` stopped at workflow validation, before jobs started. The reusable CI `changes` job requests `statuses: read`, but the staging caller granted only `contents: read` and `pull-requests: read`.
+- Fix implemented: grant `statuses: read` at the reusable-workflow call and enforce the caller/callee permission contract with `scripts/workflow-contracts.test.mjs`. The regression was observed failing with the missing permission before the fix and passing after it.
+- Production run `41270923950` then failed by design because this file tree had no full staging pass. Do not override that gate; deploy staging successfully first.
+- Verified after building the fresh worktree: `pnpm build` (10/10), `pnpm test` (154/154 script tests and 20/20 Turbo tasks), `pnpm lint` (17/17), `pnpm typecheck` (17/17), `pnpm format:check`, and `git diff --check` passed. The first sandboxed `pnpm test` attempt was invalid because packages were not built and localhost listeners were denied; it was rerun after the build with localhost permission.
+- No deployment, environment change or payment operation was performed. The verified fix is prepared for a PR against `main`; after merge, obtain a full staging pass before retrying production.
+
 # Current task — handoff (31 October 2026)
 
 The agent that built the mail platform, the WAL retention coordinator and the live-pilot design handed over. The full state, the priorities and the commands are in `docs/agent/HANDOFF.md` → "Current handoff — mail platform, staging backups and the live pilot".
