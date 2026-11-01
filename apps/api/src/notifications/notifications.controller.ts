@@ -245,6 +245,7 @@ export class NotificationsController {
       code: body.code,
       secret: this.config.AUTH_CODE_SECRET,
       keepSessionId: auth.sessionId,
+      requirePage: true,
     });
     const profile = await getMyProfile(this.database.db, auth.userId);
     // A public phone number must change on the page at once.

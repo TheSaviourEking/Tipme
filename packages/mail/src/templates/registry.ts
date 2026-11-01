@@ -32,7 +32,10 @@ import { emailVerificationLink } from './types/email-verification-link.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
 import { providerTest } from './types/provider-test.js';
 import { recoveryLink } from './types/recovery-link.js';
-import { staffInvitation } from './types/staff-invitation.js';
+import {
+  staffInvitation,
+  staffInvitationDeclined,
+} from './types/staff-invitation.js';
 import { tipReceived } from './types/tip-received.js';
 import { weeklyReport } from './types/weekly-report.js';
 
@@ -45,6 +48,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     emailVerificationLink,
     recoveryLink,
     staffInvitation,
+    staffInvitationDeclined,
     phoneChangeWarning,
     providerTest,
     signInCode,

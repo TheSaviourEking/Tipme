@@ -23,7 +23,9 @@ import {
 import {
   confirmEnrolmentAndOpenGrant,
   declineInvitation,
+  isUnenrolledInvitee,
   listAudit,
+  type MailSealing,
   openOpsGrant,
   opsEnrolmentState,
   resolveOpsGrant,
@@ -42,6 +44,7 @@ import {
   setOpsCookie,
 } from '../auth/cookies.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { CurrentUser, type AuthContext } from '../auth/session.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -61,6 +64,7 @@ export class OpsAccessController {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {
     this.key = Buffer.from(config.OPS_TOTP_KEY, 'base64');
   }
@@ -91,7 +95,16 @@ export class OpsAccessController {
     }
     const state = await opsEnrolmentState(this.database.db, auth.userId);
     return {
-      data: { state: state === 'enrolled' ? 'needs_code' : 'needs_enrolment' },
+      data:
+        state === 'enrolled'
+          ? { state: 'needs_code' }
+          : {
+              state: 'needs_enrolment',
+              canDecline: await isUnenrolledInvitee(
+                this.database.db,
+                auth.userId,
+              ),
+            },
     };
   }
 
@@ -158,7 +171,10 @@ export class OpsAccessController {
   async decline(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<{ declined: true }>> {
-    await declineInvitation(this.database.db, { userId: auth.userId });
+    await declineInvitation(this.database.db, {
+      userId: auth.userId,
+      sealing: this.sealing,
+    });
     return { data: { declined: true } };
   }
 

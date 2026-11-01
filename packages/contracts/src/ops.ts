@@ -22,7 +22,7 @@ export interface OpsEnrolment {
 
 /** What `/v1/ops/me` tells a staff member; everyone else gets 404. */
 export type OpsMe =
-  | { state: 'needs_enrolment' }
+  | { state: 'needs_enrolment'; canDecline: boolean }
   | { state: 'needs_code' }
   | { state: 'granted'; role: string; permissions: string[] };
 

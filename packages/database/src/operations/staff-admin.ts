@@ -898,7 +898,12 @@ export function addStaff(
       if (removed)
         await tx
           .update(staff)
-          .set({ roleId: role.id, grantedAt: now, revokedAt: null })
+          .set({
+            roleId: role.id,
+            grantedAt: now,
+            revokedAt: null,
+            enrolledAt: null,
+          })
           .where(eq(staff.userId, userId));
       else
         await tx

@@ -1327,6 +1327,9 @@ export const staff = pgTable('staff', {
     .references(() => roles.id),
   grantedAt: timestamp('granted_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  // First confirmed an authenticator. Outlives losing it (a reset, grant-owner); only being granted
+  // access again after removal clears it. Null is what makes someone a mere invitee.
+  enrolledAt: timestamp('enrolled_at', { withTimezone: true }),
 });
 
 /** A person's adjustments on top of their role; they stay when the role changes. */

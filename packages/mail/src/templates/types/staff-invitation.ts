@@ -51,3 +51,34 @@ export const staffInvitation = defineMailType({
     );
   },
 });
+
+/** To whoever invited them and to owners. A masked address: enough to recognise. */
+export const staffInvitationDeclined = defineMailType({
+  id: 'staff_invitation_declined',
+  category: 'security',
+  sender: 'security',
+  preference: null,
+  schema: z
+    .object({
+      personHint: z.string().max(260),
+      roleName: z.string().max(100),
+    })
+    .strict(),
+  sample: { personHint: 'a•••@example.com', roleName: 'Support' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'A TipMe admin invitation was declined',
+        heading: 'Invitation declined',
+        blocks: [
+          {
+            kind: 'text',
+            text: `${data.personHint} declined their invitation to the admin area (role: ${data.roleName}). They have no admin access, and they can be invited again.`,
+          },
+        ],
+        reason:
+          'You get this email because you invited this person or you are a TipMe owner.',
+      },
+      ctx,
+    ),
+});

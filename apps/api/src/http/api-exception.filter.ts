@@ -40,6 +40,8 @@ const messages: Record<ApiErrorCode, string> = {
     'That mailbox already belongs to staff (dots and +tags count as the same address). To bring back someone removed, use their exact address.',
   STAFF_EMAIL_LOCKED:
     'Staff can’t change their sign-in email here. Contact the owner, who can have it changed.',
+  STAFF_PHONE_LOCKED:
+    'Staff can’t change their phone number here. Contact the owner, who can have it changed.',
   STAFF_CANNOT_DELETE:
     'Staff accounts can’t be deleted. Ask an owner to remove your staff access first.',
   STAFF_ALREADY_ENROLLED:
@@ -193,6 +195,7 @@ const operationErrors: Partial<
   STAFF_EMAIL_TAKEN: { status: 409, code: 'STAFF_EMAIL_TAKEN' },
   STAFF_NO_EMAIL: { status: 409, code: 'STAFF_NO_EMAIL' },
   STAFF_EMAIL_LOCKED: { status: 409, code: 'STAFF_EMAIL_LOCKED' },
+  STAFF_PHONE_LOCKED: { status: 409, code: 'STAFF_PHONE_LOCKED' },
   STAFF_CANNOT_DELETE: { status: 409, code: 'STAFF_CANNOT_DELETE' },
   STAFF_ALREADY_ENROLLED: { status: 409, code: 'STAFF_ALREADY_ENROLLED' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },

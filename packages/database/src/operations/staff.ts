@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '@tipme/domain';
-import { and, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  auditEvents,
   OPS_PERMISSIONS,
   type OpsPermission,
   opsLockouts,
@@ -23,7 +24,7 @@ import {
 } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
 import { mailOwner } from './account-mail.js';
-import type { MailSealing } from './mail-queue.js';
+import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { openSecret, sealSecret } from './secret-box.js';
@@ -141,23 +142,98 @@ export async function lockedActiveStaff(
   return isActiveStaff(tx, userId);
 }
 
+/** Whether this person is active staff who has never enrolled: a mere invitee. */
+export async function isUnenrolledInvitee(
+  tx: Database | Tx,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ enrolledAt: staff.enrolledAt })
+    .from(staff)
+    .where(and(eq(staff.userId, userId), isNull(staff.revokedAt)));
+  return Boolean(row) && !row?.enrolledAt;
+}
+
+/** Tells whoever invited them, and every owner who can act, that an invitation was turned down. */
+async function mailInvitationDeclined(
+  tx: Tx,
+  sealing: MailSealing,
+  input: { userId: string; roleName: string; now: Date },
+): Promise<void> {
+  const [person] = await tx
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, input.userId));
+  const [invite] = await tx
+    .select({ inviter: auditEvents.staffUserId })
+    .from(auditEvents)
+    .where(
+      and(
+        eq(auditEvents.action, 'staff.added'),
+        eq(auditEvents.subjectId, input.userId),
+      ),
+    )
+    .orderBy(desc(auditEvents.seq))
+    .limit(1);
+  const recipients = await tx
+    .select({ userId: users.id, email: users.email, roleId: staff.roleId })
+    .from(staff)
+    .innerJoin(users, eq(users.id, staff.userId))
+    .innerJoin(staffTotp, eq(staffTotp.userId, staff.userId))
+    .where(
+      and(
+        isNull(staff.revokedAt),
+        isNotNull(staffTotp.confirmedAt),
+        isNotNull(users.emailVerifiedAt),
+        isNull(users.deletedAt),
+        ne(staff.userId, input.userId),
+      ),
+    );
+  for (const recipient of recipients)
+    if (
+      recipient.email &&
+      (recipient.roleId === 'owner' || recipient.userId === invite?.inviter)
+    )
+      await enqueueMail(tx, sealing, {
+        type: 'staff_invitation_declined',
+        to: recipient.email,
+        userId: recipient.userId,
+        data: {
+          personHint: person?.email ? maskEmail(person.email) : 'Someone',
+          roleName: input.roleName,
+        },
+        dedupeKey: `staff_invitation_declined.${input.userId}.${recipient.userId}.${newId()}`,
+        now: input.now,
+      });
+}
+
 /**
- * Ends the staff access of someone who hasn't enrolled, at their own request: they never had the
- * use of it, so they don't need anyone's say-so. The caller holds the staff-admin lock, and has
- * checked they aren't enrolled.
+ * Ends the staff access of a mere invitee, at their own request: they never had the use of it, so
+ * they need nobody's say-so. The caller holds the staff-admin lock. The update is conditional on
+ * the marker, so a confirmation committing at this moment wins.
  */
 export async function revokeUnenrolled(
   tx: Tx,
-  userId: string,
-  via: 'declined' | 'account_deleted',
-  now: Date,
+  input: {
+    userId: string;
+    via: 'declined' | 'account_deleted';
+    sealing: MailSealing;
+    now: Date;
+  },
 ): Promise<void> {
+  const { userId, via, now } = input;
   const [row] = await tx
     .update(staff)
     .set({ revokedAt: now })
-    .where(and(eq(staff.userId, userId), isNull(staff.revokedAt)))
+    .where(
+      and(
+        eq(staff.userId, userId),
+        isNull(staff.revokedAt),
+        isNull(staff.enrolledAt),
+      ),
+    )
     .returning({ roleId: staff.roleId });
-  if (!row) throw new OperationError('STAFF_NOT_FOUND');
+  if (!row) throw new OperationError('STAFF_ALREADY_ENROLLED');
   const [role] = await tx
     .select({ id: roles.id, name: roles.name })
     .from(roles)
@@ -176,32 +252,33 @@ export async function revokeUnenrolled(
     }),
     now,
   });
+  await mailInvitationDeclined(tx, input.sealing, {
+    userId,
+    roleName: role?.name ?? row.roleId,
+    now,
+  });
 }
 
-/** Whether this person has a confirmed authenticator. */
-export async function isEnrolled(
-  tx: Database | Tx,
-  userId: string,
-): Promise<boolean> {
-  const [row] = await tx
-    .select({ confirmedAt: staffTotp.confirmedAt })
-    .from(staffTotp)
-    .where(eq(staffTotp.userId, userId));
-  return Boolean(row?.confirmedAt);
-}
-
-/** An invited person turning it down, from their own session. Their account stays. */
+/**
+ * An invited person turning it down, from their own session. Their account stays. Only for someone
+ * who has never enrolled: anyone who has is an owner's decision, even mid-reset.
+ */
 export function declineInvitation(
   db: Database,
-  input: { userId: string; now?: Date },
+  input: { userId: string; sealing: MailSealing; now?: Date },
 ): Promise<void> {
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
       await lockStaffAdmin(tx);
-      if (await isEnrolled(tx, input.userId))
-        throw new OperationError('STAFF_ALREADY_ENROLLED');
-      await revokeUnenrolled(tx, input.userId, 'declined', now);
+      if (!(await lockedActiveStaff(tx, input.userId)))
+        throw new OperationError('STAFF_NOT_FOUND');
+      await revokeUnenrolled(tx, {
+        userId: input.userId,
+        via: 'declined',
+        sealing: input.sealing,
+        now,
+      });
     }),
   );
 }
@@ -499,7 +576,13 @@ export function grantOwner(
         .values({ userId, roleId: role, grantedAt: now })
         .onConflictDoUpdate({
           target: staff.userId,
-          set: { roleId: role, grantedAt: now, revokedAt: null },
+          // Coming back after removal starts over; a lost phone or a repeat keeps the marker.
+          set: {
+            roleId: role,
+            grantedAt: now,
+            revokedAt: null,
+            ...(previous?.revokedAt ? { enrolledAt: null } : {}),
+          },
         });
       await dropOpsAccess(tx, userId, now);
       const { code: enrolmentCode } = await issueEnrolment(tx, userId, now);
@@ -651,6 +734,11 @@ export async function checkStaffCode(
     .update(staffTotp)
     .set({ lastStep: result.step, confirmedAt: row.confirmedAt ?? input.now })
     .where(eq(staffTotp.userId, input.userId));
+  if (!row.confirmedAt)
+    await tx
+      .update(staff)
+      .set({ enrolledAt: input.now })
+      .where(and(eq(staff.userId, input.userId), isNull(staff.enrolledAt)));
   await tx.delete(opsLockouts).where(eq(opsLockouts.userId, input.userId));
   return 'ok';
 }

@@ -19,10 +19,15 @@ import {
   emailTokens,
   profiles,
   sessions,
+  staff,
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { maskEmail, normaliseEmail } from './email-address.js';
+import {
+  maskEmail,
+  normaliseEmail,
+  normaliseStaffEmail,
+} from './email-address.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
@@ -30,6 +35,7 @@ import {
   dropOpsAccess,
   isActiveStaff,
   lockedActiveStaff,
+  lockStaffAdmin,
   looksLikeAuditChange,
   voidEnrolments,
   withAuditChange,
@@ -476,13 +482,23 @@ export function setAccountEmail(
     sealing?: MailSealing;
     now?: Date;
   },
-): Promise<'set' | 'taken' | 'not_found' | 'invalid' | 'bad_reason'> {
+): Promise<
+  | 'set'
+  | 'taken'
+  | 'not_found'
+  | 'invalid'
+  | 'bad_reason'
+  | 'needs_mail_key'
+  | 'staff_mailbox_taken'
+> {
   const email = normaliseEmail(input.email);
   if (!email) return Promise.resolve('invalid');
   if (looksLikeAuditChange(input.reason)) return Promise.resolve('bad_reason');
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
+      // Who is staff must hold still, and it keeps this in the order deleting an account uses.
+      await lockStaffAdmin(tx);
       const current =
         'currentEmail' in input ? normaliseEmail(input.currentEmail) : null;
       const [page] =
@@ -505,6 +521,21 @@ export function setAccountEmail(
       if (owner && owner.id !== page.userId) return 'taken';
       // The one route that may move a staff account: whoever runs it vouches, and it's logged.
       const isStaff = await lockedActiveStaff(tx, page.userId);
+      // Someone's staff address must not move unseen: without a key the old one can't be told.
+      if (isStaff && !input.sealing) return 'needs_mail_key';
+      const mailbox = normaliseStaffEmail(email);
+      const others = await tx
+        .select({ email: users.email })
+        .from(staff)
+        .innerJoin(users, eq(users.id, staff.userId))
+        .where(and(isNull(staff.revokedAt), ne(staff.userId, page.userId)));
+      if (
+        others.some(
+          (other) =>
+            other.email && normaliseStaffEmail(other.email) === mailbox,
+        )
+      )
+        return 'staff_mailbox_taken';
       const [before] = await tx
         .select({ email: users.email, verifiedAt: users.emailVerifiedAt })
         .from(users)

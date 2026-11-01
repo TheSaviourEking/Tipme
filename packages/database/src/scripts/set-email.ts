@@ -48,6 +48,10 @@ if (
             ? `Not changed: no page @${handle}.`
             : 'Not changed: no account has that verified email.',
           invalid: 'Not changed: that is not a valid email address.',
+          needs_mail_key:
+            'Not changed: this is a staff account, so the old address must be told. Set MAIL_SEAL_KEY and run this again.',
+          staff_mailbox_taken:
+            'Not changed: that mailbox belongs to another active staff member (dots and +tags count as the same address).',
           bad_reason:
             'Not changed: the reason can’t contain "[change:", which the log keeps for its own record.',
         }[outcome],

@@ -1,6 +1,6 @@
 'use client';
 import QRCode from 'qrcode';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { OpsEnrolment } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
 import {
@@ -17,6 +17,12 @@ const problems: Record<string, string> = {
     'That code didn’t work. Wait for the next code in your app and try again.',
   OPS_LOCKED: 'Too many wrong codes. Admin access is locked for 15 minutes.',
   RATE_LIMITED: 'Too many attempts. Please wait a minute and try again.',
+};
+const declineProblems: Record<string, string> = {
+  STAFF_ALREADY_ENROLLED:
+    'You’ve set up admin access before, so it can’t be declined here. Contact the owner.',
+  NOT_FOUND:
+    'This invitation is no longer active, so there’s nothing to decline.',
 };
 const problem = (code: string) =>
   problems[code] ?? 'Something went wrong. Please try again.';
@@ -55,7 +61,13 @@ function linkedEnrolmentCode(): string {
  * First visit: the enrolment code from the emailed link or `pnpm ops:grant-owner`, then the app's
  * first code.
  */
-export function OpsEnrol({ onDone }: { onDone: () => void }) {
+export function OpsEnrol({
+  onDone,
+  canDecline,
+}: {
+  onDone: () => void;
+  canDecline: boolean;
+}) {
   const id = useId();
   // This step only renders after the client has asked for the admin state, never on the server.
   const [linkedCode] = useState(linkedEnrolmentCode);
@@ -66,6 +78,21 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [declining, setDeclining] = useState(false);
+  const [declineClosed, setDeclineClosed] = useState(false);
+  const declineButton = useRef<HTMLButtonElement>(null);
+  const confirmation = useRef<HTMLDivElement>(null);
+  const errorBox = useRef<HTMLDivElement>(null);
+  const backToButton = useRef(false);
+  useEffect(() => {
+    if (declining) confirmation.current?.focus();
+    else if (backToButton.current) declineButton.current?.focus();
+    backToButton.current = false;
+  }, [declining]);
+
+  const cancelDecline = () => {
+    backToButton.current = true;
+    setDeclining(false);
+  };
 
   const decline = async () => {
     setBusy(true);
@@ -74,9 +101,18 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
       method: 'POST',
       body: {},
     });
+    if (result.ok) {
+      window.location.assign('/dashboard');
+      return;
+    }
     setBusy(false);
-    if (result.ok) window.location.assign('/dashboard');
-    else setError(problem(result.code));
+    setError(declineProblems[result.code] ?? problem(result.code));
+    // An answer, not a hiccup: there is nothing left here to decline.
+    if (declineProblems[result.code]) {
+      setDeclineClosed(true);
+      setDeclining(false);
+    }
+    errorBox.current?.focus();
   };
 
   const start = async (event: FormEvent<HTMLFormElement>) => {
@@ -131,54 +167,75 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
         The admin area needs a second step: a code from an authenticator app
         (for example Google Authenticator, 1Password or Authy).
       </p>
-      {error && (
-        <Notice tone="error" title="Not done">
-          {error}
-        </Notice>
-      )}
+      <div ref={errorBox} tabIndex={-1}>
+        {error && (
+          <Notice tone="error" title="Not done">
+            {error}
+          </Notice>
+        )}
+      </div>
       {!enrolment ? (
-        <form className="settings-form" onSubmit={(e) => void start(e)}>
-          <InputField
-            id={`${id}-enrolment`}
-            name="enrolmentCode"
-            label="Enrolment code"
-            hint="The 10-character code from your email link, or printed by pnpm ops:grant-owner."
-            defaultValue={linkedCode}
-            autoComplete="off"
-            autoCapitalize="characters"
-            maxLength={10}
-            required
-          />
-          <Button type="submit" disabled={busy} aria-busy={busy}>
-            Continue
-          </Button>
-          {!declining ? (
-            <Button
-              type="button"
-              variant="quiet"
-              disabled={busy}
-              onClick={() => setDeclining(true)}
-            >
-              Decline admin access
+        <>
+          <form className="settings-form" onSubmit={(e) => void start(e)}>
+            <InputField
+              id={`${id}-enrolment`}
+              name="enrolmentCode"
+              label="Enrolment code"
+              hint="The 10-character code from your email link, or printed by pnpm ops:grant-owner."
+              defaultValue={linkedCode}
+              autoComplete="off"
+              autoCapitalize="characters"
+              maxLength={10}
+              required
+            />
+            <Button type="submit" disabled={busy} aria-busy={busy}>
+              Continue
             </Button>
-          ) : (
-            <Notice tone="neutral" title="Decline admin access?">
-              <p>
-                You won’t have admin access. Your TipMe account stays, and an
-                owner would need to invite you again.
-              </p>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy}
-                aria-busy={busy}
-                onClick={() => void decline()}
-              >
-                Yes, decline
-              </Button>
-            </Notice>
+          </form>
+          {canDecline && !declineClosed && (
+            <div className="settings-form">
+              {!declining ? (
+                <Button
+                  ref={declineButton}
+                  variant="quiet"
+                  disabled={busy}
+                  onClick={() => setDeclining(true)}
+                >
+                  Decline admin access
+                </Button>
+              ) : (
+                <div
+                  ref={confirmation}
+                  tabIndex={-1}
+                  role="group"
+                  aria-labelledby={`${id}-decline`}
+                  className="settings-form"
+                >
+                  <h2 id={`${id}-decline`}>Decline admin access?</h2>
+                  <p>
+                    You won’t have admin access. Your TipMe account stays, and
+                    an owner would need to invite you again.
+                  </p>
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    aria-busy={busy}
+                    onClick={() => void decline()}
+                  >
+                    Yes, decline
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    disabled={busy}
+                    onClick={cancelDecline}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
-        </form>
+        </>
       ) : (
         <form className="settings-form" onSubmit={(e) => void confirm(e)}>
           <p>Scan this with your authenticator app:</p>

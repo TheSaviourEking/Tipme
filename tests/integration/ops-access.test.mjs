@@ -75,7 +75,10 @@ test('staff without a grant are asked for the authenticator step, and other rout
   const { cookie } = await signIn(stack.api, '+2348036660002');
   const me = await call('GET', '/v1/ops/me', cookie);
   assert.equal(me.status, 200);
-  assert.deepEqual((await me.json()).data, { state: 'needs_enrolment' });
+  assert.deepEqual((await me.json()).data, {
+    state: 'needs_enrolment',
+    canDecline: true,
+  });
   assert.equal((await call('GET', '/v1/ops/audit', cookie)).status, 404);
   const wrongEnrolment = await call('POST', '/v1/ops/enrol', cookie, {
     enrolmentCode: 'AAAAAAAAAA',

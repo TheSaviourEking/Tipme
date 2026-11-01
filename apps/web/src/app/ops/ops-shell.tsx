@@ -41,7 +41,9 @@ async function opsState(): Promise<State | 'signed_out'> {
           step: 'granted',
           access: { role: me.data.role, permissions: me.data.permissions },
         }
-      : { step: me.data.state };
+      : me.data.state === 'needs_enrolment'
+        ? { step: 'needs_enrolment', canDecline: me.data.canDecline }
+        : { step: me.data.state };
   if (isTemporaryFailure(me.status)) return { step: 'retry' };
   const session = await apiFetch('/v1/me/sessions');
   if (session.status === 401) return 'signed_out';
@@ -51,11 +53,48 @@ async function opsState(): Promise<State | 'signed_out'> {
 }
 
 type State =
-  | {
-      step:
-        'loading' | 'unavailable' | 'retry' | 'needs_enrolment' | 'needs_code';
-    }
+  | { step: 'loading' | 'unavailable' | 'retry' | 'needs_code' }
+  | { step: 'needs_enrolment'; canDecline: boolean }
   | { step: 'granted'; access: OpsAccess };
+
+/** A passing failure: asks again, says so while it does, and says so if it's still failing. */
+function OpsRetry({
+  onResult,
+}: {
+  onResult: (next: State | 'signed_out') => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const retry = async () => {
+    setBusy(true);
+    const next = await opsState();
+    setBusy(false);
+    if (next !== 'signed_out' && next.step === 'retry') {
+      setFailed(true);
+      return;
+    }
+    onResult(next);
+    // The button is gone, so focus goes to what replaced it.
+    document.getElementById('main')?.focus();
+  };
+  return (
+    <>
+      <Notice tone="error" title="We couldn’t load the admin area">
+        {failed
+          ? 'Still not loading. Please try again in a minute.'
+          : 'This is usually brief.'}
+      </Notice>
+      <Button
+        variant="secondary"
+        disabled={busy}
+        aria-busy={busy}
+        onClick={() => void retry()}
+      >
+        Try again
+      </Button>
+    </>
+  );
+}
 
 /**
  * The admin area. Signed out → sign in and come back; staff → the authenticator step, then the
@@ -118,15 +157,10 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
         {state.step === 'loading' && (
           <Skeleton label="Loading the admin area" />
         )}
-        {state.step === 'retry' && (
-          <Notice tone="error" title="We couldn’t load the admin area">
-            <p>This is usually brief.</p>
-            <Button variant="secondary" onClick={reload}>
-              Try again
-            </Button>
-          </Notice>
+        {state.step === 'retry' && <OpsRetry onResult={apply} />}
+        {state.step === 'needs_enrolment' && (
+          <OpsEnrol onDone={reload} canDecline={state.canDecline} />
         )}
-        {state.step === 'needs_enrolment' && <OpsEnrol onDone={reload} />}
         {state.step === 'needs_code' && <OpsCode onDone={reload} />}
         {state.step === 'granted' && (
           <>

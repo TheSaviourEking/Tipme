@@ -400,6 +400,13 @@
       "when": 1793541066055,
       "tag": "0056_custom_roles_personal_access",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1793555222907,
+      "tag": "0057_staff_enrolled_at",
+      "breakpoints": true
     }
   ]
 }

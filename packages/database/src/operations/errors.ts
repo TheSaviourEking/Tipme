@@ -49,6 +49,7 @@ export type OperationErrorCode =
   | 'STAFF_EMAIL_TAKEN'
   | 'STAFF_NO_EMAIL'
   | 'STAFF_EMAIL_LOCKED'
+  | 'STAFF_PHONE_LOCKED'
   | 'STAFF_CANNOT_DELETE'
   | 'STAFF_ALREADY_ENROLLED';
 

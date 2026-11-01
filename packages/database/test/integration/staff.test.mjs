@@ -383,7 +383,7 @@ test('staff access', async (t) => {
   });
 
   await t.test(
-    'a phone change removes the authenticator and every grant',
+    'a phone change is refused for active staff: their authenticator and grant stay',
     async () => {
       await database.fresh();
       const { userId, sessionId, totp } = await enrolledOwner(database.db);
@@ -403,34 +403,23 @@ test('staff access', async (t) => {
       const code = /\b(\d{6})\b/.exec(
         (await listPretendOutbox(database.db, { limit: 1 }))[0].body,
       )[1];
-      await changePhone(database.db, {
-        userId,
-        newPhone: '+2348035550111',
-        code,
-        secret,
-        keepSessionId: sessionId,
-      });
-      assert.equal(await database.count('staff_totp'), 0);
-      assert.equal(
+      await assert.rejects(
+        changePhone(database.db, {
+          userId,
+          newPhone: '+2348035550111',
+          code,
+          secret,
+          keepSessionId: sessionId,
+        }),
+        (error) => error.code === 'STAFF_PHONE_LOCKED',
+      );
+      assert.equal(await database.count('staff_totp'), 1);
+      assert.ok(
         await resolveOpsGrant(database.db, {
           token: opened.token,
           sessionId,
           now,
         }),
-        null,
-      );
-      assert.equal(
-        (
-          await openOpsGrant(database.db, {
-            userId,
-            sessionId,
-            code: codeAt(totp, at(5 * MIN)),
-            key,
-            now: at(5 * MIN),
-          })
-        ).status,
-        'not_staff',
-        'not enrolled any more: the grant command must be run again',
       );
     },
   );
