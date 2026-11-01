@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { webhookAlert } from '../dist/handlers/payment-reserve.js';
+import {
+  warnIfNoAlertRoute,
+  webhookAlert,
+} from '../dist/handlers/payment-reserve.js';
 
 const URL_WITH_SECRET =
   'https://hooks.example.test/services/T0/B0/very-secret-token';
@@ -48,14 +51,29 @@ test('a failed alert throws an error that does not contain the route address', a
   }
 });
 
-test('with no alert route the text goes to the log, once, and counts as sent', async () => {
+test('with no alert route the text goes to the log and the alert is refused, so it is not counted as sent', async () => {
   const entries = [];
   const alert = webhookAlert({
     url: undefined,
     log: (entry) => entries.push(entry),
   });
-  await alert('Payment reserve is low');
+  await assert.rejects(() => alert('Payment reserve is low'), {
+    message: 'alert_route_missing',
+  });
   assert.deepEqual(entries, [
     { event: 'reserve.alert_unrouted', text: 'Payment reserve is low' },
   ]);
+});
+
+test('one startup warning names the missing setting, and nothing else, when there is no alert route', () => {
+  const entries = [];
+  warnIfNoAlertRoute(undefined, (entry) => entries.push(entry));
+  assert.deepEqual(entries, [
+    { event: 'reserve.no_alert_route', setting: 'ALERT_WEBHOOK_URL' },
+  ]);
+  const quiet = [];
+  warnIfNoAlertRoute('https://hooks.example.test/services/T0/B0/token', (e) =>
+    quiet.push(e),
+  );
+  assert.deepEqual(quiet, []);
 });

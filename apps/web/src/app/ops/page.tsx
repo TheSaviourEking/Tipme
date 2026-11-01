@@ -134,6 +134,15 @@ export default function OpsOverviewPage() {
             provider and the worker.
           </Notice>
         )}
+        {reserveNow.stale && (
+          <Notice
+            tone="error"
+            title="The payment reserve checks may have stopped"
+          >
+            The last reading is more than 45 minutes old, and the worker reads
+            every 15 minutes. Check the worker and the payment provider key.
+          </Notice>
+        )}
         <div className="ops-tiles">
           <Tile
             label="Reserve available"

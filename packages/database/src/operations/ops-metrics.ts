@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { webVitalsSummary } from './analytics.js';
 import { guarded } from './errors.js';
-import { latestReserveReading } from './payment-reserve.js';
+import { latestReserveReading, reserveIsStale } from './payment-reserve.js';
 
 const ZONE = 'Africa/Lagos';
 const SHARING_EVENTS = [
@@ -185,7 +185,7 @@ export function healthMetrics(
         tipsCompleted: int(funnel['completed']),
       },
       webVitals: await webVitalsSummary(db, { now: input.now, days: 28 }),
-      reserve: await reserveSummary(db),
+      reserve: await reserveSummary(db, input.now),
     };
   });
 }
@@ -278,7 +278,10 @@ export function visibilityMetrics(
 }
 
 /** The latest reserve reading as staff see it: amounts as text, times as ISO. */
-async function reserveSummary(db: Database): Promise<OpsPaymentReserve | null> {
+async function reserveSummary(
+  db: Database,
+  now: Date,
+): Promise<OpsPaymentReserve | null> {
   const reading = await latestReserveReading(db);
   return reading
     ? {
@@ -288,6 +291,7 @@ async function reserveSummary(db: Database): Promise<OpsPaymentReserve | null> {
         thresholdMinor: reading.thresholdMinor.toString(),
         low: reading.low,
         readAt: reading.readAt.toISOString(),
+        stale: reserveIsStale(reading.readAt, now),
       }
     : null;
 }

@@ -91,14 +91,16 @@ export const workerConfigSchema = z
       .string()
       .regex(/^[0-9a-f]{7,40}$/)
       .optional(),
-    // The payment reserve is "low" below this many kobo (default 100000 = ₦1,000).
+    // The payment reserve is "low" below this many kobo (default 100000 = ₦1,000). Positive: 0
+    // would silently switch the low alert off.
     BACHS_RESERVE_ALERT_MINOR: z
       .string()
-      .regex(/^[0-9]{1,15}$/)
+      .regex(/^[1-9][0-9]{0,14}$/)
       .default('100000')
       .transform((value) => BigInt(value)),
-    // Where reserve alerts go: a Slack-compatible incoming webhook. Optional; it is a secret
-    // (the address is the credential), so it is never logged or put in a message.
+    // Where reserve alerts go: a Slack-compatible incoming webhook. Optional, but production with
+    // live payments on refuses to start without it (below); it must be https in production. It is
+    // a secret (the address is the credential), so it is never logged or put in a message.
     ALERT_WEBHOOK_URL: z.url({ protocol: /^https?$/ }).optional(),
     RECONCILE_INTERVAL_MS: z.coerce.number().int().min(100).default(60_000),
     RECONCILE_MIN_AGE_MS: z.coerce.number().int().min(0).default(120_000),
@@ -133,6 +135,29 @@ export const workerConfigSchema = z
       });
     }
     checkMailSettings(config, context);
+    if (
+      config.NODE_ENV === 'production' &&
+      config.ALERT_WEBHOOK_URL &&
+      !config.ALERT_WEBHOOK_URL.startsWith('https://')
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['ALERT_WEBHOOK_URL'],
+        message: 'must be https in production',
+      });
+    // Once live payments are on, a reserve alert nobody receives is not acceptable. While they are
+    // off (the site starts closed) the worker only warns at startup.
+    if (
+      isProductionCopy(config) &&
+      config.PAYMENT_PROVIDER === 'bachs-live' &&
+      config.PAYMENTS_LIVE_ENABLED &&
+      !config.ALERT_WEBHOOK_URL
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['ALERT_WEBHOOK_URL'],
+        message: 'required once live payments are on',
+      });
     // A production copy carries none of the rehearsal settings (messages name, never show, them).
     if (isProductionCopy(config)) {
       // Reward cash posts to real recipients' balances, so it stays 0 until D-05 decides it.

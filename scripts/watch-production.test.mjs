@@ -68,14 +68,39 @@ test('an unset or invalid PRODUCTION_PAYMENTS_LIVE is itself a problem', async (
   }
 });
 
-test('a low reserve is a problem; a missing reserve endpoint is not', async () => {
-  const low = await run({
+test('a low or unreadable reserve is printed, not a problem: the worker owns those alerts', async () => {
+  for (const body of [
+    { reserveLow: true, unreadable: false, stale: false },
+    { reserveLow: false, unreadable: true, stale: false },
+  ]) {
+    const notes = [];
+    const problems = await run(
+      {
+        'GET https://api.tipme.example/health/payments': {
+          status: 200,
+          body: { data: body },
+        },
+      },
+      'false',
+      { log: (m) => notes.push(m) },
+    );
+    assert.deepEqual(problems, []);
+    assert.match(
+      notes.join('\n'),
+      body.reserveLow ? /is low/i : /could not be read/i,
+    );
+  }
+});
+
+test('reserve checks that have stopped are a problem; a missing reserve endpoint is not', async () => {
+  const stopped = await run({
     'GET https://api.tipme.example/health/payments': {
       status: 200,
-      body: { data: { reserveLow: true } },
+      body: { data: { reserveLow: false, unreadable: false, stale: true } },
     },
   });
-  assert.match(low[0], /reserve is low/i);
+  assert.equal(stopped.length, 1);
+  assert.match(stopped[0], /reserve checks have stopped/i);
   const notes = [];
   const missing = await run(
     { 'GET https://api.tipme.example/health/payments': { status: 404 } },
@@ -84,18 +109,6 @@ test('a low reserve is a problem; a missing reserve endpoint is not', async () =
   );
   assert.deepEqual(missing, []);
   assert.match(notes.join('\n'), /reserve not watched yet/);
-});
-
-test('a reserve that could not be read is reported as unreadable, not as low', async () => {
-  const problems = await run({
-    'GET https://api.tipme.example/health/payments': {
-      status: 200,
-      body: { data: { reserveLow: true, unreadable: true } },
-    },
-  });
-  assert.equal(problems.length, 1);
-  assert.match(problems[0], /could not be read/i);
-  assert.doesNotMatch(problems[0], /is low/i);
 });
 
 test('API not ready and web down are named', async () => {

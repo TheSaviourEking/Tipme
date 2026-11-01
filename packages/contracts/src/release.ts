@@ -47,14 +47,16 @@ export type RetentionBlock =
   | 'other';
 
 /**
- * GET /health/payments: whether the platform's payment reserve is running low, for the watcher.
- * Public, so it carries no amount, provider or detail. A reserve that could not be read cannot be
- * confirmed fine, so it also says `reserveLow: true`, with `unreadable` to tell the two apart.
- * `readAt` is when the worker last read it (null before the first read, e.g. on a copy that does
- * not run a Bachs provider): an old time means the worker has stopped checking.
+ * GET /health/payments: for the watcher. Public, so it carries no amount, provider or detail.
+ * `reserveLow` means the reserve was read and is low, nothing else; `unreadable` means the last
+ * read failed. The worker alerts on both (once, then every 6 hours), so a watcher only prints them.
+ * `stale` is the one the watcher alarms on, because a stopped worker cannot alert for itself: true
+ * when the provider is Bachs live with payments on and nothing was read for over 45 minutes (or
+ * ever). `readAt` is when the worker last read the reserve (null before the first read).
  */
 export interface PaymentsHealth {
   reserveLow: boolean;
   unreadable: boolean;
+  stale: boolean;
   readAt: string | null;
 }

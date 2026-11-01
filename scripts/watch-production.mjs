@@ -85,14 +85,21 @@ export async function checkProduction({
     const reserve = await json(payments);
     if (!reserve)
       problems.push(
-        `The payment reserve could not be read (${answer(payments.status)}).`,
+        `The payment reserve status could not be read (${answer(payments.status)}).`,
       );
-    else if (reserve.unreadable)
-      problems.push(
-        'The payment reserve could not be read by the worker: check the payment provider and the worker.',
-      );
-    else if (reserve.reserveLow)
-      problems.push('The payment reserve is low: top it up.');
+    else {
+      // Low and unreadable are the worker's to announce (once, then every 6 hours); posting them
+      // from here every 5 minutes would repeat them. They are printed for the run's log only.
+      if (reserve.reserveLow)
+        log('Payment reserve is low (the worker alerts on this).');
+      if (reserve.unreadable)
+        log('Payment reserve could not be read (the worker alerts on this).');
+      // A stopped worker cannot alert for itself, so this is the one reserve problem raised here.
+      if (reserve.stale)
+        problems.push(
+          'The payment reserve checks have stopped: no reading for over 45 minutes with live payments on. Check the worker.',
+        );
+    }
   }
 
   if (webhook.status !== 401)

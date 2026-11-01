@@ -391,7 +391,7 @@ test('the reserve alert level is ₦1,000 unless set, and the alert route is opt
 });
 
 test('a bad reserve level or alert route is refused by name, never by value', () => {
-  for (const bad of ['abc', '-1', '1.5', '1e5'])
+  for (const bad of ['abc', '-1', '1.5', '1e5', '0', '007'])
     assert.throws(
       () =>
         loadWorkerConfig({ ...reserveBase, BACHS_RESERVE_ALERT_MINOR: bad }),
@@ -404,5 +404,52 @@ test('a bad reserve level or alert route is refused by name, never by value', ()
     (error) =>
       error.message === 'Invalid configuration: ALERT_WEBHOOK_URL' &&
       !String(error.stack).includes('very-secret-token'),
+  );
+});
+
+test('in production the alert route must be https', () => {
+  assert.equal(
+    productionIssues({
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+    }),
+    '',
+  );
+  assert.match(
+    productionIssues({
+      ALERT_WEBHOOK_URL: 'http://hooks.example.test/T0/B0/x',
+    }),
+    /ALERT_WEBHOOK_URL/,
+  );
+  // Outside production a local http stand-in is fine.
+  const local = loadWorkerConfig({
+    ...reserveBase,
+    ALERT_WEBHOOK_URL: 'http://127.0.0.1:9999/hook',
+  });
+  assert.equal(local.ALERT_WEBHOOK_URL, 'http://127.0.0.1:9999/hook');
+});
+
+test('with live payments on, production will not start without an alert route; with them off it does', () => {
+  // Off (as today, while checkout is closed): no address needed, the worker only warns.
+  assert.equal(productionIssues({}), '');
+  assert.equal(productionIssues({ PAYMENTS_LIVE_ENABLED: 'false' }), '');
+  // On: the address is required (the fence names PAYMENTS_LIVE_ENABLED as well until Task 12).
+  assert.match(
+    productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
+    /ALERT_WEBHOOK_URL/,
+  );
+  assert.doesNotMatch(
+    productionIssues({
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+    }),
+    /ALERT_WEBHOOK_URL/,
+  );
+  // The message names the setting, never a value.
+  assert.doesNotMatch(
+    productionIssues({
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'http://hooks.example.test/T0/B0/very-secret-token',
+    }),
+    /very-secret-token/,
   );
 });

@@ -419,6 +419,8 @@ export interface OpsPaymentReserve {
   thresholdMinor: string;
   low: boolean | null;
   readAt: string;
+  /** Older than the worker's checks should allow: they may have stopped. */
+  stale: boolean;
 }
 
 /** Overall health. Money and reliability come from the money tables; the funnel from events. */

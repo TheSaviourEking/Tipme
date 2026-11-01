@@ -1,5 +1,9 @@
 import type { Database, ReserveReader } from '@tipme/database';
-import { checkReserve } from '@tipme/database';
+import {
+  checkReserve,
+  purgeReserveReadings,
+  RESERVE_KEEP_MS,
+} from '@tipme/database';
 
 const ALERT_TIMEOUT_MS = 10_000;
 
@@ -8,13 +12,24 @@ export type PaymentReserveOutcome = 'ok' | 'low' | 'unreadable';
 export type PaymentReserveLog = (entry: {
   event: string;
   text?: string;
+  setting?: string;
 }) => void;
+
+/** One warning when reserve checks run with nowhere to send an alert. Names the setting only. */
+export function warnIfNoAlertRoute(
+  url: string | undefined,
+  log: PaymentReserveLog,
+): void {
+  if (!url)
+    log({ event: 'reserve.no_alert_route', setting: 'ALERT_WEBHOOK_URL' });
+}
 
 /**
  * Posts alert text to the alert route as {"text": ...} (Slack-compatible), the same shape the
- * watchers use. Without a route the text goes to the log, so a copy with none still says it. A
- * failure throws a fixed message: the address is a credential and an HTTP client's error can
- * quote it, so nothing from the failure is kept.
+ * watchers use. Without a route the text goes to the log but the alert is refused, so it is not
+ * counted as sent: the 6-hour timer is not spent, and the first alert goes out as soon as an
+ * address is set. A failure throws a fixed message: the address is a credential and an HTTP
+ * client's error can quote it, so nothing from the failure is kept.
  */
 export function webhookAlert(options: {
   url: string | undefined;
@@ -25,7 +40,7 @@ export function webhookAlert(options: {
   return async (text) => {
     if (!url) {
       log?.({ event: 'reserve.alert_unrouted', text });
-      return;
+      throw new Error('alert_route_missing');
     }
     let status: number;
     try {
@@ -71,5 +86,9 @@ export async function handlePaymentReserve(deps: {
     ...(deps.now ? { now: deps.now } : {}),
   });
   if (result.alertFailed) deps.log({ event: 'reserve.alert_failed' });
+  // Housekeeping after the check, never in its way: old readings are not needed for the 6-hour rule.
+  await purgeReserveReadings(deps.db, {
+    before: new Date((deps.now ?? new Date()).getTime() - RESERVE_KEEP_MS),
+  }).catch(() => deps.log({ event: 'reserve.purge_failed' }));
   return result.low === null ? 'unreadable' : result.low ? 'low' : 'ok';
 }

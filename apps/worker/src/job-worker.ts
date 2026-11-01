@@ -52,7 +52,10 @@ import {
   DOMAIN_EVENT_NAMES,
   handleDomainEvent,
 } from './handlers/domain-events.js';
-import { handlePaymentReserve } from './handlers/payment-reserve.js';
+import {
+  handlePaymentReserve,
+  warnIfNoAlertRoute,
+} from './handlers/payment-reserve.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
@@ -258,6 +261,8 @@ export async function startJobWorker(
     : null;
   // The platform reserve is read for the same provider only. A run still going when the next one
   // fires makes it skip (see runUnlessRunning), so a slow provider never stacks up reads.
+  if (payoutSetupProvider)
+    warnIfNoAlertRoute(config.ALERT_WEBHOOK_URL, (entry) => logger.warn(entry));
   const reserveSchedule = payoutSetupProvider
     ? ensureSchedule({
         queue,

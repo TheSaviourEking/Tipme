@@ -1300,6 +1300,9 @@ export const paymentReserveReadings = pgTable(
     low: boolean('low'),
     readAt: timestamp('read_at', { withTimezone: true }).notNull(),
     alertedAt: timestamp('alerted_at', { withTimezone: true }),
+    // Set while a worker is sending this reading's alert, cleared if the send fails. An old claim
+    // with no `alerted_at` is a worker that died mid-send, so the alert is sent again.
+    alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
   },
   (table) => [
     currencyCheck('payment_reserve_readings'),
