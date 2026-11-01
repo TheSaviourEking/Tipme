@@ -488,3 +488,40 @@ for (const [name, svg] of svgs) {
     .toFile(`${out}${name}.webp`);
   console.log(name, info.width, info.height, info.size);
 }
+
+// The artwork around the Pro QR cards (spec section 7). The API deploys apart from the web app, so
+// it carries its own copy, drawn from these same covers: a square crop with the code's white panel
+// already on it, ready to have a code laid over. apps/api/src/qr/covers-for-cards.ts reads them and
+// knows where the panel is. Offsets are in the card's 1000 units; zoom as the cover is enlarged.
+const CARD_CROPS = {
+  indigo: {},
+  woven: {},
+  danfo: { ox: -1400 },
+  harmattan: { ox: -1000 },
+  lagoon: {},
+  citylights: {},
+  vinyl: { ox: -1540, oy: 0 },
+  sunburst: { ox: -1400, oy: -20 },
+  engraved: { ox: -1400, oy: 0 },
+  contour: {},
+  geometry: { ox: -700 },
+  paper: { ox: -1500, oy: -80 },
+};
+const CARD_SIZE = 1400;
+const cards = fileURLToPath(
+  new URL('../../apps/api/assets/qr-cards/', import.meta.url),
+);
+mkdirSync(cards, { recursive: true });
+for (const [name, { ox = -300, oy = -10 }] of Object.entries(CARD_CROPS)) {
+  if (only.length && !only.includes(name)) continue;
+  const zoom = 3.4;
+  const body = svgs
+    .get(name)
+    .replace(/^<svg[^>]*>/, '')
+    .replace(/<\/svg>$/, '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="${CARD_SIZE}" height="${CARD_SIZE}"><defs><clipPath id="card-frame"><rect width="1000" height="1000"/></clipPath></defs><g clip-path="url(#card-frame)"><g transform="scale(${zoom}) translate(${ox / zoom} ${oy / zoom})">${body}</g></g><rect x="150" y="150" width="700" height="700" rx="34" fill="#ffffff"/></svg>`;
+  const info = await sharp(Buffer.from(svg))
+    .webp({ quality: 78, effort: 6 })
+    .toFile(`${cards}${name}.webp`);
+  console.log('card', name, info.width, info.height, info.size);
+}
