@@ -59,13 +59,19 @@ test('a renamed page keeps its old link and QR code working, and nobody can take
   await expectAccessible(page);
 
   const visitor = await (await browser.newContext()).newPage();
+  const seen: string[] = [];
+  visitor.on('framenavigated', (frame) => seen.push(frame.url()));
   await expect(async () => {
     // A printed QR code points at the old handle with ?src=qr.
     const response = await visitor.goto(`/@${handle}?src=qr`);
     expect(response?.ok()).toBe(true);
-    // A streamed Next.js redirect can finish after goto resolves. Wait before retrying
-    // the old link, and verify that printed QR codes retain their source marker.
-    await expect(visitor).toHaveURL(`/@${renamed}?src=qr`, { timeout: 2000 });
+    // A streamed Next.js redirect can finish after goto resolves. Wait before retrying the old
+    // link. Printed QR codes keep their source marker through the redirect; once counted, the
+    // analytics client removes it from the address, so the arrival is checked from the log.
+    await expect(visitor).toHaveURL(new RegExp(`/@${renamed}(\\?src=qr)?$`), {
+      timeout: 2000,
+    });
+    expect(seen.some((url) => url.endsWith(`/@${renamed}?src=qr`))).toBe(true);
   }).toPass({ timeout: 10_000 });
   await expect(visitor.getByText(`@${renamed}`).first()).toBeVisible();
 

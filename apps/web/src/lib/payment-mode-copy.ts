@@ -44,7 +44,7 @@ const CLARITY =
   'You see the full cost and what the person receives before you pay.';
 const PAY_STEP = 'Review the full amount and what they receive, then pay.';
 const TRUST =
-  'No account needed. You’ll see the full total before you pay, and our payment partner handles your card securely.';
+  'No account needed. You’ll see the full total before you pay, and our payment partner handles your payment securely.';
 const EXAMPLE_TITLE = 'Tip the people you know';
 const EXAMPLE_BODY =
   'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to thank.';

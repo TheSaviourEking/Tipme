@@ -77,7 +77,7 @@ test('profile supports keyboard amount selection, validation and a server quote'
     .fill('Thank you for making this easier.');
   await expect(page.getByText('You pay NGN 1,234.50')).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /^Tip NGN 1,234\.50/ }),
+    page.getByRole('button', { name: /^Tip ₦1,234\.50/ }),
   ).toBeEnabled();
   // Quoting sends only the amount: no tip is created and the message stays in the page.
   expect(posts.length).toBeGreaterThan(0);

@@ -14,7 +14,7 @@ import {
 // and the worst-case pages run the same built web app against a stand-in API (profile-fixtures).
 
 const TRUST =
-  'No account needed. You’ll see the full total before you pay, and our payment partner handles your card securely.';
+  'No account needed. You’ll see the full total before you pay, and our payment partner handles your payment securely.';
 const tipButton = (page: Page) => page.getByRole('button', { name: /^Tip\b/ });
 const share = (page: Page) =>
   page.getByRole('button', { name: 'Share this page' });
@@ -79,8 +79,8 @@ both(
     const logo = await box(page, '.site-header .brand');
     const cover = await box(page, '[data-profile-cover]');
     expect(logo.y + logo.height).toBeLessThanOrEqual(cover.y + 1);
-    // The site's own footer links go too, on this page only.
-    await expect(page.getByRole('link', { name: 'Privacy' })).toHaveCount(0);
+    // The site's own footer goes, on this page only; the legal links stay in the page's own.
+    await expect(page.locator('.site-footer')).toBeHidden();
   },
 );
 
@@ -370,7 +370,7 @@ test.describe('the page in each payment state', () => {
       });
       expect(seen.cls).toBeLessThan(0.01);
       const largest = seen.lcp.at(-1);
-      expect(['cover', 'H1', 'P', 'IMG']).toContain(largest?.name);
+      expect(['cover', 'H1']).toContain(largest?.name);
     },
   );
 
@@ -496,7 +496,7 @@ test('on a phone the Tip button stays in view and the form still works @mobile',
   await page.evaluate(() => scrollTo({ top: 500, behavior: 'instant' }));
   await inView();
   await page.getByRole('radio', { name: '2,000 NGN' }).check();
-  await expect(tipButton(page)).toHaveText(/Tip NGN 2,000/);
+  await expect(tipButton(page)).toHaveText(/^Tip ₦2,000/);
   await expect(page.getByText(/You pay/)).toBeVisible();
   await inView();
   // Nothing moves while it starts: only the button's busy state.
@@ -537,16 +537,12 @@ test('the Tip bar never covers a focused field, an error or the Report link @mob
   await expect(error).toBeInViewport();
 
   // Each field: the bar is out of the way while it has focus, and back after.
-  for (const field of [
-    page.getByLabel('Personal message (optional)'),
-    page.getByLabel('What is this tip for? (optional)'),
-  ]) {
-    await field.focus();
-    await expect(bar).toBeHidden();
-    await expect(tipButton(page)).toHaveCount(0);
-    await field.blur();
-    await expect(bar).toBeVisible();
-  }
+  const message = page.getByLabel('Personal message (optional)');
+  await message.focus();
+  await expect(bar).toBeHidden();
+  await expect(tipButton(page)).toHaveCount(0);
+  await message.blur();
+  await expect(bar).toBeVisible();
 
   // Keyboard users: anything focused by Tab is scrolled clear of the bar.
   await page.getByRole('radio', { name: '1,000 NGN' }).focus();
@@ -576,7 +572,8 @@ test('the Tip bar never covers a focused field, an error or the Report link @mob
   await page.getByRole('button', { name: 'Report this page' }).click();
   const reason = page.getByLabel('What’s wrong with this page?');
   await reason.focus();
-  await expect(bar).toBeHidden();
+  await expect(bar).toBeVisible();
+  await expect.poll(() => clearOfBar(page, '.profile-foot select')).toBe(true);
   await reason.blur();
 });
 
@@ -654,4 +651,245 @@ test('home keeps its own form wording', async ({ page }) => {
   await expect(page.locator('.home-hero__panel .composer-trust')).toHaveCount(
     0,
   );
+});
+
+test('choosing a reason keeps the Tip bar: a select opens no keyboard @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  const reason = page.getByLabel('What is this tip for? (optional)');
+  await reason.focus();
+  await reason.selectOption({ index: 1 });
+  await expect(reason).toBeFocused();
+  await expect(page.locator('.composer-action')).toBeVisible();
+  await expect(tipButton(page)).toBeVisible();
+  await expect.poll(() => clearOfBar(page, 'select')).toBe(true);
+});
+
+test('the bar names the amount and shows the confirmed total beside it @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  const total = page.locator('.composer-action .tip-payment-total');
+  await expect(total).toHaveCount(0);
+  // Keys just clear of the bar, as a thumb would have them.
+  await page.evaluate(() => {
+    const keys = document.querySelector('.amount-options')!;
+    const bar = document.querySelector('.composer-action')!;
+    scrollBy({
+      top:
+        keys.getBoundingClientRect().bottom -
+        bar.getBoundingClientRect().top +
+        4,
+      behavior: 'instant',
+    });
+  });
+  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await expect(tipButton(page)).toHaveText(/^Tip ₦2,000/);
+  await expect(total).toHaveText(/You pay/);
+  await expect(total).toBeInViewport({ ratio: 1 });
+  await expect(tipButton(page)).toBeInViewport({ ratio: 1 });
+  await expect(page.getByText(/You pay/)).toHaveCount(1);
+  // Small on a phone: notice, total and button together.
+  const bar = await page.locator('.composer-action').boundingBox();
+  expect(bar!.height).toBeLessThanOrEqual(140);
+  // The Report link still clears the taller bar at the page's end.
+  await page.evaluate(() =>
+    scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }),
+  );
+  await expect.poll(() => clearOfBar(page, '.profile-foot')).toBe(true);
+});
+
+test('the notice under the Tip button is also directly above it in the bar @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  const slot = page.locator('.composer-action .composer-action__notice');
+  await expect(slot).toHaveText(
+    'TipMe is in test mode: no real money moves yet.',
+  );
+  await expect(slot).toBeInViewport({ ratio: 1 });
+  const notice = await slot.boundingBox();
+  const button = await tipButton(page).boundingBox();
+  expect(notice!.y + notice!.height).toBeLessThanOrEqual(button!.y);
+  // Read once by a screen reader, from the block under the button.
+  await expect(slot).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('.composer-disclaimer')).toContainText(
+    'TipMe is in test mode',
+  );
+});
+
+test('at desktop width the slot stays out: the wording sits under the button', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await expect(page.locator('.composer-action__notice')).toBeHidden();
+});
+
+test('with no notice to show, the bar has no empty slot @mobile', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stack = await startStack('live');
+  try {
+    await page.goto(`${stack.origin}/@kemi`);
+    await page.getByRole('heading', { level: 1 }).waitFor();
+    await expect(page.locator('.composer-action__notice')).toHaveCount(0);
+  } finally {
+    await stack.stop();
+  }
+});
+
+test('at 1280x720 the Tip button and its total line are in view, and choosing moves nothing', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/@ada');
+  const button = tipButton(page);
+  await expect(button).toBeInViewport({ ratio: 1 });
+  const before = await button.boundingBox();
+  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  const total = page.locator('.tip-payment-total');
+  await expect(total).toBeInViewport({ ratio: 1 });
+  await expect(button).toBeInViewport({ ratio: 1 });
+  expect((await button.boundingBox())!.y).toBe(before!.y);
+  expect((await total.boundingBox())!.y).toBeLessThan(before!.y);
+});
+
+// Older browsers ignore the whole block: simulated by removing it, and every :has() rule.
+test('without :has() the button simply stays in the form @mobile', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await page.getByRole('heading', { level: 1 }).waitFor();
+  const removed = await page.evaluate(() => {
+    let supports = 0;
+    const walk = (list: {
+      cssRules: CSSRuleList;
+      deleteRule(i: number): void;
+    }) => {
+      for (let i = list.cssRules.length - 1; i >= 0; i -= 1) {
+        const rule = list.cssRules[i]!;
+        if (
+          rule instanceof CSSSupportsRule &&
+          rule.conditionText.includes(':has')
+        ) {
+          list.deleteRule(i);
+          supports += 1;
+        } else if (
+          rule instanceof CSSStyleRule &&
+          rule.selectorText.includes(':has(')
+        )
+          list.deleteRule(i);
+        else if (rule instanceof CSSGroupingRule) walk(rule);
+      }
+    };
+    for (const sheet of document.styleSheets) walk(sheet);
+    return supports;
+  });
+  expect(removed).toBeGreaterThan(0);
+  await expect(page.locator('.composer-action')).toHaveCSS(
+    'position',
+    'static',
+  );
+  await expect(page.locator('.composer-action__notice')).toBeHidden();
+  await page.getByLabel('Personal message (optional)').focus();
+  await expect(tipButton(page)).toBeVisible();
+});
+
+both(
+  'Privacy and Terms are reachable, and clear of the bar',
+  async ({ page }) => {
+    await page.goto('/@ada');
+    const foot = page.locator('.profile-foot');
+    await expect(foot.getByRole('link', { name: 'Privacy' })).toHaveAttribute(
+      'href',
+      '/legal/privacy',
+    );
+    await expect(foot.getByRole('link', { name: 'Terms' })).toHaveAttribute(
+      'href',
+      '/legal/terms',
+    );
+    await page.evaluate(() =>
+      scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }),
+    );
+    const bar = await page.locator('.composer-action').boundingBox();
+    const link = await foot.getByRole('link', { name: 'Terms' }).boundingBox();
+    if (
+      (bar?.y ?? 0) + (bar?.height ?? 0) === page.viewportSize()!.height &&
+      bar!.width === page.viewportSize()!.width
+    )
+      expect(link!.y + link!.height).toBeLessThanOrEqual(bar!.y);
+  },
+);
+
+test.describe('the page without scripts, and its status codes', () => {
+  test.describe.configure({ mode: 'serial' });
+  test.setTimeout(120_000);
+  let stack: Stack;
+  test.beforeAll(async () => {
+    stack = await startStack('live');
+  });
+  test.afterAll(async () => {
+    await stack.stop();
+  });
+
+  both(
+    'the person and the form are in the HTML, with scripts off',
+    async ({ page }) => {
+      const context = await page
+        .context()
+        .browser()!
+        .newContext({ javaScriptEnabled: false });
+      const noJs = await context.newPage();
+      const response = await noJs.goto(`${stack.origin}/@kemi`);
+      expect(response?.status()).toBe(200);
+      await expect(noJs.getByRole('heading', { level: 1 })).toHaveText(
+        'Kemi Bello',
+      );
+      await expect(noJs.locator('.tm-skeleton')).toHaveCount(0);
+      await expect(noJs.locator('.profile-photo')).toHaveText('KB');
+      await expect(noJs.locator('[data-profile-cover]')).toBeVisible();
+      await context.close();
+    },
+  );
+
+  // Partial Prerendering sends the root shell first, so both still answer 200: pin what a person
+  // gets, and that search engines are told not to keep it.
+  test('an unknown handle says so, with the site navigation, scripts or not', async ({
+    page,
+  }) => {
+    const response = await page.goto(`${stack.origin}/@not_a_person`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.locator('.profile-page')).toHaveCount(0);
+    await expect(
+      page.getByRole('navigation', { name: 'Footer navigation' }),
+    ).toBeVisible();
+    await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute(
+      'content',
+      /noindex/,
+    );
+    const context = await page.context().browser()!.newContext({
+      javaScriptEnabled: false,
+    });
+    const noJs = await context.newPage();
+    await noJs.goto(`${stack.origin}/@not_a_person`);
+    await expect(noJs.locator('.profile-page')).toHaveCount(0);
+    await expect(
+      noJs.getByRole('navigation', { name: 'Footer navigation' }),
+    ).toBeVisible();
+    await context.close();
+  });
+
+  test('an old handle leads to the page and keeps its source', async ({
+    page,
+  }) => {
+    // The analytics client removes the marker once counted, so check the arrival from the log.
+    const seen: string[] = [];
+    page.on('framenavigated', (frame) => seen.push(frame.url()));
+    await page.goto(`${stack.origin}/@oldname?src=qr`);
+    await expect(page).toHaveURL(/\/@kemi(\?src=qr)?$/);
+    expect(seen.some((url) => url.endsWith('/@kemi?src=qr'))).toBe(true);
+  });
 });

@@ -85,6 +85,12 @@ export async function startStack(mode: Mode): Promise<Stack> {
     const handle = /^\/v1\/profiles\/(\w+)$/.exec(url.pathname)?.[1];
     const found = PAGES.find((p) => p.handle === handle);
     const answer = url.pathname === '/health/release' ? RELEASE[mode] : found;
+    if (handle === 'oldname') {
+      response.statusCode = 308;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ data: { movedTo: 'kemi' } }));
+      return;
+    }
     response.statusCode = answer ? 200 : 404;
     response.setHeader('content-type', 'application/json');
     response.end(JSON.stringify({ data: answer ?? null }));

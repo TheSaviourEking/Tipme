@@ -22,7 +22,7 @@ export async function startTip(
     await page.getByText('Add your name or remember tips').click();
     await page.getByLabel('Your name (optional)').fill(name);
   }
-  await page.getByRole('button', { name: /^Tip NGN/ }).click();
+  await page.getByRole('button', { name: /^Tip ₦/ }).click();
 }
 
 /** The whole tip through the pretend provider, landing on the receipt. */

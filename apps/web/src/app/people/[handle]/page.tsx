@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 import type { ResolvedCover } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
@@ -13,6 +13,12 @@ import { previewMetadata } from '@/lib/metadata';
 import { getPaymentMode } from '@/lib/payment-mode-api';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { getPublicProfile } from '@/lib/profiles-api';
+import ProfileUnavailable from './not-found';
+
+// Wait for the cached page rather than stream a silhouette: the name and photo are in the first
+// paint and work without scripts. The status stays 200 for an unknown or moved handle, because
+// Partial Prerendering sends the root shell before this page runs.
+export const instant = false;
 
 type Props = {
   params: Promise<{ handle: string }>;
@@ -40,7 +46,9 @@ const NO_COVER: ResolvedCover = {
 
 export default async function ProfilePage({ params, searchParams }: Props) {
   const profile = await getPublicProfile((await params).handle);
-  if (!profile) notFound();
+  // Rendered, not thrown: the status is 200 either way here, and a thrown not-found leaves the
+  // page blank without scripts.
+  if (!profile) return <ProfileUnavailable />;
   // An old handle of a renamed page: 308 to the current one (printed QR codes keep working).
   if ('movedTo' in profile)
     permanentRedirect(movedProfilePath(profile.movedTo, await searchParams));
@@ -82,10 +90,14 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           </aside>
         </div>
         <footer className="profile-foot">
-          <ReportPage handle={profile.handle} />
-          {copy.previewPages && (
-            <Link href="/about-preview">Learn about this preview</Link>
-          )}
+          <div className="profile-foot__quiet">
+            <ReportPage handle={profile.handle} />
+            <Link href="/legal/privacy">Privacy</Link>
+            <Link href="/legal/terms">Terms</Link>
+            {copy.previewPages && (
+              <Link href="/about-preview">Learn about this preview</Link>
+            )}
+          </div>
           {profile.plan !== 'pro' && (
             <Link className="profile-foot__own" href="/sign-up">
               Get your own TipMe page
