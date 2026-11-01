@@ -4,7 +4,13 @@ import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { seedDemoProfiles } from '../../packages/database/dist/index.js';
+import {
+  createQuote,
+  seedDemoProfiles,
+} from '../../packages/database/dist/index.js';
+import { CheckoutService } from '../../apps/api/dist/checkout/checkout.service.js';
+import { BachsWebhookController } from '../../apps/api/dist/webhooks/bachs-webhook.controller.js';
+import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js';
 import { startStack } from './helpers.mjs';
 
 startTelemetry({
@@ -438,4 +444,111 @@ test('minor: behind a trusted proxy each supporter has their own rate limit', as
   } finally {
     await proxied.stop();
   }
+});
+
+// A production copy may start on bachs-live with live payments switched off: checkout is closed.
+// Built from a fake live adapter, so no production config and no request ever reaches Bachs.
+const livePaymentsOff = {
+  PAYMENT_PROVIDER: 'bachs-live',
+  PAYMENTS_LIVE_ENABLED: false,
+  WEB_ORIGIN: WEB,
+  STATUS_TOKEN_SECRET: 'test-only-status-token-secret-32-characters',
+};
+const silentLogger = { info() {}, warn() {}, error() {} };
+const checkoutRows = async () =>
+  (
+    await database.pool.query(
+      `SELECT (SELECT count(*) FROM tip_quotes)::int AS quotes,
+              (SELECT count(*) FROM payment_intents)::int AS intents,
+              (SELECT count(*) FROM tips)::int AS tips,
+              (SELECT count(*) FROM payment_attempts)::int AS attempts`,
+    )
+  ).rows[0];
+
+test('with bachs-live and payments off, a new tip is refused as not open and nothing is written', async () => {
+  const calls = [];
+  const live = {
+    name: 'bachs-live',
+    environment: 'live',
+    async initializePayment(input) {
+      calls.push(input);
+      throw new Error('a closed checkout must never reach Bachs');
+    },
+    async getCheckoutUrl() {
+      throw new Error('a closed checkout must never reach Bachs');
+    },
+  };
+  const service = new CheckoutService(
+    livePaymentsOff,
+    { db: database.db },
+    live,
+    null,
+    live,
+    silentLogger,
+  );
+  // A quote taken before checkout closed (or by hand): its intent is still refused.
+  const { quoteId } = await createQuote(database.db, {
+    handle: 'ada',
+    tipMinor: 100000n,
+    currency: 'NGN',
+  });
+  const before = await checkoutRows();
+  const notOpen = (error) => {
+    assert.equal(error.code, 'TIPPING_NOT_OPEN');
+    assert.equal(error.getStatus(), 409);
+    return true;
+  };
+  await assert.rejects(
+    service.quote({ handle: 'ada', amountMinor: '100000', currency: 'NGN' }),
+    notOpen,
+  );
+  await assert.rejects(
+    service.createIntent({ quoteId }, randomUUID()),
+    notOpen,
+  );
+  assert.deepEqual(await checkoutRows(), before);
+  assert.deepEqual(calls, []);
+});
+
+test('webhooks are still verified and recorded with payments off', async () => {
+  const eventId = `evt_${randomUUID()}`;
+  const live = {
+    name: 'bachs-live',
+    environment: 'live',
+    verifyWebhook(body) {
+      if (body.toString() !== 'signed')
+        return { ok: false, reason: 'bad_signature' };
+      return {
+        ok: true,
+        event: {
+          kind: 'payment',
+          eventId,
+          eventType: 'collection.succeeded',
+          providerReference: 'acct_unknown:chk_unknown',
+          operationReference: randomUUID(),
+          accountReference: 'acct_unknown',
+          status: 'pending',
+        },
+      };
+    },
+  };
+  const webhooks = new BachsWebhookController(
+    live,
+    silentLogger,
+    new WebhookService({ db: database.db }),
+  );
+  await assert.rejects(
+    webhooks.receive({ rawBody: Buffer.from('forged'), headers: {} }),
+    { status: 401 },
+  );
+  const { data } = await webhooks.receive({
+    rawBody: Buffer.from('signed'),
+    headers: {},
+  });
+  assert.equal(data.outcome, 'unmatched');
+  const { rows } = await database.pool.query(
+    `SELECT provider FROM unmatched_provider_events WHERE provider_event_id = $1`,
+    [eventId],
+  );
+  assert.deepEqual(rows, [{ provider: 'bachs' }]);
 });
