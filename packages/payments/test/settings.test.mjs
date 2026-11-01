@@ -289,3 +289,44 @@ test('both Bachs environments record their rows as provider bachs', async () => 
   assert.equal(recordedProviderName('bachs-sandbox'), 'bachs');
   assert.equal(recordedProviderName('mock'), 'mock');
 });
+
+test('LIVE_CHECKOUT_HANDLES: blank means nobody, a star means everyone, names are lower-cased', async () => {
+  const { liveCheckoutSettingsShape, liveCheckoutOpenFor } =
+    await import('../dist/index.js');
+  const parse = (value) =>
+    z.object(liveCheckoutSettingsShape).safeParse({
+      LIVE_CHECKOUT_HANDLES: value,
+    });
+  assert.deepEqual(parse(undefined).data.LIVE_CHECKOUT_HANDLES, []);
+  assert.deepEqual(parse('').data.LIVE_CHECKOUT_HANDLES, []);
+  assert.deepEqual(parse('  ').data.LIVE_CHECKOUT_HANDLES, []);
+  assert.equal(parse('*').data.LIVE_CHECKOUT_HANDLES, '*');
+  assert.deepEqual(parse(' Ada, tobi_1 ,').data.LIVE_CHECKOUT_HANDLES, [
+    'ada',
+    'tobi_1',
+  ]);
+  for (const bad of ['*,ada', 'ada,*', 'not a handle', '@ada', 'ada;tobi']) {
+    const result = parse(bad);
+    assert.equal(result.success, false, bad);
+    assert.equal(JSON.stringify(result.error.issues).includes(bad), false);
+  }
+  const live = { PAYMENT_PROVIDER: 'bachs-live', PAYMENTS_LIVE_ENABLED: true };
+  const open = (config, handle) => liveCheckoutOpenFor(config, handle);
+  assert.equal(open({ ...live, LIVE_CHECKOUT_HANDLES: ['ada'] }, 'ada'), true);
+  assert.equal(
+    open({ ...live, LIVE_CHECKOUT_HANDLES: ['ada'] }, 'tobi'),
+    false,
+  );
+  assert.equal(open({ ...live, LIVE_CHECKOUT_HANDLES: [] }, 'ada'), false);
+  assert.equal(open(live, 'ada'), false);
+  assert.equal(open({ ...live, LIVE_CHECKOUT_HANDLES: '*' }, 'ada'), true);
+  assert.equal(
+    open(
+      { ...live, PAYMENTS_LIVE_ENABLED: false, LIVE_CHECKOUT_HANDLES: '*' },
+      'ada',
+    ),
+    false,
+  );
+  assert.equal(open({ PAYMENT_PROVIDER: 'mock' }, 'ada'), true);
+  assert.equal(open({ PAYMENT_PROVIDER: 'bachs-sandbox' }, 'ada'), true);
+});

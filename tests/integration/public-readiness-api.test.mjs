@@ -107,3 +107,29 @@ test('finishing payment setup refreshes the cached public page at once', async (
     true,
   );
 });
+
+test('a public page says whether its own tipping is open, from the same rule checkout uses', async (t) => {
+  const database = await openTestDatabase();
+  t.after(() => database.close());
+  await database.reset();
+  await seedDemoProfiles(database.db);
+  const open = async (config) =>
+    (await publicPage(database.db, config)).data.tippingOpen;
+  const live = { PAYMENT_PROVIDER: 'bachs-live', WEB_ORIGIN: 'https://x.test' };
+  // Off: closed for all, whatever the list says.
+  assert.equal(
+    await open({
+      ...live,
+      PAYMENTS_LIVE_ENABLED: false,
+      LIVE_CHECKOUT_HANDLES: ['tobi'],
+    }),
+    false,
+  );
+  const on = { ...live, PAYMENTS_LIVE_ENABLED: true };
+  assert.equal(await open({ ...on, LIVE_CHECKOUT_HANDLES: [] }), false);
+  assert.equal(await open({ ...on, LIVE_CHECKOUT_HANDLES: ['ada'] }), false);
+  assert.equal(await open({ ...on, LIVE_CHECKOUT_HANDLES: ['tobi'] }), true);
+  assert.equal(await open({ ...on, LIVE_CHECKOUT_HANDLES: '*' }), true);
+  // Test copies never close for this reason.
+  assert.equal(await open({ PAYMENT_PROVIDER: 'mock' }), true);
+});

@@ -86,3 +86,14 @@ test('requests at the same moment share one read', async () => {
   ]);
   assert.equal(calls, 1);
 });
+
+test('on a live copy only a page the API says is open takes tips; other modes are unaffected', async () => {
+  const { profileTippingClosed } = await import('../src/lib/payment-mode.ts');
+  assert.equal(profileTippingClosed('live', { tippingOpen: true }), false);
+  assert.equal(profileTippingClosed('live', { tippingOpen: false }), true);
+  // An API that doesn't say: never a pay button on a guess, when money is real.
+  assert.equal(profileTippingClosed('live', {}), true);
+  assert.equal(profileTippingClosed('test', {}), false);
+  assert.equal(profileTippingClosed('test', { tippingOpen: false }), false);
+  assert.equal(profileTippingClosed('closed', {}), true);
+});

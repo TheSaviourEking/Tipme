@@ -4,6 +4,7 @@ import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import {
   bachsEnvironment,
   checkPaymentSettings,
+  liveCheckoutSettingsShape,
   paymentSettingsShape,
   paymentWebhookSettingsShape,
 } from '@tipme/payments';
@@ -64,6 +65,7 @@ export const apiConfigSchema = z
       .default('tipme'),
     // Provider, live switch and Bachs credentials: one definition with the worker.
     ...paymentSettingsShape,
+    ...liveCheckoutSettingsShape,
     ...paymentWebhookSettingsShape,
     MOCK_PROVIDER_WEBHOOK_SECRET: z.string().min(32).optional(),
     // The public web app; the only CORS origin and the base of checkout return URLs.

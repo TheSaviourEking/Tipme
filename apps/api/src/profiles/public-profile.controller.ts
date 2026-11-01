@@ -25,7 +25,7 @@ import {
   publicProfile,
   reportProfile,
 } from '@tipme/database';
-import { bachsEnvironment } from '@tipme/payments';
+import { bachsEnvironment, liveCheckoutOpenFor } from '@tipme/payments';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
@@ -56,7 +56,16 @@ export class PublicProfileController {
         ? { requiredAccount: { provider: 'bachs', environment } }
         : {}),
     });
-    if (page) return { data: page };
+    if (page)
+      return {
+        data: {
+          ...page,
+          tippingOpen: liveCheckoutOpenFor(
+            this.config,
+            page.handle.toLowerCase(),
+          ),
+        },
+      };
     const movedTo = await handleAliasTarget(this.database.db, handle);
     if (!movedTo) throw new NotFoundException();
     response.status(308).setHeader('Location', `/v1/profiles/${movedTo}`);

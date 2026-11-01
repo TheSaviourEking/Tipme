@@ -54,6 +54,8 @@ x-api-env: &api-env
   QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
   PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?set PAYMENT_PROVIDER (bachs-live in production)}
   PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
+  # Who may take real tips while it is on: handles, or * for everyone. Blank is nobody.
+  LIVE_CHECKOUT_HANDLES: ${LIVE_CHECKOUT_HANDLES:-}
   # Config refuses bachs-live without the live key and webhook secret, so empty defaults are safe.
   BACHS_LIVE_API_KEY: ${BACHS_LIVE_API_KEY:-}
   BACHS_LIVE_WEBHOOK_SECRET: ${BACHS_LIVE_WEBHOOK_SECRET:-}
