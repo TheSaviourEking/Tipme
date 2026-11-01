@@ -28,6 +28,10 @@
 - [ ] Vercel Instant Rollback → the web app serves the previous deployment.
 - [ ] Redeploy the new version → the full check passes again.
 
+## If the read-only check says the API does not match the web address
+
+`API WEB_ORIGIN does not match https://…` means the API's `WEB_ORIGIN` is a different host from the public site (for example the apex `usetipme.xyz`, which redirects, instead of `www.usetipme.xyz`). Browsers then block every credentialed call to the API with a CORS error, so the dashboard cannot load. Set `WEB_ORIGIN` (and `WEB_REVALIDATE_URL`, if set) in the environment file to the exact public web origin, redeploy the API, and re-run the check.
+
 ## What a failed check leaves behind
 
 The full check deletes its own account and finishes its run, even when a step fails. A check that crashed before that leaves a live, tagged page (`rc_…`). On test copies, the worker sweeps every hour (`rehearsals.sweep`). Two hours after a rehearsal page was created, it erases the account through the normal deletion, without the balance block or the goodbye email, and finishes any run still open, which resolves its issues. Real pages are never touched, and ledger, history and audit stay as written. The log line is `rehearsals.swept` with `erased` and `runsFinished`.
