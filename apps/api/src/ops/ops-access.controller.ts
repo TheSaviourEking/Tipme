@@ -22,6 +22,7 @@ import {
 } from '@tipme/contracts';
 import {
   confirmEnrolmentAndOpenGrant,
+  declineInvitation,
   listAudit,
   openOpsGrant,
   opsEnrolmentState,
@@ -147,6 +148,18 @@ export class OpsAccessController {
         key: this.key,
       }),
     );
+  }
+
+  /** Someone invited turning it down, from the enrolment step. Refused once enrolled. */
+  @Post('decline')
+  @HttpCode(200)
+  @UseGuards(CsrfGuard, StaffGuard)
+  @RateLimit('auth_verify')
+  async decline(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<{ declined: true }>> {
+    await declineInvitation(this.database.db, { userId: auth.userId });
+    return { data: { declined: true } };
   }
 
   @Post('sign-out')

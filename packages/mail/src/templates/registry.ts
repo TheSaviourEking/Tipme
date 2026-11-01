@@ -3,6 +3,7 @@ import type { MailContext, MailType, RenderedMail } from './define.js';
 import {
   emailChangedNotice,
   newSignInNotice,
+  recoveryCancelledNotice,
   recoveryCompletedNotice,
   recoveryStartedNotice,
   welcome,
@@ -56,6 +57,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     recoveryCode,
     recoveryNewEmailCode,
     recoveryStartedNotice,
+    recoveryCancelledNotice,
     recoveryCompletedNotice,
     staffAccessNotice,
     accountDeletedNotice,

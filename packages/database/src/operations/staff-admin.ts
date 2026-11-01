@@ -31,6 +31,7 @@ import {
   normaliseEmail,
   normaliseStaffEmail,
 } from './email-address.js';
+import { mailRecoveryCancelled } from './email-recovery.js';
 import { verifiedOwner } from './email-sign-in.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
@@ -862,7 +863,11 @@ export function addStaff(
           .update(emailRecoveries)
           .set({ cancelledAt: now })
           .where(open(emailRecoveries))
-          .returning({ id: emailRecoveries.id });
+          .returning({
+            id: emailRecoveries.id,
+            newEmail: emailRecoveries.newEmail,
+            confirmedAt: emailRecoveries.confirmedAt,
+          });
         const phones = await tx
           .update(phoneRecoveries)
           .set({ cancelledAt: now })
@@ -876,6 +881,13 @@ export function addStaff(
           .for('update');
         // A recovery finished while this waited: the address is no longer theirs.
         if (!held) throw new OperationError('STAFF_CHANGED');
+        if (recoveriesCancelled > 0)
+          await mailRecoveryCancelled(tx, input.sealing, {
+            userId: proven.id,
+            signInEmail: email,
+            newEmail: emails.find((row) => row.confirmedAt)?.newEmail ?? null,
+            now,
+          });
       }
       const userId = proven?.id ?? newId();
       // Signing in still needs a code sent to the address, as with grant-owner.

@@ -39,7 +39,12 @@ import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
-import { lockedActiveStaff } from './staff.js';
+import {
+  isActiveStaff,
+  isEnrolled,
+  lockStaffAdmin,
+  revokeUnenrolled,
+} from './staff.js';
 import { mailOwner } from './account-mail.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
@@ -620,12 +625,16 @@ export function deleteAccount(
   const photoKeys: string[] = [];
   return guarded(async () => {
     const result = await db.transaction(async (tx) => {
-      // A deleted owner would still hold a staff row. Removal comes first, by someone else.
-      if (
-        !input.rehearsalCleanup &&
-        (await lockedActiveStaff(tx, input.userId))
-      )
-        throw new OperationError('STAFF_CANNOT_DELETE');
+      // First, so nobody can be invited while this runs. Taking no account row here keeps this in
+      // the order addStaff and a completing recovery use: recovery rows, then the account.
+      await lockStaffAdmin(tx);
+      // Someone enrolled needs removing by someone else first. Someone only invited never had the
+      // use of it, and an invitation mustn't cost them their account.
+      if (!input.rehearsalCleanup && (await isActiveStaff(tx, input.userId))) {
+        if (await isEnrolled(tx, input.userId))
+          throw new OperationError('STAFF_CANNOT_DELETE');
+        await revokeUnenrolled(tx, input.userId, 'account_deleted', now);
+      }
       const [row] = await tx
         .select({
           id: profiles.id,

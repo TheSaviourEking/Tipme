@@ -141,6 +141,71 @@ export async function lockedActiveStaff(
   return isActiveStaff(tx, userId);
 }
 
+/**
+ * Ends the staff access of someone who hasn't enrolled, at their own request: they never had the
+ * use of it, so they don't need anyone's say-so. The caller holds the staff-admin lock, and has
+ * checked they aren't enrolled.
+ */
+export async function revokeUnenrolled(
+  tx: Tx,
+  userId: string,
+  via: 'declined' | 'account_deleted',
+  now: Date,
+): Promise<void> {
+  const [row] = await tx
+    .update(staff)
+    .set({ revokedAt: now })
+    .where(and(eq(staff.userId, userId), isNull(staff.revokedAt)))
+    .returning({ roleId: staff.roleId });
+  if (!row) throw new OperationError('STAFF_NOT_FOUND');
+  const [role] = await tx
+    .select({ id: roles.id, name: roles.name })
+    .from(roles)
+    .where(eq(roles.id, row.roleId));
+  await dropOpsAccess(tx, userId, now);
+  const cleared = await clearOverrides(tx, userId);
+  await recordAudit(tx, {
+    staffUserId: userId,
+    action: 'staff.invitation_declined',
+    subjectType: 'user',
+    subjectId: userId,
+    reason: withAuditChange('Declined by the person themselves', {
+      via,
+      role,
+      ...cleared,
+    }),
+    now,
+  });
+}
+
+/** Whether this person has a confirmed authenticator. */
+export async function isEnrolled(
+  tx: Database | Tx,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ confirmedAt: staffTotp.confirmedAt })
+    .from(staffTotp)
+    .where(eq(staffTotp.userId, userId));
+  return Boolean(row?.confirmedAt);
+}
+
+/** An invited person turning it down, from their own session. Their account stays. */
+export function declineInvitation(
+  db: Database,
+  input: { userId: string; now?: Date },
+): Promise<void> {
+  const now = input.now ?? new Date();
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      await lockStaffAdmin(tx);
+      if (await isEnrolled(tx, input.userId))
+        throw new OperationError('STAFF_ALREADY_ENROLLED');
+      await revokeUnenrolled(tx, input.userId, 'declined', now);
+    }),
+  );
+}
+
 /** Uses up any open enrolment code. */
 export async function voidEnrolments(
   tx: Database | Tx,
@@ -366,7 +431,7 @@ export function grantOwner(
       await ensureReleaseCheckRole(tx);
       const role = input.role ?? 'owner';
       const [existing] = await tx
-        .select({ id: users.id })
+        .select({ id: users.id, email: users.email })
         .from(users)
         .where(
           and(
@@ -378,19 +443,30 @@ export function grantOwner(
               : eq(users.phoneE164, phone!),
             isNull(users.deletedAt),
           ),
-        );
-      if (email) {
-        // One person, one staff account: naming a variant must not quietly make a second one.
-        const mailbox = normaliseStaffEmail(email);
+        )
+        .for('update');
+      const named = email ?? existing?.email;
+      if (named) {
+        // One person, one staff account: naming a variant must not quietly make a second one. An
+        // account already active is who the operator means, whatever a removed look-alike held.
+        const mailbox = normaliseStaffEmail(named);
         const staffAccounts = await tx
-          .select({ userId: staff.userId, email: users.email })
+          .select({
+            userId: staff.userId,
+            email: users.email,
+            revokedAt: staff.revokedAt,
+          })
           .from(staff)
           .innerJoin(users, eq(users.id, staff.userId));
+        const active = staffAccounts.some(
+          (person) => person.userId === existing?.id && !person.revokedAt,
+        );
         const match = staffAccounts.find(
           (person) =>
             person.userId !== existing?.id &&
             person.email &&
-            normaliseStaffEmail(person.email) === mailbox,
+            normaliseStaffEmail(person.email) === mailbox &&
+            !(active && person.revokedAt),
         );
         if (match?.email)
           throw new OperationError('STAFF_EMAIL_TAKEN', maskEmail(match.email));

@@ -21,7 +21,7 @@ import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 
 const STAFF_EMAIL_LOCKED_NOTE =
-  'Staff can’t change their sign-in email here. Ask an owner to do it for you.';
+  'Staff can’t change their sign-in email here. Contact the owner, who can have it changed.';
 
 function PageState() {
   const { profile, setProfile } = useRecipient();

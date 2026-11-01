@@ -38,7 +38,9 @@ export const staffInvitation = defineMailType({
           },
           {
             kind: 'text',
-            text: 'If you weren’t expecting this, ignore this email and tell the person who runs your TipMe admin area.',
+            text: invited
+              ? 'Don’t want this? Open the link, sign in, and choose Decline. If you weren’t expecting it at all, tell the person who runs your TipMe admin area.'
+              : 'If you weren’t expecting this, tell the person who runs your TipMe admin area.',
           },
         ],
         reason: invited

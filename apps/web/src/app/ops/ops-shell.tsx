@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
-import { Button, Container, Skeleton } from '@tipme/ui';
+import { Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
 import { PageUnavailable } from '@/components/page-unavailable';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -16,6 +16,7 @@ import {
   PROVIDER_TEST_TOKEN_KEY,
   type OpsAccess,
 } from '@/lib/ops-client';
+import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
 import { apiFetch } from '@/lib/session-client';
 
 const links = [
@@ -41,12 +42,19 @@ async function opsState(): Promise<State | 'signed_out'> {
           access: { role: me.data.role, permissions: me.data.permissions },
         }
       : { step: me.data.state };
+  if (isTemporaryFailure(me.status)) return { step: 'retry' };
   const session = await apiFetch('/v1/me/sessions');
-  return session.status === 401 ? 'signed_out' : { step: 'unavailable' };
+  if (session.status === 401) return 'signed_out';
+  return isTemporaryFailure(session.status)
+    ? { step: 'retry' }
+    : { step: 'unavailable' };
 }
 
 type State =
-  | { step: 'loading' | 'unavailable' | 'needs_enrolment' | 'needs_code' }
+  | {
+      step:
+        'loading' | 'unavailable' | 'retry' | 'needs_enrolment' | 'needs_code';
+    }
   | { step: 'granted'; access: OpsAccess };
 
 /**
@@ -81,8 +89,8 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
         }
         router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
       } else {
-        // Only the enrolment step has a use for the code, and it clears it itself.
-        if (next.step !== 'needs_enrolment') clearEnrolLink();
+        // The enrolment step clears it itself, and a passing failure must not lose it.
+        if (!keepsEnrolLink(next.step)) clearEnrolLink();
         setState(next);
       }
     },
@@ -109,6 +117,14 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
         </div>
         {state.step === 'loading' && (
           <Skeleton label="Loading the admin area" />
+        )}
+        {state.step === 'retry' && (
+          <Notice tone="error" title="We couldn’t load the admin area">
+            <p>This is usually brief.</p>
+            <Button variant="secondary" onClick={reload}>
+              Try again
+            </Button>
+          </Notice>
         )}
         {state.step === 'needs_enrolment' && <OpsEnrol onDone={reload} />}
         {state.step === 'needs_code' && <OpsCode onDone={reload} />}

@@ -463,21 +463,40 @@ export function changeEmail(
   );
 }
 
-/** For `pnpm ops:set-email`: gives an existing account a proven address, on someone's say-so. */
+/**
+ * For `pnpm ops:set-email`: gives an existing account a proven address, on someone's say-so. Named
+ * by page handle, or by its current address for accounts with no page, such as staff. The old
+ * address is told when a mail key is at hand; the log says whether it was.
+ */
 export function setAccountEmail(
   db: Database,
-  input: { handle: string; email: string; reason: string; now?: Date },
-): Promise<'set' | 'taken' | 'not_found' | 'invalid'> {
+  input: ({ handle: string } | { currentEmail: string }) & {
+    email: string;
+    reason: string;
+    sealing?: MailSealing;
+    now?: Date;
+  },
+): Promise<'set' | 'taken' | 'not_found' | 'invalid' | 'bad_reason'> {
   const email = normaliseEmail(input.email);
-  if (!email || looksLikeAuditChange(input.reason))
-    return Promise.resolve('invalid');
+  if (!email) return Promise.resolve('invalid');
+  if (looksLikeAuditChange(input.reason)) return Promise.resolve('bad_reason');
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
-      const [page] = await tx
-        .select({ userId: profiles.userId })
-        .from(profiles)
-        .where(eq(profiles.handleLower, input.handle.toLowerCase()));
+      const current =
+        'currentEmail' in input ? normaliseEmail(input.currentEmail) : null;
+      const [page] =
+        'handle' in input
+          ? await tx
+              .select({ userId: profiles.userId })
+              .from(profiles)
+              .where(eq(profiles.handleLower, input.handle.toLowerCase()))
+          : current
+            ? await tx
+                .select({ userId: users.id })
+                .from(users)
+                .where(verifiedOwner(current))
+            : [];
       if (!page?.userId) return 'not_found';
       const [owner] = await tx
         .select({ id: users.id })
@@ -487,7 +506,7 @@ export function setAccountEmail(
       // The one route that may move a staff account: whoever runs it vouches, and it's logged.
       const isStaff = await lockedActiveStaff(tx, page.userId);
       const [before] = await tx
-        .select({ email: users.email })
+        .select({ email: users.email, verifiedAt: users.emailVerifiedAt })
         .from(users)
         .where(eq(users.id, page.userId));
       await tx
@@ -495,6 +514,19 @@ export function setAccountEmail(
         .set({ email, emailVerifiedAt: now })
         .where(eq(users.id, page.userId));
       if (isStaff) await voidEnrolments(tx, page.userId, now);
+      const tell =
+        input.sealing && before?.email && before.verifiedAt
+          ? before.email !== email
+          : false;
+      if (tell)
+        await enqueueMail(tx, input.sealing!, {
+          type: 'email_changed_notice',
+          to: before!.email!,
+          userId: page.userId,
+          data: { newEmailHint: maskEmail(email) },
+          dedupeKey: `email_changed_notice.${page.userId}.${newId()}`,
+          now,
+        });
       await recordAudit(tx, {
         staffUserId: null,
         action: 'account.email_set_by_script',
@@ -504,6 +536,7 @@ export function setAccountEmail(
           from: before?.email ? maskEmail(before.email) : null,
           to: maskEmail(email),
           staff: isStaff,
+          oldAddressNotified: tell,
         }),
         now,
       });

@@ -3816,6 +3816,39 @@
         "x-tipme-permission": "payments.repair"
       }
     },
+    "/v1/ops/decline": {
+      "post": {
+        "operationId": "OpsAccess.decline",
+        "tags": [
+          "OpsAccess"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
+      }
+    },
     "/v1/ops/email/export.csv": {
       "get": {
         "operationId": "OpsEmailConsole.exportCsv",

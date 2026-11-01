@@ -65,6 +65,19 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
   >(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [declining, setDeclining] = useState(false);
+
+  const decline = async () => {
+    setBusy(true);
+    setError('');
+    const result = await apiFetch('/v1/ops/decline', {
+      method: 'POST',
+      body: {},
+    });
+    setBusy(false);
+    if (result.ok) window.location.assign('/dashboard');
+    else setError(problem(result.code));
+  };
 
   const start = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -139,6 +152,32 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
           <Button type="submit" disabled={busy} aria-busy={busy}>
             Continue
           </Button>
+          {!declining ? (
+            <Button
+              type="button"
+              variant="quiet"
+              disabled={busy}
+              onClick={() => setDeclining(true)}
+            >
+              Decline admin access
+            </Button>
+          ) : (
+            <Notice tone="neutral" title="Decline admin access?">
+              <p>
+                You won’t have admin access. Your TipMe account stays, and an
+                owner would need to invite you again.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                aria-busy={busy}
+                onClick={() => void decline()}
+              >
+                Yes, decline
+              </Button>
+            </Notice>
+          )}
         </form>
       ) : (
         <form className="settings-form" onSubmit={(e) => void confirm(e)}>

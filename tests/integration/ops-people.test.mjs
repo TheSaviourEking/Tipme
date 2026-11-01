@@ -1797,3 +1797,389 @@ test('only an owner sends an invitation again to an owner', async () => {
     reason: REASON,
   });
 });
+
+const signOutOfOps = (person_) => person_.cookie.split('; ')[0];
+const openLinks = async (userId) =>
+  (
+    await rows(
+      `SELECT count(*)::int AS open FROM staff_enrolments WHERE user_id = $1 AND used_at IS NULL`,
+      [userId],
+    )
+  )[0].open;
+
+test('an invited person can decline: access ends, it is logged, and their self-service returns', async () => {
+  const email = newEmail();
+  const session = await emailSignIn(email);
+  const { userId } = await person(auditRole.id, email);
+  assert.equal(
+    (
+      await call('POST', '/v1/me/email/code', session.cookie, {
+        email: newEmail(),
+      })
+    ).status,
+    409,
+    'the email lock holds while invited',
+  );
+  const declined = await call('POST', '/v1/ops/decline', session.cookie, {});
+  assert.equal(declined.status, 200);
+  assert.equal((await call('GET', '/v1/ops/me', session.cookie)).status, 404);
+  assert.ok(
+    (await rows(`SELECT revoked_at FROM staff WHERE user_id = $1`, [userId]))[0]
+      .revoked_at,
+  );
+  assert.equal(await openLinks(userId), 0);
+  const audit = await lastAudit('staff.invitation_declined', userId);
+  assert.equal(audit.staff_user_id, userId);
+  assert.equal(changeIn(audit.reason).role.id, auditRole.id);
+  assert.equal(
+    (
+      await call('POST', '/v1/me/email/code', session.cookie, {
+        email: newEmail(),
+      })
+    ).status,
+    202,
+  );
+  // Declining isn't a ban: they can be invited again.
+  assert.equal((await person(auditRole.id, email)).userId, userId);
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+test('someone enrolled cannot decline, and a non-staff session sees nothing', async () => {
+  const someone = await enrolled();
+  const refused = await call(
+    'POST',
+    '/v1/ops/decline',
+    signOutOfOps(someone),
+    {},
+  );
+  assert.equal(refused.status, 409);
+  assert.equal(await errorCode(refused), 'STAFF_ALREADY_ENROLLED');
+  assert.equal(await ops.staffRole(database.db, someone.userId), auditRole.id);
+  const stranger = await emailSignIn(newEmail());
+  assert.equal(
+    (await call('POST', '/v1/ops/decline', stranger.cookie, {})).status,
+    404,
+  );
+  assert.equal(
+    (await call('POST', '/v1/ops/decline', undefined, {})).status,
+    404,
+  );
+});
+
+test('the invitation says how to decline; a reset does not offer it', async () => {
+  const { MAIL_TYPES } = await import('../../packages/mail/dist/index.js');
+  const ctx = { webOrigin: WEB, unsubscribeUrl: null };
+  const render = (kind) =>
+    MAIL_TYPES.staff_invitation.render({ code: 'ABCDEFGH23', kind }, ctx).text;
+  assert.match(render('invited'), /decline/i);
+  assert.doesNotMatch(render('reset'), /decline/i);
+});
+
+test('an invited person can delete their account, which ends their staff access', async () => {
+  const email = newEmail();
+  const session = await emailSignIn(email);
+  const { userId } = await person(auditRole.id, email);
+  const removed = await call('DELETE', '/v1/me/account', session.cookie, {
+    confirm: 'DELETE',
+  });
+  assert.equal(removed.status, 204);
+  const [row] = await rows(
+    `SELECT s.revoked_at, u.deleted_at, u.email FROM staff s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1`,
+    [userId],
+  );
+  assert.ok(row.revoked_at);
+  assert.ok(row.deleted_at);
+  assert.equal(row.email, null);
+  assert.equal(await openLinks(userId), 0);
+  const audit = await lastAudit('staff.invitation_declined', userId);
+  assert.equal(changeIn(audit.reason).via, 'account_deleted');
+});
+
+test('inviting someone tells them a recovery was cancelled, at both addresses', async () => {
+  const email = newEmail();
+  const newAddress = newEmail();
+  const session = await recoveryInHold(email, newAddress);
+  await person(auditRole.id, email);
+  const notices = await rows(
+    `SELECT to_hint FROM mail_messages WHERE user_id = $1 AND type = 'recovery_cancelled_notice' ORDER BY to_hint`,
+    [session.userId],
+  );
+  assert.deepEqual(
+    notices.map((n) => n.to_hint).sort(),
+    [`a•••@${email.split('@')[1]}`, `a•••@${newAddress.split('@')[1]}`].sort(),
+  );
+  const mail = await inboxMail(email, 'cancelled');
+  assert.match(mail.body, /support@/);
+  assert.doesNotMatch(mail.body, /admin|staff/i);
+  // Nothing was waiting: no notice.
+  const quiet = newEmail();
+  const { userId } = await emailSignIn(quiet);
+  await person(auditRole.id, quiet);
+  assert.equal(
+    (
+      await rows(
+        `SELECT 1 FROM mail_messages WHERE user_id = $1 AND type = 'recovery_cancelled_notice'`,
+        [userId],
+      )
+    ).length,
+    0,
+  );
+});
+
+test('a recovery refused at completion also tells the person', async () => {
+  const email = newEmail();
+  const session = await recoveryInHold(email, newEmail());
+  await ops.grantOwner(database.db, { email });
+  await ops.completeDueRecoveries(database.db, sealing, later());
+  assert.equal(
+    (
+      await rows(
+        `SELECT 1 FROM mail_messages WHERE user_id = $1 AND type = 'recovery_cancelled_notice'`,
+        [session.userId],
+      )
+    ).length,
+    2,
+  );
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId: session.userId,
+    reason: REASON,
+  });
+});
+
+test('ops:set-email reaches staff with no page, logs it and tells the old address', async () => {
+  const { execFile } = await import('node:child_process');
+  const script = new URL(
+    '../../packages/database/dist/scripts/set-email.js',
+    import.meta.url,
+  ).pathname;
+  const run = (...args) =>
+    new Promise((resolve) =>
+      execFile(
+        process.execPath,
+        [script, ...args],
+        { env: { ...process.env, DATABASE_URL: database.url, MAIL_SEAL_KEY } },
+        (error, stdout, stderr) =>
+          resolve({ code: error?.code ?? 0, stdout, stderr }),
+      ),
+    );
+  const email = newEmail();
+  const { userId } = await person(auditRole.id, email);
+  assert.deepEqual(
+    await rows(`SELECT 1 FROM profiles WHERE user_id = $1`, [userId]),
+    [],
+  );
+  const next = newEmail();
+  const moved = await run(
+    '--email-current',
+    email,
+    '--email',
+    next,
+    '--reason',
+    REASON,
+  );
+  assert.equal(moved.code, 0, moved.stderr + moved.stdout);
+  assert.equal(
+    (await rows(`SELECT email FROM users WHERE id = $1`, [userId]))[0].email,
+    next,
+  );
+  const change = changeIn(
+    (await lastAudit('account.email_set_by_script', userId)).reason,
+  );
+  assert.equal(change.staff, true);
+  assert.equal(change.oldAddressNotified, true);
+  const notice = await sealedMail(userId, 'email_changed_notice');
+  assert.equal(notice.toHint, `a•••@${email.split('@')[1]}`);
+  assert.equal(notice.newEmailHint, `a•••@${next.split('@')[1]}`);
+
+  // One way to name the account, exactly.
+  const both = await run(
+    '--email-current',
+    next,
+    '--handle',
+    'x',
+    '--email',
+    newEmail(),
+    '--reason',
+    REASON,
+  );
+  assert.equal(both.code, 1);
+  assert.match(both.stderr, /Usage/);
+  const unknown = await run(
+    '--email-current',
+    newEmail(),
+    '--email',
+    newEmail(),
+    '--reason',
+    REASON,
+  );
+  assert.equal(unknown.code, 1);
+  assert.match(unknown.stdout, /no account/i);
+  // The right message for a reason the log can't take.
+  const marked = await run(
+    '--email-current',
+    next,
+    '--email',
+    newEmail(),
+    '--reason',
+    `${REASON} [change: x]`,
+  );
+  assert.equal(marked.code, 1);
+  assert.match(marked.stdout, /reason/i);
+  assert.doesNotMatch(marked.stdout, /valid email/i);
+  assert.equal(
+    (await rows(`SELECT email FROM users WHERE id = $1`, [userId]))[0].email,
+    next,
+  );
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+test('without a mail key the script warns and the log says nobody was told', async () => {
+  const email = newEmail();
+  const { userId } = await person(auditRole.id, email);
+  assert.equal(
+    await ops.setAccountEmail(database.db, {
+      currentEmail: email,
+      email: newEmail(),
+      reason: REASON,
+    }),
+    'set',
+  );
+  assert.equal(
+    changeIn((await lastAudit('account.email_set_by_script', userId)).reason)
+      .oldAddressNotified,
+    false,
+  );
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+});
+
+test('STAFF_EMAIL_LOCKED says to contact the owner, who can have it changed', async () => {
+  const someone = await enrolled();
+  const { error } = await (
+    await call('POST', '/v1/me/email/code', signOutOfOps(someone), {
+      email: newEmail(),
+    })
+  ).json();
+  assert.match(error.message, /contact the owner/i);
+  assert.match(error.message, /have it changed/i);
+});
+
+test('grant-owner on an active account is not blocked by a removed look-alike', async () => {
+  const name = `n${uniquePrefix().replace(/\W/g, '')}`;
+  const gone = await person(auditRole.id, `${name}@gmail.com`);
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId: gone.userId,
+    reason: REASON,
+  });
+  // An operator moved an active person onto the same mailbox: the real route to this state.
+  const active = newEmail();
+  const { userId } = await person(auditRole.id, active);
+  const variant = `${name}+work@gmail.com`;
+  assert.equal(
+    await ops.setAccountEmail(database.db, {
+      currentEmail: active,
+      email: variant,
+      reason: REASON,
+    }),
+    'set',
+  );
+  const granted = await ops.grantOwner(database.db, { email: variant });
+  assert.equal(granted.userId, userId);
+  // An account that isn't active staff gets no such pass.
+  await ops.removeStaff(database.db, {
+    actorId: ownerId,
+    userId,
+    reason: REASON,
+  });
+  assert.equal(
+    await attempt(
+      ops.grantOwner(database.db, { email: `${name}+other@gmail.com` }),
+    ),
+    'STAFF_EMAIL_TAKEN',
+  );
+});
+
+test('grant-owner compares the mailbox on the phone form too', async () => {
+  const name = `n${uniquePrefix().replace(/\W/g, '')}`;
+  await person(auditRole.id, `${name}@gmail.com`);
+  const number = `+234803669${phone++}`;
+  assert.equal(
+    (await call('POST', '/v1/auth/code', undefined, { phone: number })).status,
+    202,
+  );
+  const code = /\b(\d{6})\b/.exec(
+    (await (await fetch(`${stack.api}/v1/dev/inbox`)).json()).data[0].body,
+  )[1];
+  const verified = await call('POST', '/v1/auth/verify', undefined, {
+    phone: number,
+    code,
+  });
+  assert.equal(verified.status, 200);
+  const [{ id: userId }] = await rows(
+    `SELECT id FROM users WHERE phone_e164 = $1`,
+    [number],
+  );
+  await ops.startEmailVerification(database.db, {
+    sealing,
+    userId,
+    email: `${name}+phone@gmail.com`,
+    webOrigin: WEB,
+  });
+  const { token } = await sealedMail(userId, 'email_verification_link');
+  assert.equal(await ops.confirmEmail(database.db, { token }), 'confirmed');
+  assert.equal(
+    await attempt(ops.grantOwner(database.db, { phone: number })),
+    'STAFF_EMAIL_TAKEN',
+  );
+  assert.equal(await ops.staffRole(database.db, userId), null);
+});
+
+test('inviting and deleting the same person at once never breaks', async () => {
+  for (let i = 0; i < 6; i++) {
+    const email = newEmail();
+    const { userId } = await emailSignIn(email);
+    // Set up directly: the race needs a recovery row, and six real recoveries add nothing.
+    await rows(
+      `INSERT INTO phone_recoveries (id, user_id, new_phone_e164, effective_at)
+         VALUES (gen_random_uuid(), $1, $2, now() + interval '1 hour')`,
+      [userId, `+234803670${phone++}`],
+    );
+    const results = await Promise.allSettled([
+      ops.addStaff(database.db, {
+        actorId: ownerId,
+        email,
+        roleId: auditRole.id,
+        reason: REASON,
+        sealing,
+      }),
+      ops.deleteAccount(database.db, { userId, sealing }),
+    ]);
+    for (const result of results)
+      if (result.status === 'rejected')
+        assert.equal(
+          result.reason.name,
+          'OperationError',
+          String(result.reason),
+        );
+    const [row] = await rows(
+      `SELECT u.deleted_at, s.revoked_at, s.user_id FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.id = $1`,
+      [userId],
+    );
+    assert.ok(row.deleted_at, 'the deletion ran');
+    if (row.user_id)
+      assert.ok(row.revoked_at, 'a deleted account keeps no live staff row');
+  }
+});

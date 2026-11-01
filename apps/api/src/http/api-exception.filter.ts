@@ -39,7 +39,7 @@ const messages: Record<ApiErrorCode, string> = {
   STAFF_EMAIL_TAKEN:
     'That mailbox already belongs to staff (dots and +tags count as the same address). To bring back someone removed, use their exact address.',
   STAFF_EMAIL_LOCKED:
-    'Staff can’t change their sign-in email here. Ask an owner to do it for you.',
+    'Staff can’t change their sign-in email here. Contact the owner, who can have it changed.',
   STAFF_CANNOT_DELETE:
     'Staff accounts can’t be deleted. Ask an owner to remove your staff access first.',
   STAFF_ALREADY_ENROLLED:

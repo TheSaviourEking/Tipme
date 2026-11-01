@@ -466,6 +466,35 @@ export function startStaffRecovery(
   );
 }
 
+/**
+ * Tells someone a recovery they may be waiting on won't happen: at the sign-in address, and at the
+ * new address of a confirmed email recovery, which may be the only one they can still read.
+ */
+export async function mailRecoveryCancelled(
+  tx: Tx,
+  sealing: MailSealing,
+  input: {
+    userId: string;
+    signInEmail: string | null;
+    newEmail: string | null;
+    now: Date;
+  },
+): Promise<void> {
+  const data = {
+    newEmailHint: input.newEmail ? maskEmail(input.newEmail) : null,
+  };
+  for (const to of [input.signInEmail, input.newEmail])
+    if (to)
+      await enqueueMail(tx, sealing, {
+        type: 'recovery_cancelled_notice',
+        to,
+        userId: input.userId,
+        data,
+        dedupeKey: `recovery_cancelled_notice.${input.userId}.${newId()}`,
+        now: input.now,
+      });
+}
+
 /** Scheduled. Moves accounts whose hold has ended, unless the address was taken meanwhile. */
 export function completeDueRecoveries(
   db: Database,
@@ -521,6 +550,16 @@ export function completeDueRecoveries(
             reason: withAuditChange('Recovery due on a staff account', {
               newEmail: maskEmail(row.newEmail),
             }),
+            now,
+          });
+          const [person] = await tx
+            .select({ email: users.email })
+            .from(users)
+            .where(eq(users.id, row.userId));
+          await mailRecoveryCancelled(tx, sealing, {
+            userId: row.userId,
+            signInEmail: person?.email ?? null,
+            newEmail: row.newEmail,
             now,
           });
           return false;
