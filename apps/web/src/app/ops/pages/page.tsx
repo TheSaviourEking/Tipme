@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { OpsPage } from '@tipme/contracts';
+import Link from 'next/link';
+import type { OpsPage, OpsWithdrawalFreeze } from '@tipme/contracts';
 import {
   Badge,
   Button,
@@ -98,6 +99,43 @@ function MoveSignInEmail({ userId }: { userId: string }) {
         <Button variant="secondary" onClick={() => setOpen(true)}>
           Move sign-in email…
         </Button>
+      )}
+    </Card>
+  );
+}
+
+/** A reported takeover: stops withdrawals until the issue it opens is resolved. */
+function FreezeWithdrawals({ profileId }: { profileId: string }) {
+  const [issueId, setIssueId] = useState('');
+  const freeze = async (reason: string) => {
+    const result = await apiFetch<OpsWithdrawalFreeze>(
+      `/v1/ops/pages/${profileId}/withdrawal-freeze`,
+      { method: 'POST', body: { reason } },
+    );
+    if (!result.ok) return 'That didn’t go through. Please try again.';
+    setIssueId(result.data.issueId);
+    return null;
+  };
+  return (
+    <Card className="settings-section">
+      <h2>Reported account takeover</h2>
+      <p className="tm-hint">
+        Stops new withdrawals, and any not yet started, until the issue is
+        resolved. A withdrawal already with the provider can’t be recalled. The
+        recipient sees only that withdrawals are paused while support checks.
+      </p>
+      {issueId ? (
+        <Notice tone="success" title="Withdrawals are frozen">
+          Resolve <Link href={`/ops/issues/${issueId}`}>the issue</Link> once
+          the real owner has the account back.
+        </Notice>
+      ) : (
+        <ReasonAction
+          open="Freeze withdrawals…"
+          field="Who reported it, and what did they say?"
+          submit="Freeze withdrawals"
+          onSubmit={freeze}
+        />
       )}
     </Card>
   );
@@ -231,6 +269,9 @@ export default function OpsPagesPage() {
       )}
       {page?.userId && can(access, 'recoveries.manage') && (
         <MoveSignInEmail key={page.userId} userId={page.userId} />
+      )}
+      {page && can(access, 'payouts.resolve') && (
+        <FreezeWithdrawals key={page.profileId} profileId={page.profileId} />
       )}
       {page && can(access, 'fees.manage') && (
         <PagePricing key={page.profileId} profileId={page.profileId} />

@@ -11,14 +11,18 @@ import {
   opsFeeFreeGrantSchema,
   opsPageFeeSchema,
   opsPagePlanSchema,
+  opsReasonSchema,
   type ApiDataResponse,
   type OpsFeeFreeGrantRequest,
   type OpsPage,
   type OpsPageFeeRequest,
   type OpsPagePlanRequest,
   type OpsPagePricing,
+  type OpsReasonRequest,
+  type OpsWithdrawalFreeze,
 } from '@tipme/contracts';
 import {
+  freezeWithdrawals,
   grantFeeFreeTips,
   opsPageByHandle,
   pagePricing,
@@ -88,6 +92,25 @@ export class OpsPagesController {
     const pricing = await pagePricing(this.database.db, profileId);
     if (!pricing) throw new CodedHttpException(404, 'NOT_FOUND');
     return { data: pricing };
+  }
+
+  /** A reported account takeover: stops withdrawals until the issue it opens is resolved. */
+  @Post(':profileId/withdrawal-freeze')
+  @HttpCode(200)
+  @OpsPermission('payouts.resolve')
+  async freeze(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<OpsWithdrawalFreeze>> {
+    if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
+    return {
+      data: await freezeWithdrawals(this.database.db, {
+        staffUserId: ops.userId,
+        profileId,
+        reason: body.reason,
+      }),
+    };
   }
 
   @Post(':profileId/fee')

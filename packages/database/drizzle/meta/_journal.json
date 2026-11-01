@@ -414,6 +414,13 @@
       "when": 1793558253155,
       "tag": "0058_live_payment_switches",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793558380182,
+      "tag": "0059_account_takeover_hold",
+      "breakpoints": true
     }
   ]
 }

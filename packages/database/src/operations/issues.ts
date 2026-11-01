@@ -51,6 +51,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payout_unresolved: 'money',
   payout_fee_short: 'money',
   payout_held: 'money',
+  account_takeover_reported: 'money',
   provider_in_debt: 'money',
   provider_event_conflict: 'money',
   stuck_tip: 'info',
@@ -104,6 +105,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `${page} reported a supporter’s message. Reveal it (with a reason) to review it.`;
     case 'profile_reported':
       return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
+    case 'account_takeover_reported':
+      return `Someone reported that ${page}’s account was taken over. Staff froze its withdrawals; the audit log has why. Once the real owner has it back, resolve this to release them.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }

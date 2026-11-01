@@ -47,7 +47,12 @@ export type OpsReasonRequest = z.infer<typeof opsReasonSchema>;
 export const opsResolveIssueSchema = opsReasonSchema
   .extend({
     outcome: z
-      .enum(['resolved_by_provider', 'recipient_owes', 'written_off'])
+      .enum([
+        'resolved_by_provider',
+        'recipient_owes',
+        'written_off',
+        'account_secured',
+      ])
       .optional(),
   })
   .strict();
@@ -135,6 +140,7 @@ export const ISSUE_KINDS = [
   'pending_recovery',
   'message_reported',
   'profile_reported',
+  'account_takeover_reported',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -147,6 +153,8 @@ export const ISSUE_OUTCOMES = [
   'written_off',
   // Only the mark-failed tool states this: staff looked, and the provider has no such payout.
   'staff_confirmed_absent',
+  // Staff froze withdrawals after a reported takeover, and the owner has the account back.
+  'account_secured',
 ] as const;
 export type OpsIssueOutcome = (typeof ISSUE_OUTCOMES)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
@@ -585,6 +593,12 @@ export const opsPagePlanSchema = opsReasonSchema
   .extend({ plan: z.enum(['free', 'pro']) })
   .strict();
 export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
+
+/** Staff froze a page's withdrawals after a reported takeover; `issueId` is the case that holds it. */
+export interface OpsWithdrawalFreeze {
+  state: 'frozen' | 'already_frozen';
+  issueId: string;
+}
 
 /** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
 export interface OpsPagePricing {

@@ -42,6 +42,7 @@ export const ISSUE_OUTCOME_CHOICES: Record<string, string> = {
   resolved_by_provider: 'Settled by the provider',
   recipient_owes: 'The recipient owes the money',
   written_off: 'Written off by TipMe',
+  account_secured: 'The real owner has the account back',
 };
 /** Every outcome that can be shown. The last is only ever stated by the mark-failed tool. */
 export const ISSUE_OUTCOME_LABELS: Record<string, string> = {
@@ -64,6 +65,7 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payout_unresolved: 'Withdrawal outcome unknown',
   payout_fee_short: 'Payout fee above what was covered',
   payout_held: 'Withdrawal waiting on a hold',
+  account_takeover_reported: 'Reported account takeover',
   provider_in_debt: 'Provider account in debt',
   provider_event_conflict: 'Conflicting provider event',
   stuck_tip: 'Tip stuck confirming',

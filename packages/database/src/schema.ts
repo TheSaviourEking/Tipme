@@ -1068,7 +1068,7 @@ export const withdrawalHolds = pgTable(
   (table) => [
     check(
       'withdrawal_holds_reason',
-      sql`reason IN ('reversal', 'in_debt', 'unexpected_payout')`,
+      sql`reason IN ('reversal', 'in_debt', 'unexpected_payout', 'account_takeover')`,
     ),
     check(
       'withdrawal_holds_release',

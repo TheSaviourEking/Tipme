@@ -29,6 +29,7 @@ Severity is **Money**, **Account** or **Info**. Work Money issues first.
 | **Unmatched provider event**        | The provider sent an event TipMe could not match.                                                                                                       | Look up the reference with the provider; resolve with what it was.                                                                                                                                                                                             |
 | **Reported page**                   | Visitors reported a page as impersonation, a scam, abuse or other. The evidence shows how many reports gave each reason (never who sent them).          | Open the page. If it pretends to be someone else, or is a scam, **pause the page** with a reason the recipient will see. Otherwise resolve it with what you found. A new report after you resolve it opens a new issue.                                        |
 | **Reported message**                | A recipient reported a supporter's message as abusive, spam or other. It is already hidden from their dashboard.                                        | Read it only through the evidence view (it asks for a reason and is audited). If abusive, note the tip and escalate; there is no supporter account to suspend. Resolve with what you did.                                                                      |
+| **Reported account takeover**       | Staff froze this person's withdrawals after a report that someone else has the account (Pages → Reported account takeover).                             | Prove who the real owner is, get them back in (`sign-in-problems.md`), then resolve with **The real owner has the account back**. That releases the freeze unless another money issue is open. Staff's reason is in the audit log, not the issue.              |
 | **Pending phone recovery**          | Someone used email recovery to move an account to a new number. It takes effect 24 hours later.                                                         | If the owner says it wasn't them, **cancel the phone recovery**. It closes itself when completed or cancelled.                                                                                                                                                 |
 
 ## The evidence view
@@ -49,7 +50,9 @@ Every action asks for a written reason (10–500 characters) and is recorded wit
   - The recipient sees your reason on their dashboard, so write it for them.
 - **Cancel the phone recovery.**
 
-There is **no** refund, adjustment or payout hold here: those need two people and a real provider (`docs/05-SECURITY.md`, D-03 to D-06).
+- **Freeze withdrawals (Pages, needs `payouts.resolve`):** for a reported account takeover only. It stops withdrawals not yet started, moves no money and recalls nothing already with the provider. The recipient sees only "paused while support checks your account". The freeze ends when its issue is resolved.
+
+There is **no** refund or adjustment here, and no other payout hold: those need two people and a real provider (`docs/05-SECURITY.md`, D-03 to D-06).
 
 ## Related
 
