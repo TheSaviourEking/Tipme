@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
+import { PilotNotice } from '@/components/pilot-notice';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import {
@@ -118,6 +119,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             ) : (
               <AppreciationForm
                 paymentMode={mode}
+                pilotNotice={<PilotNotice />}
                 recipient={firstName}
                 handle={profile.handle}
                 collapseExtras

@@ -428,20 +428,28 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.7;
 }
 
-/* The pilot notice: one quiet line under the footer card; it never sits above the tip action. */
+/* The pilot notice: one quiet line next to the money action; it takes no space when absent. */
 .pilot-notice {
-  margin: var(--space-4) 0 0;
-  padding: 0 var(--space-2);
+  display: block;
+  margin-top: var(--space-2);
   color: var(--text-secondary);
   font-size: var(--text-xs);
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .pilot-notice a {
-  display: inline-block;
-  padding-block: 0.6rem;
   color: var(--text-primary);
   text-underline-offset: 3px;
+}
+
+.composer-disclaimer .pilot-notice {
+  margin-top: 0;
+  font-size: inherit;
+}
+
+.dashboard-bar + .pilot-notice,
+.tip-status-card .pilot-notice {
+  margin-block: var(--space-3);
 }
 
 /* Public pages: editorial serif titles and physical surfaces on the warm canvas. */

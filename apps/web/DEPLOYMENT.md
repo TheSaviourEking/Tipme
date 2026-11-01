@@ -17,8 +17,9 @@ staging domain is attached before running the staging release check.
 
 ## Pilot notice
 
-`PILOT_NOTICE=on` (server-only, no `NEXT_PUBLIC_` equivalent) shows a one-line pilot notice in the
-footer of every page. Off unless it is exactly `on`. The app reads it for each request, but Vercel
+`PILOT_NOTICE=on` (server-only, no `NEXT_PUBLIC_` equivalent) shows a one-line pilot notice beside
+the Tip button, the receipt, the dashboard and Withdraw, but only when payments are live. Off unless
+it is exactly `on`. The app reads it for each request, but Vercel
 applies a changed variable only to a new deployment, so redeploy after changing it. See
 `docs/runbooks/production.md`, "The pilot notice".
 

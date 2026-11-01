@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { Container } from '@tipme/ui';
 import { PaymentModeSlot, TestModeOnly } from './payment-mode-slot';
 import { Brand } from './brand';
-import { PilotNotice } from './pilot-notice';
 
 const groups = [
   {
@@ -64,7 +63,6 @@ export function Footer() {
             ))}
           </nav>
         </div>
-        <PilotNotice />
         <div className="footer-bottom">
           <span>© 2026 TipMe. A little thanks goes a long way.</span>
           <PaymentModeSlot>
