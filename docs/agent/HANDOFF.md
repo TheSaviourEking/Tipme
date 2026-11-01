@@ -1,3 +1,22 @@
+# Current handoff — production release-check LCP (1 November 2026)
+
+- Branch/worktree: `fix/home-lcp` / `.worktrees/home-lcp`, based on `origin/main` at `26c324e`; four code/test files plus these continuity notes are uncommitted.
+- GitHub Actions run `41289039816` successfully shipped commit `26c324e` in its final relevant deploy job, then measured `/` at 2936 ms in the throttled release check (budget 2000 ms). In that check, 2 tests passed and the preview-only test skipped; other recorded deploy attempts failed at `Ship and deploy`. This coding task did not initiate a deployment.
+- Root cause addressed: Sentry's browser SDK was statically imported by both `instrumentation-client.ts` and the root `global-error.tsx`, putting it in the initial client bundle. Both now use a deferred loader; early browser and fatal-boundary exceptions queue up to 10 and replay after successful initialization. Failure emits a fixed warning without logging import details.
+- Evidence: web production build with dummy `NEXT_PUBLIC_SENTRY_DSN` passed; generated Sentry SDK chunk (477,910 bytes raw) is separate from all 13 initial homepage scripts. Exact throttling probe: five cold-context samples 932, 872, 880, 880, 880 ms (median 880 ms). Focused test 4/4; full web tests 90/90; web lint, typecheck and Prettier passed; `git diff --check` passed.
+- No push, PR, commit, production deployment, or live payment action. `origin/dev` is at `25eca34`, one commit behind the `origin/main` base `26c324e`; check the desired branch direction before proposing a PR.
+- Next: review the final diff, move the fix onto the intended dev-based branch if required, then run the production read-only release check only after owner-approved merge/deployment. Keep the 2000 ms budget and payments-off gate unchanged.
+
+# Current handoff — staging workflow cannot call reusable CI (1 November 2026)
+
+- **Correction (1 Nov):** #75/#76 granted only `statuses: read`, and staging run `41275075923` still had a startup failure on `main` with them. `record-tested-tree` in `ci.yml` requests `statuses: write`, and GitHub validates every job of a called workflow, even skipped ones. The caller now grants `statuses: write`, and `scripts/workflow-contracts.test.mjs` checks every CI job, not only `changes`. It takes effect only once on `main`, because `workflow_run` uses `main`'s file.
+- Branch/worktree: `chore/sync-main-into-dev-after-75` / `.worktrees/sync-main-dev`, based on `origin/dev` commit `c92bb38` and merging `origin/main` commit `6b8db24`.
+- Root cause: `.github/workflows/ci.yml` gives its `changes` job `statuses: read` so it can inspect tested-tree statuses. `.github/workflows/deploy-staging.yml` calls that workflow but omitted `statuses: read`; GitHub rejects a called workflow that requests more permission than its caller grants. Staging therefore had a startup failure before any job or deployment ran.
+- Minimal fix: add `statuses: read` to the staging `checks` caller job. The regression test compares requested and granted permission levels and was observed failing with `[['statuses', 'read']]` before the fix, then passing.
+- Fresh verification after building the isolated worktree: `pnpm build` passed 10/10 tasks; `pnpm test` passed 154/154 script tests and 20/20 Turbo tasks; `pnpm lint` and `pnpm typecheck` passed 17/17 tasks each; `pnpm format:check` and `git diff --check` passed. The initial sandboxed test attempt failed from missing build artifacts and denied localhost binds, not assertions in the change; the correctly prepared rerun passed.
+- Production is not independently broken: its staging-pass gate correctly refused the untested tree. PR #75 put the fix on `main`; PR #76 put it on `dev`; this sync reunifies their history. Run staging for the target commit and require a successful full release check before production. Do not use `override_reason` for this workflow defect.
+- Next exact step: merge this history-sync PR into `dev`, then open the normal `dev → main` PR and run staging. No real payment, staging/production deployment, environment mutation or secret access was performed during diagnosis.
+
 # Current handoff — production infrastructure (31 October 2026)
 
 Branch `feat/production-infra` (worktree `.worktrees/production-infra`), from `8b2db32`, not pushed. Plan: `docs/superpowers/plans/2026-10-31-production-infrastructure.md`; spec: `docs/superpowers/specs/2026-10-31-production-launch-design.md`.
