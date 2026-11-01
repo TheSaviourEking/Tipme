@@ -20,6 +20,34 @@ test('the copy reports itself honestly: no live payments, the expected version',
   expect(ready.status()).toBe(200);
 });
 
+test('the API accepts browser calls from the public web address it is checked with', async ({
+  request,
+}) => {
+  const info = (
+    await (
+      await request.get(`${env.api}/health/release`, {
+        ignoreHTTPSErrors: env.insecure,
+      })
+    ).json()
+  ).data;
+  // A preview copy answers nothing without its password, preflights included.
+  test.skip(info.deploymentMode === 'preview', 'preview copy: gated');
+  const origin = new URL(env.web).origin;
+  // WEB_ORIGIN set to another host (for example the apex instead of www) blocks every
+  // credentialed browser call with a CORS error, while the API itself looks healthy.
+  const preflight = await request.fetch(`${env.api}/v1/me/profile`, {
+    method: 'OPTIONS',
+    headers: { origin, 'access-control-request-method': 'GET' },
+    ignoreHTTPSErrors: env.insecure,
+  });
+  const headers = preflight.headers();
+  expect(
+    headers['access-control-allow-origin'],
+    `API WEB_ORIGIN does not match ${origin}`,
+  ).toBe(origin);
+  expect(headers['access-control-allow-credentials']).toBe('true');
+});
+
 test('a preview copy refuses the API without its password, including the pretend inbox', async ({
   request,
 }) => {
