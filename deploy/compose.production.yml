@@ -176,7 +176,8 @@ x-worker: &worker
     # The safety net when neither a webhook nor the open receipt confirmed a tip (as staging).
     RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-20000}
     RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-45000}
-    REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-25000000}
+    # 0 until D-05 decides cash rewards: the worker refuses any other value on production.
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-0}
   depends_on:
     redis: { condition: service_healthy }
   mem_limit: 512m

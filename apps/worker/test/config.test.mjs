@@ -281,7 +281,11 @@ test('production refuses mock and sandbox, and live payments need bachs-live and
     productionIssues({ PAYMENT_PROVIDER: 'bachs-sandbox' }),
     /PAYMENT_PROVIDER/,
   );
-  assert.equal(productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }), '');
+  // Live payments stay fenced until payouts land (Task 12).
+  assert.match(
+    productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
+    /PAYMENTS_LIVE_ENABLED/,
+  );
   assert.match(
     productionIssues({ BACHS_LIVE_API_KEY: undefined }),
     /BACHS_LIVE_API_KEY/,
@@ -318,4 +322,38 @@ test('a preview copy keeps these settings', () => {
     MAIL_PRETEND_DOMAINS: 'release-check.usetipme.xyz',
   });
   assert.equal(config.RELEASE_KIND, 'test');
+});
+
+test('a production copy has no pretend cash reward budget (D-05)', () => {
+  assert.equal(
+    loadWorkerConfig(productionBase).REWARD_CASH_BUDGET_MINOR_PER_MONTH,
+    0n,
+  );
+  assert.equal(
+    loadWorkerConfig({
+      ...productionBase,
+      REWARD_CASH_BUDGET_MINOR_PER_MONTH: '0',
+    }).REWARD_CASH_BUDGET_MINOR_PER_MONTH,
+    0n,
+  );
+  const message = productionIssues({
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH: '1000',
+  });
+  assert.match(message, /REWARD_CASH_BUDGET_MINOR_PER_MONTH/);
+  assert.doesNotMatch(message, /1000/);
+});
+
+test('a preview copy keeps the default cash reward budget', () => {
+  const preview = {
+    NODE_ENV: 'production',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@localhost/db',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+  };
+  assert.equal(
+    loadWorkerConfig(preview).REWARD_CASH_BUDGET_MINOR_PER_MONTH,
+    25_000_000n,
+  );
 });

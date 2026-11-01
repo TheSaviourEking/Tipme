@@ -4,6 +4,9 @@ import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { checkPaymentSettings, paymentSettingsShape } from '@tipme/payments';
 import { z } from 'zod';
 
+/** The pretend monthly cash reward budget outside production (D-05 pending). */
+const PRETEND_REWARD_CASH_BUDGET_MINOR = 25_000_000n;
+
 export const workerConfigSchema = z
   .object({
     // Hosted preview is isolated by the password gateway; production still rejects mocks.
@@ -91,10 +94,8 @@ export const workerConfigSchema = z
     RECONCILE_INTERVAL_MS: z.coerce.number().int().min(100).default(60_000),
     RECONCILE_MIN_AGE_MS: z.coerce.number().int().min(0).default(120_000),
     // Monthly budget for TipMe's cash rewards, in minor units (pretend money; D-05 pending).
-    REWARD_CASH_BUDGET_MINOR_PER_MONTH: z.coerce
-      .bigint()
-      .min(0n)
-      .default(25_000_000n),
+    // Unset resolves below: 0 on a production copy, the pretend default everywhere else.
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH: z.coerce.bigint().min(0n).optional(),
     /** Test-only: simulated work so shutdown draining can be observed. */
     TRACE_PROBE_TEST_DELAY_MS: z.coerce
       .number()
@@ -125,6 +126,13 @@ export const workerConfigSchema = z
     checkMailSettings(config, context);
     // A production copy carries none of the rehearsal settings (messages name, never show, them).
     if (isProductionCopy(config)) {
+      // Reward cash posts to real recipients' balances, so it stays 0 until D-05 decides it.
+      if ((config.REWARD_CASH_BUDGET_MINOR_PER_MONTH ?? 0n) !== 0n)
+        context.addIssue({
+          code: 'custom',
+          path: ['REWARD_CASH_BUDGET_MINOR_PER_MONTH'],
+          message: 'must be 0 in production until D-05 decides cash rewards',
+        });
       if (config.PREVIEW_PASSWORD)
         context.addIssue({
           code: 'custom',
@@ -157,7 +165,13 @@ export const workerConfigSchema = z
         });
     }
     checkPaymentSettings(config, context, { webhooks: false });
-  });
+  })
+  .transform((config) => ({
+    ...config,
+    REWARD_CASH_BUDGET_MINOR_PER_MONTH:
+      config.REWARD_CASH_BUDGET_MINOR_PER_MONTH ??
+      (isProductionCopy(config) ? 0n : PRETEND_REWARD_CASH_BUDGET_MINOR),
+  }));
 export type WorkerConfig = z.infer<typeof workerConfigSchema>;
 
 export const SERVICE_NAME = 'tipme-worker';
