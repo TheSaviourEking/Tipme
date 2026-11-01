@@ -12,11 +12,14 @@ export function CoverImage({
   src,
   unoptimized,
   priority = false,
+  sizes = '100vw',
   fallback,
 }: {
   src: string;
   unoptimized: boolean;
   priority?: boolean;
+  /** The width the picture is shown at; small previews ask for a small file. */
+  sizes?: string;
   fallback: ReactNode;
 }) {
   // Remembering which source failed resets the fallback when src changes, without an effect.
@@ -27,7 +30,7 @@ export function CoverImage({
       src={src}
       alt=""
       fill
-      sizes="100vw"
+      sizes={sizes}
       // Bundled artwork is already tuned; a high quality avoids a second visible lossy pass.
       quality={85}
       unoptimized={unoptimized}

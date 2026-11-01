@@ -51,6 +51,17 @@ Every action asks for a written reason (10–500 characters) and is recorded wit
 
 There is **no** refund, adjustment or payout hold here: those need two people and a real provider (`docs/05-SECURITY.md`, D-03 to D-06).
 
+## Allowing more handle changes
+
+A Pro page has 3 handle changes. When someone has used them and asks for another (the page then tells them to contact the team), staff with `pages.plan` can allow more. Free pages cannot change their handle at all; make the page Pro first if that is the right answer.
+
+1. Open **Pages**, look the page up by handle (an old handle works), and find the **Handle changes** card, which shows "N of M used".
+2. Check the request is the owner's, and that a change is reasonable. Each change leaves an old name held for as long as the page exists, so a name nobody else can then claim.
+3. Enter how many to allow (1 to 10 at a time; a page can hold at most 20 extra in total) and a written reason (10 to 500 characters). It is recorded in the audit log as `page.handle_changes_granted` with the number allowed.
+4. Tell the owner. They see the new allowance the next time Settings loads.
+
+Until admin roles exist, this uses the `pages.plan` permission, as making a page Pro does.
+
 ## Related
 
 - [Find a trace](find-a-trace.md)

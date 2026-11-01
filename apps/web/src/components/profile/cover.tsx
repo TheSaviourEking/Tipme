@@ -68,10 +68,13 @@ function Hearts({ view }: { view: HeartsView }) {
 export function ProfileCover({
   cover,
   priority = false,
+  sizes,
 }: {
   cover: ResolvedCover;
   /** Only for the first cover on a page, the one that may be the largest paint. */
   priority?: boolean;
+  /** Set when the cover is shown small (a choice in Settings), so a small file is fetched. */
+  sizes?: string;
 }) {
   const view = coverView(cover, API_ORIGIN);
   return (
@@ -85,6 +88,7 @@ export function ProfileCover({
           src={view.src}
           unoptimized={view.unoptimized}
           priority={priority}
+          {...(sizes ? { sizes } : {})}
           fallback={<Hearts view={fallbackHearts()} />}
         />
       ) : (

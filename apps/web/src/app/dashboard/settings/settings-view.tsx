@@ -18,7 +18,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { hasAvatar } from '@/lib/avatar-source';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { CoverSettings } from '@/components/account/cover-settings';
 import { PaymentAccountCard } from './payment-account-card';
+import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 
@@ -158,11 +160,6 @@ function NotificationSettings() {
   );
 }
 
-const photoErrors: Record<string, string> = {
-  INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
-  PAYLOAD_TOO_LARGE: 'That photo is over 5 MB. Please choose a smaller one.',
-};
-
 /** The page's photo (PR-013): resized to a square and stripped of location data by TipMe. */
 function PhotoSettings() {
   const id = useId();
@@ -176,7 +173,7 @@ function PhotoSettings() {
     setDone('');
     // Shrunk here first: a phone photo uploads in seconds instead of timing out.
     const photoFile = file ? await shrinkPhoto(file) : undefined;
-    if (photoFile && photoFile.size > 5 * 1024 * 1024) {
+    if (photoFile && photoFile.size > PHOTO_LIMIT_BYTES) {
       setBusy(false);
       setError(photoErrors['PAYLOAD_TOO_LARGE']!);
       return;
@@ -1319,7 +1316,7 @@ function DeletePage() {
   );
 }
 
-/** What Pro includes, for every plan. Nothing to buy here: staff arrange Pro for now. */
+/** What Pro includes, for every plan. Nothing to buy here: staff arrange Pro for now. No price is named. */
 function ProPlan() {
   const { profile } = useRecipient();
   const pro = profile.plan === 'pro';
@@ -1333,12 +1330,17 @@ function ProPlan() {
       <ul className="settings-list">
         <li>
           Pro QR designs, and print formats such as a counter card, poster or
-          sticker
+          sticker. Free pages keep the three standard QR looks.
         </li>
-        <li>Three changes to your handle</li>
+        <li>
+          Three changes to your handle. Free pages keep the handle they claimed.
+        </li>
         <li>Your own tip amounts</li>
         <li>No “Get your own TipMe page” link at the foot of your page</li>
       </ul>
+      <p className="tm-hint">
+        Covers are free on every plan, so choosing one below costs nothing.
+      </p>
       {!pro && (
         <p className="tm-hint">
           Pro isn’t something you can buy in the app yet. The TipMe team turns
@@ -1358,6 +1360,7 @@ export function SettingsView() {
       <ProPlan />
       <PaymentAccountCard />
       <HandleChange />
+      <CoverSettings />
       <PhotoSettings />
       <TipAmountsSettings />
       <AboutYou />

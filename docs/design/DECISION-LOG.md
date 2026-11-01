@@ -178,3 +178,13 @@ Approved direction (product owner): onboarding should feel human and stress-free
 ## 2026-11-01 — Cover colour exception
 
 - Covers may use colours beyond `#7A32F9`, `#FFFFFF` and `#000000`: the catalogue's tones and the pattern artwork. It is a narrow exception to the locked palette, for the person's own decorative picture only. Controls, text and TipMe's own surfaces keep the locked colours and the tokens, and nothing that carries meaning sits only on a cover.
+
+## 2026-11-02 — Cover designs and colours
+
+- Settings has one Cover card: a live preview, "Upload your own photo", 24 designs (six hearts, eighteen patterns) and, only for designs that take them, a colour group. Colours carry visible names beside the swatch, never colour alone. Nothing is saved until "Save cover".
+- Selecting a design or colour changes the preview at once, crossfading in 240ms (150ms for a colour change). Hovering or focusing does nothing. Reduced motion replaces the crossfade with an instant change. Saved shows in place for 2 seconds.
+- An uploaded photo beats any design. While one exists the card says so, says which design is saved, and offers "Remove photo", rather than letting a choice appear to do nothing.
+- A saved design or colour the catalogue no longer holds opens as "nothing chosen" (neutral colour), and the page shows the automatic design. "If you don't choose, we'll pick one for your page." shows until a design is saved.
+- The preview of an uploaded cover is read from the account's own route, so it works while the page is not live.
+- Violet and lilac are offered only as a person's own choice (see "Cover colour exception"). Covers are free; this is a builder's call from the spec, not an owner decision. The list of designs awaits the owner's review.
+- Settings had content wider than a 360px screen (a file input held the Photo card 402px wide). Cards now use a shrinkable single column, and the test measures every element at 360 and 320.
