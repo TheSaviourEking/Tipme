@@ -1,4 +1,4 @@
-import type { OpsIssue } from '@tipme/contracts';
+import type { OpsIssue, OpsIssueOutcome } from '@tipme/contracts';
 import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -45,6 +45,9 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_settlement_currency: 'money',
   payout_failed: 'money',
   payout_conflict: 'money',
+  payout_unexpected: 'money',
+  payout_unresolved: 'money',
+  provider_in_debt: 'money',
   provider_event_conflict: 'money',
   stuck_tip: 'info',
   unmatched_event: 'info',
@@ -75,6 +78,12 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A withdrawal for ${page} failed. The money is back in their balance.`;
     case 'payout_conflict':
       return `The provider says a withdrawal for ${page} was paid after TipMe recorded it as failed.`;
+    case 'payout_unexpected':
+      return `The provider paid out money for ${page} that TipMe did not ask for. Withdrawals for them are on hold until it is checked.`;
+    case 'payout_unresolved':
+      return `A withdrawal for ${page} has an unknown outcome. Find it at the provider and verify it; do not start it again.`;
+    case 'provider_in_debt':
+      return `The provider reports ${page}’s account owes it money. Withdrawals for them are on hold until it is settled.`;
     case 'provider_event_conflict':
       return `The provider sent the same event twice with different contents (tip to ${page}).`;
     case 'stuck_tip':
@@ -347,6 +356,8 @@ export async function markResolved(
     resolvedBy: string;
     staffUserId: string | null;
     reason: string;
+    /** For a money issue: how it was settled. Stored only; no balance changes. */
+    outcome?: OpsIssueOutcome;
     now: Date;
   },
 ): Promise<boolean> {
@@ -356,6 +367,7 @@ export async function markResolved(
       status: 'resolved',
       resolvedAt: input.now,
       resolvedBy: input.resolvedBy,
+      resolutionOutcome: input.outcome ?? null,
     })
     .where(and(eq(issues.id, input.issueId), eq(issues.status, 'open')))
     .returning({ id: issues.id });
@@ -535,7 +547,13 @@ export function relatedOpenIssues(
 /** Staff resolve an open issue with a written reason (permission `issues.resolve`, audited). */
 export function resolveIssue(
   db: Database,
-  input: { issueId: string; staffUserId: string; reason: string; now?: Date },
+  input: {
+    issueId: string;
+    staffUserId: string;
+    reason: string;
+    outcome?: OpsIssueOutcome;
+    now?: Date;
+  },
 ): Promise<void> {
   if (!UUID.test(input.issueId))
     return Promise.reject(new OperationError('ISSUE_NOT_FOUND'));
@@ -546,6 +564,7 @@ export function resolveIssue(
         resolvedBy: input.staffUserId,
         staffUserId: input.staffUserId,
         reason: input.reason,
+        outcome: input.outcome,
         now: input.now ?? new Date(),
       });
       if (resolved) return;

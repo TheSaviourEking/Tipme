@@ -1,5 +1,6 @@
 import {
   ISSUE_KINDS,
+  ISSUE_OUTCOMES,
   type OpsIssueKind as IssueKind,
   type OpsIssueSeverity as IssueSeverity,
   type OpsIssueSubject as IssueSubject,
@@ -582,6 +583,15 @@ export const paymentAccounts = pgTable(
       .notNull()
       .default(sql`ARRAY[]::text[]`),
     lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    // Withdrawals for this account are paid by hand on a schedule, not by the provider's own.
+    manualPayoutsAt: timestamp('manual_payouts_at', { withTimezone: true }),
+    // When the payout capabilities were asked of the provider for an account made before them.
+    payoutCapabilitiesRequestedAt: timestamp(
+      'payout_capabilities_requested_at',
+      {
+        withTimezone: true,
+      },
+    ),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -939,11 +949,22 @@ export const payouts = pgTable(
     paidAt: timestamp('paid_at', { withTimezone: true }),
     // When reconciliation last asked the provider about this payout (fair rotation).
     lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
+    destinationId: uuid('destination_id').references(
+      () => payoutDestinations.id,
+    ),
+    // The provider's fee for this payout, in minor units of the payout currency.
+    feeMinor: minor('fee_minor'),
+    feeTransferReference: text('fee_transfer_reference'),
+    // Set when the provider call's outcome was unknown, so the payout is looked up, not retried.
+    startUncertainAt: timestamp('start_uncertain_at', { withTimezone: true }),
+    // The provider's connected account the payout was requested on, recorded at request time.
+    accountReference: text('account_reference'),
     createdAt: createdAt(),
   },
   (table) => [
     currencyCheck('payouts'),
     check('payouts_amount_positive', sql`amount_minor > 0`),
+    check('payouts_fee_not_negative', sql`fee_minor IS NULL OR fee_minor >= 0`),
     unique('payouts_provider_reference').on(
       table.provider,
       table.providerReference,
@@ -973,6 +994,90 @@ export const payoutItems = pgTable(
     uniqueIndex('payout_items_active_tip')
       .on(table.tipId)
       .where(sql`active`),
+  ],
+);
+
+/**
+ * The bank account a recipient's withdrawals go to, as the provider holds it. Only the bank and
+ * the last four digits are kept: never the full account number. `provider` is the stored name
+ * ('bachs' for both environments), not an adapter name such as 'bachs-live'.
+ */
+export const payoutDestinations = pgTable(
+  'payout_destinations',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    provider: text('provider').notNull(),
+    destinationReference: text('destination_reference').notNull(),
+    bankCode: text('bank_code').notNull(),
+    bankName: text('bank_name').notNull(),
+    accountLast4: char('account_last4', { length: 4 }).notNull(),
+    status: text('status').notNull(),
+    createdAt: createdAt(),
+    replacedAt: timestamp('replaced_at', { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      'payout_destinations_status',
+      sql`status IN ('usable', 'pending_review', 'rejected')`,
+    ),
+    check('payout_destinations_last4', sql`account_last4 ~ '^[0-9]{4}$'`),
+    check('payout_destinations_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    uniqueIndex('payout_destinations_active')
+      .on(table.profileId, table.provider)
+      .where(sql`replaced_at IS NULL`),
+  ],
+);
+
+/** A reason a recipient cannot withdraw until staff look at the linked issue. */
+export const withdrawalHolds = pgTable(
+  'withdrawal_holds',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    reason: text('reason').notNull(),
+    issueId: uuid('issue_id')
+      .notNull()
+      .references(() => issues.id),
+    createdAt: createdAt(),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    releasedBy: uuid('released_by'),
+  },
+  (table) => [
+    check(
+      'withdrawal_holds_reason',
+      sql`reason IN ('reversal', 'in_debt', 'unexpected_payout')`,
+    ),
+    index('withdrawal_holds_active')
+      .on(table.profileId)
+      .where(sql`released_at IS NULL`),
+  ],
+);
+
+/** Fee top-ups sent to a connected account and not yet spent on a payout's fee. */
+export const providerFeeCredits = pgTable(
+  'provider_fee_credits',
+  {
+    accountReference: text('account_reference').notNull(),
+    provider: text('provider').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    transferReference: text('transfer_reference').primaryKey(),
+    payoutId: uuid('payout_id')
+      .notNull()
+      .references(() => payouts.id),
+    usedByPayoutId: uuid('used_by_payout_id').references(() => payouts.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check('provider_fee_credits_amount_positive', sql`amount_minor > 0`),
+    check('provider_fee_credits_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    index('provider_fee_credits_unspent')
+      .on(table.accountReference, table.provider)
+      .where(sql`used_by_payout_id IS NULL`),
   ],
 );
 
@@ -1264,7 +1369,7 @@ export const auditEvents = pgTable(
 
 // ---- Issues inbox (PR-009) ----
 
-export { ISSUE_KINDS };
+export { ISSUE_KINDS, ISSUE_OUTCOMES };
 export type { IssueKind, IssueSeverity, IssueSubject };
 
 /**
@@ -1287,6 +1392,8 @@ export const issues = pgTable(
     resolvedBy: text('resolved_by'),
     // About a release-check page (PR-010): hidden from the default inbox.
     rehearsal: boolean('rehearsal').notNull().default(false),
+    // How staff settled a money issue (with their reason, in the audit log); no balance changes.
+    resolutionOutcome: text('resolution_outcome'),
   },
   (table) => [
     check(
@@ -1295,6 +1402,10 @@ export const issues = pgTable(
     ),
     check('issues_severity', sql`severity IN ('money', 'account', 'info')`),
     check('issues_status', sql`status IN ('open', 'resolved')`),
+    check(
+      'issues_resolution_outcome',
+      sql`resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN (${sql.raw(ISSUE_OUTCOMES.map((o) => `'${o}'`).join(', '))}))`,
+    ),
     check(
       'issues_resolution',
       sql`(status = 'open') = (resolved_at IS NULL AND resolved_by IS NULL)`,

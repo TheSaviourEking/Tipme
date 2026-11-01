@@ -53,6 +53,9 @@ export const ISSUE_KINDS = [
   'payment_settlement_currency',
   'payout_failed',
   'payout_conflict',
+  'payout_unexpected',
+  'payout_unresolved',
+  'provider_in_debt',
   'provider_event_conflict',
   'stuck_tip',
   'unmatched_event',
@@ -61,6 +64,16 @@ export const ISSUE_KINDS = [
   'profile_reported',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
+/**
+ * How staff settled a money issue. Stored with their reason; TipMe changes no balance by it
+ * (the provider, or the recipient, settles the money).
+ */
+export const ISSUE_OUTCOMES = [
+  'resolved_by_provider',
+  'recipient_owes',
+  'written_off',
+] as const;
+export type OpsIssueOutcome = (typeof ISSUE_OUTCOMES)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
 
 /** What an issue is about: ids only (no names, messages or numbers). */
