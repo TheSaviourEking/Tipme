@@ -232,7 +232,12 @@ test('follow-up hardening', async (t) => {
         now: later(3),
         minAgeMs: 120_000,
       });
-      assert.deepEqual(result, { checked: 1, applied: 1, errors: 0 });
+      assert.deepEqual(result, {
+        checked: 1,
+        applied: 1,
+        errors: 0,
+        unresolved: 0,
+      });
       assert.equal(
         (await q('SELECT status FROM payouts WHERE id = $1', [payoutId]))[0]
           .status,

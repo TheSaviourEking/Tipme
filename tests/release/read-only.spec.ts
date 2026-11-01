@@ -4,7 +4,7 @@ import { apiCall, env, newVisitor, throttledLcp } from './client';
 
 // Read-only: safe on any copy, including one with real people. It creates nothing.
 
-test('the copy reports itself honestly: no live payments, the expected version', async ({
+test('the copy reports itself honestly: live payments as expected, the expected version', async ({
   request,
 }) => {
   const response = await request.get(`${env.api}/health/release`, {
@@ -12,7 +12,7 @@ test('the copy reports itself honestly: no live payments, the expected version',
   });
   expect(response.status()).toBe(200);
   const info = (await response.json()).data;
-  expect(info.paymentsLive).toBe(false);
+  expect(info.paymentsLive).toBe(env.expectLive);
   if (env.expectVersion) expect(info.version).toBe(env.expectVersion);
   const ready = await request.get(`${env.api}/health/ready`, {
     ignoreHTTPSErrors: env.insecure,

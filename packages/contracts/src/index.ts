@@ -2,6 +2,7 @@ export * from './health.js';
 export * from './errors.js';
 export * from './diagnostics.js';
 export * from './jobs.js';
+export * from './provider-names.js';
 export * from './webhooks.js';
 export * from './checkout.js';
 export * from './payment-accounts.js';

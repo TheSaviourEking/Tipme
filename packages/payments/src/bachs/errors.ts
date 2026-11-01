@@ -5,8 +5,8 @@ export class BachsApiError extends Error {
   ) {
     super(
       providerCode
-        ? `Bachs API request failed with HTTP ${statusCode} (${providerCode})`
-        : `Bachs API request failed with HTTP ${statusCode}`,
+        ? `The payment provider request failed with HTTP ${statusCode} (${providerCode})`
+        : `The payment provider request failed with HTTP ${statusCode}`,
     );
     this.name = 'BachsApiError';
   }
@@ -29,7 +29,7 @@ export class BachsRequestNotSentError extends Error {
 
 export class BachsTransportError extends Error {
   constructor() {
-    super('Bachs API response was not received');
+    super('The payment provider response was not received');
     this.name = 'BachsTransportError';
   }
 }
@@ -54,8 +54,20 @@ export class UncertainProviderOutcomeError extends Error {
     readonly diagnostic?: UncertainOutcomeDiagnostic,
   ) {
     super(
-      `Bachs outcome is unknown for operation ${operationReference}: ${reason}`,
+      `The payment provider outcome is unknown for operation ${operationReference}: ${reason}`,
     );
     this.name = 'UncertainProviderOutcomeError';
+  }
+}
+
+/** More than one payout carries one of TipMe's references: possibly paid twice. Never a pick. */
+export class AmbiguousPayoutError extends UncertainProviderOutcomeError {
+  constructor(operationReference: string) {
+    super(
+      operationReference,
+      'the payment provider has more than one payout for this reference',
+      { cause: 'unexpected_state' },
+    );
+    this.name = 'AmbiguousPayoutError';
   }
 }

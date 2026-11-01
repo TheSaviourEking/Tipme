@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import type { TipAmounts, TipPurpose, TipQuote } from '@tipme/contracts';
 import {
   AmountChoice,
@@ -61,6 +61,7 @@ export function AppreciationForm({
   collapseExtras = false,
   celebration,
   tipAmounts,
+  pilotNotice,
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -73,6 +74,8 @@ export function AppreciationForm({
   collapseExtras?: boolean;
   /** A moment the recipient shared: supporters may add their tip to it. */
   celebration?: { momentId: string; label: string };
+  /** The pilot notice, rendered on the server (null outside live mode). */
+  pilotNotice?: ReactNode;
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -459,6 +462,7 @@ export function AppreciationForm({
               <br />
             </>
           )}
+          {pilotNotice}
           You’ll confirm on the payment provider’s page next.
         </p>
       </form>

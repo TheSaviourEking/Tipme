@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, isNull, lte, sql } from 'drizzle-orm';
+import { recordedProviderName } from '@tipme/contracts';
 import type { Database } from '../client.js';
 import {
   paymentAttempts,
@@ -373,7 +374,8 @@ export function markPayoutInitiated(
       await tx
         .update(payouts)
         .set({
-          provider: input.provider,
+          // The stored name, whichever adapter (bachs-live, bachs-sandbox) reports it.
+          provider: recordedProviderName(input.provider),
           providerReference: input.providerReference,
         })
         .where(eq(payouts.id, input.payoutId));

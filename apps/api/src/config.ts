@@ -4,6 +4,7 @@ import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import {
   bachsEnvironment,
   checkPaymentSettings,
+  liveCheckoutSettingsShape,
   paymentSettingsShape,
   paymentWebhookSettingsShape,
 } from '@tipme/payments';
@@ -64,6 +65,7 @@ export const apiConfigSchema = z
       .default('tipme'),
     // Provider, live switch and Bachs credentials: one definition with the worker.
     ...paymentSettingsShape,
+    ...liveCheckoutSettingsShape,
     ...paymentWebhookSettingsShape,
     MOCK_PROVIDER_WEBHOOK_SECRET: z.string().min(32).optional(),
     // The public web app; the only CORS origin and the base of checkout return URLs.
@@ -81,6 +83,12 @@ export const apiConfigSchema = z
     RATE_LIMIT_REPORTS_PER_HOUR: z.coerce.number().int().min(1).default(10),
     RATE_LIMIT_UNSUBSCRIBE_PER_MIN: z.coerce.number().int().min(1).default(600),
     RATE_LIMIT_AVATARS_PER_HOUR: z.coerce.number().int().min(1).default(20),
+    RATE_LIMIT_BANK_RESOLVE_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(30),
+    RATE_LIMIT_BANK_READ_PER_MIN: z.coerce.number().int().min(1).default(30),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z

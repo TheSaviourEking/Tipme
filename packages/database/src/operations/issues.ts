@@ -1,4 +1,4 @@
-import type { OpsIssue } from '@tipme/contracts';
+import type { OpsIssue, OpsIssueOutcome } from '@tipme/contracts';
 import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -11,6 +11,7 @@ import {
   phoneRecoveries,
   profiles,
   tips,
+  withdrawalHolds,
   type IssueKind,
   type IssueSeverity,
   type IssueSubject,
@@ -20,6 +21,21 @@ import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 
 const STUCK_AFTER_MS = 30 * 60 * 1000;
+
+/**
+ * The issues that place a hold, and so the only ones that keep it. A failed withdrawal or an unknown
+ * start says nothing about why a hold was placed, and some of them never close.
+ */
+const HOLD_KINDS = [
+  'payment_reversed',
+  'provider_in_debt',
+  'payout_unexpected',
+  'account_takeover_reported',
+] as const satisfies readonly IssueKind[];
+const HOLD_KINDS_SQL = sql.join(
+  HOLD_KINDS.map((kind) => sql`${kind}`),
+  sql`, `,
+);
 
 /** Outbox alerts that need a person, and the issue kind each becomes. */
 const EVENT_KINDS: Record<string, IssueKind> = {
@@ -41,10 +57,19 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_unresolved: 'money',
   payment_attempt_unresolved: 'money',
   payment_account_unresolved: 'account',
+  payment_account_setup_failed: 'account',
   payment_reversed: 'money',
   payment_settlement_currency: 'money',
   payout_failed: 'money',
   payout_conflict: 'money',
+  payout_unexpected: 'money',
+  payout_unresolved: 'money',
+  payout_fee_short: 'money',
+  payout_held: 'money',
+  account_takeover_reported: 'money',
+  provider_in_debt: 'money',
+  reserve_empty: 'money',
+  provider_key_refused: 'money',
   provider_event_conflict: 'money',
   stuck_tip: 'info',
   unmatched_event: 'info',
@@ -67,6 +92,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A Bachs checkout for a tip to ${page} has an unknown outcome. Find and verify the checkout in Bachs Dashboard; do not retry it.`;
     case 'payment_account_unresolved':
       return `Bachs account setup for ${page} has an unknown outcome. Confirm the recipient account in Bachs Dashboard before linking it.`;
+    case 'payment_account_setup_failed':
+      return `Manual payouts could not be set on the payment account for ${page}. They can't withdraw, and can't finish setup if it isn't done. TipMe keeps trying, and this closes itself once it works. If it stays open, check the account at the provider.`;
     case 'payment_reversed':
       return `Bachs reported a refund or dispute on a paid tip to ${page}. TipMe changed no balance: review it in Bachs Dashboard.`;
     case 'payment_settlement_currency':
@@ -74,7 +101,21 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
     case 'payout_failed':
       return `A withdrawal for ${page} failed. The money is back in their balance.`;
     case 'payout_conflict':
-      return `The provider says a withdrawal for ${page} was paid after TipMe recorded it as failed.`;
+      return `The provider’s record of a withdrawal for ${page} conflicts with TipMe’s.`;
+    case 'payout_unexpected':
+      return `The provider paid out money for ${page} that TipMe did not ask for. Withdrawals for them are on hold until it is checked.`;
+    case 'payout_unresolved':
+      return `A withdrawal for ${page} has an unknown outcome. Find it at the provider and verify it; do not start it again.`;
+    case 'payout_fee_short':
+      return `The provider charged more for a withdrawal for ${page} than TipMe covered, so their balance there is short by the difference. Top it up.`;
+    case 'payout_held':
+      return `A withdrawal for ${page} was not started because their withdrawals went on hold first. Nothing was sent, and the money stays reserved.`;
+    case 'provider_in_debt':
+      return `The provider reports ${page}’s account owes it money. Withdrawals for them are on hold until it is settled.`;
+    case 'reserve_empty':
+      return 'The platform reserve could not cover a payout fee, so withdrawals are waiting. Nothing failed and the recipients were not told. Top up the reserve: they start again once a reading is at the alert level, and this closes itself.';
+    case 'provider_key_refused':
+      return 'The provider refused TipMe’s API key. Withdrawals are waiting and adding a bank account is unavailable; recipients are told to try later. Check the key and its permissions, then resolve this. Waiting withdrawals start again at the next reserve reading at the alert level.';
     case 'provider_event_conflict':
       return `The provider sent the same event twice with different contents (tip to ${page}).`;
     case 'stuck_tip':
@@ -85,6 +126,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `${page} reported a supporter’s message. Reveal it (with a reason) to review it.`;
     case 'profile_reported':
       return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
+    case 'account_takeover_reported':
+      return `Someone reported that ${page}’s account was taken over. Staff froze its withdrawals; the audit log has why. Once the real owner has it back, resolve this to release them.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
@@ -158,8 +201,10 @@ export async function openIssue(
     kind: IssueKind;
     subject: IssueSubject;
     now: Date;
+    /** Ids and plain words only: what is known about this case, after the kind's summary. */
+    note?: string;
   },
-): Promise<boolean> {
+): Promise<{ id: string; opened: boolean }> {
   const { subject, handle, rehearsal } = await completeSubject(
     tx,
     input.subject,
@@ -172,13 +217,22 @@ export async function openIssue(
       kind: input.kind,
       severity: SEVERITY[input.kind],
       subject,
-      summary: summaryOf(input.kind, handle),
+      summary: input.note
+        ? `${summaryOf(input.kind, handle)} ${input.note}`
+        : summaryOf(input.kind, handle),
       openedAt: input.now,
       rehearsal,
     })
     .onConflictDoNothing({ target: issues.dedupeKey })
     .returning({ id: issues.id });
-  return inserted.length > 0;
+  if (inserted[0]) return { id: inserted[0].id, opened: true };
+  // Already there (open or not): a hold in the same transaction still needs to point at it.
+  const [existing] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(eq(issues.dedupeKey, input.dedupeKey));
+  if (!existing) throw new OperationError('ISSUE_NOT_FOUND');
+  return { id: existing.id, opened: false };
 }
 
 /** One issue per outbox alert, keyed by the alert's dedupe key, so redelivery changes nothing. */
@@ -201,12 +255,19 @@ export function openIssueFromEvent(
     if (id) subject[key] = id;
   }
   return guarded(async () =>
-    (await openIssue(db, {
-      dedupeKey: `event.${input.dedupeKey}`,
-      kind,
-      subject,
-      now: input.now ?? new Date(),
-    }))
+    (
+      await openIssue(db, {
+        dedupeKey: `event.${input.dedupeKey}`,
+        kind,
+        subject,
+        now: input.now ?? new Date(),
+        ...(input.eventType === 'payout.conflict'
+          ? {
+              note: 'It says the withdrawal was paid after TipMe recorded it as failed.',
+            }
+          : {}),
+      })
+    ).opened
       ? 'opened'
       : 'duplicate',
   );
@@ -234,26 +295,32 @@ export function runIssueDetectors(
        LIMIT 500`);
     for (const row of stuck.rows)
       if (
-        await openIssue(db, {
-          dedupeKey: `stuck_tip.${row.id}`,
-          kind: 'stuck_tip',
-          subject: { tipId: row.id },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `stuck_tip.${row.id}`,
+            kind: 'stuck_tip',
+            subject: { tipId: row.id },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     const unmatched = await db.execute<{ id: string }>(sql`
       SELECT u.id FROM unmatched_provider_events u
        WHERE NOT EXISTS (SELECT 1 FROM issues i WHERE i.dedupe_key = 'unmatched.' || u.id)
+         -- Parked for reconciliation, which applies it or opens payout_unexpected.
+         AND NOT (u.provider = 'bachs' AND u.reason = 'unknown_payout')
        LIMIT 500`);
     for (const row of unmatched.rows)
       if (
-        await openIssue(db, {
-          dedupeKey: `unmatched.${row.id}`,
-          kind: 'unmatched_event',
-          subject: { unmatchedId: row.id },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `unmatched.${row.id}`,
+            kind: 'unmatched_event',
+            subject: { unmatchedId: row.id },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     // Either Bachs environment: a copy holds only its own environment's accounts, and the
@@ -275,12 +342,14 @@ export function runIssueDetectors(
       .limit(500);
     for (const row of unknownAccounts)
       if (
-        await openIssue(db, {
-          dedupeKey: `payment_account_unresolved.${row.id}`,
-          kind: 'payment_account_unresolved',
-          subject: { profileId: row.profileId },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `payment_account_unresolved.${row.id}`,
+            kind: 'payment_account_unresolved',
+            subject: { profileId: row.profileId },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     const unknownAttempts = await db
@@ -306,12 +375,14 @@ export function runIssueDetectors(
       .limit(500);
     for (const row of unknownAttempts)
       if (
-        await openIssue(db, {
-          dedupeKey: `payment_attempt_unresolved.${row.id}`,
-          kind: 'payment_attempt_unresolved',
-          subject: { attemptId: row.id, tipId: row.tipId },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `payment_attempt_unresolved.${row.id}`,
+            kind: 'payment_attempt_unresolved',
+            subject: { attemptId: row.id, tipId: row.tipId },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     const recoveries = await db
@@ -327,12 +398,14 @@ export function runIssueDetectors(
       .limit(500);
     for (const row of recoveries)
       if (
-        await openIssue(db, {
-          dedupeKey: `recovery.${row.id}`,
-          kind: 'pending_recovery',
-          subject: { recoveryId: row.id, userId: row.userId },
-          now,
-        })
+        (
+          await openIssue(db, {
+            dedupeKey: `recovery.${row.id}`,
+            kind: 'pending_recovery',
+            subject: { recoveryId: row.id, userId: row.userId },
+            now,
+          })
+        ).opened
       )
         opened += 1;
     return { opened };
@@ -347,6 +420,8 @@ export async function markResolved(
     resolvedBy: string;
     staffUserId: string | null;
     reason: string;
+    /** For a money issue: how it was settled. Stored only; no balance changes. */
+    outcome?: OpsIssueOutcome;
     now: Date;
   },
 ): Promise<boolean> {
@@ -356,20 +431,113 @@ export async function markResolved(
       status: 'resolved',
       resolvedAt: input.now,
       resolvedBy: input.resolvedBy,
+      resolutionOutcome: input.outcome ?? null,
     })
     .where(and(eq(issues.id, input.issueId), eq(issues.status, 'open')))
-    .returning({ id: issues.id });
-  if (updated.length === 0) return false;
+    .returning({
+      id: issues.id,
+      severity: issues.severity,
+      subject: issues.subject,
+    });
+  const [closed] = updated;
+  if (!closed) return false;
   await recordAudit(tx, {
     staffUserId: input.staffUserId,
     action: input.staffUserId ? 'issue.resolved' : 'issue.auto_resolved',
-    permission: input.staffUserId ? 'issues.resolve' : undefined,
+    permission: input.staffUserId
+      ? closed.severity === 'money'
+        ? 'payouts.resolve'
+        : 'issues.resolve'
+      : undefined,
     subjectType: 'issue',
     subjectId: input.issueId,
     reason: input.reason,
     now: input.now,
   });
+  if (closed.severity === 'money' && closed.subject.profileId)
+    await releaseHoldsIfClear(tx, {
+      profileId: closed.subject.profileId,
+      staffUserId: input.staffUserId,
+      now: input.now,
+    });
   return true;
+}
+
+/**
+ * The recipient's withdrawals resume once none of the issues that place holds is open for them,
+ * however the last one closed. A takeover freeze goes only by its own issue closing as "the owner has
+ * the account back". The profile lock makes two closes take turns, so neither misses the other.
+ */
+async function releaseHoldsIfClear(
+  tx: Tx,
+  input: { profileId: string; staffUserId: string | null; now: Date },
+): Promise<void> {
+  await tx
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.id, input.profileId))
+    .for('update');
+  const other = await tx
+    .select({ kind: issues.kind })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.status, 'open'),
+        sql`${issues.kind} IN (${HOLD_KINDS_SQL})`,
+        sql`${issues.subject}->>'profileId' = ${input.profileId}`,
+      ),
+    );
+  if (other.length > 0) {
+    const [held] = await tx
+      .select({ id: withdrawalHolds.id })
+      .from(withdrawalHolds)
+      .where(
+        and(
+          eq(withdrawalHolds.profileId, input.profileId),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      )
+      .limit(1);
+    if (held)
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'withdrawals.still_held',
+        permission: input.staffUserId ? 'payouts.resolve' : undefined,
+        subjectType: 'profile',
+        subjectId: input.profileId,
+        reason: `Still open: ${[...new Set(other.map(({ kind }) => kind))].join(', ')}.`,
+        now: input.now,
+      });
+    return;
+  }
+  const released = await tx
+    .update(withdrawalHolds)
+    .set({ releasedAt: input.now, releasedBy: input.staffUserId })
+    .where(
+      and(
+        eq(withdrawalHolds.profileId, input.profileId),
+        isNull(withdrawalHolds.releasedAt),
+        // Holds take no profile lock, so one may have been placed since the search above. A hold
+        // goes only once its own cause has closed, so a new one can't be released as it is placed.
+        sql`EXISTS (
+          SELECT 1 FROM issues i
+           WHERE i.id = ${withdrawalHolds.issueId} AND i.status <> 'open'
+             AND (${withdrawalHolds.reason} <> 'account_takeover'
+                  OR i.resolution_outcome = 'account_secured'))`,
+      ),
+    )
+    .returning({ id: withdrawalHolds.id });
+  if (released.length > 0)
+    await recordAudit(tx, {
+      staffUserId: input.staffUserId,
+      action: 'withdrawals.released',
+      permission: input.staffUserId ? 'payouts.resolve' : undefined,
+      subjectType: 'profile',
+      subjectId: input.profileId,
+      reason:
+        'None of the issues that hold the recipient’s withdrawals is open.',
+      now: input.now,
+    });
 }
 
 /** Resolves issues whose cause has cleared (resolver `system`, audited). */
@@ -415,6 +583,34 @@ export function autoResolveIssues(
               AND a.status = 'UNKNOWN'
               AND a.provider_account_reference IS NULL)
       UNION ALL
+      SELECT i.id, 'Manual payouts are now set on the account.'
+        FROM issues i
+        JOIN payment_accounts a ON i.dedupe_key = 'payment_account_setup.' || a.id
+       WHERE i.status = 'open' AND i.kind = 'payment_account_setup_failed'
+         AND a.manual_payouts_at IS NOT NULL
+      UNION ALL
+      SELECT i.id, 'The withdrawal was found at the provider or reached a final state.'
+        FROM issues i JOIN payouts p ON p.id = (i.subject->>'payoutId')::uuid
+       WHERE i.status = 'open' AND i.kind IN ('payout_unresolved', 'payout_held')
+         -- Finding the reference answers an unknown start, not a payout stuck after it.
+         AND (p.status NOT IN ('REQUESTED', 'PROCESSING')
+              OR (p.provider_reference IS NOT NULL
+                  AND i.dedupe_key NOT LIKE 'payout_stuck.%'))
+      UNION ALL
+      -- A payout with its own open issue is a person's now, and no longer the reserve's to answer for.
+      SELECT i.id, 'No withdrawal is waiting on the reserve any more.'
+        FROM issues i
+       WHERE i.status = 'open' AND i.kind = 'reserve_empty'
+         AND NOT EXISTS (
+           SELECT 1 FROM payouts p
+            WHERE p.status = 'REQUESTED'
+              AND p.platform_wait_since IS NOT NULL
+              AND p.provider_reference IS NULL
+              AND p.start_uncertain_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM issues pi
+                 WHERE pi.status = 'open' AND pi.subject->>'payoutId' = p.id::text))
+      UNION ALL
       -- Raised after its release check finished (the misreported tip never confirms).
       SELECT i.id, 'The release check that raised it has finished.'
         FROM issues i
@@ -457,6 +653,7 @@ const view = (row: typeof issues.$inferSelect): IssueView => ({
   openedAt: row.openedAt.toISOString(),
   resolvedAt: row.resolvedAt?.toISOString() ?? null,
   resolvedBy: row.resolvedBy,
+  resolutionOutcome: (row.resolutionOutcome as OpsIssueOutcome | null) ?? null,
 });
 
 /** Newest first; `cursor` is the id of the last issue already shown. */
@@ -501,6 +698,40 @@ export function issueById(db: Database, id: string): Promise<IssueView | null> {
   });
 }
 
+/**
+ * What keeps a recipient's withdrawals on hold, so staff can see why a hold didn't release: the open
+ * hold-placing issues about them, and any open cause of a hold in force. Empty with no hold in force.
+ */
+export function withdrawalHoldPins(
+  db: Database,
+  input: { profileId: string },
+): Promise<IssueView[]> {
+  return guarded(async () => {
+    const rows = await db
+      .select()
+      .from(issues)
+      .where(
+        and(
+          eq(issues.status, 'open'),
+          sql`EXISTS (
+            SELECT 1 FROM withdrawal_holds h
+             WHERE h.profile_id = ${input.profileId} AND h.released_at IS NULL)`,
+          sql`(
+            (${issues.kind} IN (${HOLD_KINDS_SQL})
+              AND ${issues.subject}->>'profileId' = ${input.profileId})
+            OR EXISTS (
+              SELECT 1 FROM withdrawal_holds h
+               WHERE h.issue_id = ${issues.id}
+                 AND h.profile_id = ${input.profileId}
+                 AND h.released_at IS NULL))`,
+        ),
+      )
+      .orderBy(desc(issues.id))
+      .limit(20);
+    return rows.map(view);
+  });
+}
+
 /** Open issues about the same tip, payout, page or person (for the evidence view). */
 export function relatedOpenIssues(
   db: Database,
@@ -532,28 +763,74 @@ export function relatedOpenIssues(
   });
 }
 
-/** Staff resolve an open issue with a written reason (permission `issues.resolve`, audited). */
+/**
+ * Staff resolve an open issue with a written reason (permission `issues.resolve`, audited). A money
+ * issue also needs how it was settled, which is stored and changes no balance; the API also asks
+ * `payouts.resolve` for one.
+ */
 export function resolveIssue(
   db: Database,
-  input: { issueId: string; staffUserId: string; reason: string; now?: Date },
+  input: {
+    issueId: string;
+    staffUserId: string;
+    reason: string;
+    outcome?: OpsIssueOutcome;
+    bankAndSignInChecked?: boolean;
+    now?: Date;
+  },
 ): Promise<void> {
   if (!UUID.test(input.issueId))
     return Promise.reject(new OperationError('ISSUE_NOT_FOUND'));
   return guarded(() =>
     db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({
+          kind: issues.kind,
+          severity: issues.severity,
+          status: issues.status,
+          subject: issues.subject,
+        })
+        .from(issues)
+        .where(eq(issues.id, input.issueId));
+      if (!current) throw new OperationError('ISSUE_NOT_FOUND');
+      // Releasing a freeze sends the next withdrawal to the current bank, which may be the thief's.
+      const takeover = current.kind === 'account_takeover_reported';
+      if (
+        current.status === 'open' &&
+        (takeover
+          ? input.outcome !== 'account_secured' ||
+            input.bankAndSignInChecked !== true
+          : input.outcome === 'account_secured')
+      )
+        throw new OperationError('ISSUE_OUTCOME_REQUIRED');
+      if (
+        current.status === 'open' &&
+        current.severity === 'money' &&
+        !input.outcome
+      )
+        throw new OperationError('ISSUE_OUTCOME_REQUIRED');
+      // Issues are never reopened and reconciliation won't raise the same one twice, so closing it
+      // now would leave the money reserved with nobody told. The tools, or the payout ending, do it.
+      if (current.status === 'open' && current.subject.payoutId) {
+        const [payout] = await tx
+          .select({ status: payouts.status })
+          .from(payouts)
+          .where(eq(payouts.id, current.subject.payoutId))
+          .for('share');
+        if (payout?.status === 'REQUESTED' || payout?.status === 'PROCESSING')
+          throw new OperationError('ISSUE_PAYOUT_UNFINISHED');
+      }
       const resolved = await markResolved(tx, {
         issueId: input.issueId,
         resolvedBy: input.staffUserId,
         staffUserId: input.staffUserId,
-        reason: input.reason,
+        reason: takeover
+          ? `Current bank and sign-in checked. ${input.reason}`
+          : input.reason,
+        outcome: current.severity === 'money' ? input.outcome : undefined,
         now: input.now ?? new Date(),
       });
-      if (resolved) return;
-      const [row] = await tx
-        .select({ status: issues.status })
-        .from(issues)
-        .where(eq(issues.id, input.issueId));
-      throw new OperationError(row ? 'ISSUE_RESOLVED' : 'ISSUE_NOT_FOUND');
+      if (!resolved) throw new OperationError('ISSUE_RESOLVED');
     }),
   );
 }

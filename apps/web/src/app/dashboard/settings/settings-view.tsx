@@ -16,6 +16,7 @@ import { Avatar } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { GetPaidCard } from '@/components/account/get-paid-card';
 import { PaymentAccountCard } from './payment-account-card';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
@@ -1179,6 +1180,7 @@ export function SettingsView() {
       <PendingRecovery />
       <PageState />
       <PaymentAccountCard />
+      <GetPaidCard />
       <HandleChange />
       <PhotoSettings />
       <TipAmountsSettings />

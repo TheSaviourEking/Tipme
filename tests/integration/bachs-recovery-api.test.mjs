@@ -357,6 +357,7 @@ test('refreshing onboarding stores what Bachs reports and blocks recipient-paid 
     { PAYMENT_PROVIDER: 'bachs-sandbox', WEB_ORIGIN: 'http://127.0.0.1:3000' },
     { db: database.db },
     {
+      name: 'bachs-sandbox',
       environment: 'sandbox',
       async getRecipientAccount(reference) {
         return {
@@ -368,6 +369,7 @@ test('refreshing onboarding stores what Bachs reports and blocks recipient-paid 
           requirementsDue: [],
         };
       },
+      async setManualPayouts() {},
       async createOnboardingLink() {
         return 'https://connect.bachs.io/onboarding/test';
       },

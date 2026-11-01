@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import type { PublicProfile } from '@tipme/contracts';
 import { Container } from '@tipme/ui';
 import { AppreciationForm } from '@/components/appreciation-form';
+import { PilotNotice } from '@/components/pilot-notice';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import {
@@ -15,6 +16,7 @@ import { ShareProfile } from '@/components/share-profile';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getPaymentMode } from '@/lib/payment-mode-api';
+import { profileTippingClosed } from '@/lib/payment-mode';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { getPublicProfile } from '@/lib/profiles-api';
 
@@ -111,13 +113,14 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             data-tip-panel
           >
             {/* Closed checkout outranks the owner's own setup: nobody can tip yet. */}
-            {!copy.payable ? (
+            {!copy.payable || profileTippingClosed(mode, profile) ? (
               <TippingOpensSoon />
             ) : profile.acceptingTips === false ? (
               <TipsNotReady recipient={firstName} />
             ) : (
               <AppreciationForm
                 paymentMode={mode}
+                pilotNotice={<PilotNotice />}
                 recipient={firstName}
                 handle={profile.handle}
                 collapseExtras

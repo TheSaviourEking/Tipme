@@ -7,7 +7,7 @@ export interface TransitionRecord {
   entityId: string;
   fromStatus: string | null;
   toStatus: string;
-  cause: 'provider_event' | 'system' | 'expiry';
+  cause: 'provider_event' | 'system' | 'expiry' | 'staff';
   providerEventId?: string;
   traceId: string | null;
 }

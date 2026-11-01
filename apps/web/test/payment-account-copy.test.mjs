@@ -7,7 +7,8 @@ test('the live payment account card never says test, sandbox or no real money', 
   const live = paymentAccountCopy('live');
   for (const [key, text] of Object.entries(live))
     assert.doesNotMatch(text, /test|sandbox|no real money/i, key);
-  assert.match(live.intro, /Bachs pays your tips into/);
+  assert.match(live.intro, /your tips are paid into/);
+  assert.match(live.intro, /our payment partner/);
 });
 
 test('the sandbox card keeps its test wording', () => {

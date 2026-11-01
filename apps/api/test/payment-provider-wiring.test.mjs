@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   bachsProviderProvider,
   checkoutProviderProvider,
+  withdrawalProviderProvider,
 } from '../dist/checkout/payment-provider.provider.js';
 
 // A production copy on bachs-live must never quietly check out through the pretend provider.
@@ -110,4 +111,32 @@ test('mock and bachs-sandbox are unchanged', () => {
     bachsProviderProvider.useFactory({ PAYMENT_PROVIDER: 'mock' }),
     null,
   );
+});
+
+test('withdrawals use exactly the configured provider, and fail closed without it', () => {
+  const sandboxConfig = {
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_x',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+  };
+  const sandbox = bachsProviderProvider.useFactory(sandboxConfig);
+  assert.equal(
+    withdrawalProviderProvider.useFactory(sandboxConfig, mock, sandbox),
+    sandbox,
+  );
+  // A mock copy that still answers old sandbox callbacks withdraws through mock.
+  assert.equal(
+    withdrawalProviderProvider.useFactory(
+      { PAYMENT_PROVIDER: 'mock' },
+      mock,
+      sandbox,
+    ),
+    mock,
+  );
+  const live = { PAYMENT_PROVIDER: 'bachs-live' };
+  for (const adapter of [null, sandbox])
+    assert.throws(
+      () => withdrawalProviderProvider.useFactory(live, mock, adapter),
+      /PAYMENT_PROVIDER/,
+    );
 });

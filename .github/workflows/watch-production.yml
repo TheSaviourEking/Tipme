@@ -1,5 +1,6 @@
 # Watches production every 5 minutes: API ready, web up, payments live only when switched on,
-# reserve not low, Bachs webhook rejecting unsigned calls. A failed run emails the repository
+# reserve checks still running (a low or unreadable reserve is the worker's to alert on), Bachs
+# webhook rejecting unsigned calls. A failed run emails the repository
 # owner through GitHub notifications and posts to the repository secret `ALERT_WEBHOOK_URL`
 # (Slack or any {"text": ...} webhook).
 # Repository-level settings, not the `production` environment: the job's `if` cannot see

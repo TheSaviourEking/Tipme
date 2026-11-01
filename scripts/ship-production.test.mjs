@@ -133,6 +133,21 @@ test('an invalid Caddyfile stops the ship before anything is deployed', () => {
   assert.equal(existsSync(join(production, 'loaded')), false);
 });
 
+test('the expected live state reaches the deploy, and an unclear one stops the ship', () => {
+  const source = readFileSync(resolve('scripts/ship-production.sh'), 'utf8');
+  assert.match(source, /deploy-production\.sh' '\$version' '\$expected_live'/);
+  const bad = spawnSync(
+    'bash',
+    [resolve('scripts/ship-production.sh'), 'abcdef123456'],
+    {
+      env: { ...process.env, PRODUCTION_PAYMENTS_LIVE: 'yes' },
+      encoding: 'utf8',
+    },
+  );
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /PRODUCTION_PAYMENTS_LIVE must be true or false/);
+});
+
 test('shipping refuses anything that is not a version', () => {
   const { run } = stage();
   for (const bad of [[], ['main'], ['abc; rm -rf /']])

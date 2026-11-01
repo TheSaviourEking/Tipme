@@ -48,6 +48,18 @@ const messages: Record<ApiErrorCode, string> = {
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
+  WITHDRAWALS_SWITCHED_OFF:
+    'Withdrawals are paused for now. Your balance is safe.',
+  WITHDRAWALS_PAUSED:
+    'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
+  PAYOUT_SETUP_NEEDED: 'Finish setting up how you get paid to withdraw.',
+  PAYOUT_DESTINATION_NEEDED: 'Add the bank account you want to be paid to.',
+  PAYOUT_DESTINATION_REFUSED:
+    'The payment provider could not accept this bank account.',
+  PAYOUT_PROVIDER_UNAVAILABLE:
+    'We can’t reach our payment partner right now. Try again in a few minutes.',
+  BANK_CHANGE_HELD:
+    'Your sign-in email changed recently, so your bank account can’t be added or changed yet.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
@@ -63,6 +75,9 @@ const messages: Record<ApiErrorCode, string> = {
   PAGE_SUSPENDED:
     'TipMe has paused your page, so it cannot go live. See the note on your dashboard.',
   ISSUE_RESOLVED: 'This issue is already resolved.',
+  ISSUE_OUTCOME_REQUIRED: 'Choose how this money issue was settled.',
+  ISSUE_PAYOUT_UNFINISHED:
+    'This withdrawal hasn’t finished. Use “Act on this withdrawal” on the issue page.',
   PREVIEW_REQUIRED:
     'This is a private preview. Please sign in with the preview password.',
   RATE_LIMITED: 'Too many requests. Please wait and retry.',
@@ -125,12 +140,30 @@ const operationErrors: Partial<
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
+  WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
+  WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
+  PAYOUT_SETUP_NEEDED: { status: 409, code: 'PAYOUT_SETUP_NEEDED' },
+  PAYOUT_DESTINATION_NEEDED: {
+    status: 409,
+    code: 'PAYOUT_DESTINATION_NEEDED',
+  },
+  PAYOUT_DESTINATION_REFUSED: {
+    status: 422,
+    code: 'PAYOUT_DESTINATION_REFUSED',
+  },
+  BANK_CHANGE_HELD: { status: 409, code: 'BANK_CHANGE_HELD' },
+  PAYOUT_PROVIDER_UNAVAILABLE: {
+    status: 503,
+    code: 'PAYOUT_PROVIDER_UNAVAILABLE',
+  },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },
   ENROLMENT_INVALID: { status: 400, code: 'ENROLMENT_INVALID' },
   PAGE_SUSPENDED: { status: 409, code: 'PAGE_SUSPENDED' },
   ISSUE_RESOLVED: { status: 409, code: 'ISSUE_RESOLVED' },
+  ISSUE_OUTCOME_REQUIRED: { status: 422, code: 'ISSUE_OUTCOME_REQUIRED' },
+  ISSUE_PAYOUT_UNFINISHED: { status: 409, code: 'ISSUE_PAYOUT_UNFINISHED' },
   ISSUE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   EMAIL_VERIFICATION_REQUIRED: {
     status: 409,

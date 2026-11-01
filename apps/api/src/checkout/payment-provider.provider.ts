@@ -19,6 +19,7 @@ import { REDIS } from '../infra/infra.module.js';
 export const PAYMENT_PROVIDER_TOKEN = Symbol('PAYMENT_PROVIDER');
 export const BACHS_PROVIDER_TOKEN = Symbol('BACHS_PROVIDER');
 export const CHECKOUT_PROVIDER_TOKEN = Symbol('CHECKOUT_PROVIDER');
+export const WITHDRAWAL_PROVIDER_TOKEN = Symbol('WITHDRAWAL_PROVIDER');
 
 export type CheckoutPaymentProvider = Pick<
   PaymentProvider,
@@ -120,5 +121,24 @@ export const checkoutProviderProvider: Provider<CheckoutPaymentProvider> = {
       initializePayment: ({ attemptId, amountMinor, currency }) =>
         mock.initializePayment({ attemptId, amountMinor, currency }),
     };
+  },
+};
+
+/** Withdrawals go through exactly the configured provider, as checkout does. */
+export const withdrawalProviderProvider: Provider<
+  MockProvider | BachsProvider
+> = {
+  provide: WITHDRAWAL_PROVIDER_TOKEN,
+  inject: [API_CONFIG, PAYMENT_PROVIDER_TOKEN, BACHS_PROVIDER_TOKEN],
+  useFactory: (
+    config: ApiConfig,
+    mock: MockProvider,
+    bachs: BachsProvider | null,
+  ): MockProvider | BachsProvider => {
+    const name = wiredPaymentProvider(config.PAYMENT_PROVIDER);
+    if (!bachsEnvironment(name)) return mock;
+    if (bachs?.name !== name)
+      throw new Error(`PAYMENT_PROVIDER=${name} has no matching Bachs adapter`);
+    return bachs;
   },
 };

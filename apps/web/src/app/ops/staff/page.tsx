@@ -12,6 +12,8 @@ const DESCRIPTIONS: Record<string, string> = {
   'pages.plan': 'Move a page between Free and Pro, with a reason',
   'pages.suspend': 'Pause and restore recipient pages',
   'payments.recheck': 'Ask the provider about a payment or withdrawal',
+  'payouts.resolve':
+    'Act on a stuck withdrawal after asking the provider: record its answer, resume a held start, or release one it doesn’t have',
   'private.view': 'Reveal private details, with a reason',
   'recoveries.cancel': 'Cancel a pending phone recovery',
   'search.view': 'Search pages, tips, withdrawals and ledger entries',

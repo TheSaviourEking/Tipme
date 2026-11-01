@@ -125,6 +125,8 @@ function fakeLiveBachs(requests) {
       requirements: { currently_due: ['individual.id_number'] },
     };
     if (url.pathname === '/v1/accounts') return json(account, 201);
+    if (url.pathname === '/v1/balance_settings')
+      return json({ schedule_by_currency: { NGN: { interval: 'manual' } } });
     if (url.pathname.endsWith('/account-links'))
       return json({ url: 'https://connect.bachs.io/onboarding/live' });
     return json(account);

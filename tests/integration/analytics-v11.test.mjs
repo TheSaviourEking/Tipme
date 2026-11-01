@@ -113,17 +113,32 @@ test('a withdrawal records payout_requested, and payout_paid_verified once the p
   );
   assert.equal(withdrawal.status, 201);
   assert.equal(await named('payout_requested', 'events_tobi'), 1);
+  const { payoutId } = (await withdrawal.json()).data;
   // The pretend bank pays at once; reconciliation confirms it and the worker records it.
-  const { reconcilePayouts } =
+  const { markPayoutInitiated, reconcilePayouts } =
     await import('../../packages/database/dist/index.js');
   const { createMockProvider } =
     await import('../../packages/payments/dist/index.js');
   const { Redis, REDIS_URL } = await import('./helpers.mjs');
   const redis = new Redis(REDIS_URL);
   try {
+    // Started by hand here, as the worker's payouts.start handler does (live-payments Task 6).
+    const provider = createMockProvider({ redis, prefix: stack.prefix });
+    const { providerReference } = await provider.initiatePayout({
+      payoutId,
+      idempotencyKey: `payout.${payoutId}`,
+      amountMinor: 100000n,
+      currency: 'NGN',
+    });
+    await markPayoutInitiated(database.db, {
+      payoutId,
+      provider: 'mock',
+      providerReference,
+    });
+    await provider.settlePayout(providerReference);
     await reconcilePayouts({
       db: database.db,
-      provider: createMockProvider({ redis, prefix: stack.prefix }),
+      provider,
       now: new Date(),
       minAgeMs: 0,
     });

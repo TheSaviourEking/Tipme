@@ -9,6 +9,8 @@ export const SCENARIOS = [
   'forged',
   'payout-paid',
   'payout-failed',
+  'payout-review',
+  'payout-timeout',
 ] as const;
 
 export type Scenario = (typeof SCENARIOS)[number];

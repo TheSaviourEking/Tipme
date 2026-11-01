@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { Database, Tx } from '../client.js';
 import { sessions, users } from '../schema.js';
+import { recordAudit } from './audit.js';
 import { guarded } from './errors.js';
+import { isActiveStaff } from './staff.js';
 import { newId } from './ids.js';
 
 /** A session ends this long after sign-in, however often it is used (the cookie's own life). */
@@ -122,7 +124,7 @@ export function revokeSession(
 }
 
 export function revokeAllSessions(
-  db: Database,
+  db: Database | Tx,
   input: { userId: string; exceptSessionId?: string; now?: Date },
 ): Promise<void> {
   return guarded(async () => {
@@ -138,5 +140,37 @@ export function revokeAllSessions(
             : []),
         ),
       );
+  });
+}
+
+/**
+ * Staff end every session of an account, for a reported takeover: audited with the written reason.
+ * Not a staff account, whose access is handled through grants. Tells the caller why not.
+ */
+export function endAccountSessions(
+  db: Database,
+  input: { staffUserId: string; userId: string; reason: string; now?: Date },
+): Promise<'ended' | 'not_found' | 'staff_account'> {
+  const now = input.now ?? new Date();
+  return guarded(async () => {
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, input.userId));
+    if (!user) return 'not_found';
+    if (await isActiveStaff(db, input.userId)) return 'staff_account';
+    await db.transaction(async (tx) => {
+      await revokeAllSessions(tx, { userId: input.userId, now });
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'account.sessions_ended',
+        permission: 'recoveries.manage',
+        subjectType: 'user',
+        subjectId: input.userId,
+        reason: input.reason,
+        now,
+      });
+    });
+    return 'ended';
   });
 }

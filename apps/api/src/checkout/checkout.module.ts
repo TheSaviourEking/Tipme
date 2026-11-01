@@ -8,6 +8,8 @@ import {
   checkoutProviderProvider,
   PAYMENT_PROVIDER_TOKEN,
   paymentProviderProvider,
+  WITHDRAWAL_PROVIDER_TOKEN,
+  withdrawalProviderProvider,
 } from './payment-provider.provider.js';
 import { RateLimitGuard } from './rate-limit.guard.js';
 import { StatusController } from './status.controller.js';
@@ -20,12 +22,14 @@ import { StatusController } from './status.controller.js';
     paymentProviderProvider,
     bachsProviderProvider,
     checkoutProviderProvider,
+    withdrawalProviderProvider,
   ],
   exports: [
     CheckoutService,
     PAYMENT_PROVIDER_TOKEN,
     BACHS_PROVIDER_TOKEN,
     CHECKOUT_PROVIDER_TOKEN,
+    WITHDRAWAL_PROVIDER_TOKEN,
   ],
 })
 export class CheckoutModule {}
