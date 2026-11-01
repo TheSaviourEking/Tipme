@@ -23,6 +23,7 @@ import {
   type MyTipDetail,
   type MyTipRow,
   type WeeklyReportData,
+  type WithdrawalQuote,
 } from '@tipme/contracts';
 import {
   dashboardSummary,
@@ -36,9 +37,10 @@ import {
   recentActivity,
   reportMessage,
   requestWithdrawal,
+  withdrawalQuote,
   withdrawalsAvailable,
+  type PayoutReader,
 } from '@tipme/database';
-import type { MockProvider } from '@tipme/payments';
 import { z } from 'zod';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
@@ -46,7 +48,7 @@ import {
   SessionGuard,
   type AuthContext,
 } from '../auth/session.guard.js';
-import { PAYMENT_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import { WITHDRAWAL_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ServerEvents } from '../analytics/server-events.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -60,7 +62,7 @@ const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
 export class DashboardController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
-    @Inject(PAYMENT_PROVIDER_TOKEN) private readonly provider: MockProvider,
+    @Inject(WITHDRAWAL_PROVIDER_TOKEN) private readonly provider: PayoutReader,
     @Inject(ServerEvents) private readonly events: ServerEvents,
   ) {}
 
@@ -188,9 +190,33 @@ export class DashboardController {
     };
   }
 
+  /** What can be withdrawn now, from both TipMe's ledger and the payment provider's balance. */
+  @Get('withdrawal-quote')
+  @Header('Cache-Control', 'private, no-store')
+  async quoteWithdrawal(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<WithdrawalQuote>> {
+    const quote = await withdrawalQuote(this.database.db, {
+      profileId: await this.profile(auth),
+      provider: this.provider,
+    });
+    return {
+      data:
+        quote.state === 'ready'
+          ? {
+              ...quote,
+              withdrawableMinor: quote.withdrawableMinor.toString(),
+              ledgerMinor: quote.ledgerMinor.toString(),
+              providerMinor: quote.providerMinor.toString(),
+              feeMinor: quote.feeMinor.toString(),
+            }
+          : quote,
+    };
+  }
+
   /**
-   * A pretend withdrawal of any amount up to the available balance. With the mock provider the
-   * pretend bank pays at once; the worker's payout reconciliation then records it as paid.
+   * A withdrawal of any amount up to what can be withdrawn. It is recorded and queued here; the
+   * worker starts the payout, and the provider's answer records the outcome.
    */
   @Post('withdrawals')
   async withdraw(
@@ -215,8 +241,6 @@ export class DashboardController {
       `payout_requested.${result.payoutId}`,
       profileId,
     );
-    if (result.providerReference)
-      await this.provider.settlePayout(result.providerReference);
     return { data: { payoutId: result.payoutId, status: result.status } };
   }
 

@@ -3265,6 +3265,42 @@
         ]
       }
     },
+    "/v1/me/withdrawal-quote": {
+      "get": {
+        "operationId": "Dashboard.quoteWithdrawal",
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/withdrawals": {
       "post": {
         "operationId": "Dashboard.withdraw",
@@ -7159,6 +7195,10 @@
                   "INSUFFICIENT_BALANCE",
                   "WITHDRAWAL_TOO_SMALL",
                   "WITHDRAWAL_UNAVAILABLE",
+                  "WITHDRAWALS_PAUSED",
+                  "PAYOUT_SETUP_NEEDED",
+                  "PAYOUT_DESTINATION_NEEDED",
+                  "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "INVALID_IMAGE",
                   "PHONE_TAKEN",

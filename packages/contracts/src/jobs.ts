@@ -3,6 +3,8 @@ import { traceProbeModeSchema } from './diagnostics.js';
 
 export const JOB_QUEUE = 'tipme-jobs';
 export const JOB_NAMES = { traceProbe: 'diagnostics.trace-probe' } as const;
+/** Queued with a new withdrawal; the worker starts the payout from it. */
+export const PAYOUT_START_EVENT = 'payouts.start';
 
 /** W3C trace context carried inside job payloads so worker spans join the producer's trace. */
 export const traceCarrierSchema = z

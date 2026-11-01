@@ -7,18 +7,25 @@ import {
   PAYOUT_TRANSITIONS,
 } from '@tipme/domain';
 import type { PayoutStatus } from '@tipme/domain';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import {
+  bachsEnvironment,
+  PAYOUT_START_EVENT,
+  recordedProviderName,
+} from '@tipme/contracts';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
+  paymentAccounts,
   paymentIntents,
+  payoutDestinations,
   payoutItems,
   payouts,
   profiles,
   providerEvents,
   tipQuotes,
   tips,
+  withdrawalHolds,
 } from '../schema.js';
-import { markPayoutInitiated } from './attempts.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
@@ -289,38 +296,58 @@ export async function recordPayoutOutcome(
   );
 }
 
-/** What a withdrawal needs from a provider: starting the payout. */
-export interface PayoutInitiator {
+/**
+ * What a withdrawal reads from the provider. The port's own shape, kept structural because
+ * provider types stay in the payments package (ADR-0004). Starting the payout is the worker's job.
+ */
+export interface PayoutReader {
   name: string;
-  initiatePayout(input: {
-    payoutId: string;
-    /** Stable across retries; providers must deduplicate payout creation by this key. */
-    idempotencyKey: string;
-    amountMinor: bigint;
-    currency: string;
-    scenario?: 'payout-paid' | 'payout-failed';
-  }): Promise<{ providerReference: string }>;
+  /** `connectedAccounts: false` is the pretend provider, which has no account or bank to reach. */
+  capabilities?: { connectedAccounts: boolean };
+  payoutCapability(accountRef: string): Promise<{
+    status: 'active' | 'restricted' | 'missing';
+    requirementsDue: string[];
+  }>;
+  payoutBalance(
+    accountRef: string,
+    currency: 'NGN',
+  ): Promise<{ availableMinor: bigint }>;
+  quotePayoutFee(
+    accountRef: string,
+    amountMinor: bigint,
+    currency: 'NGN',
+  ): Promise<{ feeMinor: bigint; exact: boolean }>;
 }
 
-/**
- * A recipient withdraws any amount up to their available balance (PR-008). The profile row is
- * locked so two withdrawals at once can never overdraw. Nothing is posted to the ledger until the
- * provider confirms the payout as paid; until then the amount is reserved, and a failed payout
- * simply releases it.
- */
+export type WithdrawalQuoteResult =
+  | {
+      state: 'ready';
+      withdrawableMinor: bigint;
+      ledgerMinor: bigint;
+      providerMinor: bigint;
+      feeMinor: bigint;
+      destination: { bankName: string; last4: string };
+    }
+  | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
+  | { state: 'no_destination' }
+  | { state: 'destination_pending' }
+  | { state: 'paused'; reason: 'reversal' | 'in_debt' | 'unexpected_payout' }
+  | { state: 'provider_unavailable' };
+
 // Money can only leave through the provider that collected it. A paid tip collected by any other
-// provider (Bachs direct charges sit in the recipient's own Bachs account, and Bachs payouts are
-// unsupported) blocks the withdrawal rather than paying it out twice.
+// provider sits where this one cannot reach it, so it blocks the withdrawal rather than paying it
+// out twice. Attempts record the stored name ('bachs'), so the adapter's name is converted first.
 async function collectedElsewhere(
   db: Pick<Database, 'execute'>,
   input: { profileId: string; provider: string },
 ): Promise<boolean> {
+  const stored = recordedProviderName(input.provider);
   const foreign = await db.execute<{ found: boolean }>(sql`
     SELECT EXISTS (
       SELECT 1 FROM tips t
         JOIN payment_attempts a ON a.intent_id = t.intent_id
        WHERE t.profile_id = ${input.profileId} AND t.status = 'SUCCEEDED'
-         AND a.status = 'VERIFIED_SUCCEEDED' AND a.provider IS DISTINCT FROM ${input.provider}
+         AND a.status = 'VERIFIED_SUCCEEDED' AND a.provider IS DISTINCT FROM ${stored}
     ) AS found`);
   return Boolean(foreign.rows[0]?.found);
 }
@@ -333,83 +360,324 @@ export function withdrawalsAvailable(
   return guarded(async () => !(await collectedElsewhere(db, input)));
 }
 
+/** Where a withdrawal would go, from TipMe's own records; the provider is not asked here. */
+async function payoutRoute(
+  db: Database,
+  input: { profileId: string; provider: PayoutReader },
+): Promise<{
+  /** Whether this provider pays through a connected account at all. */
+  accountless: boolean;
+  accountReference: string | null;
+  destination: {
+    id: string;
+    bankName: string;
+    last4: string;
+    status: string;
+  } | null;
+}> {
+  const stored = recordedProviderName(input.provider.name);
+  const accountless = input.provider.capabilities?.connectedAccounts === false;
+  const environment = bachsEnvironment(input.provider.name);
+  const [account] =
+    accountless || !environment
+      ? []
+      : await db
+          .select({ reference: paymentAccounts.providerAccountReference })
+          .from(paymentAccounts)
+          .where(
+            and(
+              eq(paymentAccounts.profileId, input.profileId),
+              eq(paymentAccounts.provider, stored),
+              eq(paymentAccounts.environment, environment),
+            ),
+          );
+  const [destination] = await db
+    .select({
+      id: payoutDestinations.id,
+      bankName: payoutDestinations.bankName,
+      last4: payoutDestinations.accountLast4,
+      status: payoutDestinations.status,
+    })
+    .from(payoutDestinations)
+    .where(
+      and(
+        eq(payoutDestinations.profileId, input.profileId),
+        eq(payoutDestinations.provider, stored),
+        isNull(payoutDestinations.replacedAt),
+      ),
+    );
+  return {
+    accountless,
+    accountReference: account?.reference ?? null,
+    destination: destination ?? null,
+  };
+}
+
+/** The refusal an unusable route means, or null when the route can carry a payout. */
+function routeBlock(
+  route: Awaited<ReturnType<typeof payoutRoute>>,
+):
+  | { state: 'setup_needed'; requirementsDue: string[] }
+  | { state: 'no_destination' }
+  | { state: 'destination_pending' }
+  | null {
+  if (!route.accountless && !route.accountReference)
+    return { state: 'setup_needed', requirementsDue: [] };
+  if (route.destination?.status === 'pending_review')
+    return { state: 'destination_pending' };
+  if (route.destination?.status === 'rejected')
+    return { state: 'no_destination' };
+  if (!route.destination && !route.accountless)
+    return { state: 'no_destination' };
+  return null;
+}
+
+/**
+ * Everything the provider must confirm for a payout. Any failed read is 'unavailable': a withdrawal
+ * never falls back to the ledger alone, because the money leaves the provider's balance, not ours.
+ * Never call this inside a transaction: it is network IO, and the profile lock must stay short.
+ */
+async function readProvider(
+  provider: PayoutReader,
+  accountRef: string,
+  amountMinor: (availableMinor: bigint) => bigint,
+): Promise<
+  | { state: 'ok'; availableMinor: bigint; feeMinor: bigint }
+  | { state: 'setup_needed'; requirementsDue: string[] }
+  | { state: 'unavailable' }
+> {
+  try {
+    const capability = await provider.payoutCapability(accountRef);
+    if (capability.status !== 'active')
+      return {
+        state: 'setup_needed',
+        requirementsDue: capability.requirementsDue,
+      };
+    const { availableMinor } = await provider.payoutBalance(accountRef, 'NGN');
+    const { feeMinor } = await provider.quotePayoutFee(
+      accountRef,
+      amountMinor(availableMinor),
+      'NGN',
+    );
+    return { state: 'ok', availableMinor, feeMinor };
+  } catch {
+    return { state: 'unavailable' };
+  }
+}
+
+/**
+ * Money queued for the worker has left the ledger's available balance but not yet the provider's,
+ * so the provider's figure still includes it. Counting it again would promise the same money twice.
+ */
+async function queuedNotStarted(
+  db: Pick<Database, 'select'>,
+  profileId: string,
+): Promise<bigint> {
+  const [row] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${payouts.amountMinor}), 0)`,
+    })
+    .from(payouts)
+    .where(
+      and(
+        eq(payouts.profileId, profileId),
+        eq(payouts.status, 'REQUESTED'),
+        isNull(payouts.providerReference),
+      ),
+    );
+  return BigInt(row?.total ?? 0);
+}
+
+const lower = (a: bigint, b: bigint) => (a < b ? a : b);
+const notNegative = (a: bigint) => (a < 0n ? 0n : a);
+
+async function activeHold(
+  db: Pick<Database, 'select'>,
+  profileId: string,
+): Promise<'reversal' | 'in_debt' | 'unexpected_payout' | null> {
+  const [hold] = await db
+    .select({ reason: withdrawalHolds.reason })
+    .from(withdrawalHolds)
+    .where(
+      and(
+        eq(withdrawalHolds.profileId, profileId),
+        isNull(withdrawalHolds.releasedAt),
+      ),
+    )
+    .orderBy(asc(withdrawalHolds.createdAt))
+    .limit(1);
+  return (hold?.reason as 'reversal' | 'in_debt' | 'unexpected_payout') ?? null;
+}
+
+/** What the recipient can withdraw right now and, if nothing, why. Never moves money. */
+export async function withdrawalQuote(
+  db: Database,
+  input: { profileId: string; provider: PayoutReader },
+): Promise<WithdrawalQuoteResult> {
+  const { hold, route, foreign } = await guarded(async () => ({
+    hold: await activeHold(db, input.profileId),
+    route: await payoutRoute(db, input),
+    foreign: await collectedElsewhere(db, {
+      profileId: input.profileId,
+      provider: input.provider.name,
+    }),
+  }));
+  if (hold) return { state: 'paused', reason: hold };
+  // A request would be refused, so the quote must not say otherwise. The states have no word for
+  // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
+  if (foreign) return { state: 'provider_unavailable' };
+  const block = routeBlock(route);
+  if (block) return block;
+  const { ledgerMinor, queuedMinor } = await guarded(async () => ({
+    ledgerMinor: (await balanceIn(db, input.profileId)).availableMinor,
+    queuedMinor: await queuedNotStarted(db, input.profileId),
+  }));
+  const read = await readProvider(
+    input.provider,
+    route.accountReference ?? input.profileId,
+    (available) => notNegative(lower(ledgerMinor, available - queuedMinor)),
+  );
+  if (read.state === 'unavailable') return { state: 'provider_unavailable' };
+  if (read.state === 'setup_needed') return read;
+  const providerMinor = notNegative(read.availableMinor - queuedMinor);
+  return {
+    state: 'ready',
+    withdrawableMinor: notNegative(lower(ledgerMinor, providerMinor)),
+    ledgerMinor,
+    providerMinor,
+    feeMinor: read.feeMinor,
+    destination: route.destination
+      ? { bankName: route.destination.bankName, last4: route.destination.last4 }
+      : { bankName: 'Pretend bank', last4: '0000' },
+  };
+}
+
+/**
+ * A recipient withdraws any amount up to what both TipMe's ledger and the provider's balance allow
+ * (PR-008). The provider is read first, outside any transaction; then the profile row is locked so
+ * two withdrawals at once can never overdraw, and holds are checked under that lock so a concurrent
+ * one is seen. Nothing is posted to the ledger until the provider confirms the payout as paid: until
+ * then the amount is reserved, and a failed payout simply releases it. The provider is never asked
+ * to move money here: the `payouts.start` job, committed with the payout, makes the worker do that.
+ * A replay returns the original payout whatever has changed since, and queues nothing.
+ */
 export async function requestWithdrawal(
   db: Database,
   input: {
     profileId: string;
     amountMinor: bigint;
     idempotencyKey: string;
-    provider: PayoutInitiator;
-    scenario?: 'payout-paid' | 'payout-failed';
+    provider: PayoutReader;
     traceId?: string | null;
   },
 ): Promise<{
   payoutId: string;
   status: string;
   replayed: boolean;
-  providerReference: string | null;
 }> {
   const traceId = input.traceId ?? activeTraceId();
+  const route = await guarded(() => payoutRoute(db, input));
+  const destinationId = route.destination?.id ?? null;
+  // The pretend provider's payouts have no bank, and keep the key they always had.
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify([
         'withdrawal',
         input.profileId,
         input.amountMinor.toString(),
+        ...(destinationId ? [destinationId] : []),
       ]),
     )
     .digest('hex');
-  const created = await guarded(() =>
+  const replayIn = async (reader: Pick<Database, 'select'>) => {
+    const [existing] = await reader
+      .select()
+      .from(payouts)
+      .where(eq(payouts.idempotencyKey, input.idempotencyKey));
+    if (!existing) return null;
+    if (existing.requestFingerprint !== fingerprint)
+      throw new OperationError('IDEMPOTENCY_CONFLICT');
+    return {
+      payoutId: existing.id,
+      status: existing.status as string,
+      replayed: true,
+    };
+  };
+  // Before any provider read: a retry must get its payout even when the provider is down.
+  const earlier = await guarded(() => replayIn(db));
+  if (earlier) return earlier;
+  if (input.amountMinor <= 0n) throw new OperationError('INVALID_INPUT');
+  const providerName = input.provider.name;
+  const isForeign = () =>
+    collectedElsewhere(db, {
+      profileId: input.profileId,
+      provider: providerName,
+    });
+  if (await guarded(isForeign))
+    throw new OperationError('WITHDRAWAL_UNAVAILABLE');
+  const block = routeBlock(route);
+  if (block?.state === 'setup_needed')
+    throw new OperationError('PAYOUT_SETUP_NEEDED');
+  if (block) throw new OperationError('PAYOUT_DESTINATION_NEEDED');
+  const read = await readProvider(
+    input.provider,
+    route.accountReference ?? input.profileId,
+    () => input.amountMinor,
+  );
+  if (read.state === 'unavailable')
+    throw new OperationError('PAYOUT_PROVIDER_UNAVAILABLE');
+  if (read.state === 'setup_needed')
+    throw new OperationError('PAYOUT_SETUP_NEEDED');
+
+  return guarded(() =>
     db.transaction(async (tx) => {
-      const replay = async () => {
-        const [existing] = await tx
-          .select()
-          .from(payouts)
-          .where(eq(payouts.idempotencyKey, input.idempotencyKey));
-        if (!existing) return null;
-        if (existing.requestFingerprint !== fingerprint)
-          throw new OperationError('IDEMPOTENCY_CONFLICT');
-        return existing;
-      };
-      const existing = await replay();
-      if (existing) {
-        return {
-          payoutId: existing.id,
-          currency: existing.currency,
-          replayed: true,
-        };
-      }
-      if (input.amountMinor <= 0n) throw new OperationError('INVALID_INPUT');
       await tx
         .select({ id: profiles.id })
         .from(profiles)
         .where(eq(profiles.id, input.profileId))
         .for('update');
-      const afterLock = await replay();
-      if (afterLock) {
-        return {
-          payoutId: afterLock.id,
-          currency: afterLock.currency,
-          replayed: true,
-        };
-      }
+      const afterLock = await replayIn(tx);
+      if (afterLock) return afterLock;
+      if (await activeHold(tx, input.profileId))
+        throw new OperationError('WITHDRAWALS_PAUSED');
       const { availableMinor } = await balanceIn(tx, input.profileId);
-      if (input.amountMinor > availableMinor)
+      const withdrawable = lower(
+        availableMinor,
+        notNegative(
+          read.availableMinor - (await queuedNotStarted(tx, input.profileId)),
+        ),
+      );
+      if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
-      // ₦1,000 minimum (PR-012), except to take the whole balance: nobody is left with money
+      // ₦1,000 minimum (PR-012), except to take all that can be taken: nobody is left with money
       // they cannot withdraw, or an account they cannot close.
       if (
         input.amountMinor < FEE_POLICY_V1.minWithdrawalMinor &&
-        input.amountMinor !== availableMinor
+        input.amountMinor !== withdrawable
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
       if (
         await collectedElsewhere(tx, {
           profileId: input.profileId,
-          provider: input.provider.name,
+          provider: providerName,
         })
       )
         throw new OperationError('WITHDRAWAL_UNAVAILABLE');
+      if (destinationId) {
+        // Held until commit: a bank change waits, and the payout never records a replaced account.
+        const [current] = await tx
+          .select({ id: payoutDestinations.id })
+          .from(payoutDestinations)
+          .where(
+            and(
+              eq(payoutDestinations.id, destinationId),
+              eq(payoutDestinations.status, 'usable'),
+              isNull(payoutDestinations.replacedAt),
+            ),
+          )
+          .for('share');
+        if (!current) throw new OperationError('PAYOUT_DESTINATION_NEEDED');
+      }
       const payoutId = newId();
       const inserted = await tx
         .insert(payouts)
@@ -421,18 +689,16 @@ export async function requestWithdrawal(
           status: 'REQUESTED',
           idempotencyKey: input.idempotencyKey,
           requestFingerprint: fingerprint,
+          provider: recordedProviderName(providerName),
+          destinationId,
+          feeMinor: read.feeMinor,
+          accountReference: route.accountReference,
         })
         .onConflictDoNothing({ target: payouts.idempotencyKey })
         .returning({ id: payouts.id });
       if (inserted.length === 0) {
-        const raced = await replay();
-        if (raced) {
-          return {
-            payoutId: raced.id,
-            currency: raced.currency,
-            replayed: true,
-          };
-        }
+        const raced = await replayIn(tx);
+        if (raced) return raced;
         throw new OperationError('IDEMPOTENCY_CONFLICT');
       }
       await recordTransition(tx, {
@@ -443,47 +709,12 @@ export async function requestWithdrawal(
         cause: 'system',
         traceId,
       });
-      return { payoutId, currency: 'NGN', replayed: false };
+      await enqueueOutbox(tx, {
+        eventType: PAYOUT_START_EVENT,
+        aggregateId: payoutId,
+        payload: { payoutId, profileId: input.profileId },
+      });
+      return { payoutId, status: 'REQUESTED', replayed: false };
     }),
   );
-  // Start the payout once; a replay whose first attempt never reached the provider starts it now.
-  const [current] = await guarded(() =>
-    db
-      .select({ status: payouts.status, reference: payouts.providerReference })
-      .from(payouts)
-      .where(eq(payouts.id, created.payoutId)),
-  );
-  let providerReference = current?.reference ?? null;
-  if (current && !current.reference && current.status === 'REQUESTED') {
-    const started = await input.provider.initiatePayout({
-      payoutId: created.payoutId,
-      idempotencyKey: created.payoutId,
-      amountMinor: input.amountMinor,
-      currency: created.currency,
-      ...(input.scenario ? { scenario: input.scenario } : {}),
-    });
-    const outcome = await markPayoutInitiated(db, {
-      payoutId: created.payoutId,
-      provider: input.provider.name,
-      providerReference: started.providerReference,
-    });
-    // A concurrent replay may have recorded its own reference first: report the winner.
-    providerReference =
-      outcome === 'initiated'
-        ? started.providerReference
-        : ((
-            await guarded(() =>
-              db
-                .select({ reference: payouts.providerReference })
-                .from(payouts)
-                .where(eq(payouts.id, created.payoutId)),
-            )
-          )[0]?.reference ?? null);
-  }
-  return {
-    payoutId: created.payoutId,
-    status: current?.status ?? 'REQUESTED',
-    replayed: created.replayed,
-    providerReference,
-  };
 }

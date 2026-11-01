@@ -67,6 +67,22 @@ export const withdrawalRequestSchema = z
   .object({ amountMinor: z.string().regex(/^\d{1,12}$/) })
   .strict();
 
+/** What the recipient can withdraw now and, if nothing, why. Amounts are minor units of NGN. */
+export type WithdrawalQuote =
+  | {
+      state: 'ready';
+      withdrawableMinor: string;
+      ledgerMinor: string;
+      providerMinor: string;
+      feeMinor: string;
+      destination: { bankName: string; last4: string };
+    }
+  | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
+  | { state: 'no_destination' }
+  | { state: 'destination_pending' }
+  | { state: 'paused'; reason: 'reversal' | 'in_debt' | 'unexpected_payout' }
+  | { state: 'provider_unavailable' };
+
 export interface NotificationView {
   id: string;
   kind: string;
