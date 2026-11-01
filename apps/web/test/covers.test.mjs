@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { COVER_COLOURS, COVER_DARK, COVER_DESIGNS } from '@tipme/contracts';
 import {
   HEART_DESIGNS,
+  HEART_LAYOUTS,
   coverView,
   heartShapes,
 } from '../src/lib/cover-view.ts';
@@ -52,7 +53,7 @@ test('every heart design renders for every colour it allows', () => {
     HEART_DESIGNS.includes(d.id),
   )) {
     const colours = design.colours
-      ? COVER_COLOURS.map((c) => ({ base: c.base, tone: c.tone, id: c.id }))
+      ? COVER_COLOURS
       : [{ ...COVER_DARK, id: undefined }];
     for (const colour of colours) {
       const view = coverView(
@@ -66,10 +67,16 @@ test('every heart design renders for every colour it allows', () => {
       assert.equal(view.kind, 'hearts', `${design.id}/${colour.id}`);
       assert.equal(view.base, colour.base);
       assert.ok(view.shapes.length > 0);
-      assert.deepEqual(view.shapes, heartShapes(design.id, colour.tone));
+      assert.deepEqual(
+        view.shapes,
+        heartShapes(design.id, colour.tone, colour.line ?? colour.tone),
+      );
       for (const shape of view.shapes) {
         assert.match(shape.d, /^M/);
-        assert.ok(shape.fill === colour.tone || shape.stroke === colour.tone);
+        assert.ok(
+          shape.fill === colour.tone ||
+            shape.stroke === (colour.line ?? colour.tone),
+        );
       }
     }
   }
@@ -104,4 +111,49 @@ test('a pattern design is a file; a photo is vetted like an avatar; anything els
     coverView({ kind: 'design', design: 'large', colour: 'gone' }, API).base,
     COVER_COLOURS.find((c) => c.id === 'neutral').base,
   );
+});
+
+/** Centre of a heart drawn by `translate(x y) scale(s) translate(-727 -50)`: 727, 50 is the middle of the path. */
+const centreOf = (transform) => {
+  const [, x, y] = transform
+    .match(/^translate\(([\d.-]+) ([\d.-]+)\) scale\(([\d.]+)\)/)
+    .map(Number);
+  return { x, y };
+};
+
+test('each heart design has its focal point in the central 60% of the width, clear of the photo and the tipping panel', () => {
+  const [left, right] = [1120 * 0.2, 1120 * 0.8];
+  for (const id of HEART_DESIGNS) {
+    const { focus, tile } = HEART_LAYOUTS[id];
+    assert.ok(focus.x >= left && focus.x <= right, `${id} focus x ${focus.x}`);
+    assert.ok(focus.y >= 60 && focus.y <= 220, `${id} focus y ${focus.y}`);
+    if (tile) continue; // a tiled pattern has no single focal shape
+    // The declared focus is real: some shape of the design is centred on it (the rising
+    // hearts climb, so one of them), and every shape's heart lies inside the safe width.
+    const centres = heartShapes(id, '#000').map((s) => centreOf(s.transform));
+    assert.ok(
+      centres.some((c) => Math.hypot(c.x - focus.x, c.y - focus.y) <= 10),
+      `${id} has a heart at its focus`,
+    );
+    for (const c of centres)
+      assert.ok(c.x >= left && c.x <= right, `${id} heart at ${c.x}`);
+  }
+});
+
+test('outline strokes are readable on every base: contrast of at least 1.4, and quiet, under 4', () => {
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  for (const c of COVER_COLOURS) {
+    const [a, b] = [lum(c.base), lum(c.line)].sort((x, y) => y - x);
+    const ratio = (a + 0.05) / (b + 0.05);
+    assert.ok(
+      ratio >= 1.4 && ratio < 4,
+      `${c.id} line contrast ${ratio.toFixed(2)}`,
+    );
+  }
 });

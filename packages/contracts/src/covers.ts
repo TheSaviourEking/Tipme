@@ -16,6 +16,8 @@ export interface CoverColour {
   name: string;
   base: string;
   tone: string;
+  /** For designs drawn in outline: readable on `base`, but quiet. */
+  line: string;
 }
 
 export const COVER_DESIGNS: readonly CoverDesign[] = [
@@ -47,13 +49,49 @@ export const COVER_DESIGNS: readonly CoverDesign[] = [
 
 /** Violet and lilac are chosen by the person, never automatic (spec §6). */
 export const COVER_COLOURS: readonly CoverColour[] = [
-  { id: 'neutral', name: 'Neutral', base: '#e6e4dc', tone: '#d6d3c8' },
-  { id: 'violet', name: 'Violet', base: '#7a32f9', tone: '#6723e8' },
-  { id: 'lilac', name: 'Lilac', base: '#ece2ff', tone: '#ddcbff' },
-  { id: 'forest', name: 'Forest', base: '#1f4d3a', tone: '#2a6049' },
-  { id: 'ocean', name: 'Ocean', base: '#1d4e89', tone: '#2a609f' },
-  { id: 'sun', name: 'Sun', base: '#f4c25b', tone: '#ebb03b' },
-  { id: 'rose', name: 'Rose', base: '#b83d62', tone: '#c9547a' },
+  {
+    id: 'neutral',
+    name: 'Neutral',
+    base: '#e6e4dc',
+    tone: '#d6d3c8',
+    line: '#bdb9ab',
+  },
+  {
+    id: 'violet',
+    name: 'Violet',
+    base: '#7a32f9',
+    tone: '#6723e8',
+    line: '#b08dff',
+  },
+  {
+    id: 'lilac',
+    name: 'Lilac',
+    base: '#ece2ff',
+    tone: '#ddcbff',
+    line: '#bfa5f5',
+  },
+  {
+    id: 'forest',
+    name: 'Forest',
+    base: '#1f4d3a',
+    tone: '#2a6049',
+    line: '#4f8a70',
+  },
+  {
+    id: 'ocean',
+    name: 'Ocean',
+    base: '#1d4e89',
+    tone: '#2a609f',
+    line: '#5b8fcc',
+  },
+  { id: 'sun', name: 'Sun', base: '#f4c25b', tone: '#ebb03b', line: '#c98f1a' },
+  {
+    id: 'rose',
+    name: 'Rose',
+    base: '#b83d62',
+    tone: '#c9547a',
+    line: '#e07a9b',
+  },
 ];
 
 /** The `dark` design's fixed colours: it takes no colour of its own. */

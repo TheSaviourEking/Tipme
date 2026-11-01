@@ -24,17 +24,27 @@ export interface HeartShape {
 export interface HeartLayout {
   /** Height of the original artboard (all are 1120 wide); the drawing is centred in the frame. */
   height: number;
+  /** Where the eye lands, in the artboard's coordinates; kept in the central 60% of the width so a phone's crop shows it. */
+  focus: { x: number; y: number };
   /** A repeating tile the shapes sit in, or none when they are drawn once. */
   tile?: { width: number; height: number };
 }
 
 export const HEART_LAYOUTS: Readonly<Record<string, HeartLayout>> = {
-  scattered: { height: 280, tile: { width: 280, height: 210 } },
-  large: { height: 280 },
-  dark: { height: 280 },
-  outline: { height: 293, tile: { width: 280, height: 210 } },
-  ripple: { height: 293 },
-  rising: { height: 293 },
+  scattered: {
+    height: 280,
+    focus: { x: 560, y: 140 },
+    tile: { width: 280, height: 210 },
+  },
+  large: { height: 280, focus: { x: 560, y: 140 } },
+  dark: { height: 280, focus: { x: 560, y: 140 } },
+  outline: {
+    height: 293,
+    focus: { x: 560, y: 146 },
+    tile: { width: 280, height: 210 },
+  },
+  ripple: { height: 293, focus: { x: 560, y: 146 } },
+  rising: { height: 293, focus: { x: 590, y: 135 } },
 };
 
 export const HEART_DESIGNS: readonly string[] = Object.keys(HEART_LAYOUTS);
@@ -43,23 +53,25 @@ const SCATTER = [
   'translate(-670 10) rotate(-14 733 45)',
   'translate(-540 90) rotate(18 733 45)',
 ];
-const RIPPLES: [number, number][] = [
-  [2, 1],
-  [4, 0.5],
-  [6, 0.33],
-  [8, 0.25],
-  [10, 0.2],
-];
+const RIPPLES = [2, 4, 6, 8, 10];
+// Hearts climbing from lower left to upper right, clear of the photo and the tipping panel.
 const RISING: [number, number, number][] = [
-  [520, 235, 0.6],
-  [640, 185, 0.95],
-  [790, 130, 1.45],
-  [980, 80, 2.2],
+  [340, 230, 0.6],
+  [450, 190, 0.95],
+  [590, 135, 1.45],
+  [760, 85, 2.2],
 ];
-const BIG = 'translate(-3650 -300) scale(6)';
+/** A heart drawn about its centre (x, y is the middle of its bounding box). */
+const placed = (x: number, y: number, scale: number) =>
+  `translate(${x} ${y}) scale(${scale}) translate(-727 -50)`;
+const BIG = placed(560, 140, 3.6);
 
 /** The shapes of a heart design, drawn in `tone` over the cover's base colour. */
-export function heartShapes(design: string, tone: string): HeartShape[] {
+export function heartShapes(
+  design: string,
+  tone: string,
+  line: string = tone,
+): HeartShape[] {
   switch (design) {
     case 'scattered':
       return SCATTER.map((transform) => ({ d: HEART, transform, fill: tone }));
@@ -67,23 +79,24 @@ export function heartShapes(design: string, tone: string): HeartShape[] {
       return SCATTER.map((transform) => ({
         d: HEART,
         transform,
-        stroke: tone,
+        stroke: line,
         strokeWidth: 2,
       }));
     case 'large':
     case 'dark':
       return [{ d: HEART, transform: BIG, fill: tone }];
     case 'ripple':
-      return RIPPLES.map(([scale, strokeWidth]) => ({
+      return RIPPLES.map((scale) => ({
         d: HEART,
-        transform: `translate(860 120) scale(${scale}) translate(-733 -45)`,
-        stroke: tone,
-        strokeWidth,
+        transform: placed(560, 146, scale),
+        stroke: line,
+        // Every ring is about 2 px wide on screen whatever its scale.
+        strokeWidth: +(2 / scale).toFixed(3),
       }));
     case 'rising':
       return RISING.map(([x, y, scale]) => ({
         d: HEART,
-        transform: `translate(${x} ${y}) scale(${scale}) translate(-733 -45)`,
+        transform: placed(x, y, scale),
         fill: tone,
       }));
     default:
@@ -98,6 +111,7 @@ export type CoverView =
       design: string;
       base: string;
       tone: string;
+      line: string;
       shapes: HeartShape[];
       layout: HeartLayout;
     };
@@ -120,15 +134,16 @@ function hearts(design: string, colourId: string | undefined): CoverView {
   const picked = colourId
     ? COVER_COLOURS.find((c) => c.id === colourId)
     : undefined;
-  const { base, tone } = !colours
-    ? COVER_DARK
-    : (picked ?? NEUTRAL ?? COVER_DARK);
+  // The dark design takes no colour of its own, so it has no outline colour either.
+  const dark = { ...COVER_DARK, line: COVER_DARK.tone };
+  const { base, tone, line } = !colours ? dark : (picked ?? NEUTRAL ?? dark);
   return {
     kind: 'hearts',
     design,
     base,
     tone,
-    shapes: heartShapes(design, tone),
+    line,
+    shapes: heartShapes(design, tone, line),
     layout,
   };
 }

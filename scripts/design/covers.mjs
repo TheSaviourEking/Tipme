@@ -237,7 +237,9 @@ const save = (name, bg, body, defs = '') =>
           1 - Math.hypot(x - 560, (y - 150) * 1.4) / 560,
         );
         if (!inside && fade < 0.22) continue;
-        const r = inside ? step * 0.48 : step * 0.13 * fade + 0.6;
+        // Outside dots shrink to nothing where they stop, so the halftone has no visible edge.
+        const t = (fade - 0.22) / 0.78;
+        const r = inside ? step * 0.48 : (step * 0.14 + 0.5) * t;
         b += `<circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${col}"/>`;
       }
   };
@@ -475,7 +477,7 @@ const out = fileURLToPath(
 );
 // Quality per design: vector art compresses well, but the dense line work (engraved, overprint)
 // is lowered only as far as the 120 KB budget needs.
-const QUALITY = { engraved: 70, overprint: 60, lagoon: 68 };
+const QUALITY = { engraved: 70, overprint: 74, lagoon: 68 };
 const only = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 for (const [name, svg] of svgs) {
