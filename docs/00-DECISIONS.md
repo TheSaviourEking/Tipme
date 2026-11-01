@@ -99,18 +99,34 @@
 >
 > - Accepted by / date:
 > - Scope (closed pilot, or public; Q7):
+> - ADR recording the approved processor and funds flow (AGENTS.md hard stop), its number:
+> - D-01 jurisdiction and currency:
 > - D-02 legal opinion, or accepted risk and why:
 > - D-03 the payment partner's written confirmation (Q4), and where it is kept:
 > - D-04 signed funds-flow diagram, and where it is kept:
 > - D-05 refunds, chargebacks, reward cash:
 > - D-06 verification, holds and support; may the owner alone settle money issues (Q5):
 > - D-07 compliance assessment, or accepted risk and why:
+> - D-08 hosting, monitoring budget and response coverage:
+> - D-10 first launch segment:
+> - D-11 messaging providers and sender registration:
+> - Do D-01, D-08, D-10 and D-11 block the pilot? (yes / no, and why):
+> - Holds on one person's say: legal or provider approval (`docs/05-SECURITY.md`), held or accepted risk:
 > - Stolen inbox (email sign-in plus a bank code to the same inbox adds a bank at once): accepted / changed:
 > - Stolen session and the 72-hour bank wait: accepted / changed:
+> - Slow recovery (24 hours, then the 72-hour bank wait): accepted / changed:
+> - Limits of the takeover freeze (nothing with the provider is recalled; staff check the bank by hand): accepted / changed:
+> - What the withdrawals switch doesn't stop (payouts already with the provider): accepted / changed:
+> - Public hint that the reserve is low (`/health/payments`): accepted / changed:
+> - ₦50 fee paid from the reserve on every withdrawal, however small: accepted / changed:
 > - One admin until second-person approval ships: accepted / changed:
+> - Pilot notice wording: approved / changed to:
+> - Provider writes on production's accounts while payments are off (manual payouts, capabilities): accepted / changed:
 > - Reserve funded to, and who tops it up (Q6):
 
-> **Takeover freeze (1 Nov 2026), PROPOSED, needs the owner's confirmation.** "Admin and money" above says payout holds stay out of admin until there are two staff. The owner's list of decisions before live named the missing takeover freeze, so a narrow one was built: staff with `payouts.resolve` can freeze a page's withdrawals for a reported account takeover, with a written reason, audited. It moves no money, recalls nothing with the provider, and ends when its money issue is resolved. All other holds stay out of admin. If the owner declines the exception, remove it before live.
+> **Takeover freeze: confirmed by the owner, 1 Nov 2026 ("keep the freeze").** "Admin and money" above says payout holds stay out of admin until there are two staff. This freeze was built first, ahead of the owner's decision, and the owner confirmed it afterwards. Staff with `payouts.resolve` can freeze a page's withdrawals for a reported account takeover, with a written reason, audited. It moves no money and recalls nothing with the provider. While it stands the bank can't change and held payouts can't resume; release needs written confirmation that the bank and sign-in were checked. All other holds stay out of admin. **This is not legal or provider approval:** D-06 stays open, and the requirement in `docs/05-SECURITY.md` that payout holds have legal or provider approval stays an open line in the runbook.
+
+> **Withdrawals switch: the owner's decision, 1 Nov 2026 ("we should be able to switch of withdrawals toooo").** Staff with `payouts.resolve` can stop all withdrawals from the Overview with a written reason, audited and alerted, on every copy at once, with no deploy. It is independent of `PAYMENTS_LIVE_ENABLED`. While off, requests are refused and queued payouts wait, reserved; payouts already with the provider can't be recalled and keep settling. The same D-06 limit applies: this doesn't approve holds.
 
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
