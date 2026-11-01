@@ -1,5 +1,6 @@
 import type {
   OpsHealth,
+  OpsLiveSwitch,
   OpsPaymentReserve,
   OpsVisibility,
 } from '@tipme/contracts';
@@ -7,6 +8,7 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { webVitalsSummary } from './analytics.js';
 import { guarded } from './errors.js';
+import { currentLiveSwitch } from './live-switch.js';
 import { latestReserveReading, reserveIsStale } from './payment-reserve.js';
 
 const ZONE = 'Africa/Lagos';
@@ -186,6 +188,7 @@ export function healthMetrics(
       },
       webVitals: await webVitalsSummary(db, { now: input.now, days: 28 }),
       reserve: await reserveSummary(db, input.now),
+      liveSwitch: await liveSwitchSummary(db),
     };
   });
 }
@@ -275,6 +278,13 @@ export function visibilityMetrics(
       })),
     };
   });
+}
+
+async function liveSwitchSummary(db: Database): Promise<OpsLiveSwitch | null> {
+  const latest = await currentLiveSwitch(db);
+  return latest
+    ? { ...latest, switchedAt: latest.switchedAt.toISOString() }
+    : null;
 }
 
 /** The latest reserve reading as staff see it: amounts as text, times as ISO. */

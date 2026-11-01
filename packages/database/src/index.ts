@@ -52,6 +52,7 @@ export * from './operations/evidence.js';
 export * from './operations/analytics.js';
 export * from './operations/ops-metrics.js';
 export * from './operations/payment-reserve.js';
+export * from './operations/live-switch.js';
 export * from './operations/market.js';
 export * from './operations/release-runs.js';
 export * from './backup/backup.js';

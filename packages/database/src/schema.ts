@@ -1289,6 +1289,25 @@ export const parkedPayoutChecks = pgTable('parked_payout_checks', {
  * `provider` is the adapter name (bachs-live or bachs-sandbox), so sandbox readings never count
  * for live.
  */
+/** Each time live payments changed on this copy: the API records one at boot. Append-only. */
+export const livePaymentSwitches = pgTable(
+  'live_payment_switches',
+  {
+    id: uuid('id').primaryKey(),
+    live: boolean('live').notNull(),
+    provider: text('provider').notNull(),
+    // The deployed commit, or `unknown` when a copy was started without one.
+    version: text('version').notNull(),
+    switchedAt: timestamp('switched_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('live_payment_switches_latest').on(
+      table.switchedAt.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
+
 export const paymentReserveReadings = pgTable(
   'payment_reserve_readings',
   {

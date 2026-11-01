@@ -9,6 +9,7 @@ import type {
 import { Notice, Skeleton } from '@tipme/ui';
 import { Funnel, Tile } from '@/components/ops/charts';
 import { change, naira } from '@/lib/money';
+import { liveSwitchText } from '@/lib/live-switch-view';
 import { reserveView } from '@/lib/payment-reserve';
 import { apiFetch } from '@/lib/session-client';
 
@@ -75,6 +76,7 @@ export default function OpsOverviewPage() {
     webVitals = [],
     // An API older than the reserve alert sends none.
     reserve = null,
+    liveSwitch = null,
   } = health.metrics;
   const reserveNow = reserveView(reserve, openedAt);
   const tips = change(
@@ -89,9 +91,10 @@ export default function OpsOverviewPage() {
     <div className="ops-dashboard">
       <h1>Overview</h1>
       <p className="tm-hint">
-        This week (from Monday, Lagos time) against all of last week. Test money
-        only.
+        This week (from Monday, Lagos time) against all of last week.
+        {liveSwitch?.live ? '' : ' Test money only.'}
       </p>
+      <p>{liveSwitchText(liveSwitch)}</p>
       {!health.collecting && (
         <Notice tone="neutral" title="Anonymous collection is off">
           The funnel stays empty until the privacy decision (D-07) turns it on.

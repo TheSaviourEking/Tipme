@@ -462,6 +462,17 @@ export interface OpsHealth {
   /** Null before the first read (a copy without a payment provider reserve). Optional for the
    *  same reason as `webVitals`. */
   reserve?: OpsPaymentReserve | null;
+  /** Null until live payments have ever been switched on. Optional as above. */
+  liveSwitch?: OpsLiveSwitch | null;
+}
+
+/** Latest change of live payments on this copy; the API records one at boot when it differs. */
+export interface OpsLiveSwitch {
+  live: boolean;
+  provider: string;
+  /** The deployed commit, or `unknown`. */
+  version: string;
+  switchedAt: string;
 }
 
 /** How people find recipients' pages, over the last `days` days (Lagos). */
