@@ -190,7 +190,7 @@ test('share card is a prerendered PNG advertised on profiles', async ({
   expect(ogImage).toMatch(/\/opengraph-image/);
   await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
     'content',
-    /Non-transactional/,
+    'TipMe. A little thanks goes a long way.',
   );
   const response = await request.get(
     new URL(ogImage ?? '', 'http://127.0.0.1:3100').pathname,

@@ -81,6 +81,7 @@ test('a Bachs payment webhook confirms the tip at once, against the quoted share
   const { db, event, tipStatus } = await startedTip(t);
   const expectations = [];
   const bachs = {
+    environment: 'sandbox',
     async verifyTransaction(reference, expectation) {
       assert.equal(reference, REFERENCE);
       expectations.push(expectation);
@@ -107,6 +108,7 @@ test('a Bachs payment webhook confirms the tip at once, against the quoted share
 test('when the read fails the tip stays pending for the worker, and the webhook still succeeds', async (t) => {
   const { db, event, tipStatus } = await startedTip(t);
   const outcome = await new WebhookService({ db }).applyBachs(event, {
+    environment: 'sandbox',
     async verifyTransaction() {
       throw new Error('Bachs is unavailable');
     },

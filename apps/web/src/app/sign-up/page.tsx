@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthStage } from '@/components/account/auth-stage';
+import { ModeText } from '@/components/payment-mode-slot';
 import { SignUpFlow } from './sign-up-flow';
 
 export const metadata: Metadata = {
@@ -11,7 +12,7 @@ export default function SignUpPage() {
   return (
     <AuthStage
       title="Your page, in a minute."
-      lede="An email address and a handle is all it takes to start receiving thanks. Payments are in test mode."
+      lede={<ModeText pick="signUpLede" />}
       promises={[
         'No card or bank details to start',
         'Your email stays private',

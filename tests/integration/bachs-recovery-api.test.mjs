@@ -99,6 +99,7 @@ test('checkout recovery verifies matching provider evidence before attaching and
   const database = await databaseFor(t);
   const { attemptId, issueId, quote } = await unknownCheckout(database);
   const bachsProvider = {
+    environment: 'sandbox',
     async verifyTransaction(reference, expectation) {
       assert.equal(reference, 'acct_ada123:chk_test123');
       // A ₦1,000 tip: Bachs confirms success only against TipMe's ₦100 share.
@@ -140,6 +141,7 @@ test('checkout recovery leaves an unlocated checkout unknown and unlinked', asyn
   const database = await databaseFor(t);
   const { attemptId, issueId } = await unknownCheckout(database);
   const result = await controller(database.db, {
+    environment: 'sandbox',
     async verifyTransaction() {
       return {
         status: 'not_found',
@@ -173,6 +175,7 @@ test('checkout recovery leaves a mismatched provider result unknown and unlinked
   const database = await databaseFor(t);
   const { attemptId, issueId, quote } = await unknownCheckout(database);
   const result = await controller(database.db, {
+    environment: 'sandbox',
     async verifyTransaction() {
       return {
         status: 'succeeded',
@@ -229,6 +232,7 @@ test('account recovery fetches provider status, links only the verified recipien
   assert.ok(issueId);
   let fetchedReference = '';
   const result = await controller(database.db, {
+    environment: 'sandbox',
     async getRecipientAccount(reference) {
       fetchedReference = reference;
       return {
@@ -293,6 +297,7 @@ test('staff recovery never activates an account whose recipient would bear Bachs
     )
   ).rows[0]?.id;
   const result = await controller(database.db, {
+    environment: 'sandbox',
     async getRecipientAccount(reference) {
       return {
         accountReference: reference,
@@ -352,6 +357,7 @@ test('refreshing onboarding stores what Bachs reports and blocks recipient-paid 
     { PAYMENT_PROVIDER: 'bachs-sandbox', WEB_ORIGIN: 'http://127.0.0.1:3000' },
     { db: database.db },
     {
+      environment: 'sandbox',
       async getRecipientAccount(reference) {
         return {
           accountReference: reference,
@@ -395,6 +401,7 @@ test('checkout recovery works with Bachs identifiers that have no acct_ or chk_ 
     'legacy-account-ada',
   );
   const result = await controller(database.db, {
+    environment: 'sandbox',
     async verifyTransaction(reference) {
       assert.equal(reference, 'legacy-account-ada:legacy-checkout-1');
       return {

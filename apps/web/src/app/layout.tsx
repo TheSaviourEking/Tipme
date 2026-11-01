@@ -4,6 +4,7 @@ import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
 import { WebVitalsReporter } from '@/components/web-vitals-reporter';
+import { SITE_DESCRIPTION } from '@/lib/payment-mode-copy';
 import '@tipme/ui/tokens.css';
 import '@tipme/ui/components.css';
 import './globals.css';
@@ -32,8 +33,7 @@ export const metadata: Metadata = {
     default: 'TipMe — A little thanks goes a long way',
     template: '%s | TipMe',
   },
-  description:
-    'An appreciation-first way to recognize the people who make a difference. Explore the non-transactional TipMe preview.',
+  description: SITE_DESCRIPTION,
   robots: { index: false, follow: false },
 };
 export default function RootLayout({

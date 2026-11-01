@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { SHARE_CARD_ALT } from './payment-mode-copy';
 import { marketingRobots } from './seo';
 
 const origin = new URL(process.env.SITE_URL ?? 'http://localhost:3000');
@@ -16,7 +17,7 @@ if (
 }
 export const siteOrigin = origin;
 export const shareCard = {
-  alt: 'TipMe. A little thanks goes a long way. Non-transactional development preview.',
+  alt: SHARE_CARD_ALT,
   width: 1200,
   height: 630,
 } as const;

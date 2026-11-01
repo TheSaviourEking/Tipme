@@ -10,6 +10,8 @@ import {
 import type { MyProfile } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { drawQrCard } from '@/lib/qr-card';
 import { frameCss, QR_STYLES, styleById } from '@/lib/qr-render';
 import { track } from '@/lib/analytics';
@@ -21,6 +23,7 @@ const noSubscription = () => () => undefined;
 export function QrStudio() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
+  const copy = paymentModeCopy(usePaymentMode());
   const origin = useSyncExternalStore(
     noSubscription,
     () => location.origin,
@@ -127,9 +130,7 @@ export function QrStudio() {
   return (
     <div className="qr-studio">
       <h1>My QR code</h1>
-      <p className="tm-hint">
-        Anyone who scans it lands on your page. Test mode.
-      </p>
+      <p className="tm-hint">{copy.qrHint}</p>
       <div className="qr-studio__layout">
         <canvas
           ref={preview}

@@ -20,7 +20,7 @@ test('the mock provider can never run in production', () => {
   );
 });
 
-test('live payments cannot be switched on', () => {
+test('live payments need the bachs-live provider', () => {
   assert.throws(
     () =>
       loadApiConfig({

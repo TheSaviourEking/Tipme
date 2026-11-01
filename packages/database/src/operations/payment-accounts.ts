@@ -12,6 +12,18 @@ export type PaymentAccountStatus =
   (typeof paymentAccounts.$inferSelect)['status'];
 export type PaymentAccountEnvironment =
   (typeof paymentAccounts.$inferSelect)['environment'];
+
+/**
+ * Refuses a missing or unknown environment (untyped callers) instead of matching nothing or the
+ * wrong one: sandbox and live accounts are never interchangeable.
+ */
+export function bachsAccountEnvironment(
+  value: PaymentAccountEnvironment,
+): PaymentAccountEnvironment {
+  if (value !== 'sandbox' && value !== 'live')
+    throw new OperationError('INVALID_INPUT');
+  return value;
+}
 export type PaymentAccountSummary = Pick<
   typeof paymentAccounts.$inferSelect,
   | 'id'
@@ -30,6 +42,7 @@ export type PaymentAccountSummary = Pick<
 export function getBachsAccountRecoveryTarget(
   db: Database,
   profileId: string,
+  environment: PaymentAccountEnvironment,
 ): Promise<{
   status: PaymentAccountStatus;
   providerAccountReference: string | null;
@@ -49,7 +62,7 @@ export function getBachsAccountRecoveryTarget(
         and(
           eq(paymentAccounts.profileId, profileId),
           eq(paymentAccounts.provider, 'bachs'),
-          eq(paymentAccounts.environment, 'sandbox'),
+          eq(paymentAccounts.environment, bachsAccountEnvironment(environment)),
         ),
       );
     return row
@@ -275,12 +288,13 @@ export function updatePaymentAccountStatus(
   );
 }
 
-/** Links a dashboard-found account only to a still-unknown sandbox creation, with an audit row. */
+/** Links a dashboard-found account only to a still-unknown creation in its environment, audited. */
 export function recoverUnknownPaymentAccount(
   db: Database,
   input: {
     issueId: string;
     profileId: string;
+    environment: PaymentAccountEnvironment;
     providerAccountReference: string;
     status: 'ONBOARDING' | 'ACTIVE' | 'RESTRICTED';
     chargesEnabled: boolean;
@@ -342,7 +356,10 @@ export function recoverUnknownPaymentAccount(
           and(
             eq(paymentAccounts.profileId, input.profileId),
             eq(paymentAccounts.provider, 'bachs'),
-            eq(paymentAccounts.environment, 'sandbox'),
+            eq(
+              paymentAccounts.environment,
+              bachsAccountEnvironment(input.environment),
+            ),
             eq(paymentAccounts.status, 'UNKNOWN'),
             isNull(paymentAccounts.providerAccountReference),
           ),

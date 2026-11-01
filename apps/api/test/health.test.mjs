@@ -13,3 +13,22 @@ test('HTTP liveness is explicit and unknown/payment routes remain unavailable', 
     assert.equal((await fetch(`${origin}${path}`)).status, 404);
   }
 });
+
+test('/health/release reports bachs-live and paymentsLive false', async () => {
+  const { ReleaseInfoController } =
+    await import('../dist/release/release.controller.js');
+  // A production copy that boots on bachs-live with live payments switched off: the web reads
+  // these two fields to keep checkout closed.
+  const { data } = new ReleaseInfoController(
+    {
+      RELEASE_KIND: 'live',
+      DEPLOYMENT_MODE: 'production',
+      NODE_ENV: 'production',
+      PAYMENT_PROVIDER: 'bachs-live',
+      PAYMENTS_LIVE_ENABLED: false,
+    },
+    {},
+  ).info();
+  assert.equal(data.paymentProvider, 'bachs-live');
+  assert.equal(data.paymentsLive, false);
+});

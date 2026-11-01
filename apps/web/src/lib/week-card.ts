@@ -5,6 +5,8 @@ import type { ShareableWeek } from './week-share';
 export function drawWeekCard(
   canvas: HTMLCanvasElement,
   week: ShareableWeek,
+  /** ' · test mode' on a test copy, empty otherwise (see paymentModeCopy). */
+  handleSuffix: string,
   size = 1080,
 ): void {
   canvas.width = canvas.height = size;
@@ -34,5 +36,5 @@ export function drawWeekCard(
   ctx.font = `700 ${Math.round(size * 0.055)}px Arial, sans-serif`;
   ctx.fillText(week.displayName, x, size * 0.84);
   ctx.font = `400 ${Math.round(size * 0.04)}px Arial, sans-serif`;
-  ctx.fillText(`@${week.handle} · test mode`, x, size * 0.9);
+  ctx.fillText(`@${week.handle}${handleSuffix}`, x, size * 0.9);
 }

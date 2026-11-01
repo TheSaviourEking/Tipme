@@ -367,6 +367,9 @@ importers:
       '@tipme/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@tipme/observability':
+        specifier: workspace:*
+        version: link:../observability
       ioredis:
         specifier: 5.11.1
         version: 5.11.1

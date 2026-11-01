@@ -9,7 +9,7 @@ export function AuthStage({
   children,
 }: {
   title: string;
-  lede: string;
+  lede: ReactNode;
   /** Short, true reassurances shown beside the form. */
   promises?: readonly string[];
   children: ReactNode;

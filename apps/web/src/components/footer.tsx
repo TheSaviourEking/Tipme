@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Container } from '@tipme/ui';
+import { PaymentModeSlot, TestModeOnly } from './payment-mode-slot';
 import { Brand } from './brand';
 
 const groups = [
@@ -16,14 +17,14 @@ const groups = [
     title: 'Get started',
     links: [
       { href: '/sign-up', label: 'Create your page' },
-      { href: '/@ada', label: 'Try the demo' },
+      { href: '/@ada', label: 'Try the demo', testOnly: true },
       { href: '/sign-in', label: 'Sign in' },
     ],
   },
   {
     title: 'About',
     links: [
-      { href: '/about-preview', label: 'About this preview' },
+      { href: '/about-preview', label: 'About this preview', testOnly: true },
       { href: '/legal/privacy', label: 'Privacy' },
       { href: '/legal/terms', label: 'Terms' },
     ],
@@ -44,11 +45,19 @@ export function Footer() {
               <div key={group.title}>
                 <h2 className="footer-heading">{group.title}</h2>
                 <ul>
-                  {group.links.map((link) => (
-                    <li key={link.href}>
-                      <Link href={link.href}>{link.label}</Link>
-                    </li>
-                  ))}
+                  {group.links.map((link) => {
+                    const item = (
+                      <li key={link.href}>
+                        <Link href={link.href}>{link.label}</Link>
+                      </li>
+                    );
+                    // The fictional demo and the preview notes exist on test copies only.
+                    return 'testOnly' in link ? (
+                      <TestModeOnly key={link.href}>{item}</TestModeOnly>
+                    ) : (
+                      item
+                    );
+                  })}
                 </ul>
               </div>
             ))}
@@ -56,7 +65,9 @@ export function Footer() {
         </div>
         <div className="footer-bottom">
           <span>© 2026 TipMe. A little thanks goes a long way.</span>
-          <span>Development preview · Test mode</span>
+          <PaymentModeSlot>
+            {(_mode, copy) => copy.footerNote && <span>{copy.footerNote}</span>}
+          </PaymentModeSlot>
         </div>
       </Container>
     </footer>

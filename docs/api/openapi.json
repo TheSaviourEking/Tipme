@@ -7173,6 +7173,7 @@
                   "PAYMENT_ACCOUNT_REQUIRED",
                   "PROVIDER_OUTCOME_UNKNOWN",
                   "PAYMENT_START_REJECTED",
+                  "TIPPING_NOT_OPEN",
                   "NO_CONFIRMED_TEST",
                   "EMAIL_TAKEN",
                   "EMAIL_INVALID",

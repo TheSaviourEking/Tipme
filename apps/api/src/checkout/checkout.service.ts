@@ -21,6 +21,8 @@ import {
   BachsApiError,
   BachsRequestNotSentError,
   UncertainProviderOutcomeError,
+  isLiveProvider,
+  recordedProviderName,
   type BachsProvider,
   type MockProvider,
 } from '@tipme/payments';
@@ -107,7 +109,22 @@ export class CheckoutService {
     this.webOrigin = new URL(config.WEB_ORIGIN).origin;
   }
 
+  /**
+   * A production copy may run Bachs live with live payments still switched off: checkout is
+   * closed, so quotes and new tips are refused before any database write or provider call.
+   * Webhooks and status checks for earlier activity are unaffected. mock and bachs-sandbox
+   * never refuse for this reason.
+   */
+  private refuseWhileClosed(): void {
+    if (
+      isLiveProvider(this.config.PAYMENT_PROVIDER) &&
+      !this.config.PAYMENTS_LIVE_ENABLED
+    )
+      throw new CodedHttpException(409, 'TIPPING_NOT_OPEN');
+  }
+
   async quote(request: TipQuoteRequest): Promise<TipQuote> {
+    this.refuseWhileClosed();
     const result = await createQuote(this.database.db, {
       handle: request.handle,
       tipMinor: BigInt(request.amountMinor),
@@ -135,6 +152,7 @@ export class CheckoutService {
     request: TipIntentRequest,
     idempotencyKey: string,
   ): Promise<TipIntentCreated> {
+    this.refuseWhileClosed();
     const { db } = this.database;
     const intent = await createPaymentIntent(db, {
       quoteId: request.quoteId,
@@ -146,7 +164,9 @@ export class CheckoutService {
     });
     const start = await findAttemptStart(db, intent.attemptId);
     if (!start) throw new OperationError('ATTEMPT_NOT_FOUND');
-    const providerName = start.provider ?? this.defaultProvider.name;
+    // Rows record 'bachs' for either environment; this copy's adapter is the one configured.
+    const providerName =
+      start.provider ?? recordedProviderName(this.defaultProvider.name);
 
     if (start.reference)
       return this.intentResponse(
@@ -169,7 +189,7 @@ export class CheckoutService {
       const accountReference = await getReadyPaymentAccount(db, {
         profileId: quote.profileId,
         provider: 'bachs',
-        environment: 'sandbox',
+        environment: this.bachsProvider.environment,
       });
       if (!accountReference)
         throw new CodedHttpException(409, 'PAYMENT_ACCOUNT_REQUIRED');

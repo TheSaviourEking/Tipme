@@ -3,7 +3,7 @@ import type { PublicProfile } from '@tipme/contracts';
 import { previewServerKey } from '@tipme/domain';
 
 /** The API as reached from the web server (may differ from the browser's address). */
-const API_ORIGIN =
+export const API_ORIGIN =
   process.env.API_INTERNAL_ORIGIN ??
   process.env.NEXT_PUBLIC_API_ORIGIN ??
   'http://localhost:4000';

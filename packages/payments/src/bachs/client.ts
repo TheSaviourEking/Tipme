@@ -7,6 +7,18 @@ import {
 } from './errors.js';
 
 const SANDBOX_API_ORIGIN = 'https://sandbox-api.bachs.io';
+const LIVE_API_ORIGIN = 'https://api.bachs.io';
+
+/** Which Bachs an adapter talks to. Live moves real money; sandbox never does. */
+export type BachsEnvironment = 'sandbox' | 'live';
+
+// Each environment's key only ever goes to that environment's origin.
+const ENVIRONMENTS: Readonly<
+  Record<BachsEnvironment, { origin: string; keyPrefix: string }>
+> = {
+  sandbox: { origin: SANDBOX_API_ORIGIN, keyPrefix: 'sk_sandbox_' },
+  live: { origin: LIVE_API_ORIGIN, keyPrefix: 'sk_live_' },
+};
 const timeoutSchema = z.number().int().min(100).max(120_000);
 
 interface RequestOptions<T> {
@@ -21,6 +33,7 @@ interface RequestOptions<T> {
 
 interface BachsClientOptions {
   apiKey: string;
+  environment: BachsEnvironment;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -36,22 +49,35 @@ function isFetchFailure(error: unknown): boolean {
 export class BachsApiClient {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly origin: string;
+  readonly environment: BachsEnvironment;
 
   constructor(private readonly options: BachsClientOptions) {
-    if (!options.apiKey.startsWith('sk_sandbox_')) {
-      throw new TypeError('Bachs adapter accepts sandbox API keys only');
+    // Checked at run time too: an environment from untyped config must never default to one.
+    if (!Object.hasOwn(ENVIRONMENTS, options.environment))
+      throw new TypeError('Bachs environment must be sandbox or live');
+    const { origin, keyPrefix } = ENVIRONMENTS[options.environment];
+    // Messages name the environment only, never any part of the key.
+    if (!options.apiKey.startsWith(keyPrefix)) {
+      throw new TypeError(
+        `Bachs ${options.environment} adapter accepts ${options.environment} API keys only`,
+      );
     }
     if (/[\r\n]/.test(options.apiKey))
       throw new TypeError('Invalid Bachs API key');
 
+    this.origin = origin;
+    this.environment = options.environment;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = timeoutSchema.parse(options.timeoutMs ?? 10_000);
   }
 
   async request<T>(options: RequestOptions<T>): Promise<T> {
-    const url = new URL(options.path, SANDBOX_API_ORIGIN);
-    if (url.origin !== SANDBOX_API_ORIGIN)
-      throw new TypeError('Bachs API requests must use the sandbox origin');
+    const url = new URL(options.path, this.origin);
+    if (url.origin !== this.origin)
+      throw new TypeError(
+        `Bachs API requests must use the ${this.environment} origin`,
+      );
     const headers: Record<string, string> = {
       authorization: `Bearer ${this.options.apiKey}`,
       accept: 'application/json',
@@ -166,4 +192,4 @@ export class BachsApiClient {
   }
 }
 
-export { SANDBOX_API_ORIGIN };
+export { LIVE_API_ORIGIN, SANDBOX_API_ORIGIN };

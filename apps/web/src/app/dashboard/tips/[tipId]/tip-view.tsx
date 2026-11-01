@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import type { MyTipDetail } from '@tipme/contracts';
 import { Card, Notice, Skeleton } from '@tipme/ui';
 import { MessageControls } from '@/components/dashboard/message-controls';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { feeLine } from '@/lib/fee-line';
 import { naira } from '@/lib/money';
 import { purposeLabels } from '@/lib/tip-purpose';
@@ -12,6 +14,7 @@ import { apiFetch } from '@/lib/session-client';
 
 export default function TipDetailPage() {
   const { tipId } = useParams<{ tipId: string }>();
+  const copy = paymentModeCopy(usePaymentMode());
   const [tip, setTip] = useState<MyTipDetail | null>(null);
   const [missing, setMissing] = useState(false);
   const [version, setVersion] = useState(0);
@@ -83,7 +86,7 @@ export default function TipDetailPage() {
           </div>
         </dl>
         <p className="tm-hint">
-          Test mode · fees from policy {tip.feePolicyVersion}.
+          {copy.tipFeesPrefix} {tip.feePolicyVersion}.
         </p>
       </Card>
       <Card className="proof">

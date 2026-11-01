@@ -4,11 +4,14 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { DashboardSummary } from '@tipme/contracts';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
+import { usePaymentMode } from '@/components/payment-mode-context';
+import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { naira, parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 
 export default function WithdrawPage() {
   const id = useId();
+  const copy = paymentModeCopy(usePaymentMode());
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [raw, setRaw] = useState('');
   const [error, setError] = useState('');
@@ -64,9 +67,9 @@ export default function WithdrawPage() {
         Available: <strong>{naira(summary.availableMinor)}</strong>
       </p>
       {summary.withdrawalsAvailable ? (
-        <Notice title="Test withdrawal">
-          No real money moves in test mode. The test bank pays straight away.
-        </Notice>
+        copy.withdrawNotice && (
+          <Notice title="Test withdrawal">{copy.withdrawNotice}</Notice>
+        )
       ) : (
         // Said before an amount is typed, not after the owner presses Withdraw.
         <Notice title="Withdrawals aren’t available yet">
@@ -77,7 +80,8 @@ export default function WithdrawPage() {
       )}
       {done && (
         <Notice tone="success" title="Withdrawal requested">
-          {done} is on its way to your test bank.{' '}
+          {done}
+          {copy.withdrawDoneSuffix}{' '}
           <Link href="/dashboard">Back to your dashboard</Link>
         </Notice>
       )}

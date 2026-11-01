@@ -8,21 +8,27 @@ import type {
 import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { apiFetch } from '@/lib/session-client';
+import {
+  paymentAccountCopy,
+  type PaymentAccountCopy,
+} from '@/lib/payment-account-copy';
 
 type Load =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | { kind: 'ready'; account: BachsPaymentAccountStatus };
 
-const messageFor = (code: string): string => {
-  if (code === 'EMAIL_VERIFICATION_REQUIRED')
-    return 'Verify your email address first, then set up test payments.';
+const messageFor = (code: string, copy: PaymentAccountCopy): string => {
+  if (code === 'EMAIL_VERIFICATION_REQUIRED') return copy.verifyEmailFirst;
   if (code === 'PROVIDER_OUTCOME_UNKNOWN')
     return 'We couldn’t confirm whether your payment account was created. TipMe support will check it. Please don’t try again.';
   return 'We couldn’t reach the payment provider. Please try again in a moment.';
 };
 
-/** Sandbox-only: shown when the API runs the Bachs sandbox provider; no real money moves. */
+/**
+ * Shown when the API runs Bachs, sandbox or live. Its words follow the account's environment, so
+ * a live recipient is never told this is a test.
+ */
 export function PaymentAccountCard() {
   const id = useId();
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
@@ -89,7 +95,14 @@ export function PaymentAccountCard() {
     );
     if (!result.ok) {
       setBusy(false);
-      setError(messageFor(result.code));
+      setError(
+        messageFor(
+          result.code,
+          paymentAccountCopy(
+            load.kind === 'ready' ? load.account.environment : null,
+          ),
+        ),
+      );
       await refresh();
       return;
     }
@@ -104,14 +117,14 @@ export function PaymentAccountCard() {
   if (load.kind === 'loading')
     return (
       <Card id="payments" className="settings-section" aria-busy="true">
-        <h2>Test payments</h2>
+        <h2>{paymentAccountCopy(null).heading}</h2>
         <p className="tm-hint">Checking your payment account…</p>
       </Card>
     );
   if (load.kind === 'failed')
     return (
       <Card id="payments" className="settings-section">
-        <h2>Test payments</h2>
+        <h2>{paymentAccountCopy(null).heading}</h2>
         <Notice tone="error" title="Couldn’t load your payment account">
           Please try again.
         </Notice>
@@ -126,17 +139,15 @@ export function PaymentAccountCard() {
   const status = account.status;
   const active = status === 'ACTIVE' && account.chargesEnabled;
   const pending = status === 'CREATING' || status === 'UNKNOWN';
+  const copy = paymentAccountCopy(account.environment);
 
   return (
     <Card id="payments" className="settings-section">
-      <h2>Test payments</h2>
-      <p className="tm-hint">
-        Sandbox only: no real money moves. Set up a test payment account so
-        supporters can tip you during testing.
-      </p>
+      <h2>{copy.heading}</h2>
+      <p className="tm-hint">{copy.intro}</p>
       {active && (
         <p role="status" className="page-state page-state--live">
-          Ready to receive test tips
+          {copy.ready}
         </p>
       )}
       {pending && (
@@ -195,7 +206,7 @@ export function PaymentAccountCard() {
                 ? 'Opening…'
                 : status === 'ONBOARDING' || status === 'RESTRICTED'
                   ? 'Continue setup'
-                  : 'Set up test payments'}
+                  : copy.setUp}
             </Button>
           </form>
         </>
