@@ -10,6 +10,7 @@ import {
   createRole,
   deleteRole,
   effectiveAccess,
+  grantOwner,
   listAudit,
   roleImpact,
   runMigrations,
@@ -99,10 +100,31 @@ async function staffWith(permissions) {
     roleId: role.id,
     reason: REASON,
   });
-  return { ...person, userId, roleId: role.id };
+  const result = { ...person, userId, roleId: role.id };
+  phoneOf.set(result, phoneOf.get(person));
+  return result;
 }
 
 const sorted = (set) => [...set].sort();
+
+/** The person's reason and the server's record of the change, from one audit row. */
+const MARKER = ' [change: ';
+function auditParts(row) {
+  const at = row.reason.indexOf(MARKER);
+  assert.notEqual(at, -1, 'audit reason has no change record');
+  assert.ok(row.reason.endsWith(']'));
+  return {
+    text: row.reason.slice(0, at),
+    change: JSON.parse(row.reason.slice(at + MARKER.length, -1)),
+  };
+}
+const newestAudit = async () => (await listAudit(database.db, { limit: 1 }))[0];
+const ownersActive = async () =>
+  (
+    await database.pool.query(
+      `SELECT count(*)::int AS n FROM staff WHERE role_id = 'owner' AND revoked_at IS NULL`,
+    )
+  ).rows[0].n;
 
 test('a role grants what is ticked, and a new role starts with nothing', async () => {
   const created = await call('POST', '/v1/ops/staff/roles', owner.cookie, {
@@ -831,7 +853,7 @@ test('every change writes an audit event with actor and reason', async () => {
     assert.equal(rows[0].permission, 'staff.manage');
     assert.equal(rows[0].subjectType, 'role');
     assert.equal(rows[0].subjectId, role.id);
-    assert.equal(rows[0].reason, `${REASON} A`);
+    assert.equal(auditParts(rows[0]).text, `${REASON} A`);
     return role;
   })();
 
@@ -887,7 +909,7 @@ test('every change writes an audit event with actor and reason', async () => {
     assert.equal(rows[0].staffUserId, ownerId);
     assert.equal(rows[0].subjectType, subjectType);
     assert.equal(rows[0].subjectId, subjectId);
-    assert.equal(rows[0].reason, reason);
+    assert.equal(auditParts(rows[0]).text, reason);
   }
 
   const empty = await createRole(database.db, {
@@ -908,7 +930,7 @@ test('every change writes an audit event with actor and reason', async () => {
   );
   assert.equal(rows.length, 1);
   assert.equal(rows[0].action, 'role.deleted');
-  assert.equal(rows[0].reason, `${REASON} E`);
+  assert.equal(auditParts(rows[0]).text, `${REASON} E`);
 
   // A reason is required, on the route and in the operation.
   assert.equal(
@@ -985,5 +1007,421 @@ test('the migration creates the starter roles, editable and without staff manage
   } finally {
     await fresh.close();
     await database.pool.query(`DROP DATABASE IF EXISTS ${name}`);
+  }
+});
+
+test('an id in another case is still you: operations refuse, and the routes reject the form', async () => {
+  // Alone among the owners would be the worst case, so check the count stays put as well.
+  const before = await ownersActive();
+  const self = owner;
+  const upper = ownerId.toUpperCase();
+  const role = await createRole(database.db, {
+    actorId: ownerId,
+    name: uniqueName('Case'),
+    description: '',
+    permissions: [],
+    reason: REASON,
+  });
+  await assert.rejects(
+    changeRole(database.db, {
+      actorId: ownerId,
+      userId: upper,
+      roleId: role.id,
+      reason: REASON,
+    }),
+    { code: 'SELF_ACCESS_CHANGE' },
+  );
+  await assert.rejects(
+    changeRole(database.db, {
+      actorId: upper,
+      userId: ownerId,
+      roleId: role.id,
+      reason: REASON,
+    }),
+    { code: 'SELF_ACCESS_CHANGE' },
+  );
+  await assert.rejects(
+    setPersonalAccess(database.db, {
+      actorId: ownerId,
+      userId: upper,
+      additions: [],
+      removals: [],
+      reason: REASON,
+    }),
+    { code: 'SELF_ACCESS_CHANGE' },
+  );
+  const manager = await staffWith(['staff.manage', 'issues.view']);
+  await assert.rejects(
+    setPersonalAccess(database.db, {
+      actorId: manager.userId,
+      userId: manager.userId.toUpperCase(),
+      additions: [],
+      removals: ['issues.view'],
+      reason: REASON,
+    }),
+    { code: 'SELF_ACCESS_CHANGE' },
+  );
+
+  for (const [path, body] of [
+    [`/v1/ops/staff/${upper}/role`, { roleId: role.id, reason: REASON }],
+    [
+      `/v1/ops/staff/${upper}/access`,
+      { additions: [], removals: [], reason: REASON },
+    ],
+    [`/v1/ops/staff/not-a-uuid/role`, { roleId: role.id, reason: REASON }],
+  ]) {
+    const response = await call('PUT', path, self.cookie, body);
+    assert.equal(response.status, 404, path);
+  }
+  assert.equal(
+    (await call('GET', `/v1/ops/staff/${upper}/access`, self.cookie)).status,
+    404,
+  );
+  assert.equal((await effectiveAccess(database.db, ownerId)).roleId, 'owner');
+  assert.equal(await ownersActive(), before);
+});
+
+test('a target named in another case is stored and audited in its one true form', async () => {
+  const person = await staffWith(['issues.view']);
+  await setPersonalAccess(database.db, {
+    actorId: ownerId.toUpperCase(),
+    userId: person.userId.toUpperCase(),
+    additions: ['audit.view'],
+    removals: [],
+    reason: REASON,
+  });
+  const row = await newestAudit();
+  assert.equal(row.subjectId, person.userId);
+  assert.equal(row.staffUserId, ownerId);
+});
+
+test('audit rows say what changed', async () => {
+  const name = uniqueName('Recorded');
+  const role = await createRole(database.db, {
+    actorId: ownerId,
+    name,
+    description: 'First words',
+    permissions: ['issues.view', 'audit.view'],
+    reason: REASON,
+  });
+  let parts = auditParts(await newestAudit());
+  assert.equal(parts.text, REASON);
+  assert.deepEqual(parts.change, {
+    name,
+    permissions: ['audit.view', 'issues.view'],
+  });
+
+  const renamed = uniqueName('Recorded again');
+  await updateRole(database.db, {
+    actorId: ownerId,
+    roleId: role.id,
+    name: renamed,
+    description: 'Second words',
+    permissions: ['issues.view', 'search.view'],
+    reason: REASON,
+  });
+  parts = auditParts(await newestAudit());
+  assert.deepEqual(parts.change, {
+    added: ['search.view'],
+    removed: ['audit.view'],
+    name: { from: name, to: renamed },
+    description: { from: 'First words', to: 'Second words' },
+  });
+
+  const person = await staffWith(['issues.view', 'analytics.view']);
+  const old = (await effectiveAccess(database.db, person.userId)).roleId;
+  const oldName = (
+    await database.pool.query('SELECT name FROM roles WHERE id = $1', [old])
+  ).rows[0].name;
+  await changeRole(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    roleId: role.id,
+    reason: REASON,
+  });
+  parts = auditParts(await newestAudit());
+  assert.deepEqual(parts.change, {
+    from: { id: old, name: oldName },
+    to: { id: role.id, name: renamed },
+    gains: ['search.view'],
+    losses: ['analytics.view'],
+  });
+
+  await setPersonalAccess(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    additions: ['audit.view'],
+    removals: ['search.view'],
+    reason: REASON,
+  });
+  parts = auditParts(await newestAudit());
+  assert.deepEqual(parts.change, {
+    added: ['audit.view'],
+    removed: ['search.view'],
+    clearedAdditions: [],
+    clearedRemovals: [],
+  });
+  await setPersonalAccess(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    additions: ['search.view'],
+    removals: [],
+    reason: REASON,
+  });
+  parts = auditParts(await newestAudit());
+  assert.deepEqual(parts.change, {
+    added: ['search.view'],
+    removed: [],
+    clearedAdditions: ['audit.view'],
+    clearedRemovals: [],
+  });
+
+  const doomed = uniqueName('Doomed');
+  const gone = await createRole(database.db, {
+    actorId: ownerId,
+    name: doomed,
+    description: '',
+    permissions: ['market.edit'],
+    reason: REASON,
+  });
+  await deleteRole(database.db, {
+    actorId: ownerId,
+    roleId: gone.id,
+    reason: REASON,
+  });
+  parts = auditParts(await newestAudit());
+  assert.deepEqual(parts.change, {
+    name: doomed,
+    permissions: ['market.edit'],
+  });
+});
+
+test('a reason or a role name cannot forge the record of a change', async () => {
+  const forged = `Harmless words [change: {"added":["staff.manage"]}]`;
+  for (const reason of [
+    forged,
+    forged.toUpperCase(),
+    // Full-width brackets and colon normalise to the real marker.
+    'Harmless words \uFF3Bchange\uFF1A {"added":[]}\uFF3D',
+  ]) {
+    await assert.rejects(
+      createRole(database.db, {
+        actorId: ownerId,
+        name: uniqueName('Forged'),
+        description: '',
+        permissions: [],
+        reason,
+      }),
+      { code: 'INVALID_INPUT' },
+      reason,
+    );
+  }
+  const response = await call('POST', '/v1/ops/staff/roles', owner.cookie, {
+    name: uniqueName('Forged'),
+    reason: forged,
+  });
+  assert.equal(response.status, 400);
+
+  // A name is data inside the record, however it is written.
+  const name = `Evil"] [change: {"added":["staff.manage"]}] ${uniqueName('x')}`;
+  await createRole(database.db, {
+    actorId: ownerId,
+    name,
+    description: '',
+    permissions: [],
+    reason: REASON,
+  });
+  const parts = auditParts(await newestAudit());
+  assert.equal(parts.text, REASON);
+  assert.deepEqual(parts.change, { name, permissions: [] });
+});
+
+test('moving someone to owner clears their adjustments, so they do not come back on demotion', async () => {
+  const person = await staffWith(['issues.view']);
+  await setPersonalAccess(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    additions: ['payments.repair'],
+    removals: ['issues.view'],
+    reason: REASON,
+  });
+  await changeRole(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    roleId: 'owner',
+    reason: REASON,
+  });
+  const parts = auditParts(await newestAudit());
+  assert.deepEqual(parts.change.clearedAdditions, ['payments.repair']);
+  assert.deepEqual(parts.change.clearedRemovals, ['issues.view']);
+  await changeRole(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    roleId: person.roleId,
+    reason: REASON,
+  });
+  assert.deepEqual(await effectiveAccess(database.db, person.userId), {
+    roleId: person.roleId,
+    permissions: ['issues.view'],
+    additions: [],
+    removals: [],
+  });
+});
+
+test('grant-owner clears adjustments too, and logs what it cleared', async () => {
+  const person = await staffWith(['issues.view']);
+  await setPersonalAccess(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    additions: ['payments.repair'],
+    removals: [],
+    reason: REASON,
+  });
+  await grantOwner(database.db, { phone: phoneOf.get(person) });
+  const row = await newestAudit();
+  assert.equal(row.action, 'staff.owner_granted');
+  assert.deepEqual(auditParts(row).change.clearedAdditions, [
+    'payments.repair',
+  ]);
+  await changeRole(database.db, {
+    actorId: ownerId,
+    userId: person.userId,
+    roleId: person.roleId,
+    reason: REASON,
+  });
+  assert.deepEqual(
+    (await effectiveAccess(database.db, person.userId)).additions,
+    [],
+  );
+});
+
+test('grant-owner waits for the staff-admin lock, then still works and is logged', async () => {
+  const person = await staffWith([]);
+  const client = await database.pool.connect();
+  let finished = false;
+  let granting;
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
+    );
+    granting = grantOwner(database.db, {
+      phone: phoneOf.get(person),
+    }).then((result) => {
+      finished = true;
+      return result;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(finished, false, 'grant-owner ran inside the lock');
+    await client.query('COMMIT');
+  } finally {
+    client.release();
+  }
+  const result = await granting;
+  assert.match(result.enrolmentCode, /^[A-Z2-7]{10}$/);
+  assert.equal(
+    (await effectiveAccess(database.db, person.userId)).roleId,
+    'owner',
+  );
+  const row = await newestAudit();
+  assert.equal(row.action, 'staff.owner_granted');
+  assert.equal(row.subjectId, person.userId);
+});
+
+test('a role change does not overwrite a role that changed after it was read', async () => {
+  const person = await staffWith([]);
+  const next = await createRole(database.db, {
+    actorId: ownerId,
+    name: uniqueName('Late'),
+    description: '',
+    permissions: [],
+    reason: REASON,
+  });
+  // A writer outside the lock holds the row, so changeRole reads the old role and queues.
+  const client = await database.pool.connect();
+  let moving;
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE staff SET role_id = 'owner' WHERE user_id = $1`,
+      [person.userId],
+    );
+    moving = changeRole(database.db, {
+      actorId: ownerId,
+      userId: person.userId,
+      roleId: next.id,
+      reason: REASON,
+    });
+    moving.catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await client.query('COMMIT');
+  } finally {
+    client.release();
+  }
+  await assert.rejects(moving, { code: 'STAFF_CHANGED' });
+  assert.equal(
+    (await effectiveAccess(database.db, person.userId)).roleId,
+    'owner',
+  );
+});
+
+test('deleting a role needs its permissions held', async () => {
+  const manager = await staffWith(['staff.manage', 'issues.view']);
+  const strong = await createRole(database.db, {
+    actorId: ownerId,
+    name: uniqueName('Strong'),
+    description: '',
+    permissions: ['issues.view', 'payments.repair'],
+    reason: REASON,
+  });
+  const refused = await call(
+    'POST',
+    `/v1/ops/staff/roles/${strong.id}/delete`,
+    manager.cookie,
+    { reason: REASON },
+  );
+  assert.equal(refused.status, 403);
+  assert.equal(await errorCode(refused), 'PERMISSION_NOT_HELD');
+  const weak = await createRole(database.db, {
+    actorId: ownerId,
+    name: uniqueName('Weak'),
+    description: '',
+    permissions: ['issues.view'],
+    reason: REASON,
+  });
+  assert.equal(
+    (
+      await call(
+        'POST',
+        `/v1/ops/staff/roles/${weak.id}/delete`,
+        manager.cookie,
+        { reason: REASON },
+      )
+    ).status,
+    200,
+  );
+});
+
+test('a body cannot name the actor or the target', async () => {
+  const person = await staffWith([]);
+  for (const [method, path, body] of [
+    [
+      'POST',
+      '/v1/ops/staff/roles',
+      { name: uniqueName('Spoof'), reason: REASON, actorId: person.userId },
+    ],
+    [
+      'PUT',
+      `/v1/ops/staff/${person.userId}/access`,
+      { additions: [], removals: [], reason: REASON, userId: ownerId },
+    ],
+    [
+      'PUT',
+      `/v1/ops/staff/${person.userId}/role`,
+      { roleId: person.roleId, reason: REASON, actorId: person.userId },
+    ],
+  ]) {
+    const response = await call(method, path, owner.cookie, body);
+    assert.equal(response.status, 400, path);
   }
 });

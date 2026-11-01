@@ -83,6 +83,26 @@ export async function isActiveStaff(
   return Boolean(row);
 }
 
+/**
+ * Serialises every change to who holds what, for the rest of the transaction. Take it first, and
+ * read anything the change depends on after it.
+ */
+export async function lockStaffAdmin(tx: Tx): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
+  );
+}
+
+const AUDIT_CHANGE_MARKER = '[change:';
+
+/** The server's record of a change, after the person's reason. `change` is data, encoded as JSON. */
+export const withAuditChange = (reason: string, change: object): string =>
+  `${reason} ${AUDIT_CHANGE_MARKER} ${JSON.stringify(change)}]`;
+
+/** Whether text could pass for that record; compared as a reader would see it. */
+export const looksLikeAuditChange = (text: string): boolean =>
+  text.normalize('NFKC').toLowerCase().includes(AUDIT_CHANGE_MARKER);
+
 export interface StaffAccess {
   roleId: string;
   permissions: Set<string>;
@@ -140,6 +160,26 @@ export function readOverrides(
     })
     .from(staffPermissionOverrides)
     .where(eq(staffPermissionOverrides.userId, userId));
+}
+
+/** Deletes a person's adjustments and says what they were. */
+export async function clearOverrides(
+  tx: Tx,
+  userId: string,
+): Promise<{ clearedAdditions: string[]; clearedRemovals: string[] }> {
+  const rows = await tx
+    .delete(staffPermissionOverrides)
+    .where(eq(staffPermissionOverrides.userId, userId))
+    .returning({
+      permission: staffPermissionOverrides.permission,
+      effect: staffPermissionOverrides.effect,
+    });
+  const named = (effect: string) =>
+    rows
+      .filter((row) => row.effect === effect)
+      .map((row) => row.permission)
+      .sort();
+  return { clearedAdditions: named('add'), clearedRemovals: named('remove') };
 }
 
 /** The permission names stored on a role. */
@@ -234,6 +274,8 @@ export function grantOwner(
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
+      // Break-glass, but still one change among the others: it waits its turn.
+      await lockStaffAdmin(tx);
       await ensureOwnerRole(tx);
       await ensureReleaseCheckRole(tx);
       const role = input.role ?? 'owner';
@@ -287,6 +329,9 @@ export function grantOwner(
         userId,
         expiresAt: new Date(now.getTime() + ENROLMENT_TTL_MS),
       });
+      // An owner's adjustments mean nothing now, and must not return if they are later demoted.
+      const cleared =
+        role === 'owner' ? await clearOverrides(tx, userId) : null;
       await recordAudit(tx, {
         staffUserId: null,
         action:
@@ -295,6 +340,10 @@ export function grantOwner(
             : 'staff.release_check_granted',
         subjectType: 'user',
         subjectId: userId,
+        ...(cleared &&
+        cleared.clearedAdditions.length + cleared.clearedRemovals.length > 0
+          ? { reason: withAuditChange('Granted from the server', cleared) }
+          : {}),
         now,
       });
       if (input.sealing)

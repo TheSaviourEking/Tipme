@@ -12,11 +12,16 @@ import { recordAudit } from './audit.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import {
+  clearOverrides,
   composeAccess,
   ignoresAdjustments,
+  lockStaffAdmin,
+  looksLikeAuditChange,
   readOverrides,
   readRolePermissions,
   readStaffAccess,
+  type StaffAccess,
+  withAuditChange,
 } from './staff.js';
 
 const MANAGE = 'staff.manage';
@@ -60,10 +65,18 @@ const without = (
 
 function checkedReason(reason: string): string {
   const trimmed = reason.trim();
-  if (trimmed.length < 10 || trimmed.length > 500)
+  if (
+    trimmed.length < 10 ||
+    trimmed.length > 500 ||
+    looksLikeAuditChange(trimmed)
+  )
     throw new OperationError('INVALID_INPUT');
   return trimmed;
 }
+
+/** Postgres reads a uuid in any case, so every comparison and record uses this one form. */
+const canonicalId = (id: string): string | null =>
+  UUID.test(id) ? id.toLowerCase() : null;
 
 function checkedName(name: string): string {
   const trimmed = name.trim();
@@ -98,14 +111,13 @@ function mustHold(held: Set<string>, permissions: Iterable<string>): void {
 async function authorise(
   tx: Tx,
   actorId: string,
-): Promise<{ held: Set<string>; roleId: string }> {
-  await tx.execute(
-    sql`SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
-  );
-  const actor = UUID.test(actorId) ? await readStaffAccess(tx, actorId) : null;
-  if (!actor?.permissions.has(MANAGE))
+): Promise<{ id: string; held: Set<string>; roleId: string }> {
+  await lockStaffAdmin(tx);
+  const id = canonicalId(actorId);
+  const actor = id ? await readStaffAccess(tx, id) : null;
+  if (!id || !actor?.permissions.has(MANAGE))
     throw new OperationError('PERMISSION_NOT_HELD');
-  return { held: actor.permissions, roleId: actor.roleId };
+  return { id, held: actor.permissions, roleId: actor.roleId };
 }
 
 async function roleOrThrow(tx: Database | Tx, roleId: string) {
@@ -227,12 +239,12 @@ export function createRole(
             permissions.map((permission) => ({ roleId: id, permission })),
           );
       await recordAudit(tx, {
-        staffUserId: input.actorId,
+        staffUserId: actor.id,
         action: 'role.created',
         permission: MANAGE,
         subjectType: 'role',
         subjectId: id,
-        reason,
+        reason: withAuditChange(reason, { name, permissions }),
       });
       return roleView(tx, id);
     });
@@ -290,6 +302,8 @@ export function updateRole(
       const role = await roleOrThrow(tx, input.roleId);
       if (role.system) throw new OperationError('ROLE_PROTECTED');
       let affected: AffectedPerson[] = [];
+      let added: string[] = [];
+      let removed: string[] = [];
       if (permissions) {
         const impact = await impactOf(tx, input.roleId, permissions);
         const changed = [...impact.added, ...impact.removed];
@@ -297,6 +311,8 @@ export function updateRole(
           throw new OperationError('SELF_ACCESS_CHANGE');
         mustHold(actor.held, changed);
         affected = impact.affected;
+        added = impact.added;
+        removed = impact.removed;
         if (impact.removed.length > 0)
           await tx
             .delete(rolePermissions)
@@ -324,12 +340,21 @@ export function updateRole(
           })
           .where(eq(roles.id, input.roleId));
       await recordAudit(tx, {
-        staffUserId: input.actorId,
+        staffUserId: actor.id,
         action: 'role.updated',
         permission: MANAGE,
         subjectType: 'role',
         subjectId: input.roleId,
-        reason,
+        reason: withAuditChange(reason, {
+          added,
+          removed,
+          ...(name !== undefined && name !== role.name
+            ? { name: { from: role.name, to: name } }
+            : {}),
+          ...(description !== undefined && description !== role.description
+            ? { description: { from: role.description, to: description } }
+            : {}),
+        }),
       });
       return { role: await roleView(tx, input.roleId), affected };
     });
@@ -347,9 +372,11 @@ export function deleteRole(
   return guarded(async () => {
     const reason = checkedReason(input.reason);
     await db.transaction(async (tx) => {
-      await authorise(tx, input.actorId);
+      const actor = await authorise(tx, input.actorId);
       const role = await roleOrThrow(tx, input.roleId);
       if (role.system) throw new OperationError('ROLE_PROTECTED');
+      const permissions = (await readRolePermissions(tx, input.roleId)).sort();
+      mustHold(actor.held, permissions);
       const [holder] = await tx
         .select({ userId: staff.userId })
         .from(staff)
@@ -361,12 +388,12 @@ export function deleteRole(
         .where(eq(rolePermissions.roleId, input.roleId));
       await tx.delete(roles).where(eq(roles.id, input.roleId));
       await recordAudit(tx, {
-        staffUserId: input.actorId,
+        staffUserId: actor.id,
         action: 'role.deleted',
         permission: MANAGE,
         subjectType: 'role',
         subjectId: input.roleId,
-        reason,
+        reason: withAuditChange(reason, { name: role.name, permissions }),
       });
     });
   });
@@ -389,11 +416,12 @@ async function targetOrThrow(
   tx: Tx,
   actorId: string,
   userId: string,
-): Promise<NonNullable<Awaited<ReturnType<typeof readStaffAccess>>>> {
-  if (userId === actorId) throw new OperationError('SELF_ACCESS_CHANGE');
-  const target = UUID.test(userId) ? await readStaffAccess(tx, userId) : null;
-  if (!target) throw new OperationError('STAFF_NOT_FOUND');
-  return target;
+): Promise<{ id: string; access: StaffAccess }> {
+  const id = canonicalId(userId);
+  if (id === actorId) throw new OperationError('SELF_ACCESS_CHANGE');
+  const access = id ? await readStaffAccess(tx, id) : null;
+  if (!id || !access) throw new OperationError('STAFF_NOT_FOUND');
+  return { id, access };
 }
 
 /**
@@ -419,11 +447,11 @@ export function setPersonalAccess(
       throw new OperationError('INVALID_INPUT');
     return db.transaction(async (tx) => {
       const actor = await authorise(tx, input.actorId);
-      const target = await targetOrThrow(tx, input.actorId, input.userId);
-      if (ignoresAdjustments(target.roleId))
+      const target = await targetOrThrow(tx, actor.id, input.userId);
+      if (ignoresAdjustments(target.access.roleId))
         throw new OperationError('STAFF_PROTECTED');
       const stored = new Map(
-        (await readOverrides(tx, input.userId)).map((row) => [
+        (await readOverrides(tx, target.id)).map((row) => [
           row.permission,
           row.effect,
         ]),
@@ -440,7 +468,7 @@ export function setPersonalAccess(
           .delete(staffPermissionOverrides)
           .where(
             and(
-              eq(staffPermissionOverrides.userId, input.userId),
+              eq(staffPermissionOverrides.userId, target.id),
               inArray(staffPermissionOverrides.permission, cleared),
             ),
           );
@@ -448,27 +476,42 @@ export function setPersonalAccess(
         await tx
           .insert(staffPermissionOverrides)
           .values({
-            userId: input.userId,
+            userId: target.id,
             permission,
             effect,
-            grantedBy: input.actorId,
+            grantedBy: actor.id,
           })
           .onConflictDoUpdate({
             target: [
               staffPermissionOverrides.userId,
               staffPermissionOverrides.permission,
             ],
-            set: { effect, grantedBy: input.actorId, createdAt: new Date() },
+            set: { effect, grantedBy: actor.id, createdAt: new Date() },
           });
       await recordAudit(tx, {
-        staffUserId: input.actorId,
+        staffUserId: actor.id,
         action: 'staff.access_changed',
         permission: MANAGE,
         subjectType: 'user',
-        subjectId: input.userId,
-        reason,
+        subjectId: target.id,
+        reason: withAuditChange(reason, {
+          added: written
+            .filter(([, e]) => e === 'add')
+            .map(([p]) => p)
+            .sort(),
+          removed: written
+            .filter(([, e]) => e === 'remove')
+            .map(([p]) => p)
+            .sort(),
+          clearedAdditions: cleared
+            .filter((p) => stored.get(p) === 'add')
+            .sort(),
+          clearedRemovals: cleared
+            .filter((p) => stored.get(p) === 'remove')
+            .sort(),
+        }),
       });
-      const after = await readStaffAccess(tx, input.userId);
+      const after = await readStaffAccess(tx, target.id);
       return {
         ...after!,
         permissions: [...after!.permissions].sort(),
@@ -478,12 +521,10 @@ export function setPersonalAccess(
 }
 
 /**
- * Moves a person to another role; their adjustments stay. The actor must hold every permission of
- * the new role and every permission the person would lose. Only an owner changes who is an owner.
- * release_check is the release account's own role, so nobody moves onto or off it from here.
- *
- * Because nobody can change their own role, an owner being demoted always leaves the owner acting,
- * so this path can't remove the last owner.
+ * Moves a person to another role; their adjustments stay, unless the move is onto owner, where
+ * they mean nothing and must not return on a later demotion. The actor must hold every permission
+ * of the new role and every permission the person would lose. Only an owner changes who is an
+ * owner. release_check is the release account's own role, so nobody moves onto or off it here.
  */
 export function changeRole(
   db: Database,
@@ -493,8 +534,13 @@ export function changeRole(
     const reason = checkedReason(input.reason);
     return db.transaction(async (tx) => {
       const actor = await authorise(tx, input.actorId);
-      const target = await targetOrThrow(tx, input.actorId, input.userId);
-      await roleOrThrow(tx, input.roleId);
+      const { id: userId, access: target } = await targetOrThrow(
+        tx,
+        actor.id,
+        input.userId,
+      );
+      const role = await roleOrThrow(tx, input.roleId);
+      const previous = await roleOrThrow(tx, target.roleId);
       if (input.roleId === 'release_check' || target.roleId === 'release_check')
         throw new OperationError('ROLE_PROTECTED');
       if (
@@ -502,27 +548,59 @@ export function changeRole(
         actor.roleId !== 'owner'
       )
         throw new OperationError('PERMISSION_NOT_HELD');
+      if (target.roleId === 'owner' && input.roleId !== 'owner') {
+        const [other] = await tx
+          .select({ userId: staff.userId })
+          .from(staff)
+          .where(
+            and(
+              eq(staff.roleId, 'owner'),
+              isNull(staff.revokedAt),
+              ne(staff.userId, userId),
+            ),
+          )
+          .limit(1);
+        if (!other) throw new OperationError('LAST_OWNER');
+      }
       const next = await readRolePermissions(tx, input.roleId);
       const after = composeAccess(
         input.roleId,
         next,
-        await readOverrides(tx, input.userId),
+        await readOverrides(tx, userId),
       );
       // Every permission of the role, not only the net gain: a personal removal hiding one
       // could be cleared later, and clearing it wouldn't count as handing out the role.
       mustHold(actor.held, input.roleId === 'owner' ? OPS_PERMISSIONS : next);
-      mustHold(actor.held, without(target.permissions, after.permissions));
-      await tx
+      const losses = without(target.permissions, after.permissions);
+      mustHold(actor.held, losses);
+      // Conditional on the role read above: a writer outside the lock must not be overwritten.
+      const moved = await tx
         .update(staff)
         .set({ roleId: input.roleId })
-        .where(eq(staff.userId, input.userId));
+        .where(
+          and(
+            eq(staff.userId, userId),
+            eq(staff.roleId, target.roleId),
+            isNull(staff.revokedAt),
+          ),
+        )
+        .returning({ userId: staff.userId });
+      if (moved.length === 0) throw new OperationError('STAFF_CHANGED');
+      const cleared =
+        input.roleId === 'owner' ? await clearOverrides(tx, userId) : {};
       await recordAudit(tx, {
-        staffUserId: input.actorId,
+        staffUserId: actor.id,
         action: 'staff.role_changed',
         permission: MANAGE,
         subjectType: 'user',
-        subjectId: input.userId,
-        reason,
+        subjectId: userId,
+        reason: withAuditChange(reason, {
+          from: { id: previous.id, name: previous.name },
+          to: { id: role.id, name: role.name },
+          gains: without(after.permissions, target.permissions),
+          losses,
+          ...cleared,
+        }),
       });
       return { ...after, permissions: [...after.permissions].sort() };
     });

@@ -41,6 +41,7 @@ import {
 } from '@tipme/database';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { uuidParam } from './actions.controller.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
@@ -70,8 +71,8 @@ export class OpsStaffController {
   ): Promise<ApiDataResponse<OpsRole>> {
     return {
       data: await createRole(this.database.db, {
-        actorId: ops.userId,
         ...body,
+        actorId: ops.userId,
       }),
     };
   }
@@ -135,7 +136,7 @@ export class OpsStaffController {
   async access(
     @Param('userId') userId: string,
   ): Promise<ApiDataResponse<OpsEffectiveAccess>> {
-    const access = await effectiveAccess(this.database.db, userId);
+    const access = await effectiveAccess(this.database.db, uuidParam(userId));
     if (!access) throw new OperationError('STAFF_NOT_FOUND');
     return { data: access };
   }
@@ -150,9 +151,9 @@ export class OpsStaffController {
   ): Promise<ApiDataResponse<OpsEffectiveAccess>> {
     return {
       data: await setPersonalAccess(this.database.db, {
-        actorId: ops.userId,
-        userId,
         ...body,
+        actorId: ops.userId,
+        userId: uuidParam(userId),
       }),
     };
   }
@@ -167,9 +168,9 @@ export class OpsStaffController {
   ): Promise<ApiDataResponse<OpsEffectiveAccess>> {
     return {
       data: await changeRole(this.database.db, {
-        actorId: ops.userId,
-        userId,
         ...body,
+        actorId: ops.userId,
+        userId: uuidParam(userId),
       }),
     };
   }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
+import { OPS_PERMISSIONS } from '../../packages/contracts/dist/index.js';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
@@ -347,15 +348,28 @@ test('the withdrawal tools need payouts.resolve, on the owner role only, and rea
   const path = `/v1/ops/issues/${issueId}/payout-read`;
   // Not a withdrawal issue: nothing to read.
   assert.equal((await call('POST', path, owner.cookie, {})).status, 404);
-  // Owner always holds every permission, so someone without it is on another role.
+  // Owner always holds every permission, so the test person is on a role holding everything else:
+  // a 403 can then only come from payouts.resolve itself.
   const other = await opsSignIn(stack.api, database.db, '+2348039990099');
   await database.pool.query(
     `INSERT INTO roles (id, name) VALUES ('no_payouts', 'No payouts') ON CONFLICT DO NOTHING`,
   );
   await database.pool.query(
+    `INSERT INTO role_permissions (role_id, permission)
+     SELECT 'no_payouts', p FROM unnest($1::text[]) AS p ON CONFLICT DO NOTHING`,
+    [OPS_PERMISSIONS.filter((p) => p !== 'payouts.resolve')],
+  );
+  await database.pool.query(
     `UPDATE staff SET role_id = 'no_payouts' WHERE user_id = (SELECT id FROM users WHERE phone_e164 = '+2348039990099')`,
   );
   assert.equal((await call('POST', path, other.cookie, {})).status, 403);
+  await database.pool.query(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ('no_payouts', 'payouts.resolve')`,
+  );
+  assert.equal((await call('POST', path, other.cookie, {})).status, 404);
+  await database.pool.query(
+    `DELETE FROM role_permissions WHERE role_id = 'no_payouts' AND permission = 'payouts.resolve'`,
+  );
   const { rows } = await database.pool.query(
     `SELECT role_id FROM role_permissions WHERE permission = 'payouts.resolve'`,
   );

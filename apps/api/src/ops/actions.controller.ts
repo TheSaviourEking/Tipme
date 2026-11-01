@@ -61,7 +61,7 @@ import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { MailSealing } from '@tipme/database';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const uuidParam = (value: string) => {
+export const uuidParam = (value: string) => {
   if (!UUID.test(value)) throw new CodedHttpException(404, 'NOT_FOUND');
   return value;
 };

@@ -41,7 +41,9 @@ export type OperationErrorCode =
   | 'ROLE_IN_USE'
   | 'ROLE_PROTECTED'
   | 'STAFF_NOT_FOUND'
-  | 'STAFF_PROTECTED';
+  | 'STAFF_PROTECTED'
+  | 'STAFF_CHANGED'
+  | 'LAST_OWNER';
 
 /** Expected business outcomes callers map to responses; never carries request values. */
 export class OperationError extends Error {
