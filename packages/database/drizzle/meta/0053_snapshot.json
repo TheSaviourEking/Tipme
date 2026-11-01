@@ -1,5 +1,5 @@
 {
-  "id": "6ead42bc-72e4-4674-9483-52e873353f14",
+  "id": "31ae2f88-3baf-47d6-96e4-fb4c9b10419c",
   "prevId": "915f54bc-a0fe-41c3-82d6-65118254f7e2",
   "version": "7",
   "dialect": "postgresql",
@@ -2724,6 +2724,31 @@
           "value": "dedupe_key !~ ':'"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.parked_payout_checks": {
+      "name": "parked_payout_checks",
+      "schema": "",
+      "columns": {
+        "unmatched_id": {
+          "name": "unmatched_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "last_checked_at": {
+          "name": "last_checked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.payment_accounts": {

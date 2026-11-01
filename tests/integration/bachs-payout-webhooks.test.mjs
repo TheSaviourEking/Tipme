@@ -926,24 +926,66 @@ test('a status read with the wrong amount is not booked', async (t) => {
 });
 
 for (const [label, wrong] of [
-  ['amount', { amountMinor: 999n, currency: 'NGN' }],
-  ['currency', { amountMinor: 200000n, currency: 'USD' }],
+  // The docs leave open whether data.amount includes the fee: 200000 + 5000 looks gross.
+  ['a gross-looking amount', { amountMinor: 205000n, currency: 'NGN' }],
+  ['the wrong currency', { amountMinor: 200000n, currency: 'USD' }],
 ]) {
-  test(`a signed payout.paid with the wrong ${label} is not applied`, async (t) => {
+  test(`a signed payout.paid with ${label} books once if the read agrees, with no issue`, async (t) => {
     const { db, withdraw, row, issues, ledger, paidEvent, webhooks } =
       await fixture(t);
     const payoutId = await withdraw();
     const provider = scripted();
     await startPayout(db, { payoutId, provider });
+    provider.status = {
+      status: 'paid',
+      amountMinor: 200000n,
+      currency: 'NGN',
+      destinationRef: 'ba_tobi',
+    };
+    const event = paidEvent(payoutId, wrong);
+    assert.equal(await webhooks.applyBachs(event, provider), 'applied');
+    assert.equal(await webhooks.applyBachs(event, provider), 'duplicate');
+    assert.equal((await row(payoutId)).status, 'PAID');
+    assert.equal((await ledger(payoutId)).length, 4);
+    assert.equal((await issues('payout_conflict')).length, 0);
+  });
+
+  test(`a signed payout.paid with ${label} books nothing if the read disagrees, and says which field`, async (t) => {
+    const { db, withdraw, row, issues, ledger, paidEvent, webhooks } =
+      await fixture(t);
+    const payoutId = await withdraw();
+    const provider = scripted();
+    await startPayout(db, { payoutId, provider });
+    provider.status = { status: 'paid', amountMinor: 1n, currency: 'NGN' };
     assert.equal(
       await webhooks.applyBachs(paidEvent(payoutId, wrong), provider),
       'conflict',
     );
     assert.equal((await row(payoutId)).status, 'PROCESSING');
     assert.equal((await ledger(payoutId)).length, 0);
-    assert.equal((await issues('payout_conflict')).length, 1);
+    const [issue] = await issues('payout_conflict');
+    assert.match(issue.summary, /amount/);
+    assert.doesNotMatch(issue.summary, /200000|205000/);
   });
 }
+
+test('a disagreeing event with a read that has no answer, or no figures, changes nothing', async (t) => {
+  const { db, withdraw, row, issues, paidEvent, webhooks } = await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  const event = paidEvent(payoutId, { amountMinor: 1n, currency: 'NGN' });
+  for (const status of [
+    { status: 'pending' },
+    { status: 'not_found' },
+    { status: 'paid' },
+  ]) {
+    provider.status = status;
+    await webhooks.applyBachs(event, provider);
+    assert.equal((await row(payoutId)).status, 'PROCESSING');
+  }
+  assert.equal((await issues('payout_conflict')).length, 0);
+});
 
 test('a matching signed payout.paid is applied, with the fee it states', async (t) => {
   const { db, withdraw, row, ledger, paidEvent, webhooks } = await fixture(t);
@@ -1198,4 +1240,147 @@ test('fee and review notes do not write on a finished payout', async (t) => {
   const payout = await row(payoutId);
   assert.equal(payout.fee_minor, '5000');
   assert.equal(payout.provider_review_at, null);
+});
+
+test('a parked paid event naming a released payout is a conflict at once, even with reads down', async (t) => {
+  const {
+    db,
+    withdraw,
+    row,
+    issues,
+    paidEvent,
+    webhooks,
+    reconcile,
+    available,
+  } = await fixture(t);
+  const payoutId = await withdraw();
+  await startPayout(db, {
+    payoutId,
+    provider: scripted({
+      async initiatePayout() {
+        throw new PayoutRejectedError('other', 'INSUFFICIENT_BALANCE');
+      },
+    }),
+  });
+  const released = await available();
+  const provider = scripted({
+    async fetchPayoutStatus() {
+      throw timeout();
+    },
+  });
+  const event = paidEvent(payoutId, { operationReference: payoutId });
+  assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  await reconcile(provider);
+  await reconcile(provider);
+  const conflicts = await issues('payout_conflict');
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].subject.payoutId, payoutId);
+  await autoResolveIssues(db, new Date());
+  assert.equal((await issues('payout_conflict'))[0].status, 'open');
+  assert.equal((await row(payoutId)).status, 'FAILED');
+  assert.equal(await available(), released);
+});
+
+test('a parked event naming our payout under another reference is a conflict at once', async (t) => {
+  const { db, withdraw, row, issues, paidEvent, webhooks, reconcile } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  const before = (await row(payoutId)).provider_reference;
+  const event = paidEvent('another', { operationReference: payoutId });
+  assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  await reconcile(provider);
+  assert.equal((await issues('payout_conflict')).length, 1);
+  assert.equal((await row(payoutId)).provider_reference, before);
+  assert.equal((await row(payoutId)).status, 'PROCESSING');
+});
+
+test('a parked event that never gets an answer reaches staff at the age cap, once', async (t) => {
+  const {
+    db,
+    withdraw,
+    issues,
+    holds,
+    paidEvent,
+    webhooks,
+    reconcile,
+    available,
+  } = await fixture(t);
+  const payoutId = await withdraw();
+  const reserved = await available();
+  const provider = scripted({
+    async initiatePayout() {
+      throw timeout();
+    },
+    async findPayoutByReference() {
+      return null;
+    },
+    async fetchPayoutStatus() {
+      return { status: 'not_found' };
+    },
+  });
+  await startPayout(db, { payoutId, provider });
+  await webhooks.applyBachs(
+    paidEvent(payoutId, { operationReference: payoutId }),
+    provider,
+  );
+  const parkedIssues = async () =>
+    (await issues('payout_unresolved')).filter((i) =>
+      i.dedupe_key.startsWith('payout_parked.'),
+    );
+  await reconcile(provider, after(PAYOUT_NOT_FOUND_AFTER_MS));
+  assert.equal((await parkedIssues()).length, 0);
+  const late = after(PAYOUT_STUCK_AFTER_MS);
+  await reconcile(provider, late);
+  await reconcile(provider, late);
+  assert.equal((await parkedIssues()).length, 1);
+  assert.equal((await holds()).length, 0);
+  assert.equal(await available(), reserved);
+});
+
+test('fifty stuck parked events do not block a newer one', async (t) => {
+  const { db, withdraw, issues, paidEvent, webhooks, reconcile } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted({
+    async initiatePayout() {
+      throw timeout();
+    },
+    async findPayoutByReference() {
+      throw timeout();
+    },
+    async fetchPayoutStatus() {
+      throw timeout();
+    },
+  });
+  await startPayout(db, { payoutId, provider });
+  for (let i = 0; i < 55; i += 1)
+    await webhooks.applyBachs(
+      paidEvent(`stuck${i}`, { operationReference: payoutId }),
+      provider,
+    );
+  // Not named, so past the wait it is unexpected, if the sweep ever gets to it.
+  await webhooks.applyBachs(paidEvent('newer'), provider);
+  const late = after(PAYOUT_NOT_FOUND_AFTER_MS);
+  await reconcile(provider, late);
+  await reconcile(provider, new Date(late.getTime() + 1000));
+  assert.equal((await issues('payout_unexpected')).length, 1);
+});
+
+test('an unreadable stored amount fails one parked row, not the sweep', async (t) => {
+  const { db, withdraw, row, paidEvent, webhooks, reconcile } =
+    await fixture(t);
+  const provider = scripted();
+  await webhooks.applyBachs(
+    { ...paidEvent('bad'), amountMinor: 'lots' },
+    provider,
+  );
+  const payoutId = await withdraw();
+  await startPayout(db, { payoutId, provider });
+  const good = paidEvent(payoutId);
+  await webhooks.applyBachs(good, provider);
+  assert.equal((await row(payoutId)).status, 'PAID');
+  const result = await reconcile(provider);
+  assert.equal(result.errors, 1);
 });

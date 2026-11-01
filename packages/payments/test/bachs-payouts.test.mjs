@@ -834,6 +834,9 @@ const payoutEvent = (type, data = {}, envelope = {}) => ({
     status: type === 'payout.paid' ? 'completed' : 'failed',
     amount: '1500.00',
     currency: 'NGN',
+    // As payout-paid.md shows them; the docs do not settle whether `amount` includes the fee.
+    withdrawal_fee: '50.00',
+    net_from_amount: '1450.00',
     ...data,
   },
   ...envelope,
@@ -857,6 +860,7 @@ test('payout.paid and payout.failed webhooks normalize to payout events', () => 
       status: 'paid',
       currency: 'NGN',
       amountMinor: 150000n,
+      feeMinor: 5000n,
       operationReference: 'p1',
     },
   });
@@ -871,6 +875,7 @@ test('payout.paid and payout.failed webhooks normalize to payout events', () => 
       status: 'failed',
       currency: 'NGN',
       amountMinor: 150000n,
+      feeMinor: 5000n,
       operationReference: 'p1',
     },
   });

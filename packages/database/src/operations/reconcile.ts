@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
+  parkedPayoutChecks,
   paymentAttempts,
   paymentIntents,
   payouts,
@@ -25,6 +26,8 @@ import {
   applyFoundPayout,
   applyPayoutSignal,
   isAmbiguousLookup,
+  openParkedPayoutConflict,
+  openParkedPayoutUnresolved,
   openPayoutConflict,
   openUnexpectedPayout,
   PAYOUT_NOT_FOUND_AFTER_MS,
@@ -362,9 +365,9 @@ export async function reconcilePayouts(input: {
   let unresolved = 0;
   const stuckBefore = new Date(now.getTime() - PAYOUT_STUCK_AFTER_MS);
   for (const payout of candidates) {
-    if (!payout.provider || !payout.providerReference) continue;
     let finished = false;
     try {
+      if (!payout.provider || !payout.providerReference) continue;
       const { status, ...details } = await providerFor(
         input.provider,
         payout.provider,
@@ -422,11 +425,11 @@ export async function reconcilePayouts(input: {
     )
     .limit(limit);
   for (const payout of uncertain) {
-    if (!payout.provider) continue;
     const pastWait =
       payout.startUncertainAt !== null &&
       payout.startUncertainAt <= notFoundBefore;
     try {
+      if (!payout.provider) continue;
       const lookup = providerFor(input.provider, payout.provider);
       const found = lookup.findPayoutByReference
         ? await lookup.findPayoutByReference(
@@ -538,6 +541,10 @@ async function sweepParkedPayoutEvents(
       receivedAt: unmatchedProviderEvents.receivedAt,
     })
     .from(unmatchedProviderEvents)
+    .leftJoin(
+      parkedPayoutChecks,
+      eq(parkedPayoutChecks.unmatchedId, unmatchedProviderEvents.id),
+    )
     .where(
       and(
         eq(unmatchedProviderEvents.provider, 'bachs'),
@@ -548,13 +555,32 @@ async function sweepParkedPayoutEvents(
              AND e.provider_event_id = ${unmatchedProviderEvents.providerEventId})`,
         sql`NOT EXISTS (
           SELECT 1 FROM issues i
-           WHERE i.dedupe_key = 'payout_unexpected.' || ${unmatchedProviderEvents.id})`,
+           WHERE i.dedupe_key IN (
+             'payout_unexpected.' || ${unmatchedProviderEvents.id},
+             'payout_conflict.parked.' || ${unmatchedProviderEvents.id},
+             'payout_parked.' || ${unmatchedProviderEvents.id}))`,
       ),
     )
-    .orderBy(asc(unmatchedProviderEvents.receivedAt))
+    // Least recently checked first, so rows that never resolve cannot starve newer ones.
+    .orderBy(
+      sql`${parkedPayoutChecks.lastCheckedAt} ASC NULLS FIRST`,
+      asc(unmatchedProviderEvents.receivedAt),
+    )
     .limit(limit);
   let applied = 0;
   let errors = 0;
+  // Told before the read: a row whose read always fails must still reach someone.
+  const capParkedAge = async (
+    row: { id: string; receivedAt: Date },
+    payoutId: string,
+  ) => {
+    if (now.getTime() - row.receivedAt.getTime() > PAYOUT_STUCK_AFTER_MS)
+      await openParkedPayoutUnresolved(db, {
+        unmatchedId: row.id,
+        payoutId,
+        now,
+      });
+  };
   for (const row of parked) {
     // Stored as JSON, so money comes back as strings.
     const event = row.payload as {
@@ -567,13 +593,13 @@ async function sweepParkedPayoutEvents(
       operationReference?: string;
       feeMinor?: string;
     };
-    const claims = {
-      ...(event.amountMinor === undefined
-        ? {}
-        : { amountMinor: BigInt(event.amountMinor) }),
-      ...(event.currency === undefined ? {} : { currency: event.currency }),
-    };
     try {
+      const claims = {
+        ...(event.amountMinor === undefined
+          ? {}
+          : { amountMinor: BigInt(event.amountMinor) }),
+        ...(event.currency === undefined ? {} : { currency: event.currency }),
+      };
       let payoutId = await findPayoutByReference(
         db,
         'bachs',
@@ -583,7 +609,12 @@ async function sweepParkedPayoutEvents(
         // The signed reference names a payout of ours on this account: never unexpected. Adopt it,
         // but only on a read; until one answers, it waits here however long that takes.
         const [named] = await db
-          .select({ id: payouts.id, provider: payouts.provider })
+          .select({
+            id: payouts.id,
+            provider: payouts.provider,
+            status: payouts.status,
+            providerReference: payouts.providerReference,
+          })
           .from(payouts)
           .where(
             and(
@@ -591,7 +622,21 @@ async function sweepParkedPayoutEvents(
               eq(payouts.accountReference, event.accountReference),
             ),
           );
+        if (
+          named &&
+          (named.providerReference !== null ||
+            (named.status !== 'REQUESTED' && named.status !== 'PROCESSING'))
+        ) {
+          // Before any read: with the provider down, this is still the case someone must see.
+          await openParkedPayoutConflict(db, {
+            unmatchedId: row.id,
+            payoutId: named.id,
+            now,
+          });
+          continue;
+        }
         if (named) {
+          await capParkedAge(row, named.id);
           const { status, ...details } = await providerFor(
             input.provider,
             'bachs',
@@ -613,6 +658,7 @@ async function sweepParkedPayoutEvents(
         }
       }
       if (payoutId) {
+        await capParkedAge(row, payoutId);
         const reader = providerFor(input.provider, 'bachs');
         const outcome = await applyPayoutSignal(db, {
           payoutId,
@@ -653,6 +699,15 @@ async function sweepParkedPayoutEvents(
       });
     } catch {
       errors += 1;
+    } finally {
+      await db
+        .insert(parkedPayoutChecks)
+        .values({ unmatchedId: row.id, lastCheckedAt: now })
+        .onConflictDoUpdate({
+          target: parkedPayoutChecks.unmatchedId,
+          set: { lastCheckedAt: now },
+        })
+        .catch(() => undefined);
     }
   }
   return { applied, errors };

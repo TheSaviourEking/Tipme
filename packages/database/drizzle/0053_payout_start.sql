@@ -1,3 +1,8 @@
+CREATE TABLE "parked_payout_checks" (
+	"unmatched_id" uuid PRIMARY KEY NOT NULL,
+	"last_checked_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE "issues" DROP CONSTRAINT "issues_kind";--> statement-breakpoint
 ALTER TABLE "payouts" ADD COLUMN "start_step" text;--> statement-breakpoint
 ALTER TABLE "payouts" ADD COLUMN "provider_review_at" timestamp with time zone;--> statement-breakpoint

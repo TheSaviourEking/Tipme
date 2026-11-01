@@ -91,14 +91,15 @@ export function openPayoutConflict(
   input: {
     payoutId: string;
     why: 'two_references' | 'mismatch' | 'ambiguous';
+    /** The fields that differ, by name only. */
+    fields?: string[];
     now: Date;
   },
 ): Promise<{ id: string; opened: boolean }> {
   const notes = {
     two_references:
       'It has two references for one payout, so the recipient may have been paid twice. The money stays reserved.',
-    mismatch:
-      'What it reports differs from what TipMe asked for (amount, currency, destination or reference). Nothing was booked and the money stays reserved.',
+    mismatch: `What it reports differs from what TipMe asked for (${input.fields?.join(', ') ?? 'details'}). Nothing was booked and the money stays reserved.`,
     ambiguous:
       'It has more than one payout with TipMe’s reference, so the recipient may have been paid twice. The money stays reserved.',
   };
@@ -116,19 +117,19 @@ export function openPayoutConflict(
 export const isAmbiguousLookup = (error: unknown): boolean =>
   error instanceof Error && error.name === 'AmbiguousPayoutError';
 
-/** Whether what the provider says differs from what TipMe asked for, in anything it says. */
-async function disagrees(
+/** The fields, by name, where what the provider says differs from what TipMe asked for. */
+async function differences(
   db: Database,
   payoutId: string,
   claims: PayoutClaims,
-): Promise<boolean> {
+): Promise<string[]> {
   if (
     claims.amountMinor === undefined &&
     claims.currency === undefined &&
     claims.destinationRef === undefined &&
     claims.operationReference === undefined
   )
-    return false;
+    return [];
   return guarded(async () => {
     const [row] = await db
       .select({
@@ -142,16 +143,24 @@ async function disagrees(
         eq(payoutDestinations.id, payouts.destinationId),
       )
       .where(eq(payouts.id, payoutId));
-    if (!row) return true;
-    return (
-      (claims.amountMinor !== undefined &&
-        claims.amountMinor !== row.amountMinor) ||
-      (claims.currency !== undefined && claims.currency !== row.currency) ||
-      (claims.destinationRef !== undefined &&
-        claims.destinationRef !== row.destinationRef) ||
-      (claims.operationReference !== undefined &&
-        claims.operationReference !== payoutId)
-    );
+    if (!row) return ['payout'];
+    return [
+      ...(claims.amountMinor !== undefined &&
+      claims.amountMinor !== row.amountMinor
+        ? ['amount']
+        : []),
+      ...(claims.currency !== undefined && claims.currency !== row.currency
+        ? ['currency']
+        : []),
+      ...(claims.destinationRef !== undefined &&
+      claims.destinationRef !== row.destinationRef
+        ? ['destination']
+        : []),
+      ...(claims.operationReference !== undefined &&
+      claims.operationReference !== payoutId
+        ? ['reference']
+        : []),
+    ];
   });
 }
 
@@ -218,10 +227,12 @@ export async function applyFoundPayout(
 ): Promise<{ outcome: 'started' | 'failed' | 'uncertain'; applied: boolean }> {
   const provider = payout.provider ?? 'unknown';
   // Before anything is recorded: a payout that isn't what TipMe asked for is never adopted or booked.
-  if (await disagrees(db, payout.id, found)) {
+  const differing = await differences(db, payout.id, found);
+  if (differing.length > 0) {
     await openPayoutConflict(db, {
       payoutId: payout.id,
       why: 'mismatch',
+      fields: differing,
       now,
     });
     return { outcome: 'uncertain', applied: false };
@@ -621,7 +632,8 @@ async function coverFee(
 
 /**
  * A signed payout event for a payout TipMe knows. A paid event that agrees with itself is applied;
- * a failed one (which documents no reason) or a contradiction only triggers a read, and what the
+ * a failed one (which documents no reason), a contradiction or one that differs from the request
+ * only triggers a read, and what the
  * read says is what happens. No answer, or "not found", changes nothing: reconciliation keeps asking.
  */
 export async function applyPayoutSignal(
@@ -650,20 +662,14 @@ export async function applyPayoutSignal(
     now: Date;
   },
 ): Promise<string> {
-  const conflict = async () => {
-    await openPayoutConflict(db, {
-      payoutId: input.payoutId,
-      why: 'mismatch',
-      now: input.now,
-    });
-    return 'conflict';
-  };
-  if (await disagrees(db, input.payoutId, input.claims ?? {}))
-    return conflict();
+  // The docs don't settle whether an event's amount includes the fee, so an event that differs is
+  // only a contradiction: a read decides, and only a read that differs is a conflict.
+  const eventDiffers =
+    (await differences(db, input.payoutId, input.claims ?? {})).length > 0;
   let outcome: 'paid' | 'failed' = input.status;
   let details: { failureReason?: PayoutFailure; actualFeeMinor?: bigint } =
     input.feeMinor === undefined ? {} : { actualFeeMinor: input.feeMinor };
-  if (input.status === 'failed' || input.contradicted) {
+  if (input.status === 'failed' || input.contradicted || eventDiffers) {
     if (!input.reader.fetchPayoutStatus) return 'unread';
     let read;
     try {
@@ -680,7 +686,18 @@ export async function applyPayoutSignal(
       return 'pending';
     }
     if (read.status === 'not_found') return 'pending';
-    if (await disagrees(db, input.payoutId, read)) return conflict();
+    const differing = await differences(db, input.payoutId, read);
+    if (differing.length > 0) {
+      await openPayoutConflict(db, {
+        payoutId: input.payoutId,
+        why: 'mismatch',
+        fields: differing,
+        now: input.now,
+      });
+      return 'conflict';
+    }
+    // An event that differs needs a read that positively says otherwise, not a silent one.
+    if (eventDiffers && read.amountMinor === undefined) return 'unread';
     outcome = read.status;
     details = {
       ...(read.failureReason ? { failureReason: read.failureReason } : {}),
@@ -699,6 +716,38 @@ export async function applyPayoutSignal(
     ...details,
   });
   return result.outcome;
+}
+
+/** A parked event names a payout it can't belong to: possibly paid after release, or paid twice. */
+export function openParkedPayoutConflict(
+  db: Database,
+  input: { unmatchedId: string; payoutId: string; now: Date },
+): Promise<{ id: string; opened: boolean }> {
+  return guarded(() =>
+    openIssue(db, {
+      dedupeKey: `payout_conflict.parked.${input.unmatchedId}`,
+      kind: 'payout_conflict',
+      subject: { payoutId: input.payoutId, unmatchedId: input.unmatchedId },
+      note: 'It sent a signed payout event naming this withdrawal, which already ended or has another reference. Money may have left: check it at the provider.',
+      now: input.now,
+    }),
+  );
+}
+
+/** A parked event has had no answer for too long: a person looks. */
+export function openParkedPayoutUnresolved(
+  db: Database,
+  input: { unmatchedId: string; payoutId: string; now: Date },
+): Promise<{ id: string; opened: boolean }> {
+  return guarded(() =>
+    openIssue(db, {
+      dedupeKey: `payout_parked.${input.unmatchedId}`,
+      kind: 'payout_unresolved',
+      subject: { payoutId: input.payoutId, unmatchedId: input.unmatchedId },
+      note: 'A signed payout event about it could not be applied, because the provider’s record has given no usable answer.',
+      now: input.now,
+    }),
+  );
 }
 
 /**

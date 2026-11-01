@@ -1262,6 +1262,18 @@ export const unmatchedProviderEvents = pgTable(
   ],
 );
 
+/**
+ * When reconciliation last tried a parked payout event (fair rotation). Its own table, because
+ * unmatched_provider_events is append-only.
+ */
+export const parkedPayoutChecks = pgTable('parked_payout_checks', {
+  // No foreign key: one would change how the append-only table refuses TRUNCATE.
+  unmatchedId: uuid('unmatched_id').primaryKey(),
+  lastCheckedAt: timestamp('last_checked_at', {
+    withTimezone: true,
+  }).notNull(),
+});
+
 // ---- Staff access and audit (PR-009, ADR-0010) ----
 
 export const OPS_PERMISSIONS = [
