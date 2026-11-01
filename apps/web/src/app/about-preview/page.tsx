@@ -3,8 +3,8 @@ import { ActionLink, Container } from '@tipme/ui';
 import { PaymentModeSlot } from '@/components/payment-mode-slot';
 import { previewMetadata } from '@/lib/metadata';
 export const metadata = previewMetadata(
-  'About this preview',
-  'What TipMe’s development preview does—and what it does not do.',
+  'About TipMe today',
+  'What TipMe does today, and what it does not do.',
   '/about-preview',
 );
 /**
