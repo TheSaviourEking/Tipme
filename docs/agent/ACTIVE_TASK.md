@@ -1,11 +1,11 @@
 # Current task — staging reusable-workflow permission fix (1 November 2026)
 
-- Branch/worktree: `fix/staging-reusable-workflow-permissions-dev` / `.worktrees/staging-workflow-fix-dev`, from `origin/dev` at `1b79d7c`.
+- Branch/worktree: `chore/sync-main-into-dev-after-75` / `.worktrees/sync-main-dev`, from `origin/dev` at `c92bb38`.
 - Failure: staging runs `41270562653` and `41270824881` stopped at workflow validation, before jobs started. The reusable CI `changes` job requests `statuses: read`, but the staging caller granted only `contents: read` and `pull-requests: read`.
 - Fix implemented: grant `statuses: read` at the reusable-workflow call and enforce the caller/callee permission contract with `scripts/workflow-contracts.test.mjs`. The regression was observed failing with the missing permission before the fix and passing after it.
 - Production run `41270923950` then failed by design because this file tree had no full staging pass. Do not override that gate; deploy staging successfully first.
 - Verified after building the fresh worktree: `pnpm build` (10/10), `pnpm test` (154/154 script tests and 20/20 Turbo tasks), `pnpm lint` (17/17), `pnpm typecheck` (17/17), `pnpm format:check`, and `git diff --check` passed. The first sandboxed `pnpm test` attempt was invalid because packages were not built and localhost listeners were denied; it was rerun after the build with localhost permission.
-- PR #75 already placed the fix on `main` directly. The repository's required flow is `feature → dev → main`, so this branch carries the same verified fix into `dev` to restore branch consistency. No deployment, environment change or payment operation was performed; after `dev` includes the fix, deploy staging and obtain a full pass before retrying production.
+- PR #75 placed the fix on `main`, and PR #76 then placed the same fix on `dev` to restore the required `feature → dev → main` flow. This sync merges `main` history back into `dev`, resolving only the duplicate continuity notes, so the next `dev → main` PR is mergeable. No deployment, environment change or payment operation was performed; deploy staging and obtain a full pass before retrying production.
 
 # Current task — handoff (31 October 2026)
 
