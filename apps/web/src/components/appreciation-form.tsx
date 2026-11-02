@@ -38,6 +38,8 @@ const PANEL_MARGIN_PX = 32;
 const MESSAGE_LIMIT = 280;
 const NAME_LIMIT = 60;
 const FIRST_TOTAL_PAUSE_MS = 500;
+// Read only in event handlers and the answers they await, never while rendering.
+const clock = () => performance.now();
 
 const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   if (failure.code === 'NETWORK')
@@ -156,7 +158,7 @@ export function AppreciationForm({
     }
     if (awaitingFirstTotal.current) {
       awaitingFirstTotal.current = false;
-      firstTotalAt.current = performance.now();
+      firstTotalAt.current = clock();
     }
     setQuote({ kind: 'ready', quote: result.data });
     return result.data;
@@ -219,7 +221,7 @@ export function AppreciationForm({
     // decision to pay. The next tap counts.
     if (
       firstTotalAt.current !== null &&
-      performance.now() - firstTotalAt.current < FIRST_TOTAL_PAUSE_MS
+      clock() - firstTotalAt.current < FIRST_TOTAL_PAUSE_MS
     )
       return;
     track('tip_cta_clicked', { surface: 'profile', handle });
