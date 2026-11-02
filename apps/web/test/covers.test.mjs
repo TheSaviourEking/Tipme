@@ -218,20 +218,51 @@ test('each heart design reads on a phone: drawn geometry sits in the middle, cle
   }
 });
 
-test('outline strokes are readable on every base: contrast of at least 1.4, and quiet, under 4', () => {
-  const lum = (hex) => {
-    const [r, g, b] = [1, 3, 5].map((i) => {
-      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-  for (const c of COVER_COLOURS) {
-    const [a, b] = [lum(c.base), lum(c.line)].sort((x, y) => y - x);
-    const ratio = (a + 0.05) / (b + 0.05);
+const lum = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (x, y) => {
+  const [a, b] = [lum(x), lum(y)].sort((p, q) => q - p);
+  return (a + 0.05) / (b + 0.05);
+};
+
+// Owner, 2 Nov 2026: the covers were too pale and the page could read as an empty block. Every
+// colour (and the dark design) now has a fill that shows against its base and a line that is
+// clearly visible, yet calm: well short of the 4.5 that would make it shout.
+test('every colour has presence: fills of at least 1.45 against the base, lines of at least 2.5, and both calm, under 4', () => {
+  for (const c of [...COVER_COLOURS, { id: 'dark', ...COVER_DARK }]) {
+    const fill = contrast(c.base, c.tone);
+    const line = contrast(c.base, c.line);
     assert.ok(
-      ratio >= 1.4 && ratio < 4,
-      `${c.id} line contrast ${ratio.toFixed(2)}`,
+      fill >= 1.45 && fill < 4,
+      `${c.id} fill contrast ${fill.toFixed(2)}`,
     );
+    assert.ok(
+      line >= 2.5 && line < 4,
+      `${c.id} line contrast ${line.toFixed(2)}`,
+    );
+  }
+});
+
+test('outlines are drawn at 3 px on screen, wide enough to be seen', () => {
+  for (const id of OUTLINED) {
+    const view = coverView(
+      { kind: 'design', design: id, colour: 'neutral' },
+      API,
+    );
+    for (const shape of view.shapes) {
+      const scale =
+        id === 'outline'
+          ? 1
+          : Number(/scale\(([\d.]+)\)/.exec(shape.transform)[1]);
+      assert.ok(
+        Math.abs(shape.strokeWidth * scale - 3) < 0.01,
+        `${id} ${shape.strokeWidth}`,
+      );
+    }
   }
 });

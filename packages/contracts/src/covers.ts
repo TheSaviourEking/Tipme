@@ -47,58 +47,67 @@ export const COVER_DESIGNS: readonly CoverDesign[] = [
   { id: 'confetti', name: 'Confetti Hearts', colours: false },
 ];
 
-/** Violet and lilac are chosen by the person, never automatic (spec §6). */
+/**
+ * Deepened on 2 Nov 2026 at the owner's request (the covers were too pale): each tone is at
+ * least 1.45:1 against its base and each line at least 2.5:1, still under 4:1 so they stay calm.
+ * Violet and lilac are chosen by the person, never automatic (spec §6). */
 export const COVER_COLOURS: readonly CoverColour[] = [
   {
     id: 'neutral',
     name: 'Neutral',
     base: '#e6e4dc',
-    tone: '#d6d3c8',
-    line: '#bdb9ab',
+    tone: '#bdb8a5',
+    line: '#8c8672',
   },
   {
     id: 'violet',
     name: 'Violet',
     base: '#7a32f9',
-    tone: '#6723e8',
-    line: '#b08dff',
+    tone: '#5415c9',
+    line: '#c9adff',
   },
   {
     id: 'lilac',
     name: 'Lilac',
     base: '#ece2ff',
-    tone: '#ddcbff',
-    line: '#bfa5f5',
+    tone: '#c9b0fb',
+    line: '#8f66e0',
   },
   {
     id: 'forest',
     name: 'Forest',
     base: '#1f4d3a',
-    tone: '#2a6049',
-    line: '#4f8a70',
+    tone: '#357a5c',
+    line: '#66a587',
   },
   {
     id: 'ocean',
     name: 'Ocean',
     base: '#1d4e89',
-    tone: '#2a609f',
-    line: '#5b8fcc',
+    tone: '#3a79c2',
+    line: '#76a6dc',
   },
-  { id: 'sun', name: 'Sun', base: '#f4c25b', tone: '#ebb03b', line: '#c98f1a' },
+  {
+    id: 'sun',
+    name: 'Sun',
+    base: '#f4c25b',
+    tone: '#d99a1a',
+    line: '#9a6500',
+  },
   {
     id: 'rose',
     name: 'Rose',
     base: '#b83d62',
-    tone: '#c9547a',
-    line: '#e07a9b',
+    tone: '#d9648a',
+    line: '#f4a3bd',
   },
 ];
 
 /** The `dark` design's fixed colours: it takes no colour of its own. */
 export const COVER_DARK = {
   base: '#24221f',
-  tone: '#33302b',
-  line: '#4a463f',
+  tone: '#4a463f',
+  line: '#7a746a',
 } as const;
 
 const AUTOMATIC = ['scattered', 'large', 'dark'] as const;

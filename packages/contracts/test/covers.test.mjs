@@ -46,23 +46,23 @@ test('only heart designs other than dark take a colour', () => {
   );
 });
 
-test('colours carry the mockup’s base and tone, neutral first', () => {
+test('colours carry the mockup’s base and the deeper tones chosen on 2 Nov 2026, neutral first', () => {
   assert.deepEqual(
     COVER_COLOURS.map((c) => [c.id, c.name, c.base, c.tone]),
     [
-      ['neutral', 'Neutral', '#e6e4dc', '#d6d3c8'],
-      ['violet', 'Violet', '#7a32f9', '#6723e8'],
-      ['lilac', 'Lilac', '#ece2ff', '#ddcbff'],
-      ['forest', 'Forest', '#1f4d3a', '#2a6049'],
-      ['ocean', 'Ocean', '#1d4e89', '#2a609f'],
-      ['sun', 'Sun', '#f4c25b', '#ebb03b'],
-      ['rose', 'Rose', '#b83d62', '#c9547a'],
+      ['neutral', 'Neutral', '#e6e4dc', '#bdb8a5'],
+      ['violet', 'Violet', '#7a32f9', '#5415c9'],
+      ['lilac', 'Lilac', '#ece2ff', '#c9b0fb'],
+      ['forest', 'Forest', '#1f4d3a', '#357a5c'],
+      ['ocean', 'Ocean', '#1d4e89', '#3a79c2'],
+      ['sun', 'Sun', '#f4c25b', '#d99a1a'],
+      ['rose', 'Rose', '#b83d62', '#d9648a'],
     ],
   );
   assert.deepEqual(COVER_DARK, {
     base: '#24221f',
-    tone: '#33302b',
-    line: '#4a463f',
+    tone: '#4a463f',
+    line: '#7a746a',
   });
 });
 

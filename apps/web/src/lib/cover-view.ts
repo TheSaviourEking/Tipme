@@ -43,6 +43,8 @@ const SCATTER = [
   'translate(-670 10) rotate(-14 733 45)',
   'translate(-540 90) rotate(18 733 45)',
 ];
+// Outline width in artboard units (about px on a desktop); 2 read as a hairline on the pale covers.
+const LINE = 3;
 const RIPPLES = [2, 4, 6, 8, 10];
 // Hearts climbing from lower left to upper right, clear of the photo and the tipping panel.
 const RISING: [number, number, number][] = [
@@ -70,7 +72,7 @@ export function heartShapes(
         d: HEART,
         transform,
         stroke: line,
-        strokeWidth: 2,
+        strokeWidth: LINE,
       }));
     case 'large':
     case 'dark':
@@ -80,8 +82,8 @@ export function heartShapes(
         d: HEART,
         transform: placed(560, 146, scale),
         stroke: line,
-        // Every ring is about 2 px wide on screen whatever its scale.
-        strokeWidth: +(2 / scale).toFixed(3),
+        // Every ring is about 3 px wide on screen whatever its scale.
+        strokeWidth: +(LINE / scale).toFixed(3),
       }));
     case 'rising':
       return RISING.map(([x, y, scale]) => ({
