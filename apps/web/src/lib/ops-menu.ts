@@ -1,3 +1,13 @@
+// Whoever holds one has a card on the Pages screen (OPS_PAGE_LOOKUP_PERMISSIONS; this file imports
+// nothing so it can be tested alone).
+const PAGE_CARDS = [
+  'pages.plan',
+  'pages.suspend',
+  'fees.manage',
+  'payouts.resolve',
+  'recoveries.manage',
+];
+
 /** Each entry names what its page reads, so nobody is offered a page that would refuse them. */
 const LINKS: { href: string; label: string; needs: string[] | null }[] = [
   { href: '/ops', label: 'Overview', needs: null },
@@ -5,12 +15,12 @@ const LINKS: { href: string; label: string; needs: string[] | null }[] = [
   { href: '/ops/issues', label: 'Issues', needs: ['issues.view'] },
   { href: '/ops/visibility', label: 'Visibility', needs: ['analytics.view'] },
   { href: '/ops/market', label: 'Market', needs: ['analytics.view'] },
-  { href: '/ops/pages', label: 'Pages', needs: ['pages.plan'] },
+  { href: '/ops/pages', label: 'Pages', needs: [...PAGE_CARDS] },
   { href: '/ops/search', label: 'Search', needs: ['search.view'] },
   {
     href: '/ops/providers',
     label: 'Providers',
-    needs: ['issues.view', 'providers.manage'],
+    needs: ['issues.view'],
   },
   { href: '/ops/email', label: 'Email', needs: ['issues.view'] },
   { href: '/ops/audit', label: 'Audit log', needs: ['audit.view'] },

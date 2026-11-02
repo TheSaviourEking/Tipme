@@ -30,7 +30,9 @@ Status: the code can move real money once the owner works through `docs/runbooks
 
 ## Staff roles and permissions
 
-Two roles exist today. **Owner** holds every permission; staff are created only on the server with `pnpm ops:grant-owner`. **release_check** is the release check's own staff account and holds only `issues.view`, `issues.resolve`, `analytics.view` and `audit.view`. A new role is a row in the database (a name and a set of permissions) and needs no code change. A role with fewer permissions gets `403` on the rest (tested).
+**Owner** is built in and holds every permission. **release_check** is the release check's own staff account and holds only `issues.view`, `issues.resolve`, `analytics.view` and `audit.view`; it can't be edited or given from the dashboard. Staff with `staff.manage` add people, and create custom roles (a name and a set of permissions, with no code change), from the dashboard. Support, Finance and Marketing are starter roles. A person's access is their role's permissions, plus additions, minus removals, read on every request. Anything outside it gets `403` (tested). `pnpm ops:grant-owner` stays as the server-side way in if every owner is locked out.
+
+Serious actions wait for a second qualified person, and run alone with an alert when nobody else qualifies. Switching withdrawals off, freezing a page and ending sessions take no fresh code, so they work first time; switching on and releasing a freeze take one. Releasing a freeze is one person, audited and alerted, and not on your own page while someone else could do it. `docs/runbooks/admin-roles.md` has the rules, and none of this approves a regulatory decision.
 
 | Permission          | What it allows                                                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -62,7 +64,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
-| `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
+| `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
 | `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation` |
@@ -247,7 +249,6 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/market/series` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/metrics/health` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/metrics/visibility` | `analytics.view` | n/a (read) | – | – |
-| GET | `/v1/ops/pages/{handle}` | `pages.plan` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{handle}/handle-changes` | `pages.plan` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/fee` | `fees.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/pages/{profileId}/fee-free` | `fees.manage` | yes | `ops_request` | – |
@@ -295,6 +296,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/ops/approvals/{id}/approve` | yes | `ops_code` | – |
 | POST | `/v1/ops/approvals/{id}/cancel` | yes | – | – |
 | POST | `/v1/ops/approvals/{id}/reject` | yes | – | – |
+| GET | `/v1/ops/pages/{handle}` | n/a (read) | – | – |
 
 <!-- /generated:routes -->
 <!-- prettier-ignore-end -->

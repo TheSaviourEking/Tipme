@@ -2,14 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   OPS_APPROVAL_STALE_REASONS,
+  SERIOUS_ACTION_WORDS,
   SERIOUS_ACTIONS,
 } from '../../../packages/contracts/dist/index.js';
 import {
   accessAdjustments,
   approveRefusal,
   answerOf,
+  outcomeIsUnknown,
   refusalWords,
-  SERIOUS_ACTION_WORDS,
   STALE_WORDS,
   withFreshCode,
 } from '../src/lib/ops-answers.ts';
@@ -130,6 +131,30 @@ test('refusals on money closes are specific; the server’s fixed words are the 
     'Server words.',
   );
   assert.match(refusalWords(no(0, 'NETWORK')), /no answer/i);
+});
+
+test('a 5xx or an unmapped answer never says nothing changed: the result is unknown', () => {
+  for (const answer of [
+    no(500, 'INTERNAL_ERROR'),
+    no(502, 'INTERNAL_ERROR'),
+    no(0, 'NETWORK'),
+    no(503, 'DEPENDENCY_UNAVAILABLE'),
+    no(400, 'SOMETHING_NEW'),
+  ]) {
+    assert.doesNotMatch(refusalWords(answer), /nothing changed/i, answer.code);
+    assert.match(refusalWords(answer), /reload/i, answer.code);
+  }
+  for (const answer of [no(500, 'INTERNAL_ERROR'), no(0, 'NETWORK')])
+    assert.equal(outcomeIsUnknown(answer), true);
+  assert.equal(outcomeIsUnknown(no(409, 'LAST_OWNER')), false);
+  const lost = approveRefusal(no(500, 'INTERNAL_ERROR'));
+  assert.equal(lost.unknown, true);
+  assert.doesNotMatch(lost.text, /nothing|not approved/i);
+});
+
+test('the words live in the catalogue, so emails and screens say the same', () => {
+  for (const action of SERIOUS_ACTIONS)
+    assert.ok(SERIOUS_ACTION_WORDS[action], action);
 });
 
 test('ticks become a person’s additions and removals against their role', () => {

@@ -37,6 +37,7 @@ import { providerTest } from './types/provider-test.js';
 import { recoveryLink } from './types/recovery-link.js';
 import {
   staffActedAlone,
+  staffFreezeReleased,
   staffApprovalOutcome,
   staffApprovalPending,
   staffLastApproverRemoved,
@@ -57,6 +58,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     staffInvitation,
     staffInvitationDeclined,
     staffActedAlone,
+    staffFreezeReleased,
     staffApprovalOutcome,
     staffApprovalPending,
     staffLastApproverRemoved,

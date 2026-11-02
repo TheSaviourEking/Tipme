@@ -38,6 +38,7 @@ import {
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import {
+  qualifiedApprovers,
   registerSeriousAction,
   requestSeriousAction,
   type SeriousActionCheck,
@@ -58,6 +59,8 @@ import {
   readOverrides,
   readRolePermissions,
   readStaffAccess,
+  readMailboxes,
+  sharesMailbox,
   whileHoldingStaffAdmin,
 } from './staff.js';
 
@@ -352,6 +355,40 @@ const payoutSettle = acting<SettlePayload>({
  * Any hand close of a money issue: closing one can lift a hold, whichever outcome is named. The
  * outcome is in the payload and the words, so the approver agrees to that one.
  */
+/**
+ * Someone releasing the freeze on their own page. A second person who could do it means they can't;
+ * with nobody else it goes the alone way, so the log and alert say so (the owner's ruling).
+ */
+export async function freezeReleaseBySubject(
+  db: Database,
+  input: { issueId: string; actorId: string },
+): Promise<'not_subject' | 'refused' | 'alone'> {
+  return guarded(async () => {
+    const [issue] = await db
+      .select({ subject: issues.subject })
+      .from(issues)
+      .where(eq(issues.id, input.issueId));
+    const { profileId } = issue?.subject ?? {};
+    const owners = profileId ? await pageOwner(db, profileId) : [];
+    const mine = await readMailboxes(db, input.actorId);
+    let subject = false;
+    for (const owner of owners)
+      if (
+        owner === input.actorId ||
+        sharesMailbox(mine, await readMailboxes(db, owner))
+      )
+        subject = true;
+    if (!subject) return 'not_subject';
+    const others = await qualifiedApprovers(db, {
+      permission: 'payouts.resolve',
+      requesterId: input.actorId,
+      action: 'money_issue.close',
+      payload: { issueId: input.issueId, outcome: 'account_secured' },
+    });
+    return others.length > 0 ? 'refused' : 'alone';
+  });
+}
+
 const moneyIssueClose = acting<{
   issueId: string;
   outcome: OpsIssueOutcome | null;
@@ -395,7 +432,7 @@ const moneyIssueClose = acting<{
       .from(issues)
       .where(eq(issues.id, issueId));
     if (issue?.status !== 'open') throw new OperationError('ISSUE_RESOLVED');
-    await resolveIssue(tx, {
+    const closed = await resolveIssue(tx, {
       issueId,
       staffUserId: context.actorId,
       reason: context.reason,
@@ -403,7 +440,7 @@ const moneyIssueClose = acting<{
       ...(bankAndSignInChecked === undefined ? {} : { bankAndSignInChecked }),
       now: context.now,
     });
-    return { resolved: true };
+    return { resolved: true, ...closed };
   },
 });
 
@@ -599,8 +636,14 @@ const roleAddSensitive = acting<RoleEditPayload>({
   },
   target: ({ roleId }) => roleId,
   current: (tx, { roleId }) => roleStamp(tx, roleId),
-  describe: async (tx, payload) =>
-    `Add ${(await addedBy(tx, payload)).join(', ') || 'nothing'} to the role ${await roleName(tx, payload.roleId)}`,
+  // The run replaces the whole list, so the words must name what goes as well as what comes.
+  describe: async (tx, payload) => {
+    const stored = await readRolePermissions(tx, payload.roleId);
+    const removed = stored.filter((p) => !payload.permissions.includes(p));
+    return `Add ${(await addedBy(tx, payload)).join(', ') || 'nothing'}${
+      removed.length ? ` and remove ${removed.join(', ')}` : ''
+    } to the role ${await roleName(tx, payload.roleId)}`;
+  },
   act: (tx, payload, context) =>
     updateRole(tx, {
       actorId: context.actorId,

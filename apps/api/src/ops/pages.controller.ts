@@ -14,6 +14,7 @@ import type { Response } from 'express';
 import {
   OPS_PAGE_IMAGES,
   opsFeeFreeGrantSchema,
+  OPS_PAGE_LOOKUP_PERMISSIONS,
   opsHandleChangesGrantSchema,
   opsPageFeeSchema,
   opsPagePlanSchema,
@@ -58,7 +59,7 @@ import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { FreshCode } from './fresh-code.guard.js';
-import { OpsPermission } from './permission.decorator.js';
+import { OpsAnyStaff, OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const uuidOf = (value: string) => {
@@ -75,6 +76,9 @@ const imageOf = (value: string): OpsPageImage => {
  * Free and Pro (PR-012): staff look a page up and change its plan. Staff also set one page's
  * fee and grant fee-free tips (ADR-0014); nothing about pricing is automatic. No billing; audited.
  */
+const holdsOneOf = (held: ReadonlySet<string>, wanted: readonly string[]) =>
+  wanted.some((permission) => held.has(permission));
+
 @Controller('v1/ops/pages')
 export class OpsPagesController {
   constructor(
@@ -89,10 +93,13 @@ export class OpsPagesController {
   ) {}
 
   @Get(':handle')
-  @OpsPermission('pages.plan')
+  @OpsAnyStaff()
   async page(
+    @CurrentOps() ops: OpsContext,
     @Param('handle') handle: string,
   ): Promise<ApiDataResponse<OpsPage>> {
+    if (!holdsOneOf(ops.permissions, OPS_PAGE_LOOKUP_PERMISSIONS))
+      throw new CodedHttpException(403, 'FORBIDDEN');
     const page = await opsPageByHandle(this.database.db, handle);
     if (!page) throw new CodedHttpException(404, 'NOT_FOUND');
     return { data: page };

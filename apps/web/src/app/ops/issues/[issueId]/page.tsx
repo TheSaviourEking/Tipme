@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import type {
+  OpsFreezeReleased,
   OpsIssueEvidence,
   OpsPrivateDetails,
   OpsRecheckOutcome,
@@ -32,7 +33,7 @@ import {
   useOpsAccess,
   when,
 } from '@/lib/ops-client';
-import { refusalWords } from '@/lib/ops-answers';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 // Bachs IDs are opaque (no fixed prefix); whitespace, ':' and '/' are refused. The browser
@@ -49,7 +50,7 @@ const RECHECK: Record<OpsRecheckOutcome, string> = {
   not_pending: 'Nothing to re-check: it is no longer waiting on the provider.',
 };
 
-const failure = (answer: { code: string; message?: string }) =>
+const failure = (answer: { status: number; code: string; message?: string }) =>
   answer.code === 'ISSUE_OUTCOME_REQUIRED'
     ? 'Choose how this money issue was settled.'
     : answer.code === 'ISSUE_PAYOUT_UNFINISHED'
@@ -328,13 +329,32 @@ export default function IssuePage() {
     done: string,
     meanwhile?: string,
   ) => {
-    const answer = await opsAct(path, { method: 'POST', body });
+    const answer = await opsAct<Partial<OpsFreezeReleased>>(path, {
+      method: 'POST',
+      body,
+    });
     if (answer.kind === 'refused') {
-      // Someone else got there first: the page should show that, not the old state.
-      if (answer.code === 'ISSUE_RESOLVED') await load();
+      // Someone else got there first, or it may have worked: show what's so, not the old state.
+      if (answer.code === 'ISSUE_RESOLVED' || outcomeIsUnknown(answer))
+        await load();
       return failure(answer);
     }
-    setOutcome(outcomeOf(answer, done, meanwhile));
+    const stillHeld =
+      answer.kind === 'done' && answer.data.withdrawals === 'still_held';
+    setOutcome({
+      ...outcomeOf(
+        answer,
+        stillHeld
+          ? `The issue is resolved, but withdrawals stay on hold. Still open: ${(
+              answer.data.stillOpen ?? []
+            )
+              .map(({ kind }) => ISSUE_KIND_LABELS[kind] ?? kind)
+              .join(', ')}.`
+          : done,
+        meanwhile,
+      ),
+      ...(stillHeld ? { warning: true } : {}),
+    } as ActionOutcomeState);
     await load();
     return null;
   };

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import {
   MAX_HANDLE_CHANGE_EXTRA,
   MAX_HANDLE_CHANGE_GRANT,
+  OPS_PAGE_LOOKUP_PERMISSIONS,
   type OpsPage,
   type OpsWithdrawalFreeze,
   type OpsWithdrawalFreezeState,
@@ -32,7 +33,7 @@ import { ReasonAction } from '@/components/ops/reason-action';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { can, useOpsAccess } from '@/lib/ops-client';
-import { refusalWords } from '@/lib/ops-answers';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const STATE_LABELS: Record<OpsPage['pageState'], string> = {
@@ -205,7 +206,17 @@ function FreezeWithdrawals({
       `/v1/ops/pages/${profileId}/withdrawal-freeze`,
       { method: 'POST', body: { reason } },
     );
-    if (!result.ok) return 'That didn’t go through. Please try again.';
+    if (!result.ok) {
+      // It may have worked with the answer lost: read it, rather than trust the card.
+      if (outcomeIsUnknown(result)) {
+        const again = await opsFetch<OpsWithdrawalFreezeState>(
+          `/v1/ops/pages/${profileId}/withdrawal-freeze`,
+        );
+        setRead(again.ok ? { ok: true, data: again.data } : { ok: false });
+        return refusalWords(result);
+      }
+      return 'That didn’t go through. Please try again.';
+    }
     setRead({ ok: true, data: { issueId: result.data.issueId } });
     return null;
   };
@@ -277,7 +288,8 @@ export default function OpsPagesPage() {
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const [busy, setBusy] = useState(false);
-  const allowed = can(access, 'pages.plan');
+  const allowed = OPS_PAGE_LOOKUP_PERMISSIONS.some((p) => can(access, p));
+  const mayPlan = can(access, 'pages.plan');
 
   const fetchPage = (wanted: string) =>
     opsFetch<OpsPage>(`/v1/ops/pages/${encodeURIComponent(wanted)}`);
@@ -317,7 +329,7 @@ export default function OpsPagesPage() {
   if (!allowed)
     return (
       <Notice tone="neutral" title="Not part of your role">
-        Changing a page’s plan needs the “pages.plan” permission.
+        Finding a page needs a permission that acts on pages.
       </Notice>
     );
 
@@ -380,17 +392,19 @@ export default function OpsPagesPage() {
             {STATE_LABELS[page.pageState]}
             {page.suspended ? ' · Paused by TipMe' : ''}
           </p>
-          <ReasonAction
-            key={page.plan}
-            open={page.plan === 'pro' ? 'Move back to Free…' : 'Make Pro…'}
-            field={
-              page.plan === 'pro'
-                ? 'Why is this page going back to Free?'
-                : 'Why is this page getting Pro?'
-            }
-            submit={page.plan === 'pro' ? 'Move to Free' : 'Make Pro'}
-            onSubmit={(reason) => changePlan(page, reason)}
-          />
+          {mayPlan && (
+            <ReasonAction
+              key={page.plan}
+              open={page.plan === 'pro' ? 'Move back to Free…' : 'Make Pro…'}
+              field={
+                page.plan === 'pro'
+                  ? 'Why is this page going back to Free?'
+                  : 'Why is this page getting Pro?'
+              }
+              submit={page.plan === 'pro' ? 'Move to Free' : 'Make Pro'}
+              onSubmit={(reason) => changePlan(page, reason)}
+            />
+          )}
         </Card>
       )}
       {page?.images && can(access, 'pages.suspend') && (
@@ -404,7 +418,7 @@ export default function OpsPagesPage() {
           }}
         />
       )}
-      {page?.handleChanges && (
+      {mayPlan && page?.handleChanges && (
         <HandleChanges
           key={`handle-changes-${page.profileId}`}
           page={page}

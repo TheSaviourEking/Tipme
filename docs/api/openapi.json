@@ -6765,13 +6765,12 @@
             }
           }
         },
-        "x-tipme-access": "staff-grant",
+        "x-tipme-access": "staff-any",
         "security": [
           {
             "session": []
           }
-        ],
-        "x-tipme-permission": "pages.plan"
+        ]
       }
     },
     "/v1/ops/pages/{handle}/handle-changes": {

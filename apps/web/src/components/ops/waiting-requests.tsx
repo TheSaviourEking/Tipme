@@ -3,8 +3,7 @@ import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { OpsApproval } from '@tipme/contracts';
 import { Notice, Skeleton } from '@tipme/ui';
-import { SERIOUS_ACTION_WORDS } from '@/lib/ops-answers';
-import { opsFetch } from '@/lib/ops-staff-api';
+import { actionWords, opsFetch } from '@/lib/ops-staff-api';
 
 /**
  * What is waiting for a second person, on the Overview and on People and Roles (which pass the one
@@ -59,9 +58,7 @@ export function WaitingRequests({
           <ul className="ops-list">
             {shown.slice(0, 5).map((row) => (
               <li key={row.id} className="ops-row">
-                <strong>
-                  {SERIOUS_ACTION_WORDS[row.action] ?? row.action}
-                </strong>
+                <strong>{actionWords(row.action)}</strong>
                 <span>{row.summary}</span>
                 <span className="tm-hint">
                   {row.mine

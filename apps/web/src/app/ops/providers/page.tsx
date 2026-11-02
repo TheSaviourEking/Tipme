@@ -16,7 +16,7 @@ import {
 } from '@/components/ops/action-outcome';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
-import { refusalWords } from '@/lib/ops-answers';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const TEST_STATUS: Record<string, string> = {
@@ -157,6 +157,7 @@ function ProviderCard({
                     onChange();
                     return null;
                   }
+                  if (outcomeIsUnknown(answer)) onChange();
                   return answer.code === 'PROVIDER_NOT_ALLOWED'
                     ? 'This provider can’t be made active in production.'
                     : refusalWords(answer);

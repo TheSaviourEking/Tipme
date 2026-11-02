@@ -143,7 +143,7 @@ export async function handleDomainEvent(
         : what;
     await deps.postStaffAlert({
       event: name,
-      action: typeof outcome === 'string' ? `${what}: ${outcome}` : about,
+      action: typeof outcome === 'string' ? `${about}: ${outcome}` : about,
       requestedBy: typeof requestedBy === 'string' ? requestedBy : 'unknown',
     });
   }

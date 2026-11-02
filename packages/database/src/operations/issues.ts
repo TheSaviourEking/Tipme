@@ -1,4 +1,8 @@
-import type { OpsIssue, OpsIssueOutcome } from '@tipme/contracts';
+import type {
+  OpsFreezeReleased,
+  OpsIssue,
+  OpsIssueOutcome,
+} from '@tipme/contracts';
 import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -876,11 +880,11 @@ export function resolveIssue(
     bankAndSignInChecked?: boolean;
     now?: Date;
   },
-): Promise<void> {
+): Promise<Partial<OpsFreezeReleased>> {
   if (!UUID.test(input.issueId))
     return Promise.reject(new OperationError('ISSUE_NOT_FOUND'));
   return guarded(() =>
-    db.transaction(async (tx) => {
+    db.transaction(async (tx): Promise<Partial<OpsFreezeReleased>> => {
       const [current] = await tx
         .select({
           kind: issues.kind,
@@ -936,16 +940,57 @@ export function resolveIssue(
         now: input.now ?? new Date(),
       });
       if (!resolved) throw new OperationError('ISSUE_RESOLVED');
+      if (!takeover) return {};
+      // Closing it doesn't lift a hold another open issue placed, and staff must not say it does.
+      const { profileId } = current.subject;
+      const [held] = profileId
+        ? await tx
+            .select({ id: withdrawalHolds.id })
+            .from(withdrawalHolds)
+            .where(
+              and(
+                eq(withdrawalHolds.profileId, profileId),
+                isNull(withdrawalHolds.releasedAt),
+              ),
+            )
+            .limit(1)
+        : [];
+      const stillOpen = held
+        ? await tx
+            .select({ id: issues.id, kind: issues.kind })
+            .from(issues)
+            .where(
+              and(
+                eq(issues.status, 'open'),
+                sql`${issues.kind} IN (${HOLD_KINDS_SQL})`,
+                sql`${issues.subject}->>'profileId' = ${profileId}`,
+              ),
+            )
+        : [];
+      const withdrawals: OpsFreezeReleased['withdrawals'] = held
+        ? 'still_held'
+        : 'released';
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'withdrawals.freeze_lifted',
+        permission: 'payouts.resolve',
+        subjectType: 'issue',
+        subjectId: input.issueId,
+        reason: withdrawals,
+        now: input.now,
+      });
       // One person can lift a freeze, so it is never quiet.
-      if (takeover)
-        await enqueueOutbox(tx, {
-          eventType: 'ops.freeze_released',
-          aggregateId: input.issueId,
-          payload: {
-            action: 'freeze_released',
-            requestedBy: input.staffUserId,
-          },
-        });
+      await enqueueOutbox(tx, {
+        eventType: 'ops.freeze_released',
+        aggregateId: input.issueId,
+        payload: {
+          action: 'freeze_released',
+          outcome: withdrawals,
+          targetId: input.issueId,
+          requestedBy: input.staffUserId,
+        },
+      });
+      return { withdrawals, stillOpen };
     }),
   );
 }

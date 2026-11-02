@@ -9,12 +9,12 @@ import {
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
 import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
-import { refusalWords } from '@/lib/ops-answers';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const STANDARD_BPS = 1000;
 
-const problem = (answer: { code: string; message?: string }) =>
+const problem = (answer: { status: number; code: string; message?: string }) =>
   answer.code === 'VALIDATION_FAILED'
     ? 'Check the values: a reason of at least 10 characters is needed.'
     : refusalWords(answer);
@@ -98,7 +98,13 @@ export function PagePricing({ profileId }: { profileId: string }) {
       method: 'POST',
       body,
     });
-    if (answer.kind === 'refused') return problem(answer);
+    if (answer.kind === 'refused') {
+      if (outcomeIsUnknown(answer)) {
+        const again = await opsFetch<OpsPagePricing>(`${base}/pricing`);
+        if (again.ok) setPricing(again.data);
+      }
+      return problem(answer);
+    }
     if (answer.kind === 'done') setPricing(answer.data);
     setOutcome(outcomeOf(answer, message));
     return null;

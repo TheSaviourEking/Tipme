@@ -1,8 +1,12 @@
 'use client';
+import { SERIOUS_ACTION_WORDS, type SeriousAction } from '@tipme/contracts';
 import { answerOf, withFreshCode, type OpsAnswer } from '@/lib/ops-answers';
 import { apiFetch, type SessionResult } from '@/lib/session-client';
 
 type Init = Parameters<typeof apiFetch>[1];
+
+export const actionWords = (action: string) =>
+  SERIOUS_ACTION_WORDS[action as SeriousAction] ?? action;
 
 let askForCode: (() => Promise<boolean>) | null = null;
 

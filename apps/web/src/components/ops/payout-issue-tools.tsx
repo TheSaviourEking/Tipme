@@ -7,6 +7,7 @@ import type {
 import { Button, Notice, TextareaField } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import {
+  ActionOutcome,
   outcomeOf,
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
@@ -49,13 +50,15 @@ const REFUSED = {
 } as const;
 
 // A failed call may still have done its work, so only asking again can say. These few did nothing.
-const failed = (answer: { code: string; message?: string }) =>
+const failed = (answer: { status: number; code: string; message?: string }) =>
   [
     'FORBIDDEN',
     'RATE_LIMITED',
     'PAYOUT_CHANGED',
     'ISSUE_RESOLVED',
     'FRESH_CODE_REQUIRED',
+    'APPROVAL_ALREADY_PENDING',
+    'APPROVAL_SUBJECT',
   ].includes(answer.code)
     ? refusalWords(answer)
     : 'We got no clear answer. Ask the provider again to see what happened.';
@@ -71,6 +74,7 @@ export function PayoutIssueTools({
   const [view, setView] = useState<OpsPayoutIssueView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [waiting, setWaiting] = useState<ActionOutcomeState | null>(null);
   const base = `/v1/ops/issues/${issueId}`;
 
   const ask = async () => {
@@ -96,7 +100,9 @@ export function PayoutIssueTools({
     });
     if (answer.kind === 'refused') return failed(answer);
     if (answer.kind === 'waiting') {
-      onChanged(outcomeOf(answer, ''));
+      // Said here, beside what was pressed. The offers are closed: asking again reads afresh.
+      setWaiting(outcomeOf(answer, ''));
+      setView(null);
       return null;
     }
     setView(answer.data.view);
@@ -130,6 +136,7 @@ export function PayoutIssueTools({
           {error}
         </Notice>
       )}
+      {waiting && <ActionOutcome outcome={waiting} />}
       {view && <Answer view={view} act={act} />}
     </>
   );

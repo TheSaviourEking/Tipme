@@ -3,8 +3,8 @@ import { useEffect, useId, useState } from 'react';
 import type { OpsStaffActivity } from '@tipme/contracts';
 import { Notice, Skeleton } from '@tipme/ui';
 import { when } from '@/lib/ops-client';
-import { SERIOUS_ACTION_WORDS, STAFF_ACTIVITY_WORDS } from '@/lib/ops-answers';
-import { opsFetch } from '@/lib/ops-staff-api';
+import { STAFF_ACTIVITY_WORDS } from '@/lib/ops-answers';
+import { actionWords, opsFetch } from '@/lib/ops-staff-api';
 
 /** Spec 6.4 on the Overview: who changed what among staff, and anything done alone. */
 export function StaffActivity() {
@@ -36,7 +36,7 @@ export function StaffActivity() {
               {row.seriousAction && (
                 <>
                   {': '}
-                  {SERIOUS_ACTION_WORDS[row.seriousAction] ?? row.seriousAction}
+                  {actionWords(row.seriousAction)}
                 </>
               )}{' '}
               <span className="tm-hint">

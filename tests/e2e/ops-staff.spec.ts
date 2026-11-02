@@ -25,11 +25,14 @@ const waiting = (page: Page) =>
   page.getByText('Waiting for a second person', { exact: true });
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Admin' });
 
+const feeForm = (page: Page) =>
+  page.locator('form').filter({ has: page.getByLabel('New TipMe fee (%)') });
+
 /** Fills the fee form on the Pages screen for this handle; nothing has happened until approved. */
 async function askForFee(page: Page, handle: string, percent = '7') {
   await page.goto(`/ops/pages?handle=${handle}`);
   await page.getByLabel('New TipMe fee (%)').fill(percent);
-  await page.getByLabel('Reason').first().fill(REASON);
+  await feeForm(page).getByLabel('Reason').fill(REASON);
   await page.getByRole('button', { name: 'Set this page’s fee' }).click();
 }
 
@@ -601,4 +604,318 @@ test('the screens fit 320px and work by keyboard', async ({
   await expect(prompt).toHaveCount(0);
   await expect(page.getByText('The role is created')).toBeVisible();
   await other.context.close();
+});
+
+/** A real issue, dressed by the browser as a stuck withdrawal whose provider read offers `offers`. */
+async function stuckWithdrawalScreen(
+  page: Page,
+  issueId: string,
+  offers: Record<string, unknown>,
+) {
+  const payoutId = randomUUID();
+  await page.route(`**/v1/ops/issues/${issueId}`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.data.issue.kind = 'payout_unresolved';
+    body.data.issue.subject = { payoutId };
+    await route.fulfill({ response, json: body });
+  });
+  await page.route(`**/v1/ops/issues/${issueId}/payout-read`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          issueId,
+          issueStatus: 'open',
+          payoutStatus: 'PROCESSING',
+          startStep: 'payout',
+          startAttemptedAt: null,
+          holdActive: false,
+          takeoverReported: false,
+          parkedEvent: false,
+          openConflict: false,
+          destinationReplaced: false,
+          holdTouched: false,
+          read: {
+            state: 'absent',
+            referenceTail: null,
+            differing: [],
+            failureReason: null,
+          },
+          offers: {
+            applyReported: null,
+            resume: false,
+            markFailed: false,
+            ...offers,
+          },
+        },
+      },
+    }),
+  );
+}
+
+test('payout-apply and mark-failed: a 202 reads as waiting beside the button, and the form closes', async ({
+  page,
+  browser,
+  request,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  await enrolOwner(page, testInfo);
+  const issueId = await mismatchedTip(request, handle);
+  await stuckWithdrawalScreen(page, issueId, {
+    applyReported: 'paid',
+    markFailed: true,
+  });
+  const wait = { status: 202, json: { data: { requestId: randomUUID() } } };
+  await page.route('**/payout-apply', (route) => route.fulfill(wait));
+  await page.route('**/payout-mark-failed', (route) => route.fulfill(wait));
+  await page.goto(`/ops/issues/${issueId}`);
+  const tools = page.getByRole('region', { name: 'Act on this withdrawal' });
+
+  await tools.getByRole('button', { name: 'Ask the provider' }).click();
+  await tools.getByRole('button', { name: 'Record it as paid…' }).click();
+  await tools.getByLabel('Why record this now?').fill(REASON);
+  await tools.getByRole('button', { name: 'Record as paid' }).click();
+  await expect(tools.getByText('Waiting for a second person')).toBeVisible();
+  await expect(tools.getByText(/was recorded through/)).toHaveCount(0);
+  await expect(
+    tools.getByRole('button', { name: 'Record as paid' }),
+  ).toHaveCount(0);
+
+  await tools.getByRole('button', { name: 'Ask the provider' }).click();
+  await tools.getByLabel('What did you find at the provider?').fill(REASON);
+  await tools
+    .getByLabel(
+      'I checked the provider’s dashboard, and this payout is not there.',
+    )
+    .check();
+  await tools.getByRole('button', { name: 'Mark failed and release' }).click();
+  await expect(tools.getByText('Waiting for a second person')).toBeVisible();
+  await expect(
+    tools.getByLabel('What did you find at the provider?'),
+  ).toHaveCount(0);
+  await expect(tools.getByText(/is marked failed/)).toHaveCount(0);
+  await expectAccessible(page);
+
+  // A lone admin whose own request waits is told the way out, not to ask the provider again.
+  await page.unroute('**/payout-apply');
+  await page.route('**/payout-apply', (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: { code: 'APPROVAL_ALREADY_PENDING', message: 'x' } },
+    }),
+  );
+  await tools.getByRole('button', { name: 'Ask the provider' }).click();
+  await tools.getByRole('button', { name: 'Record it as paid…' }).click();
+  await tools.getByLabel('Why record this now?').fill(REASON);
+  await tools.getByRole('button', { name: 'Record as paid' }).click();
+  await expect(tools.getByText(/Cancel it in Approvals/)).toBeVisible();
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
+test('a real role change and a real role edit wait, and neither shows as done', async ({
+  page,
+  browser,
+}, testInfo) => {
+  await enrolOwner(page, testInfo);
+  const other = await secondOwner(browser, testInfo);
+  const name = `Wait ${randomUUID().slice(0, 6)}`;
+  const [role] = await sql<{ id: string }>(
+    `INSERT INTO roles (id, name, description) VALUES ($1, $2, '') RETURNING id`,
+    [`r-${randomUUID().slice(0, 8)}`, name],
+  );
+  await sql(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'search.view')`,
+    [role!.id],
+  );
+  const email = `moves.${randomUUID().slice(0, 8)}@example.com`;
+  const [user] = await sql<{ id: string }>(
+    `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
+    [email],
+  );
+  await sql(
+    `INSERT INTO staff (user_id, role_id, granted_at, enrolled_at) VALUES ($1, $2, now(), now())`,
+    [user!.id, role!.id],
+  );
+
+  await page.goto('/ops/staff/people');
+  const person = page.getByRole('article').filter({ hasText: email });
+  await person.getByRole('button', { name: 'Change role…' }).click();
+  await person.getByLabel('New role').selectOption('owner');
+  await person.getByLabel('Why change their role?').fill(REASON);
+  await person.getByRole('button', { name: 'Change role' }).click();
+  await expect(person.getByText('Waiting for a second person')).toBeVisible();
+  await expect(person.getByText(name, { exact: true })).toBeVisible();
+  await expect(person.getByText('Their role is changed')).toHaveCount(0);
+
+  await page.goto('/ops/staff/roles');
+  const card = page.getByRole('article').filter({ hasText: name });
+  await card.getByRole('button', { name: 'Edit…' }).click();
+  await card.getByRole('checkbox', { name: /^search\.view/ }).uncheck();
+  await card.getByRole('checkbox', { name: /^audit\.view/ }).check();
+  await card.getByRole('button', { name: 'Review who is affected' }).click();
+  await card.getByLabel('Why change this role?').fill(REASON);
+  await card.getByRole('button', { name: 'Save role' }).click();
+  await expect(card.getByText('Waiting for a second person')).toBeVisible();
+  await expect(card.getByText('The role is saved')).toHaveCount(0);
+
+  await other.page.goto('/ops/approvals');
+  const asked = other.page
+    .getByRole('article')
+    .filter({ hasText: `to the role ${name}` });
+  await expect(asked.getByText(/Add audit\.view/)).toBeVisible();
+  await expect(asked.getByText(/remove search\.view/)).toBeVisible();
+  await sql(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
+    user!.id,
+  ]);
+  await other.context.close();
+});
+
+test('a mail switch that waits reads as waiting (stubbed), and the active provider stays', async ({
+  page,
+}, testInfo) => {
+  await enrolOwner(page, testInfo);
+  await page.route('**/v1/ops/providers/mail', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.data.providers = body.data.providers.map(
+      (card: Record<string, unknown>, index: number) => ({
+        ...card,
+        active: index !== 0,
+        canActivate: index === 0,
+      }),
+    );
+    await route.fulfill({ response, json: body });
+  });
+  await page.route('**/v1/ops/providers/mail/active', (route) =>
+    route.fulfill({ status: 202, json: { data: { requestId: randomUUID() } } }),
+  );
+  await page.goto('/ops/providers');
+  await page.getByRole('button', { name: 'Make active' }).first().click();
+  await page.getByLabel('Why are you switching?').fill(REASON);
+  await page.getByRole('button', { name: 'Switch provider' }).click();
+  await expect(page.getByText('Waiting for a second person')).toBeVisible();
+  await expect(page.getByText(/is now the active provider/)).toHaveCount(0);
+  // The re-read after a switch may still be in flight through the stub.
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
+test('a lost answer says the result is unknown and re-reads; roles unknown blocks saving access', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  await enrolOwner(page, testInfo);
+  await page.goto(`/ops/pages?handle=${handle}`);
+  await page.getByRole('button', { name: 'Freeze withdrawals…' }).click();
+  await page.getByLabel('Who reported it, and what did they say?').fill(REASON);
+  await page.getByRole('button', { name: 'Freeze withdrawals' }).click();
+  await page.getByRole('link', { name: 'the issue' }).click();
+  await page.waitForURL(/\/ops\/issues\//);
+  await page.route('**/v1/ops/issues/*/resolve', (route) =>
+    route.fulfill({ status: 500, json: { error: { code: 'INTERNAL_ERROR' } } }),
+  );
+  let reads = 0;
+  page.on('request', (r) => {
+    if (r.method() === 'GET' && /\/v1\/ops\/issues\/[^/]+$/.test(r.url()))
+      reads += 1;
+  });
+  await page.getByRole('button', { name: 'Resolve…' }).click();
+  await page.getByLabel('How was it settled?').selectOption('account_secured');
+  await page
+    .getByLabel(
+      'I checked the current bank and the sign-in with the real owner.',
+    )
+    .check();
+  await page.getByLabel('How was it resolved?').fill(REASON);
+  await page.getByRole('button', { name: 'Resolve issue' }).click();
+  await expect(
+    page.getByText(/can’t say whether it went through/),
+  ).toBeVisible();
+  await expect(page.getByText(/nothing changed/i)).toHaveCount(0);
+  await expect.poll(() => reads).toBeGreaterThan(0);
+
+  await page.route('**/v1/ops/staff/roles', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          status: 500,
+          json: { error: { code: 'INTERNAL_ERROR' } },
+        })
+      : route.fallback(),
+  );
+  await page.goto('/ops/staff/people');
+  await expect(page.getByRole('article').first()).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Adjust access…' }),
+  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Change role…' })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText(/Couldn’t read the roles/).first()).toBeVisible();
+});
+
+test('the screens that gained an outcome fit 320px; focus lands on the outcome', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  await enrolOwner(page, testInfo);
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto(`/ops/pages?handle=${handle}`);
+  await page.getByLabel('New TipMe fee (%)').fill('7');
+  await feeForm(page).getByLabel('Reason').fill(REASON);
+  await page.getByRole('button', { name: 'Set this page’s fee' }).click();
+  const outcome = page.getByTestId('action-outcome');
+  await expect(outcome).toBeFocused();
+  expect(await fitsViewport(page)).toBe(true);
+  await page.goto('/ops/providers');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+  await page.goto(`/ops/pages?handle=${handle}`);
+  await page.getByRole('button', { name: 'Freeze withdrawals…' }).click();
+  await page.getByLabel('Who reported it, and what did they say?').fill(REASON);
+  await page.getByRole('button', { name: 'Freeze withdrawals' }).click();
+  await page.getByRole('link', { name: 'the issue' }).click();
+  await page.waitForURL(/\/ops\/issues\//);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+});
+
+test('a finance role with fees.manage only can find a page and change its fee', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  const person = await enrolOwner(page, testInfo);
+  const [role] = await sql<{ id: string }>(
+    `INSERT INTO roles (id, name, description) VALUES ($1, $1, '') RETURNING id`,
+    [`r-${randomUUID().slice(0, 8)}`],
+  );
+  await sql(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'fees.manage')`,
+    [role!.id],
+  );
+  await sql(
+    `UPDATE staff SET role_id = $2 WHERE user_id = (SELECT id FROM users WHERE lower(email) = lower($1))`,
+    [person.email, role!.id],
+  );
+  await page.goto('/ops');
+  await nav(page).getByRole('link', { name: 'Pages' }).click();
+  await page.getByLabel('Handle').fill(handle);
+  await page.getByRole('button', { name: 'Find page' }).click();
+  await expect(page.getByLabel('New TipMe fee (%)')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Make Pro…' })).toHaveCount(0);
 });

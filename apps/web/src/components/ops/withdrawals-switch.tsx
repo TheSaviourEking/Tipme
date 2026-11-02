@@ -4,7 +4,7 @@ import type { OpsWithdrawalsSwitch } from '@tipme/contracts';
 import { Notice, Skeleton } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { when } from '@/lib/ops-client';
-import { refusalWords } from '@/lib/ops-answers';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsFetch } from '@/lib/ops-staff-api';
 
 const PATH = '/v1/ops/withdrawals-switch';
@@ -36,6 +36,7 @@ export function WithdrawalsSwitch() {
     if (!result.ok) {
       // A lost answer may still have worked: what the line above says must be read, not assumed.
       if (result.code !== 'FRESH_CODE_REQUIRED') await read();
+      if (outcomeIsUnknown(result)) return refusalWords(result);
       return paused
         ? `Not switched off. ${refusalWords(result)}`
         : `Not switched on. ${refusalWords(result)}`;

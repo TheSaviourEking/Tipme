@@ -384,6 +384,7 @@ for (const [name, setup] of Object.entries(routes)) {
 // cost is one person lifting it, so the log and the alert must both be there.
 test('releasing a freeze is one person with a fresh code, audited and alerted, with a second person available', async () => {
   const { id } = await profile();
+  await q(`DELETE FROM withdrawal_holds WHERE profile_id = $1`, [id]);
   const frozen = await call(
     stack.api,
     'POST',
@@ -410,7 +411,11 @@ test('releasing a freeze is one person with a fresh code, audited and alerted, w
 
   const released = await release();
   assert.equal(released.status, 200, await released.clone().text());
-  assert.deepEqual((await released.json()).data, { resolved: true });
+  assert.deepEqual((await released.json()).data, {
+    resolved: true,
+    withdrawals: 'released',
+    stillOpen: [],
+  });
   assert.equal(await issueOutcome(issueId), 'account_secured');
   assert.equal(
     (
@@ -785,4 +790,218 @@ test('the withdrawals switch can be read without analytics or a code', async () 
   await q(`UPDATE ops_sessions SET last_totp_at = now()`);
   assert.equal(read.status, 200);
   assert.equal(typeof (await read.json()).data.paused, 'boolean');
+});
+
+test('I1: a role edit tells the approver what it adds and what it takes away', async () => {
+  const roleId = await roleWith(['search.view', 'audit.view']);
+  const asked = await call(
+    stack.api,
+    'PATCH',
+    `/v1/ops/staff/roles/${roleId}`,
+    first.cookie,
+    { permissions: ['search.view', 'payouts.resolve'], reason: REASON },
+  );
+  assert.equal(asked.status, 202);
+  const list = await call(
+    stack.api,
+    'GET',
+    '/v1/ops/approvals?status=pending',
+    second.cookie,
+  );
+  const row = (await list.json()).data.find(
+    (each) => each.action === 'role.add_sensitive',
+  );
+  assert.match(row.summary, /Add payouts\.resolve/);
+  assert.match(row.summary, /remove audit\.view/);
+});
+
+test('I2: anyone holding what the Pages screen offers can look a page up; nobody else can', async () => {
+  const { handle } = (
+    await q(`SELECT handle FROM profiles WHERE id = $1`, [(await profile()).id])
+  )[0];
+  const original = await roleOf(secondId);
+  try {
+    for (const [permission, status] of [
+      ['pages.plan', 200],
+      ['fees.manage', 200],
+      ['payouts.resolve', 200],
+      ['recoveries.manage', 200],
+      ['search.view', 403],
+    ]) {
+      await q(`UPDATE staff SET role_id = $2 WHERE user_id = $1`, [
+        secondId,
+        await roleWith([permission]),
+      ]);
+      const read = await call(
+        stack.api,
+        'GET',
+        `/v1/ops/pages/${handle}`,
+        second.cookie,
+      );
+      assert.equal(read.status, status, permission);
+    }
+  } finally {
+    await q(`UPDATE staff SET role_id = $2 WHERE user_id = $1`, [
+      secondId,
+      original,
+    ]);
+  }
+});
+
+test('I3, I5: a release with another hold open says still held, and its alert and activity say so too', async () => {
+  const { id } = await profile();
+  await q(`DELETE FROM withdrawal_holds WHERE profile_id = $1`, [id]);
+  const frozen = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/pages/${id}/withdrawal-freeze`,
+    first.cookie,
+    { reason: REASON },
+  );
+  const { issueId } = (await frozen.json()).data;
+  const [{ id: other }] = await q(
+    `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
+     VALUES (gen_random_uuid(), $1, 'payment_reversed', 'money', $2, 'x', now()) RETURNING id`,
+    [`test.${randomUUID()}`, { profileId: id }],
+  );
+  await q(
+    `INSERT INTO withdrawal_holds (id, profile_id, reason, issue_id) VALUES (gen_random_uuid(), $1, 'reversal', $2)`,
+    [id, other],
+  );
+  const released = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/issues/${issueId}/resolve`,
+    first.cookie,
+    {
+      reason: REASON,
+      outcome: 'account_secured',
+      bankAndSignInChecked: true,
+    },
+  );
+  const closed = (await released.json()).data;
+  assert.equal(closed.withdrawals, 'still_held');
+  assert.ok(
+    closed.stillOpen.some(
+      (row) => row.id === other && row.kind === 'payment_reversed',
+    ),
+  );
+  const [{ payload }] = await q(
+    `SELECT payload FROM outbox_events WHERE event_type = 'ops.freeze_released' AND aggregate_id = $1`,
+    [issueId],
+  );
+  assert.equal(payload.outcome, 'still_held');
+  assert.equal(payload.targetId, issueId);
+
+  // Owners hear by mail, as the webhook may not be set.
+  await q(
+    `UPDATE users SET email = $2, email_verified_at = now() WHERE id = $1`,
+    [firstId, `owner.${randomUUID().slice(0, 8)}@example.com`],
+  );
+  await ops.mailForDomainEvent(
+    database.db,
+    ops.mailSealing(Buffer.alloc(32, 8)),
+    'ops.freeze_released',
+    payload,
+    `test.${issueId}`,
+  );
+  assert.ok(
+    (
+      await q(
+        `SELECT 1 FROM mail_messages WHERE type = 'staff_freeze_released' AND dedupe_key LIKE $1`,
+        [`staff_freeze_released.test.${issueId}.%`],
+      )
+    ).length > 0,
+  );
+  const feed = await call(
+    stack.api,
+    'GET',
+    '/v1/ops/staff-activity',
+    first.cookie,
+  );
+  assert.ok(
+    (await feed.json()).data.some(
+      (row) => row.action === 'withdrawals.freeze_lifted',
+    ),
+  );
+});
+
+test('I4: staff can’t release a freeze on their own page when someone else could; alone they can, and it says so', async () => {
+  const [{ id }] = await q(`SELECT id FROM profiles ORDER BY id LIMIT 1`);
+  const [{ user_id: owner }] = await q(
+    `SELECT user_id FROM profiles WHERE id = $1`,
+    [id],
+  );
+  await q(`UPDATE profiles SET user_id = $2 WHERE id = $1`, [id, firstId]);
+  await q(`DELETE FROM withdrawal_holds WHERE profile_id = $1`, [id]);
+  try {
+    const frozen = await call(
+      stack.api,
+      'POST',
+      `/v1/ops/pages/${id}/withdrawal-freeze`,
+      second.cookie,
+      { reason: REASON },
+    );
+    const { issueId } = (await frozen.json()).data;
+    const release = () =>
+      call(
+        stack.api,
+        'POST',
+        `/v1/ops/issues/${issueId}/resolve`,
+        first.cookie,
+        {
+          reason: REASON,
+          outcome: 'account_secured',
+          bankAndSignInChecked: true,
+        },
+      );
+    const refused = await release();
+    assert.equal(refused.status, 403);
+    assert.equal((await refused.json()).error.code, 'APPROVAL_SUBJECT');
+    assert.equal(await issueOutcome(issueId), null);
+
+    await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
+      secondId,
+    ]);
+    const alone = await release();
+    assert.equal(alone.status, 200, await alone.clone().text());
+    assert.equal((await alone.json()).data.actedAlone, true);
+    assert.equal(await issueOutcome(issueId), 'account_secured');
+    assert.ok(
+      (
+        await q(
+          `SELECT 1 FROM outbox_events WHERE event_type = 'ops.acted_alone' AND payload->>'action' = 'money_issue.close'`,
+        )
+      ).length > 0,
+    );
+  } finally {
+    await q(`UPDATE staff SET revoked_at = NULL WHERE user_id = $1`, [
+      secondId,
+    ]);
+    await q(`UPDATE profiles SET user_id = $2 WHERE id = $1`, [id, owner]);
+  }
+});
+
+test('M5: staff emails say the action in plain words, never its id', async () => {
+  const sealing = ops.mailSealing(Buffer.alloc(32, 8));
+  await q(
+    `UPDATE users SET email = $2, email_verified_at = now() WHERE id = $1`,
+    [firstId, `words.${randomUUID().slice(0, 8)}@example.com`],
+  );
+  const key = `test.${randomUUID()}`;
+  await ops.mailForDomainEvent(
+    database.db,
+    sealing,
+    'ops.acted_alone',
+    { action: 'money_issue.close', requestedBy: secondId },
+    key,
+  );
+  const [row] = await q(
+    `SELECT data_sealed FROM mail_messages WHERE dedupe_key LIKE $1 LIMIT 1`,
+    [`staff_acted_alone.${key}.%`],
+  );
+  assert.equal(
+    JSON.parse(ops.openSecret(sealing.key, row.data_sealed)).action,
+    'Close a money issue',
+  );
 });

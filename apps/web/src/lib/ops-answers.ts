@@ -68,19 +68,6 @@ export async function withFreshCode<R extends { ok: boolean; code?: string }>(
   return (await ask()) ? send() : first;
 }
 
-export const SERIOUS_ACTION_WORDS: Record<string, string> = {
-  'email_recovery.start': 'Move an account to a new email address',
-  'payout.settle': 'Settle a stuck withdrawal',
-  'money_issue.close': 'Close a money issue',
-  'fee.change': 'Change a page’s fee',
-  'fee.free': 'Give a page fee-free tips',
-  'staff.grant_owner': 'Make someone an owner',
-  'staff.grant_sensitive': 'Give someone sensitive access',
-  'role.add_sensitive': 'Add sensitive access to a role',
-  'staff.reset_authenticator': 'Reset someone’s authenticator',
-  'mail_provider.switch': 'Switch the active email provider',
-};
-
 export const STALE_WORDS: Record<string, string> = {
   requester_lost_access:
     'It did not run: the person who asked no longer holds the permission.',
@@ -122,6 +109,7 @@ export const STAFF_ACTIVITY_WORDS: Record<string, string> = {
   'serious_action.rejected': 'Rejected a serious action',
   'serious_action.stale': 'A serious action stopped without running',
   'withdrawals.released': 'Withdrawals resumed for a recipient',
+  'withdrawals.freeze_lifted': 'Closed a reported takeover',
 };
 
 const REFUSALS: Record<string, string> = {
@@ -134,27 +122,44 @@ const REFUSALS: Record<string, string> = {
   ISSUE_RESOLVED: 'This issue was already resolved. Nothing changed.',
   PAYOUT_CHANGED:
     'The withdrawal changed while you were deciding. Nothing was done; ask the provider again.',
-  DEPENDENCY_UNAVAILABLE:
-    'The provider can’t be reached just now. Nothing changed; try again in a minute.',
   STAFF_ADMIN_BUSY:
     'Another staff change is going through. Nothing changed; try again in a moment.',
   APPROVAL_ALREADY_PENDING:
     'Your earlier request for this is still waiting. Cancel it in Approvals to do this yourself.',
   APPROVAL_SUBJECT:
     'That address is a staff mailbox, or this concerns you. Nothing changed.',
-  NETWORK:
-    'We got no answer, so we can’t say whether it went through. Check the screen before trying again.',
 };
 
-/** What to tell staff: our words where the stakes need them, otherwise the server's fixed message. */
+const UNKNOWN =
+  'We can’t say whether it went through. Reload and check before trying again.';
+const NO_ANSWER = `We got no answer. ${UNKNOWN}`;
+
+/** The answer doesn't say what happened: it may have committed with the reply lost. */
+export function outcomeIsUnknown(answer: {
+  status: number;
+  code: string;
+}): boolean {
+  return (
+    answer.status === 0 ||
+    (answer.status >= 500 && answer.code !== 'STAFF_ADMIN_BUSY')
+  );
+}
+
+/**
+ * What to tell staff. "Nothing changed" only where the server's refusal means that: a 5xx or an
+ * answer we don't know could mean it happened.
+ */
 export function refusalWords(answer: {
+  status: number;
   code: string;
   message?: string;
 }): string {
+  if (answer.status === 0) return NO_ANSWER;
+  if (outcomeIsUnknown(answer)) return UNKNOWN;
   return (
     REFUSALS[answer.code] ??
     answer.message ??
-    'That didn’t work. Nothing changed; please try again.'
+    `That was refused, and we don’t have words for why. ${UNKNOWN}`
   );
 }
 
@@ -164,17 +169,13 @@ export function approveRefusal(answer: {
   code: string;
   reason?: string;
   message?: string;
-}): { stillWaiting: boolean; text: string } {
+}): { stillWaiting: boolean; unknown?: boolean; text: string } {
   switch (answer.code) {
     case 'DEPENDENCY_UNAVAILABLE':
     case 'STAFF_ADMIN_BUSY':
-    case 'NETWORK':
       return {
         stillWaiting: true,
-        text:
-          answer.code === 'NETWORK'
-            ? 'We got no answer. It’s probably still waiting; look at the list below, then try again.'
-            : 'The provider or the system can’t answer just now, so nothing ran. It’s still waiting; try again in a minute.',
+        text: 'The provider or the system can’t answer just now, so nothing ran. It’s still waiting; try again in a minute.',
       };
     case 'CODE_INVALID':
       return {
@@ -226,7 +227,13 @@ export function approveRefusal(answer: {
         text: 'Someone has already decided this. See the history below.',
       };
     default:
-      return { stillWaiting: true, text: refusalWords(answer) };
+      return outcomeIsUnknown(answer)
+        ? {
+            stillWaiting: false,
+            unknown: true,
+            text: 'We can’t say whether it ran. The list below has been read again: check it before trying again.',
+          }
+        : { stillWaiting: true, text: refusalWords(answer) };
   }
 }
 

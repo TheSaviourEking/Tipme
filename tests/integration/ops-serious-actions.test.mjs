@@ -399,7 +399,7 @@ test('exactly the pinned routes let any staff through, and none also names a per
     }
   }
   assert.deepEqual([...found].sort(), Object.keys(pinned).sort());
-  assert.equal(found.size, 4);
+  assert.equal(found.size, 5);
 });
 
 const staleCode = (phone) =>

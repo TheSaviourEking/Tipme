@@ -26,7 +26,11 @@ import { PermissionPicker } from '@/components/ops/permission-picker';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { WaitingRequests } from '@/components/ops/waiting-requests';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
-import { accessAdjustments, refusalWords } from '@/lib/ops-answers';
+import {
+  accessAdjustments,
+  outcomeIsUnknown,
+  refusalWords,
+} from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const sensitiveIn = (permissions: readonly string[]) =>
@@ -39,6 +43,26 @@ const inviteWords = (
   delivery === 'suppressed'
     ? 'That address is known not to accept mail, so the link won’t arrive. Fix it with their provider, then resend.'
     : `The link is on its way and works until ${when(expiresAt)}.`;
+
+/** Done, but a link that won't arrive is not a success to tick. */
+const sentOutcome = (
+  answer: { kind: 'done'; actedAlone: boolean },
+  link: { delivery: 'queued' | 'suppressed'; enrolmentExpiresAt: string },
+  lead: string,
+  title?: string,
+): ActionOutcomeState => {
+  const suppressed = link.delivery === 'suppressed';
+  return {
+    kind: 'done',
+    actedAlone: answer.actedAlone,
+    text: `${lead}${inviteWords(link.delivery, link.enrolmentExpiresAt)}`,
+    ...(suppressed
+      ? { warning: true, title: 'The link won’t arrive' }
+      : title
+        ? { title }
+        : {}),
+  };
+};
 
 function AddPerson({
   roles,
@@ -74,13 +98,7 @@ function AddPerson({
     }
     onOutcome(
       answer.kind === 'done'
-        ? ({
-            ...outcomeOf(
-              answer,
-              inviteWords(answer.data.delivery, answer.data.enrolmentExpiresAt),
-            ),
-            title: 'Invitation sent',
-          } as ActionOutcomeState)
+        ? sentOutcome(answer, answer.data, '', 'Invitation sent')
         : outcomeOf(answer, ''),
     );
     setOpen(false);
@@ -156,10 +174,12 @@ function ChangeRole({
   person,
   roles,
   onOutcome,
+  onUnknown,
 }: {
   person: OpsStaffPerson;
   roles: OpsRole[];
   onOutcome: (outcome: ActionOutcomeState) => void;
+  onUnknown: () => void;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -178,7 +198,10 @@ function ChangeRole({
       { method: 'PUT', body: { roleId, reason: reason.trim() } },
     );
     setBusy(false);
-    if (answer.kind === 'refused') return setError(refusalWords(answer));
+    if (answer.kind === 'refused') {
+      if (outcomeIsUnknown(answer)) onUnknown();
+      return setError(refusalWords(answer));
+    }
     onOutcome(outcomeOf(answer, 'Their role is changed.'));
     setOpen(false);
   };
@@ -218,7 +241,11 @@ function ChangeRole({
         id={`${id}-reason`}
         name="reason"
         label="Why change their role?"
-        hint="Their personal adjustments stay. Recorded in the audit log."
+        hint={
+          roleId === 'owner'
+            ? 'An owner holds everything, so their personal adjustments are cleared. Recorded in the audit log.'
+            : 'Their personal adjustments stay. Recorded in the audit log.'
+        }
         minLength={10}
         maxLength={500}
         required
@@ -246,21 +273,22 @@ function ChangeRole({
 
 function AdjustAccess({
   person,
-  roles,
+  rolePermissions: fromRole,
   held,
   onOutcome,
+  onUnknown,
 }: {
   person: OpsStaffPerson;
-  roles: OpsRole[];
+  rolePermissions: string[];
   held: string[];
   onOutcome: (outcome: ActionOutcomeState) => void;
+  onUnknown: () => void;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const [ticked, setTicked] = useState(person.permissions);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const fromRole = roles.find((r) => r.id === person.roleId)?.permissions ?? [];
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const reason = String(
@@ -276,7 +304,10 @@ function AdjustAccess({
       },
     );
     setBusy(false);
-    if (answer.kind === 'refused') return setError(refusalWords(answer));
+    if (answer.kind === 'refused') {
+      if (outcomeIsUnknown(answer)) onUnknown();
+      return setError(refusalWords(answer));
+    }
     onOutcome(outcomeOf(answer, 'Their access is changed.'));
     setOpen(false);
   };
@@ -337,11 +368,13 @@ function Person({
   roles,
   held,
   onChanged,
+  onRemoved,
 }: {
   person: OpsStaffPerson;
-  roles: OpsRole[];
+  roles: OpsRole[] | null;
   held: string[];
   onChanged: () => void;
+  onRemoved: (text: string) => void;
 }) {
   const id = useId();
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
@@ -350,6 +383,11 @@ function Person({
     onChanged();
   };
   const name = person.email ?? 'No email on the account';
+  // Without the role's own list, ticks can't be turned into what differs from it.
+  const rolePermissions = roles?.find(
+    (r) => r.id === person.roleId,
+  )?.permissions;
+  const roleKnown = rolePermissions !== undefined;
   return (
     <article aria-labelledby={id} className="ops-row">
       <div className="ops-row__head">
@@ -375,13 +413,28 @@ function Person({
       )}
       {outcome && <ActionOutcome outcome={outcome} />}
       <div className="ops-actions">
-        <ChangeRole person={person} roles={roles} onOutcome={hear} />
-        <AdjustAccess
-          person={person}
-          roles={roles}
-          held={held}
-          onOutcome={hear}
-        />
+        {roleKnown ? (
+          <>
+            <ChangeRole
+              person={person}
+              roles={roles!}
+              onOutcome={hear}
+              onUnknown={onChanged}
+            />
+            <AdjustAccess
+              person={person}
+              rolePermissions={rolePermissions!}
+              held={held}
+              onOutcome={hear}
+              onUnknown={onChanged}
+            />
+          </>
+        ) : (
+          <p className="tm-hint">
+            Couldn’t read the roles, so role and access changes wait until they
+            load.
+          </p>
+        )}
         {person.enrolled ? (
           <ReasonAction
             open="Reset authenticator…"
@@ -396,9 +449,10 @@ function Person({
               if (answer.kind === 'refused') return refusalWords(answer);
               hear(
                 answer.kind === 'done'
-                  ? outcomeOf(
+                  ? sentOutcome(
                       answer,
-                      `Their authenticator is reset. ${inviteWords(answer.data.delivery, answer.data.enrolmentExpiresAt)}`,
+                      answer.data,
+                      'Their authenticator is reset. ',
                     )
                   : outcomeOf(answer, ''),
               );
@@ -416,14 +470,13 @@ function Person({
                 { method: 'POST', body: { reason } },
               );
               if (!result.ok) return refusalWords(result);
-              hear({
-                kind: 'done',
-                actedAlone: false,
-                text: inviteWords(
-                  result.data.delivery,
-                  result.data.enrolmentExpiresAt,
+              hear(
+                sentOutcome(
+                  { kind: 'done', actedAlone: false },
+                  result.data,
+                  '',
                 ),
-              });
+              );
               return null;
             }}
           />
@@ -438,8 +491,11 @@ function Person({
               `/v1/ops/staff/${person.userId}/remove`,
               { method: 'POST', body: { reason } },
             );
-            if (!result.ok) return refusalWords(result);
-            onChanged();
+            if (!result.ok) {
+              if (outcomeIsUnknown(result)) onChanged();
+              return refusalWords(result);
+            }
+            onRemoved(`${name} is off staff, and their admin sessions ended.`);
             return null;
           }}
         />
@@ -452,7 +508,7 @@ function Person({
 export default function PeoplePage() {
   const access = useOpsAccess();
   const [people, setPeople] = useState<OpsStaffPerson[] | null>(null);
-  const [roles, setRoles] = useState<OpsRole[]>([]);
+  const [roles, setRoles] = useState<OpsRole[] | null>(null);
   const [problem, setProblem] = useState('');
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -463,7 +519,7 @@ export default function PeoplePage() {
       opsFetch<OpsStaffPerson[]>('/v1/ops/staff'),
       opsFetch<OpsRole[]>('/v1/ops/staff/roles'),
     ]);
-    if (roleList.ok) setRoles(roleList.data);
+    setRoles(roleList.ok ? roleList.data : null);
     if (list.ok) {
       setPeople(list.data);
       setProblem('');
@@ -494,13 +550,15 @@ export default function PeoplePage() {
         permission="staff.manage"
         refresh={refresh}
       />
-      <AddPerson
-        roles={roles}
-        onOutcome={(next) => {
-          setOutcome(next);
-          void load();
-        }}
-      />
+      {roles && (
+        <AddPerson
+          roles={roles}
+          onOutcome={(next) => {
+            setOutcome(next);
+            void load();
+          }}
+        />
+      )}
       {problem && (
         <Notice tone="error" title="Couldn’t load the people">
           {problem}{' '}
@@ -519,6 +577,10 @@ export default function PeoplePage() {
               roles={roles}
               held={access.permissions}
               onChanged={() => void load()}
+              onRemoved={(text) => {
+                setOutcome({ kind: 'done', actedAlone: false, text });
+                void load();
+              }}
             />
           ))}
         </div>

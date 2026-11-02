@@ -26,6 +26,7 @@ import {
   type OpsRecheckOutcome,
   type OpsRecheckRequest,
   type OpsResolveIssueRequest,
+  type OpsFreezeReleased,
   type OpsSeriousPending,
 } from '@tipme/contracts';
 import {
@@ -42,6 +43,7 @@ import {
   recoverUnknownPaymentAccount,
   resolveIssue,
   setPageSuspension,
+  freezeReleaseBySubject,
   requestSeriousAction,
   type SeriousActionServices,
 } from '@tipme/database';
@@ -109,7 +111,11 @@ export class OpsActionsController {
     @Body(new ZodValidationPipe(opsResolveIssueSchema))
     body: OpsResolveIssueRequest,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<ApiDataResponse<{ resolved: true } | OpsSeriousPending>> {
+  ): Promise<
+    ApiDataResponse<
+      ({ resolved: true } & Partial<OpsFreezeReleased>) | OpsSeriousPending
+    >
+  > {
     // Closing a money issue can lift a hold, so it takes what acting on money takes.
     const issue = await issueById(this.database.db, uuidParam(id));
     if (issue?.severity === 'money' && !ops.permissions.has('payouts.resolve'))
@@ -118,12 +124,22 @@ export class OpsActionsController {
     // the written check, and it is audited and alerted. Nothing else about a takeover closes it.
     const releasesFreeze =
       issue?.kind === 'account_takeover_reported' &&
+      issue.status === 'open' &&
       body.outcome === 'account_secured';
+    // Not on your own page while someone else could; alone, it goes the alone way below and says so.
+    const bySubject = releasesFreeze
+      ? await freezeReleaseBySubject(this.database.db, {
+          issueId: uuidParam(id),
+          actorId: ops.userId,
+        })
+      : 'not_subject';
+    if (bySubject === 'refused')
+      throw new CodedHttpException(403, 'APPROVAL_SUBJECT');
     // Closing money by hand takes a second person, when there is one. Only this counts as asking.
     if (
       issue?.severity === 'money' &&
       issue.status === 'open' &&
-      !releasesFreeze
+      (!releasesFreeze || bySubject === 'alone')
     ) {
       await this.rateLimit.consumeForPerson('ops_request', ops.userId);
       const outcome = await requestSeriousAction(this.database.db, {
@@ -140,10 +156,13 @@ export class OpsActionsController {
         reason: body.reason,
         services: this.services,
       });
-      const answer = pendingOr<{ resolved: true }>(outcome, response);
+      const answer = pendingOr<{ resolved: true } & Partial<OpsFreezeReleased>>(
+        outcome,
+        response,
+      );
       return { data: 'pending' in answer ? answer.pending : answer.result };
     }
-    await resolveIssue(this.database.db, {
+    const closed = await resolveIssue(this.database.db, {
       issueId: uuidParam(id),
       staffUserId: ops.userId,
       reason: body.reason,
@@ -152,7 +171,7 @@ export class OpsActionsController {
         ? { bankAndSignInChecked: body.bankAndSignInChecked }
         : {}),
     });
-    return { data: { resolved: true } };
+    return { data: { resolved: true, ...closed } };
   }
 
   @Post('issues/:id/notes')

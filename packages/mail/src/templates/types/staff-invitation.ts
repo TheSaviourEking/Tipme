@@ -102,7 +102,7 @@ export const staffActedAlone = defineMailType({
       action: z.string().max(60),
     })
     .strict(),
-  sample: { personHint: 'a•••@example.com', action: 'fee.change' },
+  sample: { personHint: 'a•••@example.com', action: 'Change a page’s fee' },
   render: (data, ctx) =>
     letter(
       {
@@ -112,6 +112,40 @@ export const staffActedAlone = defineMailType({
           {
             kind: 'text',
             text: `${data.personHint} took a serious admin action (${data.action}) on their own, because nobody else was available to approve it. The admin audit log has their reason. If you didn’t expect this, check it now.`,
+          },
+        ],
+        reason: 'You get this email because you are a TipMe owner.',
+      },
+      ctx,
+    ),
+});
+
+/** To every owner: one person lifted a takeover freeze, which needs no second person (spec 6.5). */
+export const staffFreezeReleased = defineMailType({
+  id: 'staff_freeze_released',
+  category: 'security',
+  sender: 'security',
+  preference: null,
+  schema: z
+    .object({
+      personHint: z.string().max(260),
+      stillHeld: z.boolean(),
+    })
+    .strict(),
+  sample: { personHint: 'a•••@example.com', stillHeld: false },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'A TipMe withdrawal freeze was released',
+        heading: 'A withdrawal freeze was released',
+        blocks: [
+          {
+            kind: 'text',
+            text: `${data.personHint} closed a reported account takeover, which releases its freeze. ${
+              data.stillHeld
+                ? 'Another open issue still holds this recipient’s withdrawals.'
+                : 'This recipient can withdraw again.'
+            } The admin audit log has their reason. If you didn’t expect this, check it now.`,
           },
         ],
         reason: 'You get this email because you are a TipMe owner.',
@@ -132,7 +166,7 @@ export const staffApprovalPending = defineMailType({
       action: z.string().max(60),
     })
     .strict(),
-  sample: { personHint: 'a•••@example.com', action: 'fee.change' },
+  sample: { personHint: 'a•••@example.com', action: 'Change a page’s fee' },
   render: (data, ctx) =>
     letter(
       {
@@ -206,7 +240,7 @@ export const staffApprovalOutcome = defineMailType({
       outcome: z.enum(['approved', 'rejected', 'stale', 'expired']),
     })
     .strict(),
-  sample: { action: 'fee.change', outcome: 'approved' as const },
+  sample: { action: 'Change a page’s fee', outcome: 'approved' as const },
   render: (data, ctx) =>
     letter(
       {

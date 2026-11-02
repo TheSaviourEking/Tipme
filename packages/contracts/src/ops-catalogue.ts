@@ -188,12 +188,6 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'Fixed action names and masked staff addresses for the Overview; no reasons or private details.',
   },
-  'OpsPagesController.page': {
-    verb: 'GET',
-    permission: 'pages.plan',
-    reason:
-      'Finds a page by handle: public-level fields only, changes nothing.',
-  },
   'OpsPagesController.pricing': {
     verb: 'GET',
     permission: 'fees.manage',
@@ -218,6 +212,15 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
   },
 };
 
+/** Whoever holds one of these has a card on the Pages screen, so may find a page for it. */
+export const OPS_PAGE_LOOKUP_PERMISSIONS: readonly OpsPermission[] = [
+  'pages.plan',
+  'pages.suspend',
+  'fees.manage',
+  'payouts.resolve',
+  'recoveries.manage',
+];
+
 /**
  * Routes no one permission fits, where the operation authorises each person against each record.
  * Pinned, so a new one has to be argued for here.
@@ -226,6 +229,12 @@ export const OPS_ANY_STAFF_ROUTES: Record<
   string,
   { verb: 'GET' | 'POST'; freshCode: boolean; reason: string }
 > = {
+  'OpsPagesController.page': {
+    verb: 'GET',
+    freshCode: false,
+    reason:
+      'Finds a page for whoever acts on pages (OPS_PAGE_LOOKUP_PERMISSIONS): public-level fields only.',
+  },
   'OpsApprovalsController.list': {
     verb: 'GET',
     freshCode: false,
@@ -263,6 +272,20 @@ export const SERIOUS_ACTIONS = [
   'mail_provider.switch',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
+
+/** Plain words for each action, on the screens and in staff emails. */
+export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
+  'email_recovery.start': 'Move an account to a new email address',
+  'payout.settle': 'Settle a stuck withdrawal',
+  'money_issue.close': 'Close a money issue',
+  'fee.change': 'Change a page’s fee',
+  'fee.free': 'Give a page fee-free tips',
+  'staff.grant_owner': 'Make someone an owner',
+  'staff.grant_sensitive': 'Give someone sensitive access',
+  'role.add_sensitive': 'Add sensitive access to a role',
+  'staff.reset_authenticator': 'Reset someone’s authenticator',
+  'mail_provider.switch': 'Switch the active email provider',
+};
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
 export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =

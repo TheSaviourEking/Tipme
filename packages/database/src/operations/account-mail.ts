@@ -1,3 +1,4 @@
+import { SERIOUS_ACTION_WORDS, type SeriousAction } from '@tipme/contracts';
 import { eq, and, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   approvalRequests,
@@ -87,6 +88,36 @@ const verifiedOwners = (db: Database) =>
  * without it, and each dedupe key makes a repeated delivery a no-op.
  */
 /** Every owner hears, the person who acted included: it may not have been them at the keyboard. */
+const actionWords = (action: string) =>
+  SERIOUS_ACTION_WORDS[action as SeriousAction] ?? action;
+
+/** Every owner hears: the webhook may not be set, and one person lifted a freeze. */
+async function mailOwnersFreezeReleased(
+  db: Database,
+  sealing: MailSealing,
+  payload: Record<string, unknown>,
+  dedupeKey?: string,
+): Promise<void> {
+  const actorId = idOf(payload['requestedBy']);
+  if (!actorId || !dedupeKey) return;
+  const [actor] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, actorId));
+  for (const owner of await verifiedOwners(db))
+    if (owner.email)
+      await enqueueMail(db, sealing, {
+        type: 'staff_freeze_released',
+        to: owner.email,
+        userId: owner.userId,
+        data: {
+          personHint: actor?.email ? maskEmail(actor.email) : 'A staff member',
+          stillHeld: payload['outcome'] === 'still_held',
+        },
+        dedupeKey: `staff_freeze_released.${dedupeKey}.${owner.userId}`,
+      });
+}
+
 async function mailOwnersActedAlone(
   db: Database,
   sealing: MailSealing,
@@ -108,7 +139,7 @@ async function mailOwnersActedAlone(
         userId: owner.userId,
         data: {
           personHint: actor?.email ? maskEmail(actor.email) : 'A staff member',
-          action,
+          action: actionWords(action),
         },
         // A retried event sends nothing twice; each action is its own event.
         dedupeKey: `staff_acted_alone.${dedupeKey}.${owner.userId}`,
@@ -164,7 +195,7 @@ async function mailApprovalPending(
         userId: recipient.userId,
         data: {
           personHint: asker?.email ? maskEmail(asker.email) : 'A staff member',
-          action: request.action,
+          action: actionWords(request.action),
         },
         dedupeKey: `staff_approval_pending.${dedupeKey}.${recipient.userId}`,
       });
@@ -217,6 +248,10 @@ export function mailForDomainEvent(
       await mailOwnersActedAlone(db, sealing, payload, dedupeKey);
       return;
     }
+    if (name === 'ops.freeze_released') {
+      await mailOwnersFreezeReleased(db, sealing, payload, dedupeKey);
+      return;
+    }
     if (name === 'ops.approval_pending') {
       await mailApprovalPending(db, sealing, payload, dedupeKey);
       return;
@@ -231,7 +266,7 @@ export function mailForDomainEvent(
       await mailOwner(db, sealing, {
         userId,
         type: 'staff_approval_outcome',
-        data: { action, outcome },
+        data: { action: actionWords(action), outcome },
         dedupeKey: `staff_approval_outcome.${dedupeKey}`,
       });
       return;

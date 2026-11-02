@@ -11,9 +11,11 @@ test('someone with nothing still gets Overview, Approvals and their own access',
 test('each entry needs what its page reads', () => {
   const cases = [
     ['issues.view', ['/ops/issues', '/ops/providers', '/ops/email']],
-    ['providers.manage', ['/ops/providers']],
     ['analytics.view', ['/ops/visibility', '/ops/market']],
     ['pages.plan', ['/ops/pages']],
+    ['fees.manage', ['/ops/pages']],
+    ['payouts.resolve', ['/ops/pages']],
+    ['recoveries.manage', ['/ops/pages']],
     ['search.view', ['/ops/search']],
     ['audit.view', ['/ops/audit']],
     ['staff.manage', ['/ops/staff/people', '/ops/staff/roles']],
@@ -31,6 +33,10 @@ test('a permission opens nothing else', () => {
     '/ops/staff',
   ]);
   assert.ok(!hrefs(['issues.view']).includes('/ops/staff/people'));
+});
+
+test('Providers reads under issues.view, so providers.manage alone is not offered it', () => {
+  assert.ok(!hrefs(['providers.manage']).includes('/ops/providers'));
 });
 
 test('labels are unique, so a screen reader can tell them apart', () => {

@@ -28,7 +28,11 @@ test('one admin alone does everything at once, sees that they acted alone, and i
 
   await page.goto(`/ops/pages?handle=${handle}`);
   await page.getByLabel('New TipMe fee (%)').fill('7');
-  await page.getByLabel('Reason').first().fill(REASON);
+  await page
+    .locator('form')
+    .filter({ has: page.getByLabel('New TipMe fee (%)') })
+    .getByLabel('Reason')
+    .fill(REASON);
   await page.getByRole('button', { name: 'Set this page’s fee' }).click();
   await expect(page.getByText('Done, without a second person')).toBeVisible();
   await expect(
@@ -156,4 +160,5 @@ test('a stale session can freeze and end sessions at once, and releasing asks fo
   await expect(
     page.getByText('The issue is resolved. Withdrawals are released.'),
   ).toBeVisible();
+  await expect(page.getByTestId('action-outcome')).toBeFocused();
 });

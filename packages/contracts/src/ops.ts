@@ -125,6 +125,12 @@ export interface OpsActedAlone {
   actedAlone?: true;
 }
 
+/** Closing a takeover: its freeze lifted, or another open issue still holds withdrawals. */
+export interface OpsFreezeReleased {
+  withdrawals: 'released' | 'still_held';
+  stillOpen: { id: string; kind: string }[];
+}
+
 export interface OpsApprovalApproved {
   status: 'approved';
 }
