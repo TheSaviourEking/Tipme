@@ -154,12 +154,18 @@ both(
 test.describe('the page in each payment state', () => {
   test.describe.configure({ mode: 'serial' });
   test.setTimeout(120_000);
-  const stacks = new Map<Mode, Stack>();
-  const at = async (mode: Mode, path: string, page: Page) => {
-    let stack = stacks.get(mode);
+  const stacks = new Map<string, Stack>();
+  const at = async (
+    mode: Mode,
+    path: string,
+    page: Page,
+    options: { pilotNotice?: boolean } = {},
+  ) => {
+    const key = `${mode}${options.pilotNotice ? '+pilot' : ''}`;
+    let stack = stacks.get(key);
     if (!stack) {
-      stack = await startStack(mode);
-      stacks.set(mode, stack);
+      stack = await startStack(mode, options);
+      stacks.set(key, stack);
     }
     await page.goto(`${stack.origin}${path}`);
     // The loading silhouette has been swapped for the page.
@@ -264,6 +270,77 @@ test.describe('the page in each payment state', () => {
           'padding-bottom',
           /^(8|9)\dpx/,
         );
+    },
+  );
+
+  both(
+    'live payments for named pages: a page not on the list shows Tipping opens soon, with no pay button',
+    async ({ page }) => {
+      await page
+        .context()
+        .grantPermissions(['clipboard-read', 'clipboard-write']);
+      const origin = await at('live', '/@unlisted', page, {
+        pilotNotice: true,
+      });
+      await expect(
+        page.getByRole('heading', { name: 'Tipping opens soon' }),
+      ).toBeVisible();
+      // No amounts, no Tip button or bar, no trust line, and no pilot notice: nothing here moves money.
+      await expect(tipButton(page)).toHaveCount(0);
+      await expect(page.getByRole('radio')).toHaveCount(0);
+      await expect(page.locator('.composer-action')).toHaveCount(0);
+      await expect(page.getByText(TRUST)).toHaveCount(0);
+      await expect(page.getByTestId('pilot-notice')).toHaveCount(0);
+      // The page itself still reads as the person's, and can be passed on.
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        'Kemi Bello',
+      );
+      await page.getByRole('button', { name: 'Copy page link' }).click();
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        `${origin}/@unlisted`,
+      );
+      expect(await page.locator('body').innerText()).not.toMatch(/bachs|demo/i);
+      expect(await overflowing(page)).toEqual([]);
+      await expectAccessible(page, 'live unlisted page');
+      // A page on the list, on the same copy, takes tips.
+      await at('live', '/@kemi', page, { pilotNotice: true });
+      await expect(tipButton(page)).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'Tipping opens soon' }),
+      ).toHaveCount(0);
+    },
+  );
+
+  both(
+    'the pilot notice sits with the Tip button on the redesigned page, in live mode only',
+    async ({ page }) => {
+      await at('live', '/@kemi', page, { pilotNotice: true });
+      const panel = page.locator('[data-tip-panel]');
+      const tip = panel.getByRole('button', { name: /^Tip/ });
+      await expect(tip).toBeVisible();
+      // Shown once on the page, in the tip panel, never in the footer.
+      await expect(page.getByTestId('pilot-notice')).toHaveCount(1);
+      await expect(panel.getByTestId('pilot-notice')).toContainText(
+        'TipMe is in a pilot. Payments are real.',
+      );
+      await expect(
+        panel.getByRole('link', { name: 'support@usetipme.xyz' }),
+      ).toHaveAttribute('href', 'mailto:support@usetipme.xyz');
+      await expect(
+        page.locator('footer [data-testid=pilot-notice]'),
+      ).toHaveCount(0);
+      const [tipBox, noticeBox] = await Promise.all([
+        tip.boundingBox(),
+        panel.getByTestId('pilot-notice').boundingBox(),
+      ]);
+      expect(noticeBox!.y).toBeGreaterThan(tipBox!.y);
+      expect(noticeBox!.y - (tipBox!.y + tipBox!.height)).toBeLessThan(80);
+      expect(await page.locator('body').innerText()).not.toMatch(/bachs/i);
+      // Not live (test mode, or closed): the setting is on but there is nothing real to warn about.
+      for (const mode of ['test', 'closed'] as const) {
+        await at(mode, '/@kemi', page, { pilotNotice: true });
+        await expect(page.getByTestId('pilot-notice')).toHaveCount(0);
+      }
     },
   );
 

@@ -33,6 +33,8 @@ export const page = (
   phone: '+2348000000000',
   email: 'kemi@example.com',
   acceptingTips: true,
+  // The API's answer for a live copy limited to named pages: this page is on the list.
+  tippingOpen: true,
   plan: 'free',
   cover: { kind: 'design', design: 'danfo' },
   ...extra,
@@ -56,11 +58,14 @@ export const PAGES: PublicProfile[] = [
   }),
   page('widename', { displayName: UNBROKEN_NAME }),
   page('widerole', { role: UNBROKEN_ROLE }),
+  // A live copy that takes tips only for named pages, and this one is not named.
+  page('unlisted', { tippingOpen: false }),
   // Only what a page must have: no photo, role, bio or links.
   {
     handle: 'bareface',
     displayName: 'Ngozi Eze',
     acceptingTips: true,
+    tippingOpen: true,
     plan: 'free',
     cover: { kind: 'design', design: 'scattered', colour: 'neutral' },
   },
@@ -85,7 +90,10 @@ async function freePort() {
   return port;
 }
 
-export async function startStack(mode: Mode): Promise<Stack> {
+export async function startStack(
+  mode: Mode,
+  options: { pilotNotice?: boolean } = {},
+): Promise<Stack> {
   let state: ApiState = 'up';
   const api = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://stand-in');
@@ -122,6 +130,7 @@ export async function startStack(mode: Mode): Promise<Stack> {
         API_INTERNAL_ORIGIN: `http://127.0.0.1:${portOf(api)}`,
         NEXT_PUBLIC_API_ORIGIN: API_ORIGIN,
         WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
+        ...(options.pilotNotice ? { PILOT_NOTICE: 'on' } : {}),
       },
     },
   );
