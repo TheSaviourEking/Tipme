@@ -5084,7 +5084,11 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "email.read",
+          "email.export"
+        ]
       }
     },
     "/v1/ops/email/messages/{id}/content": {
@@ -5324,7 +5328,11 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "email.read",
+          "email.export"
+        ]
       }
     },
     "/v1/ops/email/summary": {
@@ -5401,7 +5409,11 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "email.read",
+          "email.export"
+        ]
       }
     },
     "/v1/ops/enrol": {
@@ -7549,7 +7561,10 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "providers.manage"
+        ]
       }
     },
     "/v1/ops/providers/mail/active": {
@@ -8021,7 +8036,10 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "providers.manage"
+        ]
       }
     },
     "/v1/ops/recheck": {

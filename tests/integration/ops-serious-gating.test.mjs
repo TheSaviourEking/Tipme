@@ -1764,6 +1764,10 @@ test('M7: a closed request keeps no address in the clear, however it closed', as
     newEmail: `moved.${randomUUID().slice(0, 6)}@example.com`,
     checks: 'Selfie and a call',
   });
+  // The same approver within one 30-second code: this isn't about reusing codes.
+  await q(`UPDATE staff_totp SET last_step = NULL WHERE user_id = $1`, [
+    second,
+  ]);
   assert.equal((await approve(recovery.requestId, second)).status, 'approved');
   assert.doesNotMatch(
     JSON.stringify((await rowOf(recovery.requestId)).payload),
