@@ -435,6 +435,20 @@
       "when": 1793572370459,
       "tag": "0061_payout_platform_wait",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793572370460,
+      "tag": "0062_handle_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793572370461,
+      "tag": "0063_profile_covers",
+      "breakpoints": true
     }
   ]
 }

@@ -7,9 +7,9 @@ import { API_ORIGIN, avatarSource } from '@/lib/avatar-source';
 const initialsFor = (name: string) =>
   name
     .split(/\s+/)
-    .map((part) => part[0] ?? '')
-    .join('')
+    .map((part) => Array.from(part)[0] ?? '')
     .slice(0, 2)
+    .join('')
     .toUpperCase();
 
 /**

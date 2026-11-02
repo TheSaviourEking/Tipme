@@ -514,6 +514,13 @@ export const profiles = pgTable(
     // The page's photo version (PR-013): only ever goes up, so a photo URL is never reused, not
     // even after removing a photo and adding another.
     avatarVersion: integer('avatar_version').notNull().default(0),
+    // The page's cover. A chosen design and colour from the catalogue (@tipme/contracts), held
+    // as text so that removing a catalogue entry needs no migration; `coverPath` is an uploaded
+    // photo, which wins over them. `coverVersion` only ever goes up, like `avatarVersion`.
+    coverDesign: text('cover_design'),
+    coverColour: text('cover_colour'),
+    coverPath: text('cover_path'),
+    coverVersion: integer('cover_version').notNull().default(0),
     // When the page first went live (PR-013): `profile_published` is recorded once, ever.
     firstPublishedAt: timestamp('first_published_at', { withTimezone: true }),
     // Notification preferences (PR-013): what the recipient chose not to be told about.
@@ -529,6 +536,10 @@ export const profiles = pgTable(
     minTipMinor: minor('min_tip_minor'),
     // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
     customFeeBps: integer('custom_fee_bps'),
+    // Handle changes made so far (never reset), and how many staff have allowed beyond the
+    // standard allowance, at most MAX_HANDLE_CHANGE_EXTRA. Only Pro pages can make one.
+    handleChangesUsed: integer('handle_changes_used').notNull().default(0),
+    handleChangesExtra: integer('handle_changes_extra').notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [
@@ -537,6 +548,10 @@ export const profiles = pgTable(
       sql`page_state IN ('live', 'not_live', 'deleted')`,
     ),
     check('profiles_plan', sql`plan IN ('free', 'pro')`),
+    check(
+      'profiles_handle_changes',
+      sql`handle_changes_used >= 0 AND handle_changes_extra BETWEEN 0 AND 20`,
+    ),
     check(
       'profiles_custom_fee_bps',
       sql`custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 0 AND 10000`,
@@ -778,7 +793,8 @@ export const handleHolds = pgTable('handle_holds', {
 
 /**
  * A page's previous handles (PR-011): they keep pointing at the page so printed QR codes still
- * work, and nobody else can claim them. At most 5 per page; released as 90-day holds on deletion.
+ * work, and nobody else can claim them. Their number is bounded by the page's handle changes (the
+ * Pro allowance plus what staff allowed); released as 90-day holds on deletion.
  */
 export const handleAliases = pgTable(
   'handle_aliases',
@@ -1610,6 +1626,29 @@ export const profileAvatars = pgTable(
   () => [
     check(
       'profile_avatars_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+  ],
+);
+
+/**
+ * A page's uploaded cover: one per page, already re-encoded on the server (2240×600 WebP, no
+ * metadata). Kept like `profile_avatars`: in Postgres or in R2, exactly one of the two.
+ */
+export const profileCovers = pgTable(
+  'profile_covers',
+  {
+    profileId: uuid('profile_id')
+      .primaryKey()
+      .references(() => profiles.id),
+    version: integer('version').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdAt: createdAt(),
+  },
+  () => [
+    check(
+      'profile_covers_one_place',
       sql`(bytes IS NULL) <> (object_key IS NULL)`,
     ),
   ],

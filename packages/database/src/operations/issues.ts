@@ -512,7 +512,9 @@ async function releaseHoldsIfClear(
   }
   const released = await tx
     .update(withdrawalHolds)
-    .set({ releasedAt: input.now, releasedBy: input.staffUserId })
+    // The database's clock, as for the times this is compared with: a hold's start, a request, and
+    // a Resume. The app's may differ, and a Resume mustn't count for a hold that ended after it.
+    .set({ releasedAt: sql`clock_timestamp()`, releasedBy: input.staffUserId })
     .where(
       and(
         eq(withdrawalHolds.profileId, input.profileId),

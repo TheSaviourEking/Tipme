@@ -5,16 +5,11 @@ import QRCode from 'qrcode';
  * zone, so every style scans; the style lives in the frame around it and in the module shape.
  * The three finder squares are always drawn solid, whatever the shape.
  */
-export type FrameFill =
-  | { kind: 'solid'; color: string }
-  | { kind: 'linear'; from: string; to: string }
-  | { kind: 'radial'; inner: string; outer: string }
-  | { kind: 'stripes'; a: string; b: string };
+export type FrameFill = { kind: 'solid'; color: string };
 
 export interface QrStyle {
   id: string;
   name: string;
-  premium: boolean;
   /** Module colour and the light square behind the code: contrast must be at least 4.5:1. */
   dark: string;
   light: string;
@@ -27,7 +22,6 @@ export const QR_STYLES: readonly QrStyle[] = [
   {
     id: 'purple',
     name: 'Purple',
-    premium: false,
     dark: '#2b0a5c',
     light: '#ffffff',
     frame: { kind: 'solid', color: '#7a32f9' },
@@ -37,7 +31,6 @@ export const QR_STYLES: readonly QrStyle[] = [
   {
     id: 'night',
     name: 'Night',
-    premium: false,
     dark: '#000000',
     light: '#ffffff',
     frame: { kind: 'solid', color: '#000000' },
@@ -47,41 +40,10 @@ export const QR_STYLES: readonly QrStyle[] = [
   {
     id: 'clean',
     name: 'Clean',
-    premium: false,
     dark: '#000000',
     light: '#ffffff',
     frame: { kind: 'solid', color: '#ffffff' },
     frameText: '#000000',
-    shape: 'square',
-  },
-  {
-    id: 'sunset',
-    name: 'Sunset',
-    premium: true,
-    dark: '#3b0a75',
-    light: '#ffffff',
-    frame: { kind: 'linear', from: '#5b1ec4', to: '#c2185b' },
-    frameText: '#ffffff',
-    shape: 'dot',
-  },
-  {
-    id: 'glow',
-    name: 'Glow',
-    premium: true,
-    dark: '#2b0a5c',
-    light: '#ffffff',
-    frame: { kind: 'radial', inner: '#7a32f9', outer: '#2b0a5c' },
-    frameText: '#ffffff',
-    shape: 'rounded',
-  },
-  {
-    id: 'stripe',
-    name: 'Stripe',
-    premium: true,
-    dark: '#000000',
-    light: '#ffffff',
-    frame: { kind: 'stripes', a: '#000000', b: '#511cb0' },
-    frameText: '#ffffff',
     shape: 'square',
   },
 ];
@@ -90,18 +52,7 @@ export const styleById = (id: string): QrStyle =>
   QR_STYLES.find((style) => style.id === id) ?? (QR_STYLES[0] as QrStyle);
 
 /** The CSS background for on-screen previews of a frame. */
-export function frameCss(frame: FrameFill): string {
-  switch (frame.kind) {
-    case 'solid':
-      return frame.color;
-    case 'linear':
-      return `linear-gradient(135deg, ${frame.from}, ${frame.to})`;
-    case 'radial':
-      return `radial-gradient(circle at 30% 20%, ${frame.inner}, ${frame.outer})`;
-    case 'stripes':
-      return `repeating-linear-gradient(45deg, ${frame.a} 0 14px, ${frame.b} 14px 28px)`;
-  }
-}
+export const frameCss = (frame: FrameFill): string => frame.color;
 
 const channel = (value: number) => {
   const c = value / 255;

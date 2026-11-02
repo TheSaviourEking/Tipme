@@ -9,7 +9,7 @@ Make appreciation tangible. TipMe is a carefully engineered personal object: tru
 ## Direction
 
 - **60% Physical Interface:** believable shallow materials, precise controls, crisp edges, and touch response.
-- **30% Editorial Interface:** composed typography, portrait-led identity, asymmetry, whitespace, and concise hierarchy.
+- **30% Editorial Interface:** composed typography, person-led identity (a cover and profile photo on the public page, per the decision log; portraits elsewhere), asymmetry, whitespace, and concise hierarchy.
 - **10% Playful Interface:** selective brand motion and a memorable acknowledgement only after verified success.
 
 This is one system, not three themes. The board in `reference/` is the fidelity target once its original asset is present. Until then, use `REFERENCE-ANATOMY.md` and do not claim final parity.
@@ -27,4 +27,4 @@ This is one system, not three themes. The board in `reference/` is the fidelity 
 
 ## Required reading
 
-Frontend work must also read the anatomy, token/material, component, motion, responsive, iconography, and visual-quality documents in this directory. Record new visual rulings in `DECISION-LOG.md` rather than silently inventing variants.
+Frontend work must also read the anatomy, token/material, component, motion, experience, responsive, iconography, and visual-quality documents in this directory. Record new visual rulings in `DECISION-LOG.md` rather than silently inventing variants.

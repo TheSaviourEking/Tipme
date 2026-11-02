@@ -14,7 +14,7 @@ import {
 import { track } from '@/lib/analytics';
 import { newUuid } from '@/lib/random-id';
 import { createTip, quoteTip, type ApiFailure } from '@/lib/api-client';
-import { formatDemoAmount } from '@/lib/demo-amount';
+import { formatDemoAmount, formatNaira } from '@/lib/demo-amount';
 import { amountOptions } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
@@ -22,6 +22,7 @@ import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
+import { TipAction } from './tip-action';
 
 type QuoteState =
   | { kind: 'idle' }
@@ -61,7 +62,9 @@ export function AppreciationForm({
   collapseExtras = false,
   celebration,
   tipAmounts,
+  surface = 'home',
   pilotNotice,
+  barNotice,
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -74,8 +77,16 @@ export function AppreciationForm({
   collapseExtras?: boolean;
   /** A moment the recipient shared: supporters may add their tip to it. */
   celebration?: { momentId: string; label: string };
-  /** The pilot notice, rendered on the server (null outside live mode). */
+  /** A person's own page has its own heading and wording, and a Tip bar on phones. */
+  surface?: 'home' | 'profile';
+  /** The pilot notice, rendered on the server (null outside live mode): it must be seen before paying, under the button and in the phone's Tip bar. */
   pilotNotice?: ReactNode;
+  /**
+   * The pilot notice as plain text for the phone's Tip bar, or nothing when it is not shown. The
+   * server decides, so the bar never holds an empty slot; it has no test id, so the notice under
+   * the button stays the one the page is tested by.
+   */
+  barNotice?: ReactNode;
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -84,7 +95,13 @@ export function AppreciationForm({
   const options = amountOptions(tipAmounts);
   const presets = options.presets;
   const [joining, setJoining] = useState(false);
-  const [selection, setSelection] = useState('');
+  // Starts on the owner's NGN 2,000 where this page offers it (nothing otherwise). This is only a
+  // starting point: nothing is quoted until the person chooses, taps the amount again or taps
+  // Tip, so a page view never creates a quote, and `amount_selected` counts people, not defaults.
+  const [selection, setSelection] = useState(
+    options.defaultMinor === null ? '' : String(options.defaultMinor),
+  );
+  const [chosen, setChosen] = useState(options.defaultMinor === null);
   const [custom, setCustom] = useState('');
   const [message, setMessage] = useState('');
   const [payerName, setPayerName] = useState('');
@@ -99,6 +116,8 @@ export function AppreciationForm({
   const latestQuote = useRef(0);
   const customField = useRef<HTMLInputElement>(null);
   const firstChoice = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const onProfile = surface === 'profile';
 
   const amount =
     selection === 'other'
@@ -137,7 +156,7 @@ export function AppreciationForm({
 
   // Presets quote at once; a typed amount waits until typing pauses.
   useEffect(() => {
-    if (amount === null) {
+    if (amount === null || !chosen) {
       // Drop any answer still in flight for an amount that is no longer chosen.
       latestQuote.current += 1;
       return;
@@ -149,11 +168,11 @@ export function AppreciationForm({
     return () => clearTimeout(timer);
     // fetchQuote is recreated each render; the amount is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amount, selection]);
+  }, [amount, selection, chosen]);
 
   // What is on screen always belongs to the amount chosen now; an older answer counts as loading.
   const shown: QuoteState =
-    amount === null
+    amount === null || !chosen
       ? { kind: 'idle' }
       : quote.kind === 'idle' ||
           (quote.kind === 'ready'
@@ -178,6 +197,12 @@ export function AppreciationForm({
     }
     setError('');
     setNotice('');
+    if (!chosen) {
+      // The starting amount, not yet confirmed by the person: this tap fetches its total and shows
+      // it (in the bar, and read out), and the next tap pays. Nothing is created until then.
+      setChosen(true);
+      return;
+    }
     // Never pay without a current server quote for exactly this amount.
     const current =
       shown.kind === 'ready' ? shown.quote : await fetchQuote(amount);
@@ -232,6 +257,58 @@ export function AppreciationForm({
     setNotice(failureMessage(result, options.rangeText));
   };
 
+  // On a phone the Tip bar can be pressed from anywhere on the page: bring a problem into view,
+  // above the bar (the page's scroll padding), however far away the supporter was.
+  const problem =
+    error || notice || (shown.kind === 'failed' ? shown.message : '');
+  useEffect(() => {
+    if (!onProfile || !problem) return;
+    form.current
+      ?.querySelector('.tm-notice, .tm-field-error')
+      ?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }, [onProfile, problem]);
+
+  // The Tip bar steps aside while a field has focus (CSS). Android's back gesture closes the
+  // keyboard but leaves the field focused, which would leave the bar away: end the editing too.
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!onProfile || !view) return;
+    let { height, scale } = view;
+    const resized = () => {
+      const grew = view.height - height > 120 && view.scale === scale;
+      ({ height, scale } = view);
+      const field = document.activeElement;
+      if (
+        grew &&
+        matchMedia('(max-width: 860px)').matches &&
+        field instanceof HTMLElement &&
+        field.matches('input:not([type="radio"], [type="checkbox"]), textarea')
+      )
+        field.blur();
+    };
+    view.addEventListener('resize', resized);
+    return () => view.removeEventListener('resize', resized);
+  }, [onProfile]);
+
+  // Scroll padding and page padding follow the bar's real height: a notice or a failed quote
+  // makes it taller, and the Report link must still clear it.
+  useEffect(() => {
+    const bar = form.current?.querySelector('.composer-action');
+    if (!onProfile || !bar) return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => {
+      root.style.setProperty(
+        '--tip-bar',
+        `${bar.getBoundingClientRect().height}px`,
+      );
+    });
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--tip-bar');
+    };
+  }, [onProfile, closed]);
+
   const ready = shown.kind === 'ready' ? shown.quote : null;
   const busy = submitting || shown.kind === 'loading';
   const extras = (
@@ -267,7 +344,44 @@ export function AppreciationForm({
       </label>
     </>
   );
-  if (closed || !copy.payable) return <TippingOpensSoon announce={closed} />;
+  // On a person's page the visible figure rides in the Tip bar, which hides while a field has
+  // focus and takes a live region with it. So the words are read from one hidden region outside
+  // the bar, and the visible copies stay out of the accessibility tree. Try again stays in it.
+  const shownOnly = onProfile ? ({ 'aria-hidden': true } as const) : {};
+  const quoteArea = (
+    <div
+      className="tip-quote"
+      {...(onProfile ? {} : { 'aria-live': 'polite' })}
+    >
+      {shown.kind === 'loading' && (
+        <p className="tm-hint" {...shownOnly}>
+          Getting the latest price…
+        </p>
+      )}
+      {shown.kind === 'failed' && (
+        <div className="tip-quote__failed">
+          <p className="tm-field-error" {...shownOnly}>
+            {shown.message}
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() => void fetchQuote(shown.amount)}
+          >
+            Try again
+          </Button>
+        </div>
+      )}
+      {ready && (
+        <p className="tip-payment-total" {...shownOnly}>
+          You pay {formatDemoAmount(Number(ready.payerTotalMinor))}
+        </p>
+      )}
+    </div>
+  );
+  if (closed || !copy.payable)
+    return (
+      <TippingOpensSoon announce={closed} {...(onProfile ? { handle } : {})} />
+    );
   return (
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}
@@ -277,7 +391,13 @@ export function AppreciationForm({
         {copy.formBadge && <Badge>{copy.formBadge}</Badge>}
       </div>
       {/* No browser form restoration: after Back, the controls must match React's state. */}
-      <form onSubmit={submit} noValidate autoComplete="off">
+      <form
+        ref={form}
+        onSubmit={submit}
+        noValidate
+        autoComplete="off"
+        {...(submitting ? { 'data-submitting': '' } : {})}
+      >
         {celebration && (
           <div className="celebration-banner">
             <p>
@@ -297,10 +417,16 @@ export function AppreciationForm({
             </Button>
           </div>
         )}
-        <h2>Make {recipient}’s day.</h2>
-        <p className="composer-description">
-          A small gesture. A very human thank you.
-        </p>
+        {onProfile ? (
+          <h2>Tip {recipient}</h2>
+        ) : (
+          <>
+            <h2>Make {recipient}’s day.</h2>
+            <p className="composer-description">
+              A small gesture. A very human thank you.
+            </p>
+          </>
+        )}
         <fieldset
           disabled={submitting}
           aria-describedby={`${id}-currency ${error && selection !== 'other' ? `${id}-error` : ''}`}
@@ -320,7 +446,15 @@ export function AppreciationForm({
                 checked={selection === String(preset.minor)}
                 onChange={() => {
                   setSelection(String(preset.minor));
+                  setChosen(true);
                   setError('');
+                  track('amount_selected', { surface: 'profile', handle });
+                }}
+                // Tapping the amount already shown is a choice too: it asks for its total.
+                onClick={() => {
+                  // A different amount is counted by onChange; this is only the one already shown.
+                  if (chosen || selection !== String(preset.minor)) return;
+                  setChosen(true);
                   track('amount_selected', { surface: 'profile', handle });
                 }}
               >
@@ -334,6 +468,7 @@ export function AppreciationForm({
               checked={selection === 'other'}
               onChange={() => {
                 setSelection('other');
+                setChosen(true);
                 setError('');
               }}
             >
@@ -367,27 +502,19 @@ export function AppreciationForm({
             hint={`${options.rangeText}.`}
           />
         )}
-        <div className="tip-quote" aria-live="polite">
-          {shown.kind === 'loading' && (
-            <p className="tm-hint">Getting the latest price…</p>
-          )}
-          {shown.kind === 'failed' && (
-            <div className="tip-quote__failed">
-              <p className="tm-field-error">{shown.message}</p>
-              <Button
-                variant="secondary"
-                onClick={() => void fetchQuote(shown.amount)}
-              >
-                Try again
-              </Button>
-            </div>
-          )}
-          {ready && (
-            <p className="tip-payment-total">
-              You pay {formatDemoAmount(Number(ready.payerTotalMinor))}
-            </p>
-          )}
-        </div>
+        {onProfile ? (
+          <p className="tip-quote-live sr-only" aria-live="polite">
+            {shown.kind === 'loading'
+              ? 'Getting the latest price…'
+              : shown.kind === 'failed'
+                ? shown.message
+                : ready
+                  ? `Total to pay: ${formatDemoAmount(Number(ready.payerTotalMinor))}`
+                  : ''}
+          </p>
+        ) : (
+          quoteArea
+        )}
         <div className="tm-field">
           <label htmlFor={`${id}-purpose`}>
             What is this tip for? (optional)
@@ -442,29 +569,63 @@ export function AppreciationForm({
             {notice}
           </Notice>
         )}
-        <Button
-          className="composer-submit"
-          type="submit"
-          disabled={busy}
-          aria-busy={busy}
+        {/* A fixed bar on a phone's public page (CSS): still this form's one submit button. */}
+        <TipAction
+          {...(onProfile
+            ? {
+                quote: quoteArea,
+                notice: barNotice ?? copy.formDisclaimer,
+              }
+            : {})}
         >
-          {submitting
-            ? 'Starting your tip…'
-            : amount
-              ? `Tip ${formatDemoAmount(amount)}`
-              : 'Tip'}{' '}
-          <Arrow />
-        </Button>
+          <Button
+            className="composer-submit"
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+          >
+            {submitting
+              ? 'Starting your tip…'
+              : amount
+                ? `Tip ${onProfile ? formatNaira(amount) : formatDemoAmount(amount)}`
+                : 'Tip'}{' '}
+            <Arrow />
+          </Button>
+        </TipAction>
         <p className="composer-disclaimer">
-          {copy.formDisclaimer && (
-            <>
-              {copy.formDisclaimer}
-              <br />
-            </>
-          )}
-          {pilotNotice}
+          {/* The mode wording: on a phone with the Tip bar, the bar carries it and CSS removes this
+              copy, so it is seen and read once. A block of its own; outside live mode the pilot
+              notice renders nothing, so no break after it. */}
+          <span className="composer-disclaimer__mode">
+            {pilotNotice}
+            {copy.formDisclaimer && (
+              <>
+                {copy.formDisclaimer}
+                <br />
+              </>
+            )}
+          </span>
           You’ll confirm on the payment provider’s page next.
         </p>
+        {onProfile && copy.formTrust && (
+          <p className="composer-trust">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="5" y="11" width="14" height="9" rx="2" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
+            <span>{copy.formTrust}</span>
+          </p>
+        )}
       </form>
     </Card>
   );

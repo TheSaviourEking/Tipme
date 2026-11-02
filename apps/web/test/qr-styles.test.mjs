@@ -7,19 +7,23 @@ import {
   qrMatrix,
   QR_STYLES,
   renderQrPixels,
+  styleById,
 } from '../src/lib/qr-render.ts';
 
 const url = 'http://127.0.0.1:3100/@tobi';
 
-test('three free styles and three premium ones (free during the preview)', () => {
+test('only the three free styles are drawn in the browser, with no premium flag', () => {
   assert.deepEqual(
-    QR_STYLES.filter((s) => !s.premium).map((s) => s.id),
+    QR_STYLES.map((s) => s.id),
     ['purple', 'night', 'clean'],
   );
-  assert.deepEqual(
-    QR_STYLES.filter((s) => s.premium).map((s) => s.id),
-    ['sunset', 'glow', 'stripe'],
-  );
+  assert.ok(QR_STYLES.every((s) => !('premium' in s)));
+});
+
+test('old sunset, glow and stripe values, and Pro design ids, show purple here', () => {
+  for (const id of ['sunset', 'glow', 'stripe', 'heart', 'mosaic', ''])
+    assert.equal(styleById(id).id, 'purple', id);
+  assert.equal(styleById('night').id, 'night');
 });
 
 test('every style scans back to the exact page link', () => {

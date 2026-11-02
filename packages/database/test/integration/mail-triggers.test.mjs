@@ -12,6 +12,7 @@ import {
   mailForDomainEvent,
   mailSealing,
   setPageSuspension,
+  staffRemovePageImage,
   updatePaymentAccountStatus,
 } from '../../dist/index.js';
 import { queuedMail } from '../../dist/test-support.js';
@@ -130,6 +131,29 @@ test('no payment account email when the update is refused', async (t) => {
     ),
   );
   assert.equal((await sent('payment_account_ready')).length, 0);
+});
+
+test('page_image_removed tells the owner which image, once, with no staff reason', async (t) => {
+  const { db, sent, rows } = await fresh(t);
+  const reason = 'internal note about this person';
+  await rows(
+    `UPDATE profiles SET cover_path = '/v1/covers/x/1.webp', avatar_path = '/v1/avatars/x/1.webp' WHERE id = $1`,
+    [ADA],
+  );
+  const remove = (image) =>
+    staffRemovePageImage(db, {
+      profileId: ADA,
+      staffUserId: STAFF,
+      image,
+      reason,
+      sealing,
+    });
+  await remove('cover');
+  await remove('cover');
+  await remove('photo');
+  const mails = await sent('page_image_removed');
+  assert.deepEqual(mails.map((m) => m.data.image).sort(), ['cover', 'photo']);
+  assert.ok(!JSON.stringify(mails).includes(reason));
 });
 
 test('page_paused and page_restored are queued once per action, with no staff reason', async (t) => {

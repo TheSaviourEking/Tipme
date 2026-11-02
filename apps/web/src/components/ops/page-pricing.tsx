@@ -16,7 +16,7 @@ const problem = (code: string) =>
       : 'That didn’t work. Please try again.';
 
 /** A value and a written reason, sent together (every pricing change is audited). */
-function ValueWithReason({
+export function ValueWithReason({
   label,
   hint,
   submit,
