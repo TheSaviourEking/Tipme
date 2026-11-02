@@ -4,6 +4,7 @@ import {
   JOB_QUEUE,
   PAYOUT_START_EVENT,
   PLATFORM_REFUSAL_EVENT,
+  WITHDRAWAL_FREEZE_OPENED_EVENT,
   WITHDRAWALS_SWITCH_EVENT,
   traceCarrierSchema,
 } from '@tipme/contracts';
@@ -59,6 +60,7 @@ import {
   warnIfNoAlertRoute,
 } from './handlers/payment-reserve.js';
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
+import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
@@ -507,6 +509,14 @@ export async function startJobWorker(
               log: (entry) => logger.warn({ ...entry, ...fields }),
             });
             processed.add(1, { outcome: `withdrawals_switch_${outcome}` });
+            return outcome;
+          }
+          if (job.name === WITHDRAWAL_FREEZE_OPENED_EVENT) {
+            const outcome = await handleWithdrawalFreezeOpened(job.data, {
+              url: config.ALERT_WEBHOOK_URL,
+              log: (entry) => logger.warn({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome: `withdrawal_freeze_${outcome}` });
             return outcome;
           }
           if (job.name === PLATFORM_REFUSAL_EVENT) {
