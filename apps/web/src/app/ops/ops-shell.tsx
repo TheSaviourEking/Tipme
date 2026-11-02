@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Notice, Skeleton } from '@tipme/ui';
+import { FreshCodePrompt } from '@/components/ops/fresh-code';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
 import { PageUnavailable } from '@/components/page-unavailable';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -17,20 +18,8 @@ import {
   type OpsAccess,
 } from '@/lib/ops-client';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
+import { opsMenu } from '@/lib/ops-menu';
 import { apiFetch } from '@/lib/session-client';
-
-const links = [
-  { href: '/ops', label: 'Overview' },
-  { href: '/ops/issues', label: 'Issues' },
-  { href: '/ops/visibility', label: 'Visibility' },
-  { href: '/ops/market', label: 'Market' },
-  { href: '/ops/pages', label: 'Pages' },
-  { href: '/ops/search', label: 'Search' },
-  { href: '/ops/providers', label: 'Providers' },
-  { href: '/ops/email', label: 'Email' },
-  { href: '/ops/audit', label: 'Audit log' },
-  { href: '/ops/staff', label: 'Staff & roles' },
-] as const;
 
 /** Where this visitor stands: signed out, not staff, the authenticator step, or in. */
 async function opsState(): Promise<State | 'signed_out'> {
@@ -166,7 +155,7 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
           <>
             <div className="dashboard-bar">
               <nav aria-label="Admin" className="dashboard-nav">
-                {links.map((link) => (
+                {opsMenu(state.access.permissions).map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
@@ -180,6 +169,7 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
                 Leave admin
               </Button>
             </div>
+            <FreshCodePrompt />
             <OpsAccessContext.Provider value={state.access}>
               {children}
             </OpsAccessContext.Provider>

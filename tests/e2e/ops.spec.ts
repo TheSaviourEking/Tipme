@@ -48,8 +48,12 @@ test('the owner enrols, works an issue (reveal, note, resolve) and sees it all i
     .getByLabel('How was it resolved?')
     .fill(`Provider confirmed nothing was taken ${tag}`);
   await page.getByRole('button', { name: 'Resolve issue' }).click();
+  // Alone it closes; with any other staff in this shared database it waits. Either is the truth.
   await expect(
-    page.locator('.ops-issue__status').getByText('Resolved', { exact: true }),
+    page
+      .locator('.ops-issue__status')
+      .getByText('Resolved', { exact: true })
+      .or(page.getByText('Waiting for a second person', { exact: true })),
   ).toBeVisible();
 
   await page.goto('/ops/audit');
@@ -58,7 +62,8 @@ test('the owner enrols, works an issue (reveal, note, resolve) and sees it all i
     page.getByText(`Supporter asked about their tip ${tag}`),
   ).toBeVisible();
   await expect(
-    page.getByText(`Provider confirmed nothing was taken ${tag}`),
+    // Asked for, and closed if alone: the same words on each line.
+    page.getByText(`Provider confirmed nothing was taken ${tag}`).first(),
   ).toBeVisible();
   await expectAccessible(page);
   expect(await fitsViewport(page)).toBe(true);

@@ -56,7 +56,9 @@ test('staff freeze a reported takeover from Pages, the card remembers it, and re
   await page.getByLabel('How was it resolved?').fill(REASON);
   await page.getByRole('button', { name: 'Resolve issue' }).click();
   await expect(
-    page.getByText('The issue is resolved.', { exact: true }),
+    page.getByText('The issue is resolved. Withdrawals are released.', {
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Resolve issue' })).toHaveCount(
     0,
@@ -71,7 +73,9 @@ test('the Overview shows live state and the withdrawals switch, and asks why bef
 }, testInfo) => {
   await enrolOwner(page, testInfo);
   await page.route('**/v1/ops/withdrawals-switch', (route) =>
-    route.fulfill({ json: { data: { changed: true } } }),
+    route.request().method() === 'POST'
+      ? route.fulfill({ json: { data: { changed: true } } })
+      : route.fallback(),
   );
   await page.goto('/ops');
   await expect(page.getByTestId('live-now')).toHaveText(

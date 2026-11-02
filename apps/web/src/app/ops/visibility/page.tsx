@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { OpsMetricsEnvelope, OpsVisibility } from '@tipme/contracts';
 import { Card, Notice, Skeleton } from '@tipme/ui';
 import { BarChart, LineChart, Tile } from '@/components/ops/charts';
-import { apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 const CHANNELS: Record<string, string> = {
   qr: 'QR code',
@@ -36,7 +36,7 @@ export default function VisibilityPage() {
   );
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    void apiFetch<OpsMetricsEnvelope<OpsVisibility>>(
+    void opsFetch<OpsMetricsEnvelope<OpsVisibility>>(
       '/v1/ops/metrics/visibility',
     ).then((result) => (result.ok ? setData(result.data) : setFailed(true)));
   }, []);

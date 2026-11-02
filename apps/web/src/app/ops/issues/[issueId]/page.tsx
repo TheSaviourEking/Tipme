@@ -15,6 +15,11 @@ import {
   Skeleton,
   TextareaField,
 } from '@tipme/ui';
+import {
+  ActionOutcome,
+  outcomeOf,
+  type ActionOutcomeState,
+} from '@/components/ops/action-outcome';
 import { PayoutIssueTools } from '@/components/ops/payout-issue-tools';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { ResolveMoneyIssue } from '@/components/ops/resolve-money-issue';
@@ -27,7 +32,8 @@ import {
   useOpsAccess,
   when,
 } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { refusalWords } from '@/lib/ops-answers';
+import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 // Bachs IDs are opaque (no fixed prefix); whitespace, ':' and '/' are refused. The browser
 // compiles this with the `v` flag, so '/' is escaped.
@@ -43,16 +49,12 @@ const RECHECK: Record<OpsRecheckOutcome, string> = {
   not_pending: 'Nothing to re-check: it is no longer waiting on the provider.',
 };
 
-const failure = (code: string) =>
-  code === 'ISSUE_RESOLVED'
-    ? 'This issue was already resolved.'
-    : code === 'ISSUE_OUTCOME_REQUIRED'
-      ? 'Choose how this money issue was settled.'
-      : code === 'ISSUE_PAYOUT_UNFINISHED'
-        ? 'This withdrawal hasn’t finished. Use “Act on this withdrawal” below.'
-        : code === 'FORBIDDEN'
-          ? 'Your role does not allow this.'
-          : 'That didn’t work. Please try again.';
+const failure = (answer: { code: string; message?: string }) =>
+  answer.code === 'ISSUE_OUTCOME_REQUIRED'
+    ? 'Choose how this money issue was settled.'
+    : answer.code === 'ISSUE_PAYOUT_UNFINISHED'
+      ? 'This withdrawal hasn’t finished. Use “Act on this withdrawal” below.'
+      : refusalWords(answer);
 
 function Section({
   title,
@@ -302,11 +304,13 @@ export default function IssuePage() {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [missing, setMissing] = useState(false);
   const [revealed, setRevealed] = useState<OpsPrivateDetails | null>(null);
-  const [message, setMessage] = useState('');
+  const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
+  const setMessage = (text: string) =>
+    setOutcome({ kind: 'done', text, actedAlone: false });
 
   const load = useCallback(
     () =>
-      apiFetch<Evidence>(`/v1/ops/issues/${encodeURIComponent(issueId)}`).then(
+      opsFetch<Evidence>(`/v1/ops/issues/${encodeURIComponent(issueId)}`).then(
         (result) => {
           if (result.ok) setEvidence(result.data);
           else setMissing(true);
@@ -318,10 +322,19 @@ export default function IssuePage() {
     void load();
   }, [load]);
 
-  const act = async (path: string, body: unknown, done: string) => {
-    const result = await apiFetch(path, { method: 'POST', body });
-    if (!result.ok) return failure(result.code);
-    setMessage(done);
+  const act = async (
+    path: string,
+    body: unknown,
+    done: string,
+    meanwhile?: string,
+  ) => {
+    const answer = await opsAct(path, { method: 'POST', body });
+    if (answer.kind === 'refused') {
+      // Someone else got there first: the page should show that, not the old state.
+      if (answer.code === 'ISSUE_RESOLVED') await load();
+      return failure(answer);
+    }
+    setOutcome(outcomeOf(answer, done, meanwhile));
     await load();
     return null;
   };
@@ -376,11 +389,7 @@ export default function IssuePage() {
         </span>
       </p>
       <p className="ops-summary">{issue.summary}</p>
-      {message && (
-        <Notice tone="success" title="Done">
-          {message}
-        </Notice>
-      )}
+      {outcome && <ActionOutcome outcome={outcome} />}
 
       <Section title="Decide">
         <div className="ops-actions">
@@ -396,7 +405,12 @@ export default function IssuePage() {
                     issue.kind === 'account_takeover_reported'
                       ? { reason, outcome, bankAndSignInChecked: true }
                       : { reason, outcome },
-                    'The issue is resolved.',
+                    issue.kind === 'account_takeover_reported'
+                      ? 'The issue is resolved. Withdrawals are released.'
+                      : 'The issue is resolved.',
+                    issue.kind === 'account_takeover_reported'
+                      ? 'Withdrawals stay frozen until then.'
+                      : undefined,
                   )
                 }
               />
@@ -424,11 +438,11 @@ export default function IssuePage() {
               field="Why re-check now?"
               submit="Ask the provider"
               onSubmit={async (reason) => {
-                const result = await apiFetch<{ outcome: OpsRecheckOutcome }>(
+                const result = await opsFetch<{ outcome: OpsRecheckOutcome }>(
                   '/v1/ops/recheck',
                   { method: 'POST', body: { ...recheckTarget, reason } },
                 );
-                if (!result.ok) return failure(result.code);
+                if (!result.ok) return failure(result);
                 setMessage(RECHECK[result.data.outcome]);
                 await load();
                 return null;
@@ -522,8 +536,8 @@ export default function IssuePage() {
           <Section title="Act on this withdrawal">
             <PayoutIssueTools
               issueId={issue.id}
-              onChanged={(done) => {
-                setMessage(done);
+              onChanged={(next) => {
+                setOutcome(next);
                 void load();
               }}
             />
@@ -545,7 +559,7 @@ export default function IssuePage() {
             </p>
             <BachsFeeBearerAction
               onSubmit={async (reason) => {
-                const result = await apiFetch<FeeBearerResult>(
+                const result = await opsFetch<FeeBearerResult>(
                   '/v1/ops/bachs/fee-bearer-confirmation',
                   {
                     method: 'POST',
@@ -557,7 +571,7 @@ export default function IssuePage() {
                     },
                   },
                 );
-                if (!result.ok) return failure(result.code);
+                if (!result.ok) return failure(result);
                 setMessage(FEE_BEARER[result.data.outcome]);
                 await load();
                 return null;
@@ -585,7 +599,7 @@ export default function IssuePage() {
               confirmation="I found this checkout in Bachs Dashboard and checked that it belongs to this TipMe payment."
               submitLabel="Verify and recover checkout"
               onSubmit={async (checkoutId, reason) => {
-                const result = await apiFetch<RecoveryResult>(
+                const result = await opsFetch<RecoveryResult>(
                   '/v1/ops/bachs/checkout-recovery',
                   {
                     method: 'POST',
@@ -598,7 +612,7 @@ export default function IssuePage() {
                     },
                   },
                 );
-                if (!result.ok) return failure(result.code);
+                if (!result.ok) return failure(result);
                 const status = result.data.outcome;
                 setMessage(
                   status === 'attached'
@@ -642,7 +656,7 @@ export default function IssuePage() {
                 confirmation="I confirmed in Bachs Dashboard that this account belongs to the recipient’s verified TipMe email and that platform fees are configured correctly."
                 submitLabel="Verify and recover account"
                 onSubmit={async (accountReference, reason) => {
-                  const result = await apiFetch<RecoveryResult>(
+                  const result = await opsFetch<RecoveryResult>(
                     '/v1/ops/bachs/account-recovery',
                     {
                       method: 'POST',
@@ -654,7 +668,7 @@ export default function IssuePage() {
                       },
                     },
                   );
-                  if (!result.ok) return failure(result.code);
+                  if (!result.ok) return failure(result);
                   const status = result.data.outcome;
                   setMessage(
                     status === 'recovered'
@@ -763,11 +777,11 @@ export default function IssuePage() {
                   field="Why do you need to see them?"
                   submit="Reveal"
                   onSubmit={async (reason) => {
-                    const result = await apiFetch<OpsPrivateDetails>(
+                    const result = await opsFetch<OpsPrivateDetails>(
                       `/v1/ops/issues/${issue.id}/reveal`,
                       { method: 'POST', body: { reason } },
                     );
-                    if (!result.ok) return failure(result.code);
+                    if (!result.ok) return failure(result);
                     setRevealed(result.data);
                     return null;
                   }}
@@ -959,7 +973,7 @@ export default function IssuePage() {
         )}
         <NoteForm
           onSave={async (text) => {
-            const result = await apiFetch(`/v1/ops/issues/${issue.id}/notes`, {
+            const result = await opsFetch(`/v1/ops/issues/${issue.id}/notes`, {
               method: 'POST',
               body: { text },
             });

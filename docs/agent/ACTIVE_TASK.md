@@ -1,3 +1,10 @@
+# Current task — admin roles Task 7 (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`.
+- Done: the screens on `/ops`: People, Roles, Approvals, a menu from permissions, a fresh-code prompt on every admin call, waiting and acted-alone wording on every gated action, and pending approvals, staff activity and the switch on the Overview. Releasing a freeze is one person with a fresh code again (spec 6.5). No decision is approved by this work.
+- `tests/e2e/ops-alone.spec.ts` revokes all staff and changes the global switch, so it has its own Playwright project: run it alone with `--project=desktop-alone --no-deps`.
+- Next exact step: review Task 7, then Task 8 (runbook; `docs/security/access-control.md` still says staff are only created on the server).
+
 # Current task — admin roles Task 6 (2 November 2026)
 
 - Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, with `origin/dev` merged (this branch's migrations are now 0062-0068).

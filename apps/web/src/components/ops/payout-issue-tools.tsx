@@ -6,8 +6,13 @@ import type {
 } from '@tipme/contracts';
 import { Button, Notice, TextareaField } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
+import {
+  outcomeOf,
+  type ActionOutcomeState,
+} from '@/components/ops/action-outcome';
+import { refusalWords } from '@/lib/ops-answers';
+import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { resumeWarnings } from '@/lib/payout-resume-warnings';
-import { apiFetch } from '@/lib/session-client';
 
 const READ: Record<OpsPayoutIssueView['read']['state'], string> = {
   paid: 'The provider says this payout was paid.',
@@ -43,10 +48,16 @@ const REFUSED = {
   not_open: 'This issue was already resolved. Nothing was done.',
 } as const;
 
-// A failed call may still have done its work, so only asking again can say.
-const failed = (code: string) =>
-  code === 'FORBIDDEN'
-    ? 'Your role does not allow this.'
+// A failed call may still have done its work, so only asking again can say. These few did nothing.
+const failed = (answer: { code: string; message?: string }) =>
+  [
+    'FORBIDDEN',
+    'RATE_LIMITED',
+    'PAYOUT_CHANGED',
+    'ISSUE_RESOLVED',
+    'FRESH_CODE_REQUIRED',
+  ].includes(answer.code)
+    ? refusalWords(answer)
     : 'We got no clear answer. Ask the provider again to see what happened.';
 
 /** Asks the provider first; only what that answer allows is then offered. */
@@ -55,7 +66,7 @@ export function PayoutIssueTools({
   onChanged,
 }: {
   issueId: string;
-  onChanged: (message: string) => void;
+  onChanged: (outcome: ActionOutcomeState) => void;
 }) {
   const [view, setView] = useState<OpsPayoutIssueView | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,13 +76,13 @@ export function PayoutIssueTools({
   const ask = async () => {
     setBusy(true);
     setError('');
-    const result = await apiFetch<OpsPayoutIssueView>(`${base}/payout-read`, {
+    const result = await opsFetch<OpsPayoutIssueView>(`${base}/payout-read`, {
       method: 'POST',
       body: {},
     });
     setBusy(false);
     if (result.ok) setView(result.data);
-    else setError(failed(result.code));
+    else setError(failed(result));
   };
 
   const act = async (
@@ -79,20 +90,24 @@ export function PayoutIssueTools({
     body: unknown,
     reported?: string,
   ): Promise<string | null> => {
-    const result = await apiFetch<OpsPayoutActionResult>(`${base}/${path}`, {
+    const answer = await opsAct<OpsPayoutActionResult>(`${base}/${path}`, {
       method: 'POST',
       body,
     });
-    if (!result.ok) return failed(result.code);
-    setView(result.data.view);
-    const { outcome } = result.data;
+    if (answer.kind === 'refused') return failed(answer);
+    if (answer.kind === 'waiting') {
+      onChanged(outcomeOf(answer, ''));
+      return null;
+    }
+    setView(answer.data.view);
+    const { outcome } = answer.data;
     if (
       outcome === 'mismatch' ||
       outcome === 'not_offered' ||
       outcome === 'not_open'
     )
       return REFUSED[outcome];
-    onChanged(DONE[outcome](reported));
+    onChanged(outcomeOf(answer, DONE[outcome](reported)));
     return null;
   };
 

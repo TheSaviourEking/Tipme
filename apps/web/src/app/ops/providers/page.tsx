@@ -9,9 +9,15 @@ import {
   Skeleton,
   TextareaField,
 } from '@tipme/ui';
+import {
+  ActionOutcome,
+  outcomeOf,
+  type ActionOutcomeState,
+} from '@/components/ops/action-outcome';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { refusalWords } from '@/lib/ops-answers';
+import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const TEST_STATUS: Record<string, string> = {
   pending: 'Waiting for the link in the email to be opened',
@@ -31,13 +37,14 @@ function ProviderCard({
 }) {
   const id = useId();
   const [testing, setTesting] = useState(false);
+  const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
   const test = card.lastTest;
   const sendTest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const to = String(data.get('to') ?? '').trim();
     const reason = String(data.get('reason') ?? '').trim();
-    const result = await apiFetch(`/v1/ops/providers/mail/${card.name}/test`, {
+    const result = await opsFetch(`/v1/ops/providers/mail/${card.name}/test`, {
       method: 'POST',
       body: { reason, ...(to ? { to } : {}) },
     });
@@ -56,6 +63,7 @@ function ProviderCard({
   return (
     <Card className="settings-section" data-testid={`provider-${card.name}`}>
       <h2>{card.label}</h2>
+      {outcome && <ActionOutcome outcome={outcome} />}
       {card.active && (
         <p>
           <strong>Active</strong>
@@ -135,20 +143,23 @@ function ProviderCard({
                 submit="Switch provider"
                 variant="primary"
                 onSubmit={async (reason) => {
-                  const result = await apiFetch(
-                    '/v1/ops/providers/mail/active',
-                    {
-                      method: 'POST',
-                      body: { provider: card.name, reason },
-                    },
-                  );
-                  if (result.ok) {
+                  const answer = await opsAct('/v1/ops/providers/mail/active', {
+                    method: 'POST',
+                    body: { provider: card.name, reason },
+                  });
+                  if (answer.kind !== 'refused') {
+                    setOutcome(
+                      outcomeOf(
+                        answer,
+                        `${card.name} is now the active provider.`,
+                      ),
+                    );
                     onChange();
                     return null;
                   }
-                  return result.code === 'PROVIDER_NOT_ALLOWED'
+                  return answer.code === 'PROVIDER_NOT_ALLOWED'
                     ? 'This provider can’t be made active in production.'
-                    : 'The switch didn’t go through. Please try again.';
+                    : refusalWords(answer);
                 }}
               />
             ) : (
@@ -178,7 +189,7 @@ function Overrides({
     event.preventDefault();
     const form = event.currentTarget;
     const values = new FormData(form);
-    const result = await apiFetch('/v1/ops/providers/overrides', {
+    const result = await opsFetch('/v1/ops/providers/overrides', {
       method: 'POST',
       body: {
         account: String(values.get('account') ?? '').trim(),
@@ -225,7 +236,7 @@ function Overrides({
                   field="Why remove this pin?"
                   submit="Remove pin"
                   onSubmit={async (reason) => {
-                    const result = await apiFetch(
+                    const result = await opsFetch(
                       '/v1/ops/providers/overrides/remove',
                       {
                         method: 'POST',
@@ -294,7 +305,7 @@ function Suppressions({ canManage }: { canManage: boolean }) {
   >(undefined);
   const lookup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await apiFetch<{
+    const result = await opsFetch<{
       suppression: { reason: string; createdAt: string } | null;
     }>('/v1/ops/providers/suppressions/lookup', {
       method: 'POST',
@@ -342,7 +353,7 @@ function Suppressions({ canManage }: { canManage: boolean }) {
                   : 'Unblock address'
               }
               onSubmit={async (reason) => {
-                const result = await apiFetch(
+                const result = await opsFetch(
                   '/v1/ops/providers/suppressions/remove',
                   {
                     method: 'POST',
@@ -373,7 +384,7 @@ export default function ProvidersPage() {
   const [failed, setFailed] = useState(false);
   const [version, setVersion] = useState(0);
   useEffect(() => {
-    void apiFetch<OpsMailProviders>('/v1/ops/providers/mail').then((result) => {
+    void opsFetch<OpsMailProviders>('/v1/ops/providers/mail').then((result) => {
       if (result.ok) setData(result.data);
       else setFailed(true);
     });

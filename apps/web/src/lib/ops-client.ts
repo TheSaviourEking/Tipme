@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext } from 'react';
+import { OPS_ISSUE_OUTCOME_WORDS } from '@tipme/contracts';
 
 /** The signed-in staff member's role and permissions (the server checks them on every call). */
 export interface OpsAccess {
@@ -39,15 +40,14 @@ export const PROVIDER_TEST_TOKEN_KEY = 'tipme.provider-test-token';
 
 /** How staff say a money issue was settled. TipMe changes no balance by it. */
 export const ISSUE_OUTCOME_CHOICES: Record<string, string> = {
-  resolved_by_provider: 'Settled by the provider',
-  recipient_owes: 'The recipient owes the money',
-  written_off: 'Written off by TipMe',
-  account_secured: 'The real owner has the account back',
+  resolved_by_provider: OPS_ISSUE_OUTCOME_WORDS.resolved_by_provider,
+  recipient_owes: OPS_ISSUE_OUTCOME_WORDS.recipient_owes,
+  written_off: OPS_ISSUE_OUTCOME_WORDS.written_off,
+  account_secured: OPS_ISSUE_OUTCOME_WORDS.account_secured,
 };
 /** Every outcome that can be shown. The last is only ever stated by the mark-failed tool. */
 export const ISSUE_OUTCOME_LABELS: Record<string, string> = {
-  ...ISSUE_OUTCOME_CHOICES,
-  staff_confirmed_absent: 'Staff confirmed the provider has no such payout',
+  ...OPS_ISSUE_OUTCOME_WORDS,
 };
 
 export const ISSUE_KIND_LABELS: Record<string, string> = {

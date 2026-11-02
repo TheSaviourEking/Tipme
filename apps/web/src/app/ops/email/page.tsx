@@ -11,7 +11,8 @@ import { Button, Card, EmptyState, Notice, Skeleton } from '@tipme/ui';
 import { LineChart, Tile } from '@/components/ops/charts';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
-import { apiDownload, apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
+import { apiDownload } from '@/lib/session-client';
 
 const PERIODS: Record<string, { label: string; versus: string }> = {
   today: { label: 'Today', versus: 'all of yesterday' },
@@ -72,7 +73,7 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
   const canRead = can(access, 'email.read');
   useEffect(() => {
     if (!canRead) return;
-    void apiFetch<OpsMailTimelineEvent[]>(
+    void opsFetch<OpsMailTimelineEvent[]>(
       `/v1/ops/email/messages/${row.id}/timeline`,
     ).then((result) => setTimeline(result.ok ? result.data : []));
   }, [row.id, canRead]);
@@ -90,7 +91,7 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
             field="Why do you need the full address?"
             submit="Reveal"
             onSubmit={async (reason) => {
-              const result = await apiFetch<{ address: string | null }>(
+              const result = await opsFetch<{ address: string | null }>(
                 `/v1/ops/email/messages/${row.id}/reveal-recipient`,
                 { method: 'POST', body: { reason } },
               );
@@ -123,7 +124,7 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
           <Button
             variant="secondary"
             onClick={() =>
-              void apiFetch<OpsMailContent>(
+              void opsFetch<OpsMailContent>(
                 `/v1/ops/email/messages/${row.id}/content`,
               ).then((result) =>
                 setContent(result.ok ? result.data : { status: 'withheld' }),
@@ -179,14 +180,14 @@ export default function EmailConsolePage() {
   // Each response is ignored once a newer choice has been made.
   useEffect(() => {
     let current = true;
-    void apiFetch<OpsMailSummary>(
+    void opsFetch<OpsMailSummary>(
       `/v1/ops/email/summary?period=${period}`,
     ).then((result) => {
       if (!current) return;
       setNumbersFailed(!result.ok);
       if (result.ok) setSummary(result.data);
     });
-    void apiFetch<OpsMailSeriesPoint[]>(
+    void opsFetch<OpsMailSeriesPoint[]>(
       `/v1/ops/email/series?period=${period}`,
     ).then((result) => {
       if (!current) return;
@@ -217,7 +218,7 @@ export default function EmailConsolePage() {
   type Page = { rows: OpsMailRow[]; nextCursor: string | null };
   useEffect(() => {
     let current = true;
-    void apiFetch<Page>(`/v1/ops/email/messages?${query}`).then((result) => {
+    void opsFetch<Page>(`/v1/ops/email/messages?${query}`).then((result) => {
       if (!current) return;
       setListFailed(!result.ok);
       if (!result.ok) return;
@@ -230,7 +231,7 @@ export default function EmailConsolePage() {
   }, [query]);
   const showMore = async (after: string) => {
     const asked = query;
-    const result = await apiFetch<Page>(
+    const result = await opsFetch<Page>(
       `/v1/ops/email/messages?${asked}&cursor=${encodeURIComponent(after)}`,
     );
     if (asked !== latestQuery.current) return;

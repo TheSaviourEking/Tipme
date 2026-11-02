@@ -36,15 +36,26 @@ export default defineConfig({
     {
       name: 'desktop',
       grepInvert: /@mobile/,
+      testIgnore: /ops-alone\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'mobile',
       grep: /@mobile/,
+      testIgnore: /ops-alone\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 360, height: 800 },
       },
+    },
+    {
+      // Removes every other staff member and changes the global switch, so nothing may run beside
+      // it. Run it alone with --project=desktop-alone --no-deps.
+      name: 'desktop-alone',
+      testMatch: /ops-alone\.spec\.ts/,
+      dependencies: ['desktop', 'mobile'],
+      fullyParallel: false,
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
   webServer: [

@@ -6,7 +6,16 @@ const API_ORIGIN =
 
 export type SessionResult<T> =
   | { ok: true; status: number; data: T }
-  | { ok: false; status: number; code: string; fields?: string[] };
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      fields?: string[];
+      /** A fixed reason code, on the few refusals that have one. */
+      reason?: string;
+      /** The API's fixed words for this code. */
+      message?: string;
+    };
 
 export async function apiFetch<T>(
   path: string,
@@ -47,7 +56,12 @@ export async function apiFetch<T>(
     return { ok: true, status: 204, data: undefined as T };
   const body = (await response.json().catch(() => null)) as {
     data?: T;
-    error?: { code?: string; fields?: string[] };
+    error?: {
+      code?: string;
+      fields?: string[];
+      reason?: string;
+      message?: string;
+    };
   } | null;
   if (response.ok && body && 'data' in body)
     return { ok: true, status: response.status, data: body.data as T };
@@ -56,6 +70,8 @@ export async function apiFetch<T>(
     status: response.status,
     code: body?.error?.code ?? 'INTERNAL_ERROR',
     ...(body?.error?.fields ? { fields: body.error.fields } : {}),
+    ...(body?.error?.reason ? { reason: body.error.reason } : {}),
+    ...(body?.error?.message ? { message: body.error.message } : {}),
   };
 }
 

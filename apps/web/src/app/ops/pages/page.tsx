@@ -19,12 +19,18 @@ import {
   Notice,
   TextareaField,
 } from '@tipme/ui';
+import {
+  ActionOutcome,
+  outcomeOf,
+  type ActionOutcomeState,
+} from '@/components/ops/action-outcome';
 import { PagePricing } from '@/components/ops/page-pricing';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { can, useOpsAccess } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { refusalWords } from '@/lib/ops-answers';
+import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const STATE_LABELS: Record<OpsPage['pageState'], string> = {
   live: 'Live',
@@ -36,13 +42,13 @@ const STATE_LABELS: Record<OpsPage['pageState'], string> = {
 function MoveSignInEmail({ userId }: { userId: string }) {
   const id = useId();
   const [open, setOpen] = useState(false);
-  const [done, setDone] = useState(false);
+  const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
   const [error, setError] = useState('');
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const text = (key: string) => String(data.get(key) ?? '').trim();
-    const result = await apiFetch(`/v1/ops/accounts/${userId}/email-recovery`, {
+    const answer = await opsAct(`/v1/ops/accounts/${userId}/email-recovery`, {
       method: 'POST',
       body: {
         newEmail: text('newEmail'),
@@ -50,25 +56,27 @@ function MoveSignInEmail({ userId }: { userId: string }) {
         reason: text('reason'),
       },
     });
-    if (result.ok) {
-      setDone(true);
+    if (answer.kind !== 'refused') {
+      setOutcome(
+        outcomeOf(
+          answer,
+          'A code was sent to the new address. Once they enter it at /recover, the move happens after 24 hours, and the old address is told.',
+        ),
+      );
       setOpen(false);
     } else
       setError(
-        result.code === 'FORBIDDEN'
+        answer.code === 'FORBIDDEN'
           ? 'Staff accounts can’t be moved this way.'
-          : 'That didn’t go through. Check the fields and try again.',
+          : answer.code === 'VALIDATION_FAILED'
+            ? 'That didn’t go through. Check the fields and try again.'
+            : refusalWords(answer),
       );
   };
   return (
     <Card className="settings-section">
       <h2>Sign-in email</h2>
-      {done && (
-        <Notice tone="success" title="Started">
-          A code was sent to the new address. Once they enter it at /recover,
-          the move happens after 24 hours, and the old address is told.
-        </Notice>
-      )}
+      {outcome && <ActionOutcome outcome={outcome} />}
       {open ? (
         <form className="settings-form" onSubmit={(e) => void submit(e)}>
           <InputField
@@ -127,14 +135,14 @@ function FreezeWithdrawals({
   const issueId = view.issueId;
   const [ended, setEnded] = useState(false);
   useEffect(() => {
-    void apiFetch<OpsWithdrawalFreezeState>(
+    void opsFetch<OpsWithdrawalFreezeState>(
       `/v1/ops/pages/${profileId}/withdrawal-freeze`,
     ).then((result) => {
       setRead(result.ok ? { ok: true, data: result.data } : { ok: false });
     });
   }, [profileId]);
   const freeze = async (reason: string) => {
-    const result = await apiFetch<OpsWithdrawalFreeze>(
+    const result = await opsFetch<OpsWithdrawalFreeze>(
       `/v1/ops/pages/${profileId}/withdrawal-freeze`,
       { method: 'POST', body: { reason } },
     );
@@ -143,7 +151,7 @@ function FreezeWithdrawals({
     return null;
   };
   const endSessions = async (reason: string) => {
-    const result = await apiFetch(`/v1/ops/accounts/${userId}/end-sessions`, {
+    const result = await opsFetch(`/v1/ops/accounts/${userId}/end-sessions`, {
       method: 'POST',
       body: { reason },
     });
@@ -213,7 +221,7 @@ export default function OpsPagesPage() {
   const allowed = can(access, 'pages.plan');
 
   const fetchPage = (wanted: string) =>
-    apiFetch<OpsPage>(`/v1/ops/pages/${encodeURIComponent(wanted)}`);
+    opsFetch<OpsPage>(`/v1/ops/pages/${encodeURIComponent(wanted)}`);
   const show = (
     wanted: string,
     result: Awaited<ReturnType<typeof fetchPage>>,
@@ -261,7 +269,7 @@ export default function OpsPagesPage() {
 
   const changePlan = async (current: OpsPage, reason: string) => {
     const plan = current.plan === 'pro' ? 'free' : 'pro';
-    const result = await apiFetch<OpsPage>(
+    const result = await opsFetch<OpsPage>(
       `/v1/ops/pages/${current.profileId}/plan`,
       { method: 'POST', body: { plan, reason } },
     );
