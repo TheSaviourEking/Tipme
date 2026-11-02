@@ -64,6 +64,7 @@ export function AppreciationForm({
   tipAmounts,
   surface = 'home',
   pilotNotice,
+  barNotice,
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -80,6 +81,12 @@ export function AppreciationForm({
   surface?: 'home' | 'profile';
   /** The pilot notice, rendered on the server (null outside live mode): it must be seen before paying, under the button and in the phone's Tip bar. */
   pilotNotice?: ReactNode;
+  /**
+   * The pilot notice as plain text for the phone's Tip bar, or nothing when it is not shown. The
+   * server decides, so the bar never holds an empty slot; it has no test id, so the notice under
+   * the button stays the one the page is tested by.
+   */
+  barNotice?: ReactNode;
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -546,7 +553,7 @@ export function AppreciationForm({
           {...(onProfile
             ? {
                 quote: quoteArea,
-                notice: pilotNotice ?? copy.formDisclaimer,
+                notice: barNotice ?? copy.formDisclaimer,
               }
             : {})}
         >
@@ -565,12 +572,8 @@ export function AppreciationForm({
           </Button>
         </TipAction>
         <p className="composer-disclaimer">
-          {pilotNotice && (
-            <>
-              {pilotNotice}
-              <br />
-            </>
-          )}
+          {/* A block of its own; outside live mode it renders nothing, so no break after it. */}
+          {pilotNotice}
           {copy.formDisclaimer && (
             <>
               {copy.formDisclaimer}

@@ -116,6 +116,8 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
 
   // Escape cancels too, and the page stays where it was scrolled to.
   await page.getByLabel('Handle').fill(first);
+  // Bring the button into view first: with the cards above it the click would scroll the page itself.
+  await change.scrollIntoViewIfNeeded();
   const scrolled = await page.evaluate(() => scrollY);
   await change.click();
   await expect(dialog).toBeVisible();

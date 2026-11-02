@@ -3,6 +3,11 @@ import { permanentRedirect } from 'next/navigation';
 import type { ResolvedCover } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { PilotNotice } from '@/components/pilot-notice';
+import {
+  PILOT_NOTICE_SUPPORT_EMAIL,
+  PILOT_NOTICE_TEXT,
+  pilotNoticeShown,
+} from '@/lib/pilot';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import { PageRetry } from '@/components/profile/page-retry';
@@ -85,6 +90,11 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                 surface="profile"
                 paymentMode={mode}
                 pilotNotice={<PilotNotice />}
+                {...(pilotNoticeShown(process.env, mode)
+                  ? {
+                      barNotice: `${PILOT_NOTICE_TEXT} ${PILOT_NOTICE_SUPPORT_EMAIL}`,
+                    }
+                  : {})}
                 recipient={firstName}
                 handle={profile.handle}
                 collapseExtras

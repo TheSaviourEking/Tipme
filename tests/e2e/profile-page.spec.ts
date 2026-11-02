@@ -329,12 +329,24 @@ test.describe('the page in each payment state', () => {
       await expect(
         page.locator('footer [data-testid=pilot-notice]'),
       ).toHaveCount(0);
-      const [tipBox, noticeBox] = await Promise.all([
-        tip.boundingBox(),
-        panel.getByTestId('pilot-notice').boundingBox(),
-      ]);
-      expect(noticeBox!.y).toBeGreaterThan(tipBox!.y);
-      expect(noticeBox!.y - (tipBox!.y + tipBox!.height)).toBeLessThan(80);
+      // On a phone the Tip button is in the fixed bar, with the same words directly above it;
+      // elsewhere the notice is the line under the button.
+      const bar = page.locator('.composer-action__notice');
+      const tipBox = (await tip.boundingBox())!;
+      if (await bar.isVisible()) {
+        await expect(bar).toContainText(
+          'TipMe is in a pilot. Payments are real.',
+        );
+        const barBox = (await bar.boundingBox())!;
+        expect(barBox.y + barBox.height).toBeLessThanOrEqual(tipBox.y);
+        expect(tipBox.y - (barBox.y + barBox.height)).toBeLessThan(40);
+      } else {
+        const noticeBox = (await panel
+          .getByTestId('pilot-notice')
+          .boundingBox())!;
+        expect(noticeBox.y).toBeGreaterThan(tipBox.y);
+        expect(noticeBox.y - (tipBox.y + tipBox.height)).toBeLessThan(80);
+      }
       expect(await page.locator('body').innerText()).not.toMatch(/bachs/i);
       // Not live (test mode, or closed): the setting is on but there is nothing real to warn about.
       for (const mode of ['test', 'closed'] as const) {
