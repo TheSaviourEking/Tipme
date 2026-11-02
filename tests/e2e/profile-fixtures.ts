@@ -45,6 +45,16 @@ export const LONG_NAME =
 export const UNBROKEN_NAME = 'W'.repeat(60);
 export const UNBROKEN_ROLE = 'R'.repeat(60);
 
+/** A moment a page shared, as the API sends it. */
+export const CELEBRATION = {
+  momentId: '11111111-1111-4111-8111-111111111111',
+  label: '10th tip',
+};
+const amounts = (...naira: number[]) => ({
+  presetsMinor: naira.map((n) => String(n * 100)),
+  minMinor: String(naira[0]! * 100),
+});
+
 export const PAGES: PublicProfile[] = [
   page('kemi'),
   page('hearts', {
@@ -58,6 +68,45 @@ export const PAGES: PublicProfile[] = [
   }),
   page('widename', { displayName: UNBROKEN_NAME }),
   page('widerole', { role: UNBROKEN_ROLE }),
+  // The compact tip card's worst and usual cases: a page like DR7's, then more amounts.
+  page('dr7', {
+    displayName: 'DR7',
+    avatarPath: '/portraits/tobi.webp',
+    tipAmounts: amounts(10_000, 20_000, 50_000, 100_000),
+    celebration: CELEBRATION,
+  }),
+  page('sixkeys', {
+    tipAmounts: amounts(1_000, 2_000, 5_000, 10_000, 50_000, 100_000),
+    celebration: CELEBRATION,
+  }),
+  page('fivekeys', {
+    tipAmounts: amounts(1_000, 3_000, 5_000, 10_000, 100_000),
+  }),
+  page('eightkeys', {
+    tipAmounts: amounts(
+      1_000,
+      1_500,
+      3_000,
+      5_000,
+      10_000,
+      20_000,
+      50_000,
+      100_000,
+    ),
+    celebration: CELEBRATION,
+  }),
+  page('tiekeys', { tipAmounts: amounts(1_500, 2_500, 9_000) }),
+  page('tallpage', {
+    bio: 'A long bio that keeps on going. '.repeat(9).slice(0, 280),
+    craft: 'Fades. '.repeat(60),
+    note: 'Thank you for every visit. '.repeat(40),
+    celebration: CELEBRATION,
+  }),
+  page('closedout', { acceptingTips: false, celebration: CELEBRATION }),
+  page('longfirst', {
+    displayName: 'Oluwatobiloba-Adebayo-Akinwande Bello',
+    celebration: CELEBRATION,
+  }),
   // A live copy that takes tips only for named pages, and this one is not named.
   page('unlisted', { tippingOpen: false }),
   // Only what a page must have: no photo, role, bio or links.

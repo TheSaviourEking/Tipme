@@ -35,16 +35,15 @@ async function tip(
 ) {
   await page.goto(`/@${handle}`);
   await page.getByRole('radio', { name: amount }).click();
+  // The optional details sit behind one disclosure.
+  if (purpose || remember)
+    await page.getByText('Add a message, reason or your name').click();
   if (purpose)
     await page
       .getByLabel('What is this tip for? (optional)')
       .selectOption(purpose);
   await expect(page.getByText(/You pay NGN [\d,]+\.\d\d/)).toBeVisible();
-  if (remember) {
-    // The profile keeps the optional extras behind a disclosure.
-    await page.getByText('Add your name or remember tips').click();
-    await page.getByLabel('Remember my tips on this phone').check();
-  }
+  if (remember) await page.getByLabel('Remember my tips on this phone').check();
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pay_/);
   await expect(

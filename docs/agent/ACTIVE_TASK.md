@@ -1,3 +1,10 @@
+# Current task — compact tip card and celebration placement (2 November 2026)
+
+- Branch/worktree: `feat/compact-tip-card` / `.worktrees/tip-card`, from `origin/dev` at `7295866`, committed, not pushed. Web and tests only: no API, contract, migration or payment change.
+- Built: shorter card, keys with exact amounts and no lone key (`keyLayout`), full-width Other field, one disclosure, one trust line, partner wording moved to the page foot, celebration in the identity column with a tick box, closest-to-₦2,000 preselect, sticky only while the panel fits the window. Rulings are in `docs/design/DECISION-LOG.md`, 2 Nov.
+- Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
+- Next exact step: regenerate `profile-desktop-desktop-linux.png` and `profile-mobile-mobile-linux.png` from CI's render, then open the PR to `dev`.
+
 # Current task — home page LCP, second pass (2 November 2026)
 
 - Branch/worktree: `fix/home-lcp-2` / `.worktrees/home-lcp-2`, from `origin/dev` at `010ed89` (`fix/home-lcp` and `.worktrees/home-lcp` already existed from the Sentry pass and were left alone). Committed, not pushed.

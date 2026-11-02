@@ -61,6 +61,10 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
   const mode = await getPaymentMode();
   const copy = paymentModeCopy(mode);
+  const pilotShown = pilotNoticeShown(process.env, mode);
+  // Closed checkout outranks the owner's own setup: nobody can tip yet.
+  const opensSoon = !copy.payable || profileTippingClosed(mode, profile);
+  const takesTips = !opensSoon && profile.acceptingTips !== false;
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
@@ -79,14 +83,20 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           priority
         />
         <div className="profile-columns">
-          <RecipientIdentity profile={profile} firstName={firstName} />
+          <RecipientIdentity
+            profile={profile}
+            firstName={firstName}
+            // Only beside a form that can add to it.
+            celebrationLabel={
+              takesTips ? (profile.celebration?.label ?? null) : null
+            }
+          />
           <aside
             className="profile-composer tip-instrument"
             aria-label={`Tip ${firstName}`}
             data-tip-panel
           >
-            {/* Closed checkout outranks the owner's own setup: nobody can tip yet. */}
-            {!copy.payable || profileTippingClosed(mode, profile) ? (
+            {opensSoon ? (
               <TippingOpensSoon handle={profile.handle} />
             ) : profile.acceptingTips === false ? (
               <TipsNotReady recipient={firstName} />
@@ -94,9 +104,9 @@ export default async function ProfilePage({ params, searchParams }: Props) {
               <AppreciationForm
                 surface="profile"
                 paymentMode={mode}
-                pilotNotice={<PilotNotice />}
-                {...(pilotNoticeShown(process.env, mode)
+                {...(pilotShown
                   ? {
+                      pilotNotice: <PilotNotice />,
                       barNotice: (
                         <>
                           {PILOT_NOTICE_TEXT}{' '}
@@ -109,7 +119,6 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                   : {})}
                 recipient={firstName}
                 handle={profile.handle}
-                collapseExtras
                 {...(profile.tipAmounts
                   ? { tipAmounts: profile.tipAmounts }
                   : {})}
@@ -121,6 +130,9 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           </aside>
         </div>
         <footer className="profile-foot">
+          {takesTips && copy.formPartner && (
+            <p className="profile-foot__partner">{copy.formPartner}</p>
+          )}
           <div className="profile-foot__quiet">
             <ReportPage handle={profile.handle} />
             <Link href="/legal/privacy">Privacy</Link>

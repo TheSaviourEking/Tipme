@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { CSSProperties, FormEvent, ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import type { TipAmounts, TipPurpose, TipQuote } from '@tipme/contracts';
 import {
   AmountChoice,
@@ -15,7 +16,7 @@ import { track } from '@/lib/analytics';
 import { newUuid } from '@/lib/random-id';
 import { createTip, quoteTip, type ApiFailure } from '@/lib/api-client';
 import { formatDemoAmount, formatNaira } from '@/lib/demo-amount';
-import { amountOptions } from '@/lib/tip-amounts';
+import { amountOptions, keyLayout } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
@@ -31,6 +32,11 @@ type QuoteState =
   | { kind: 'failed'; amount: number; message: string };
 
 const newIdempotencyKey = newUuid;
+// The sticky panel's top offset and a little room under it (globals.css).
+const PANEL_MARGIN_PX = 32;
+// packages/contracts/src/checkout.ts: what a tip may carry.
+const MESSAGE_LIMIT = 280;
+const NAME_LIMIT = 60;
 
 const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   if (failure.code === 'NETWORK')
@@ -59,7 +65,6 @@ export function AppreciationForm({
   recipient,
   handle,
   compact = false,
-  collapseExtras = false,
   celebration,
   tipAmounts,
   surface = 'home',
@@ -73,9 +78,7 @@ export function AppreciationForm({
   /** This page's amounts (PR-012): the standard ones, or a Pro page's own. */
   tipAmounts?: TipAmounts;
   compact?: boolean;
-  /** Tuck the optional name and "remember" choices behind a disclosure (profile panel). */
-  collapseExtras?: boolean;
-  /** A moment the recipient shared: supporters may add their tip to it. */
+  /** A moment the recipient shared (announced beside the card): supporters may add their tip. */
   celebration?: { momentId: string; label: string };
   /** A person's own page has its own heading and wording, and a Tip bar on phones. */
   surface?: 'home' | 'profile';
@@ -94,9 +97,9 @@ export function AppreciationForm({
   const [closed, setClosed] = useState(false);
   const options = amountOptions(tipAmounts);
   const presets = options.presets;
+  const layout = keyLayout(presets.map((preset) => preset.label));
   const [joining, setJoining] = useState(false);
-  // Starts on the owner's NGN 2,000 where this page offers it (nothing otherwise). This is only a
-  // starting point: nothing is quoted until the person chooses, taps the amount again or taps
+  // Starts on the owner's NGN 2,000, or the preset closest to it. This is only a starting point: nothing is quoted until the person chooses, taps the amount again or taps
   // Tip, so a page view never creates a quote, and `amount_selected` counts people, not defaults.
   const [selection, setSelection] = useState(
     options.defaultMinor === null ? '' : String(options.defaultMinor),
@@ -108,6 +111,10 @@ export function AppreciationForm({
   const [purpose, setPurpose] = useState<TipPurpose | ''>('');
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
+  // The optional details stay mounted when closed, so what was typed survives closing.
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const [messageError, setMessageError] = useState('');
+  const [nameError, setNameError] = useState('');
   const [quote, setQuote] = useState<QuoteState>({ kind: 'idle' });
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -116,6 +123,8 @@ export function AppreciationForm({
   const latestQuote = useRef(0);
   const customField = useRef<HTMLInputElement>(null);
   const firstChoice = useRef<HTMLInputElement>(null);
+  const messageField = useRef<HTMLTextAreaElement>(null);
+  const nameField = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const onProfile = surface === 'profile';
 
@@ -192,11 +201,25 @@ export function AppreciationForm({
           : 'Choose an amount or enter your own.',
       );
       if (selection === 'other') customField.current?.focus();
-      else firstChoice.current?.focus();
+      else (firstChoice.current ?? customField.current)?.focus();
       return;
     }
     setError('');
     setNotice('');
+    // The API's own limits (the fields stop there too). An error in the closed details opens them.
+    const tooLongMessage = message.trim().length > MESSAGE_LIMIT;
+    const tooLongName = payerName.trim().length > NAME_LIMIT;
+    setMessageError(
+      tooLongMessage ? `Keep your message to ${MESSAGE_LIMIT} characters.` : '',
+    );
+    setNameError(
+      tooLongName ? `Keep your name to ${NAME_LIMIT} characters.` : '',
+    );
+    if (tooLongMessage || tooLongName) {
+      flushSync(() => setExtrasOpen(true));
+      (tooLongMessage ? messageField : nameField).current?.focus();
+      return;
+    }
     if (!chosen) {
       // The starting amount, not yet confirmed by the person: this tap fetches its total and shows
       // it (in the bar, and read out), and the next tap pays. Nothing is created until then.
@@ -260,7 +283,11 @@ export function AppreciationForm({
   // On a phone the Tip bar can be pressed from anywhere on the page: bring a problem into view,
   // above the bar (the page's scroll padding), however far away the supporter was.
   const problem =
-    error || notice || (shown.kind === 'failed' ? shown.message : '');
+    error ||
+    messageError ||
+    nameError ||
+    notice ||
+    (shown.kind === 'failed' ? shown.message : '');
   useEffect(() => {
     if (!onProfile || !problem) return;
     form.current
@@ -309,22 +336,97 @@ export function AppreciationForm({
     };
   }, [onProfile, closed]);
 
+  // The tipping panel stays in view (CSS, sticky) only while it fits the window: a taller one
+  // scrolls with the page, or its Tip button would stay below the fold. Opening the details can
+  // make it taller while it is stuck: the scroll moves with it, so what is on screen stays put.
+  useEffect(() => {
+    const panel = form.current?.closest<HTMLElement>('[data-tip-panel]');
+    if (!onProfile || !panel) return;
+    const measure = () => {
+      if (!matchMedia('(min-width: 861px)').matches) {
+        panel.removeAttribute('data-taller-than-window');
+        return;
+      }
+      const taller = panel.offsetHeight + PANEL_MARGIN_PX > innerHeight;
+      if (taller === panel.hasAttribute('data-taller-than-window')) return;
+      const before = panel.getBoundingClientRect().top;
+      panel.toggleAttribute('data-taller-than-window', taller);
+      const moved = panel.getBoundingClientRect().top - before;
+      if (moved) scrollBy({ top: moved, behavior: 'instant' });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      removeEventListener('resize', measure);
+      panel.removeAttribute('data-taller-than-window');
+    };
+  }, [onProfile, closed]);
+
   const ready = shown.kind === 'ready' ? shown.quote : null;
   const busy = submitting || shown.kind === 'loading';
   const extras = (
     <>
+      <div className="tm-field">
+        <label htmlFor={`${id}-purpose`}>
+          What is this tip for? (optional)
+        </label>
+        <select
+          id={`${id}-purpose`}
+          className="tm-input"
+          value={purpose}
+          disabled={submitting}
+          onChange={(event) => {
+            const selected = purposeOptions.find(
+              (option) => option.value === event.currentTarget.value,
+            );
+            setPurpose(selected?.value ?? '');
+            draftKey.current = null;
+          }}
+        >
+          <option value="">Choose a reason</option>
+          {purposeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <TextareaField
+        id={`${id}-message`}
+        label="Personal message (optional)"
+        maxLength={MESSAGE_LIMIT}
+        value={message}
+        disabled={submitting}
+        ref={messageField}
+        onChange={(event) => {
+          // That someone started a note, never what it says.
+          if (!message && event.target.value)
+            track('message_started', { surface: 'profile', handle });
+          setMessage(event.target.value);
+          setMessageError('');
+          draftKey.current = null;
+        }}
+        placeholder="Your work made a difference. Thank you."
+        hint={`${message.length}/${MESSAGE_LIMIT} characters. Sent privately with your tip.`}
+        error={messageError || undefined}
+      />
       <InputField
         id={`${id}-name`}
         label="Your name (optional)"
-        maxLength={60}
+        maxLength={NAME_LIMIT}
         autoComplete="name"
         value={payerName}
         disabled={submitting}
+        ref={nameField}
         onChange={(event) => {
           setPayerName(event.target.value);
+          setNameError('');
           draftKey.current = null;
         }}
         hint={`Shown to ${recipient} with your tip. Leave it empty to stay anonymous.`}
+        error={nameError || undefined}
       />
       <label className="tip-remember" htmlFor={`${id}-remember`}>
         <input
@@ -386,10 +488,13 @@ export function AppreciationForm({
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}
     >
-      <div className="composer-topline">
-        <span className="eyebrow">A little appreciation</span>
-        {copy.formBadge && <Badge>{copy.formBadge}</Badge>}
-      </div>
+      {/* A person's page says its mode once, in the wording beside the Tip button. */}
+      {!onProfile && (
+        <div className="composer-topline">
+          <span className="eyebrow">A little appreciation</span>
+          {copy.formBadge && <Badge>{copy.formBadge}</Badge>}
+        </div>
+      )}
       {/* No browser form restoration: after Back, the controls must match React's state. */}
       <form
         ref={form}
@@ -398,25 +503,6 @@ export function AppreciationForm({
         autoComplete="off"
         {...(submitting ? { 'data-submitting': '' } : {})}
       >
-        {celebration && (
-          <div className="celebration-banner">
-            <p>
-              <span aria-hidden="true">✳ </span>
-              Celebrating {recipient}’s {celebration.label}
-            </p>
-            <Button
-              variant={joining ? 'primary' : 'secondary'}
-              aria-pressed={joining}
-              disabled={submitting}
-              onClick={() => {
-                setJoining((value) => !value);
-                draftKey.current = null;
-              }}
-            >
-              Add to the celebration
-            </Button>
-          </div>
-        )}
         {onProfile ? (
           <h2>Tip {recipient}</h2>
         ) : (
@@ -431,49 +517,48 @@ export function AppreciationForm({
           disabled={submitting}
           aria-describedby={`${id}-currency ${error && selection !== 'other' ? `${id}-error` : ''}`}
         >
-          <legend>Choose an amount</legend>
-          <p id={`${id}-currency`} className="tm-hint">
+          <legend className="sr-only">Choose an amount</legend>
+          <p id={`${id}-currency`} className="sr-only">
             Amounts are in NGN.
           </p>
-          <div className="amount-options">
-            {presets.map((preset, index) => (
-              <AmountChoice
-                key={preset.minor}
-                ref={index === 0 ? firstChoice : undefined}
-                name={`amount-${id}`}
-                value={String(preset.minor)}
-                aria-label={`${preset.label} NGN`}
-                checked={selection === String(preset.minor)}
-                onChange={() => {
-                  setSelection(String(preset.minor));
-                  setChosen(true);
-                  setError('');
-                  track('amount_selected', { surface: 'profile', handle });
-                }}
-                // Tapping the amount already shown is a choice too: it asks for its total.
-                onClick={() => {
-                  // A different amount is counted by onChange; this is only the one already shown.
-                  if (chosen || selection !== String(preset.minor)) return;
-                  setChosen(true);
-                  track('amount_selected', { surface: 'profile', handle });
-                }}
-              >
-                ₦{preset.label}
-              </AmountChoice>
-            ))}
-            <AmountChoice
-              name={`amount-${id}`}
-              value="other"
-              aria-label="Other amount"
-              checked={selection === 'other'}
-              onChange={() => {
-                setSelection('other');
-                setChosen(true);
-                setError('');
-              }}
+          <div className="amount-fit">
+            <div
+              className="amount-options"
+              style={
+                {
+                  '--keys-small': layout.small,
+                  '--keys-medium': layout.medium,
+                  '--keys-large': layout.large,
+                } as CSSProperties
+              }
             >
-              Other
-            </AmountChoice>
+              {presets.map((preset, index) => (
+                <AmountChoice
+                  key={preset.minor}
+                  ref={index === 0 ? firstChoice : undefined}
+                  name={`amount-${id}`}
+                  value={String(preset.minor)}
+                  aria-label={`${preset.label} NGN`}
+                  checked={selection === String(preset.minor)}
+                  onChange={() => {
+                    setSelection(String(preset.minor));
+                    setChosen(true);
+                    setCustom('');
+                    setError('');
+                    track('amount_selected', { surface: 'profile', handle });
+                  }}
+                  // Tapping the amount already shown is a choice too: it asks for its total.
+                  onClick={() => {
+                    // A different amount is counted by onChange; this is only the one already shown.
+                    if (chosen || selection !== String(preset.minor)) return;
+                    setChosen(true);
+                    track('amount_selected', { surface: 'profile', handle });
+                  }}
+                >
+                  ₦{preset.label}
+                </AmountChoice>
+              ))}
+            </div>
           </div>
           {error && selection !== 'other' && (
             <p className="tm-field-error" role="alert" id={`${id}-error`}>
@@ -481,27 +566,26 @@ export function AppreciationForm({
             </p>
           )}
         </fieldset>
-        {selection === 'other' && (
-          <InputField
-            id={`${id}-custom`}
-            label="Your amount (NGN)"
-            inputMode="decimal"
-            autoComplete="off"
-            maxLength={16}
-            placeholder="e.g. 1500.00"
-            value={custom}
-            disabled={submitting}
-            ref={customField}
-            onChange={(event) => {
-              if (!custom && event.target.value)
-                track('custom_amount_entered', { surface: 'profile', handle });
-              setCustom(event.target.value);
-              setError('');
-            }}
-            error={error || undefined}
-            hint={`${options.rangeText}.`}
-          />
-        )}
+        <InputField
+          id={`${id}-custom`}
+          label={`Other amount (${options.rangeText})`}
+          inputMode="decimal"
+          autoComplete="off"
+          maxLength={16}
+          placeholder="e.g. 1500.00"
+          value={selection === 'other' ? custom : ''}
+          disabled={submitting}
+          ref={customField}
+          onChange={(event) => {
+            if (!custom && event.target.value)
+              track('custom_amount_entered', { surface: 'profile', handle });
+            setSelection('other');
+            setChosen(true);
+            setCustom(event.target.value);
+            setError('');
+          }}
+          error={selection === 'other' && error ? error : undefined}
+        />
         {onProfile ? (
           <p className="tip-quote-live sr-only" aria-live="polite">
             {shown.kind === 'loading'
@@ -515,55 +599,36 @@ export function AppreciationForm({
         ) : (
           quoteArea
         )}
-        <div className="tm-field">
-          <label htmlFor={`${id}-purpose`}>
-            What is this tip for? (optional)
+        {celebration && (
+          <label className="tip-remember tip-celebrate" htmlFor={`${id}-join`}>
+            <input
+              id={`${id}-join`}
+              type="checkbox"
+              checked={joining}
+              disabled={submitting}
+              onChange={(event) => {
+                setJoining(event.target.checked);
+                draftKey.current = null;
+              }}
+            />
+            <span>Add to the celebration</span>
           </label>
-          <select
-            id={`${id}-purpose`}
-            className="tm-input"
-            value={purpose}
-            disabled={submitting}
-            onChange={(event) => {
-              const selected = purposeOptions.find(
-                (option) => option.value === event.currentTarget.value,
-              );
-              setPurpose(selected?.value ?? '');
-              draftKey.current = null;
+        )}
+        <details
+          className="composer-extras"
+          open={extrasOpen}
+          onToggle={(event) => setExtrasOpen(event.currentTarget.open)}
+        >
+          <summary
+            // The payment moment stays still: nothing opens or closes while a tip starts.
+            onClick={(event) => {
+              if (submitting) event.preventDefault();
             }}
           >
-            <option value="">Choose a reason</option>
-            {purposeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <TextareaField
-          id={`${id}-message`}
-          label="Personal message (optional)"
-          maxLength={280}
-          value={message}
-          disabled={submitting}
-          onChange={(event) => {
-            // That someone started a note, never what it says.
-            if (!message && event.target.value)
-              track('message_started', { surface: 'profile', handle });
-            setMessage(event.target.value);
-            draftKey.current = null;
-          }}
-          placeholder="Your work made a difference. Thank you."
-          hint={`${message.length}/280 characters. Sent privately with your tip.`}
-        />
-        {collapseExtras ? (
-          <details className="composer-extras">
-            <summary>Add your name or remember tips</summary>
-            <div className="composer-extras__body">{extras}</div>
-          </details>
-        ) : (
-          extras
-        )}
+            Add a message, reason or your name
+          </summary>
+          <div className="composer-extras__body">{extras}</div>
+        </details>
         {notice && (
           <Notice tone="error" title="Not sent yet">
             {notice}
@@ -592,39 +657,27 @@ export function AppreciationForm({
             <Arrow />
           </Button>
         </TipAction>
-        <p className="composer-disclaimer">
-          {/* The mode wording: on a phone with the Tip bar, the bar carries it and CSS removes this
-              copy, so it is seen and read once. A block of its own; outside live mode the pilot
-              notice renders nothing, so no break after it. */}
-          <span className="composer-disclaimer__mode">
-            {pilotNotice}
-            {copy.formDisclaimer && (
-              <>
-                {copy.formDisclaimer}
-                <br />
-              </>
-            )}
-          </span>
-          You’ll confirm on the payment provider’s page next.
-        </p>
-        {onProfile && copy.formTrust && (
-          <p className="composer-trust">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="5" y="11" width="14" height="9" rx="2" />
-              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-            </svg>
-            <span>{copy.formTrust}</span>
+        {(pilotNotice || copy.formDisclaimer || !onProfile) && (
+          <p className="composer-disclaimer">
+            {/* The mode wording: on a phone with the Tip bar, the bar carries it and CSS removes this
+                copy, so it is seen and read once. A block of its own; outside live mode the pilot
+                notice renders nothing, so no break after it. */}
+            <span className="composer-disclaimer__mode">
+              {pilotNotice}
+              {copy.formDisclaimer && (
+                <>
+                  {copy.formDisclaimer}
+                  {!onProfile && <br />}
+                </>
+              )}
+            </span>
+            {/* A person's page says this at its foot (formPartner). */}
+            {!onProfile &&
+              'You’ll confirm on the payment provider’s page next.'}
           </p>
+        )}
+        {onProfile && copy.formTrust && (
+          <p className="composer-trust">{copy.formTrust}</p>
         )}
       </form>
     </Card>

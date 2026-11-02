@@ -14,8 +14,9 @@ import {
 // The public page (spec section 5). Test mode runs on the full e2e stack. The other payment states
 // and the worst-case pages run the same built web app against a stand-in API (profile-fixtures).
 
-const TRUST =
-  'No account needed. You’ll see the full total before you pay, and our payment partner handles your payment securely.';
+const TRUST = 'No account needed. You’ll see the full total before you pay.';
+const openDetails = (page: Page) =>
+  page.getByText('Add a message, reason or your name').click();
 const tipButton = (page: Page) => page.getByRole('button', { name: /^Tip\b/ });
 const share = (page: Page) =>
   page.getByRole('button', { name: 'Share this page' });
@@ -552,12 +553,10 @@ test.describe('the page in each payment state', () => {
     await expect(tipButton(page)).toHaveCSS('background-color', 'rgb(0, 0, 0)');
     // Space for the live pilot notice: the wording stays directly under the button.
     const button = await tipButton(page).boundingBox();
-    const wording = await box(page, '.composer-action + .composer-disclaimer');
-    expect(wording.y).toBeGreaterThanOrEqual(
+    const trust = await page.getByText(TRUST).boundingBox();
+    expect(trust?.y).toBeGreaterThanOrEqual(
       (button?.y ?? 0) + (button?.height ?? 0),
     );
-    const trust = await page.getByText(TRUST).boundingBox();
-    expect(trust?.y).toBeGreaterThanOrEqual(wording.y);
   });
 
   test('the panel rises in, without moving the fixed Tip bar on a phone', async ({
@@ -667,7 +666,8 @@ test('the Tip bar never covers a focused field, an error or the Report link @mob
   const bar = page.locator('.composer-action');
   // Tapping Tip with a missing amount (the page starts on 2,000, so choose Other and leave it
   // empty): the error is shown clear of the bar.
-  await page.getByRole('radio', { name: 'Other amount' }).click();
+  await page.getByLabel(/^Other amount/).fill('5');
+  await page.getByLabel(/^Other amount/).blur();
   await tipButton(page).click();
   const error = page.getByText(/Enter an amount of NGN 1,000 or more/);
   await expect(error).toBeVisible();
@@ -677,6 +677,8 @@ test('the Tip bar never covers a focused field, an error or the Report link @mob
   await expect(error).toBeInViewport();
 
   // Each field: the bar is out of the way while it has focus, and back after.
+  await page.getByLabel(/^Other amount/).blur();
+  await openDetails(page);
   const message = page.getByLabel('Personal message (optional)');
   await message.focus();
   await expect(bar).toBeHidden();
@@ -721,6 +723,7 @@ test('closing the phone keyboard with a field still focused brings the Tip bar b
   page,
 }) => {
   await page.goto('/@ada');
+  await openDetails(page);
   const field = page.getByLabel('Personal message (optional)');
   await field.focus();
   await page.setViewportSize({ width: 360, height: 500 });
@@ -754,14 +757,14 @@ test('a failed start is shown clear of the Tip bar @mobile', async ({
     .toBe(true);
 });
 
-test('the wording under the Tip button stays in its place on a phone @mobile', async ({
+test('the trust line stays in the card on a phone, and the partner wording at the page foot @mobile', async ({
   page,
 }) => {
   await page.goto('/@ada');
-  await expect(
-    page.locator('.composer-action + .composer-disclaimer'),
-  ).toContainText('You’ll confirm on the payment provider’s page next.');
-  await expect(page.locator('.composer-trust')).toContainText(TRUST);
+  await expect(page.locator('.composer-trust')).toHaveText(TRUST);
+  await expect(page.locator('.profile-foot__partner')).toContainText(
+    'Our payment partner handles your payment securely',
+  );
 });
 
 test('a Pro page loses "Get your own TipMe page" within seconds of staff changing the plan', async ({
@@ -797,6 +800,7 @@ test('choosing a reason keeps the Tip bar: a select opens no keyboard @mobile', 
   page,
 }) => {
   await page.goto('/@ada');
+  await openDetails(page);
   const reason = page.getByLabel('What is this tip for? (optional)');
   await reason.focus();
   await reason.selectOption({ index: 1 });
@@ -860,10 +864,6 @@ test('on a phone the mode wording is shown once, in the bar directly above the b
   await expect(page.locator('.composer-disclaimer__mode')).toBeHidden();
   await expect(page.getByText(WORDS).locator('visible=true')).toHaveCount(1);
   expect(await heardTimes(page)).toBe(1);
-  // The rest of the line under the button stays.
-  await expect(page.locator('.composer-disclaimer')).toContainText(
-    'You’ll confirm on the payment provider’s page next.',
-  );
 });
 
 test('at desktop width the bar copy stays out: the wording sits under the button, seen and heard once', async ({
@@ -943,6 +943,7 @@ test('without :has() the button simply stays in the form @mobile', async ({
     'static',
   );
   await expect(page.locator('.composer-action__notice')).toBeHidden();
+  await openDetails(page);
   await page.getByLabel('Personal message (optional)').focus();
   await expect(tipButton(page)).toBeVisible();
 });
@@ -1110,8 +1111,7 @@ test('typing an amount on a phone is still announced: one live region, outside t
   page,
 }) => {
   await page.goto('/@ada');
-  await page.getByRole('radio', { name: 'Other amount' }).check();
-  const field = page.getByLabel('Your amount (NGN)');
+  const field = page.getByLabel(/^Other amount/);
   await field.focus();
   await field.fill('2500');
   await expect(page.locator('.composer-action')).toBeHidden();
