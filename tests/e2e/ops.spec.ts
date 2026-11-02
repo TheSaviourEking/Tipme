@@ -68,6 +68,7 @@ test('the owner enrols, works an issue (reveal, note, resolve) and sees it all i
   ).toBeVisible();
   await expectAccessible(page);
   expect(await fitsViewport(page)).toBe(true);
+  await other.context.close();
 
   await page.goto('/ops/staff');
   await expect(page.getByText('private.view')).toBeVisible();
