@@ -654,6 +654,26 @@ export async function alertIfLastApproverGone(
   });
 }
 
+/** Spec 6.4: who holds what changed. Goes to the alert route, by id and name only. */
+export const alertStaffChange = (
+  tx: Tx,
+  action:
+    | 'added'
+    | 'removed'
+    | 'role_changed'
+    | 'access_changed'
+    | 'role_updated'
+    | 'role_created'
+    | 'role_deleted',
+  actorId: string | null,
+) =>
+  enqueueOutbox(tx, {
+    eventType: 'ops.staff_changed',
+    // Each occurrence is its own alert.
+    aggregateId: newId(),
+    payload: { action, requestedBy: actorId },
+  });
+
 /** The permissions of an active staff member, or null for everyone else. */
 export function staffPermissions(
   db: Database | Tx,
@@ -836,6 +856,7 @@ export function grantOwner(
           now,
         });
       await alertIfLastApproverGone(tx, holdersBefore, null);
+      await alertStaffChange(tx, 'added', null);
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
           userId,

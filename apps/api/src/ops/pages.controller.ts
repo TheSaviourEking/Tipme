@@ -105,7 +105,6 @@ export class OpsPagesController {
   }
 
   @Get(':profileId/withdrawal-freeze')
-  @FreshCode()
   @OpsPermission('payouts.resolve')
   async freezeState(
     @Param('profileId') profileId: string,
@@ -121,7 +120,6 @@ export class OpsPagesController {
   /** A reported account takeover: stops withdrawals until the issue it opens is resolved. */
   @Post(':profileId/withdrawal-freeze')
   @HttpCode(200)
-  @FreshCode()
   @OpsPermission('payouts.resolve')
   async freeze(
     @CurrentOps() ops: OpsContext,

@@ -23,7 +23,7 @@ import type { Database, Tx } from '../client.js';
 import { approvalRequests, staffTotp, users } from '../schema.js';
 import type { MailProviderName } from '@tipme/mail';
 import { recordAudit } from './audit.js';
-import { maskEmail } from './email-address.js';
+import { maskEmail, normaliseStaffEmail } from './email-address.js';
 import {
   guarded,
   OperationError,
@@ -134,6 +134,8 @@ export interface SeriousActionDefinition<Payload> {
   ): Promise<boolean>;
   /** Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox. */
   subjects?(payload: Payload, db: Database | Tx): string[] | Promise<string[]>;
+  /** Addresses the change would hand something to: nobody behind one can decide it. */
+  mailboxes?(payload: Payload): string[];
   /**
    * What the action applies to, say the role or page. Acting alone closes the requester's other
    * requests with the same target. Leave out and the whole action counts as one target.
@@ -319,6 +321,8 @@ async function refusalToDecide(
     if (!(await action.mayDecide(db, input.payload, input.decider)))
       return 'PERMISSION_NOT_HELD';
   }
+  for (const address of action?.mailboxes?.(input.payload) ?? [])
+    if (theirs.has(normaliseStaffEmail(address))) return 'APPROVAL_SUBJECT';
   for (const subject of (await action?.subjects?.(input.payload, db)) ?? []) {
     const subjectId = canonicalId(subject);
     if (subjectId === userId) return 'APPROVAL_SUBJECT';
@@ -615,11 +619,11 @@ async function closeRequest(
     reason: withAuditChange(close.reason, stepRecord(request, close.change)),
     now: close.now,
   });
+  // Quiet means no mail to someone who knows: the alert route still hears.
   if (
-    !close.quiet &&
-    (close.status === 'rejected' ||
-      close.status === 'stale' ||
-      close.status === 'expired')
+    close.status === 'rejected' ||
+    close.status === 'stale' ||
+    close.status === 'expired'
   )
     await enqueueOutbox(tx, {
       eventType: 'ops.approval_closed',
@@ -629,6 +633,7 @@ async function closeRequest(
         action: request.action,
         requestedBy: request.requestedBy,
         outcome: close.status,
+        ...(close.quiet ? { quiet: 'yes' } : {}),
       },
     });
 }

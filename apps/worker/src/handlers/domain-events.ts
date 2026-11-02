@@ -22,6 +22,7 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'ops.last_approver_removed',
   'ops.approval_ran',
   'ops.approval_closed',
+  'ops.staff_changed',
   'provider_event.conflict',
   'payment.unresolved',
   'payment.conflict',
@@ -35,6 +36,13 @@ const STAFF_ALERT_EVENTS: ReadonlySet<string> = new Set([
   'ops.acted_alone',
   'ops.approval_pending',
   'ops.last_approver_removed',
+]);
+
+/** Staff alerts that open no inbox issue: the post is all there is, besides any mail. */
+const POSTED_ONLY_EVENTS: ReadonlySet<string> = new Set([
+  'ops.approval_ran',
+  'ops.approval_closed',
+  'ops.staff_changed',
 ]);
 
 export interface StaffAlert {
@@ -62,6 +70,7 @@ export function staffAlertPoster(options: {
     url: options.url,
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
     log: ({ event }) => options.log({ event }),
+    unroutedEvent: 'staff_alert.unrouted',
   });
   return async ({ event, action, requestedBy }) => {
     try {
@@ -122,11 +131,15 @@ export async function handleDomainEvent(
     return outcome === 'opened' ? 'issue_opened' : 'duplicate';
   }
   await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
-  if (name === 'ops.approval_ran' && deps.postStaffAlert) {
-    const { action, requestedBy } = (data ?? {}) as Record<string, unknown>;
+  if (POSTED_ONLY_EVENTS.has(name) && deps.postStaffAlert) {
+    const { action, outcome, requestedBy } = (data ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const what = typeof action === 'string' ? action : 'unknown';
     await deps.postStaffAlert({
       event: name,
-      action: typeof action === 'string' ? action : 'unknown',
+      action: typeof outcome === 'string' ? `${what}: ${outcome}` : what,
       requestedBy: typeof requestedBy === 'string' ? requestedBy : 'unknown',
     });
   }

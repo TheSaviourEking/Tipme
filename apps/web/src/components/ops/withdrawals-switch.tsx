@@ -20,7 +20,10 @@ export function WithdrawalsSwitch({
       method: 'POST',
       body: { paused, reason },
     });
-    if (!result.ok) return 'That didn’t go through. Nothing changed.';
+    if (!result.ok)
+      return result.code === 'FRESH_CODE_REQUIRED'
+        ? 'Switching back on needs a fresh authenticator code, and this screen can’t ask for one yet. Nothing changed.'
+        : 'That didn’t go through. Nothing changed.';
     onChanged({ paused, changedAt: new Date().toISOString() });
     return null;
   };

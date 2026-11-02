@@ -169,6 +169,14 @@ export class RateLimitGuard implements CanActivate {
     return this.count(route, subject, window);
   }
 
+  /** For a route where only some requests count: the limit `ops_request` sets, per person. */
+  async consumeForPerson(route: 'ops_request', userId: string): Promise<void> {
+    await this.count(route, `user:${userId}`, {
+      limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
+      windowMs: 3_600_000,
+    });
+  }
+
   private async count(
     route: RateLimitedRoute,
     subject: string,

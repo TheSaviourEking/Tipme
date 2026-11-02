@@ -222,6 +222,7 @@ export function mailForDomainEvent(
       return;
     }
     if (name === 'ops.approval_ran' || name === 'ops.approval_closed') {
+      if (payload['quiet'] === 'yes') return;
       const userId = idOf(payload['requestedBy']);
       const action = payload['action'];
       const outcome =

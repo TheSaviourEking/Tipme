@@ -56,6 +56,14 @@ const call = (method, path, cookie, body) =>
   });
 const json = async (response) => (await response.json()).data;
 
+/** Money closes wait for a second person: alone, they run at once. The waiting path is in ops-serious-routes. */
+const aloneAmongStaff = (phone) =>
+  database.pool.query(
+    `UPDATE staff SET revoked_at = now() WHERE revoked_at IS NULL
+     AND user_id <> (SELECT id FROM users WHERE phone_e164 = $1)`,
+    [phone],
+  );
+
 async function waitFor(check, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -274,6 +282,7 @@ const issueStatusOf = async (id) =>
 
 test('staff must pick an outcome to resolve a money issue, and resolving releases the hold', async () => {
   const owner = await opsSignIn(stack.api, database.db, '+2348039990021');
+  await aloneAmongStaff('+2348039990021');
   const profileId = await profileIdOf('ada');
   const issueId = await moneyIssue(profileId);
   await placeHold(profileId, issueId);
@@ -323,6 +332,7 @@ test('staff must pick an outcome to resolve a money issue, and resolving release
 
 test('the hold stays while another money issue for the recipient is open', async () => {
   const owner = await opsSignIn(stack.api, database.db, '+2348039990022');
+  await aloneAmongStaff('+2348039990022');
   const profileId = await profileIdOf('ada');
   const first = await moneyIssue(profileId);
   const second = await moneyIssue(profileId, 'provider_in_debt');
@@ -402,6 +412,7 @@ test('the withdrawal tools need payouts.resolve, on the owner role only, and rea
 
 test('a held withdrawal is read at the pretend provider, resumed, and only then started', async () => {
   const owner = await opsSignIn(stack.api, database.db, '+2348039990024');
+  await aloneAmongStaff('+2348039990024');
   const profileId = await profileIdOf('ada');
   const payoutId = randomUUID();
   await database.pool.query(
@@ -465,6 +476,7 @@ const MONEY_KINDS = [
 
 test('issues.resolve alone cannot close a money issue or lift a hold, and still closes the rest', async () => {
   const staff = await opsSignIn(stack.api, database.db, '+2348039990025');
+  await aloneAmongStaff('+2348039990025');
   const profileId = await profileIdOf('ada');
   // Owner always holds every permission, so this person is on a role holding everything else:
   // a 403 can then only come from payouts.resolve itself.

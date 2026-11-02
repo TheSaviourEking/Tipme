@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import { sql } from '../../packages/database/node_modules/drizzle-orm/index.js';
@@ -12,7 +13,9 @@ import * as contracts from '../../packages/contracts/dist/index.js';
 import {
   MAIL_SEAL_KEY,
   OPS_TOTP_KEY,
+  REDIS_URL,
   WEB,
+  WEBHOOK_SECRET,
   browserHeaders,
   opsSignIn,
   startStack,
@@ -21,6 +24,7 @@ import {
 const key = Buffer.from(OPS_TOTP_KEY, 'base64');
 const sealing = ops.mailSealing(Buffer.from(MAIL_SEAL_KEY, 'base64'));
 const REASON = 'Checked with the person on a call today';
+const OPERATION = (error) => error instanceof ops.OperationError;
 const SENSITIVE = 'fees.manage';
 const HARMLESS = 'search.view';
 
@@ -283,7 +287,7 @@ const wired = {
           .status === 'FAILED',
     };
   },
-  'balance.write_off': async () => {
+  'money_issue.close': async () => {
     const issue = await ops.openIssue(database.db, {
       dedupeKey: `payment_reversed.${randomUUID()}`,
       kind: 'payment_reversed',
@@ -291,7 +295,7 @@ const wired = {
       now: new Date(),
     });
     return {
-      payload: { issueId: issue.id },
+      payload: { issueId: issue.id, outcome: 'written_off' },
       happened: async () =>
         (
           await q(`SELECT resolution_outcome FROM issues WHERE id = $1`, [
@@ -437,7 +441,7 @@ test('giving someone a role with no sensitive permission applies at once', async
   const requester = await person();
   await person();
   const userId = await person({ roleId: await roleWith([HARMLESS]) });
-  const roleId = await roleWith(['analytics.view'].filter(Boolean));
+  const roleId = await roleWith(['analytics.view']);
   const outcome = await ops.changeRoleOrAsk(database.db, {
     ...asking(requester),
     userId,
@@ -489,7 +493,7 @@ test('adding someone on a sensitive role, or a personal sensitive permission, wa
   const harmless = await ops.setPersonalAccessOrAsk(database.db, {
     ...asking(requester),
     userId,
-    additions: ['analytics.view'].filter(() => false),
+    additions: ['analytics.view'],
     removals: [],
   });
   assert.equal(harmless.state, 'applied');
@@ -684,9 +688,7 @@ test('N2: an identical request from someone who cannot count does not run again 
   const payload = { profileId: id, count: 2 };
   await q(`DELETE FROM fee_free_credits WHERE profile_id = $1`, [id]);
   const asked = await ask(a, 'fee.free', payload);
-  // b leaves: a's request now has nobody, and c arrives with a's mailbox-free account.
-  await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [a]);
-  await q(`UPDATE staff SET revoked_at = NULL WHERE user_id = $1`, [a]);
+  // a can no longer enter a code, so a doesn't count as second person for b, whose ask runs alone.
   await q(`DELETE FROM staff_totp WHERE user_id = $1`, [a]);
   const alone = await ask(b, 'fee.free', payload);
   assert.equal(alone.state, 'ran');
@@ -902,4 +904,524 @@ test('routes answer 202 with the request, repeats say so, and asking is limited 
   let last;
   for (let i = 0; i < 6; i += 1) last = await post(700);
   assert.equal(last.status, 429);
+});
+
+/* A reader whose answers each test scripts. */
+const scripted = (answer) => ({
+  ...services(),
+  payoutReader: () => ({
+    findPayoutByReference: async () => answer(),
+    fetchPayoutStatus: async () => ({ status: 'not_found' }),
+  }),
+});
+const FOUND = (status) => ({
+  providerReference: `ref_${randomUUID()}`,
+  status,
+});
+const statusOf = async (payoutId) =>
+  (await q(`SELECT status FROM payouts WHERE id = $1`, [payoutId]))[0].status;
+const approveWith = (requestId, actorId, servicesNow) =>
+  ops.approveRequest(database.db, {
+    requestId,
+    actorId,
+    code: codeOf(actorId),
+    key,
+    services: servicesNow,
+  });
+const noFalseSuccess = async (requestId) => {
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM audit_events WHERE subject_id = $1 AND action IN ('serious_action.ran', 'serious_action.approved')`,
+        [requestId],
+      )
+    ).length,
+    0,
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'ops.approval_ran' AND aggregate_id = $1`,
+        [requestId],
+      )
+    ).length,
+    0,
+  );
+};
+
+for (const [reported, expected] of [
+  ['paid', 'PAID'],
+  ['failed', 'FAILED'],
+]) {
+  test(`payout.settle apply ${reported}: waits, then records what the provider says`, async () => {
+    const requester = await person();
+    const second = await person();
+    const { issueId, payoutId } = await unresolvedPayoutIssue();
+    const answering = scripted(() => FOUND(reported));
+    const asked = await ask(
+      requester,
+      'payout.settle',
+      { issueId, how: 'apply', reported },
+      { services: answering },
+    );
+    assert.equal(asked.state, 'pending');
+    assert.equal(await statusOf(payoutId), 'REQUESTED');
+    assert.equal(
+      (await approveWith(asked.requestId, second, answering)).status,
+      'approved',
+    );
+    assert.equal(await statusOf(payoutId), expected);
+  });
+}
+
+test('payout.settle apply: the provider’s answer changing during the wait goes stale', async () => {
+  const requester = await person();
+  const second = await person();
+  const { issueId, payoutId } = await unresolvedPayoutIssue();
+  const asked = await ask(
+    requester,
+    'payout.settle',
+    { issueId, how: 'apply', reported: 'paid' },
+    { services: scripted(() => FOUND('paid')) },
+  );
+  const outcome = await approveWith(
+    asked.requestId,
+    second,
+    scripted(() => null),
+  );
+  assert.equal(outcome.status, 'stale');
+  assert.equal(await statusOf(payoutId), 'REQUESTED');
+  await noFalseSuccess(asked.requestId);
+});
+
+test('I3: a settlement refused inside the run is not approved-and-ran, and the mutation of the first refusal is caught', async () => {
+  const requester = await person();
+  const second = await person();
+  const { issueId, payoutId } = await unresolvedPayoutIssue();
+  const asked = await ask(
+    requester,
+    'payout.settle',
+    { issueId, how: 'apply', reported: 'paid' },
+    { services: scripted(() => FOUND('paid')) },
+  );
+  // Another reference lands after the read and before the lock.
+  const racing = scripted(async () => {
+    await q(
+      `UPDATE payouts SET provider_reference = 'someone_else' WHERE id = $1`,
+      [payoutId],
+    );
+    return FOUND('paid');
+  });
+  const outcome = await approveWith(asked.requestId, second, racing);
+  assert.equal(outcome.status, 'stale', JSON.stringify(outcome));
+  assert.equal((await rowOf(asked.requestId)).status, 'stale');
+  assert.notEqual(await statusOf(payoutId), 'PAID');
+  await noFalseSuccess(asked.requestId);
+});
+
+test('I3: alone on an issue already closed records no ran_alone and no alert; with a second person no request opens', async () => {
+  const requester = await person();
+  const { issueId } = await unresolvedPayoutIssue();
+  await q(
+    `UPDATE issues SET status = 'resolved', resolved_at = now() WHERE id = $1`,
+    [issueId],
+  );
+  const payload = { issueId, how: 'mark_failed' };
+  await assert.rejects(ask(requester, 'payout.settle', payload), OPERATION);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM audit_events WHERE action = 'serious_action.ran_alone' AND staff_user_id = $1`,
+        [requester],
+      )
+    ).length,
+    0,
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'ops.acted_alone'`,
+      )
+    ).length,
+    0,
+  );
+  await person();
+  await assert.rejects(ask(requester, 'payout.settle', payload), OPERATION);
+  assert.equal((await q(`SELECT 1 FROM approval_requests`)).length, 0);
+});
+
+test('M1: a mismatch found at approval keeps its conflict issue, and the request stops', async () => {
+  const requester = await person();
+  const second = await person();
+  const { issueId, payoutId } = await unresolvedPayoutIssue();
+  const asked = await ask(
+    requester,
+    'payout.settle',
+    { issueId, how: 'apply', reported: 'paid' },
+    { services: scripted(() => FOUND('paid')) },
+  );
+  const wrong = scripted(() => ({ ...FOUND('paid'), amountMinor: 1n }));
+  assert.equal(
+    (await approveWith(asked.requestId, second, wrong)).status,
+    'stale',
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM issues WHERE kind = 'payout_conflict' AND subject->>'payoutId' = $1`,
+        [payoutId],
+      )
+    ).length,
+    1,
+  );
+});
+
+test('M2: a provider outage at approval leaves the request waiting and the code unused', async () => {
+  const requester = await person();
+  const second = await person();
+  const { issueId } = await unresolvedPayoutIssue();
+  const asked = await ask(requester, 'payout.settle', {
+    issueId,
+    how: 'mark_failed',
+  });
+  const down = {
+    ...services(),
+    payoutReader: () => ({
+      findPayoutByReference: async () => {
+        throw new Error('connection refused');
+      },
+      fetchPayoutStatus: async () => {
+        throw new Error('connection refused');
+      },
+    }),
+  };
+  await assert.rejects(approveWith(asked.requestId, second, down), {
+    code: 'PROVIDER_STATUS_UNKNOWN',
+  });
+  assert.equal((await rowOf(asked.requestId)).status, 'pending');
+  assert.equal(
+    (
+      await q(`SELECT last_step FROM staff_totp WHERE user_id = $1`, [second])
+    )[0].last_step,
+    null,
+  );
+  assert.equal(
+    (await approveWith(asked.requestId, second, services())).status,
+    'approved',
+  );
+});
+
+test('M3: clearing a personal removal needs an approver holding that permission', async () => {
+  const requester = await person();
+  const manager = await person({ roleId: await roleWith(['staff.manage']) });
+  const owner = await person();
+  const userId = await person({ roleId: await roleWith([SENSITIVE]) });
+  await q(
+    `INSERT INTO staff_permission_overrides (user_id, permission, effect, granted_by) VALUES ($1, $2, 'remove', $3)`,
+    [userId, SENSITIVE, requester],
+  );
+  const asked = await ops.setPersonalAccessOrAsk(database.db, {
+    ...asking(requester),
+    userId,
+    additions: [],
+    removals: [],
+  });
+  assert.equal(asked.state, 'pending');
+  await assert.rejects(approve(asked.requestId, manager), {
+    code: 'PERMISSION_NOT_HELD',
+  });
+  assert.equal((await approve(asked.requestId, owner)).status, 'approved');
+});
+
+test('M7: a requester who has lost issues.resolve can’t have a money close run', async () => {
+  const roleId = await roleWith(['payouts.resolve', 'issues.resolve']);
+  const requester = await person({ roleId });
+  const owner = await person();
+  const issue = await ops.openIssue(database.db, {
+    dedupeKey: `payment_reversed.${randomUUID()}`,
+    kind: 'payment_reversed',
+    subject: { profileId: await profileId() },
+    now: new Date(),
+  });
+  const asked = await ask(requester, 'money_issue.close', {
+    issueId: issue.id,
+    outcome: 'recipient_owes',
+  });
+  await q(
+    `DELETE FROM role_permissions WHERE role_id = $1 AND permission = 'issues.resolve'`,
+    [roleId],
+  );
+  assert.equal((await approve(asked.requestId, owner)).status, 'stale');
+  assert.equal(
+    (await q(`SELECT status FROM issues WHERE id = $1`, [issue.id]))[0].status,
+    'open',
+  );
+});
+
+test('I4: recovery can’t move an account to the requester’s or the approver’s own mailbox, tags and dots included', async () => {
+  const requester = await person();
+  const approver = await person();
+  const other = await person();
+  const userId = await ownerOf();
+  await q(
+    `UPDATE users SET email = $2, email_verified_at = now() WHERE id = $1`,
+    [userId, `page.${randomUUID().slice(0, 6)}@example.com`],
+  );
+  await q(`DELETE FROM email_recoveries WHERE user_id = $1`, [userId]);
+  const tagged = (id) => people.get(id).email.replace('@', '+x@');
+  const checks = 'Matched their last three tips';
+  await assert.rejects(
+    ask(requester, 'email_recovery.start', {
+      userId,
+      newEmail: tagged(requester),
+      checks,
+    }),
+    { code: 'APPROVAL_SUBJECT' },
+  );
+  const asked = await ask(requester, 'email_recovery.start', {
+    userId,
+    newEmail: tagged(approver),
+    checks,
+  });
+  assert.equal(asked.state, 'pending');
+  await assert.rejects(approve(asked.requestId, approver), {
+    code: 'APPROVAL_SUBJECT',
+  });
+  const row = await rowOf(asked.requestId);
+  assert.match(row.summary, /Matched their last three tips/);
+  assert.ok(
+    !row.summary.includes(tagged(approver)),
+    'the address stays masked',
+  );
+  // Gmail's dots are the same mailbox.
+  await q(`UPDATE users SET email = 'first.last@gmail.com' WHERE id = $1`, [
+    other,
+  ]);
+  const dotted = await ask(requester, 'email_recovery.start', {
+    userId,
+    newEmail: 'firstlast+y@gmail.com',
+    checks,
+  });
+  await assert.rejects(approve(dotted.requestId, other), {
+    code: 'APPROVAL_SUBJECT',
+  });
+});
+
+test('I5: new staff, removals and role changes each queue an alert, by id and name only', async () => {
+  const actor = await person();
+  const alerts = async () =>
+    (
+      await q(
+        `SELECT payload FROM outbox_events WHERE event_type = 'ops.staff_changed' ORDER BY created_at, id`,
+      )
+    ).map((row) => row.payload.action);
+  const email = `alert.${randomUUID().slice(0, 6)}@example.com`;
+  const roleId = await roleWith([HARMLESS]);
+  const added = await ops.addStaff(database.db, {
+    actorId: actor,
+    email,
+    roleId,
+    reason: REASON,
+    sealing,
+  });
+  const target = await person({ roleId });
+  await ops.changeRole(database.db, {
+    actorId: actor,
+    userId: target,
+    roleId: await roleWith(['analytics.view']),
+    reason: REASON,
+  });
+  await ops.setPersonalAccess(database.db, {
+    actorId: actor,
+    userId: target,
+    additions: [HARMLESS],
+    removals: [],
+    reason: REASON,
+  });
+  await ops.updateRole(database.db, {
+    actorId: actor,
+    roleId,
+    description: 'New words',
+    reason: REASON,
+  });
+  await ops.removeStaff(database.db, {
+    actorId: actor,
+    userId: added.userId,
+    reason: REASON,
+    sealing,
+  });
+  assert.deepEqual((await alerts()).sort(), [
+    'access_changed',
+    'added',
+    'removed',
+    'role_changed',
+    'role_updated',
+  ]);
+  const raw = JSON.stringify(
+    await q(
+      `SELECT payload FROM outbox_events WHERE event_type = 'ops.staff_changed'`,
+    ),
+  );
+  assert.ok(!raw.includes(email), 'no address in an alert');
+});
+
+test('I5, M4: each alert event reaches the webhook, and an unset route logs under its own name', async () => {
+  const requester = await person();
+  const context = (name) => {
+    const posted = [];
+    return {
+      posted,
+      deps: {
+        db: database.db,
+        logger: { info() {}, warn() {} },
+        dedupeKey: `${name}.${randomUUID()}`,
+        sealing,
+        pretendPayment: true,
+        postStaffAlert: async (alert) => posted.push(alert),
+      },
+    };
+  };
+  for (const [name, data, action] of [
+    [
+      'ops.acted_alone',
+      { action: 'fee.change', requestedBy: requester },
+      'fee.change',
+    ],
+    [
+      'ops.approval_ran',
+      { action: 'fee.free', requestedBy: requester, requestId: randomUUID() },
+      'fee.free',
+    ],
+    [
+      'ops.approval_closed',
+      {
+        action: 'fee.free',
+        requestedBy: requester,
+        requestId: randomUUID(),
+        outcome: 'rejected',
+      },
+      'fee.free: rejected',
+    ],
+    [
+      'ops.approval_closed',
+      {
+        action: 'fee.free',
+        requestedBy: requester,
+        requestId: randomUUID(),
+        outcome: 'stale',
+      },
+      'fee.free: stale',
+    ],
+    [
+      'ops.approval_closed',
+      {
+        action: 'fee.free',
+        requestedBy: requester,
+        requestId: randomUUID(),
+        outcome: 'expired',
+      },
+      'fee.free: expired',
+    ],
+    ['ops.staff_changed', { action: 'added', requestedBy: requester }, 'added'],
+  ]) {
+    const { posted, deps } = context(name);
+    await handleDomainEvent(name, data, deps);
+    assert.equal(posted.length, 1, name);
+    assert.equal(posted[0].action, action);
+    assert.equal(posted[0].event, name);
+  }
+  const logs = [];
+  await staffAlertPoster({
+    url: undefined,
+    log: (entry) => logs.push(entry.event),
+  })({
+    event: 'ops.acted_alone',
+    action: 'fee.change',
+    requestedBy: requester,
+  });
+  assert.ok(logs.includes('staff_alert.unrouted'), logs.join());
+  assert.ok(!logs.includes('reserve.alert_unrouted'));
+});
+
+test('I5: a quiet close still posts, without mailing the person who already knows', async () => {
+  const a = await person();
+  const b = await person();
+  const asked = await ask(a, 'fee.change', {
+    profileId: await profileId(),
+    feeBps: 909,
+  });
+  await ops.cancelRequest(database.db, {
+    requestId: asked.requestId,
+    actorId: a,
+  });
+  const asked2 = await ask(a, 'fee.change', {
+    profileId: await profileId(),
+    feeBps: 910,
+  });
+  await ops.removeStaff(database.db, {
+    actorId: b,
+    userId: a,
+    reason: REASON,
+    sealing,
+  });
+  const [closed] = await q(
+    `SELECT payload FROM outbox_events WHERE event_type = 'ops.approval_closed' AND aggregate_id = $1`,
+    [asked2.requestId],
+  );
+  assert.equal(closed.payload.outcome, 'stale');
+  assert.equal(closed.payload.quiet, 'yes');
+  const posted = [];
+  await handleDomainEvent('ops.approval_closed', closed.payload, {
+    db: database.db,
+    logger: { info() {}, warn() {} },
+    dedupeKey: `ops.approval_closed.${randomUUID()}`,
+    sealing,
+    pretendPayment: true,
+    postStaffAlert: async (alert) => posted.push(alert),
+  });
+  assert.equal(posted.length, 1);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM mail_messages WHERE type = 'staff_approval_outcome' AND user_id = $1`,
+        [a],
+      )
+    ).length,
+    0,
+  );
+});
+
+test('M4: a process that loaded only the worker has the real actions registered', async () => {
+  const script = `
+    const { startJobWorker } = await import(${JSON.stringify(new URL('../../apps/worker/dist/job-worker.js', import.meta.url).href)});
+    const { loadWorkerConfig } = await import(${JSON.stringify(new URL('../../apps/worker/dist/config.js', import.meta.url).href)});
+    const db = await import(${JSON.stringify(new URL('../../packages/database/dist/index.js', import.meta.url).href)});
+    const worker = await startJobWorker(loadWorkerConfig({
+      NODE_ENV: 'test',
+      REDIS_URL: ${JSON.stringify(REDIS_URL)},
+      QUEUE_PREFIX: 'worker-only-' + process.pid,
+      LOG_LEVEL: 'error',
+      MAIL_SEAL_KEY: ${JSON.stringify(MAIL_SEAL_KEY)},
+      DATABASE_URL: ${JSON.stringify(database.url)},
+      MOCK_PROVIDER_WEBHOOK_SECRET: ${JSON.stringify(WEBHOOK_SECRET)},
+    }));
+    let already = false;
+    try {
+      db.registerSeriousAction({ name: 'fee.change', permission: 'fees.manage', validate: async () => {}, describe: async () => 'x', run: async () => {} });
+    } catch (error) { already = /already registered/.test(error.message); }
+    await worker.close();
+    console.log(already ? 'REGISTERED' : 'NOT_REGISTERED');
+    process.exit(0);
+  `;
+  const output = await new Promise((resolve, reject) =>
+    execFile(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      { timeout: 60_000 },
+      (error, stdout, stderr) =>
+        error ? reject(new Error(stderr || error.message)) : resolve(stdout),
+    ),
+  );
+  assert.match(output, /\bREGISTERED\b/);
+  assert.doesNotMatch(output, /NOT_REGISTERED/);
 });

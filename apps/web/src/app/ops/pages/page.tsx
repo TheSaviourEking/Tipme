@@ -1,4 +1,8 @@
 'use client';
+import {
+  freezeView,
+  type FreezeRead,
+} from '../../../lib/withdrawal-freeze-view';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -118,13 +122,15 @@ function FreezeWithdrawals({
   userId: string | null;
   mayEndSessions: boolean;
 }) {
-  const [issueId, setIssueId] = useState('');
+  const [read, setRead] = useState<FreezeRead>(null);
+  const view = freezeView(read);
+  const issueId = view.issueId;
   const [ended, setEnded] = useState(false);
   useEffect(() => {
     void apiFetch<OpsWithdrawalFreezeState>(
       `/v1/ops/pages/${profileId}/withdrawal-freeze`,
     ).then((result) => {
-      if (result.ok && result.data.issueId) setIssueId(result.data.issueId);
+      setRead(result.ok ? { ok: true, data: result.data } : { ok: false });
     });
   }, [profileId]);
   const freeze = async (reason: string) => {
@@ -133,7 +139,7 @@ function FreezeWithdrawals({
       { method: 'POST', body: { reason } },
     );
     if (!result.ok) return 'That didn’t go through. Please try again.';
-    setIssueId(result.data.issueId);
+    setRead({ ok: true, data: { issueId: result.data.issueId } });
     return null;
   };
   const endSessions = async (reason: string) => {
@@ -165,10 +171,15 @@ function FreezeWithdrawals({
           recorded below.
         </Notice>
       ) : null}
+      {view.warning && (
+        <Notice tone="error" title="Freeze state unknown">
+          {view.warning}
+        </Notice>
+      )}
       <ReasonAction
-        open={issueId ? 'Record another report…' : 'Freeze withdrawals…'}
+        open={view.open}
         field="Who reported it, and what did they say?"
-        submit={issueId ? 'Record report' : 'Freeze withdrawals'}
+        submit={view.submit}
         onSubmit={freeze}
       />
       {ended && (

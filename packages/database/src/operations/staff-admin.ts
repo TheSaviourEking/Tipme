@@ -43,6 +43,7 @@ import {
   clearOverrides,
   composeAccess,
   alertIfLastApproverGone,
+  alertStaffChange,
   mailboxesOf,
   readMailboxes,
   sharesMailbox,
@@ -281,6 +282,7 @@ export function createRole(
         subjectId: id,
         reason: withAuditChange(reason, { name, permissions }),
       });
+      await alertStaffChange(tx, 'role_created', actor.id);
       return roleView(tx, id);
     });
   });
@@ -393,6 +395,7 @@ export function updateRole(
             : {}),
         }),
       });
+      await alertStaffChange(tx, 'role_updated', actor.id);
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       return { role: await roleView(tx, input.roleId), affected };
     });
@@ -436,6 +439,7 @@ export function deleteRole(
         subjectId: input.roleId,
         reason: withAuditChange(reason, { name: role.name, permissions }),
       });
+      await alertStaffChange(tx, 'role_deleted', actor.id);
     });
   });
 }
@@ -553,6 +557,7 @@ export function setPersonalAccess(
             .sort(),
         }),
       });
+      await alertStaffChange(tx, 'access_changed', actor.id);
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       const after = await readStaffAccess(tx, target.id);
       return {
@@ -634,6 +639,7 @@ export function changeRole(
           ...cleared,
         }),
       });
+      await alertStaffChange(tx, 'role_changed', actor.id);
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       return { ...after, permissions: [...after.permissions].sort() };
     });
@@ -950,6 +956,7 @@ export function addStaff(
         }),
         now,
       });
+      await alertStaffChange(tx, 'added', actor.id);
       return { userId, roleId: role.id, ...link };
     });
   });
@@ -1085,6 +1092,7 @@ export function removeStaff(
         }),
         now,
       });
+      await alertStaffChange(tx, 'removed', actor.id);
       await closePendingRequestsOf(tx, {
         userId,
         why: 'requester_removed',

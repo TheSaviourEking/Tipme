@@ -51,7 +51,7 @@ import {
   type MockProvider,
 } from '@tipme/payments';
 import type { Logger } from '@tipme/observability';
-import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import {
   BACHS_PROVIDER_TOKEN,
@@ -90,11 +90,11 @@ export class OpsActionsController {
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Inject(RateLimitGuard) private readonly rateLimit: RateLimitGuard,
   ) {}
 
   @Post('issues/:id/resolve')
   @HttpCode(200)
-  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('issues.resolve')
   async resolve(
@@ -108,11 +108,18 @@ export class OpsActionsController {
     const issue = await issueById(this.database.db, uuidParam(id));
     if (issue?.severity === 'money' && !ops.permissions.has('payouts.resolve'))
       throw new CodedHttpException(403, 'FORBIDDEN');
-    // Giving money up takes a second person, when there is one.
-    if (body.outcome === 'written_off') {
+    // Closing money by hand takes a second person, when there is one. Only this counts as asking.
+    if (issue?.severity === 'money' && issue.status === 'open') {
+      await this.rateLimit.consumeForPerson('ops_request', ops.userId);
       const outcome = await requestSeriousAction(this.database.db, {
-        name: 'balance.write_off',
-        payload: { issueId: uuidParam(id) },
+        name: 'money_issue.close',
+        payload: {
+          issueId: uuidParam(id),
+          outcome: body.outcome ?? null,
+          ...(body.bankAndSignInChecked !== undefined
+            ? { bankAndSignInChecked: body.bankAndSignInChecked }
+            : {}),
+        },
         actorId: ops.userId,
         grantId: ops.grantId,
         reason: body.reason,

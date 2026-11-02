@@ -14,11 +14,16 @@ import {
   staff,
   users,
 } from '../schema.js';
-import { maskEmail, normaliseEmail } from './email-address.js';
+import {
+  maskEmail,
+  normaliseEmail,
+  normaliseStaffEmail,
+} from './email-address.js';
 import { startStaffRecovery } from './email-recovery.js';
 import { guarded, OperationError } from './errors.js';
 import { grantFeeFreeTips, setAccountFee } from './fees.js';
 import { resolveIssue } from './issues.js';
+import { openPayoutConflict } from './payout-start.js';
 import {
   applyAfterRead,
   markFailedAfterRead,
@@ -47,6 +52,7 @@ import {
 } from './staff-admin.js';
 import {
   lockStaffAdmin,
+  readMailboxes,
   readOverrides,
   readRolePermissions,
   readStaffAccess,
@@ -174,10 +180,16 @@ const emailRecovery = acting<RecoveryPayload>({
   name: 'email_recovery.start',
   permission: 'recoveries.manage',
   subjects: ({ userId }) => [userId],
+  mailboxes: ({ newEmail }) => [newEmail],
   target: ({ userId }) => userId,
-  describe: async (tx, { userId, newEmail }) =>
-    `Move ${await personHint(tx, userId)} to the email address ${maskEmail(newEmail)}`,
+  // The address stays masked (spec 6.4). The server refuses staff's own mailboxes, so what the
+  // approver judges is the written checks.
+  describe: async (tx, { userId, newEmail, checks }) =>
+    `Move ${await personHint(tx, userId)} to the email address ${maskEmail(newEmail)}. Identity checks: ${checks}`,
   act: async (tx, payload, context) => {
+    const own = await readMailboxes(tx, context.actorId);
+    if (own.has(normaliseStaffEmail(payload.newEmail)))
+      throw new OperationError('APPROVAL_SUBJECT');
     const outcome = await startStaffRecovery(tx, servicesOf(context).sealing, {
       staffUserId: context.actorId,
       userId: payload.userId,
@@ -221,15 +233,34 @@ const noReads = () => {
 const payoutSettle = acting<SettlePayload>({
   name: 'payout.settle',
   permission: 'payouts.resolve',
-  prepare: (db, payload, { actorId, services }) => {
+  prepare: async (db, payload, { actorId, services }) => {
     const provider = servicesOf({ services }).payoutReader;
     if (!provider) throw new OperationError('INVALID_INPUT');
-    return readPayoutForAction(db, {
+    const read = await readPayoutForAction(db, {
       issueId: payload.issueId,
       staffUserId: actorId,
       provider,
       ...(services?.payoutLog ? { log: services.payoutLog } : {}),
     });
+    const { answer, kase, now } = read;
+    // We don't know yet: not a reason to close anything, so nothing has happened and it can wait.
+    if (answer.state === 'uncertain' || answer.state === 'ambiguous')
+      throw new OperationError('PROVIDER_STATUS_UNKNOWN');
+    // Out here it stays, whatever happens to the request: someone must look at a mismatch.
+    if (
+      payload.how === 'apply' &&
+      answer.state === payload.reported &&
+      'found' in answer &&
+      answer.differing.length > 0 &&
+      ['REQUESTED', 'PROCESSING'].includes(kase.payout.status)
+    )
+      await openPayoutConflict(db, {
+        payoutId: kase.payout.id,
+        why: 'mismatch',
+        fields: answer.differing,
+        now,
+      });
+    return read;
   },
   subjects: async ({ issueId }, db) => {
     const facts = await payoutCaseFacts(db, issueId);
@@ -261,23 +292,33 @@ const payoutSettle = acting<SettlePayload>({
             prepared,
           )
         : await refuseToMarkFailed(tx, input, prepared);
-    if (refusal) {
-      // A second person agreed to the change, not to a refusal: the request closes as stale.
-      if (context.approverId)
-        throw new OperationError('STAFF_CHANGED', `payout_${refusal.outcome}`);
-      return refusal;
-    }
-    return payload.how === 'apply'
-      ? applyAfterRead(tx, { ...input, reported: payload.reported }, prepared)
-      : markFailedAfterRead(tx, input, prepared);
+    // Nothing settled, so nothing may read as approved or as having run alone. The throw undoes
+    // this run's writes; the request, if any, closes as stale.
+    const settled =
+      refusal ??
+      (payload.how === 'apply'
+        ? await applyAfterRead(
+            tx,
+            { ...input, reported: payload.reported },
+            prepared,
+          )
+        : await markFailedAfterRead(tx, input, prepared));
+    if (settled.outcome !== 'applied' && settled.outcome !== 'marked_failed')
+      throw new OperationError('STAFF_CHANGED', `payout_${settled.outcome}`);
+    return settled;
   },
 });
 
-/** Only `written_off`: the other outcomes record what happened, and this gives money up. */
-const WRITE_OFF: OpsIssueOutcome = 'written_off';
-
-const balanceWriteOff = acting<{ issueId: string }>({
-  name: 'balance.write_off',
+/**
+ * Any hand close of a money issue: closing one can lift a hold, whichever outcome is named. The
+ * outcome is in the payload and the words, so the approver agrees to that one.
+ */
+const moneyIssueClose = acting<{
+  issueId: string;
+  outcome: OpsIssueOutcome | null;
+  bankAndSignInChecked?: boolean;
+}>({
+  name: 'money_issue.close',
   permission: 'payouts.resolve',
   // The route asks for this too: closing an issue takes it.
   mayDecide: async (_db, _payload, approver) =>
@@ -288,26 +329,37 @@ const balanceWriteOff = acting<{ issueId: string }>({
       .from(issues)
       .where(eq(issues.id, issueId));
     const { profileId, userId } = issue?.subject ?? {};
+    const payout = await payoutCaseFacts(db, issueId);
     return [
       ...(userId ? [userId] : []),
       ...(profileId ? await pageOwner(db, profileId) : []),
+      ...(payout ? await pageOwner(db, payout.profileId) : []),
     ];
   },
   target: ({ issueId }) => issueId,
-  describe: async (tx, { issueId }) => {
+  describe: async (tx, { issueId, outcome }) => {
     const [issue] = await tx
       .select({ kind: issues.kind })
       .from(issues)
       .where(eq(issues.id, issueId));
     if (!issue) throw new OperationError('ISSUE_NOT_FOUND');
-    return `Close money issue ending ${issueId.slice(-6)} (${issue.kind}) as written off`;
+    return `Close money issue ending ${issueId.slice(-6)} (${issue.kind}) as ${outcome ?? 'no outcome'}`;
   },
-  act: async (tx, { issueId }, context) => {
+  act: async (tx, { issueId, outcome, bankAndSignInChecked }, context) => {
+    const access = await readStaffAccess(tx, context.actorId);
+    if (!access?.permissions.has('issues.resolve'))
+      throw new OperationError('PERMISSION_NOT_HELD');
+    const [issue] = await tx
+      .select({ status: issues.status })
+      .from(issues)
+      .where(eq(issues.id, issueId));
+    if (issue?.status !== 'open') throw new OperationError('ISSUE_RESOLVED');
     await resolveIssue(tx, {
       issueId,
       staffUserId: context.actorId,
       reason: context.reason,
-      outcome: WRITE_OFF,
+      ...(outcome ? { outcome } : {}),
+      ...(bankAndSignInChecked === undefined ? {} : { bankAndSignInChecked }),
       now: context.now,
     });
     return { resolved: true };
@@ -441,10 +493,26 @@ const grantOwnerAction = acting<GrantPayload>({
   act: grantAct,
 });
 
+/** What personal adjustments would leave them holding that they don't hold now. */
+async function accessGains(
+  db: Database | Tx,
+  userId: string,
+  additions: readonly string[],
+  removals: readonly string[],
+): Promise<string[]> {
+  const before = await readStaffAccess(db, userId);
+  if (!before) return [];
+  const roleHas = await readRolePermissions(db, before.roleId);
+  return [...new Set([...additions, ...roleHas])].filter(
+    (permission) =>
+      !removals.includes(permission) && !before.permissions.has(permission),
+  );
+}
+
 /** What the person would be given: someone who doesn't hold it all can't decide it. */
 const permissionsGranted = async (db: Database | Tx, payload: GrantPayload) =>
   payload.kind === 'access'
-    ? payload.additions
+    ? accessGains(db, payload.userId, payload.additions, payload.removals)
     : readRolePermissions(db, payload.roleId);
 
 const grantSensitive = acting<GrantPayload>({
@@ -578,7 +646,7 @@ export function registerRealSeriousActions(): void {
   registered = true;
   registerSeriousAction(emailRecovery);
   registerSeriousAction(payoutSettle);
-  registerSeriousAction(balanceWriteOff);
+  registerSeriousAction(moneyIssueClose);
   registerSeriousAction(feeChange);
   registerSeriousAction(feeFree);
   registerSeriousAction(grantOwnerAction);
@@ -705,13 +773,7 @@ export function setPersonalAccessOrAsk(
   return applyUnlessSerious(
     db,
     async (tx) => {
-      const before = await readStaffAccess(tx, userId);
-      if (!before) return null;
-      const roleHas = new Set(await readRolePermissions(tx, before.roleId));
-      const gains = [...additions, ...roleHas].filter(
-        (permission) =>
-          !removals.includes(permission) && !before.permissions.has(permission),
-      );
+      const gains = await accessGains(tx, userId, additions, removals);
       return hasSensitive(gains)
         ? {
             name: 'staff.grant_sensitive',

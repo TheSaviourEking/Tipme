@@ -73,7 +73,6 @@ export class OpsAccountRecoveryController {
   /** A reported takeover: signs the account out everywhere. Audited with the reason. */
   @Post(':userId/end-sessions')
   @HttpCode(200)
-  @FreshCode()
   @OpsPermission('recoveries.manage')
   async endSessions(
     @CurrentOps() ops: OpsContext,

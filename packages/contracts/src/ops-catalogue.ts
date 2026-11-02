@@ -150,6 +150,31 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
   string,
   { verb: 'GET' | 'POST'; permission: OpsPermission; reason: string }
 > = {
+  // Stopping has to work first time in an incident. Permission, reason and audit still apply.
+  'OpsWithdrawalsSwitchController.set': {
+    verb: 'POST',
+    permission: 'payouts.resolve',
+    reason:
+      'Switching off must work at once; the handler asks for a code to switch back on.',
+  },
+  'OpsPagesController.freeze': {
+    verb: 'POST',
+    permission: 'payouts.resolve',
+    reason:
+      'Stopping a takeover must work at once; releasing it goes through a fresh code.',
+  },
+  'OpsPagesController.freezeState': {
+    verb: 'GET',
+    permission: 'payouts.resolve',
+    reason:
+      'Says whether a page is frozen, so a freeze is never shown as absent; changes nothing.',
+  },
+  'OpsAccountRecoveryController.endSessions': {
+    verb: 'POST',
+    permission: 'recoveries.manage',
+    reason:
+      'Signing a stolen account out must work at once, and only stops access.',
+  },
   'OpsPagesController.page': {
     verb: 'GET',
     permission: 'pages.plan',
@@ -215,7 +240,7 @@ export const OPS_ANY_STAFF_ROUTES: Record<
 export const SERIOUS_ACTIONS = [
   'email_recovery.start',
   'payout.settle',
-  'balance.write_off',
+  'money_issue.close',
   'fee.change',
   'fee.free',
   'staff.grant_owner',
@@ -231,7 +256,7 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
   {
     'email_recovery.start': 'recoveries.manage',
     'payout.settle': 'payouts.resolve',
-    'balance.write_off': 'payouts.resolve',
+    'money_issue.close': 'payouts.resolve',
     'fee.change': 'fees.manage',
     'fee.free': 'fees.manage',
     'staff.grant_owner': 'staff.manage',

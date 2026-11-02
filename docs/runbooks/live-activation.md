@@ -195,6 +195,8 @@ Stops new tips. **It doesn't stop withdrawals;** for that see the next section. 
 
 ## Stopping withdrawals
 
+Switching off, freezing a page and ending sessions need no fresh authenticator code, so they work first time in an incident; the permission, the reason and the alert still apply. Switching back on needs a fresh code.
+
 Ops → Overview → **Switch off all withdrawals…**, with a written reason. Needs `payouts.resolve`. It takes effect at the next request and job on every copy, with no deploy, is audited, and posts to the alert route (the reason stays in the audit log). It doesn't depend on `PAYMENTS_LIVE_ENABLED`: tips can stay open with withdrawals off, or the reverse.
 
 **Use it when:** a payout goes wrong in amount or destination, the provider or reserve is in doubt, or a takeover or fraud looks like more than one account. For one account, use the freeze.
