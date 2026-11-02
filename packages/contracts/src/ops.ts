@@ -761,9 +761,10 @@ export interface OpsWithdrawalFreeze {
   issueId: string;
 }
 
-/** Whether a page's withdrawals are frozen now, and the issue that holds them. */
+/** Whether a page's withdrawals are frozen now, the issue that holds them, and if it's still open. */
 export interface OpsWithdrawalFreezeState {
   issueId: string | null;
+  issueOpen: boolean;
 }
 
 /** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */

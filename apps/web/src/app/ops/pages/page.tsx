@@ -217,7 +217,11 @@ function FreezeWithdrawals({
       }
       return 'That didn’t go through. Please try again.';
     }
-    setRead({ ok: true, data: { issueId: result.data.issueId } });
+    // Either answer names an open issue: the one this report added to, or the one it opened.
+    setRead({
+      ok: true,
+      data: { issueId: result.data.issueId, issueOpen: true },
+    });
     return null;
   };
   const endSessions = async (reason: string) => {
@@ -242,7 +246,15 @@ function FreezeWithdrawals({
         while support checks. Then: end the sessions, check the current bank,
         and mark any withdrawal the thief asked for as failed.
       </p>
-      {issueId ? (
+      {issueId && !view.issueOpen ? (
+        <Notice tone="neutral" title="Withdrawals are still frozen">
+          The takeover report is closed, but another open issue is holding this
+          page’s withdrawals. If it has been reported again, record it below:
+          that opens a new issue and alerts staff, and the freeze moves to it.
+          See <Link href={`/ops/issues/${issueId}`}>the closed report</Link>.
+        </Notice>
+      ) : null}
+      {issueId && view.issueOpen ? (
         <Notice tone="success" title="Withdrawals are frozen">
           Resolve <Link href={`/ops/issues/${issueId}`}>the issue</Link> once
           the real owner has the account back. Another report can still be

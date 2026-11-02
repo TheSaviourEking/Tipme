@@ -45,7 +45,7 @@ import {
   staffViewPageImage,
   type MailSealing,
   type PhotoStore,
-  withdrawalFreezeIssue,
+  withdrawalFreezeState,
 } from '@tipme/database';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
@@ -216,9 +216,7 @@ export class OpsPagesController {
   ): Promise<ApiDataResponse<OpsWithdrawalFreezeState>> {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
     return {
-      data: {
-        issueId: await withdrawalFreezeIssue(this.database.db, { profileId }),
-      },
+      data: await withdrawalFreezeState(this.database.db, { profileId }),
     };
   }
 

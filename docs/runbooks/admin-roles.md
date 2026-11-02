@@ -108,6 +108,8 @@ If the other qualified people leave while your request waits, Approvals tells yo
 
 - You can't release a freeze on your own page while someone else could. Ask them. If nobody else qualifies you can, and it is recorded and alerted as acting alone.
 - Release doesn't always mean withdrawals resume. If another open issue holds them, the screen says **withdrawals stay on hold** and names what is still open.
+- **Reported again after the takeover issue closed:** the Pages card says **Withdrawals are still frozen** when another issue kept the hold, and offers **Record a new report**. A new report always opens a new issue and alerts staff, whether or not withdrawals were still held. The freeze moves to the new issue (`withdrawals.freeze_reopened`, in the audit log and staff activity), the card links to it, and it notes the earlier one. From then on, closing the unrelated issue doesn't lift the freeze: only the new issue closing as "The real owner has the account back" does, with no other hold issue open. That release is one person with a fresh code, under the rules above.
+- A report while the takeover issue is open adds its reason to the audit log and changes nothing else.
 
 ## Adding and removing people
 

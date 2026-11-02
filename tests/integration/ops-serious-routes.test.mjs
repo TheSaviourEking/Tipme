@@ -926,6 +926,141 @@ test('I3, I5: a release with another hold open says still held, and its alert an
   );
 });
 
+test('a new report after the takeover closed, through the routes: new issue, alert, and only it can release', async () => {
+  const { id } = await profile();
+  const stateOf = async () =>
+    (
+      await (
+        await call(
+          stack.api,
+          'GET',
+          `/v1/ops/pages/${id}/withdrawal-freeze`,
+          first.cookie,
+        )
+      ).json()
+    ).data;
+  const report = async () =>
+    (
+      await (
+        await call(
+          stack.api,
+          'POST',
+          `/v1/ops/pages/${id}/withdrawal-freeze`,
+          first.cookie,
+          { reason: REASON },
+        )
+      ).json()
+    ).data;
+  const secure = (issueId) =>
+    call(stack.api, 'POST', `/v1/ops/issues/${issueId}/resolve`, first.cookie, {
+      reason: REASON,
+      outcome: 'account_secured',
+      bankAndSignInChecked: true,
+    });
+  const frozenNow = async () =>
+    (
+      await q(
+        `SELECT 1 FROM withdrawal_holds WHERE profile_id = $1 AND reason = 'account_takeover' AND released_at IS NULL`,
+        [id],
+      )
+    ).length === 1;
+
+  const { issueId: firstReport } = await report();
+  assert.deepEqual(await stateOf(), {
+    issueId: firstReport,
+    issueOpen: true,
+  });
+  const [{ id: other }] = await q(
+    `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
+     VALUES (gen_random_uuid(), $1, 'payment_reversed', 'money', $2, 'x', now()) RETURNING id`,
+    [`test.${randomUUID()}`, { profileId: id }],
+  );
+  await q(
+    `INSERT INTO withdrawal_holds (id, profile_id, reason, issue_id) VALUES (gen_random_uuid(), $1, 'reversal', $2)`,
+    [id, other],
+  );
+
+  // One person, fresh code: closes it, but the other issue keeps the hold.
+  assert.equal(
+    (await (await secure(firstReport)).json()).data.withdrawals,
+    'still_held',
+  );
+  // The card must not tell staff to resolve a closed issue.
+  assert.deepEqual(await stateOf(), {
+    issueId: firstReport,
+    issueOpen: false,
+  });
+
+  const again = await report();
+  assert.equal(again.state, 'frozen');
+  assert.notEqual(again.issueId, firstReport);
+  assert.deepEqual(await stateOf(), {
+    issueId: again.issueId,
+    issueOpen: true,
+  });
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'withdrawals.freeze_opened' AND aggregate_id = $1`,
+        [again.issueId],
+      )
+    ).length,
+    1,
+  );
+  const feed = await call(
+    stack.api,
+    'GET',
+    '/v1/ops/staff-activity',
+    first.cookie,
+  );
+  assert.ok(
+    (await feed.json()).data.some(
+      (row) => row.action === 'withdrawals.freeze_reopened',
+    ),
+  );
+  // The issue page opens the new issue as open, naming the earlier one.
+  const evidence = await (
+    await call(
+      stack.api,
+      'GET',
+      `/v1/ops/issues/${again.issueId}`,
+      first.cookie,
+    )
+  ).json();
+  assert.equal(evidence.data.issue.status, 'open');
+  assert.match(evidence.data.issue.summary, new RegExp(firstReport));
+
+  // The unrelated issue closes, through the second person: the freeze stays.
+  const asked = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/issues/${other}/resolve`,
+    first.cookie,
+    { reason: REASON, outcome: 'resolved_by_provider' },
+  );
+  assert.equal(asked.status, 202);
+  const { requestId } = (await asked.json()).data;
+  assert.equal((await approveThroughApi(requestId)).status, 200);
+  assert.equal(await frozenNow(), true);
+
+  // Only the new issue releases, by one person. Their own page refuses them while another could.
+  const [{ user_id: pageOwnerId }] = await q(
+    `SELECT user_id FROM profiles WHERE id = $1`,
+    [id],
+  );
+  await q(`UPDATE profiles SET user_id = $1 WHERE id = $2`, [firstId, id]);
+  const own = await secure(again.issueId);
+  assert.equal(own.status, 403);
+  assert.equal((await own.json()).error.code, 'APPROVAL_SUBJECT');
+  assert.equal(await frozenNow(), true);
+  await q(`UPDATE profiles SET user_id = $1 WHERE id = $2`, [pageOwnerId, id]);
+
+  const lifted = await secure(again.issueId);
+  assert.equal(lifted.status, 200);
+  assert.equal(await frozenNow(), false);
+  assert.deepEqual(await stateOf(), { issueId: null, issueOpen: false });
+});
+
 test('I4: staff can’t release a freeze on their own page when someone else could; alone they can, and it says so', async () => {
   const [{ id }] = await q(`SELECT id FROM profiles ORDER BY id LIMIT 1`);
   const [{ user_id: owner }] = await q(

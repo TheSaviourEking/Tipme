@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { signUpRecipient } from './helpers';
-import { enrolOwner, secondOwner } from './ops-helpers';
+import { enrolOwner, secondOwner, sql } from './ops-helpers';
 
 // What a screen says for answers that are hard to cause on purpose, so the answers are stubbed.
 const REASON = 'Checked with the person on a call today';
@@ -201,4 +201,45 @@ test('holding only providers.manage or email.read opens those screens', async ({
     ).toBeVisible();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   }
+});
+
+test('a report after the takeover closed: the card stops pointing at the closed issue, and leads to the new one', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  await enrolOwner(page, testInfo);
+  await page.goto(`/ops/pages?handle=${handle}`);
+  await page.getByRole('button', { name: 'Freeze withdrawals…' }).click();
+  await page.getByLabel('Who reported it, and what did they say?').fill(REASON);
+  await page.getByRole('button', { name: 'Freeze withdrawals' }).click();
+  const first = page.getByRole('link', { name: 'the issue' });
+  const firstHref = await first.getAttribute('href');
+  const firstId = firstHref!.split('/').pop()!;
+  // As closing it leaves things when another open issue keeps the hold (integration covers the close).
+  await sql(
+    `UPDATE issues SET status = 'resolved', resolved_at = now(), resolution_outcome = 'account_secured' WHERE id = $1`,
+    [firstId],
+  );
+
+  await page.reload();
+  await expect(page.getByText('Withdrawals are still frozen')).toBeVisible();
+  await expect(page.getByText('Withdrawals are frozen')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'the issue' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Record a new report…' }).click();
+  await page.getByLabel('Who reported it, and what did they say?').fill(REASON);
+  await page.getByRole('button', { name: 'Record report' }).click();
+  const next = page.getByRole('link', { name: 'the issue' });
+  await expect(next).toBeVisible();
+  expect(await next.getAttribute('href')).not.toBe(firstHref);
+  await next.click();
+  await page.waitForURL(/\/ops\/issues\//);
+  await expect(page.getByRole('button', { name: 'Resolve…' })).toBeVisible();
+  await expect(
+    page.getByText(`Earlier report, now closed: ${firstId}.`),
+  ).toBeVisible();
 });

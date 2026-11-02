@@ -2,9 +2,9 @@
 
 - Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, not pushed.
 - Done: I1, I2, M1-M10 from `.superpowers/sdd/2026-11-01-admin-roles/final-findings.md`, Task 7 M1-M4 tests and a mutation proof of the race tests. Report: `.superpowers/sdd/2026-11-01-admin-roles/final-fix-report.md`.
-- Not done here: C1 (a separate branch from dev fixes it, by merge).
+- C1: merged from dev (PR #97). The Pages card now reads whether the issue holding a freeze is open.
 - `@alone` tests are now their own run: `E2E_ALONE=1 playwright test`, or `pnpm test:e2e --alone`; `pnpm test:e2e` runs the suite and then them.
-- Next exact step: merge the C1 fix, then the PR. Owner rulings stay open: see the spec header.
+- Next exact step: the PR. Owner rulings stay open: see the spec header.
 
 # Current task — admin roles Task 7 (2 November 2026)
 

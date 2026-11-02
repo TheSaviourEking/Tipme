@@ -57,6 +57,7 @@ const STAFF_ACTIVITY_ACTIONS = [
   'serious_action.stale',
   'withdrawals.released',
   'withdrawals.freeze_lifted',
+  'withdrawals.freeze_reopened',
 ];
 
 /** Newest first. The written reason stays in the audit log, which takes its own permission. */

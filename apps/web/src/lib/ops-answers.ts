@@ -110,6 +110,8 @@ export const STAFF_ACTIVITY_WORDS: Record<string, string> = {
   'serious_action.stale': 'A serious action stopped without running',
   'withdrawals.released': 'Withdrawals resumed for a recipient',
   'withdrawals.freeze_lifted': 'Closed a reported takeover',
+  'withdrawals.freeze_reopened':
+    'A takeover was reported again: a new issue now holds the freeze',
 };
 
 const REFUSALS: Record<string, string> = {

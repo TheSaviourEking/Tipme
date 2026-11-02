@@ -302,9 +302,9 @@ test('a second report while frozen keeps its written reason in the audit, and th
         })
       ).json()
     ).data;
-  assert.deepEqual(await state(), { issueId: null });
+  assert.deepEqual(await state(), { issueId: null, issueOpen: false });
   const { issueId } = (await (await freeze()).json()).data;
-  assert.deepEqual(await state(), { issueId });
+  assert.deepEqual(await state(), { issueId, issueOpen: true });
   const second = 'A second person rang about the same account.';
   await freeze(owner.cookie, TOBI, second);
   const [audit] = await rows(
@@ -333,7 +333,10 @@ test('a new report after the last closed, with a reversal still holding, opens a
     `${stack.api}/v1/ops/pages/${TOBI}/withdrawal-freeze`,
     { headers: { cookie: owner.cookie } },
   );
-  assert.deepEqual((await screen.json()).data, { issueId: report.issueId });
+  assert.deepEqual((await screen.json()).data, {
+    issueId: report.issueId,
+    issueOpen: true,
+  });
   await resolve(reversal, { outcome: 'resolved_by_provider' });
   assert.equal(await withdrawalsFrozen(database.db, { profileId: TOBI }), true);
   assert.deepEqual(
