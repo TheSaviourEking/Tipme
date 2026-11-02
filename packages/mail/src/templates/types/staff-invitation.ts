@@ -183,3 +183,43 @@ export const staffLastApproverRemoved = defineMailType({
       ctx,
     ),
 });
+
+const OUTCOME_WORDS = {
+  approved: 'was approved and has run.',
+  rejected:
+    'was rejected. Nothing ran. The admin area shows who decided, and why.',
+  stale:
+    'stopped when someone tried to approve it, because things had changed. Nothing ran. Ask again if it is still needed.',
+  expired:
+    'passed its 24 hours with no decision, so it closed. Nothing ran. Ask again if it is still needed.',
+} as const;
+
+/** To the person who asked, so a request doesn't just go quiet. */
+export const staffApprovalOutcome = defineMailType({
+  id: 'staff_approval_outcome',
+  category: 'security',
+  sender: 'security',
+  preference: null,
+  schema: z
+    .object({
+      action: z.string().max(60),
+      outcome: z.enum(['approved', 'rejected', 'stale', 'expired']),
+    })
+    .strict(),
+  sample: { action: 'fee.change', outcome: 'approved' as const },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'Your serious TipMe admin request has an outcome',
+        heading: 'Your request has an outcome',
+        blocks: [
+          {
+            kind: 'text',
+            text: `Your request (${data.action}) ${OUTCOME_WORDS[data.outcome]}`,
+          },
+        ],
+        reason: 'You get this email because you asked for this admin action.',
+      },
+      ctx,
+    ),
+});

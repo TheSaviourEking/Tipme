@@ -180,6 +180,37 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
   },
 };
 
+/**
+ * Routes no one permission fits, where the operation authorises each person against each record.
+ * Pinned, so a new one has to be argued for here.
+ */
+export const OPS_ANY_STAFF_ROUTES: Record<
+  string,
+  { verb: 'GET' | 'POST'; freshCode: boolean; reason: string }
+> = {
+  'OpsApprovalsController.list': {
+    verb: 'GET',
+    freshCode: false,
+    reason: 'Filtered per person to permissions held and their own requests.',
+  },
+  'OpsApprovalsController.approve': {
+    verb: 'POST',
+    freshCode: false,
+    reason:
+      'Checks the request’s permission, and takes a code in the body for this approval.',
+  },
+  'OpsApprovalsController.reject': {
+    verb: 'POST',
+    freshCode: true,
+    reason: 'Checks the permission the request names, per request.',
+  },
+  'OpsApprovalsController.cancel': {
+    verb: 'POST',
+    freshCode: false,
+    reason: 'Only the person who asked, even if they have lost the permission.',
+  },
+};
+
 /** Actions serious enough that a later task asks a second person to approve them. */
 export const SERIOUS_ACTIONS = [
   'email_recovery.start',

@@ -59,6 +59,7 @@ export const apiErrorCodes = [
   'ISSUE_OWN_ALERT',
   'APPROVAL_OWN_REQUEST',
   'APPROVAL_NOT_YOURS',
+  'APPROVAL_SUBJECT',
   'APPROVAL_CLOSED',
   'APPROVAL_EXPIRED',
   'APPROVAL_STALE',
@@ -88,6 +89,8 @@ export interface ApiErrorResponse {
     message: string;
     reference: string;
     fields?: string[];
+    /** A fixed code saying more about the refusal, never request data. */
+    reason?: string;
   };
 }
 

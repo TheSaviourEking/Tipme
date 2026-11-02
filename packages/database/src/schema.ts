@@ -1419,6 +1419,8 @@ export const approvalRequests = pgTable(
     id: uuid('id').primaryKey(),
     action: text('action').notNull(),
     payload: jsonb('payload').notNull(),
+    // The action's `current` value when asked for: if it has moved at approval, the action stops.
+    pinned: jsonb('pinned'),
     // Exactly what will change, in words, fixed when requested.
     summary: text('summary').notNull(),
     permission: text('permission').notNull(),

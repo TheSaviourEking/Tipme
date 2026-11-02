@@ -86,7 +86,7 @@ export class OpsApprovalsController {
       case 'approved':
         return { data: { status: 'approved' } };
       case 'stale':
-        throw new CodedHttpException(409, 'APPROVAL_STALE');
+        throw new CodedHttpException(409, 'APPROVAL_STALE', outcome.why);
       case 'expired':
         throw new CodedHttpException(409, 'APPROVAL_EXPIRED');
       case 'reused':

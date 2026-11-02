@@ -1,5 +1,5 @@
 import type { OpsIssue, OpsIssueOutcome } from '@tipme/contracts';
-import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   issueNotes,
@@ -11,17 +11,15 @@ import {
   phoneRecoveries,
   profiles,
   tips,
-  users,
   withdrawalHolds,
   type IssueKind,
   type IssueSeverity,
   type IssueSubject,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { normaliseStaffEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { canonicalId } from './staff.js';
+import { canonicalId, readMailboxes, sharesMailbox } from './staff.js';
 
 const STUCK_AFTER_MS = 30 * 60 * 1000;
 const ACTED_ALONE_CLOSES_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
@@ -756,15 +754,9 @@ async function isSamePerson(
   const closer = canonicalId(closingBy);
   if (closer === actedBy) return true;
   if (!closer) return false;
-  const people = await tx
-    .select({ id: users.id, email: users.email })
-    .from(users)
-    .where(inArray(users.id, [actedBy, closer]));
-  const [first, second] = people.map((person) => person.email);
-  return Boolean(
-    first &&
-    second &&
-    normaliseStaffEmail(first) === normaliseStaffEmail(second),
+  return sharesMailbox(
+    await readMailboxes(tx, actedBy),
+    await readMailboxes(tx, closer),
   );
 }
 

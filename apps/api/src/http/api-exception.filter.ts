@@ -37,6 +37,8 @@ const messages: Record<ApiErrorCode, string> = {
   APPROVAL_OWN_REQUEST:
     'Someone else has to decide this one, because you asked for it.',
   APPROVAL_NOT_YOURS: 'Only the person who asked can cancel this request.',
+  APPROVAL_SUBJECT:
+    'Someone else has to decide this one, because it is about you.',
   APPROVAL_CLOSED:
     'This request has already been closed. Nothing more was done.',
   APPROVAL_EXPIRED:
@@ -206,6 +208,7 @@ const operationErrors: Partial<
   APPROVAL_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   APPROVAL_OWN_REQUEST: { status: 403, code: 'APPROVAL_OWN_REQUEST' },
   APPROVAL_NOT_YOURS: { status: 403, code: 'APPROVAL_NOT_YOURS' },
+  APPROVAL_SUBJECT: { status: 403, code: 'APPROVAL_SUBJECT' },
   APPROVAL_CLOSED: { status: 409, code: 'APPROVAL_CLOSED' },
   APPROVAL_EXPIRED: { status: 409, code: 'APPROVAL_EXPIRED' },
   APPROVAL_ALREADY_PENDING: { status: 409, code: 'APPROVAL_ALREADY_PENDING' },
@@ -320,6 +323,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (exception instanceof ValidationFailedException)
       body.error.fields = exception.fields;
     else if (fields) body.error.fields = fields;
+    if (exception instanceof CodedHttpException && exception.reason)
+      body.error.reason = exception.reason;
     if (exception instanceof RateLimitedException)
       response.setHeader('Retry-After', String(exception.retryAfterSeconds));
     response.status(status).json(body);

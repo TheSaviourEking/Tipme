@@ -54,6 +54,20 @@ export const OPS_APPROVAL_STATUSES = [
 ] as const;
 export type OpsApprovalStatus = (typeof OPS_APPROVAL_STATUSES)[number];
 
+/** Why a request closed without running: fixed codes, for a screen to put into words. */
+export const OPS_APPROVAL_STALE_REASONS = [
+  'requester_lost_access',
+  'requester_removed',
+  'requester_reset',
+  'facts_changed',
+  'description_changed',
+  'permission_changed',
+  'action_unknown',
+  'superseded',
+] as const;
+export type OpsApprovalStaleReason =
+  (typeof OPS_APPROVAL_STALE_REASONS)[number];
+
 /** A code entered for this approval: a recent one in the session doesn't count (spec 6.9). */
 export const opsApproveSchema = opsCodeSchema
   .extend({ reason: z.string().trim().min(10).max(500).optional() })

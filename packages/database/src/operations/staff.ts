@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes } from 'node:crypto';
 import { SERIOUS_ACTION_PERMISSIONS } from '@tipme/contracts';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '@tipme/domain';
@@ -30,6 +31,7 @@ import { newId } from './ids.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { enqueueOutbox } from './outbox.js';
 import { openSecret, sealSecret } from './secret-box.js';
+import { closePendingRequestsOf } from './serious-actions.js';
 
 const ENROLMENT_TTL_MS = 30 * 60 * 1000;
 const MAX_FAILURES = 5;
@@ -94,6 +96,15 @@ export async function isActiveStaff(
 // process: public pages keep the rest. Everyone else gets a retryable refusal straight away.
 const STAFF_ADMIN_MAX_WAITERS = 3;
 let staffAdminWaiters = 0;
+const holdingStaffAdmin = new AsyncLocalStorage<true>();
+
+/**
+ * For work already holding the lock in its transaction (a serious action's `run`): taking it again is
+ * immediate, so that doesn't count as waiting, and those queueing behind can't get it refused.
+ * Taking it on another connection from in here still waits, and is still refused in the end.
+ */
+export const whileHoldingStaffAdmin = <T>(work: () => Promise<T>): Promise<T> =>
+  holdingStaffAdmin.run(true, work);
 
 /**
  * Serialises every change to who holds what, for the rest of the transaction. Take it first, and
@@ -101,9 +112,10 @@ let staffAdminWaiters = 0;
  * STAFF_ADMIN_BUSY: nothing has changed, so trying again is safe. The limit covers this wait only.
  */
 export async function lockStaffAdmin(tx: Tx): Promise<void> {
-  if (staffAdminWaiters >= STAFF_ADMIN_MAX_WAITERS)
+  const counted = !holdingStaffAdmin.getStore();
+  if (counted && staffAdminWaiters >= STAFF_ADMIN_MAX_WAITERS)
     throw new OperationError('STAFF_ADMIN_BUSY');
-  staffAdminWaiters += 1;
+  if (counted) staffAdminWaiters += 1;
   try {
     await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
     await tx.execute(
@@ -115,7 +127,7 @@ export async function lockStaffAdmin(tx: Tx): Promise<void> {
       throw new OperationError('STAFF_ADMIN_BUSY');
     throw error;
   } finally {
-    staffAdminWaiters -= 1;
+    if (counted) staffAdminWaiters -= 1;
   }
 }
 
@@ -503,15 +515,70 @@ export async function readStaffAccess(
   return composeAccess(row.roleId, names, overrides);
 }
 
+const MAILBOX_COLUMNS = {
+  email: users.email,
+  recoveryEmail: users.recoveryEmail,
+  recoveryVerifiedAt: users.recoveryEmailVerifiedAt,
+};
+export interface MailboxFields {
+  email: string | null;
+  recoveryEmail: string | null;
+  recoveryVerifiedAt: Date | null;
+}
+
+/**
+ * The mailboxes that are this person: their sign-in address, and a recovery address they proved.
+ * None at all is never a match, so phone-only staff are told apart by id.
+ */
+export function mailboxesOf(person: MailboxFields): Set<string> {
+  const boxes = new Set<string>();
+  if (person.email) boxes.add(normaliseStaffEmail(person.email));
+  if (person.recoveryEmail && person.recoveryVerifiedAt)
+    boxes.add(normaliseStaffEmail(person.recoveryEmail));
+  return boxes;
+}
+
+export const sharesMailbox = (
+  first: ReadonlySet<string>,
+  second: ReadonlySet<string>,
+): boolean => [...first].some((box) => second.has(box));
+
+/** One person's mailboxes, read now. */
+export async function readMailboxes(
+  db: Database | Tx,
+  userId: string,
+): Promise<Set<string>> {
+  const [row] = await db
+    .select(MAILBOX_COLUMNS)
+    .from(users)
+    .where(eq(users.id, userId));
+  return row ? mailboxesOf(row) : new Set();
+}
+
+/** How many people these are: accounts sharing a mailbox, even by way of a third, count as one. */
+function countPeople(accounts: readonly Set<string>[]): number {
+  const people: Set<string>[] = [];
+  for (const boxes of accounts) {
+    const merged = new Set(boxes);
+    for (let i = people.length - 1; i >= 0; i -= 1)
+      if (sharesMailbox(people[i]!, merged)) {
+        for (const box of people[i]!) merged.add(box);
+        people.splice(i, 1);
+      }
+    people.push(merged);
+  }
+  return people.length;
+}
+
 /**
  * Everyone who could enter a code right now: active staff with a confirmed authenticator on a live
  * account. Someone mid-reset has enrolled before, but can't.
  */
 export function staffAbleToEnterCode(
   db: Database | Tx,
-): Promise<{ userId: string; email: string | null }[]> {
+): Promise<({ userId: string } & MailboxFields)[]> {
   return db
-    .select({ userId: staff.userId, email: users.email })
+    .select({ userId: staff.userId, ...MAILBOX_COLUMNS })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
     .innerJoin(staffTotp, eq(staffTotp.userId, staff.userId))
@@ -534,21 +601,21 @@ const SERIOUS_PERMISSIONS = new Set<string>(
  */
 export async function seriousPermissionHolders(
   tx: Database | Tx,
-): Promise<Map<string, Set<string>>> {
-  const holders = new Map<string, Set<string>>();
+): Promise<Map<string, number>> {
+  const holders = new Map<string, Set<string>[]>();
   for (const person of await staffAbleToEnterCode(tx)) {
     const access = await readStaffAccess(tx, person.userId);
-    const who = person.email
-      ? normaliseStaffEmail(person.email)
-      : person.userId;
+    const boxes = mailboxesOf(person);
     for (const permission of access?.permissions ?? [])
       if (SERIOUS_PERMISSIONS.has(permission))
-        holders.set(
-          permission,
-          (holders.get(permission) ?? new Set<string>()).add(who),
-        );
+        holders.set(permission, [...(holders.get(permission) ?? []), boxes]);
   }
-  return holders;
+  return new Map(
+    [...holders].map(([permission, accounts]) => [
+      permission,
+      countPeople(accounts),
+    ]),
+  );
 }
 
 /**
@@ -558,14 +625,13 @@ export async function seriousPermissionHolders(
  */
 export async function alertIfLastApproverGone(
   tx: Tx,
-  before: Map<string, Set<string>>,
+  before: Map<string, number>,
   actorId: string | null,
 ): Promise<void> {
   const after = await seriousPermissionHolders(tx);
   const gone = [...before]
     .filter(
-      ([permission, people]) =>
-        people.size >= 2 && (after.get(permission)?.size ?? 0) < 2,
+      ([permission, people]) => people >= 2 && (after.get(permission) ?? 0) < 2,
     )
     .map(([permission]) => permission)
     .sort();
@@ -668,12 +734,15 @@ export function grantOwner(
       if (named) {
         // One person, one staff account: naming a variant must not quietly make a second one. An
         // account already active is who the operator means, whatever a removed look-alike held.
-        const mailbox = normaliseStaffEmail(named);
+        const mailboxes = existing
+          ? await readMailboxes(tx, existing.id)
+          : new Set<string>();
+        mailboxes.add(normaliseStaffEmail(named));
         const staffAccounts = await tx
           .select({
             userId: staff.userId,
-            email: users.email,
             revokedAt: staff.revokedAt,
+            ...MAILBOX_COLUMNS,
           })
           .from(staff)
           .innerJoin(users, eq(users.id, staff.userId));
@@ -683,12 +752,14 @@ export function grantOwner(
         const match = staffAccounts.find(
           (person) =>
             person.userId !== existing?.id &&
-            person.email &&
-            normaliseStaffEmail(person.email) === mailbox &&
+            sharesMailbox(mailboxesOf(person), mailboxes) &&
             !(active && person.revokedAt),
         );
-        if (match?.email)
-          throw new OperationError('STAFF_EMAIL_TAKEN', maskEmail(match.email));
+        if (match)
+          throw new OperationError(
+            'STAFF_EMAIL_TAKEN',
+            maskEmail(match.email ?? match.recoveryEmail ?? ''),
+          );
       }
       const userId = existing?.id ?? newId();
       const [previous] = existing
@@ -746,6 +817,13 @@ export function grantOwner(
         }),
         now,
       });
+      if (existing)
+        await closePendingRequestsOf(tx, {
+          userId,
+          why: 'requester_reset',
+          actorId: null,
+          now,
+        });
       await alertIfLastApproverGone(tx, holdersBefore, null);
       if (input.sealing)
         await mailOwner(tx, input.sealing, {

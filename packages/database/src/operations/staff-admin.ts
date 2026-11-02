@@ -43,6 +43,9 @@ import {
   clearOverrides,
   composeAccess,
   alertIfLastApproverGone,
+  mailboxesOf,
+  readMailboxes,
+  sharesMailbox,
   dropOpsAccess,
   seriousPermissionHolders,
   isUnenrolledInvitee,
@@ -55,6 +58,7 @@ import {
   type StaffAccess,
   withAuditChange,
 } from './staff.js';
+import { closePendingRequestsOf } from './serious-actions.js';
 
 const MANAGE = 'staff.manage';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -819,14 +823,15 @@ export function addStaff(
         .select({
           userId: staff.userId,
           email: users.email,
+          recoveryEmail: users.recoveryEmail,
+          recoveryVerifiedAt: users.recoveryEmailVerifiedAt,
           verifiedAt: users.emailVerifiedAt,
           revokedAt: staff.revokedAt,
         })
         .from(staff)
         .innerJoin(users, eq(users.id, staff.userId));
-      const matches = everyone.filter(
-        (person) =>
-          person.email && normaliseStaffEmail(person.email) === mailbox,
+      const matches = everyone.filter((person) =>
+        mailboxesOf(person).has(mailbox),
       );
       const removed = matches.find(
         (person) =>
@@ -845,6 +850,19 @@ export function addStaff(
             .select({ id: users.id })
             .from(users)
             .where(verifiedOwner(email));
+      // The account being brought in may reach an existing colleague by its recovery address.
+      if (proven) {
+        const theirs = await readMailboxes(tx, proven.id);
+        if (
+          everyone.some(
+            (person) =>
+              person.userId !== proven.id &&
+              !person.revokedAt &&
+              sharesMailbox(mailboxesOf(person), theirs),
+          )
+        )
+          throw new OperationError('STAFF_EMAIL_TAKEN');
+      }
       // Recovery rows before the account row: the order completing a recovery takes them in.
       let recoveriesCancelled = 0;
       if (proven) {
@@ -1066,6 +1084,12 @@ export function removeStaff(
         }),
         now,
       });
+      await closePendingRequestsOf(tx, {
+        userId,
+        why: 'requester_removed',
+        actorId: actor.id,
+        now,
+      });
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);
     });
   });
@@ -1118,6 +1142,12 @@ export function resetAuthenticator(
           linkSentTo: maskEmail(to),
           delivery: link.delivery,
         }),
+        now,
+      });
+      await closePendingRequestsOf(tx, {
+        userId,
+        why: 'requester_reset',
+        actorId: actor.id,
         now,
       });
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);

@@ -127,6 +127,7 @@ async function mailApprovalPending(
   const [request] = await db
     .select({
       action: approvalRequests.action,
+      payload: approvalRequests.payload,
       permission: approvalRequests.permission,
       requestedBy: approvalRequests.requestedBy,
       status: approvalRequests.status,
@@ -141,6 +142,8 @@ async function mailApprovalPending(
   const able = await qualifiedApprovers(db, {
     permission: request.permission,
     requesterId: request.requestedBy,
+    action: request.action,
+    payload: request.payload,
   });
   if (able.length === 0) return;
   const recipients = await db
@@ -216,6 +219,20 @@ export function mailForDomainEvent(
     }
     if (name === 'ops.approval_pending') {
       await mailApprovalPending(db, sealing, payload, dedupeKey);
+      return;
+    }
+    if (name === 'ops.approval_ran' || name === 'ops.approval_closed') {
+      const userId = idOf(payload['requestedBy']);
+      const action = payload['action'];
+      const outcome =
+        name === 'ops.approval_ran' ? 'approved' : payload['outcome'];
+      if (!userId || typeof action !== 'string' || !dedupeKey) return;
+      await mailOwner(db, sealing, {
+        userId,
+        type: 'staff_approval_outcome',
+        data: { action, outcome },
+        dedupeKey: `staff_approval_outcome.${dedupeKey}`,
+      });
       return;
     }
     if (name === 'ops.last_approver_removed') {

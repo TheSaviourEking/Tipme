@@ -30,6 +30,19 @@ export const OPS_PERMISSION = 'tipme:ops-permission';
 /** No permission fits the route: the operation behind it decides, per record. */
 export const OPS_ANY_STAFF = 'tipme:ops-any-staff';
 
+/**
+ * A named permission is always checked. Any-staff only counts where none is named, and a route marked
+ * both ways is a mistake, so it refuses everyone rather than guess which was meant.
+ */
+export function routeAllows(
+  permission: string | undefined,
+  anyStaff: boolean,
+  held: ReadonlySet<string>,
+): boolean {
+  if (permission && anyStaff) return false;
+  return permission ? held.has(permission) : anyStaff;
+}
+
 // Anyone who is not signed-in staff learns nothing about the admin area: every refusal is a 404.
 const hidden = () => new CodedHttpException(404, 'NOT_FOUND');
 
@@ -89,7 +102,7 @@ export class OpsGuard implements CanActivate {
       OPS_ANY_STAFF,
       [context.getHandler(), context.getClass()],
     );
-    if (!anyStaff && (!permission || !grant.permissions.has(permission)))
+    if (!routeAllows(permission, Boolean(anyStaff), grant.permissions))
       throw new CodedHttpException(403, 'FORBIDDEN');
     request.auth = session;
     request.ops = { ...grant, sessionId: session.sessionId };

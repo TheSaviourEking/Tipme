@@ -19,6 +19,8 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'ops.acted_alone',
   'ops.approval_pending',
   'ops.last_approver_removed',
+  'ops.approval_ran',
+  'ops.approval_closed',
   'provider_event.conflict',
   'payment.unresolved',
   'payment.conflict',
@@ -32,6 +34,7 @@ const STAFF_ALERT_EVENTS: ReadonlySet<string> = new Set([
   'ops.acted_alone',
   'ops.approval_pending',
   'ops.last_approver_removed',
+  'ops.approval_ran',
 ]);
 
 export interface StaffAlert {
@@ -94,6 +97,14 @@ export async function handleDomainEvent(
     return outcome === 'opened' ? 'issue_opened' : 'duplicate';
   }
   await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
+  if (name === 'ops.approval_ran' && deps.postStaffAlert) {
+    const { action, requestedBy } = (data ?? {}) as Record<string, unknown>;
+    await deps.postStaffAlert({
+      event: name,
+      action: typeof action === 'string' ? action : 'unknown',
+      requestedBy: typeof requestedBy === 'string' ? requestedBy : 'unknown',
+    });
+  }
   if (name === 'tip.failed' && deps.analyticsEnabled) {
     const { tipId, profileId } = (data ?? {}) as Record<string, unknown>;
     if (typeof tipId === 'string' && UUID.test(tipId))

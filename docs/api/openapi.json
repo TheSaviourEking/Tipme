@@ -8752,6 +8752,7 @@
                   "ISSUE_OWN_ALERT",
                   "APPROVAL_OWN_REQUEST",
                   "APPROVAL_NOT_YOURS",
+                  "APPROVAL_SUBJECT",
                   "APPROVAL_CLOSED",
                   "APPROVAL_EXPIRED",
                   "APPROVAL_STALE",

@@ -421,6 +421,13 @@
       "when": 1793568438689,
       "tag": "0059_staff_approval_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793574664083,
+      "tag": "0060_approval_pinned",
+      "breakpoints": true
     }
   ]
 }

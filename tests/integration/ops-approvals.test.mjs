@@ -9,6 +9,8 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import * as contracts from '../../packages/contracts/dist/index.js';
 import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
+import * as guardModule from '../../apps/api/dist/ops/ops.guard.js';
+const routeAllows = (...args) => guardModule.routeAllows(...args);
 import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
 import {
   MAIL_SEAL_KEY,
@@ -90,6 +92,54 @@ registerSeriousAction({
     throw new Error('a bug');
   },
 });
+// Only an owner may decide it, the person it's about may not, and it pins a current value.
+const gated = { current: 'one' };
+registerSeriousAction({
+  name: 'test.gated',
+  permission: 'fees.manage',
+  validate: async () => {},
+  describe: async (_tx, payload) => `Gated ${payload.target}`,
+  mayDecide: async (_tx, _payload, approver) =>
+    approver.access.roleId === 'owner',
+  subjects: (payload) => (payload.subject ? [payload.subject] : []),
+  target: (payload) => payload.target,
+  current: async () => ({ value: gated.current }),
+  run: async (_tx, payload, ctx) => {
+    runs.push({ payload, ctx });
+  },
+});
+const signal = {};
+registerSeriousAction({
+  name: 'test.waits_in_js',
+  permission: 'fees.manage',
+  validate: async () => {},
+  describe: async () => 'Waits on something other than the database',
+  run: async (tx, _payload, ctx) => {
+    await new Promise((resolve) => setTimeout(resolve, 16_500));
+    try {
+      await ops.recordAudit(tx, {
+        staffUserId: ctx.actorId,
+        action: 'test.stray_write',
+        now: ctx.now,
+      });
+    } catch (error) {
+      signal.strayRefused = true;
+      throw error;
+    }
+  },
+});
+registerSeriousAction({
+  name: 'test.reenters_lock',
+  permission: 'fees.manage',
+  validate: async () => {},
+  describe: async () => 'Re-enters the staff-admin lock',
+  run: async (tx) => {
+    signal.inRun?.();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await ops.lockStaffAdmin(tx);
+    return { reentered: true };
+  },
+});
 registerSeriousAction({
   name: 'test.slow',
   permission: 'fees.manage',
@@ -107,6 +157,7 @@ beforeEach(async () => {
   runs.length = 0;
   facts.refuse = null;
   facts.describeSuffix = undefined;
+  gated.current = 'one';
   await q('DELETE FROM ops_sessions');
   await q('DELETE FROM ops_lockouts');
   await q('DELETE FROM staff_totp');
@@ -380,10 +431,13 @@ test('facts that changed stop the action and mark it stale', async () => {
   facts.refuse = 'ROLE_NOT_FOUND';
   const outcome = await approve(id, approver);
   assert.equal(outcome.status, 'stale');
-  assert.equal(outcome.why, 'ROLE_NOT_FOUND');
+  assert.equal(outcome.why, 'facts_changed');
   assert.equal(runs.length, 0);
   assert.equal((await rowOf(id)).status, 'stale');
-  assert.equal((await auditOf(id, 'serious_action.stale')).length, 1);
+  // The screen gets a safe reason; the raw code stays in the log.
+  assert.equal((await rowOf(id)).decided_reason, 'facts_changed');
+  const [stale] = await auditOf(id, 'serious_action.stale');
+  assert.ok(stale.reason.includes('ROLE_NOT_FOUND'));
   assert.equal((await auditOf(id, 'serious_action.ran')).length, 0);
 });
 
@@ -1127,7 +1181,9 @@ test('the routes: list without the payload, approve with a code, reject, cancel'
   );
   facts.refuse = null;
   assert.equal(stale.status, 409);
-  assert.equal(await errorCode(stale), 'APPROVAL_STALE');
+  const staleBody = (await stale.json()).error;
+  assert.equal(staleBody.code, 'APPROVAL_STALE');
+  assert.equal(staleBody.reason, 'facts_changed');
   assert.equal(runs.length, 1);
 
   // Rejecting takes the usual fresh code.
@@ -1177,4 +1233,450 @@ test('a person who lost a permission can still see and cancel their own request'
   assert.equal(listed.id, id);
   await ops.cancelRequest(database.db, { requestId: id, actorId: asker });
   assert.equal((await rowOf(id)).status, 'cancelled');
+});
+
+// ---- Fix round 1 ----
+
+const eventsOf = (type) =>
+  q(`SELECT * FROM outbox_events WHERE event_type = $1`, [type]);
+const handle = (name, data, extra = {}) =>
+  handleDomainEvent(name, data, {
+    db: database.db,
+    logger: { info() {}, warn() {}, error() {} },
+    dedupeKey: `${name}.${randomUUID()}`,
+    sealing,
+    pretendPayment: true,
+    ...extra,
+  });
+const verifiedPerson = (options = {}) =>
+  person({
+    email: `p-${randomUUID()}@example.com`,
+    verified: true,
+    ...options,
+  });
+
+test('an approval that ran raises an event, reaches the webhook point and tells the requester', async () => {
+  const asker = await verifiedPerson();
+  const approver = await person();
+  const id = await ask(asker);
+  await approve(id, approver);
+  const [event] = await eventsOf('ops.approval_ran');
+  assert.equal(event.payload.requestId, id);
+  assert.equal(event.payload.requestedBy, asker);
+  assert.equal(event.payload.approvedBy, approver);
+  const told = [];
+  await handle('ops.approval_ran', event.payload, {
+    dedupeKey: event.dedupe_key,
+    postStaffAlert: async (alert) => told.push(alert),
+  });
+  assert.deepEqual(told, [
+    { event: 'ops.approval_ran', action: ACTION, requestedBy: asker },
+  ]);
+  await waitFor(
+    async () => (await mailTo('staff_approval_outcome', asker)).length === 1,
+  );
+});
+
+test('the requester hears of a rejection, a stale close and an expiry, through the worker', async () => {
+  const asker = await verifiedPerson();
+  const other = await person();
+  const rejected = await ask(asker, { payload: { value: 'a' } });
+  await ops.rejectRequest(database.db, {
+    requestId: rejected,
+    actorId: other,
+    grantId: people.get(other).grantId,
+    reason: 'That is not what the ticket asked for',
+  });
+  const stale = await ask(asker, { payload: { value: 'b' } });
+  facts.refuse = 'ROLE_NOT_FOUND';
+  await approve(stale, other);
+  facts.refuse = null;
+  const lapsed = await ask(asker, { payload: { value: 'c' } });
+  await ops.expireRequests(database.db, {
+    now: new Date(Date.now() + 25 * 60 * 60 * 1000),
+  });
+  assert.equal((await rowOf(lapsed)).status, 'expired');
+  const events = await eventsOf('ops.approval_closed');
+  assert.deepEqual(events.map((e) => e.payload.outcome).sort(), [
+    'expired',
+    'rejected',
+    'stale',
+  ]);
+  await waitFor(
+    async () => (await mailTo('staff_approval_outcome', asker)).length === 3,
+  );
+  // Asking the requester to hear of their own cancel would be noise.
+  const cancelled = await ask(asker, { payload: { value: 'd' } });
+  await ops.cancelRequest(database.db, {
+    requestId: cancelled,
+    actorId: asker,
+  });
+  assert.equal((await eventsOf('ops.approval_closed')).length, 3);
+});
+
+test('someone an action says may not decide cannot approve, and is not a second person', async () => {
+  const asker = await person();
+  const limited = await person({ roleId: await roleWith(['fees.manage']) });
+  const gatedAsk = (actor, extra = {}) =>
+    requestSeriousAction(database.db, {
+      name: 'test.gated',
+      payload: { target: 't1', ...extra },
+      actorId: actor,
+      grantId: people.get(actor).grantId,
+      reason: REASON,
+    });
+  // With only them as the other person, it runs alone.
+  assert.equal((await gatedAsk(asker)).state, 'ran');
+  const owner = await person();
+  const { requestId } = await gatedAsk(asker);
+  await assert.rejects(
+    approve(requestId, limited),
+    refusedWith('PERMISSION_NOT_HELD'),
+  );
+  assert.equal(await lastStep(limited), null);
+  const [view] = await ops.listApprovals(database.db, { actorId: limited });
+  assert.equal(view.canDecide, false);
+  const [ownerView] = await ops.listApprovals(database.db, { actorId: owner });
+  assert.equal(ownerView.canDecide, true);
+  assert.equal((await approve(requestId, owner)).status, 'approved');
+});
+
+test('the person an action benefits cannot approve it, by id or by mailbox, and does not count', async () => {
+  const asker = await person();
+  const subject = await person({ email: 'bene.fit@gmail.com' });
+  const twin = await person({ email: 'benefit+2@gmail.com' });
+  const gatedAsk = () =>
+    requestSeriousAction(database.db, {
+      name: 'test.gated',
+      payload: { target: 't1', subject },
+      actorId: asker,
+      grantId: people.get(asker).grantId,
+      reason: REASON,
+    });
+  // Neither they nor their second account is anyone else.
+  assert.equal((await gatedAsk()).state, 'ran');
+  const owner = await person();
+  gated.current = 'two';
+  const { requestId } = await gatedAsk();
+  await assert.rejects(
+    approve(requestId, subject),
+    refusedWith('APPROVAL_SUBJECT'),
+  );
+  await assert.rejects(
+    approve(requestId, twin),
+    refusedWith('APPROVAL_SUBJECT'),
+  );
+  await assert.rejects(
+    ops.rejectRequest(database.db, {
+      requestId,
+      actorId: subject,
+      grantId: people.get(subject).grantId,
+      reason: 'I would rather not have this at all',
+    }),
+    refusedWith('APPROVAL_SUBJECT'),
+  );
+  assert.equal((await approve(requestId, owner)).status, 'approved');
+});
+
+test('a verified recovery address on the same mailbox is the same person', async () => {
+  const withRecovery = async (recovery, options) => {
+    const id = await person(options);
+    await q(
+      `UPDATE users SET recovery_email = $1, recovery_email_verified_at = now() WHERE id = $2`,
+      [recovery, id],
+    );
+    return id;
+  };
+  const asker = await withRecovery('pat.r@gmail.com');
+  const second = await person({ email: 'patr+second@gmail.com' });
+  assert.deepEqual(
+    await ops.qualifiedApprovers(database.db, {
+      permission: 'fees.manage',
+      requesterId: asker,
+    }),
+    [],
+  );
+  // People count: losing them was never losing a second person.
+  await ops.removeStaff(database.db, {
+    actorId: asker,
+    userId: second,
+    reason: 'That was a duplicate account',
+  });
+  assert.equal((await lastAlerts()).length, 0);
+
+  const back = await person({ email: 'patr+third@gmail.com' });
+  const other = await person();
+  const id = await ask(asker);
+  await assert.rejects(approve(id, back), refusedWith('APPROVAL_OWN_REQUEST'));
+  assert.equal((await approve(id, other)).status, 'approved');
+
+  // An unverified recovery address proves nothing.
+  const unproven = await person({ email: 'someone.else@example.com' });
+  await q(
+    `UPDATE users SET recovery_email = 'quinn@example.com' WHERE id = $1`,
+    [unproven],
+  );
+  const quinn = await person({ email: 'quinn+1@example.com' });
+  assert.ok(
+    (
+      await ops.qualifiedApprovers(database.db, {
+        permission: 'fees.manage',
+        requesterId: unproven,
+      })
+    ).includes(quinn),
+  );
+
+  // Adding staff on that mailbox is refused, either way round.
+  await assert.rejects(
+    ops.addStaff(database.db, {
+      actorId: other,
+      email: 'patr+new@gmail.com',
+      roleId: 'owner',
+      reason: 'Adding them for the launch week',
+      sealing,
+    }),
+    refusedWith('STAFF_EMAIL_TAKEN'),
+  );
+  await assert.rejects(
+    ops.grantOwner(database.db, { email: 'patr+cli@gmail.com' }),
+    refusedWith('STAFF_EMAIL_TAKEN'),
+  );
+  const outside = randomUUID();
+  await q(
+    `INSERT INTO users (id, email, email_verified_at, recovery_email, recovery_email_verified_at)
+     VALUES (gen_random_uuid(), $1, now(), 'pat.r+x@gmail.com', now())`,
+    [`outside-${outside}@example.com`],
+  );
+  await assert.rejects(
+    ops.addStaff(database.db, {
+      actorId: other,
+      email: `outside-${outside}@example.com`,
+      roleId: 'owner',
+      reason: 'Adding them for the launch week',
+      sealing,
+    }),
+    refusedWith('STAFF_EMAIL_TAKEN'),
+  );
+});
+
+test("acting alone closes the requester's other requests for that action and target", async () => {
+  const [asker, other] = await twoPeople();
+  const payload = (target, value) => ({ target, value });
+  const gatedAsk = (body) =>
+    requestSeriousAction(database.db, {
+      name: 'test.gated',
+      payload: body,
+      actorId: asker,
+      grantId: people.get(asker).grantId,
+      reason: REASON,
+    });
+  const old = await gatedAsk(payload('t1', 'old'));
+  const elsewhere = await gatedAsk(payload('t2', 'old'));
+  assert.equal(old.state, 'pending');
+  await ops.removeStaff(database.db, {
+    actorId: asker,
+    userId: other,
+    reason: 'They have left the company',
+  });
+  const alone = await gatedAsk(payload('t1', 'new'));
+  assert.equal(alone.state, 'ran');
+  assert.deepEqual(alone.superseded, [old.requestId]);
+  const row = await rowOf(old.requestId);
+  assert.equal(row.status, 'stale');
+  assert.equal(row.decided_reason, 'superseded');
+  assert.equal(
+    (await auditOf(old.requestId, 'serious_action.stale')).length,
+    1,
+  );
+  assert.equal((await rowOf(elsewhere.requestId)).status, 'pending');
+
+  // With no target declared, the whole action counts as one.
+  runs.length = 0;
+  const third = await person();
+  const plain = await ask(asker, { payload: { value: 'old' } });
+  await ops.removeStaff(database.db, {
+    actorId: asker,
+    userId: third,
+    reason: 'They have left the company',
+  });
+  const lone = await requestSeriousAction(database.db, {
+    name: ACTION,
+    payload: { value: 'new' },
+    actorId: asker,
+    grantId: people.get(asker).grantId,
+    reason: REASON,
+  });
+  assert.equal(lone.state, 'ran');
+  const late = await person();
+  await assert.rejects(approve(plain, late), refusedWith('APPROVAL_CLOSED'));
+  assert.deepEqual(
+    runs.map((r) => r.payload.value),
+    ['new'],
+  );
+});
+
+test('a pinned current value that moves stops the action; the engine does the comparing', async () => {
+  const [asker, other] = await twoPeople();
+  const { requestId } = await requestSeriousAction(database.db, {
+    name: 'test.gated',
+    payload: { target: 't1' },
+    actorId: asker,
+    grantId: people.get(asker).grantId,
+    reason: REASON,
+  });
+  assert.deepEqual((await rowOf(requestId)).pinned, { value: 'one' });
+  gated.current = 'two';
+  const outcome = await approve(requestId, other);
+  assert.equal(outcome.status, 'stale');
+  assert.equal(outcome.why, 'facts_changed');
+  assert.equal(runs.length, 0);
+});
+
+test('removing or resetting the requester closes their requests, and a restored person does not revive them', async () => {
+  const asker = await verifiedPerson();
+  const owner = await person();
+  const approver = await person();
+  const id = await ask(asker);
+  await ops.resetAuthenticator(database.db, {
+    actorId: owner,
+    userId: asker,
+    reason: 'They lost their phone today',
+    sealing,
+  });
+  const reset = await rowOf(id);
+  assert.equal(reset.status, 'stale');
+  assert.equal(reset.decided_reason, 'requester_reset');
+  assert.equal(reset.decided_by, owner);
+
+  const leaver = await person();
+  const second = await ask(leaver);
+  await ops.removeStaff(database.db, {
+    actorId: owner,
+    userId: leaver,
+    reason: 'They have left the company',
+  });
+  assert.equal((await rowOf(second)).decided_reason, 'requester_removed');
+  await q(`UPDATE staff SET revoked_at = NULL WHERE user_id = $1`, [leaver]);
+  await assert.rejects(
+    approve(second, approver),
+    refusedWith('APPROVAL_CLOSED'),
+  );
+
+  // Someone who can't enter a code any more, however that came about.
+  const midReset = await person();
+  const third = await ask(midReset);
+  await q(`DELETE FROM staff_totp WHERE user_id = $1`, [midReset]);
+  const outcome = await approve(third, approver);
+  assert.equal(outcome.status, 'stale');
+  assert.equal(outcome.why, 'requester_lost_access');
+
+  // The server command is a reset too.
+  const email = `cli-${randomUUID()}@example.com`;
+  const cli = await person({ email, verified: true });
+  const fourth = await ask(cli);
+  await ops.grantOwner(database.db, { email });
+  assert.equal((await rowOf(fourth)).decided_reason, 'requester_reset');
+  assert.equal(runs.length, 0);
+});
+
+test('two people asking for the same thing share one request, and the second is told', async () => {
+  const [first, second] = await twoPeople();
+  const a = await ask(first);
+  const repeat = await requestSeriousAction(database.db, {
+    name: ACTION,
+    payload: { value: 'x' },
+    actorId: second,
+    grantId: people.get(second).grantId,
+    reason: 'A different reason from the same ticket',
+  });
+  assert.deepEqual(repeat, { state: 'pending', requestId: a, repeat: true });
+  const mine = await requestSeriousAction(database.db, {
+    name: ACTION,
+    payload: { value: 'x' },
+    actorId: first,
+    grantId: people.get(first).grantId,
+    reason: 'Asking a second time with new words',
+  });
+  assert.equal(mine.repeat, true);
+  assert.equal((await rowOf(a)).reason, REASON);
+  assert.equal((await eventsOf('ops.approval_pending')).length, 1);
+  assert.equal((await approve(a, second)).status, 'approved');
+  assert.equal(runs.length, 1);
+});
+
+test('a stored permission that no longer matches the action closes as stale', async () => {
+  const asker = await person();
+  await person();
+  const id = await ask(asker);
+  await q(
+    `UPDATE approval_requests SET permission = 'issues.view' WHERE id = $1`,
+    [id],
+  );
+  const viewer = await person({ roleId: await roleWith(['issues.view']) });
+  const outcome = await approve(id, viewer);
+  assert.equal(outcome.status, 'stale');
+  assert.equal(outcome.why, 'permission_changed');
+  assert.equal(runs.length, 0);
+});
+
+test(
+  'a run past the deadline is STAFF_ADMIN_BUSY, leaves no trace, and cannot write afterwards',
+  { timeout: 40_000 },
+  async () => {
+    const [asker, approver] = await twoPeople();
+    const id = await ask(asker, { name: 'test.waits_in_js', payload: {} });
+    signal.strayRefused = false;
+    const started = Date.now();
+    await assert.rejects(
+      approve(id, approver),
+      refusedWith('STAFF_ADMIN_BUSY'),
+    );
+    const took = Date.now() - started;
+    assert.ok(took < 16_000 && took > 14_000, `took ${took}`);
+    assert.equal((await rowOf(id)).status, 'pending');
+    assert.equal(await lastStep(approver), null);
+    await waitFor(() => signal.strayRefused, 5000);
+    assert.equal(
+      (await q(`SELECT 1 FROM audit_events WHERE action = 'test.stray_write'`))
+        .length,
+      0,
+    );
+  },
+);
+
+test(
+  'a run re-entering the staff-admin lock is not turned away by those queueing behind it',
+  { timeout: 30_000 },
+  async () => {
+    const [asker, approver] = await twoPeople();
+    const id = await ask(asker, { name: 'test.reenters_lock', payload: {} });
+    const inRun = new Promise((resolve) => {
+      signal.inRun = resolve;
+    });
+    const approving = approve(id, approver);
+    await inRun;
+    const queued = [1, 2, 3].map(() =>
+      database.db
+        .transaction((tx) => ops.lockStaffAdmin(tx))
+        .then(
+          () => 'got',
+          (error) => error.code,
+        ),
+    );
+    const outcome = await approving;
+    assert.equal(outcome.status, 'approved');
+    assert.deepEqual(outcome.result, { reentered: true });
+    await Promise.all(queued);
+  },
+);
+
+test('the guard checks a permission whenever one is present, and refuses both decorators', () => {
+  const held = new Set(['issues.view']);
+  assert.equal(routeAllows('issues.view', false, held), true);
+  assert.equal(routeAllows('fees.manage', false, held), false);
+  assert.equal(routeAllows(undefined, false, held), false);
+  assert.equal(routeAllows(undefined, true, held), true);
+  // Both on one route: never quietly wider than the permission.
+  assert.equal(routeAllows('fees.manage', true, held), false);
+  assert.equal(routeAllows('issues.view', true, held), false);
 });

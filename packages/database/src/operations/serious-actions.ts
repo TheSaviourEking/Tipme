@@ -2,6 +2,7 @@ import {
   OPS_CATALOGUE,
   SERIOUS_ACTION_PERMISSIONS,
   type OpsApproval,
+  type OpsApprovalStaleReason,
   type OpsApprovalStatus,
   type OpsPermission,
   type SeriousAction,
@@ -21,7 +22,7 @@ import {
 import type { Database, Tx } from '../client.js';
 import { approvalRequests, staffTotp, users } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { maskEmail, normaliseStaffEmail } from './email-address.js';
+import { maskEmail } from './email-address.js';
 import {
   guarded,
   OperationError,
@@ -36,13 +37,19 @@ import {
   checkedReason,
   checkStaffCode,
   lockStaffAdmin,
+  readMailboxes,
   readStaffAccess,
+  sharesMailbox,
   staffAbleToEnterCode,
+  type StaffAccess,
+  whileHoldingStaffAdmin,
   withAuditChange,
 } from './staff.js';
 
 const REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
 const RUN_TIMEOUT = '10s';
+// The statement timeout can't see many short statements, or a wait outside the database.
+const RUN_DEADLINE_MS = 15_000;
 const LIST_LIMIT = 100;
 const SWEEP_BATCH = 100;
 // Names that say a value is a credential. Requests sit in the clear for approvers and the log.
@@ -70,6 +77,28 @@ export interface SeriousActionDefinition<Payload> {
   permission: string;
   /** Throws an OperationError if the facts don't allow it. */
   validate(tx: Tx, payload: Payload): Promise<void>;
+  /**
+   * Whether this person could take the action directly: the action's own rules beyond holding
+   * `permission` (owner only, must hold what is being granted). Someone it refuses can't approve and
+   * doesn't count as a second person. Leave out if the permission is enough.
+   */
+  mayDecide?(
+    tx: Database | Tx,
+    payload: Payload,
+    approver: { userId: string; access: StaffAccess },
+  ): Promise<boolean>;
+  /** Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox. */
+  subjects?(payload: Payload): string[];
+  /**
+   * What the action applies to, say the role or page. Acting alone closes the requester's other
+   * requests with the same target. Leave out and the whole action counts as one target.
+   */
+  target?(payload: Payload): string;
+  /**
+   * The current value the change depends on (a fee, a role's updated_at). Stored when asked for and
+   * compared at approval, so a request can't overwrite something that has moved since. Plain JSON.
+   */
+  current?(tx: Tx, payload: Payload): Promise<unknown>;
   /** Shown to the approver and kept in the log, so server-chosen words, no private details. */
   describe(tx: Tx, payload: Payload): Promise<string>;
   /**
@@ -82,8 +111,19 @@ export interface SeriousActionDefinition<Payload> {
 }
 
 export type SeriousActionOutcome =
-  | { state: 'ran'; aloneReason: 'no_second_person'; result: unknown }
-  | { state: 'pending'; requestId: string };
+  | {
+      state: 'ran';
+      aloneReason: 'no_second_person';
+      result: unknown;
+      /** The requester's waiting requests this replaced, now closed. */
+      superseded: string[];
+    }
+  | {
+      state: 'pending';
+      requestId: string;
+      /** The same thing was already waiting: this is that request, and this reason wasn't kept. */
+      repeat?: true;
+    };
 
 const registry = new Map<string, SeriousActionDefinition<unknown>>();
 
@@ -126,13 +166,54 @@ function plainPayload(payload: unknown): unknown {
   return plain;
 }
 
+/** The same transaction, until the gate shuts: after that, using it is refused rather than run. */
+function fenced(tx: Tx, gate: { shut: boolean }): Tx {
+  return new Proxy(tx, {
+    get(target, property) {
+      const value: unknown = Reflect.get(target, property);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        if (gate.shut) throw new OperationError('STAFF_ADMIN_BUSY');
+        if (property === 'transaction') {
+          const [work, ...rest] = args as [
+            (inner: Tx) => unknown,
+            ...unknown[],
+          ];
+          return (value as (...all: unknown[]) => unknown).call(
+            target,
+            (inner: Tx) => work(fenced(inner, gate)),
+            ...rest,
+          );
+        }
+        return (value as (...all: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+}
+
+/**
+ * Runs an action's work holding the global lock, within a per-statement and an overall limit. Past
+ * either, STAFF_ADMIN_BUSY: the caller's transaction undoes everything. JavaScript can't be stopped,
+ * so work still going after the deadline finds its transaction fenced off, and a client that has gone
+ * back to the pool can't be written through. Call this inside the savepoint or transaction to undo.
+ */
 async function runWithinTime(
   tx: Tx,
-  run: () => Promise<unknown>,
+  work: (fencedTx: Tx) => Promise<unknown>,
 ): Promise<unknown> {
   await tx.execute(sql.raw(`SET LOCAL statement_timeout = '${RUN_TIMEOUT}'`));
+  const gate = { shut: false };
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      gate.shut = true;
+      reject(new OperationError('STAFF_ADMIN_BUSY'));
+    }, RUN_DEADLINE_MS);
+  });
   try {
-    const result = await run();
+    const result = await whileHoldingStaffAdmin(() =>
+      Promise.race([work(fenced(tx, gate)), deadline]),
+    );
     await tx.execute(sql`SET LOCAL statement_timeout TO DEFAULT`);
     return result;
   } catch (error) {
@@ -141,6 +222,9 @@ async function runWithinTime(
       error instanceof PersistenceError ? error.sqlState : sqlStateOf(error);
     if (state === '57014') throw new OperationError('STAFF_ADMIN_BUSY');
     throw error;
+  } finally {
+    gate.shut = true;
+    clearTimeout(timer);
   }
 }
 
@@ -161,38 +245,68 @@ async function canEnterCode(tx: Database | Tx, id: string): Promise<boolean> {
 }
 
 /**
+ * Why this person, already known to hold the permission and able to enter a code, can't decide this
+ * action, or null. Same answer for approving, qualifying and the list.
+ */
+async function refusalToDecide(
+  db: Database | Tx,
+  input: {
+    action: string | undefined;
+    payload: unknown;
+    requesterId: string;
+    decider: { userId: string; access: StaffAccess };
+  },
+): Promise<
+  'APPROVAL_OWN_REQUEST' | 'APPROVAL_SUBJECT' | 'PERMISSION_NOT_HELD' | null
+> {
+  const { userId } = input.decider;
+  if (userId === input.requesterId) return 'APPROVAL_OWN_REQUEST';
+  const theirs = await readMailboxes(db, userId);
+  if (sharesMailbox(theirs, await readMailboxes(db, input.requesterId)))
+    return 'APPROVAL_OWN_REQUEST';
+  const action = input.action ? registry.get(input.action) : undefined;
+  if (action?.mayDecide) {
+    if (!(await action.mayDecide(db, input.payload, input.decider)))
+      return 'PERMISSION_NOT_HELD';
+  }
+  for (const subject of action?.subjects?.(input.payload) ?? []) {
+    const subjectId = canonicalId(subject);
+    if (subjectId === userId) return 'APPROVAL_SUBJECT';
+    if (subjectId && sharesMailbox(theirs, await readMailboxes(db, subjectId)))
+      return 'APPROVAL_SUBJECT';
+  }
+  return null;
+}
+
+/**
  * Who could be the second person: active staff with a confirmed authenticator on a live account,
  * holding this permission, and not the requester by id or by mailbox. Someone mid-reset can't enter
- * a code, so they don't count, even though they have enrolled before.
+ * a code, so they don't count, even though they have enrolled before. Given the action and payload,
+ * the action's own rules apply too: anyone it refuses is no second person.
  */
 export function qualifiedApprovers(
   db: Database | Tx,
-  input: { permission: string; requesterId: string },
+  input: {
+    permission: string;
+    requesterId: string;
+    action?: string;
+    payload?: unknown;
+  },
 ): Promise<string[]> {
   return guarded(async () => {
     const requesterId = canonicalId(input.requesterId);
     if (!requesterId) throw new OperationError('INVALID_INPUT');
-    const [requester] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(eq(users.id, requesterId));
-    // Phone-based staff have no email: no address is never a match.
-    const mailbox = requester?.email
-      ? normaliseStaffEmail(requester.email)
-      : null;
-    const candidates = await staffAbleToEnterCode(db);
     const qualified: string[] = [];
-    for (const person of candidates) {
-      if (person.userId === requesterId) continue;
-      if (
-        mailbox &&
-        person.email &&
-        normaliseStaffEmail(person.email) === mailbox
-      )
-        continue;
+    for (const person of await staffAbleToEnterCode(db)) {
       const access = await readStaffAccess(db, person.userId);
-      if (access?.permissions.has(input.permission))
-        qualified.push(person.userId);
+      if (!access?.permissions.has(input.permission)) continue;
+      const refusal = await refusalToDecide(db, {
+        action: input.action,
+        payload: input.payload,
+        requesterId,
+        decider: { userId: person.userId, access },
+      });
+      if (!refusal) qualified.push(person.userId);
     }
     return qualified;
   });
@@ -207,9 +321,10 @@ export function qualifiedApprovers(
  * than missed. That lock comes first, as in every staff-admin path. The fresh code is checked after
  * it, whatever the route did, so no caller escapes it and time spent queueing counts. A confirmation
  * committing just then (checkStaffCode doesn't take this lock) can be missed: the action then runs
- * alone with its alert, which fails towards visible. The same person asking for the same thing again
- * gets the request already waiting; if nobody qualifies any more they must cancel it first (6.9), so
- * it can't also be approved later by someone new.
+ * alone with its alert, which fails towards visible. Anyone asking for what is already waiting gets
+ * that request, marked as a repeat, so two people can't each approve the other's copy. If nobody
+ * qualifies any more, the requester must cancel an identical one first (6.9). Acting alone closes
+ * their other requests for the same target, so an older one can't overwrite it later.
  */
 export function requestSeriousAction(
   db: Database,
@@ -247,25 +362,37 @@ export function requestSeriousAction(
 
       await action.validate(tx, payload);
       const summary = await action.describe(tx, payload);
+      const pinned = action.current
+        ? plainPayload((await action.current(tx, payload)) ?? null)
+        : null;
       const approvers = await qualifiedApprovers(tx, {
         permission: action.permission,
         requesterId: actorId,
+        action: action.name,
+        payload,
       });
-      const [waiting] = await tx
-        .select({ id: approvalRequests.id })
+      const waiting = await tx
+        .select({
+          id: approvalRequests.id,
+          requestedBy: approvalRequests.requestedBy,
+        })
         .from(approvalRequests)
         .where(
           and(
             eq(approvalRequests.status, 'pending'),
             eq(approvalRequests.action, action.name),
-            eq(approvalRequests.requestedBy, actorId),
             gt(approvalRequests.expiresAt, now),
             sql`${approvalRequests.payload} = ${JSON.stringify(payload)}::jsonb`,
+            sql`${approvalRequests.pinned} IS NOT DISTINCT FROM ${pinned === null ? null : JSON.stringify(pinned)}::jsonb`,
           ),
         );
-      if (waiting && approvers.length === 0)
+      if (
+        approvers.length === 0 &&
+        waiting.some((row) => row.requestedBy === actorId)
+      )
         throw new OperationError('APPROVAL_ALREADY_PENDING');
-      if (waiting) return { state: 'pending', requestId: waiting.id };
+      if (approvers.length > 0 && waiting[0])
+        return { state: 'pending', requestId: waiting[0].id, repeat: true };
 
       if (approvers.length > 0) {
         const requestId = newId();
@@ -273,6 +400,7 @@ export function requestSeriousAction(
           id: requestId,
           action: action.name,
           payload,
+          pinned,
           summary,
           permission: action.permission,
           requestedBy: actorId,
@@ -307,8 +435,20 @@ export function requestSeriousAction(
         return { state: 'pending', requestId };
       }
 
-      const result = await runWithinTime(tx, () =>
-        action.run(tx, payload, { actorId, reason, now, approverId: null }),
+      const superseded = await closeSuperseded(
+        tx,
+        action,
+        payload,
+        actorId,
+        now,
+      );
+      const result = await runWithinTime(tx, (fencedTx) =>
+        action.run(fencedTx, payload, {
+          actorId,
+          reason,
+          now,
+          approverId: null,
+        }),
       );
       await recordAudit(tx, {
         staffUserId: actorId,
@@ -332,7 +472,12 @@ export function requestSeriousAction(
         aggregateId: newId(),
         payload: { action: action.name, requestedBy: actorId },
       });
-      return { state: 'ran', aloneReason: 'no_second_person', result };
+      return {
+        state: 'ran',
+        aloneReason: 'no_second_person',
+        result,
+        superseded,
+      };
     });
   });
 }
@@ -368,6 +513,8 @@ async function closeRequest(
     reason: string;
     change: object;
     now: Date;
+    /** The requester already knows, because it's their own doing or it's about them. */
+    quiet?: boolean;
   },
 ): Promise<void> {
   await tx
@@ -388,6 +535,93 @@ async function closeRequest(
     reason: withAuditChange(close.reason, stepRecord(request, close.change)),
     now: close.now,
   });
+  if (
+    !close.quiet &&
+    (close.status === 'rejected' ||
+      close.status === 'stale' ||
+      close.status === 'expired')
+  )
+    await enqueueOutbox(tx, {
+      eventType: 'ops.approval_closed',
+      aggregateId: request.id,
+      payload: {
+        requestId: request.id,
+        action: request.action,
+        requestedBy: request.requestedBy,
+        outcome: close.status,
+      },
+    });
+}
+
+/** A serious action's stale close that nobody tried to approve. */
+const closeStaleQuietly = (
+  tx: Tx,
+  request: ApprovalRow,
+  input: { why: OpsApprovalStaleReason; actorId: string | null; now: Date },
+) =>
+  closeRequest(tx, request, {
+    status: 'stale',
+    event: 'serious_action.stale',
+    staffUserId: input.actorId,
+    ...(input.actorId ? { decidedBy: input.actorId } : {}),
+    decidedReason: input.why,
+    reason: 'Closed without running',
+    change: { why: input.why },
+    now: input.now,
+    quiet: true,
+  });
+
+const lockPendingOf = (tx: Tx, userId: string) =>
+  tx
+    .select()
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.status, 'pending'),
+        eq(approvalRequests.requestedBy, userId),
+      ),
+    )
+    .for('update');
+
+/**
+ * Removed or reset, a person's waiting requests end with them: bringing them back mustn't revive what
+ * may have been asked for from a stolen phone. The caller holds the staff-admin lock.
+ */
+export async function closePendingRequestsOf(
+  tx: Tx,
+  input: {
+    userId: string;
+    why: 'requester_removed' | 'requester_reset';
+    actorId: string | null;
+    now: Date;
+  },
+): Promise<void> {
+  for (const request of await lockPendingOf(tx, input.userId))
+    await closeStaleQuietly(tx, request, input);
+}
+
+async function closeSuperseded(
+  tx: Tx,
+  action: SeriousActionDefinition<unknown>,
+  payload: unknown,
+  actorId: string,
+  now: Date,
+): Promise<string[]> {
+  const target = action.target?.(payload);
+  const closed: string[] = [];
+  for (const request of await lockPendingOf(tx, actorId))
+    if (
+      request.action === action.name &&
+      action.target?.(request.payload) === target
+    ) {
+      await closeStaleQuietly(tx, request, {
+        why: 'superseded',
+        actorId,
+        now,
+      });
+      closed.push(request.id);
+    }
+  return closed;
 }
 
 const stepRecord = (request: ApprovalRow, change: object) => ({
@@ -407,21 +641,6 @@ const expire = (tx: Tx, request: ApprovalRow, now: Date) =>
     now,
   });
 
-async function isSameMailbox(
-  tx: Database | Tx,
-  firstId: string,
-  secondId: string,
-): Promise<boolean> {
-  const rows = await tx
-    .select({ email: users.email })
-    .from(users)
-    .where(inArray(users.id, [firstId, secondId]));
-  const [first, second] = rows.map((row) =>
-    row.email ? normaliseStaffEmail(row.email) : null,
-  );
-  return rows.length === 2 && first !== null && first === second;
-}
-
 /** May this person decide this request at all? Asked before any code is looked at or used. */
 async function deciderOrThrow(
   tx: Tx,
@@ -438,20 +657,22 @@ async function deciderOrThrow(
     !(await canEnterCode(tx, actorId))
   )
     throw new OperationError('PERMISSION_NOT_HELD');
-  if (await isSameMailbox(tx, actorId, request.requestedBy))
-    throw new OperationError('APPROVAL_OWN_REQUEST');
+  const refusal = await refusalToDecide(tx, {
+    action: request.action,
+    payload: request.payload,
+    requesterId: request.requestedBy,
+    decider: { userId: actorId, access },
+  });
+  if (refusal) throw new OperationError(refusal);
   return actorId;
 }
 
+/** Still staff, holding it, and able to enter a code: a phone reported stolen ends what it asked for. */
 async function requesterStillHolds(
   tx: Tx,
   request: ApprovalRow,
 ): Promise<boolean> {
-  const [account] = await tx
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.id, request.requestedBy), isNull(users.deletedAt)));
-  if (!account) return false;
+  if (!(await canEnterCode(tx, request.requestedBy))) return false;
   const access = await readStaffAccess(tx, request.requestedBy);
   return Boolean(access?.permissions.has(request.permission));
 }
@@ -467,17 +688,36 @@ async function checkAndRun(
   tx: Tx,
   request: ApprovalRow,
   context: SeriousActionContext,
-): Promise<{ ran: true; result: unknown } | { ran: false; why: string }> {
+): Promise<
+  | { ran: true; result: unknown }
+  | { ran: false; why: OpsApprovalStaleReason; detail?: string }
+> {
   const action = registry.get(request.action);
   if (!action) return { ran: false, why: 'action_unknown' };
+  // The approver was checked against the stored permission, so it must still be the action's.
+  if (action.permission !== request.permission)
+    return { ran: false, why: 'permission_changed' };
   try {
-    const result = await runWithinTime(tx, () =>
-      tx.transaction(async (savepoint) => {
-        await action.validate(savepoint, request.payload);
-        const summary = await action.describe(savepoint, request.payload);
+    const result = await tx.transaction((savepoint) =>
+      runWithinTime(savepoint, async (work) => {
+        await action.validate(work, request.payload);
+        if (action.current) {
+          const now = plainPayload(
+            (await action.current(work, request.payload)) ?? null,
+          );
+          const [same] = await work
+            .select({
+              same: sql<boolean>`${approvalRequests.pinned} IS NOT DISTINCT FROM ${now === null ? null : JSON.stringify(now)}::jsonb`,
+            })
+            .from(approvalRequests)
+            .where(eq(approvalRequests.id, request.id));
+          if (!same?.same)
+            throw new OperationError('STAFF_CHANGED', 'pinned_value_moved');
+        }
+        const summary = await action.describe(work, request.payload);
         // The approver agreed to the words they read; if those no longer hold, nor does the approval.
         if (summary !== request.summary) return DESCRIPTION_CHANGED;
-        return action.run(savepoint, request.payload, context);
+        return action.run(work, request.payload, context);
       }),
     );
     if (result === DESCRIPTION_CHANGED)
@@ -486,15 +726,19 @@ async function checkAndRun(
   } catch (error) {
     if (!(error instanceof OperationError) || error.code === 'STAFF_ADMIN_BUSY')
       throw error;
-    await tx.execute(sql`SET LOCAL statement_timeout TO DEFAULT`);
-    return { ran: false, why: error.code };
+    // The raw code goes to the log; a screen gets one safe reason.
+    return {
+      ran: false,
+      why: 'facts_changed',
+      detail: error.detail ?? error.code,
+    };
   }
 }
 
 export type ApprovalOutcome =
   | { status: 'approved'; result: unknown }
   /** Closed without running: the facts, or the people, changed. */
-  | { status: 'stale'; why: string }
+  | { status: 'stale'; why: OpsApprovalStaleReason }
   | { status: 'expired' }
   /** The code didn't pass, and nothing else happened. */
   | { status: 'invalid' | 'locked' | 'reused' };
@@ -548,7 +792,10 @@ export function approveRequest(
       if (check !== 'ok') return { status: check };
 
       const both = { approvedBy: actorId };
-      const stop = async (why: string): Promise<ApprovalOutcome> => {
+      const stop = async (
+        why: OpsApprovalStaleReason,
+        detail?: string,
+      ): Promise<ApprovalOutcome> => {
         await closeRequest(tx, request, {
           status: 'stale',
           event: 'serious_action.stale',
@@ -556,7 +803,7 @@ export function approveRequest(
           decidedBy: actorId,
           decidedReason: why,
           reason: 'Stopped at approval, and nothing ran',
-          change: { ...both, why },
+          change: { ...both, why, ...(detail ? { detail } : {}) },
           now,
         });
         return { status: 'stale', why };
@@ -569,7 +816,7 @@ export function approveRequest(
         now,
         approverId: actorId,
       });
-      if (!outcome.ran) return stop(outcome.why);
+      if (!outcome.ran) return stop(outcome.why, outcome.detail);
 
       await closeRequest(tx, request, {
         status: 'approved',
@@ -589,6 +836,16 @@ export function approveRequest(
         subjectId: request.id,
         reason: withAuditChange(request.reason, stepRecord(request, both)),
         now,
+      });
+      await enqueueOutbox(tx, {
+        eventType: 'ops.approval_ran',
+        aggregateId: request.id,
+        payload: {
+          requestId: request.id,
+          action: request.action,
+          requestedBy: request.requestedBy,
+          approvedBy: actorId,
+        },
       });
       return { status: 'approved', result: outcome.result };
     });
@@ -756,7 +1013,7 @@ export function listApprovals(
       .limit(LIST_LIMIT);
     if (rows.length === 0) return [];
 
-    const ids = new Set<string>([actorId]);
+    const ids = new Set<string>();
     for (const row of rows) {
       ids.add(row.requestedBy);
       if (row.decidedBy) ids.add(row.decidedBy);
@@ -770,20 +1027,18 @@ export function listApprovals(
       const email = id ? emails.get(id) : null;
       return email ? maskEmail(email) : null;
     };
-    const mailboxOf = (id: string) => {
-      const email = emails.get(id);
-      return email ? normaliseStaffEmail(email) : null;
-    };
     const actorAble = await canEnterCode(db, actorId);
     // Many requests share a requester and permission, and each answer walks all the staff.
     const nobody = new Map<string, Promise<boolean>>();
     const nobodyElse = (row: ApprovalRow) => {
-      const key = `${row.requestedBy}.${row.permission}`;
+      const key = `${row.requestedBy}.${row.permission}.${row.action}.${JSON.stringify(row.payload)}`;
       const known = nobody.get(key);
       if (known) return known;
       const answer = qualifiedApprovers(db, {
         permission: row.permission,
         requesterId: row.requestedBy,
+        action: row.action,
+        payload: row.payload,
       }).then((people) => people.length === 0);
       nobody.set(key, answer);
       return answer;
@@ -793,7 +1048,17 @@ export function listApprovals(
     for (const row of rows) {
       const open = row.status === 'pending' && now < row.expiresAt;
       const mine = row.requestedBy === actorId;
-      const actorMailbox = mailboxOf(actorId);
+      const canDecide =
+        open &&
+        !mine &&
+        actorAble &&
+        access.permissions.has(row.permission) &&
+        !(await refusalToDecide(db, {
+          action: row.action,
+          payload: row.payload,
+          requesterId: row.requestedBy,
+          decider: { userId: actorId, access },
+        }));
       views.push({
         id: row.id,
         action: row.action,
@@ -813,13 +1078,7 @@ export function listApprovals(
         expiresAt: row.expiresAt.toISOString(),
         decidedAt: row.decidedAt?.toISOString() ?? null,
         mine,
-        canDecide:
-          open &&
-          !mine &&
-          actorAble &&
-          access.permissions.has(row.permission) &&
-          (actorMailbox === null ||
-            actorMailbox !== mailboxOf(row.requestedBy)),
+        canDecide,
         nobodyElseQualified: open && (await nobodyElse(row)),
       });
     }

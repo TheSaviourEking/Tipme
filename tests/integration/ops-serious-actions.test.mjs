@@ -22,7 +22,11 @@ import {
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import { AppModule } from '../../apps/api/dist/app.module.js';
-import { OPS_PERMISSION, OpsGuard } from '../../apps/api/dist/ops/ops.guard.js';
+import {
+  OPS_ANY_STAFF,
+  OPS_PERMISSION,
+  OpsGuard,
+} from '../../apps/api/dist/ops/ops.guard.js';
 import {
   FRESH_CODE,
   FreshCodeGuard,
@@ -359,6 +363,45 @@ test('every route under a sensitive permission asks for a fresh code, enforced i
     assert.equal(exemptions[named], undefined, `${named} needs a code`);
 });
 
+test('exactly the pinned routes let any staff through, and none also names a permission', () => {
+  const pinned = contracts.OPS_ANY_STAFF_ROUTES;
+  assert.ok(pinned, 'the list lives in the catalogue');
+  const found = new Set();
+  for (const controller of mountedControllers()) {
+    const proto = controller.prototype;
+    const classWide = Reflect.getMetadata(OPS_ANY_STAFF, controller);
+    assert.equal(classWide, undefined, `${controller.name}: per route only`);
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      const handler = proto[name];
+      if (name === 'constructor' || typeof handler !== 'function') continue;
+      if (Reflect.getMetadata(OPS_ANY_STAFF, handler) !== true) continue;
+      const route = `${controller.name}.${name}`;
+      found.add(route);
+      assert.equal(
+        Reflect.getMetadata(OPS_PERMISSION, handler) ??
+          Reflect.getMetadata(OPS_PERMISSION, controller),
+        undefined,
+        `${route} names a permission too`,
+      );
+      const entry = pinned[route];
+      assert.ok(entry, `${route} is not pinned`);
+      assert.equal(entry.verb, VERBS[Reflect.getMetadata('method', handler)]);
+      assert.ok(entry.reason.length > 20, `${route}: reason`);
+      const guards = Reflect.getMetadata('__guards__', handler) ?? [];
+      assert.ok(guards.includes(OpsGuard), `${route}: OpsGuard`);
+      const marked = Reflect.getMetadata(FRESH_CODE, handler) === true;
+      assert.equal(marked, entry.freshCode, `${route}: fresh code`);
+      if (marked)
+        assert.ok(
+          guards.indexOf(FreshCodeGuard) > guards.indexOf(OpsGuard),
+          `${route}: guard order`,
+        );
+    }
+  }
+  assert.deepEqual([...found].sort(), Object.keys(pinned).sort());
+  assert.equal(found.size, 4);
+});
+
 const staleCode = (phone) =>
   q(
     `UPDATE ops_sessions SET last_totp_at = now() - interval '6 hours'
@@ -525,6 +568,7 @@ test('with nobody else qualified, the action runs at once and logs that no secon
   assert.deepEqual(outcome, {
     state: 'ran',
     aloneReason: 'no_second_person',
+    superseded: [],
     result: { applied: 'x' },
   });
   assert.equal(runs.length, 1);
