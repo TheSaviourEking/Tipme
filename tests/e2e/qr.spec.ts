@@ -228,3 +228,31 @@ test('@mobile the studio, a locked preview and the print formats fit a phone', a
   }
   await context.close();
 });
+
+test('Show full screen waits for a Pro design to be drawn, and stays off if it fails', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const { handle } = await signUpRecipient(page, testInfo);
+  await makePagePro(browser, handle, testInfo);
+  await page.goto('/dashboard/qr');
+  await page.getByRole('radio', { name: /Heart modules/ }).check();
+  await expect(page.getByText('Style saved')).toBeVisible();
+  const fullScreen = page.getByRole('button', { name: 'Show full screen' });
+  await expect(fullScreen).toBeEnabled();
+
+  // The full-size picture is held back, then refused: a blank screen must never be offered.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/v1\/me\/qr-art\/[^/]+\.png\?size=/, async (route) => {
+    await held;
+    await route.fulfill({ status: 500, body: '{}' });
+  });
+  await page.getByRole('radio', { name: /Jewel/ }).check();
+  await expect(fullScreen).toBeDisabled();
+  release();
+  await expect(page.locator('.qr-design__error')).toBeVisible();
+  await expect(fullScreen).toBeDisabled();
+  await context.close();
+});

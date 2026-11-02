@@ -54,7 +54,10 @@ test('only heart designs other than dark take colours', () => {
 });
 
 test('the request sends a colour only for designs that take one', () => {
-  assert.equal(choiceBody({ design: null, colour: 'neutral' }), null);
+  // Going back to automatic is a save too: the API takes `design: null` as "TipMe picks".
+  assert.deepEqual(choiceBody({ design: null, colour: 'neutral' }), {
+    design: null,
+  });
   assert.deepEqual(choiceBody({ design: 'outline', colour: 'rose' }), {
     design: 'outline',
     colour: 'rose',
@@ -91,4 +94,11 @@ test('drafts compare by what would be saved', () => {
     ),
     false,
   );
+});
+
+test('going back to the automatic cover counts as a change from a saved design', () => {
+  const saved = { design: 'ripple', colour: 'forest' };
+  const automatic = { design: null, colour: 'forest' };
+  assert.equal(sameDraft(automatic, saved), false);
+  assert.equal(sameDraft(automatic, { design: null, colour: 'neutral' }), true);
 });

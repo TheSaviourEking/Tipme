@@ -37,9 +37,9 @@ export function draftFromChoice(choice: MyProfile['coverChoice']): CoverDraft {
   };
 }
 
-/** The request body that saves a draft, or null when there is no design to save. */
-export function choiceBody(draft: CoverDraft): CoverDesignChoice | null {
-  if (!draft.design) return null;
+/** The request body that saves a draft. No design saves `design: null`: TipMe picks one again. */
+export function choiceBody(draft: CoverDraft): CoverDesignChoice {
+  if (!draft.design) return { design: null };
   return takesColours(draft.design)
     ? { design: draft.design, colour: draft.colour }
     : { design: draft.design };

@@ -140,6 +140,8 @@ export function CoverSettings() {
   // The photo being uploaded, shown at once while it is stored.
   const [pending, setPending] = useState<string | null>(null);
   const clear = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uploadInput = useRef<HTMLInputElement>(null);
+  const refocusUpload = useRef(false);
   useEffect(
     () => () => {
       if (clear.current) clearTimeout(clear.current);
@@ -152,6 +154,12 @@ export function CoverSettings() {
     },
     [pending],
   );
+
+  useEffect(() => {
+    if (busy || !refocusUpload.current) return;
+    refocusUpload.current = false;
+    uploadInput.current?.focus();
+  }, [busy]);
 
   // A new photo changes the route's answer, and the path carries its version.
   const photoKey = hasPhoto
@@ -175,15 +183,13 @@ export function CoverSettings() {
   };
 
   const dirty = !sameDraft(draft, saved);
-  const body = choiceBody(draft);
 
   const save = async () => {
-    if (!body) return;
     setBusy(true);
     setError('');
     const result = await apiFetch<MyProfile>('/v1/me/cover-design', {
       method: 'PUT',
-      body,
+      body: choiceBody(draft),
     });
     setBusy(false);
     if (result.ok) {
@@ -233,6 +239,9 @@ export function CoverSettings() {
       setPending(null);
       setProfile(result.data);
       say('Cover removed.');
+      // The button is about to unmount; focus would fall to the page body. It moves to the upload
+      // control once that is enabled again (below).
+      refocusUpload.current = true;
     } else setError('We couldn’t remove that. Please try again.');
   };
 
@@ -251,7 +260,7 @@ export function CoverSettings() {
 
   const colours = takesColours(draft.design);
   const name = designName(draft.design);
-  const unsaved = dirty && Boolean(body);
+  const unsaved = dirty;
 
   return (
     <Card id="cover" className="settings-section">
@@ -268,6 +277,7 @@ export function CoverSettings() {
 
       <label className="cover-upload tm-button tm-button--secondary">
         <input
+          ref={uploadInput}
           type="file"
           className="cover-upload__input"
           accept="image/jpeg,image/png,image/webp"
@@ -314,6 +324,24 @@ export function CoverSettings() {
       <fieldset className="cover-choices" role="radiogroup">
         <legend>Or choose a design</legend>
         <div className="cover-choices__grid">
+          <label className="cover-choice">
+            <input
+              type="radio"
+              name={`${id}-design`}
+              checked={draft.design === null}
+              onChange={() => apply({ ...draft, design: null })}
+            />
+            <span className="cover-choice__thumb" aria-hidden="true">
+              <ProfileCover
+                cover={draftPreview(
+                  { design: null, colour: draft.colour },
+                  profile.handle,
+                )}
+                sizes="(max-width: 520px) 45vw, 160px"
+              />
+            </span>
+            <span className="cover-choice__name">Let TipMe pick</span>
+          </label>
           {COVER_DESIGNS.map((design) => (
             <label key={design.id} className="cover-choice">
               <input
@@ -368,7 +396,7 @@ export function CoverSettings() {
       )}
       <div className="cover-save">
         <Button
-          disabled={busy || !body || !dirty}
+          disabled={busy || !dirty}
           aria-busy={busy || undefined}
           onClick={() => void save()}
         >

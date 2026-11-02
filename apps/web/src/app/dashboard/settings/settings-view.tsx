@@ -167,6 +167,15 @@ function PhotoSettings() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
+  const chooser = useRef<HTMLInputElement>(null);
+  const refocusChooser = useRef(false);
+  // After Remove photo the button is gone, and focus would fall to the page body: it goes to the
+  // chooser instead, once that is enabled again.
+  useEffect(() => {
+    if (busy || !refocusChooser.current) return;
+    refocusChooser.current = false;
+    chooser.current?.focus();
+  }, [busy]);
   const send = async (method: 'PUT' | 'DELETE', file?: File) => {
     setBusy(true);
     setError('');
@@ -186,6 +195,7 @@ function PhotoSettings() {
     if (result.ok) {
       setProfile(result.data);
       setDone(method === 'PUT' ? 'Photo saved.' : 'Photo removed.');
+      if (method === 'DELETE') refocusChooser.current = true;
     } else
       setError(
         photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
@@ -211,6 +221,7 @@ function PhotoSettings() {
           {photo ? 'Choose a new photo' : 'Choose a photo'}
         </label>
         <input
+          ref={chooser}
           id={`${id}-photo`}
           type="file"
           accept="image/jpeg,image/png,image/webp"
@@ -1343,8 +1354,8 @@ function ProPlan() {
       </p>
       {!pro && (
         <p className="tm-hint">
-          Pro isn’t something you can buy in the app yet. The TipMe team turns
-          it on for your page, and this page will show it when they do.
+          The TipMe team turns Pro on for your page, and this page will show it
+          when they do.
         </p>
       )}
     </Card>

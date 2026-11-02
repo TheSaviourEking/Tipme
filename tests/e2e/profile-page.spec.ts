@@ -5,6 +5,7 @@ import { makePagePro } from './ops-helpers';
 import {
   LONG_NAME,
   UNBROKEN_NAME,
+  UNBROKEN_ROLE,
   startStack,
   type Mode,
   type Stack,
@@ -50,9 +51,40 @@ const box = async (page: Page, selector: string) => {
   return found;
 };
 
-const fitsWidth = (page: Page) =>
-  page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
-
+/**
+ * The text that sticks out sideways, if any (empty is a pass). The document width alone can't
+ * say: `main` clips overflowing content (`overflow-x: clip`), so a cut-off line leaves
+ * `scrollWidth` untouched. Every piece of visible text is measured where it is actually drawn.
+ */
+const overflowing = (page: Page) =>
+  page.evaluate(() => {
+    const found: string[] = [];
+    if (document.documentElement.scrollWidth > innerWidth)
+      found.push('the document scrolls sideways');
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+    );
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (!parent || !node.textContent?.trim()) continue;
+      if (parent.closest('script, style, [hidden], [aria-hidden="true"]'))
+        continue;
+      if (getComputedStyle(parent).visibility === 'hidden') continue;
+      // The body of a closed disclosure keeps its boxes but is not drawn.
+      const closed = parent.closest('details:not([open])');
+      if (closed && !parent.closest('summary')) continue;
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects())
+        // Tiny boxes are visually hidden text (screen-reader only), not drawn.
+        if (rect.width > 1 && rect.height > 1 && rect.right > innerWidth + 0.5)
+          found.push(
+            `${parent.tagName.toLowerCase()}.${parent.className} reaches ${Math.round(rect.right)} of ${innerWidth}: ${node.textContent.trim().slice(0, 30)}`,
+          );
+    }
+    return found;
+  });
 /** No overlap between the on-screen part of an element and the fixed Tip bar. */
 const clearOfBar = (page: Page, selector: string) =>
   page.evaluate((target) => {
@@ -249,14 +281,14 @@ test.describe('the page in each payment state', () => {
   });
 
   both(
-    'a 60-character name, 280-character bio, and no photo, role or links all hold at 320px',
+    'a 60-character name or role, 280-character bio, and no photo, role or links all hold at 320px',
     async ({ page }) => {
       await page.setViewportSize({ width: 320, height: 700 });
       await at('live', '/@longname', page);
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(
         LONG_NAME,
       );
-      expect(await fitsWidth(page)).toBe(true);
+      expect(await overflowing(page)).toEqual([]);
       const name = await box(page, 'h1');
       const shareButton = await share(page).boundingBox();
       expect(name.x + name.width).toBeLessThanOrEqual(320);
@@ -266,9 +298,14 @@ test.describe('the page in each payment state', () => {
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(
         UNBROKEN_NAME,
       );
-      expect(await fitsWidth(page)).toBe(true);
+      expect(await overflowing(page)).toEqual([]);
+      await at('live', '/@widerole', page);
+      await expect(page.locator('.profile-role')).toHaveText(UNBROKEN_ROLE);
+      expect(await overflowing(page)).toEqual([]);
+      const role = await box(page, '.profile-role');
+      expect(role.x + role.width).toBeLessThanOrEqual(320);
       await at('live', '/@bareface', page);
-      expect(await fitsWidth(page)).toBe(true);
+      expect(await overflowing(page)).toEqual([]);
       await expect(page.locator('.profile-photo')).toHaveText('NE');
       await expect(page.getByRole('list', { name: /elsewhere/ })).toHaveCount(
         0,
@@ -473,7 +510,7 @@ test('Copy page link says so when the browser refuses @mobile', async ({
   });
   await share(page).click();
   await expect(page.getByText(/Copy is unavailable/)).toBeVisible();
-  expect(await fitsWidth(page)).toBe(true);
+  expect(await overflowing(page)).toEqual([]);
 });
 
 test('on a phone the Tip button stays in view and the form still works @mobile', async ({

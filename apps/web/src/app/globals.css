@@ -1186,6 +1186,8 @@ body:has(.profile-page) .brand__mark {
   font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.3;
+  /* A long unbroken role wraps; `main` clips sideways overflow, so it would otherwise be cut off. */
+  overflow-wrap: anywhere;
 }
 
 .profile-bio {
@@ -4232,6 +4234,7 @@ html:has(.confirm-dialog[open]) {
 
 .qr-format__title {
   font-size: 2rem;
+  overflow-wrap: anywhere;
 }
 
 .qr-format__big {

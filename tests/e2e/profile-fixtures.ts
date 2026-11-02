@@ -41,6 +41,7 @@ export const page = (
 export const LONG_NAME =
   'Oluwatobiloba Adebayo-Akinwande Oghenekaro Chukwuemeka Ibekwe';
 export const UNBROKEN_NAME = 'W'.repeat(60);
+export const UNBROKEN_ROLE = 'R'.repeat(60);
 
 export const PAGES: PublicProfile[] = [
   page('kemi'),
@@ -54,6 +55,7 @@ export const PAGES: PublicProfile[] = [
     bio: 'A long bio that keeps on going. '.repeat(9).slice(0, 280),
   }),
   page('widename', { displayName: UNBROKEN_NAME }),
+  page('widerole', { role: UNBROKEN_ROLE }),
   // Only what a page must have: no photo, role, bio or links.
   {
     handle: 'bareface',

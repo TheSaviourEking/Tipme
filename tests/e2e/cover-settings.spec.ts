@@ -161,6 +161,8 @@ test('uploading a cover wins over a design; removing it returns to the chosen de
 
   await page.getByRole('button', { name: 'Remove photo' }).click();
   await expect(page.getByText('Cover removed.')).toBeVisible();
+  // The button is gone, and focus doesn't fall to the page body: it moves to the upload control.
+  await expect(page.getByLabel('Upload your own photo')).toBeFocused();
   await expect(shown(page)).toHaveAttribute('data-profile-cover', 'outline');
   await expect(note).toHaveCount(0);
   await publicCover(browser, handle, 'outline');
@@ -244,4 +246,62 @@ test('Settings fits at 360px and 320px, with the cover chooser in reach @mobile'
     expect(await fitsViewport(page)).toBe(true);
     await expectAccessible(page);
   }
+});
+
+test('a saved design can be given up for the automatic cover', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  const automatic = page.getByRole('radio', { name: 'Let TipMe pick' });
+  await expect(automatic).toBeChecked();
+  await expect(
+    page.getByText('The TipMe team turns Pro on for your page'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save cover' })).toBeDisabled();
+  await page.getByRole('radio', { name: 'Rippling heart' }).check();
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await publicCover(browser, handle, 'ripple');
+
+  await automatic.check();
+  await expect(shown(page)).toHaveAttribute('data-profile-cover', AUTOMATIC);
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await expect(page.getByText(HINT)).toBeVisible();
+  await publicCover(
+    browser,
+    handle,
+    (await shown(page).getAttribute('data-profile-cover')) ?? '',
+  );
+  await page.reload();
+  await expect(automatic).toBeChecked();
+  await expectAccessible(page);
+});
+
+test('removing the page photo keeps focus in the Photo card', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  const photo = await sharp({
+    create: {
+      width: 400,
+      height: 400,
+      channels: 3,
+      background: { r: 122, g: 50, b: 249 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
+  await page.getByLabel('Choose a photo').setInputFiles({
+    name: 'me.jpg',
+    mimeType: 'image/jpeg',
+    buffer: photo,
+  });
+  await expect(page.getByText('Photo saved.')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove photo' }).click();
+  await expect(page.getByText('Photo removed.')).toBeVisible();
+  await expect(page.getByLabel('Choose a photo')).toBeFocused();
 });

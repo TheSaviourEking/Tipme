@@ -197,7 +197,7 @@ export function QrStudio() {
   };
 
   const fullScreen = async () => {
-    if (!stage.current) return;
+    if (!stage.current || (design && !art.ready)) return;
     if (!design && big.current)
       drawQrCard(big.current, {
         url,
@@ -390,7 +390,12 @@ export function QrStudio() {
               >
                 Print card
               </Link>
-              <Button variant="secondary" onClick={() => void fullScreen()}>
+              {/* A design is shown from the picture the API drew: until it has, full screen is blank. */}
+              <Button
+                variant="secondary"
+                disabled={design !== null && !art.ready}
+                onClick={() => void fullScreen()}
+              >
                 Show full screen
               </Button>
               <Button
