@@ -119,6 +119,8 @@ ssh tipme-prod@<server>
 
 Then roll back the web in Vercel (Deployments → the previous one → Instant Rollback) and run the release check with `--expect-version <old sha> --expect-provider bachs-live --expect-live <true|false>` (read-only, never `--full`). `--expect-live` must say what `production.env` says. The last 5 deployed versions and both colours' versions stay on the server.
 
+**Rolling back past admin roles** weakens access with no warning: the schema stays, but the older code reads only the role. Personal removals stop applying, `issues.view` can again read email content and export it, `payments.recheck` can again run repairs, and serious actions run with one person and no alert. Review who holds what first (`admin-roles.md`), and treat Approvals as stopped: waiting requests just wait, then expire after the next deploy.
+
 **A stuck lock** ("Another deploy or rollback is running"): check that no Deploy production run and no script is running, then `rm -rf /srv/tipme-production/releases/.deploy.lock`.
 
 ## 8. Evidence: the no-downtime rehearsal

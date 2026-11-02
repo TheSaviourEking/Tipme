@@ -1,6 +1,6 @@
 # Admin roles: many staff, custom roles, per-person access, second-person approval
 
-Status: DRAFT for owner approval, 1 November 2026.
+Status: built on `feat/admin-roles` (2 November 2026), not yet merged or deployed; what shipped is in `docs/runbooks/admin-roles.md`. **Still open for the owner:** the builder's calls in section 8 and 6.9, and whether `payout-resume` and `bachs/account-recovery` stay one person with audit (they do for now, and the runbook lists them; 6.5 and 6.8 pull apart on them). None of this approves anything in `docs/00-DECISIONS.md`.
 Related: ADR-0010 (admin access, audit), `docs/05-SECURITY.md`, `docs/runbooks/issues-inbox.md`, `docs/superpowers/plans/2026-10-31-live-payments.md` (its Task 7 adds new money actions).
 
 ## 1. Intent

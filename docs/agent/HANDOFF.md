@@ -1,3 +1,9 @@
+# Current handoff — admin roles, final review fixes (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, committed, not pushed. C1 is deliberately not fixed here. Nothing is recorded as approved in `docs/00-DECISIONS.md`.
+- Evidence and every failure by name: `.superpowers/sdd/2026-11-01-admin-roles/final-fix-report.md`. CI's new `e2e (alone)` entry has not run on GitHub.
+- Open for the owner: `payout-resume` and `bachs/account-recovery` stay one-person with audit, listed in the runbook. `docs/runbooks/live-activation.md` line 40 still says approval hasn't shipped; update it when this reaches production.
+
 # Current handoff — home page LCP, second pass (2 November 2026)
 
 - Branch/worktree: `fix/home-lcp-2` / `.worktrees/home-lcp-2`, from `origin/dev`, committed, not pushed. Web-only change: `apps/web/src/app/page.tsx` (`sizes`) and `apps/web/next.config.ts` (`images.deviceSizes`). No payments code touched.

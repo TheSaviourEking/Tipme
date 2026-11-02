@@ -1,8 +1,16 @@
+# Current task — admin roles, final review fixes (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, not pushed.
+- Done: I1, I2, M1-M10 from `.superpowers/sdd/2026-11-01-admin-roles/final-findings.md`, Task 7 M1-M4 tests and a mutation proof of the race tests. Report: `.superpowers/sdd/2026-11-01-admin-roles/final-fix-report.md`.
+- Not done here: C1 (a separate branch from dev fixes it, by merge).
+- `@alone` tests are now their own run: `E2E_ALONE=1 playwright test`, or `pnpm test:e2e --alone`; `pnpm test:e2e` runs the suite and then them.
+- Next exact step: merge the C1 fix, then the PR. Owner rulings stay open: see the spec header.
+
 # Current task — admin roles Task 7 (2 November 2026)
 
 - Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`.
 - Done: the screens on `/ops`: People, Roles, Approvals, a menu from permissions, a fresh-code prompt on every admin call, waiting and acted-alone wording on every gated action, and pending approvals, staff activity and the switch on the Overview. Releasing a freeze is one person with a fresh code again (spec 6.5). No decision is approved by this work.
-- Tests tagged `@alone` revoke all staff and some change the global switch, so they have their own Playwright project: run them alone with `--project=desktop-alone --no-deps`.
+- Tests tagged `@alone` revoke all staff and some change the global switch, so they have their own Playwright project: run them alone (superseded: see the entry above).
 - Task 7 fix round 1 and Task 8 (`docs/runbooks/admin-roles.md`) are done, with origin/dev merged: this branch's migrations are now 0064-0070.
 - Next exact step: review, then merge with the payouts plan.
 

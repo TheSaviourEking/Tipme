@@ -14,7 +14,7 @@ Nothing in this runbook, and nothing these screens do, approves a regulatory, pa
 | `/ops/staff/roles`  | `staff.manage` | Create, edit, delete roles.                                                                                                   |
 | `/ops/staff`        | All staff      | Your own access.                                                                                                              |
 
-The menu only offers what someone can use. The server checks every call whatever the menu shows. `/ops/pages` is offered to anyone holding `pages.plan`, `pages.suspend`, `fees.manage`, `payouts.resolve` or `recoveries.manage`; each card there still needs its own permission.
+The menu only offers what someone can use. The server checks every call whatever the menu shows. `/ops/pages` is offered to anyone holding `pages.plan`, `pages.suspend`, `fees.manage`, `payouts.resolve` or `recoveries.manage`; each card there still needs its own permission. `/ops/providers` is offered to `issues.view` or `providers.manage`, and `/ops/email` to `issues.view`, `email.read` or `email.export`: the list there holds no email contents and no full address, and opening an email or downloading the log still needs its own permission.
 
 ## Every permission, in plain words
 
@@ -46,30 +46,47 @@ The menu only offers what someone can use. The server checks every call whatever
 
 These wait for a second person when one is available:
 
-| Action                      | In plain words                         | Needs               |
-| --------------------------- | -------------------------------------- | ------------------- |
-| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage` |
-| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`   |
-| `money_issue.close`         | Close a money issue                    | `payouts.resolve`   |
-| `fee.change`                | Change a page’s fee                    | `fees.manage`       |
-| `fee.free`                  | Give a page fee-free tips              | `fees.manage`       |
-| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`      |
-| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`      |
-| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`      |
-| `staff.reset_authenticator` | Reset someone’s authenticator          | `staff.manage`      |
-| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`  |
+| Action                      | In plain words                         | Needs                                                       |
+| --------------------------- | -------------------------------------- | ----------------------------------------------------------- |
+| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                         |
+| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                           |
+| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it |
+| `fee.change`                | Change a page’s fee                    | `fees.manage`                                               |
+| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                               |
+| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                       |
+| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                              |
+| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                              |
+| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                               |
+| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                          |
 
 Giving someone a role or permission counts as serious only if it contains something sensitive. A harmless edit applies at once. Hand closes of money issues are serious, except releasing a freeze (below).
+
+**One person, with audit, not a second person.** These act on money or a provider account and don't wait for anyone, by the current ruling. Each takes a fresh code and a written reason, and is audited. Owner: this list is here so you can see it and change it.
+
+| Route                                   | In plain words                                                                             | Needs             | What it rests on                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------- |
+| `POST /v1/ops/issues/:id/payout-resume` | Queue a held withdrawal to start again, after asking the provider                          | `payouts.resolve` | The provider read, and the withdrawal job's own checks                                               |
+| `POST /v1/ops/bachs/account-recovery`   | Link a provider account, typed by staff, to a page whose account creation was left unknown | `payments.repair` | The read proves the account exists, not whose it is. Identity rests on that person's dashboard check |
+
+Releasing a freeze is also one person: see below.
 
 ## How an approval works
 
 1. Someone asks and writes a reason, entering a fresh code if asked. Nothing has happened. The screen says **Waiting for a second person**.
-2. Everyone else qualified is told, and sees it in Approvals: the action, the exact change, who asked and why. Addresses stay masked, and a recovery says whether the new address matches a staff mailbox and shows the written identity checks. Nobody sees the raw request.
+2. Everyone else qualified is told, and sees it in Approvals: the action, the exact change (what the person gains and loses, worked out from what they hold now, not from what was typed), who asked and why. Addresses stay masked, and a recovery says whether the new address matches a staff mailbox and shows the written identity checks. Nobody sees the raw request. Once the request closes, however it closes, the stored request keeps only the masked address too.
 3. A different qualified person approves with an authenticator code entered for that approval, or rejects with a reason.
 4. On approval the server re-checks the facts and both people, then runs it. If something changed it stops, and Approvals says why.
 5. Requests expire after 24 hours. The person who asked can cancel their own.
 
 **Who qualifies:** active staff, set up with an authenticator, holding the same permission, and not the person who asked by id or mailbox. Someone the action concerns can't decide it.
+
+Some actions ask more of the approver:
+
+- Giving access, or adding it to a role: they must hold everything being given.
+- Making an owner, or resetting an authenticator: they must be an owner.
+- Closing a money issue: they must hold `issues.resolve` too.
+
+So an action can run alone even though someone holding the named permission exists, when that person doesn't meet these rules. It is recorded and alerted as acting alone, like any other.
 
 **If it says "still waiting":** the provider or system couldn't answer, so nothing ran. Try again in a minute.
 
@@ -83,7 +100,7 @@ If the other qualified people leave while your request waits, Approvals tells yo
 
 ## Stopping, and starting again
 
-**Stopping takes no code, so it works first time in an incident:** switching off all withdrawals, freezing a page's withdrawals after a reported takeover, and ending an account's sessions. Each still needs its permission and a written reason, and is audited.
+**Stopping takes no code, so it works first time in an incident:** switching off all withdrawals, freezing a page's withdrawals after a reported takeover, and ending an account's sessions. Each still needs its permission and a written reason, and is audited. That is within a live admin session: after an hour idle or 12 hours, opening the session takes one code first.
 
 **Starting again takes a fresh code:** switching withdrawals back on, and releasing a freeze. If yours has lapsed (5 minutes) the screen asks and carries on.
 
@@ -101,7 +118,7 @@ If the other qualified people leave while your request waits, Approvals tells yo
 
 ## A lost phone
 
-An owner or anyone with `staff.manage` uses **Reset authenticator** on the person. It is serious, so it waits for a second person when there is one. The person gets a new link by email. Changing a staff member's email is not done here: see `ops:set-email` below.
+An owner uses **Reset authenticator** on the person; only owners are offered it. It is serious, so it waits for a second owner when there is one. The person gets a new link by email. Changing a staff member's email is not done here: see `ops:set-email` below.
 
 ## An owner locked out
 
@@ -114,6 +131,12 @@ Roles only govern the dashboard. These go around them, so keep them with very fe
 - **Server access and GitHub deploy rights:** can read every secret and reach the database.
 - **`pnpm ops:set-email` and `pnpm ops:grant-owner`:** bypass the dashboard and any second person. `ops:set-email` refuses staff without `MAIL_SEAL_KEY` and refuses a mailbox clash, but it keeps the authenticator and doesn't tell the old address.
 - **Each supplier's own login:** Bachs, Aiven, ZeptoMail, Cloudflare and Vercel.
+
+## Deploying and rolling back
+
+**During a deploy, no staff actions.** The API switches before the workers are replaced, so a staff event relayed by an old worker in that window loses its alert; the audit line stays. An admin tab left open from before this release, or a web deploy that lands after the API, can read a request that is waiting as done. The current screens don't: they read a waiting answer as waiting. This only matters with two or more staff acting during a deploy. Reload open admin tabs afterwards.
+
+**Rolling back to a release from before admin roles weakens the rules without any warning.** See `production.md`, section 7.
 
 ## Before live payments
 
