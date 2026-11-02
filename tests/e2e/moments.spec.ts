@@ -89,7 +89,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
     const { rows } = await database.pool.query(
       `SELECT count(*)::int AS n FROM tips t JOIN profiles p ON p.id = t.profile_id
         WHERE p.handle_lower = $1 AND t.celebration_moment_id IS NOT NULL
-          AND t.status = 'paid'`,
+          AND t.status = 'SUCCEEDED'`,
       [handle],
     );
     expect(rows[0].n).toBe(1);
