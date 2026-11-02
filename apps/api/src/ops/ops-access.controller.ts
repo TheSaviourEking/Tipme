@@ -15,6 +15,7 @@ import {
   opsEnrolSchema,
   type ApiDataResponse,
   type OpsAuditEntry,
+  type OpsStaffActivity,
   type OpsCodeRequest,
   type OpsEnrolment,
   type OpsEnrolRequest,
@@ -22,7 +23,11 @@ import {
 } from '@tipme/contracts';
 import {
   confirmEnrolmentAndOpenGrant,
+  declineInvitation,
+  isUnenrolledInvitee,
   listAudit,
+  staffActivity,
+  type MailSealing,
   openOpsGrant,
   opsEnrolmentState,
   resolveOpsGrant,
@@ -41,6 +46,7 @@ import {
   setOpsCookie,
 } from '../auth/cookies.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { CurrentUser, type AuthContext } from '../auth/session.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -51,6 +57,7 @@ import {
   type OpsContext,
   type OpsRequest,
 } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 /** Staff sign-in step (authenticator), the audit log and the admin's own role (ADR-0010). */
@@ -60,6 +67,7 @@ export class OpsAccessController {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {
     this.key = Buffer.from(config.OPS_TOTP_KEY, 'base64');
   }
@@ -90,7 +98,16 @@ export class OpsAccessController {
     }
     const state = await opsEnrolmentState(this.database.db, auth.userId);
     return {
-      data: { state: state === 'enrolled' ? 'needs_code' : 'needs_enrolment' },
+      data:
+        state === 'enrolled'
+          ? { state: 'needs_code' }
+          : {
+              state: 'needs_enrolment',
+              canDecline: await isUnenrolledInvitee(
+                this.database.db,
+                auth.userId,
+              ),
+            },
     };
   }
 
@@ -130,10 +147,12 @@ export class OpsAccessController {
     );
   }
 
+  // After StaffGuard (decorators apply bottom-up): the budget is this person's, so colleagues on
+  // one office address can't spend each other's. Their authenticator's lockout stops guessing.
   @Post('grant')
   @HttpCode(200)
+  @RateLimit('ops_code')
   @UseGuards(CsrfGuard, StaffGuard)
-  @RateLimit('auth_verify')
   async grant(
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(opsCodeSchema)) body: OpsCodeRequest,
@@ -149,6 +168,21 @@ export class OpsAccessController {
     );
   }
 
+  /** Someone invited turning it down, from the enrolment step. Refused once enrolled. */
+  @Post('decline')
+  @HttpCode(200)
+  @UseGuards(CsrfGuard, StaffGuard)
+  @RateLimit('auth_verify')
+  async decline(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<{ declined: true }>> {
+    await declineInvitation(this.database.db, {
+      userId: auth.userId,
+      sealing: this.sealing,
+    });
+    return { data: { declined: true } };
+  }
+
   @Post('sign-out')
   @HttpCode(204)
   @UseGuards(CsrfGuard, StaffGuard)
@@ -161,6 +195,7 @@ export class OpsAccessController {
   }
 
   @Get('audit')
+  @FreshCode()
   @OpsPermission('audit.view')
   async audit(
     @CurrentOps() _ops: OpsContext,
@@ -173,6 +208,13 @@ export class OpsAccessController {
     };
   }
 
+  /** The Overview's list of staff changes. Fixed names only, so it asks for no code. */
+  @Get('staff-activity')
+  @OpsPermission('audit.view')
+  async activity(): Promise<ApiDataResponse<OpsStaffActivity[]>> {
+    return { data: await staffActivity(this.database.db, { limit: 15 }) };
+  }
+
   private granted(
     response: Response,
     result: OpenGrantResult,
@@ -181,6 +223,8 @@ export class OpsAccessController {
       setOpsCookie(response, this.config, result.token, result.expiresAt);
       return { data: { expiresAt: result.expiresAt.toISOString() } };
     }
+    if (result.status === 'reused')
+      throw new CodedHttpException(400, 'CODE_ALREADY_USED');
     if (result.status === 'locked')
       throw new CodedHttpException(429, 'OPS_LOCKED');
     if (result.status === 'not_staff')

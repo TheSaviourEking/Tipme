@@ -168,14 +168,18 @@ test('it is staff only, needs payouts.resolve, a written reason, and a real page
   assert.equal((await rows('SELECT id FROM withdrawal_holds')).length, 0);
 
   // A role without payouts.resolve is refused.
+  // An owner holds the whole catalogue, whatever is stored: move them to a role without it.
   await database.pool.query(
-    `DELETE FROM role_permissions WHERE role_id = 'owner' AND permission = 'payouts.resolve'`,
+    `INSERT INTO roles (id, name) VALUES ('no_payouts', 'No payouts') ON CONFLICT DO NOTHING`,
+  );
+  await database.pool.query(
+    `UPDATE staff SET role_id = 'no_payouts' WHERE role_id = 'owner'`,
   );
   try {
     assert.equal((await freeze()).status, 403);
   } finally {
     await database.pool.query(
-      `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
+      `UPDATE staff SET role_id = 'owner' WHERE role_id = 'no_payouts'`,
     );
   }
 });
@@ -298,9 +302,9 @@ test('a second report while frozen keeps its written reason in the audit, and th
         })
       ).json()
     ).data;
-  assert.deepEqual(await state(), { issueId: null });
+  assert.deepEqual(await state(), { issueId: null, issueOpen: false });
   const { issueId } = (await (await freeze()).json()).data;
-  assert.deepEqual(await state(), { issueId });
+  assert.deepEqual(await state(), { issueId, issueOpen: true });
   const second = 'A second person rang about the same account.';
   await freeze(owner.cookie, TOBI, second);
   const [audit] = await rows(
@@ -329,7 +333,10 @@ test('a new report after the last closed, with a reversal still holding, opens a
     `${stack.api}/v1/ops/pages/${TOBI}/withdrawal-freeze`,
     { headers: { cookie: owner.cookie } },
   );
-  assert.deepEqual((await screen.json()).data, { issueId: report.issueId });
+  assert.deepEqual((await screen.json()).data, {
+    issueId: report.issueId,
+    issueOpen: true,
+  });
   await resolve(reversal, { outcome: 'resolved_by_provider' });
   assert.equal(await withdrawalsFrozen(database.db, { profileId: TOBI }), true);
   assert.deepEqual(

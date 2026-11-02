@@ -28,6 +28,51 @@ export class DependencyUnavailableError extends Error {
 
 // Fixed messages: framework and parser messages can quote request input.
 const messages: Record<ApiErrorCode, string> = {
+  PERMISSION_NOT_HELD:
+    'You can only give or take away access you hold yourself.',
+  FRESH_CODE_REQUIRED: 'Enter a code from your authenticator to do this.',
+  CODE_ALREADY_USED:
+    'That code has just been used. Wait for the next one in your app.',
+  STAFF_ADMIN_BUSY:
+    'Another staff change is in progress and nothing was changed. Please try again in a moment.',
+  ISSUE_OWN_ALERT:
+    'Someone else has to close this one, because it records your own action. With nobody else, it closes by itself after 30 days.',
+  PAYOUT_CHANGED:
+    'This withdrawal changed, so nothing was done. Look at it again.',
+  APPROVAL_OWN_REQUEST:
+    'Someone else has to decide this one, because you asked for it.',
+  APPROVAL_NOT_YOURS: 'Only the person who asked can cancel this request.',
+  APPROVAL_SUBJECT:
+    'Someone else has to decide this one, because it is about you.',
+  APPROVAL_CLOSED:
+    'This request has already been closed. Nothing more was done.',
+  APPROVAL_EXPIRED:
+    'This request passed its 24 hours, so it has closed. Nothing ran. Ask again if it is still needed.',
+  APPROVAL_STALE:
+    'Things have changed since this was asked for, so it stopped and nothing ran. Ask again if it is still needed.',
+  APPROVAL_ALREADY_PENDING:
+    'You already have this same request waiting. Cancel it first, then you can act.',
+  SELF_ACCESS_CHANGE: 'You can’t change your own access.',
+  ROLE_NAME_TAKEN: 'A role with that name already exists.',
+  ROLE_IN_USE: 'Move everyone off this role before deleting it.',
+  ROLE_PROTECTED: 'This built-in role can’t be changed.',
+  STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
+  STAFF_CHANGED: 'This person’s role just changed. Check it and try again.',
+  LAST_OWNER: 'The last active owner can’t be removed or demoted.',
+  ROLE_HAS_FORMER_HOLDERS:
+    'People who were removed held this role, and their history keeps it, so it can’t be deleted. You can rename it or untick its permissions.',
+  STAFF_EMAIL_TAKEN:
+    'That mailbox already belongs to staff (dots and +tags count as the same address). To bring back someone removed, use their exact address.',
+  STAFF_EMAIL_LOCKED:
+    'Staff can’t change their sign-in email here. Contact the owner, who can have it changed.',
+  STAFF_PHONE_LOCKED:
+    'Staff can’t change their phone number here. Ask an owner.',
+  STAFF_CANNOT_DELETE:
+    'Staff accounts can’t be deleted. Ask an owner to remove your staff access first.',
+  STAFF_ALREADY_ENROLLED:
+    'This person has already set up their authenticator. An owner can reset it instead.',
+  STAFF_NO_EMAIL:
+    'This person has no verified email to send a link to. Use grant-owner on the server.',
   VALIDATION_FAILED: 'The request was not valid.',
   UNAUTHORIZED: 'Unauthorized.',
   NOT_FOUND: 'Not found.',
@@ -79,7 +124,7 @@ const messages: Record<ApiErrorCode, string> = {
   PROFILE_NOT_FOUND: 'That profile does not exist.',
   FORBIDDEN: 'Your admin role does not allow this.',
   ENROLMENT_INVALID:
-    'That enrolment code is not right or has expired. Ask for a new one with pnpm ops:grant-owner.',
+    'That enrolment code is not right or has expired. Ask an owner for a new one, or use pnpm ops:grant-owner.',
   OPS_LOCKED: 'Too many wrong codes. Admin access is locked for 15 minutes.',
   PAGE_SUSPENDED:
     'TipMe has paused your page, so it cannot go live. See the note on your dashboard.',
@@ -184,6 +229,38 @@ const operationErrors: Partial<
     code: 'EMAIL_VERIFICATION_REQUIRED',
   },
   MARKET_ENTRY_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  PERMISSION_NOT_HELD: { status: 403, code: 'PERMISSION_NOT_HELD' },
+  FRESH_CODE_REQUIRED: { status: 403, code: 'FRESH_CODE_REQUIRED' },
+  STAFF_ADMIN_BUSY: { status: 503, code: 'STAFF_ADMIN_BUSY' },
+  ISSUE_OWN_ALERT: { status: 403, code: 'ISSUE_OWN_ALERT' },
+  APPROVAL_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  APPROVAL_OWN_REQUEST: { status: 403, code: 'APPROVAL_OWN_REQUEST' },
+  APPROVAL_NOT_YOURS: { status: 403, code: 'APPROVAL_NOT_YOURS' },
+  APPROVAL_SUBJECT: { status: 403, code: 'APPROVAL_SUBJECT' },
+  APPROVAL_CLOSED: { status: 409, code: 'APPROVAL_CLOSED' },
+  APPROVAL_EXPIRED: { status: 409, code: 'APPROVAL_EXPIRED' },
+  APPROVAL_ALREADY_PENDING: { status: 409, code: 'APPROVAL_ALREADY_PENDING' },
+  RECOVERY_STAFF_ACCOUNT: { status: 409, code: 'FORBIDDEN' },
+  PAYOUT_CHANGED: { status: 409, code: 'PAYOUT_CHANGED' },
+  NO_CONFIRMED_TEST: { status: 409, code: 'NO_CONFIRMED_TEST' },
+  PROVIDER_NOT_ALLOWED: { status: 409, code: 'PROVIDER_NOT_ALLOWED' },
+  PROVIDER_STATUS_UNKNOWN: { status: 503, code: 'DEPENDENCY_UNAVAILABLE' },
+  SELF_ACCESS_CHANGE: { status: 403, code: 'SELF_ACCESS_CHANGE' },
+  ROLE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  ROLE_NAME_TAKEN: { status: 409, code: 'ROLE_NAME_TAKEN' },
+  ROLE_IN_USE: { status: 409, code: 'ROLE_IN_USE' },
+  ROLE_PROTECTED: { status: 409, code: 'ROLE_PROTECTED' },
+  STAFF_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  STAFF_PROTECTED: { status: 409, code: 'STAFF_PROTECTED' },
+  STAFF_CHANGED: { status: 409, code: 'STAFF_CHANGED' },
+  LAST_OWNER: { status: 409, code: 'LAST_OWNER' },
+  ROLE_HAS_FORMER_HOLDERS: { status: 409, code: 'ROLE_HAS_FORMER_HOLDERS' },
+  STAFF_EMAIL_TAKEN: { status: 409, code: 'STAFF_EMAIL_TAKEN' },
+  STAFF_NO_EMAIL: { status: 409, code: 'STAFF_NO_EMAIL' },
+  STAFF_EMAIL_LOCKED: { status: 409, code: 'STAFF_EMAIL_LOCKED' },
+  STAFF_PHONE_LOCKED: { status: 409, code: 'STAFF_PHONE_LOCKED' },
+  STAFF_CANNOT_DELETE: { status: 409, code: 'STAFF_CANNOT_DELETE' },
+  STAFF_ALREADY_ENROLLED: { status: 409, code: 'STAFF_ALREADY_ENROLLED' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },
   QUOTE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
@@ -312,6 +389,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (exception instanceof ValidationFailedException)
       body.error.fields = exception.fields;
     else if (fields) body.error.fields = fields;
+    if (exception instanceof CodedHttpException && exception.reason)
+      body.error.reason = exception.reason;
     if (exception instanceof RateLimitedException)
       response.setHeader('Retry-After', String(exception.retryAfterSeconds));
     response.status(status).json(body);

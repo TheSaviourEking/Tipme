@@ -41,6 +41,7 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -74,8 +75,10 @@ export class OpsEmailConsoleController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {}
 
+  // The list is the way to the email you may open or the log you may download: no contents or
+  // recipient here, which stay behind email.read and private.view.
   @Get('summary')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'email.read', 'email.export')
   async summary(
     @Query(new ZodValidationPipe(opsMailPeriodQuerySchema))
     query: z.infer<typeof opsMailPeriodQuerySchema>,
@@ -90,7 +93,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('series')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'email.read', 'email.export')
   async series(
     @Query(new ZodValidationPipe(opsMailPeriodQuerySchema))
     query: z.infer<typeof opsMailPeriodQuerySchema>,
@@ -105,7 +108,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('messages')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'email.read', 'email.export')
   async messages(
     @Query(new ZodValidationPipe(opsMailListQuerySchema))
     query: z.infer<typeof opsMailListQuerySchema>,
@@ -136,7 +139,8 @@ export class OpsEmailConsoleController {
   }
 
   @Get('messages/:id/timeline')
-  @OpsPermission('issues.view')
+  @FreshCode()
+  @OpsPermission('email.read')
   async timeline(
     @Param('id') id: string,
   ): Promise<ApiDataResponse<OpsMailTimelineEvent[]>> {
@@ -146,7 +150,8 @@ export class OpsEmailConsoleController {
 
   /** The email as sent, with personal links removed. Security email is never shown. */
   @Get('messages/:id/content')
-  @OpsPermission('issues.view')
+  @FreshCode()
+  @OpsPermission('email.read')
   async content(
     @CurrentOps() ops: OpsContext,
     @Param('id') id: string,
@@ -163,6 +168,7 @@ export class OpsEmailConsoleController {
 
   @Post('messages/:id/reveal-recipient')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('private.view')
   async revealRecipient(
     @CurrentOps() ops: OpsContext,
@@ -180,7 +186,8 @@ export class OpsEmailConsoleController {
   }
 
   @Get('export.csv')
-  @OpsPermission('issues.view')
+  @FreshCode()
+  @OpsPermission('email.export')
   async exportCsv(
     @CurrentOps() ops: OpsContext,
     @Query(new ZodValidationPipe(opsMailExportQuerySchema))
@@ -193,7 +200,7 @@ export class OpsEmailConsoleController {
     await recordAudit(db, {
       staffUserId: ops.userId,
       action: 'email.exported',
-      permission: 'issues.view',
+      permission: 'email.export',
       subjectType: 'mail_export',
       subjectId: query.kind,
     });

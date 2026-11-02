@@ -65,16 +65,16 @@ const code = async (promise) => {
 
 test('each route names the permission it needs', () => {
   const expected = {
-    summary: 'issues.view',
-    series: 'issues.view',
-    messages: 'issues.view',
-    timeline: 'issues.view',
-    content: 'issues.view',
+    summary: ['issues.view', 'email.read', 'email.export'],
+    series: ['issues.view', 'email.read', 'email.export'],
+    messages: ['issues.view', 'email.read', 'email.export'],
+    timeline: 'email.read',
+    content: 'email.read',
     revealRecipient: 'private.view',
-    exportCsv: 'issues.view',
+    exportCsv: 'email.export',
   };
   for (const [method, permission] of Object.entries(expected))
-    assert.equal(
+    assert.deepEqual(
       Reflect.getMetadata(
         OPS_PERMISSION,
         OpsEmailConsoleController.prototype[method],
@@ -167,6 +167,13 @@ test('the export contains no full address and is audited', async (t) => {
     `SELECT count(*)::int AS n FROM audit_events WHERE action = 'email.exported'`,
   );
   assert.equal(rows[0].n, 2);
+  const permissions = await pool.query(
+    `SELECT DISTINCT permission FROM audit_events WHERE action = 'email.exported'`,
+  );
+  assert.deepEqual(
+    permissions.rows.map((r) => r.permission),
+    ['email.export'],
+  );
 });
 
 test('a CSV cell can never be read as a spreadsheet formula', async (t) => {

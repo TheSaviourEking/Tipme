@@ -1,21 +1,28 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { opsSessions, sessions, staffTotp } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { guarded } from './errors.js';
+import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { checkStaffCode, isActiveStaff, staffPermissions } from './staff.js';
+import {
+  canonicalId,
+  checkStaffCode,
+  isActiveStaff,
+  staffPermissions,
+} from './staff.js';
 
 export const OPS_GRANT_TTL_MS = 12 * 60 * 60 * 1000;
 export const OPS_GRANT_IDLE_MS = 60 * 60 * 1000;
+/** One code covers sensitive actions in that grant for this long. */
+export const FRESH_CODE_WINDOW_MS = 5 * 60 * 1000;
 
 const hashToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 
 export type OpenGrantResult =
   | { status: 'ok'; token: string; expiresAt: Date }
-  | { status: 'invalid' | 'locked' | 'not_staff' };
+  | { status: 'invalid' | 'locked' | 'not_staff' | 'reused' };
 
 /**
  * Opens an admin grant after an authenticator code, bound to the recipient session it was opened
@@ -58,7 +65,38 @@ async function insertGrant(
   now: Date,
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = randomBytes(32).toString('base64url');
-  const expiresAt = new Date(now.getTime() + OPS_GRANT_TTL_MS);
+  // Entering a code again replaces this session's grant rather than stacking another, and never
+  // extends it: only the first code in a session sets how long the session's admin access lasts.
+  const earlier = await tx
+    .select({ id: opsSessions.id, expiresAt: opsSessions.expiresAt })
+    .from(opsSessions)
+    .where(
+      and(
+        eq(opsSessions.sessionId, sessionId),
+        eq(opsSessions.userId, userId),
+        isNull(opsSessions.revokedAt),
+        gt(opsSessions.expiresAt, now),
+        // A grant that went idle has already ended: signing in again starts afresh.
+        gt(opsSessions.lastSeenAt, new Date(now.getTime() - OPS_GRANT_IDLE_MS)),
+      ),
+    )
+    .for('update');
+  if (earlier.length > 0)
+    await tx
+      .update(opsSessions)
+      .set({ revokedAt: now })
+      .where(
+        inArray(
+          opsSessions.id,
+          earlier.map((grant) => grant.id),
+        ),
+      );
+  const expiresAt = new Date(
+    Math.min(
+      now.getTime() + OPS_GRANT_TTL_MS,
+      ...earlier.map((grant) => grant.expiresAt.getTime()),
+    ),
+  );
   const id = newId();
   await tx.insert(opsSessions).values({
     id,
@@ -68,10 +106,12 @@ async function insertGrant(
     createdAt: now,
     lastSeenAt: now,
     expiresAt,
+    // Opening a grant always takes a code.
+    lastTotpAt: now,
   });
   await recordAudit(tx, {
     staffUserId: userId,
-    action: 'ops.grant_opened',
+    action: earlier.length > 0 ? 'ops.code_entered' : 'ops.grant_opened',
     subjectType: 'ops_session',
     subjectId: id,
     now,
@@ -124,12 +164,21 @@ export function confirmEnrolmentAndOpenGrant(
 export function resolveOpsGrant(
   db: Database,
   input: { token: string; sessionId: string; now?: Date },
-): Promise<{ userId: string; permissions: Set<string> } | null> {
+): Promise<{
+  userId: string;
+  grantId: string;
+  permissions: Set<string>;
+  lastTotpAt: Date | null;
+} | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(input.token)) return Promise.resolve(null);
   const now = input.now ?? new Date();
   return guarded(async () => {
     const [row] = await db
-      .select({ id: opsSessions.id, userId: opsSessions.userId })
+      .select({
+        id: opsSessions.id,
+        userId: opsSessions.userId,
+        lastTotpAt: opsSessions.lastTotpAt,
+      })
       .from(opsSessions)
       .innerJoin(sessions, eq(sessions.id, opsSessions.sessionId))
       .where(
@@ -153,8 +202,39 @@ export function resolveOpsGrant(
       .update(opsSessions)
       .set({ lastSeenAt: now })
       .where(eq(opsSessions.id, row.id));
-    return { userId: row.userId, permissions };
+    return {
+      userId: row.userId,
+      grantId: row.id,
+      permissions,
+      lastTotpAt: row.lastTotpAt,
+    };
   });
+}
+
+/** Refuses unless this live grant, of this person, had a code entered within the window. */
+export async function assertFreshCode(
+  tx: Database | Tx,
+  input: { grantId: string; userId: string; now: Date },
+): Promise<void> {
+  const grantId = canonicalId(input.grantId ?? '');
+  const [grant] = grantId
+    ? await tx
+        .select({ lastTotpAt: opsSessions.lastTotpAt })
+        .from(opsSessions)
+        .where(
+          and(
+            eq(opsSessions.id, grantId),
+            eq(opsSessions.userId, input.userId),
+            isNull(opsSessions.revokedAt),
+            gt(opsSessions.expiresAt, input.now),
+          ),
+        )
+    : [];
+  if (
+    !grant?.lastTotpAt ||
+    input.now.getTime() - grant.lastTotpAt.getTime() > FRESH_CODE_WINDOW_MS
+  )
+    throw new OperationError('FRESH_CODE_REQUIRED');
 }
 
 /** Ends this staff member's grants (admin sign-out). */

@@ -4,6 +4,36 @@
 - Each API copy and worker now sizes its pool from the server's `max_connections`, with both colours counted, and resizes with no restart. Budget, numbers and checks: `docs/runbooks/remote-database.md`. Full report: `.worktrees/db-budget-report.md`.
 - Next: owner reviews and opens the PR; run the runbook's `backend_type` query on production to replace the margin's assumption. `feat/admin-roles` must take this before it merges.
 
+# Current task — admin roles, final review fixes (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, not pushed.
+- Done: I1, I2, M1-M10 from `.superpowers/sdd/2026-11-01-admin-roles/final-findings.md`, Task 7 M1-M4 tests and a mutation proof of the race tests. Report: `.superpowers/sdd/2026-11-01-admin-roles/final-fix-report.md`.
+- C1: merged from dev (PR #97). The Pages card now reads whether the issue holding a freeze is open.
+- `@alone` tests are now their own run: `E2E_ALONE=1 playwright test`, or `pnpm test:e2e --alone`; `pnpm test:e2e` runs the suite and then them.
+- Next exact step: the PR. Owner rulings stay open: see the spec header.
+
+# Current task — admin roles Task 7 (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`.
+- Done: the screens on `/ops`: People, Roles, Approvals, a menu from permissions, a fresh-code prompt on every admin call, waiting and acted-alone wording on every gated action, and pending approvals, staff activity and the switch on the Overview. Releasing a freeze is one person with a fresh code again (spec 6.5). No decision is approved by this work.
+- Tests tagged `@alone` revoke all staff and some change the global switch, so they have their own Playwright project: run them alone (superseded: see the entry above).
+- Task 7 fix round 1 and Task 8 (`docs/runbooks/admin-roles.md`) are done, with origin/dev merged: this branch's migrations are now 0064-0070.
+- Next exact step: review, then merge with the payouts plan.
+
+# Current task — admin roles Task 6 (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, with `origin/dev` merged (this branch's migrations are now 0062-0068).
+- Done: every name in `SERIOUS_ACTIONS` is registered in `serious-actions-registered.ts` and its route goes through the approval engine. Provider reads happen in `prepare`, before the transaction. Evidence and open questions: `.superpowers/sdd/2026-11-01-admin-roles/task-6-report.md`.
+- Not done: the screens don't yet handle a route's `202 { requestId }` (Task 7). No decision is approved by this work.
+- Next exact step: review Task 6, then Task 7.
+
+# Current task — merge compact tip card with dev (2 November 2026)
+
+- Branch/worktree: `feat/compact-tip-card`. Existing PR #96; merged current `dev` after resolving the continuity-document conflicts. The merge commit is ready for publication.
+- Built: shorter card, keys with exact amounts and no lone key (`keyLayout`), full-width Other field, one disclosure, one trust line, partner wording moved to the page foot, celebration in the identity column with a tick box, closest-to-₦2,000 preselect, sticky only while the panel fits the window. Rulings are in `docs/design/DECISION-LOG.md`, 2 Nov.
+- Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
+- The Linux profile baselines are present. PR head `49673cd` passed CI before this merge; validation for the merged commit is pending. Next: publish the merge commit and check its CI on the existing PR.
+
 # Current task — takeover freeze, second report (2 November 2026)
 
 - Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev` at `a232891`. Committed, not pushed.

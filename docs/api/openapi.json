@@ -4209,6 +4209,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -4284,6 +4285,248 @@
           }
         ],
         "x-tipme-permission": "recoveries.manage"
+      }
+    },
+    "/v1/ops/approvals": {
+      "get": {
+        "operationId": "OpsApprovals.list",
+        "tags": [
+          "OpsApprovals"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "cancelled",
+                "expired",
+                "stale"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-any",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/ops/approvals/{id}/approve": {
+      "post": {
+        "operationId": "OpsApprovals.approve",
+        "tags": [
+          "OpsApprovals"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-any",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_code",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/ops/approvals/{id}/cancel": {
+      "post": {
+        "operationId": "OpsApprovals.cancel",
+        "tags": [
+          "OpsApprovals"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-any",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/ops/approvals/{id}/reject": {
+      "post": {
+        "operationId": "OpsApprovals.reject",
+        "tags": [
+          "OpsApprovals"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-any",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/v1/ops/audit": {
@@ -4395,7 +4638,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "payments.recheck"
+        "x-tipme-permission": "payments.repair"
       }
     },
     "/v1/ops/bachs/checkout-recovery": {
@@ -4476,7 +4719,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "payments.recheck"
+        "x-tipme-permission": "payments.repair"
       }
     },
     "/v1/ops/bachs/fee-bearer-confirmation": {
@@ -4551,7 +4794,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "payments.recheck"
+        "x-tipme-permission": "payments.repair"
       }
     },
     "/v1/ops/database-budget": {
@@ -4589,6 +4832,39 @@
           }
         ],
         "x-tipme-permission": "issues.view"
+      }
+    },
+    "/v1/ops/decline": {
+      "post": {
+        "operationId": "OpsAccess.decline",
+        "tags": [
+          "OpsAccess"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify"
       }
     },
     "/v1/ops/email/export.csv": {
@@ -4718,7 +4994,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": "email.export"
       }
     },
     "/v1/ops/email/messages": {
@@ -4845,7 +5121,11 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "email.read",
+          "email.export"
+        ]
       }
     },
     "/v1/ops/email/messages/{id}/content": {
@@ -4892,7 +5172,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": "email.read"
       }
     },
     "/v1/ops/email/messages/{id}/reveal-recipient": {
@@ -5008,7 +5288,7 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": "email.read"
       }
     },
     "/v1/ops/email/series": {
@@ -5085,7 +5365,11 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "email.read",
+          "email.export"
+        ]
       }
     },
     "/v1/ops/email/summary": {
@@ -5162,7 +5446,11 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "email.read",
+          "email.export"
+        ]
       }
     },
     "/v1/ops/enrol": {
@@ -5321,7 +5609,7 @@
         },
         "x-tipme-access": "staff",
         "x-tipme-csrf": true,
-        "x-tipme-rate-limit": "auth_verify"
+        "x-tipme-rate-limit": "ops_code"
       }
     },
     "/v1/ops/issues": {
@@ -5386,7 +5674,10 @@
                 "profile_reported",
                 "account_takeover_reported",
                 "reserve_empty",
-                "provider_key_refused"
+                "provider_key_refused",
+                "staff_acted_alone",
+                "staff_approval_pending",
+                "staff_last_approver_removed"
               ]
             }
           },
@@ -5626,6 +5917,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -5700,6 +5992,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -5898,6 +6191,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request (money closes only)",
         "security": [
           {
             "session": []
@@ -6520,13 +6814,12 @@
             }
           }
         },
-        "x-tipme-access": "staff-grant",
+        "x-tipme-access": "staff-any",
         "security": [
           {
             "session": []
           }
-        ],
-        "x-tipme-permission": "pages.plan"
+        ]
       }
     },
     "/v1/ops/pages/{handle}/handle-changes": {
@@ -6678,6 +6971,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -6753,6 +7047,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -7303,7 +7598,10 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "providers.manage"
+        ]
       }
     },
     "/v1/ops/providers/mail/active": {
@@ -7366,6 +7664,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -7774,7 +8073,10 @@
             "session": []
           }
         ],
-        "x-tipme-permission": "issues.view"
+        "x-tipme-permission": [
+          "issues.view",
+          "providers.manage"
+        ]
       }
     },
     "/v1/ops/recheck": {
@@ -7908,6 +8210,1009 @@
         "x-tipme-csrf": true
       }
     },
+    "/v1/ops/staff": {
+      "get": {
+        "operationId": "OpsStaff.people",
+        "tags": [
+          "OpsStaff"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      },
+      "post": {
+        "operationId": "OpsStaff.addPerson",
+        "tags": [
+          "OpsStaff"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 254
+                  },
+                  "roleId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "reason",
+                  "email",
+                  "roleId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff-activity": {
+      "get": {
+        "operationId": "OpsAccess.activity",
+        "tags": [
+          "OpsAccess"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "audit.view"
+      }
+    },
+    "/v1/ops/staff/roles": {
+      "get": {
+        "operationId": "OpsStaff.roles",
+        "tags": [
+          "OpsStaff"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      },
+      "post": {
+        "operationId": "OpsStaff.create",
+        "tags": [
+          "OpsStaff"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 60
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "permissions": {
+                    "default": [],
+                    "maxItems": 19,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "issues.view",
+                        "issues.resolve",
+                        "pages.suspend",
+                        "recoveries.cancel",
+                        "analytics.view",
+                        "market.edit",
+                        "audit.view",
+                        "payments.recheck",
+                        "private.view",
+                        "pages.plan",
+                        "search.view",
+                        "fees.manage",
+                        "providers.manage",
+                        "recoveries.manage",
+                        "payouts.resolve",
+                        "email.read",
+                        "email.export",
+                        "payments.repair",
+                        "staff.manage"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "reason",
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/roles/{roleId}": {
+      "patch": {
+        "operationId": "OpsStaff.update",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 60
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "permissions": {
+                    "maxItems": 19,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "issues.view",
+                        "issues.resolve",
+                        "pages.suspend",
+                        "recoveries.cancel",
+                        "analytics.view",
+                        "market.edit",
+                        "audit.view",
+                        "payments.recheck",
+                        "private.view",
+                        "pages.plan",
+                        "search.view",
+                        "fees.manage",
+                        "providers.manage",
+                        "recoveries.manage",
+                        "payouts.resolve",
+                        "email.read",
+                        "email.export",
+                        "payments.repair",
+                        "staff.manage"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/roles/{roleId}/delete": {
+      "post": {
+        "operationId": "OpsStaff.remove",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/roles/{roleId}/impact": {
+      "post": {
+        "operationId": "OpsStaff.impact",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "permissions": {
+                    "maxItems": 19,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "issues.view",
+                        "issues.resolve",
+                        "pages.suspend",
+                        "recoveries.cancel",
+                        "analytics.view",
+                        "market.edit",
+                        "audit.view",
+                        "payments.recheck",
+                        "private.view",
+                        "pages.plan",
+                        "search.view",
+                        "fees.manage",
+                        "providers.manage",
+                        "recoveries.manage",
+                        "payouts.resolve",
+                        "email.read",
+                        "email.export",
+                        "payments.repair",
+                        "staff.manage"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "permissions"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/{userId}/access": {
+      "get": {
+        "operationId": "OpsStaff.access",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      },
+      "put": {
+        "operationId": "OpsStaff.setAccess",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "additions": {
+                    "maxItems": 19,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "issues.view",
+                        "issues.resolve",
+                        "pages.suspend",
+                        "recoveries.cancel",
+                        "analytics.view",
+                        "market.edit",
+                        "audit.view",
+                        "payments.recheck",
+                        "private.view",
+                        "pages.plan",
+                        "search.view",
+                        "fees.manage",
+                        "providers.manage",
+                        "recoveries.manage",
+                        "payouts.resolve",
+                        "email.read",
+                        "email.export",
+                        "payments.repair",
+                        "staff.manage"
+                      ]
+                    }
+                  },
+                  "removals": {
+                    "maxItems": 19,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "issues.view",
+                        "issues.resolve",
+                        "pages.suspend",
+                        "recoveries.cancel",
+                        "analytics.view",
+                        "market.edit",
+                        "audit.view",
+                        "payments.recheck",
+                        "private.view",
+                        "pages.plan",
+                        "search.view",
+                        "fees.manage",
+                        "providers.manage",
+                        "recoveries.manage",
+                        "payouts.resolve",
+                        "email.read",
+                        "email.export",
+                        "payments.repair",
+                        "staff.manage"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "reason",
+                  "additions",
+                  "removals"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/{userId}/remove": {
+      "post": {
+        "operationId": "OpsStaff.removePerson",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/{userId}/resend-invitation": {
+      "post": {
+        "operationId": "OpsStaff.resendPersonInvitation",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/{userId}/reset-authenticator": {
+      "post": {
+        "operationId": "OpsStaff.resetPersonAuthenticator",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/staff/{userId}/role": {
+      "put": {
+        "operationId": "OpsStaff.setRole",
+        "tags": [
+          "OpsStaff"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "roleId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "reason",
+                  "roleId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "staff.manage"
+      }
+    },
     "/v1/ops/users/{userId}/cancel-recovery": {
       "post": {
         "operationId": "OpsActions.cancelRecovery",
@@ -7978,6 +9283,41 @@
       }
     },
     "/v1/ops/withdrawals-switch": {
+      "get": {
+        "operationId": "OpsWithdrawalsSwitch.state",
+        "tags": [
+          "OpsWithdrawalsSwitch"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
+      },
       "post": {
         "operationId": "OpsWithdrawalsSwitch.set",
         "tags": [
@@ -8767,6 +10107,33 @@
                   "SAME_AS_SIGN_IN_EMAIL",
                   "SIGN_IN_CODE_REQUIRED",
                   "PROVIDER_NOT_ALLOWED",
+                  "PERMISSION_NOT_HELD",
+                  "FRESH_CODE_REQUIRED",
+                  "CODE_ALREADY_USED",
+                  "STAFF_ADMIN_BUSY",
+                  "ISSUE_OWN_ALERT",
+                  "APPROVAL_OWN_REQUEST",
+                  "APPROVAL_NOT_YOURS",
+                  "APPROVAL_SUBJECT",
+                  "APPROVAL_CLOSED",
+                  "APPROVAL_EXPIRED",
+                  "APPROVAL_STALE",
+                  "APPROVAL_ALREADY_PENDING",
+                  "PAYOUT_CHANGED",
+                  "SELF_ACCESS_CHANGE",
+                  "ROLE_NAME_TAKEN",
+                  "ROLE_IN_USE",
+                  "ROLE_PROTECTED",
+                  "STAFF_PROTECTED",
+                  "STAFF_CHANGED",
+                  "LAST_OWNER",
+                  "ROLE_HAS_FORMER_HOLDERS",
+                  "STAFF_EMAIL_TAKEN",
+                  "STAFF_NO_EMAIL",
+                  "STAFF_EMAIL_LOCKED",
+                  "STAFF_PHONE_LOCKED",
+                  "STAFF_CANNOT_DELETE",
+                  "STAFF_ALREADY_ENROLLED",
                   "INTERNAL_ERROR"
                 ]
               },
@@ -8775,6 +10142,10 @@
               },
               "reference": {
                 "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Why a serious action stopped, as a fixed code."
               },
               "fields": {
                 "type": "array",

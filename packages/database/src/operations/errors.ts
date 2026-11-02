@@ -39,12 +39,50 @@ export type OperationErrorCode =
   | 'ISSUE_RESOLVED'
   | 'ISSUE_OUTCOME_REQUIRED'
   | 'ISSUE_PAYOUT_UNFINISHED'
-  | 'MARKET_ENTRY_NOT_FOUND';
+  | 'MARKET_ENTRY_NOT_FOUND'
+  | 'PERMISSION_NOT_HELD'
+  | 'FRESH_CODE_REQUIRED'
+  | 'STAFF_ADMIN_BUSY'
+  | 'ISSUE_OWN_ALERT'
+  | 'APPROVAL_NOT_FOUND'
+  | 'APPROVAL_OWN_REQUEST'
+  | 'APPROVAL_NOT_YOURS'
+  | 'APPROVAL_SUBJECT'
+  | 'APPROVAL_CLOSED'
+  | 'APPROVAL_EXPIRED'
+  | 'APPROVAL_ALREADY_PENDING'
+  | 'RECOVERY_STAFF_ACCOUNT'
+  | 'PAYOUT_CHANGED'
+  | 'NO_CONFIRMED_TEST'
+  | 'PROVIDER_NOT_ALLOWED'
+  | 'PROVIDER_STATUS_UNKNOWN'
+  | 'SELF_ACCESS_CHANGE'
+  | 'ROLE_NOT_FOUND'
+  | 'ROLE_NAME_TAKEN'
+  | 'ROLE_IN_USE'
+  | 'ROLE_PROTECTED'
+  | 'STAFF_NOT_FOUND'
+  | 'STAFF_PROTECTED'
+  | 'STAFF_CHANGED'
+  | 'LAST_OWNER'
+  | 'ROLE_HAS_FORMER_HOLDERS'
+  | 'STAFF_EMAIL_TAKEN'
+  | 'STAFF_NO_EMAIL'
+  | 'STAFF_EMAIL_LOCKED'
+  | 'STAFF_PHONE_LOCKED'
+  | 'STAFF_CANNOT_DELETE'
+  | 'STAFF_ALREADY_ENROLLED';
 
-/** Expected business outcomes callers map to responses; never carries request values. */
+/**
+ * Expected business outcomes callers map to responses; never carries request values. `detail` is
+ * for a server operator's console (masked data only) and never reaches an API response.
+ */
 export class OperationError extends Error {
   override readonly name = 'OperationError';
-  constructor(readonly code: OperationErrorCode) {
+  constructor(
+    readonly code: OperationErrorCode,
+    readonly detail?: string,
+  ) {
     super(code);
   }
 }

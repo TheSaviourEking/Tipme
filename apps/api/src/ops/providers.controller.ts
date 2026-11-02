@@ -6,7 +6,9 @@ import {
   Inject,
   Param,
   Post,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   mailProviderNameSchema,
   opsMailOverrideRemoveSchema,
@@ -22,6 +24,7 @@ import {
   type OpsMailProviders,
   type OpsMailSwitchRequest,
   type OpsMailTestRequest,
+  type OpsSeriousPending,
   type OpsProviderTestConfirmRequest,
   type OpsSuppressionLookupRequest,
   type OpsSuppressionRemoveRequest,
@@ -37,7 +40,8 @@ import {
   removeSuppression,
   setProviderOverride,
   startMailProviderTest,
-  switchMailProvider,
+  requestSeriousAction,
+  type SeriousActionServices,
   verifiedEmailOf,
   type MailSealing,
 } from '@tipme/database';
@@ -47,6 +51,8 @@ import type {
   MailProviderStatus,
 } from '@tipme/mail';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -56,6 +62,7 @@ import {
   type MailProviders,
 } from '../mail/mail-providers.provider.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
 const STATUS_TIMEOUT_MS = 3000;
@@ -69,6 +76,7 @@ export class OpsProvidersController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(MAIL_PROVIDERS) readonly providers: MailProviders,
+    @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
   ) {}
 
   private configured(name: string): MailProvider {
@@ -113,8 +121,9 @@ export class OpsProvidersController {
     );
   }
 
+  // Whoever may change the settings has to read them, and open their own test's link.
   @Get('mail')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'providers.manage')
   async overview(): Promise<ApiDataResponse<OpsMailProviders>> {
     const overview = await mailProviderOverview(this.database.db, {
       configured: [...this.providers.keys()],
@@ -142,6 +151,7 @@ export class OpsProvidersController {
 
   @Post('mail/:provider/test')
   @HttpCode(202)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async startTest(
     @CurrentOps() ops: OpsContext,
@@ -165,7 +175,7 @@ export class OpsProvidersController {
   /** Opened from the test email: any staff member with an ops session may confirm. */
   @Post('tests/confirm')
   @HttpCode(200)
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'providers.manage')
   async confirmTest(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsProviderTestConfirmSchema))
@@ -183,38 +193,33 @@ export class OpsProvidersController {
 
   @Post('mail/active')
   @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
   @OpsPermission('providers.manage')
   async switchProvider(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsMailSwitchSchema))
     body: OpsMailSwitchRequest,
-  ): Promise<ApiDataResponse<{ provider: string }>> {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<{ provider: string } | OpsSeriousPending>> {
     const provider = this.configured(body.provider);
-    const production = this.production();
-    const status = await this.statusOf(provider, true);
-    // In production a provider whose status can't be read is not switched to blind.
-    if (production && !status)
-      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
-    const outcome = await switchMailProvider(this.database.db, {
-      staffUserId: ops.userId,
-      provider: provider.name,
-      reason: body.reason,
-      production,
-      sandbox: status?.sandbox ?? null,
-      configured: new Set(this.providers.keys()),
-      fallback: this.config.MAIL_DEFAULT_PROVIDER,
-    });
-    if (outcome === 'no_confirmed_test')
-      throw new CodedHttpException(409, 'NO_CONFIRMED_TEST');
-    if (outcome === 'refused_in_production')
-      throw new CodedHttpException(409, 'PROVIDER_NOT_ALLOWED');
-    if (outcome === 'not_configured')
-      throw new CodedHttpException(404, 'NOT_FOUND');
-    return { data: { provider: provider.name } };
+    const answer = pendingOr<{ provider: string }>(
+      await requestSeriousAction(this.database.db, {
+        name: 'mail_provider.switch',
+        payload: { provider: provider.name },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 
   @Post('overrides')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async setOverride(
     @CurrentOps() ops: OpsContext,
@@ -250,6 +255,7 @@ export class OpsProvidersController {
 
   @Post('overrides/remove')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async removeOverride(
     @CurrentOps() ops: OpsContext,
@@ -271,6 +277,7 @@ export class OpsProvidersController {
   /** The address goes in the body so it stays out of access logs. */
   @Post('suppressions/lookup')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('private.view')
   async lookupSuppression(
     @CurrentOps() ops: OpsContext,
@@ -302,6 +309,7 @@ export class OpsProvidersController {
 
   @Post('suppressions/remove')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('providers.manage')
   async removeAddressSuppression(
     @CurrentOps() ops: OpsContext,

@@ -8,11 +8,14 @@ import type {
 } from '@tipme/contracts';
 import { Notice, Skeleton } from '@tipme/ui';
 import { Funnel, Tile } from '@/components/ops/charts';
+import { StaffActivity } from '@/components/ops/staff-activity';
+import { WaitingRequests } from '@/components/ops/waiting-requests';
 import { WithdrawalsSwitch } from '@/components/ops/withdrawals-switch';
 import { change, naira } from '@/lib/money';
 import { liveSwitchView } from '@/lib/live-switch-view';
 import { reserveView } from '@/lib/payment-reserve';
-import { apiFetch } from '@/lib/session-client';
+import { can, useOpsAccess } from '@/lib/ops-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 const count = (n: { thisWeek: number; lastWeek: number }) => ({
   value: String(n.thisWeek),
@@ -47,8 +50,35 @@ const vitalValue = (metric: WebVitalSummary['metric'], value: number | null) =>
         ? `${(value / 1000).toFixed(2)} s`
         : `${value} ms`;
 
-/** Overall health: money, the tipping funnel, reliability and recipients, this week vs last. */
+/** What every staff member can use, whatever else their role holds: nothing here hides behind numbers. */
+function ForEveryone() {
+  const access = useOpsAccess();
+  return (
+    <>
+      {can(access, 'payouts.resolve') && <WithdrawalsSwitch />}
+      <WaitingRequests />
+      {can(access, 'audit.view') && <StaffActivity />}
+    </>
+  );
+}
+
+/** Pending approvals, staff changes and the stop switch; then, for those who may, the numbers. */
 export default function OpsOverviewPage() {
+  const access = useOpsAccess();
+  const mayRead = can(access, 'analytics.view');
+  return (
+    <div className="ops-dashboard">
+      <h1>Overview</h1>
+      <ForEveryone />
+      {mayRead && <Numbers />}
+    </div>
+  );
+}
+
+/** Overall health: money, the tipping funnel, reliability and recipients, this week vs last. */
+function Numbers() {
+  // Who can stop withdrawals sees the control above; everyone else still sees which way it is.
+  const mayStop = can(useOpsAccess(), 'payouts.resolve');
   const [health, setHealth] = useState<OpsMetricsEnvelope<OpsHealth> | null>(
     null,
   );
@@ -56,14 +86,14 @@ export default function OpsOverviewPage() {
   // When the page opened, for "read 12 min ago" (the data is fetched right after).
   const [openedAt] = useState(() => Date.now());
   useEffect(() => {
-    void apiFetch<OpsMetricsEnvelope<OpsHealth>>('/v1/ops/metrics/health').then(
+    void opsFetch<OpsMetricsEnvelope<OpsHealth>>('/v1/ops/metrics/health').then(
       (result) => (result.ok ? setHealth(result.data) : setFailed(true)),
     );
   }, []);
   if (failed)
     return (
-      <Notice tone="error" title="Couldn’t load the overview">
-        Your role may not include analytics, or the connection failed.{' '}
+      <Notice tone="error" title="Couldn’t load the numbers">
+        The connection failed, or your access changed.{' '}
         <Link href="/ops/issues">Go to the issues inbox</Link>
       </Notice>
     );
@@ -92,27 +122,17 @@ export default function OpsOverviewPage() {
     reliability.openIssues.account +
     reliability.openIssues.info;
   return (
-    <div className="ops-dashboard">
-      <h1>Overview</h1>
+    <>
       <p className="tm-hint">
         This week (from Monday, Lagos time) against all of last week.
         {live.testMoney ? ' Test money only.' : ''}
       </p>
       {live.current && <p data-testid="live-now">{live.current}</p>}
       {live.history && <p className="tm-hint">{live.history}</p>}
-      {withdrawalsSwitch && (
-        <WithdrawalsSwitch
-          state={withdrawalsSwitch}
-          onChanged={(next) =>
-            setHealth(
-              (current) =>
-                current && {
-                  ...current,
-                  metrics: { ...current.metrics, withdrawalsSwitch: next },
-                },
-            )
-          }
-        />
+      {withdrawalsSwitch && !mayStop && (
+        <p>
+          Withdrawals: {withdrawalsSwitch.paused ? 'OFF for everyone' : 'on'}.
+        </p>
       )}
       {live.disagrees && (
         <Notice tone="error" title="The record of live payments disagrees">
@@ -267,6 +287,6 @@ export default function OpsOverviewPage() {
           />
         </div>
       </section>
-    </div>
+    </>
   );
 }

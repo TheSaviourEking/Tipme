@@ -14,10 +14,14 @@ import { OpsMarketController } from './market.controller.js';
 import { OpsAccountRecoveryController } from './account-recovery.controller.js';
 import { OpsEmailConsoleController } from './email-console.controller.js';
 import { OpsProvidersController } from './providers.controller.js';
+import { OpsStaffController } from './staff.controller.js';
+import { OpsApprovalsController } from './approvals.controller.js';
 import { MailModule } from '../mail/mail.module.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
+import { FreshCodeGuard } from './fresh-code.guard.js';
 import { OpsGuard, StaffGuard } from './ops.guard.js';
+import { seriousServicesProvider } from './serious-services.js';
 
 /** The staff admin area (PR-009). */
 @Module({
@@ -34,9 +38,18 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsDatabaseBudgetController,
     OpsSearchController,
     OpsProvidersController,
+    OpsStaffController,
+    OpsApprovalsController,
     OpsEmailConsoleController,
     OpsAccountRecoveryController,
   ],
-  providers: [CsrfGuard, RateLimitGuard, StaffGuard, OpsGuard],
+  providers: [
+    CsrfGuard,
+    RateLimitGuard,
+    StaffGuard,
+    OpsGuard,
+    FreshCodeGuard,
+    seriousServicesProvider,
+  ],
 })
 export class OpsModule {}

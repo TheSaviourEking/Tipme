@@ -128,3 +128,19 @@ test('one address can stand in for every sender, keeping each sender’s name', 
     'staging@usetipme.xyz',
   );
 });
+
+test('a takeover release tells owners whether withdrawals really resumed', () => {
+  const released = renderMail(
+    'staff_freeze_released',
+    { personHint: 'a•••@example.com', stillHeld: false },
+    ctx,
+  );
+  assert.match(released.text, /can withdraw again/);
+  const held = renderMail(
+    'staff_freeze_released',
+    { personHint: 'a•••@example.com', stillHeld: true },
+    ctx,
+  );
+  assert.match(held.text, /still holds/);
+  assert.doesNotMatch(held.text, /can withdraw again/);
+});

@@ -68,8 +68,7 @@ test('profile supports keyboard amount selection, validation and a server quote'
   await page.keyboard.press('Space');
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
-  await page.getByRole('radio', { name: 'Other amount' }).check();
-  const custom = page.getByLabel('Your amount (NGN)');
+  const custom = page.getByLabel(/^Other amount/);
   await custom.fill('0');
   await page.getByRole('button', { name: /^Tip/ }).click();
   await expect(
@@ -78,6 +77,7 @@ test('profile supports keyboard amount selection, validation and a server quote'
     ),
   ).toBeVisible();
   await custom.fill('1234.50');
+  await page.getByText('Add a message, reason or your name').click();
   await page
     .getByLabel('Personal message (optional)')
     .fill('Thank you for making this easier.');

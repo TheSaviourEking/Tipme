@@ -149,3 +149,35 @@ export const recoveryCompletedNotice = defineMailType({
       ctx,
     ),
 });
+
+/** Staying vague about why: this can reach an address that isn't the account's owner. */
+export const recoveryCancelledNotice = defineMailType({
+  id: 'recovery_cancelled_notice',
+  category: 'security',
+  sender: 'security',
+  preference: null,
+  schema: z.object({ newEmailHint: z.string().max(260).nullable() }).strict(),
+  sample: { newEmailHint: 'a•••@example.com' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'Your TipMe account recovery was cancelled',
+        heading: 'Recovery cancelled',
+        blocks: [
+          {
+            kind: 'text',
+            text: data.newEmailHint
+              ? `A request to move this TipMe account to ${data.newEmailHint} was cancelled, because the account’s access changed. Its sign-in details stay as they were.`
+              : 'A request to recover this TipMe account was cancelled, because the account’s access changed. Its sign-in details stay as they were.',
+          },
+          {
+            kind: 'text',
+            text: 'If you still need to recover it, contact support@usetipme.xyz.',
+          },
+        ],
+        reason:
+          'You get this email because a recovery of this TipMe account was waiting.',
+      },
+      ctx,
+    ),
+});

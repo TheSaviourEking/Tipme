@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
-import { enrolOwner, mismatchedTip } from './ops-helpers';
+import { enrolOwner, mismatchedTip, secondOwner } from './ops-helpers';
 
 test('the owner enrols, works an issue (reveal, note, resolve) and sees it all in the audit log', async ({
   page,
   request,
+  browser,
 }, testInfo) => {
   await enrolOwner(page, testInfo);
+  // Someone to decide it, so it always waits: ops-alone.spec.ts covers one person closing it.
+  const other = await secondOwner(browser, testInfo);
   const issueId = await mismatchedTip(request, 'tobi');
 
   await page.goto('/ops/issues');
@@ -49,8 +52,11 @@ test('the owner enrols, works an issue (reveal, note, resolve) and sees it all i
     .fill(`Provider confirmed nothing was taken ${tag}`);
   await page.getByRole('button', { name: 'Resolve issue' }).click();
   await expect(
-    page.locator('.ops-issue__status').getByText('Resolved', { exact: true }),
+    page.getByText('Waiting for a second person', { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.locator('.ops-issue__status').getByText('Resolved', { exact: true }),
+  ).toHaveCount(0);
 
   await page.goto('/ops/audit');
   await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
@@ -58,10 +64,11 @@ test('the owner enrols, works an issue (reveal, note, resolve) and sees it all i
     page.getByText(`Supporter asked about their tip ${tag}`),
   ).toBeVisible();
   await expect(
-    page.getByText(`Provider confirmed nothing was taken ${tag}`),
+    page.getByText(`Provider confirmed nothing was taken ${tag}`).first(),
   ).toBeVisible();
   await expectAccessible(page);
   expect(await fitsViewport(page)).toBe(true);
+  await other.context.close();
 
   await page.goto('/ops/staff');
   await expect(page.getByText('private.view')).toBeVisible();

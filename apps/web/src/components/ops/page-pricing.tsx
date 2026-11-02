@@ -3,17 +3,21 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { OpsPagePricing } from '@tipme/contracts';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
+import {
+  ActionOutcome,
+  outcomeOf,
+  type ActionOutcomeState,
+} from '@/components/ops/action-outcome';
 import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
-import { apiFetch } from '@/lib/session-client';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
+import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const STANDARD_BPS = 1000;
 
-const problem = (code: string) =>
-  code === 'FORBIDDEN'
-    ? 'Your role can’t do that.'
-    : code === 'VALIDATION_FAILED'
-      ? 'Check the values: a reason of at least 10 characters is needed.'
-      : 'That didn’t work. Please try again.';
+const problem = (answer: { status: number; code: string; message?: string }) =>
+  answer.code === 'VALIDATION_FAILED'
+    ? 'Check the values: a reason of at least 10 characters is needed.'
+    : refusalWords(answer);
 
 /** A value and a written reason, sent together (every pricing change is audited). */
 export function ValueWithReason({
@@ -76,12 +80,12 @@ export function ValueWithReason({
  */
 export function PagePricing({ profileId }: { profileId: string }) {
   const [pricing, setPricing] = useState<OpsPagePricing | null>(null);
-  const [done, setDone] = useState('');
+  const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
   const base = `/v1/ops/pages/${profileId}`;
 
   useEffect(() => {
     let current = true;
-    void apiFetch<OpsPagePricing>(`${base}/pricing`).then((result) => {
+    void opsFetch<OpsPagePricing>(`${base}/pricing`).then((result) => {
       if (current && result.ok) setPricing(result.data);
     });
     return () => {
@@ -90,13 +94,19 @@ export function PagePricing({ profileId }: { profileId: string }) {
   }, [base]);
 
   const act = async (path: string, body: unknown, message: string) => {
-    const result = await apiFetch<OpsPagePricing>(`${base}/${path}`, {
+    const answer = await opsAct<OpsPagePricing>(`${base}/${path}`, {
       method: 'POST',
       body,
     });
-    if (!result.ok) return problem(result.code);
-    setPricing(result.data);
-    setDone(message);
+    if (answer.kind === 'refused') {
+      if (outcomeIsUnknown(answer)) {
+        const again = await opsFetch<OpsPagePricing>(`${base}/pricing`);
+        if (again.ok) setPricing(again.data);
+      }
+      return problem(answer);
+    }
+    if (answer.kind === 'done') setPricing(answer.data);
+    setOutcome(outcomeOf(answer, message));
     return null;
   };
 
@@ -117,11 +127,7 @@ export function PagePricing({ profileId }: { profileId: string }) {
         Changes apply to new tips only; a price already shown to a supporter is
         kept. Nothing here is automatic.
       </p>
-      {done && (
-        <Notice tone="success" title="Done">
-          {done}
-        </Notice>
-      )}
+      {outcome && <ActionOutcome outcome={outcome} />}
       <ValueWithReason
         label="New TipMe fee (%)"
         hint="For example 8 or 7.5. Use 10 for the standard fee."

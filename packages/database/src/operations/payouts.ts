@@ -355,6 +355,34 @@ export function withdrawalFreezeIssue(
   });
 }
 
+/**
+ * For staff screens: the issue holding the freeze, and whether it can still be worked. It can be
+ * closed while another open issue keeps the hold; a new report then opens a new issue.
+ */
+export function withdrawalFreezeState(
+  db: Database | Tx,
+  input: { profileId: string },
+): Promise<{ issueId: string | null; issueOpen: boolean }> {
+  return guarded(async () => {
+    const rows = await db
+      .select({ issueId: withdrawalHolds.issueId, status: issues.status })
+      .from(withdrawalHolds)
+      .innerJoin(issues, eq(issues.id, withdrawalHolds.issueId))
+      .where(
+        and(
+          eq(withdrawalHolds.profileId, input.profileId),
+          eq(withdrawalHolds.reason, 'account_takeover'),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      );
+    const row = rows.find(({ status }) => status === 'open') ?? rows[0];
+    return {
+      issueId: row?.issueId ?? null,
+      issueOpen: row?.status === 'open',
+    };
+  });
+}
+
 /** Whether a reported takeover has this page's withdrawals, and so its bank, frozen. */
 export async function withdrawalsFrozen(
   db: Database | Tx,

@@ -18,7 +18,12 @@ import { RATE_LIMIT_ROUTE } from '../checkout/rate-limit.guard.js';
 import { loadApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { OPENAPI_IMAGE, type ImageResponseDoc } from './image.js';
-import { OPS_PERMISSION, OpsGuard, StaffGuard } from '../ops/ops.guard.js';
+import {
+  OPS_ANY_STAFF,
+  OPS_PERMISSION,
+  OpsGuard,
+  StaffGuard,
+} from '../ops/ops.guard.js';
 
 // OpenAPI 3.1 (PR-011, PRD §8), generated from what Nest actually registers: each controller's
 // paths and methods, the guards that require a session, the admin permission, and the zod schema
@@ -89,8 +94,11 @@ function operation(
   const session = guards.some((g) => g === SessionGuard || g === OpsGuard);
   // Who may call it: the strongest guard that applies (grant > staff > recipient), else a
   // route-specific proof, else anyone.
+  const anyStaff = Reflect.getMetadata(OPS_ANY_STAFF, handler) === true;
   const access = guards.includes(OpsGuard)
-    ? 'staff-grant'
+    ? anyStaff
+      ? 'staff-any'
+      : 'staff-grant'
     : guards.includes(StaffGuard)
       ? 'staff'
       : guards.includes(SessionGuard)
@@ -101,7 +109,7 @@ function operation(
   const rateLimit = Reflect.getMetadata(RATE_LIMIT_ROUTE, handler) as
     string | undefined;
   const permission = Reflect.getMetadata(OPS_PERMISSION, handler) as
-    string | undefined;
+    string | string[] | undefined;
   const args = Object.entries(
     (Reflect.getMetadata(
       ROUTE_ARGS_METADATA,
@@ -296,6 +304,10 @@ export function buildOpenApi(app: INestApplication): Json {
                 code: { type: 'string', enum: [...apiErrorCodes] },
                 message: { type: 'string' },
                 reference: { type: 'string' },
+                reason: {
+                  type: 'string',
+                  description: 'Why a serious action stopped, as a fixed code.',
+                },
                 fields: { type: 'array', items: { type: 'string' } },
               },
             },

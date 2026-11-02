@@ -110,6 +110,9 @@ export const apiConfigSchema = z
       ),
     // Sign-in code requests per client per hour (each number is also limited to 3 an hour).
     RATE_LIMIT_AUTH_PER_HOUR: z.coerce.number().int().min(1).default(10),
+    // Authenticator codes re-entered per staff member per hour (the code itself locks after 5 misses).
+    RATE_LIMIT_OPS_CODE_PER_HOUR: z.coerce.number().int().min(1).default(60),
+    RATE_LIMIT_OPS_REQUEST_PER_HOUR: z.coerce.number().int().min(1).default(60),
     // Sign-in codes per phone number per hour. Keep 3 on any copy people use; local drills raise it.
     RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: z.coerce
       .number()

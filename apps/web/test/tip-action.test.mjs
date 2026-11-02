@@ -43,6 +43,20 @@ test('a notice node of any kind sits directly above the button', () => {
   );
 });
 
+test('the partner line sits directly under the button', () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      TipAction,
+      { partner: 'A partner handles this.' },
+      createElement('button', null, 'Tip'),
+    ),
+  );
+  assert.match(
+    html,
+    /<button>Tip<\/button><p class="composer-action__partner">A partner handles this\.<\/p>/,
+  );
+});
+
 test('no notice, no slot', () => {
   const html = renderToStaticMarkup(
     createElement(TipAction, null, createElement('button', null, 'Tip')),
