@@ -1,6 +1,7 @@
 import { JOB_NAMES } from '@tipme/contracts';
 import {
   databaseFailureOf,
+  OperationError,
   isDatabaseAvailabilityFailure,
 } from '@tipme/database';
 import { UnrecoverableError } from 'bullmq';
@@ -20,7 +21,12 @@ export const RELAY_JOB_RETRIES = {
  * and anything else fails once, as it always has. The trace probe tests the queue's own retries.
  */
 export function jobFailure(jobName: string, error: unknown): unknown {
-  if (jobName === JOB_NAMES.traceProbe || isDatabaseAvailabilityFailure(error))
+  if (
+    jobName === JOB_NAMES.traceProbe ||
+    isDatabaseAvailabilityFailure(error) ||
+    // Refused before anything changed, and at a small pool without waiting at all.
+    (error instanceof OperationError && error.code === 'STAFF_ADMIN_BUSY')
+  )
     return error;
   if (error instanceof UnrecoverableError) return error;
   return new UnrecoverableError(

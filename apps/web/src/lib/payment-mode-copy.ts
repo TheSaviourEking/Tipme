@@ -42,10 +42,9 @@ const CLOSED_TITLE = 'Tipping opens soon';
 const CLOSED_BODY = 'TipMe isn’t taking tips yet. Please come back soon.';
 const SIGN_UP =
   'An email address and a handle is all it takes to start receiving thanks.';
-const CLARITY =
-  'You see the full cost and what the person receives before you pay.';
-const PAY_STEP = 'Review the full amount and what they receive, then pay.';
-const TRUST = 'No account needed. You’ll see the full total before you pay.';
+const CLARITY = 'You pay exactly the amount you choose.';
+const PAY_STEP = 'Choose an amount and pay exactly that.';
+const TRUST = 'No account needed. You pay exactly this amount.';
 const PARTNER = 'Our payment partner handles this. You’ll confirm on its page.';
 const EXAMPLE_TITLE = 'Tip the people you know';
 const EXAMPLE_BODY =

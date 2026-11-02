@@ -14,6 +14,7 @@ import {
   createQuote,
   guarded,
   isDatabaseAvailabilityFailure,
+  lockStaffAdmin,
   mailSealing,
   markAttemptInitiated,
   notifyTipSucceeded,
@@ -130,6 +131,22 @@ test('at pool 1 a busy staff lock refuses at once, public pages stay up, and sto
     permissions: [],
   });
   assert.ok(retried.status < 300, String(retried.status));
+});
+
+test('a one-off script with one connection waits its turn: it serves nobody else', async () => {
+  const script = createDatabase(database.url, { max: 1 });
+  const holder = await database.pool.connect();
+  try {
+    await holder.query('BEGIN');
+    await holder.query(STAFF_LOCK);
+    const waited = script.db.transaction((tx) => lockStaffAdmin(tx));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await holder.query('ROLLBACK');
+    await waited;
+  } finally {
+    holder.release();
+    await script.close();
+  }
 });
 
 test('every pool asks for keepalive and gives an abandoned transaction a server-side limit', async () => {

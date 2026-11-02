@@ -1,4 +1,4 @@
-import { currentPoolMax } from '../client.js';
+import { servingPoolMax } from '../client.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes } from 'node:crypto';
 import { SERIOUS_ACTION_PERMISSIONS } from '@tipme/contracts';
@@ -121,7 +121,7 @@ export const whileHoldingStaffAdmin = <T>(work: () => Promise<T>): Promise<T> =>
  */
 export async function lockStaffAdmin(tx: Tx): Promise<void> {
   const counted = !holdingStaffAdmin.getStore();
-  const allowed = staffLockWaitersAllowed(currentPoolMax() ?? POOL_MAX_UNKNOWN);
+  const allowed = staffLockWaitersAllowed(servingPoolMax() ?? POOL_MAX_UNKNOWN);
   if (counted && allowed === 0) {
     const { rows } = await tx.execute<{ taken: boolean }>(
       sql`SELECT pg_try_advisory_xact_lock(hashtext('tipme.staff-admin')) AS taken`,

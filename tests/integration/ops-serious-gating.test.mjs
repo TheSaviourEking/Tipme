@@ -31,11 +31,16 @@ const HARMLESS = 'search.view';
 const reads = { lockHeldDuringRead: [] };
 let database;
 
-/** Each provider read checks from elsewhere that nobody is holding the staff-admin lock. */
+/**
+ * Each provider read checks from elsewhere that nobody is holding the staff-admin lock in this
+ * database. pg_locks covers the whole server, and test files running alongside hold the same lock
+ * in their own databases.
+ */
 const lockHeld = async () =>
   (
     await database.pool.query(
       `SELECT 1 FROM pg_locks WHERE locktype = 'advisory'
+       AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
        AND objid = (hashtext('tipme.staff-admin')::bigint & 4294967295)::oid`,
     )
   ).rows.length > 0;

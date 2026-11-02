@@ -65,6 +65,7 @@ test('a quote shows what the recipient receives', async () => {
   assert.equal(status, 201);
   assert.equal(body.data.recipientNetMinor, '90000');
   assert.equal(body.data.tipMinor, '100000');
+  assert.equal(body.data.payerTotalMinor, '100000');
   assert.equal(body.data.displayName.length > 0, true);
   assert.equal(body.data.handle, 'ada');
   assert.equal(body.data.currency, 'NGN');

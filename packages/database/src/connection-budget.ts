@@ -1,4 +1,4 @@
-import type { DatabaseHandle } from './client.js';
+import { markServingPool, type DatabaseHandle } from './client.js';
 import {
   databaseFailureOf,
   type DatabaseFailure,
@@ -134,6 +134,7 @@ export function adaptPoolToServer(
   },
 ): AdaptiveBudget {
   const { pool } = handle;
+  markServingPool(pool);
   let limits: ServerLimits | null = null;
   let plan: BudgetPlan | null = null;
   let roleSessions: number | null = null;

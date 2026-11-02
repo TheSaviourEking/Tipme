@@ -32,9 +32,21 @@ interface TransactionScope {
 }
 const transactionScope = new AsyncLocalStorage<TransactionScope>();
 
-/** The size now of the pool the current transaction came from; null outside createDatabase's. */
-export const currentPoolMax = (): number | null =>
-  transactionScope.getStore()?.pool.options.max ?? null;
+const servingPools = new WeakSet<pg.Pool>();
+
+/** A pool that serves requests or jobs, so what holds a connection keeps others waiting. */
+export const markServingPool = (pool: pg.Pool): void => {
+  servingPools.add(pool);
+};
+
+/**
+ * The size now of the serving pool the current transaction came from. Null for any other pool: a
+ * one-off script's single connection keeps nobody waiting, so nothing need be rationed for it.
+ */
+export const servingPoolMax = (): number | null => {
+  const pool = transactionScope.getStore()?.pool;
+  return pool && servingPools.has(pool) ? (pool.options.max ?? null) : null;
+};
 
 // Connection errors from pg, marked as they pass so only these count as the database's network
 // failures (errors.ts): a fetch failing the same way elsewhere is somebody else's.

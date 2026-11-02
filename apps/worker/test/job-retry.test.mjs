@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PersistenceError } from '@tipme/database';
+import { OperationError, PersistenceError } from '@tipme/database';
 import { UnrecoverableError } from 'bullmq';
 import { databaseFailureFields, jobFailure } from '../dist/job-retry.js';
 
@@ -17,6 +17,11 @@ test('the database being unavailable earns another try', () => {
     new Error('Client has encountered a connection error and is not queryable'),
   ])
     assert.equal(jobFailure('tip.succeeded', error), error);
+});
+
+test('a busy staff lock earns another try: nothing changed', () => {
+  const error = new OperationError('STAFF_ADMIN_BUSY');
+  assert.equal(jobFailure('ops.approval_pending', error), error);
 });
 
 test('anything else fails once, as before', () => {

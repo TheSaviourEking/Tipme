@@ -28,7 +28,8 @@ export class ReadinessService {
   ) {
     // Drizzle releases without an error even after a failed transaction, so ask the client too.
     pool.on('release', (error, client) => {
-      if (!error && (client as { _queryable?: boolean })._queryable !== false) this.lastHealthy = Date.now();
+      if (!error && (client as { _queryable?: boolean })._queryable !== false)
+        this.lastHealthy = Date.now();
     });
   }
 

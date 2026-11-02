@@ -1,8 +1,17 @@
+<<<<<<< HEAD
 # Current task — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Committed, not pushed. No migration.
 - Each API copy and worker now sizes its pool from the server's `max_connections`, with both colours counted, and resizes with no restart. Budget, numbers and checks: `docs/runbooks/remote-database.md`. Full report: `.worktrees/db-budget-report.md`.
 - Next: owner reviews and opens the PR; run the runbook's `backend_type` query on production to replace the margin's assumption. Admin roles (#98) is merged into this branch, and the staff lock now follows the pool size. Review findings: `.worktrees/db-budget-review.md`.
+=======
+# Current task — compact tip card and celebration placement (2 November 2026)
+
+- Branch/worktree: `feat/compact-tip-card` / `.worktrees/tip-card`, from `origin/dev` at `7295866`, committed, not pushed. Web and tests only: no API, contract, migration or payment change.
+- Built: shorter card, keys with exact amounts and no lone key (`keyLayout`), full-width Other field, one disclosure, one trust line, partner wording moved to the page foot, celebration in the identity column with a tick box, closest-to-₦2,000 preselect, sticky only while the panel fits the window. Rulings are in `docs/design/DECISION-LOG.md`, 2 Nov.
+- Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
+- Review round done (partner line beside Tip, phone Go key, M1-M5). Next exact step: regenerate `profile-desktop-desktop-linux.png` and `profile-mobile-mobile-linux.png` from CI's render, then open the PR to `dev`.
+>>>>>>> origin/dev
 
 # Current task — admin roles, final review fixes (2 November 2026)
 
