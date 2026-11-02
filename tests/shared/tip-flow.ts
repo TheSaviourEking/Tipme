@@ -12,7 +12,7 @@ export async function startTip(
   page: Page,
   { amount = '2,000 NGN', name, message }: TipChoices = {},
 ) {
-  await page.getByRole('radio', { name: amount }).check();
+  await page.getByRole('radio', { name: amount }).click();
   // The tip summary shows only what the supporter pays.
   await expect(page.getByText(/^You pay NGN [\d,]+\.\d\d$/)).toBeVisible();
   if (message)
@@ -22,7 +22,7 @@ export async function startTip(
     await page.getByText('Add your name or remember tips').click();
     await page.getByLabel('Your name (optional)').fill(name);
   }
-  await page.getByRole('button', { name: /^Tip NGN/ }).click();
+  await page.getByRole('button', { name: /^Tip ₦/ }).click();
 }
 
 /** The whole tip through the pretend provider, landing on the receipt. */

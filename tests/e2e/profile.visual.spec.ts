@@ -5,9 +5,8 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => document.fonts.ready);
 });
 
-// Concept A (docs/design/reference): the identity card overlaps the portrait's lower left and
-// the tipping panel floats over its right edge, beside a headline on the left.
-test('public profile has the portrait-led overlapping composition', async ({
+// The cover leads; the photo overlaps its lower edge and the tipping panel its lower right.
+test('public profile has the cover-led overlapping composition', async ({
   page,
 }) => {
   const box = async (selector: string) => {
@@ -17,31 +16,26 @@ test('public profile has the portrait-led overlapping composition', async ({
     if (!found) throw new Error(`${selector} is not rendered`);
     return found;
   };
-  const portrait = await box('[data-profile-portrait]');
-  const card = await box('[data-profile-card]');
+  const cover = await box('[data-profile-cover]');
+  const photo = await box('.profile-photo');
   const panel = await box('[data-tip-panel]');
-  const headline = await box('.profile-headline__title');
+  const bottom = cover.y + cover.height;
 
-  expect(headline.x + headline.width).toBeLessThanOrEqual(portrait.x + 1);
-  expect(card.x).toBeLessThan(portrait.x);
-  expect(card.x + card.width).toBeGreaterThan(portrait.x + 32);
-  expect(card.y + card.height / 2).toBeGreaterThan(
-    portrait.y + portrait.height / 2,
-  );
-  expect(panel.x).toBeLessThan(portrait.x + portrait.width - 32);
-  expect(panel.x + panel.width).toBeGreaterThan(portrait.x + portrait.width);
-  // A compact instrument, not a full-width checkout column.
-  expect(panel.width).toBeLessThan(portrait.width);
+  expect(photo.y).toBeLessThan(bottom);
+  expect(photo.y + photo.height).toBeGreaterThan(bottom);
+  expect(photo.x).toBeLessThan(cover.x + cover.width / 2);
+  expect(panel.y).toBeLessThan(bottom);
+  expect(panel.x).toBeGreaterThan(cover.x + cover.width / 2);
+  expect(panel.x + panel.width).toBeLessThanOrEqual(cover.x + cover.width + 1);
 });
 
-test('public profile portrait falls back to initials when loading fails', async ({
+test('public profile photo falls back to initials when loading fails', async ({
   page,
 }) => {
   await page.route('**/_next/image**', (route) => route.abort());
   await page.reload();
-  await expect(
-    page.locator('[data-profile-portrait]').getByText('AO', { exact: true }),
-  ).toBeVisible();
+  await page.getByRole('heading', { level: 1 }).waitFor();
+  await expect(page.locator('.profile-photo')).toHaveText('AO');
 });
 
 test('public profile visual desktop', async ({ page }) => {

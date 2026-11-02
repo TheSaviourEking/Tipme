@@ -1,5 +1,7 @@
 # Reference anatomy
 
+The public page (`/@handle`) no longer follows this anatomy: since 2026-11-01 it leads with a cover and profile photo (see `DECISION-LOG.md`). The rest still applies to other surfaces that use it.
+
 ## Desktop
 
 A warm neutral canvas holds a portrait-led recipient object and a raised tipping instrument. The pair is visually related without becoming a dashboard grid. Thin borders, light-facing edges, shallow contact shadows, and controlled ambient shadows create depth. Purple is concentrated in selected amounts and the primary action.

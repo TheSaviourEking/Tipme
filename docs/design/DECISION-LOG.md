@@ -155,3 +155,51 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - Tone is encouraging, not alarming: the neutral notice, not the error tone, because nothing has gone wrong yet; the owner has a step left.
 - When payments need the owner's own provider account, the first-day checklist shows the real payment step instead of "Coming later".
 - Withdraw says up front when the balance cannot be paid out yet, and shows no amount form.
+
+## 2026-11-01 — Experience and motion
+
+- `EXPERIENCE-AND-MOTION.md` sets how screens move, on the existing motion tokens, with no new runtime dependency. Drafted at the owner's request; its specifics await the owner's review.
+- Money never performs: balances don't count up, and no animation implies a payment or withdrawal has progressed past its recorded state.
+- The Appreciation Moment plays once per confirmed tip, and is the only celebration. A paid withdrawal is deliberately quiet, because it's the person's own money.
+- No parallax or scroll-tied animation on money screens; the home page alone may use one-time section entrances.
+
+## 2026-11-01 — Public page leads with the person and the tip
+
+- The owner approved this on 1 Nov, with the mockup's Main, Phone and PhoneClosed boards: the cover-led page replaces the portrait-led Concept A on `/@handle` only. This supersedes the 2026-10-26 "Report this page sits under the preview note" placement. "Portrait-led identity" in the constitution now means the profile photo here; other surfaces keep their compositions.
+- The page opens with the logo, then the cover. The profile photo overlaps the cover's edge, appears once, and shows initials in the same circle when there is none. Its ring is solid canvas, because it sits on any of the 24 covers.
+- The site's navigation and footer links are hidden on `/@handle` only (CSS). The page's own footer is "Report this page", quiet Privacy and Terms links in every state (owner's ruling, because this page takes payment), and, except on Pro pages, "Get your own TipMe page".
+- Phone Tip bar: the form's own submit button, fixed to the bottom, so there is one action and one accessible button. It hides while a typing field has focus, because the keyboard needs the room; a select opens none, so the bar stays. It carries the amount, the confirmed total and, directly above the button, the same notice as the wording under the button, so a pilot notice is always seen before paying. Scroll padding and page padding follow its height. Closing an Android keyboard ends the editing, so the bar comes back. Browsers without `:has()` keep the button in the form.
+- The page no longer streams a silhouette (`instant = false`, no `loading.tsx`): the name and photo are in the first paint and work without scripts. Unknown and moved handles still answer 200, because Partial Prerendering sends the root shell first; a real 404 or 308 would need an API call in the proxy on every profile request. The cost is that a cold cache waits for the API before anything shows.
+- While a tip is starting, the form's transitions are switched off: only the button's label changes.
+- On phones the panel fades without rising 12px, because a transform on the panel would carry the fixed bar with it.
+- Kept from the existing form rather than the mockup, because the checkout flow and its tests depend on them: the "Other" key that reveals the amount field, and the purpose select. Awaiting the owner's view on one open question: amount keys above the bio on phones (for now the bio comes first). The other, preselecting ₦2,000, was decided on 2 Nov 2026 (see below).
+- The trust line says "handles your payment" rather than "your card", because bank transfer also exists.
+
+## 2026-11-01 — Cover colour exception
+
+- Covers may use colours beyond `#7A32F9`, `#FFFFFF` and `#000000`: the catalogue's tones and the pattern artwork. It is a narrow exception to the locked palette, for the person's own decorative picture only. Controls, text and TipMe's own surfaces keep the locked colours and the tokens, and nothing that carries meaning sits only on a cover.
+
+## 2026-11-02 — Cover designs and colours
+
+- Settings has one Cover card: a live preview, "Upload your own photo", 24 designs (six hearts, eighteen patterns) and, only for designs that take them, a colour group. Colours carry visible names beside the swatch, never colour alone. Nothing is saved until "Save cover".
+- Selecting a design or colour changes the preview at once, crossfading in 240ms (150ms for a colour change). Hovering or focusing does nothing. Reduced motion replaces the crossfade with an instant change. Saved shows in place for 2 seconds.
+- An uploaded photo beats any design. While one exists the card says so, says which design is saved, and offers "Remove photo", rather than letting a choice appear to do nothing.
+- A saved design or colour the catalogue no longer holds opens as "nothing chosen" (neutral colour), and the page shows the automatic design. "If you don't choose, we'll pick one for your page." shows until a design is saved.
+- The preview of an uploaded cover is read from the account's own route, so it works while the page is not live.
+- Violet and lilac are offered only as a person's own choice (see "Cover colour exception"). Covers are free; this is a builder's call from the spec, not an owner decision. The list of designs awaits the owner's review.
+- Settings had content wider than a 360px screen (a file input held the Photo card 402px wide). Cards now use a shrinkable single column, and the test measures every element at 360 and 320.
+
+## 2026-11-02 — Owner changes to the public tip page
+
+- **₦2,000 starts selected.** The owner chose this on 2 Nov 2026. It is a product default, not a regulatory approval, and no D-item is affected. The amount keys start on ₦2,000 where the page offers it; a page whose own amounts lack ₦2,000 (a Pro page) starts with nothing chosen, because any other amount would be our guess. The starting amount is not a choice: a page view requests no quote and sends no `amount_selected`. The first tap on Tip then fetches and shows the total for that amount without paying, and the next tap pays, so nobody starts a payment without having seen the total. Tapping an amount, including ₦2,000 again, counts as choosing. Closed pages ("Tipping opens soon") have no form, so nothing changes there.
+- **The mode wording appears once on a phone.** With the fixed Tip bar showing, the bar carries the test-mode line or the live pilot notice (with its help link) directly above the button, and the copy under the button is removed from view and from assistive technology. Everywhere else (desktop, short screens, browsers without `:has()`) the bar copy is removed and the copy under the button stays. The live pilot notice therefore always sits beside the money action.
+- **Covers have more presence.** Every heart colour has a deeper tone (at least 1.45:1 against its base) and a clearer line (at least 2.5:1, under 4:1 to stay calm), and the dark design is lighter against its base. Outlines are 3px, up from 2. Geometry, assignment by handle, the pattern images and uploaded photos are unchanged.
+
+## 2026-11-02 — Automatic covers use rich colours
+
+- **Owner decision, 2 Nov 2026: a page with no chosen cover gets a rich colour.** It is a product and visual decision, not a regulatory approval; no VALIDATE item is touched and it needs none. Violet, forest, ocean or rose is picked by the handle, so a new page looks finished from day one. Before, the automatic covers were dark, scattered/neutral and large/neutral.
+- **How it is picked.** The design is still chosen by the handle (32-bit FNV-1a, spread over three designs). The colour reads a finalised copy of the same hash, so it does not follow the design and all twelve pairings occur about equally (a test prints the spread over 2,400 handles). Nothing is stored: pages with no chosen cover change on their next view, and `cover_design`, `cover_colour` and the uploaded photo are untouched. A design or photo a person chose, and a chosen design's saved colour (or neutral), stay exactly as they were.
+- **The dark design leaves the automatic set; its heart is unchanged.** Dark takes no colour, so a third of pages would have skipped the decision, and lightening its heart would restyle every page whose owner chose Dark. The third automatic design is now "Rising hearts" (a filled heart design, like the other two). Dark stays in the catalogue for anyone who picks it. Handles that had the old third design now have Rising hearts, in a colour.
+- **A page that changes its handle may change look.** The pick follows the handle, as it did before, so a rename can give a different design and colour. The old handle redirects to the new page, which shows the new look. Choosing a design in Settings fixes it.
+- **Legibility.** Nothing is written on a cover. The name, share button and bio sit on the page's canvas, the photo's ring is the solid canvas (at least 3:1 against all four colours), and the panel is an opaque surface. A test asserts that no text or control sits on the cover except the photo and the panel.
+- **Settings shows what the page shows.** "Let TipMe pick" previews the handle's design in its colour and says it in words ("Now: Rising hearts in Violet"). Violet and lilac remain offered as a person's own choice.

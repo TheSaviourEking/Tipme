@@ -32,20 +32,20 @@ Status: the code can move real money once the owner works through `docs/runbooks
 
 Two roles exist today. **Owner** holds every permission; staff are created only on the server with `pnpm ops:grant-owner`. **release_check** is the release check's own staff account and holds only `issues.view`, `issues.resolve`, `analytics.view` and `audit.view`. A new role is a row in the database (a name and a set of permissions) and needs no code change. A role with fewer permissions gets `403` on the rest (tested).
 
-| Permission          | What it allows                                                                                                    |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issues.view`       | Read the issues inbox and an issue's evidence; add notes                                                          |
-| `issues.resolve`    | Resolve an issue, with a reason                                                                                   |
-| `pages.suspend`     | Pause or restore a page, with a reason the recipient sees                                                         |
-| `recoveries.cancel` | Cancel a pending phone-number move (email recovery), with a reason                                                |
-| `analytics.view`    | Read the Overview, visibility and market numbers                                                                  |
-| `market.edit`       | Add, edit or archive hand-entered market observations                                                             |
-| `audit.view`        | Read the audit log                                                                                                |
-| `payments.recheck`  | Ask the payment provider for the current status of a payment or withdrawal                                        |
-| `private.view`      | Reveal a supporter's message and similar private detail, with a reason (audited)                                  |
-| `pages.plan`        | Look a page up and move it between Free and Pro, with a reason                                                    |
-| `search.view`       | Search pages, tips, withdrawals and ledger entries (ids and labels only; audited by length)                       |
-| `fees.manage`       | Set one page's TipMe fee or return it to the standard 10%, and grant fee-free tips, each with a reason (ADR-0014) |
+| Permission          | What it allows                                                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `issues.view`       | Read the issues inbox and an issue's evidence; add notes                                                                           |
+| `issues.resolve`    | Resolve an issue, with a reason                                                                                                    |
+| `pages.suspend`     | Pause or restore a page, with a reason the recipient sees; view a page's cover or photo (audited) and remove either, with a reason |
+| `recoveries.cancel` | Cancel a pending phone-number move (email recovery), with a reason                                                                 |
+| `analytics.view`    | Read the Overview, visibility and market numbers                                                                                   |
+| `market.edit`       | Add, edit or archive hand-entered market observations                                                                              |
+| `audit.view`        | Read the audit log                                                                                                                 |
+| `payments.recheck`  | Ask the payment provider for the current status of a payment or withdrawal                                                         |
+| `private.view`      | Reveal a supporter's message and similar private detail, with a reason (audited)                                                   |
+| `pages.plan`        | Look a page up and move it between Free and Pro, with a reason                                                                     |
+| `search.view`       | Search pages, tips, withdrawals and ledger entries (ids and labels only; audited by length)                                        |
+| `fees.manage`       | Set one page's TipMe fee or return it to the standard 10%, and grant fee-free tips, each with a reason (ADR-0014)                  |
 
 ### Which routes each permission unlocks
 
@@ -60,8 +60,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
-| `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{profileId}/plan` |
-| `pages.suspend` | POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
+| `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
+| `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/recheck` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
@@ -98,6 +98,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/auth/recover/complete` | yes | `auth_verify` | – |
 | POST | `/v1/auth/verify` | yes | `auth_verify` | – |
 | GET | `/v1/avatars/{profileId}/{file}` | n/a (read) | – | – |
+| GET | `/v1/covers/{profileId}/{file}` | n/a (read) | – | – |
 | GET | `/v1/dev/inbox` | n/a (read) | – | yes |
 | POST | `/v1/dev/jobs/weekly-report` | – | – | yes |
 | POST | `/v1/diagnostics/trace-probe` | – | – | yes |
@@ -110,6 +111,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/mock-provider/checkout/{reference}` | – | – | yes |
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
 | POST | `/v1/profiles/{handle}/report` | – | `reports` | – |
+| GET | `/v1/qr-art/previews/{file}` | n/a (read) | – | – |
 | POST | `/v1/tip-intents` | – | `intents` | – |
 | POST | `/v1/tip-quotes` | – | `quotes` | – |
 | POST | `/v1/vitals` | – | `analytics` | – |
@@ -144,6 +146,10 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/me/activity` | n/a (read) | – | – |
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
+| DELETE | `/v1/me/cover` | yes | – | – |
+| GET | `/v1/me/cover` | n/a (read) | – | – |
+| PUT | `/v1/me/cover` | yes | `avatars` | – |
+| PUT | `/v1/me/cover-design` | yes | `cover_designs` | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
 | GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
@@ -169,6 +175,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
 | PATCH | `/v1/me/profile` | yes | – | – |
+| GET | `/v1/me/qr-art` | n/a (read) | `qr_art` | – |
+| GET | `/v1/me/qr-art/{file}` | n/a (read) | `qr_art` | – |
+| GET | `/v1/me/qr-art/thumbs/{file}` | n/a (read) | `qr_thumb` | – |
 | GET | `/v1/me/recovery` | n/a (read) | – | – |
 | GET | `/v1/me/recovery-email` | n/a (read) | – | – |
 | POST | `/v1/me/recovery-email` | yes | `auth_verify` | – |
@@ -234,8 +243,11 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/metrics/health` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/metrics/visibility` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/pages/{handle}` | `pages.plan` | n/a (read) | – | – |
+| POST | `/v1/ops/pages/{handle}/handle-changes` | `pages.plan` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/fee` | `fees.manage` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/fee-free` | `fees.manage` | yes | – | – |
+| GET | `/v1/ops/pages/{profileId}/images/{image}` | `pages.suspend` | n/a (read) | – | – |
+| POST | `/v1/ops/pages/{profileId}/images/{image}/remove` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/plan` | `pages.plan` | yes | – | – |
 | GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
@@ -274,6 +286,8 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `POST /v1/profiles/{handle}/report`                                                    | Anyone can report a page                                              | A reason from a fixed list; always answers the same; rate-limited                                                  |
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |
 | `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                        | Only the current photo of a live, active page                                                                      |
+| `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                       | Only the current cover of a live, active page                                                                      |
+| `GET /v1/qr-art/previews/{file}`                                                       | The marked preview of a Pro QR design, the same for every Free page   | Encodes only the TipMe home page and carries the Preview mark; fixed list of designs; drawn once and kept          |
 | `POST /v1/tip-quotes`, `POST /v1/tip-intents`                                          | A supporter tips without an account                                   | Rate-limited; amounts and fees computed on the server; idempotency key                                             |
 | `GET`, `POST /v1/mail/unsubscribe`                                                     | One-click unsubscribe from a mail app, with no session                | A signed token naming one person and one optional email type; GET only shows a page; rate-limited                  |
 | `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                    | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07 |

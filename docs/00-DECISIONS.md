@@ -53,7 +53,7 @@
 > - **Numbering fix:** earlier documents called messaging providers "D-08". D-08 is the hosting and monitoring budget; messaging providers are **D-11**.
 > - **Error tracking:** TipMe's own reporter sends server errors in Sentry's envelope format (Sentry or self-hosted GlitchTip), without messages, bodies, cookies, headers or user data. Off without `SENTRY_DSN`; which service and plan waits for D-08.
 > - **Search engines:** `robots.txt` and `sitemap.xml` exist, but indexing stays off (`SITE_INDEXING`) on every copy until launch; public profiles stay noindex until D-06.
-> - **Handle renames:** old handles keep leading to the page (at most 5) and nobody else can claim them; on deletion they are held 90 days like the current handle.
+> - **Handle renames (superseded by the handle rule below):** old handles keep leading to the page and nobody else can claim them; on deletion they are held 90 days like the current handle. The earlier limit of 5 old handles has gone, because the change count now bounds them.
 > - **Web vitals:** anonymous page-speed samples (metric, value, page kind, device class) follow the analytics rules: off in production until D-07, GPC/DNT honoured, kept 90 days.
 
 > **PR-012 notes (22 Oct 2026), all PROPOSED (pretend money):**
@@ -132,3 +132,11 @@
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 
 > **Product-owner decisions (25 Oct 2026, ADR-0014):** TipMe takes a flat 10% of every tip and pays the payment provider out of it. Nobody receives a reduced fee automatically: staff grant fee-free tips and may set a custom fee per account, with a reason and an audit record. Milestones are celebrations only. This supersedes the PR-008 automatic reward notes above.
+
+> **Covers, Pro and the handle rule (1 Nov 2026), all PROPOSED builder's calls from the design spec (`docs/superpowers/specs/2026-11-01-profile-covers-qr-design.md`) unless said otherwise. The owner has not approved the items marked open:**
+> - **Handle rule:** a Free page cannot change its handle once claimed. A Pro page has 3 changes in total, counted on the server, including a switch back to an old handle; a change of letter case alone is not a change. After the last, the form is replaced by a message to contact the team. Staff with `pages.plan` can allow more, with a written reason, audited: up to 10 at a time and 20 extra in total per page. Before saving, a confirmation shows the new handle, that old links and printed QR codes keep working, and how many changes remain. The count starts at zero when this ships; leaving Pro keeps the handle and refuses further changes, and returning to Pro does not reset the count. Old handles keep leading to the page and stay unclaimable while it exists; on deletion they are held 90 days.
+> - **What Pro includes now:** Pro QR designs and print formats, three handle changes, the page's own tip amounts, and no "Get your own TipMe page" footer link. Free keeps the three standard QR looks, the handle it claimed, the standard tip amounts and the footer link.
+> - **Covers are free** on every plan: an uploaded photo (JPEG, PNG or WebP up to 5 MB, re-encoded), or one of the designs, with a colour for the heart designs that take one. Precedence is the uploaded photo, then the chosen design, then a design picked from the handle. Builder's call.
+> - **QR designs are Pro; Free gets a marked preview.** Builder's call. A Pro code printed earlier keeps working after Pro ends.
+> - **Privacy line, and the 500-cover R2 threshold** (turn R2 on before many covers are uploaded, because Postgres dumps grow): builder's calls. The Privacy page wording is not changed and stays for the owner's approval.
+> - **Still open (owner):** the final list of designs; whether staff may remove an uploaded image, and the wording of the email the owner receives; the Pro price, billing and how someone buys Pro (until then staff switch Pro on, and no screen names a price); the Privacy page wording; approval of the payment wording.

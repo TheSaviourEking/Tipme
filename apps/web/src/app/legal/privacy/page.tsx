@@ -13,7 +13,7 @@ export default function PrivacyPlaceholder() {
       title="Privacy notice"
       covers={[
         'Who is responsible for personal data, and how to contact them',
-        'What is collected from payers and recipients, and why',
+        'What is collected from payers and recipients, including page photos and covers, and why',
         'How long data is kept and how deletion works',
         'Which service providers process data, and where',
         'Consent for analytics, and your rights',

@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import {
+  expect,
+  type APIRequestContext,
+  type Browser,
+  type Page,
+} from '@playwright/test';
 import { expectAccessible, identity, signInWithEmail } from './helpers';
 import { API_ORIGIN, E2E_DATABASE_URL } from './stack';
 
@@ -103,4 +108,24 @@ export async function mismatchedTip(
     expect(issueId).not.toBe('');
   }).toPass({ timeout: 15_000 });
   return issueId;
+}
+
+/** Staff make the recipient's page Pro from the admin area, in their own browser context. */
+export async function makePagePro(
+  browser: Browser,
+  handle: string,
+  testInfo: TestInfo,
+): Promise<Page> {
+  const staff = await (await browser.newContext()).newPage();
+  await enrolOwner(staff, testInfo);
+  await staff.getByRole('link', { name: 'Pages' }).click();
+  await staff.getByLabel('Handle').fill(handle);
+  await staff.getByRole('button', { name: 'Find page' }).click();
+  await staff.getByRole('button', { name: 'Make Pro…' }).click();
+  await staff
+    .getByLabel('Why is this page getting Pro?')
+    .fill('Pilot recipient for Pro features');
+  await staff.getByRole('button', { name: 'Make Pro', exact: true }).click();
+  await expect(staff.getByText(`@${handle} is now Pro`)).toBeVisible();
+  return staff;
 }

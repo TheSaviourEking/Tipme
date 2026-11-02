@@ -38,8 +38,8 @@ test('PILOT_NOTICE=on shows nothing on a test-mode copy', async ({
   // The page itself says it is a test, so the notice would contradict it.
   await expect(
     visitor
-      .getByText('TipMe is in test mode: no real money moves yet.')
-      .first(),
+      .locator('.composer-disclaimer')
+      .getByText('TipMe is in test mode: no real money moves yet.'),
   ).toBeVisible();
   await expectNoNotice(visitor);
   await startTip(visitor, {});
@@ -217,12 +217,20 @@ test.describe('live mode', () => {
     await expect(
       panel.getByRole('link', { name: 'support@usetipme.xyz' }),
     ).toHaveAttribute('href', 'mailto:support@usetipme.xyz');
-    const [tipBox, noticeBox] = await Promise.all([
-      tip.boundingBox(),
-      notice(live).boundingBox(),
-    ]);
-    expect(noticeBox!.y).toBeGreaterThan(tipBox!.y);
-    expect(noticeBox!.y - (tipBox!.y + tipBox!.height)).toBeLessThan(80);
+    // On a phone the Tip button is in the fixed bar, and the same words sit directly above it
+    // there; elsewhere the notice is the line under the button.
+    const bar = live.locator('.composer-action__notice');
+    const tipBox = (await tip.boundingBox())!;
+    if (await bar.isVisible()) {
+      await expect(bar).toHaveText(SENTENCE);
+      const barBox = (await bar.boundingBox())!;
+      expect(barBox.y + barBox.height).toBeLessThanOrEqual(tipBox.y);
+      expect(tipBox.y - (barBox.y + barBox.height)).toBeLessThan(40);
+    } else {
+      const noticeBox = (await notice(live).boundingBox())!;
+      expect(noticeBox.y).toBeGreaterThan(tipBox.y);
+      expect(noticeBox.y - (tipBox.y + tipBox.height)).toBeLessThan(80);
+    }
     expect(await notice(live).innerText()).not.toMatch(/bachs/i);
     await expect(live.locator('meta[name="robots"]').first()).toHaveAttribute(
       'content',

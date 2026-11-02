@@ -146,6 +146,37 @@ export const pagePaused = defineMailType({
     ),
 });
 
+export const pageImageRemoved = defineMailType({
+  id: 'page_image_removed',
+  category: 'account',
+  sender: 'notifications',
+  preference: null,
+  schema: z.object({ image: z.enum(['cover', 'photo']) }).strict(),
+  sample: { image: 'cover' },
+  render: ({ image }, ctx) => {
+    const name = image === 'cover' ? 'cover' : 'profile photo';
+    return letter(
+      {
+        subject: `We removed your page’s ${name}`,
+        heading: `We removed your page’s ${name}`,
+        blocks: [
+          {
+            kind: 'text',
+            text: `TipMe staff removed the ${name} from your page. Your page is still up and can take tips. You can choose another in Settings. Reply to this email to find out more.`,
+          },
+          {
+            kind: 'button',
+            label: 'Go to Settings',
+            href: mailLink(ctx, '/dashboard/settings', 'settings'),
+          },
+        ],
+        reason: 'You get this email when staff remove an image from your page.',
+      },
+      ctx,
+    );
+  },
+});
+
 export const pageRestored = defineMailType({
   id: 'page_restored',
   category: 'account',

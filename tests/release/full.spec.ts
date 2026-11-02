@@ -110,9 +110,9 @@ test('the whole story works together, and leaves nothing visible behind', async 
       await expect(
         visitor.getByRole('heading', { name: /can’t receive tips just yet/ }),
       ).toBeVisible();
-      await expect(
-        visitor.getByRole('button', { name: /^Tip NGN/ }),
-      ).toHaveCount(0);
+      await expect(visitor.getByRole('button', { name: /^Tip ₦/ })).toHaveCount(
+        0,
+      );
       await recipient.goto('/dashboard');
       await expect(
         recipient

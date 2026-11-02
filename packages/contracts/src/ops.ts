@@ -624,7 +624,15 @@ export interface OpsPage {
   plan: 'free' | 'pro';
   pageState: 'live' | 'not_live' | 'deleted';
   suspended: boolean;
+  /** Optional until the release after the handle rule (the web deploys before the API). */
+  handleChanges?: { used: number; allowed: number };
+  /** Which images staff can review. Optional, as `handleChanges`. */
+  images?: { hasCover: boolean; hasPhoto: boolean };
 }
+
+/** A page's image, as staff review and remove it. */
+export const OPS_PAGE_IMAGES = ['cover', 'photo'] as const;
+export type OpsPageImage = (typeof OPS_PAGE_IMAGES)[number];
 
 /** Making a page Pro or Free again: always with a written reason (audited). */
 export const opsPagePlanSchema = opsReasonSchema
@@ -632,6 +640,16 @@ export const opsPagePlanSchema = opsReasonSchema
   .strict();
 export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
 
+/** Staff allow a page more handle changes, on top of what it has: small, deliberate steps. */
+export const MAX_HANDLE_CHANGE_GRANT = 10;
+/** The most extra changes one page can hold in total; each leaves a name held for good. */
+export const MAX_HANDLE_CHANGE_EXTRA = 20;
+export const opsHandleChangesGrantSchema = opsReasonSchema
+  .extend({ extra: z.number().int().min(1).max(MAX_HANDLE_CHANGE_GRANT) })
+  .strict();
+export type OpsHandleChangesGrantRequest = z.infer<
+  typeof opsHandleChangesGrantSchema
+>;
 /** Staff froze a page's withdrawals after a reported takeover; `issueId` is the case that holds it. */
 export interface OpsWithdrawalFreeze {
   state: 'frozen' | 'already_frozen';

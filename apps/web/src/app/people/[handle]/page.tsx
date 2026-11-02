@@ -1,24 +1,32 @@
 import Link from 'next/link';
-import { notFound, permanentRedirect } from 'next/navigation';
-import type { PublicProfile } from '@tipme/contracts';
-import { Container } from '@tipme/ui';
+import { permanentRedirect } from 'next/navigation';
+import { resolveCover } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { PilotNotice } from '@/components/pilot-notice';
+import {
+  PILOT_NOTICE_SUPPORT_EMAIL,
+  PILOT_NOTICE_TEXT,
+  pilotNoticeShown,
+} from '@/lib/pilot';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
-import {
-  RecipientIdentity,
-  RecipientPortrait,
-} from '@/components/profile/recipient-card';
+import { PageRetry } from '@/components/profile/page-retry';
+import { ProfileCover } from '@/components/profile/cover';
+import { RecipientIdentity } from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ReportPage } from '@/components/report-page';
-import { ShareProfile } from '@/components/share-profile';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getPaymentMode } from '@/lib/payment-mode-api';
 import { profileTippingClosed } from '@/lib/payment-mode';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { getPublicProfile } from '@/lib/profiles-api';
+import { loadPublicProfile } from '@/lib/profiles-api';
+import ProfileUnavailable from './not-found';
+
+// Wait for the cached page rather than stream a silhouette: the name and photo are in the first
+// paint and work without scripts. The status stays 200 for an unknown or moved handle, because
+// Partial Prerendering sends the root shell before this page runs.
+export const instant = false;
 
 type Props = {
   params: Promise<{ handle: string }>;
@@ -26,7 +34,9 @@ type Props = {
 };
 
 export async function generateMetadata({ params }: Props) {
-  const profile = await getPublicProfile((await params).handle);
+  const profile = await loadPublicProfile((await params).handle);
+  // Says nothing about the page: not "unavailable", and no robots rule of its own.
+  if (profile === 'unreachable') return { title: 'Let’s try that again' };
   const copy = paymentModeCopy(await getPaymentMode());
   return profile && !('movedTo' in profile)
     ? previewMetadata(
@@ -37,44 +47,14 @@ export async function generateMetadata({ params }: Props) {
     : { title: 'Page unavailable', robots: { index: false, follow: false } };
 }
 
-const socialNames = {
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  x: 'X (Twitter)',
-} as const;
-
-function Contact({ profile }: { profile: PublicProfile }) {
-  const socials = Object.entries(profile.socials ?? {}) as [
-    keyof typeof socialNames,
-    string,
-  ][];
-  if (socials.length === 0 && !profile.phone && !profile.email) return null;
-  return (
-    <ul className="profile-contact" aria-label="Find me elsewhere">
-      {socials.map(([kind, url]) => (
-        <li key={kind}>
-          <a href={url} rel="noopener noreferrer nofollow" target="_blank">
-            {socialNames[kind]}
-          </a>
-        </li>
-      ))}
-      {profile.phone && (
-        <li>
-          <a href={`tel:${profile.phone}`}>{profile.phone}</a>
-        </li>
-      )}
-      {profile.email && (
-        <li>
-          <a href={`mailto:${profile.email}`}>{profile.email}</a>
-        </li>
-      )}
-    </ul>
-  );
-}
-
 export default async function ProfilePage({ params, searchParams }: Props) {
-  const profile = await getPublicProfile((await params).handle);
-  if (!profile) notFound();
+  const { handle } = await params;
+  const profile = await loadPublicProfile(handle);
+  if (profile === 'unreachable')
+    return <PageRetry href={movedProfilePath(handle, await searchParams)} />;
+  // Rendered, not thrown: the status is 200 either way here, and a thrown not-found leaves the
+  // page blank without scripts.
+  if (!profile) return <ProfileUnavailable />;
   // An old handle of a renamed page: 308 to the current one (printed QR codes keep working).
   if ('movedTo' in profile)
     permanentRedirect(movedProfilePath(profile.movedTo, await searchParams));
@@ -84,29 +64,22 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
-      <Container>
-        <nav className="profile-breadcrumb" aria-label="Breadcrumb">
-          <Link href="/">Home</Link>
-          <span aria-hidden="true">/</span>
-          <span aria-current="page">Meet {firstName}</span>
-        </nav>
-        {/* Portrait-led composition: the identity card and tipping panel overlap the portrait. */}
-        <div className="profile-stage">
-          <div className="profile-scene">
-            <div className="profile-headline">
-              <p className="profile-headline__title">Support Great People</p>
-              <p className="profile-headline__lede">
-                A simpler, more thoughtful way to send appreciation.
-              </p>
-            </div>
-            <RecipientPortrait profile={profile} />
-            <section
-              className="profile-identity-slot"
-              aria-labelledby="profile-name"
-            >
-              <RecipientIdentity profile={profile} />
-            </section>
-          </div>
+      <div className="profile-sheet">
+        <ProfileCover
+          // An API older than the covers sends none: work out the same automatic one here.
+          cover={
+            profile.cover ??
+            resolveCover({
+              handle: profile.handle,
+              coverPath: null,
+              coverDesign: null,
+              coverColour: null,
+            })
+          }
+          priority
+        />
+        <div className="profile-columns">
+          <RecipientIdentity profile={profile} firstName={firstName} />
           <aside
             className="profile-composer tip-instrument"
             aria-label={`Tip ${firstName}`}
@@ -114,13 +87,26 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           >
             {/* Closed checkout outranks the owner's own setup: nobody can tip yet. */}
             {!copy.payable || profileTippingClosed(mode, profile) ? (
-              <TippingOpensSoon />
+              <TippingOpensSoon handle={profile.handle} />
             ) : profile.acceptingTips === false ? (
               <TipsNotReady recipient={firstName} />
             ) : (
               <AppreciationForm
+                surface="profile"
                 paymentMode={mode}
                 pilotNotice={<PilotNotice />}
+                {...(pilotNoticeShown(process.env, mode)
+                  ? {
+                      barNotice: (
+                        <>
+                          {PILOT_NOTICE_TEXT}{' '}
+                          <a href={`mailto:${PILOT_NOTICE_SUPPORT_EMAIL}`}>
+                            {PILOT_NOTICE_SUPPORT_EMAIL}
+                          </a>
+                        </>
+                      ),
+                    }
+                  : {})}
                 recipient={firstName}
                 handle={profile.handle}
                 collapseExtras
@@ -134,30 +120,22 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             )}
           </aside>
         </div>
-        <section className="profile-more" aria-label={`More from ${firstName}`}>
-          {(profile.craft ?? profile.note) && (
-            <div className="profile-more__words">
-              {profile.craft && (
-                <p className="profile-more__craft">{profile.craft}</p>
-              )}
-              {profile.note && (
-                <blockquote className="profile-note">{profile.note}</blockquote>
-              )}
-            </div>
-          )}
-          <div className="profile-more__links">
-            <Contact profile={profile} />
-            <ShareProfile handle={profile.handle} />
-          </div>
-          <div className="profile-safety">
-            <p>{copy.profileSafety}</p>
+        <footer className="profile-foot">
+          <div className="profile-foot__quiet">
+            <ReportPage handle={profile.handle} />
+            <Link href="/legal/privacy">Privacy</Link>
+            <Link href="/legal/terms">Terms</Link>
             {copy.previewPages && (
               <Link href="/about-preview">Learn about this preview</Link>
             )}
-            <ReportPage handle={profile.handle} />
           </div>
-        </section>
-      </Container>
+          {profile.plan !== 'pro' && (
+            <Link className="profile-foot__own" href="/sign-up">
+              Get your own TipMe page
+            </Link>
+          )}
+        </footer>
+      </div>
     </main>
   );
 }
