@@ -125,7 +125,7 @@ export function AppreciationForm({
   const draftKey = useRef<string | null>(null);
   const latestQuote = useRef(0);
   const awaitingFirstTotal = useRef(false);
-  const firstTotalAt = useRef<number | null>(null);
+  const firstTotal = useRef<{ amount: number; at: number } | null>(null);
   // Counted once a page view: choosing a key clears the field, and typing again is the same person.
   const customCounted = useRef(false);
   const customField = useRef<HTMLInputElement>(null);
@@ -158,7 +158,7 @@ export function AppreciationForm({
     }
     if (awaitingFirstTotal.current) {
       awaitingFirstTotal.current = false;
-      firstTotalAt.current = clock();
+      firstTotal.current = { amount: minor, at: clock() };
     }
     setQuote({ kind: 'ready', quote: result.data });
     return result.data;
@@ -217,11 +217,11 @@ export function AppreciationForm({
       field.blur();
       return;
     }
-    // A double tap on the starting amount: the total has only just appeared, so this isn't yet a
-    // decision to pay. The next tap counts.
+    // A double tap on the starting amount: its total has only just appeared, so this isn't yet a
+    // decision to pay. The next tap counts, and so does any tap once the amount has changed.
     if (
-      firstTotalAt.current !== null &&
-      clock() - firstTotalAt.current < FIRST_TOTAL_PAUSE_MS
+      firstTotal.current?.amount === amount &&
+      clock() - firstTotal.current.at < FIRST_TOTAL_PAUSE_MS
     )
       return;
     track('tip_cta_clicked', { surface: 'profile', handle });
