@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Notice, Skeleton } from '@tipme/ui';
 import { PROVIDER_TEST_TOKEN_KEY } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 /** Opened from a provider test email. The token is in the fragment, so it never reaches logs. */
 export default function ConfirmProviderTestPage() {
@@ -23,7 +23,7 @@ export default function ConfirmProviderTestPage() {
     }
     const token = new URLSearchParams(hash.slice(1)).get('t') ?? '';
     history.replaceState(null, '', location.pathname);
-    void apiFetch<{ outcome: 'confirmed' | 'invalid' }>(
+    void opsFetch<{ outcome: 'confirmed' | 'invalid' }>(
       '/v1/ops/providers/tests/confirm',
       { method: 'POST', body: { token } },
     ).then((result) =>

@@ -1,3 +1,26 @@
+# Current task — admin roles, final review fixes (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, not pushed.
+- Done: I1, I2, M1-M10 from `.superpowers/sdd/2026-11-01-admin-roles/final-findings.md`, Task 7 M1-M4 tests and a mutation proof of the race tests. Report: `.superpowers/sdd/2026-11-01-admin-roles/final-fix-report.md`.
+- C1: merged from dev (PR #97). The Pages card now reads whether the issue holding a freeze is open.
+- `@alone` tests are now their own run: `E2E_ALONE=1 playwright test`, or `pnpm test:e2e --alone`; `pnpm test:e2e` runs the suite and then them.
+- Next exact step: the PR. Owner rulings stay open: see the spec header.
+
+# Current task — admin roles Task 7 (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`.
+- Done: the screens on `/ops`: People, Roles, Approvals, a menu from permissions, a fresh-code prompt on every admin call, waiting and acted-alone wording on every gated action, and pending approvals, staff activity and the switch on the Overview. Releasing a freeze is one person with a fresh code again (spec 6.5). No decision is approved by this work.
+- Tests tagged `@alone` revoke all staff and some change the global switch, so they have their own Playwright project: run them alone (superseded: see the entry above).
+- Task 7 fix round 1 and Task 8 (`docs/runbooks/admin-roles.md`) are done, with origin/dev merged: this branch's migrations are now 0064-0070.
+- Next exact step: review, then merge with the payouts plan.
+
+# Current task — admin roles Task 6 (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, with `origin/dev` merged (this branch's migrations are now 0062-0068).
+- Done: every name in `SERIOUS_ACTIONS` is registered in `serious-actions-registered.ts` and its route goes through the approval engine. Provider reads happen in `prepare`, before the transaction. Evidence and open questions: `.superpowers/sdd/2026-11-01-admin-roles/task-6-report.md`.
+- Not done: the screens don't yet handle a route's `202 { requestId }` (Task 7). No decision is approved by this work.
+- Next exact step: review Task 6, then Task 7.
+
 # Current task — merge compact tip card with dev (2 November 2026)
 
 - Branch/worktree: `feat/compact-tip-card`. Existing PR #96; merged current `dev` after resolving the continuity-document conflicts. The merge commit is ready for publication.

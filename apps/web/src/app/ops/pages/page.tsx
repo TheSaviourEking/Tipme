@@ -1,10 +1,15 @@
 'use client';
+import {
+  freezeView,
+  type FreezeRead,
+} from '../../../lib/withdrawal-freeze-view';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   MAX_HANDLE_CHANGE_EXTRA,
   MAX_HANDLE_CHANGE_GRANT,
+  OPS_PAGE_LOOKUP_PERMISSIONS,
   type OpsPage,
   type OpsWithdrawalFreeze,
   type OpsWithdrawalFreezeState,
@@ -17,13 +22,19 @@ import {
   Notice,
   TextareaField,
 } from '@tipme/ui';
+import {
+  ActionOutcome,
+  outcomeOf,
+  type ActionOutcomeState,
+} from '@/components/ops/action-outcome';
 import { PageImages } from '@/components/ops/page-images';
 import { PagePricing, ValueWithReason } from '@/components/ops/page-pricing';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { can, useOpsAccess } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
+import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const STATE_LABELS: Record<OpsPage['pageState'], string> = {
   live: 'Live',
@@ -35,13 +46,13 @@ const STATE_LABELS: Record<OpsPage['pageState'], string> = {
 function MoveSignInEmail({ userId }: { userId: string }) {
   const id = useId();
   const [open, setOpen] = useState(false);
-  const [done, setDone] = useState(false);
+  const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
   const [error, setError] = useState('');
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const text = (key: string) => String(data.get(key) ?? '').trim();
-    const result = await apiFetch(`/v1/ops/accounts/${userId}/email-recovery`, {
+    const answer = await opsAct(`/v1/ops/accounts/${userId}/email-recovery`, {
       method: 'POST',
       body: {
         newEmail: text('newEmail'),
@@ -49,25 +60,27 @@ function MoveSignInEmail({ userId }: { userId: string }) {
         reason: text('reason'),
       },
     });
-    if (result.ok) {
-      setDone(true);
+    if (answer.kind !== 'refused') {
+      setOutcome(
+        outcomeOf(
+          answer,
+          'A code was sent to the new address. Once they enter it at /recover, the move happens after 24 hours, and the old address is told.',
+        ),
+      );
       setOpen(false);
     } else
       setError(
-        result.code === 'FORBIDDEN'
+        answer.code === 'FORBIDDEN'
           ? 'Staff accounts can’t be moved this way.'
-          : 'That didn’t go through. Check the fields and try again.',
+          : answer.code === 'VALIDATION_FAILED'
+            ? 'That didn’t go through. Check the fields and try again.'
+            : refusalWords(answer),
       );
   };
   return (
     <Card className="settings-section">
       <h2>Sign-in email</h2>
-      {done && (
-        <Notice tone="success" title="Started">
-          A code was sent to the new address. Once they enter it at /recover,
-          the move happens after 24 hours, and the old address is told.
-        </Notice>
-      )}
+      {outcome && <ActionOutcome outcome={outcome} />}
       {open ? (
         <form className="settings-form" onSubmit={(e) => void submit(e)}>
           <InputField
@@ -126,7 +139,7 @@ function HandleChanges({
   const [done, setDone] = useState('');
   const grant = async (extra: number, reason: string) => {
     setDone('');
-    const result = await apiFetch<{ allowed: number }>(
+    const result = await opsFetch<{ allowed: number }>(
       `/v1/ops/pages/${encodeURIComponent(page.handle)}/handle-changes`,
       { method: 'POST', body: { extra, reason } },
     );
@@ -177,26 +190,42 @@ function FreezeWithdrawals({
   userId: string | null;
   mayEndSessions: boolean;
 }) {
-  const [issueId, setIssueId] = useState('');
+  const [read, setRead] = useState<FreezeRead>(null);
+  const view = freezeView(read);
+  const issueId = view.issueId;
   const [ended, setEnded] = useState(false);
   useEffect(() => {
-    void apiFetch<OpsWithdrawalFreezeState>(
+    void opsFetch<OpsWithdrawalFreezeState>(
       `/v1/ops/pages/${profileId}/withdrawal-freeze`,
     ).then((result) => {
-      if (result.ok && result.data.issueId) setIssueId(result.data.issueId);
+      setRead(result.ok ? { ok: true, data: result.data } : { ok: false });
     });
   }, [profileId]);
   const freeze = async (reason: string) => {
-    const result = await apiFetch<OpsWithdrawalFreeze>(
+    const result = await opsFetch<OpsWithdrawalFreeze>(
       `/v1/ops/pages/${profileId}/withdrawal-freeze`,
       { method: 'POST', body: { reason } },
     );
-    if (!result.ok) return 'That didn’t go through. Please try again.';
-    setIssueId(result.data.issueId);
+    if (!result.ok) {
+      // It may have worked with the answer lost: read it, rather than trust the card.
+      if (outcomeIsUnknown(result)) {
+        const again = await opsFetch<OpsWithdrawalFreezeState>(
+          `/v1/ops/pages/${profileId}/withdrawal-freeze`,
+        );
+        setRead(again.ok ? { ok: true, data: again.data } : { ok: false });
+        return refusalWords(result);
+      }
+      return 'That didn’t go through. Please try again.';
+    }
+    // Either answer names an open issue: the one this report added to, or the one it opened.
+    setRead({
+      ok: true,
+      data: { issueId: result.data.issueId, issueOpen: true },
+    });
     return null;
   };
   const endSessions = async (reason: string) => {
-    const result = await apiFetch(`/v1/ops/accounts/${userId}/end-sessions`, {
+    const result = await opsFetch(`/v1/ops/accounts/${userId}/end-sessions`, {
       method: 'POST',
       body: { reason },
     });
@@ -217,17 +246,30 @@ function FreezeWithdrawals({
         while support checks. Then: end the sessions, check the current bank,
         and mark any withdrawal the thief asked for as failed.
       </p>
-      {issueId ? (
+      {issueId && !view.issueOpen ? (
+        <Notice tone="neutral" title="Withdrawals are still frozen">
+          The takeover report is closed, but another open issue is holding this
+          page’s withdrawals. If it has been reported again, record it below:
+          that opens a new issue and alerts staff, and the freeze moves to it.
+          See <Link href={`/ops/issues/${issueId}`}>the closed report</Link>.
+        </Notice>
+      ) : null}
+      {issueId && view.issueOpen ? (
         <Notice tone="success" title="Withdrawals are frozen">
           Resolve <Link href={`/ops/issues/${issueId}`}>the issue</Link> once
           the real owner has the account back. Another report can still be
           recorded below.
         </Notice>
       ) : null}
+      {view.warning && (
+        <Notice tone="error" title="Freeze state unknown">
+          {view.warning}
+        </Notice>
+      )}
       <ReasonAction
-        open={issueId ? 'Record another report…' : 'Freeze withdrawals…'}
+        open={view.open}
         field="Who reported it, and what did they say?"
-        submit={issueId ? 'Record report' : 'Freeze withdrawals'}
+        submit={view.submit}
         onSubmit={freeze}
       />
       {ended && (
@@ -258,10 +300,11 @@ export default function OpsPagesPage() {
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const [busy, setBusy] = useState(false);
-  const allowed = can(access, 'pages.plan');
+  const allowed = OPS_PAGE_LOOKUP_PERMISSIONS.some((p) => can(access, p));
+  const mayPlan = can(access, 'pages.plan');
 
   const fetchPage = (wanted: string) =>
-    apiFetch<OpsPage>(`/v1/ops/pages/${encodeURIComponent(wanted)}`);
+    opsFetch<OpsPage>(`/v1/ops/pages/${encodeURIComponent(wanted)}`);
   const show = (
     wanted: string,
     result: Awaited<ReturnType<typeof fetchPage>>,
@@ -298,7 +341,7 @@ export default function OpsPagesPage() {
   if (!allowed)
     return (
       <Notice tone="neutral" title="Not part of your role">
-        Changing a page’s plan needs the “pages.plan” permission.
+        Finding a page needs a permission that acts on pages.
       </Notice>
     );
 
@@ -309,7 +352,7 @@ export default function OpsPagesPage() {
 
   const changePlan = async (current: OpsPage, reason: string) => {
     const plan = current.plan === 'pro' ? 'free' : 'pro';
-    const result = await apiFetch<OpsPage>(
+    const result = await opsFetch<OpsPage>(
       `/v1/ops/pages/${current.profileId}/plan`,
       { method: 'POST', body: { plan, reason } },
     );
@@ -361,17 +404,19 @@ export default function OpsPagesPage() {
             {STATE_LABELS[page.pageState]}
             {page.suspended ? ' · Paused by TipMe' : ''}
           </p>
-          <ReasonAction
-            key={page.plan}
-            open={page.plan === 'pro' ? 'Move back to Free…' : 'Make Pro…'}
-            field={
-              page.plan === 'pro'
-                ? 'Why is this page going back to Free?'
-                : 'Why is this page getting Pro?'
-            }
-            submit={page.plan === 'pro' ? 'Move to Free' : 'Make Pro'}
-            onSubmit={(reason) => changePlan(page, reason)}
-          />
+          {mayPlan && (
+            <ReasonAction
+              key={page.plan}
+              open={page.plan === 'pro' ? 'Move back to Free…' : 'Make Pro…'}
+              field={
+                page.plan === 'pro'
+                  ? 'Why is this page going back to Free?'
+                  : 'Why is this page getting Pro?'
+              }
+              submit={page.plan === 'pro' ? 'Move to Free' : 'Make Pro'}
+              onSubmit={(reason) => changePlan(page, reason)}
+            />
+          )}
         </Card>
       )}
       {page?.images && can(access, 'pages.suspend') && (
@@ -385,7 +430,7 @@ export default function OpsPagesPage() {
           }}
         />
       )}
-      {page?.handleChanges && (
+      {mayPlan && page?.handleChanges && (
         <HandleChanges
           key={`handle-changes-${page.profileId}`}
           page={page}

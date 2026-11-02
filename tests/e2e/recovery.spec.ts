@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
-import { enrolOwner } from './ops-helpers';
+import { enrolOwner, noOtherStaff } from './ops-helpers';
 
 async function mailCode(page: Page, hint: string, subject: string) {
   const inbox = await page.context().newPage();
@@ -107,10 +107,11 @@ test('someone without their email recovers, waits 24 hours, and can cancel from 
   await expect(page.getByText(/being moved to n•••@/)).toHaveCount(0);
 });
 
-test('staff move a sign-in email with the checks recorded, and the person finishes it', async ({
+test('@alone staff move a sign-in email with the checks recorded, and the person finishes it', async ({
   page,
   browser,
 }, testInfo) => {
+  await noOtherStaff();
   const person = await (await browser.newContext()).newPage();
   const who = await signUpRecipient(person, testInfo, { live: false });
   await enrolOwner(page, testInfo);

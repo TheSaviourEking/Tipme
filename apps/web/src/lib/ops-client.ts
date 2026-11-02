@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext } from 'react';
+import { OPS_ISSUE_OUTCOME_WORDS } from '@tipme/contracts';
 
 /** The signed-in staff member's role and permissions (the server checks them on every call). */
 export interface OpsAccess {
@@ -39,15 +40,14 @@ export const PROVIDER_TEST_TOKEN_KEY = 'tipme.provider-test-token';
 
 /** How staff say a money issue was settled. TipMe changes no balance by it. */
 export const ISSUE_OUTCOME_CHOICES: Record<string, string> = {
-  resolved_by_provider: 'Settled by the provider',
-  recipient_owes: 'The recipient owes the money',
-  written_off: 'Written off by TipMe',
-  account_secured: 'The real owner has the account back',
+  resolved_by_provider: OPS_ISSUE_OUTCOME_WORDS.resolved_by_provider,
+  recipient_owes: OPS_ISSUE_OUTCOME_WORDS.recipient_owes,
+  written_off: OPS_ISSUE_OUTCOME_WORDS.written_off,
+  account_secured: OPS_ISSUE_OUTCOME_WORDS.account_secured,
 };
 /** Every outcome that can be shown. The last is only ever stated by the mark-failed tool. */
 export const ISSUE_OUTCOME_LABELS: Record<string, string> = {
-  ...ISSUE_OUTCOME_CHOICES,
-  staff_confirmed_absent: 'Staff confirmed the provider has no such payout',
+  ...OPS_ISSUE_OUTCOME_WORDS,
 };
 
 export const ISSUE_KIND_LABELS: Record<string, string> = {
@@ -66,6 +66,9 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payout_fee_short: 'Payout fee above what was covered',
   payout_held: 'Withdrawal waiting on a hold',
   account_takeover_reported: 'Reported account takeover',
+  staff_acted_alone: 'Serious action without a second person',
+  staff_approval_pending: 'Serious action waiting for approval',
+  staff_last_approver_removed: 'Last second person removed',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',
@@ -81,3 +84,18 @@ export const SEVERITY_LABELS: Record<string, string> = {
   account: 'Account',
   info: 'Info',
 };
+
+/** An emailed enrolment link: `/ops#enrol=<code>`. The fragment never reaches a server or a log. */
+export const ENROL_LINK_PREFIX = '#enrol=';
+export const ENROL_LINK_KEY = 'tipme.enrol-link';
+
+/** Takes an enrolment code out of the address bar and this tab's storage, whatever happened next. */
+export function clearEnrolLink(): void {
+  if (location.hash.startsWith(ENROL_LINK_PREFIX))
+    history.replaceState(null, '', location.pathname + location.search);
+  try {
+    sessionStorage.removeItem(ENROL_LINK_KEY);
+  } catch {
+    // Storage blocked: nothing was kept.
+  }
+}

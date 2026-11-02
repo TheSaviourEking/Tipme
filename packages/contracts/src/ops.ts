@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { WebVitalSummary } from './analytics.js';
+import { OPS_PERMISSIONS } from './ops-catalogue.js';
 import type { ProfileReportReason } from './profiles.js';
 
 // Staff admin area (PR-009, ADR-0010).
@@ -21,9 +22,20 @@ export interface OpsEnrolment {
 
 /** What `/v1/ops/me` tells a staff member; everyone else gets 404. */
 export type OpsMe =
-  | { state: 'needs_enrolment' }
+  | { state: 'needs_enrolment'; canDecline: boolean }
   | { state: 'needs_code' }
   | { state: 'granted'; role: string; permissions: string[] };
+
+/** One line of who changed what among staff (spec 6.4): fixed names, never the written reason. */
+export interface OpsStaffActivity {
+  seq: number;
+  action: string;
+  staffUserId: string | null;
+  staffHint: string | null;
+  /** For an action taken alone: which one. */
+  seriousAction: string | null;
+  at: string;
+}
 
 export interface OpsAuditEntry {
   seq: number;
@@ -42,6 +54,86 @@ export const opsReasonSchema = z
   .object({ reason: z.string().trim().min(10).max(500) })
   .strict();
 export type OpsReasonRequest = z.infer<typeof opsReasonSchema>;
+
+export const OPS_APPROVAL_STATUSES = [
+  'pending',
+  'approved',
+  'rejected',
+  'cancelled',
+  'expired',
+  'stale',
+] as const;
+export type OpsApprovalStatus = (typeof OPS_APPROVAL_STATUSES)[number];
+
+/** Why a request closed without running: fixed codes, for a screen to put into words. */
+export const OPS_APPROVAL_STALE_REASONS = [
+  'requester_lost_access',
+  'requester_removed',
+  'requester_reset',
+  'facts_changed',
+  'description_changed',
+  'permission_changed',
+  'action_unknown',
+  'superseded',
+] as const;
+export type OpsApprovalStaleReason =
+  (typeof OPS_APPROVAL_STALE_REASONS)[number];
+
+/** A code entered for this approval: a recent one in the session doesn't count (spec 6.9). */
+export const opsApproveSchema = opsCodeSchema
+  .extend({ reason: z.string().trim().min(10).max(500).optional() })
+  .strict();
+export type OpsApproveRequest = z.infer<typeof opsApproveSchema>;
+
+export const opsApprovalListSchema = z
+  .object({ status: z.enum(OPS_APPROVAL_STATUSES).optional() })
+  .strict();
+export type OpsApprovalListQuery = z.infer<typeof opsApprovalListSchema>;
+
+/** A request as a screen shows it: the words fixed when asked for, and never the payload. */
+export interface OpsApproval {
+  id: string;
+  action: string;
+  summary: string;
+  permission: string;
+  requestedBy: string;
+  requestedByHint: string | null;
+  reason: string;
+  status: OpsApprovalStatus;
+  decidedBy: string | null;
+  decidedByHint: string | null;
+  decidedReason: string | null;
+  createdAt: string;
+  expiresAt: string;
+  decidedAt: string | null;
+  mine: boolean;
+  /** Whether this viewer could approve or reject it now. */
+  canDecide: boolean;
+  /** Waiting, with nobody left who could decide: the requester can cancel and act alone. */
+  nobodyElseQualified: boolean;
+}
+
+/** A serious action waiting for a second person: its route answers 202 with this. */
+export interface OpsSeriousPending {
+  requestId: string;
+  /** The same thing was already waiting, and this is that request. */
+  repeat?: true;
+}
+
+/** On a serious action's normal answer, when it ran because nobody else could approve it. */
+export interface OpsActedAlone {
+  actedAlone?: true;
+}
+
+/** Closing a takeover: its freeze lifted, or another open issue still holds withdrawals. */
+export interface OpsFreezeReleased {
+  withdrawals: 'released' | 'still_held';
+  stillOpen: { id: string; kind: string }[];
+}
+
+export interface OpsApprovalApproved {
+  status: 'approved';
+}
 
 /** Resolving an issue: a money issue must also say how it was settled (the operation checks). */
 export const opsResolveIssueSchema = opsReasonSchema
@@ -149,6 +241,9 @@ export const ISSUE_KINDS = [
   'account_takeover_reported',
   'reserve_empty',
   'provider_key_refused',
+  'staff_acted_alone',
+  'staff_approval_pending',
+  'staff_last_approver_removed',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -165,6 +260,15 @@ export const ISSUE_OUTCOMES = [
   'account_secured',
 ] as const;
 export type OpsIssueOutcome = (typeof ISSUE_OUTCOMES)[number];
+
+/** Outcomes in plain words: for the screens, and fixed into a request's summary when asked. */
+export const OPS_ISSUE_OUTCOME_WORDS: Record<OpsIssueOutcome, string> = {
+  resolved_by_provider: 'Settled by the provider',
+  recipient_owes: 'The recipient owes the money',
+  written_off: 'Written off by TipMe',
+  account_secured: 'The real owner has the account back',
+  staff_confirmed_absent: 'Staff confirmed the provider has no such payout',
+};
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
 
 /** What an issue is about: ids only (no names, messages or numbers). */
@@ -176,6 +280,7 @@ export interface OpsIssueSubject {
   userId?: string;
   unmatchedId?: string;
   recoveryId?: string;
+  requestId?: string;
   providerEventRowId?: string;
 }
 
@@ -656,9 +761,10 @@ export interface OpsWithdrawalFreeze {
   issueId: string;
 }
 
-/** Whether a page's withdrawals are frozen now, and the issue that holds them. */
+/** Whether a page's withdrawals are frozen now, the issue that holds them, and if it's still open. */
 export interface OpsWithdrawalFreezeState {
   issueId: string | null;
+  issueOpen: boolean;
 }
 
 /** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
@@ -947,3 +1053,128 @@ export const opsEmailRecoverySchema = opsReasonSchema
   })
   .strict();
 export type OpsEmailRecoveryRequest = z.infer<typeof opsEmailRecoverySchema>;
+
+// Custom roles and per-person access (admin roles plan, Task 2).
+
+const opsPermissionList = z
+  .array(z.enum(OPS_PERMISSIONS))
+  .max(OPS_PERMISSIONS.length)
+  .refine((list) => new Set(list).size === list.length, 'repeated permission');
+const opsRoleName = z.string().trim().min(2).max(60);
+const opsRoleDescription = z.string().trim().max(300);
+
+/** A new role starts with nothing ticked. */
+export const opsRoleCreateSchema = opsReasonSchema.extend({
+  name: opsRoleName,
+  description: opsRoleDescription.default(''),
+  permissions: opsPermissionList.default([]),
+});
+export type OpsRoleCreateRequest = z.infer<typeof opsRoleCreateSchema>;
+
+export const opsRoleUpdateSchema = opsReasonSchema
+  .extend({
+    name: opsRoleName.optional(),
+    description: opsRoleDescription.optional(),
+    permissions: opsPermissionList.optional(),
+  })
+  .refine(
+    (patch) =>
+      patch.name !== undefined ||
+      patch.description !== undefined ||
+      patch.permissions !== undefined,
+    'nothing to change',
+  );
+export type OpsRoleUpdateRequest = z.infer<typeof opsRoleUpdateSchema>;
+
+export const opsRoleImpactSchema = z
+  .object({ permissions: opsPermissionList })
+  .strict();
+export type OpsRoleImpactRequest = z.infer<typeof opsRoleImpactSchema>;
+
+/** The person's full list of adjustments: it replaces what they had. */
+export const opsPersonalAccessSchema = opsReasonSchema
+  .extend({ additions: opsPermissionList, removals: opsPermissionList })
+  .refine(
+    (body) => !body.additions.some((p) => body.removals.includes(p)),
+    'a permission cannot be both added and removed',
+  );
+export type OpsPersonalAccessRequest = z.infer<typeof opsPersonalAccessSchema>;
+
+export const opsChangeRoleSchema = opsReasonSchema.extend({
+  roleId: z.string().min(1).max(64),
+});
+export type OpsChangeRoleRequest = z.infer<typeof opsChangeRoleSchema>;
+
+export interface OpsRole {
+  id: string;
+  name: string;
+  description: string;
+  /** Built in: `owner` and `release_check`, which can't be edited or deleted. */
+  system: boolean;
+  permissions: string[];
+  /** Active staff on this role. */
+  people: number;
+}
+
+export interface OpsEffectiveAccess {
+  roleId: string;
+  permissions: string[];
+  additions: string[];
+  removals: string[];
+}
+
+/** What a role edit would do; a person is listed only if their access would really change. */
+export interface OpsRoleImpact {
+  roleId: string;
+  added: string[];
+  removed: string[];
+  affected: {
+    userId: string;
+    email: string | null;
+    gains: string[];
+    losses: string[];
+  }[];
+}
+
+export interface OpsRoleUpdated {
+  role: OpsRole;
+  affected: OpsRoleImpact['affected'];
+}
+
+export const opsAddStaffSchema = opsReasonSchema
+  .extend({
+    email: z.string().trim().min(3).max(254),
+    roleId: z.string().min(1).max(100),
+  })
+  .strict();
+export type OpsAddStaffRequest = z.infer<typeof opsAddStaffSchema>;
+
+/** The enrolment code goes only to the person, by email. */
+export interface OpsStaffAdded {
+  userId: string;
+  roleId: string;
+  enrolmentExpiresAt: string;
+  /** 'suppressed': the address is known not to accept mail, so the link won't arrive. */
+  delivery: OpsInvitationDelivery;
+}
+
+export type OpsInvitationDelivery = 'queued' | 'suppressed';
+
+export interface OpsEnrolmentLinkSent {
+  enrolmentExpiresAt: string;
+  delivery: OpsInvitationDelivery;
+}
+
+export interface OpsStaffPerson {
+  userId: string;
+  email: string | null;
+  roleId: string;
+  roleName: string;
+  grantedAt: string;
+  enrolled: boolean;
+  /** The newest link's email state and whether it can still be used; null once enrolled. */
+  invitation: { status: string; linkOpen: boolean } | null;
+  permissions: string[];
+  additions: string[];
+  removals: string[];
+}

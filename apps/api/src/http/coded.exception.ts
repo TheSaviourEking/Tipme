@@ -6,6 +6,8 @@ export class CodedHttpException extends HttpException {
   constructor(
     status: number,
     readonly code: ApiErrorCode,
+    /** A fixed code to add to the response, never request data. */
+    readonly reason?: string,
   ) {
     super(code, status);
   }

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, gt, isNotNull, isNull, ne } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { Database, Tx } from '../client.js';
 import {
   emailTokens,
   phoneRecoveries,
@@ -14,7 +14,7 @@ import { emailChangedAtFor, normaliseEmail } from './email-address.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { writePretendMessage } from './pretend-outbox.js';
-import { dropOpsAccess, isActiveStaff } from './staff.js';
+import { dropOpsAccess, isActiveStaff, lockedActiveStaff } from './staff.js';
 import { verifySignInCode } from './sign-in.js';
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -66,7 +66,7 @@ export function startEmailVerification(
 }
 
 async function useToken(
-  db: Database,
+  db: Database | Tx,
   token: string,
   purpose: 'verify' | 'recover',
   now: Date,
@@ -100,21 +100,26 @@ async function useToken(
 export function confirmEmail(
   db: Database,
   input: { token: string; now?: Date },
-): Promise<'confirmed' | 'invalid'> {
+): Promise<'confirmed' | 'invalid' | 'staff_account'> {
   const now = input.now ?? new Date();
-  return guarded(async () => {
-    const row = await useToken(db, input.token, 'verify', now, true);
-    if (!row) return 'invalid';
-    await db
-      .update(users)
-      .set({
-        email: row.email,
-        emailVerifiedAt: now,
-        emailChangedAt: emailChangedAtFor(row.email, now),
-      })
-      .where(eq(users.id, row.userId));
-    return 'confirmed';
-  });
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const row = await useToken(tx, input.token, 'verify', now, true);
+      if (!row) return 'invalid' as const;
+      // Refused like changeEmail, and the link is used up either way.
+      if (await lockedActiveStaff(tx, row.userId))
+        return 'staff_account' as const;
+      await tx
+        .update(users)
+        .set({
+          email: row.email,
+          emailVerifiedAt: now,
+          emailChangedAt: emailChangedAtFor(row.email, now),
+        })
+        .where(eq(users.id, row.userId));
+      return 'confirmed' as const;
+    }),
+  );
 }
 
 /**
@@ -180,9 +185,10 @@ export function checkRecoveryToken(
   );
 }
 
-async function attachPhone(
+/** Checks a code proving a new number. Commits by itself, so a wrong guess is always counted. */
+async function provePhone(
   db: Database,
-  input: { userId: string; newPhone: string; code: string; secret: string },
+  input: { newPhone: string; code: string; secret: string },
 ): Promise<string> {
   const phone = normalisePhone(input.newPhone);
   if (!phone) throw new OperationError('INVALID_INPUT');
@@ -193,19 +199,28 @@ async function attachPhone(
     purpose: 'change_phone',
   });
   if (verified.status !== 'ok') throw new OperationError('CODE_INVALID');
-  const [owner] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.phoneE164, phone), ne(users.id, input.userId)));
-  if (owner) throw new OperationError('PHONE_TAKEN');
-  await db
-    .update(users)
-    .set({ phoneE164: phone })
-    .where(eq(users.id, input.userId));
   return phone;
 }
 
-/** A signed-in recipient moves to a new number, proven by a code sent to that number. */
+async function savePhone(
+  db: Database | Tx,
+  userId: string,
+  phone: string,
+): Promise<void> {
+  const [owner] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.phoneE164, phone), ne(users.id, userId)));
+  if (owner) throw new OperationError('PHONE_TAKEN');
+  await db.update(users).set({ phoneE164: phone }).where(eq(users.id, userId));
+}
+
+/**
+ * A signed-in recipient moves to a new number, proven by a code sent to that number. All or nothing
+ * once the code is good. Refused for active staff: moving a number removes the authenticator, which
+ * a recipient session must never be able to do. `requirePage` refuses an account with no page
+ * before anything changes, for a caller that answers with the page.
+ */
 export function changePhone(
   db: Database,
   input: {
@@ -214,23 +229,43 @@ export function changePhone(
     code: string;
     secret: string;
     keepSessionId?: string;
+    requirePage?: boolean;
   },
 ): Promise<{ phone: string }> {
+  const refusals = async (tx: Database | Tx) => {
+    if (await isActiveStaff(tx, input.userId))
+      throw new OperationError('STAFF_PHONE_LOCKED');
+    if (input.requirePage) {
+      const [page] = await tx
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(eq(profiles.userId, input.userId));
+      if (!page) throw new OperationError('PROFILE_NOT_FOUND');
+    }
+  };
   return guarded(async () => {
-    const phone = await attachPhone(db, input);
-    await dropOpsAccess(db, input.userId);
-    await db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(sessions.userId, input.userId),
-          isNull(sessions.revokedAt),
-          ...(input.keepSessionId
-            ? [ne(sessions.id, input.keepSessionId)]
-            : []),
-        ),
-      );
+    // Before the code, so a refusal doesn't use it up; and again below, under the account's lock.
+    await refusals(db);
+    const phone = await provePhone(db, input);
+    await db.transaction(async (tx) => {
+      await lockedActiveStaff(tx, input.userId);
+      await refusals(tx);
+      await savePhone(tx, input.userId, phone);
+      // Not staff (checked above), but a removed person's leftovers must not survive the move.
+      await dropOpsAccess(tx, input.userId);
+      await tx
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(sessions.userId, input.userId),
+            isNull(sessions.revokedAt),
+            ...(input.keepSessionId
+              ? [ne(sessions.id, input.keepSessionId)]
+              : []),
+          ),
+        );
+    });
     return { phone };
   });
 }
@@ -354,23 +389,30 @@ export function pendingRecoveries(
 export function confirmEmailForUser(
   db: Database,
   input: { token: string; now?: Date },
-): Promise<{ status: 'confirmed' | 'invalid'; handle: string | null }> {
+): Promise<{
+  status: 'confirmed' | 'invalid' | 'staff_account';
+  handle: string | null;
+}> {
   const now = input.now ?? new Date();
-  return guarded(async () => {
-    const row = await useToken(db, input.token, 'verify', now, true);
-    if (!row) return { status: 'invalid' as const, handle: null };
-    await db
-      .update(users)
-      .set({
-        email: row.email,
-        emailVerifiedAt: now,
-        emailChangedAt: emailChangedAtFor(row.email, now),
-      })
-      .where(eq(users.id, row.userId));
-    const [page] = await db
-      .select({ handle: profiles.handleLower })
-      .from(profiles)
-      .where(eq(profiles.userId, row.userId));
-    return { status: 'confirmed' as const, handle: page?.handle ?? null };
-  });
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const row = await useToken(tx, input.token, 'verify', now, true);
+      if (!row) return { status: 'invalid' as const, handle: null };
+      if (await lockedActiveStaff(tx, row.userId))
+        return { status: 'staff_account' as const, handle: null };
+      await tx
+        .update(users)
+        .set({
+          email: row.email,
+          emailVerifiedAt: now,
+          emailChangedAt: emailChangedAtFor(row.email, now),
+        })
+        .where(eq(users.id, row.userId));
+      const [page] = await tx
+        .select({ handle: profiles.handleLower })
+        .from(profiles)
+        .where(eq(profiles.userId, row.userId));
+      return { status: 'confirmed' as const, handle: page?.handle ?? null };
+    }),
+  );
 }

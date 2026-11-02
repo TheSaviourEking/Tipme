@@ -5,7 +5,10 @@ import {
   Inject,
   Param,
   Post,
+  Res,
+  SetMetadata,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   opsNoteSchema,
   opsBachsAccountRecoverySchema,
@@ -23,6 +26,8 @@ import {
   type OpsRecheckOutcome,
   type OpsRecheckRequest,
   type OpsResolveIssueRequest,
+  type OpsFreezeReleased,
+  type OpsSeriousPending,
 } from '@tipme/contracts';
 import {
   addIssueNote,
@@ -38,6 +43,9 @@ import {
   recoverUnknownPaymentAccount,
   resolveIssue,
   setPageSuspension,
+  freezeReleaseBySubject,
+  requestSeriousAction,
+  type SeriousActionServices,
 } from '@tipme/database';
 import {
   BachsApiError,
@@ -46,6 +54,11 @@ import {
   type MockProvider,
 } from '@tipme/payments';
 import type { Logger } from '@tipme/observability';
+import {
+  RATE_LIMIT_ROUTE,
+  RateLimitGuard,
+} from '../checkout/rate-limit.guard.js';
+import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import {
   BACHS_PROVIDER_TOKEN,
   PAYMENT_PROVIDER_TOKEN,
@@ -56,12 +69,13 @@ import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { LOGGER } from '../tokens.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { MailSealing } from '@tipme/database';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const uuidParam = (value: string) => {
+export const uuidParam = (value: string) => {
   if (!UUID.test(value)) throw new CodedHttpException(404, 'NOT_FOUND');
   return value;
 };
@@ -81,22 +95,74 @@ export class OpsActionsController {
     private readonly bachsProvider: BachsProvider | null,
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Inject(RateLimitGuard) private readonly rateLimit: RateLimitGuard,
   ) {}
 
   @Post('issues/:id/resolve')
   @HttpCode(200)
+  // For the document: the handler counts money closes only, so the guard isn't on this route.
+  @SetMetadata(RATE_LIMIT_ROUTE, 'ops_request (money closes only)')
+  @FreshCode()
   @OpsPermission('issues.resolve')
   async resolve(
     @CurrentOps() ops: OpsContext,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(opsResolveIssueSchema))
     body: OpsResolveIssueRequest,
-  ): Promise<ApiDataResponse<{ resolved: true }>> {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<
+      ({ resolved: true } & Partial<OpsFreezeReleased>) | OpsSeriousPending
+    >
+  > {
     // Closing a money issue can lift a hold, so it takes what acting on money takes.
     const issue = await issueById(this.database.db, uuidParam(id));
     if (issue?.severity === 'money' && !ops.permissions.has('payouts.resolve'))
       throw new CodedHttpException(403, 'FORBIDDEN');
-    await resolveIssue(this.database.db, {
+    // Releasing a freeze is one person with the route's fresh code (spec 6.5); the operation demands
+    // the written check, and it is audited and alerted. Nothing else about a takeover closes it.
+    const releasesFreeze =
+      issue?.kind === 'account_takeover_reported' &&
+      issue.status === 'open' &&
+      body.outcome === 'account_secured';
+    // Not on your own page while someone else could; alone, it goes the alone way below and says so.
+    const bySubject = releasesFreeze
+      ? await freezeReleaseBySubject(this.database.db, {
+          issueId: uuidParam(id),
+          actorId: ops.userId,
+        })
+      : 'not_subject';
+    if (bySubject === 'refused')
+      throw new CodedHttpException(403, 'APPROVAL_SUBJECT');
+    // Closing money by hand takes a second person, when there is one. Only this counts as asking.
+    if (
+      issue?.severity === 'money' &&
+      issue.status === 'open' &&
+      (!releasesFreeze || bySubject === 'alone')
+    ) {
+      await this.rateLimit.consumeForPerson('ops_request', ops.userId);
+      const outcome = await requestSeriousAction(this.database.db, {
+        name: 'money_issue.close',
+        payload: {
+          issueId: uuidParam(id),
+          outcome: body.outcome ?? null,
+          ...(body.bankAndSignInChecked !== undefined
+            ? { bankAndSignInChecked: body.bankAndSignInChecked }
+            : {}),
+        },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      });
+      const answer = pendingOr<{ resolved: true } & Partial<OpsFreezeReleased>>(
+        outcome,
+        response,
+      );
+      return { data: 'pending' in answer ? answer.pending : answer.result };
+    }
+    const closed = await resolveIssue(this.database.db, {
       issueId: uuidParam(id),
       staffUserId: ops.userId,
       reason: body.reason,
@@ -105,7 +171,7 @@ export class OpsActionsController {
         ? { bankAndSignInChecked: body.bankAndSignInChecked }
         : {}),
     });
-    return { data: { resolved: true } };
+    return { data: { resolved: true, ...closed } };
   }
 
   @Post('issues/:id/notes')
@@ -174,7 +240,8 @@ export class OpsActionsController {
   /** Verifies a dashboard-found checkout before linking it; unknown/mismatched IDs stay unlinked. */
   @Post('bachs/checkout-recovery')
   @HttpCode(200)
-  @OpsPermission('payments.recheck')
+  @FreshCode()
+  @OpsPermission('payments.repair')
   async recoverBachsCheckout(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsBachsCheckoutRecoverySchema))
@@ -331,7 +398,8 @@ export class OpsActionsController {
    */
   @Post('bachs/fee-bearer-confirmation')
   @HttpCode(200)
-  @OpsPermission('payments.recheck')
+  @FreshCode()
+  @OpsPermission('payments.repair')
   async confirmBachsFeeBearer(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsBachsFeeBearerSchema))
@@ -432,7 +500,8 @@ export class OpsActionsController {
 
   @Post('bachs/account-recovery')
   @HttpCode(200)
-  @OpsPermission('payments.recheck')
+  @FreshCode()
+  @OpsPermission('payments.repair')
   async recoverBachsAccount(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsBachsAccountRecoverySchema))
@@ -583,7 +652,7 @@ export class OpsActionsController {
     return recordAudit(this.database.db, {
       staffUserId: ops.userId,
       action,
-      permission: 'payments.recheck',
+      permission: 'payments.repair',
       subjectType: 'provider_recovery',
       subjectId,
       reason,

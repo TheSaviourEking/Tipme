@@ -95,6 +95,17 @@ function controller(db, bachsProvider) {
   );
 }
 
+/** Repair audit rows name the permission that guards the route, not the older recheck one. */
+async function assertRepairAudited(database) {
+  const { rows } = await database.pool.query(
+    `SELECT DISTINCT permission FROM audit_events WHERE permission IS NOT NULL`,
+  );
+  assert.deepEqual(
+    rows.map((r) => r.permission),
+    ['payments.repair'],
+  );
+}
+
 test('checkout recovery verifies matching provider evidence before attaching and processing it', async (t) => {
   const database = await databaseFor(t);
   const { attemptId, issueId, quote } = await unknownCheckout(database);
@@ -135,6 +146,7 @@ test('checkout recovery verifies matching provider evidence before attaching and
   ).rows[0];
   assert.equal(attempt.status, 'VERIFIED_SUCCEEDED');
   assert.equal(attempt.provider_reference, 'acct_ada123:chk_test123');
+  await assertRepairAudited(database);
 });
 
 test('checkout recovery leaves an unlocated checkout unknown and unlinked', async (t) => {
@@ -271,6 +283,7 @@ test('account recovery fetches provider status, links only the verified recipien
     ])
   ).rows[0];
   assert.equal(issue.status, 'resolved');
+  await assertRepairAudited(database);
 });
 
 test('staff recovery never activates an account whose recipient would bear Bachs fees', async (t) => {

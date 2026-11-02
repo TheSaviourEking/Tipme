@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
+import { OPS_PERMISSIONS } from '@tipme/contracts';
 import { totpAt } from '@tipme/domain';
 import {
   changePhone,
@@ -109,7 +110,7 @@ test('staff access', async (t) => {
       );
       assert.equal(
         (await staffPermissions(database.db, userId)).size,
-        15,
+        OPS_PERMISSIONS.length,
         'Owner holds every permission',
       );
       await assert.rejects(
@@ -203,7 +204,7 @@ test('staff access', async (t) => {
             now: later,
           })
         ).status,
-        'invalid',
+        'reused',
       );
       const audit = await listAudit(database.db, { limit: 10 });
       assert.ok(audit.some((e) => e.action === 'ops.grant_opened'));
@@ -382,7 +383,7 @@ test('staff access', async (t) => {
   });
 
   await t.test(
-    'a phone change removes the authenticator and every grant',
+    'a phone change is refused for active staff: their authenticator and grant stay',
     async () => {
       await database.fresh();
       const { userId, sessionId, totp } = await enrolledOwner(database.db);
@@ -402,34 +403,23 @@ test('staff access', async (t) => {
       const code = /\b(\d{6})\b/.exec(
         (await listPretendOutbox(database.db, { limit: 1 }))[0].body,
       )[1];
-      await changePhone(database.db, {
-        userId,
-        newPhone: '+2348035550111',
-        code,
-        secret,
-        keepSessionId: sessionId,
-      });
-      assert.equal(await database.count('staff_totp'), 0);
-      assert.equal(
+      await assert.rejects(
+        changePhone(database.db, {
+          userId,
+          newPhone: '+2348035550111',
+          code,
+          secret,
+          keepSessionId: sessionId,
+        }),
+        (error) => error.code === 'STAFF_PHONE_LOCKED',
+      );
+      assert.equal(await database.count('staff_totp'), 1);
+      assert.ok(
         await resolveOpsGrant(database.db, {
           token: opened.token,
           sessionId,
           now,
         }),
-        null,
-      );
-      assert.equal(
-        (
-          await openOpsGrant(database.db, {
-            userId,
-            sessionId,
-            code: codeAt(totp, at(5 * MIN)),
-            key,
-            now: at(5 * MIN),
-          })
-        ).status,
-        'not_staff',
-        'not enrolled any more: the grant command must be run again',
       );
     },
   );
@@ -456,7 +446,7 @@ test('staff access', async (t) => {
   );
 
   await t.test(
-    'a completed phone recovery removes ops access too',
+    'a phone recovery that comes due on active staff is cancelled, and their access stays',
     async () => {
       await database.fresh();
       const { userId } = await enrolledOwner(database.db);
@@ -469,8 +459,14 @@ test('staff access', async (t) => {
       const [user] = await q('SELECT phone_e164 FROM users WHERE id = $1', [
         userId,
       ]);
-      assert.equal(user.phone_e164, '+2348035550122');
-      assert.equal(await database.count('staff_totp'), 0);
+      assert.notEqual(user.phone_e164, '+2348035550122');
+      assert.equal(await database.count('staff_totp'), 1);
+      const [recovery] = await q(
+        'SELECT cancelled_at, completed_at FROM phone_recoveries WHERE user_id = $1',
+        [userId],
+      );
+      assert.ok(recovery.cancelled_at);
+      assert.equal(recovery.completed_at, null);
     },
   );
 });

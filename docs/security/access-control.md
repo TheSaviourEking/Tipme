@@ -30,7 +30,9 @@ Status: the code can move real money once the owner works through `docs/runbooks
 
 ## Staff roles and permissions
 
-Two roles exist today. **Owner** holds every permission; staff are created only on the server with `pnpm ops:grant-owner`. **release_check** is the release check's own staff account and holds only `issues.view`, `issues.resolve`, `analytics.view` and `audit.view`. A new role is a row in the database (a name and a set of permissions) and needs no code change. A role with fewer permissions gets `403` on the rest (tested).
+**Owner** is built in and holds every permission. **release_check** is the release check's own staff account and holds only `issues.view`, `issues.resolve`, `analytics.view` and `audit.view`; it can't be edited or given from the dashboard. Staff with `staff.manage` add people, and create custom roles (a name and a set of permissions, with no code change), from the dashboard. Support, Finance and Marketing are starter roles. A person's access is their role's permissions, plus additions, minus removals, read on every request. Anything outside it gets `403` (tested). `pnpm ops:grant-owner` stays as the server-side way in if every owner is locked out.
+
+Serious actions wait for a second qualified person, and run alone with an alert when nobody else qualifies. Switching withdrawals off, freezing a page and ending sessions take no fresh code, so they work first time; switching on and releasing a freeze take one. Releasing a freeze is one person, audited and alerted, and not on your own page while someone else could do it. `docs/runbooks/admin-roles.md` has the rules, and none of this approves a regulatory decision.
 
 | Permission          | What it allows                                                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -55,20 +57,24 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | Permission | Routes it unlocks |
 | --- | --- |
 | `analytics.view` | GET `/v1/ops/market`<br>GET `/v1/ops/market/series`<br>GET `/v1/ops/metrics/health`<br>GET `/v1/ops/metrics/visibility` |
-| `audit.view` | GET `/v1/ops/audit` |
+| `audit.view` | GET `/v1/ops/audit`<br>GET `/v1/ops/staff-activity` |
+| `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
+| `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
 | `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
-| `issues.view` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
+| `issues.view` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
-| `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
+| `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
-| `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/recheck` |
-| `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/withdrawals-switch` |
+| `payments.recheck` | POST `/v1/ops/recheck` |
+| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation` |
+| `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
-| `providers.manage` | POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove` |
+| `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
 | `search.view` | GET `/v1/ops/search` |
+| `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
 
 <!-- /generated:permissions -->
 <!-- prettier-ignore-end -->
@@ -203,9 +209,10 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
+| POST | `/v1/ops/decline` | yes | `auth_verify` | – |
 | POST | `/v1/ops/enrol` | yes | `auth_verify` | – |
 | POST | `/v1/ops/enrol/confirm` | yes | `auth_verify` | – |
-| POST | `/v1/ops/grant` | yes | `auth_verify` | – |
+| POST | `/v1/ops/grant` | yes | `ops_code` | – |
 | GET | `/v1/ops/me` | n/a (read) | – | – |
 | POST | `/v1/ops/sign-out` | yes | – | – |
 
@@ -213,27 +220,27 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 
 | Method | Path | Permission | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- | --- |
-| POST | `/v1/ops/accounts/{userId}/email-recovery` | `recoveries.manage` | yes | – | – |
+| POST | `/v1/ops/accounts/{userId}/email-recovery` | `recoveries.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/accounts/{userId}/end-sessions` | `recoveries.manage` | yes | – | – |
 | GET | `/v1/ops/audit` | `audit.view` | n/a (read) | – | – |
-| POST | `/v1/ops/bachs/account-recovery` | `payments.recheck` | yes | – | – |
-| POST | `/v1/ops/bachs/checkout-recovery` | `payments.recheck` | yes | – | – |
-| POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.recheck` | yes | – | – |
-| GET | `/v1/ops/email/export.csv` | `issues.view` | n/a (read) | – | – |
-| GET | `/v1/ops/email/messages` | `issues.view` | n/a (read) | – | – |
-| GET | `/v1/ops/email/messages/{id}/content` | `issues.view` | n/a (read) | – | – |
+| POST | `/v1/ops/bachs/account-recovery` | `payments.repair` | yes | – | – |
+| POST | `/v1/ops/bachs/checkout-recovery` | `payments.repair` | yes | – | – |
+| POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.repair` | yes | – | – |
+| GET | `/v1/ops/email/export.csv` | `email.export` | n/a (read) | – | – |
+| GET | `/v1/ops/email/messages` | `issues.view,email.read,email.export` | n/a (read) | – | – |
+| GET | `/v1/ops/email/messages/{id}/content` | `email.read` | n/a (read) | – | – |
 | POST | `/v1/ops/email/messages/{id}/reveal-recipient` | `private.view` | yes | – | – |
-| GET | `/v1/ops/email/messages/{id}/timeline` | `issues.view` | n/a (read) | – | – |
-| GET | `/v1/ops/email/series` | `issues.view` | n/a (read) | – | – |
-| GET | `/v1/ops/email/summary` | `issues.view` | n/a (read) | – | – |
+| GET | `/v1/ops/email/messages/{id}/timeline` | `email.read` | n/a (read) | – | – |
+| GET | `/v1/ops/email/series` | `issues.view,email.read,email.export` | n/a (read) | – | – |
+| GET | `/v1/ops/email/summary` | `issues.view,email.read,email.export` | n/a (read) | – | – |
 | GET | `/v1/ops/issues` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/issues/{id}` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/issues/{id}/notes` | `issues.view` | yes | – | – |
-| POST | `/v1/ops/issues/{id}/payout-apply` | `payouts.resolve` | yes | – | – |
-| POST | `/v1/ops/issues/{id}/payout-mark-failed` | `payouts.resolve` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/payout-apply` | `payouts.resolve` | yes | `ops_request` | – |
+| POST | `/v1/ops/issues/{id}/payout-mark-failed` | `payouts.resolve` | yes | `ops_request` | – |
 | POST | `/v1/ops/issues/{id}/payout-read` | `payouts.resolve` | yes | – | – |
 | POST | `/v1/ops/issues/{id}/payout-resume` | `payouts.resolve` | yes | – | – |
-| POST | `/v1/ops/issues/{id}/resolve` | `issues.resolve` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/resolve` | `issues.resolve` | yes | `ops_request (money closes only)` | – |
 | POST | `/v1/ops/issues/{id}/reveal` | `private.view` | yes | – | – |
 | GET | `/v1/ops/market` | `analytics.view` | n/a (read) | – | – |
 | POST | `/v1/ops/market` | `market.edit` | yes | – | – |
@@ -242,10 +249,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/market/series` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/metrics/health` | `analytics.view` | n/a (read) | – | – |
 | GET | `/v1/ops/metrics/visibility` | `analytics.view` | n/a (read) | – | – |
-| GET | `/v1/ops/pages/{handle}` | `pages.plan` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{handle}/handle-changes` | `pages.plan` | yes | – | – |
-| POST | `/v1/ops/pages/{profileId}/fee` | `fees.manage` | yes | – | – |
-| POST | `/v1/ops/pages/{profileId}/fee-free` | `fees.manage` | yes | – | – |
+| POST | `/v1/ops/pages/{profileId}/fee` | `fees.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/pages/{profileId}/fee-free` | `fees.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/pages/{profileId}/images/{image}` | `pages.suspend` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/images/{image}/remove` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/plan` | `pages.plan` | yes | – | – |
@@ -254,18 +260,43 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
 | GET | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | yes | – | – |
-| GET | `/v1/ops/providers/mail` | `issues.view` | n/a (read) | – | – |
+| GET | `/v1/ops/providers/mail` | `issues.view,providers.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
-| POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/providers/overrides` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/overrides/remove` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/suppressions/lookup` | `private.view` | yes | – | – |
 | POST | `/v1/ops/providers/suppressions/remove` | `providers.manage` | yes | – | – |
-| POST | `/v1/ops/providers/tests/confirm` | `issues.view` | yes | – | – |
+| POST | `/v1/ops/providers/tests/confirm` | `issues.view,providers.manage` | yes | – | – |
 | POST | `/v1/ops/recheck` | `payments.recheck` | yes | – | – |
 | GET | `/v1/ops/search` | `search.view` | n/a (read) | – | – |
+| GET | `/v1/ops/staff` | `staff.manage` | n/a (read) | – | – |
+| POST | `/v1/ops/staff` | `staff.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/staff-activity` | `audit.view` | n/a (read) | – | – |
+| GET | `/v1/ops/staff/{userId}/access` | `staff.manage` | n/a (read) | – | – |
+| PUT | `/v1/ops/staff/{userId}/access` | `staff.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/staff/{userId}/remove` | `staff.manage` | yes | – | – |
+| POST | `/v1/ops/staff/{userId}/resend-invitation` | `staff.manage` | yes | – | – |
+| POST | `/v1/ops/staff/{userId}/reset-authenticator` | `staff.manage` | yes | `ops_request` | – |
+| PUT | `/v1/ops/staff/{userId}/role` | `staff.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/staff/roles` | `staff.manage` | n/a (read) | – | – |
+| POST | `/v1/ops/staff/roles` | `staff.manage` | yes | – | – |
+| PATCH | `/v1/ops/staff/roles/{roleId}` | `staff.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/staff/roles/{roleId}/delete` | `staff.manage` | yes | – | – |
+| POST | `/v1/ops/staff/roles/{roleId}/impact` | `staff.manage` | yes | – | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
+| GET | `/v1/ops/withdrawals-switch` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/withdrawals-switch` | `payouts.resolve` | yes | – | – |
+
+#### Staff with a live admin grant (the operation checks each request)
+
+| Method | Path | Needs CSRF check | Rate limit | Pretend only |
+| --- | --- | --- | --- | --- |
+| GET | `/v1/ops/approvals` | n/a (read) | – | – |
+| POST | `/v1/ops/approvals/{id}/approve` | yes | `ops_code` | – |
+| POST | `/v1/ops/approvals/{id}/cancel` | yes | – | – |
+| POST | `/v1/ops/approvals/{id}/reject` | yes | – | – |
+| GET | `/v1/ops/pages/{handle}` | n/a (read) | – | – |
 
 <!-- /generated:routes -->
 <!-- prettier-ignore-end -->

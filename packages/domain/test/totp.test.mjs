@@ -41,10 +41,13 @@ test('a code from the last used step, or earlier, is refused (no reuse)', () => 
   const now = new Date(1_800_000_000_000);
   const step = stepOf(now.getTime() / 1000);
   const code = totpAt(RFC_SECRET, step);
-  assert.deepEqual(verifyTotp(RFC_SECRET, code, now, step), { ok: false });
+  assert.deepEqual(verifyTotp(RFC_SECRET, code, now, step), {
+    ok: false,
+    reused: true,
+  });
   assert.deepEqual(
     verifyTotp(RFC_SECRET, totpAt(RFC_SECRET, step - 1n), now, step),
-    { ok: false },
+    { ok: false, reused: true },
   );
   assert.deepEqual(
     verifyTotp(RFC_SECRET, totpAt(RFC_SECRET, step + 1n), now, step),
@@ -70,4 +73,16 @@ test('new secrets are 20 random bytes in base32, and the otpauth link names TipM
   assert.equal(url.searchParams.get('digits'), '6');
   assert.equal(url.searchParams.get('period'), '30');
   assert.match(decodeURIComponent(url.pathname), /^\/TipMe Admin:/);
+});
+
+test('a code from a step already used says so; any other wrong code does not', () => {
+  const now = new Date(1_700_000_000_000);
+  const step = BigInt(Math.floor(now.getTime() / 30_000));
+  const used = totpAt(RFC_SECRET, step);
+  assert.deepEqual(verifyTotp(RFC_SECRET, used, now, step), {
+    ok: false,
+    reused: true,
+  });
+  const other = used === '000000' ? '000001' : '000000';
+  assert.deepEqual(verifyTotp(RFC_SECRET, other, now, step), { ok: false });
 });

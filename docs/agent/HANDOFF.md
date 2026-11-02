@@ -1,3 +1,9 @@
+# Current handoff — admin roles, final review fixes (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, committed, not pushed. C1 came in by merging dev (PR #97). Nothing is recorded as approved in `docs/00-DECISIONS.md`.
+- Evidence and every failure by name: `.superpowers/sdd/2026-11-01-admin-roles/final-fix-report.md`. CI's new `e2e (alone)` entry has not run on GitHub.
+- Open for the owner: `payout-resume` and `bachs/account-recovery` stay one-person with audit, listed in the runbook.
+
 # Current handoff — merge compact tip card with dev (2 November 2026)
 
 - Branch/worktree: `feat/compact-tip-card`. Existing PR #96; merged current `dev` after resolving the continuity-document conflicts. The merge commit is ready for publication.

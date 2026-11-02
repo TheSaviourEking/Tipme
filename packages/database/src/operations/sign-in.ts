@@ -12,7 +12,7 @@ import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { normalisePhone, phoneHint } from './phone.js';
 import { writePretendMessage } from './pretend-outbox.js';
-import { dropOpsAccess } from './staff.js';
+import { dropOpsAccess, lockedActiveStaff } from './staff.js';
 
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const CODES_PER_HOUR = 3;
@@ -187,11 +187,14 @@ export function verifySignInCode(
           .select({ id: users.id })
           .from(users)
           .where(and(eq(users.id, recovery.userId), isNull(users.deletedAt)));
+        // Staff accounts are never recovered this way (ADR-0010), even if they became staff during
+        // the hold. The number stays free, as for any cancelled recovery.
+        const refused = account && (await lockedActiveStaff(tx, account.id));
         await tx
           .update(phoneRecoveries)
-          .set({ completedAt: now })
+          .set(refused ? { cancelledAt: now } : { completedAt: now })
           .where(eq(phoneRecoveries.id, recovery.id));
-        if (account) {
+        if (account && !refused) {
           await tx
             .update(users)
             .set({ phoneE164: phone })

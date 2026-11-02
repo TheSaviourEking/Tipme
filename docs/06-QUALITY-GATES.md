@@ -26,7 +26,7 @@
 ### Before pushing and before merging
 
 - **Pre-push hook.** `pnpm install` points git at `scripts/hooks`, whose `pre-push` runs formatting, lint, typecheck and the unit tests (about 30 seconds once builds are cached; it never rebuilds the web app). The full e2e suite needs the local stack and takes several minutes, so it runs only on request: `TIPME_PREPUSH_E2E=1 git push`. Skip once with `git push --no-verify`.
-- **Merge with `pnpm pr:merge <number>`.** This repository's GitHub plan has no branch protection, so nothing else stops a red PR from merging into `dev` and deploying to staging. The command refuses a draft, closed or conflicting PR, and any CI check that failed, is pending or was cancelled.
+- **Merge with `pnpm pr:merge <number>`.** This repository's GitHub plan has no branch protection, so nothing else stops a red PR from merging into `dev` and deploying to staging. The command refuses a draft, closed or conflicting PR, and any CI check that failed, is pending or was cancelled. It reads whatever checks the PR has, so there is no list to keep up, and `e2e (alone)` counts like the rest. If the plan ever gains branch protection, require `e2e (1)`, `e2e (2)`, `e2e (3)` and `e2e (alone)`, with the other CI jobs.
 - **Shared test steps.** The e2e suite and the staging release check tip through the same `tests/shared/tip-flow.ts`, so a change to the tip form's copy fails the PR's e2e check rather than only the release check after deployment.
 
 ## Launch gates
