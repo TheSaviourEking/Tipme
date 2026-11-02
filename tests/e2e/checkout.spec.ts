@@ -297,6 +297,8 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
   const reference = new URL(page.url()).pathname.split('/')[2] ?? '';
+  // The page reads the payment as it loads: on a busy machine, expiring it first hides this button.
+  await expect(page.getByRole('button', { name: /^Pay/ })).toBeVisible();
   const { openTestDatabase } =
     await import('../../packages/database/dist/test-support.js');
   const { expireStaleTips } =
