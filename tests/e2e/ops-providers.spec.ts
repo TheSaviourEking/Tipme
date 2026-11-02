@@ -80,7 +80,7 @@ test('@alone staff send a test, confirm it from the inbox, and make the provider
   await expect(ready.getByText('Active', { exact: true })).toBeVisible();
 });
 
-test('an override can be set and removed with a reason', async ({
+test('@alone an override can be set and removed with a reason (needs the confirmed test above)', async ({
   page,
 }, testInfo) => {
   await enrolOwner(page, testInfo);
