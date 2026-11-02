@@ -72,7 +72,17 @@ test('public pages load fast on a throttled phone and pass accessibility checks'
   const page = await context.newPage();
   const paths = ['/', '/sign-in', ...(env.handle ? [`/@${env.handle}`] : [])];
   for (const path of paths) {
-    const lcp = await throttledLcp(page, path);
+    // One load can land on either of two speeds about 700 ms apart with the same response time,
+    // so a single number passes or fails by chance. Three fresh visitors, and the middle one counts.
+    const loads: number[] = [];
+    for (let visit = 0; visit < 3; visit += 1) {
+      const visitor = await newVisitor(browser);
+      loads.push(await throttledLcp(await visitor.newPage(), path));
+      await visitor.close();
+    }
+    console.log(`LCP ${path}: ${loads.map(Math.round).join(', ')} ms`);
+    const lcp = [...loads].sort((a, b) => a - b)[1]!;
+    await page.goto(path, { waitUntil: 'load' });
     expect(lcp, `LCP ${path}`).toBeGreaterThan(0);
     expect(lcp, `LCP ${path}`).toBeLessThanOrEqual(2000);
     await expectAccessible(page);
