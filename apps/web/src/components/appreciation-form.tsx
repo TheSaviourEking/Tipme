@@ -351,8 +351,13 @@ export function AppreciationForm({
       if (taller === panel.hasAttribute('data-taller-than-window')) return;
       const before = panel.getBoundingClientRect().top;
       panel.toggleAttribute('data-taller-than-window', taller);
-      const moved = panel.getBoundingClientRect().top - before;
-      if (moved) scrollBy({ top: moved, behavior: 'instant' });
+      const keepInPlace = () => {
+        const moved = panel.getBoundingClientRect().top - before;
+        if (moved) scrollBy({ top: moved, behavior: 'instant' });
+      };
+      keepInPlace();
+      // The browser's scroll anchoring may nudge the page once more on the next layout.
+      requestAnimationFrame(keepInPlace);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(panel);

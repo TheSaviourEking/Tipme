@@ -1440,6 +1440,11 @@ body:has(.profile-page) .brand__mark {
 .profile-composer .tip-quote {
   min-height: 1.375rem;
   margin: 0 0 var(--space-1);
+  line-height: 1.375rem;
+}
+
+.profile-composer .tip-quote p {
+  line-height: inherit;
 }
 
 .profile-composer .tip-quote:empty {
