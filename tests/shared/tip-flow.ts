@@ -15,13 +15,12 @@ export async function startTip(
   await page.getByRole('radio', { name: amount }).click();
   // The tip summary shows only what the supporter pays.
   await expect(page.getByText(/^You pay NGN [\d,]+\.\d\d$/)).toBeVisible();
+  if (message || name)
+    // The optional details sit behind one disclosure.
+    await page.getByText('Add a message, reason or your name').click();
   if (message)
     await page.getByLabel('Personal message (optional)').fill(message);
-  if (name) {
-    // The profile keeps the optional extras behind a disclosure.
-    await page.getByText('Add your name or remember tips').click();
-    await page.getByLabel('Your name (optional)').fill(name);
-  }
+  if (name) await page.getByLabel('Your name (optional)').fill(name);
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
 }
 

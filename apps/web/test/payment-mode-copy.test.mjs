@@ -33,7 +33,19 @@ test('test copy keeps today’s wording', () => {
     copy.signUpLede,
     'An email address and a handle is all it takes to start receiving thanks. Payments are in test mode.',
   );
-  assert.match(copy.formTrust, /^No account needed\./);
+  assert.equal(
+    copy.formTrust,
+    'No account needed. You’ll see the full total before you pay.',
+  );
+  assert.equal(
+    copy.formPartner,
+    'A test page stands in for our payment partner. Confirm there.',
+  );
+  assert.equal(
+    paymentModeCopy('live').formPartner,
+    'Our payment partner handles this. You’ll confirm on its page.',
+  );
+  assert.equal(paymentModeCopy('closed').formPartner, null);
   assert.equal(
     copy.withdrawNotice,
     'No real money moves in test mode. The test bank pays straight away.',
