@@ -20,6 +20,7 @@
 - Done: every name in `SERIOUS_ACTIONS` is registered in `serious-actions-registered.ts` and its route goes through the approval engine. Provider reads happen in `prepare`, before the transaction. Evidence and open questions: `.superpowers/sdd/2026-11-01-admin-roles/task-6-report.md`.
 - Not done: the screens don't yet handle a route's `202 { requestId }` (Task 7). No decision is approved by this work.
 - Next exact step: review Task 6, then Task 7.
+
 # Current task — takeover freeze, second report (2 November 2026)
 
 - Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev` at `a232891`. Committed, not pushed.
