@@ -965,6 +965,16 @@ test('a new report after the takeover closed, through the routes: new issue, ale
       )
     ).length === 1;
 
+  // Other tests here leave holds on this page, and they'd rightly keep withdrawals held at the end.
+  await q(
+    `UPDATE withdrawal_holds SET released_at = now() WHERE profile_id = $1 AND released_at IS NULL`,
+    [id],
+  );
+  await q(
+    `UPDATE issues SET status = 'resolved', resolved_at = now() WHERE status = 'open' AND subject->>'profileId' = $1`,
+    [id],
+  );
+
   const { issueId: firstReport } = await report();
   assert.deepEqual(await stateOf(), {
     issueId: firstReport,
