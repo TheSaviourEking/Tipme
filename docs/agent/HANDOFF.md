@@ -52,6 +52,10 @@ Branch `feat/production-infra` (worktree `.worktrees/production-infra`), from `8
 
 Read this first. It is written for an agent taking over with no memory of the previous session. Its state was checked at about 05:00 UTC on 31 October 2026.
 
+## Hold clock skew (2 November 2026)
+
+`fix/hold-clock-skew`: release and Resume use `clock_timestamp()`; mark-failed's wait for a never-tried payout goes by the database. Verified: see `.worktrees/hold-clock-report.md`. Not done: nothing run against production or staging, nothing pushed. The wait for a payout with a start mark still compares two app times, which is sound only while the API and worker share a host.
+
 ## Ground rules that still apply
 
 - Read `AGENTS.md`, the nearest scoped `AGENTS.md`, `docs/00-DECISIONS.md` and `docs/09-AGENT-PROMPT-PLAYBOOK.md`. Real money stays gated (`PAYMENTS_LIVE_ENABLED=false`) until the owner explicitly activates the live pilot (see §4).

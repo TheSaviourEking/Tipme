@@ -1,3 +1,9 @@
+# Current task — withdrawal hold clock skew (2 November 2026)
+
+- Branch/worktree: `fix/hold-clock-skew` / `.worktrees/hold-clock`, from `origin/dev` at `53edd1c`. Committed, not pushed.
+- A hold's release and a Resume now take the database's clock, and "mark failed" for a payout never tried measures its age there. No migration. Full report: `.worktrees/hold-clock-report.md`.
+- Next: owner reviews and opens the PR; `feat/admin-roles` carries the same two lines and will merge over this. Run the report's read-only detection query in production only if the owner chooses to.
+
 # Current task — home page LCP, second pass (2 November 2026)
 
 - Branch/worktree: `fix/home-lcp-2` / `.worktrees/home-lcp-2`, from `origin/dev` at `010ed89` (`fix/home-lcp` and `.worktrees/home-lcp` already existed from the Sentry pass and were left alone). Committed, not pushed.
