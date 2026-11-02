@@ -175,6 +175,18 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'Signing a stolen account out must work at once, and only stops access.',
   },
+  'OpsWithdrawalsSwitchController.state': {
+    verb: 'GET',
+    permission: 'payouts.resolve',
+    reason:
+      'Says whether withdrawals are on, for whoever can stop them; changes nothing.',
+  },
+  'OpsAccessController.activity': {
+    verb: 'GET',
+    permission: 'audit.view',
+    reason:
+      'Fixed action names and masked staff addresses for the Overview; no reasons or private details.',
+  },
   'OpsPagesController.page': {
     verb: 'GET',
     permission: 'pages.plan',

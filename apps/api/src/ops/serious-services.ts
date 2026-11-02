@@ -6,7 +6,7 @@ import {
   type SeriousActionServices,
   type StaffPayoutReader,
 } from '@tipme/database';
-import type { OpsSeriousPending } from '@tipme/contracts';
+import type { OpsActedAlone, OpsSeriousPending } from '@tipme/contracts';
 import type { MailProviderName } from '@tipme/mail';
 import type { Logger } from '@tipme/observability';
 import type { BachsProvider, MockProvider } from '@tipme/payments';
@@ -81,11 +81,14 @@ export const seriousServicesProvider: Provider<SeriousActionServices> = {
   },
 };
 
-/** A pending action answers 202 { requestId }; one that ran goes on to the route's normal answer. */
+/**
+ * A pending action answers 202 { requestId }; one that ran goes on to the route's normal answer,
+ * which says so if it ran without a second person: the screen must not leave that to the log.
+ */
 export function pendingOr<Result>(
   outcome: SeriousActionOutcome | { state: 'applied'; result: Result },
   response: Response,
-): { pending: OpsSeriousPending } | { result: Result } {
+): { pending: OpsSeriousPending } | { result: Result & OpsActedAlone } {
   if (outcome.state === 'pending') {
     response.status(202);
     return {
@@ -95,5 +98,9 @@ export function pendingOr<Result>(
       },
     };
   }
-  return { result: outcome.result as Result };
+  if (outcome.state === 'ran')
+    return {
+      result: { ...(outcome.result as Result), actedAlone: true as const },
+    };
+  return { result: outcome.result as Result & OpsActedAlone };
 }

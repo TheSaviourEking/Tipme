@@ -15,6 +15,7 @@ import {
   opsEnrolSchema,
   type ApiDataResponse,
   type OpsAuditEntry,
+  type OpsStaffActivity,
   type OpsCodeRequest,
   type OpsEnrolment,
   type OpsEnrolRequest,
@@ -25,6 +26,7 @@ import {
   declineInvitation,
   isUnenrolledInvitee,
   listAudit,
+  staffActivity,
   type MailSealing,
   openOpsGrant,
   opsEnrolmentState,
@@ -204,6 +206,13 @@ export class OpsAccessController {
     return {
       data: await listAudit(this.database.db, { cursor: parsed, limit: 50 }),
     };
+  }
+
+  /** The Overview's list of staff changes. Fixed names only, so it asks for no code. */
+  @Get('staff-activity')
+  @OpsPermission('audit.view')
+  async activity(): Promise<ApiDataResponse<OpsStaffActivity[]>> {
+    return { data: await staffActivity(this.database.db, { limit: 15 }) };
   }
 
   private granted(

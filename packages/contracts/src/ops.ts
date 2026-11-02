@@ -26,6 +26,17 @@ export type OpsMe =
   | { state: 'needs_code' }
   | { state: 'granted'; role: string; permissions: string[] };
 
+/** One line of who changed what among staff (spec 6.4): fixed names, never the written reason. */
+export interface OpsStaffActivity {
+  seq: number;
+  action: string;
+  staffUserId: string | null;
+  staffHint: string | null;
+  /** For an action taken alone: which one. */
+  seriousAction: string | null;
+  at: string;
+}
+
 export interface OpsAuditEntry {
   seq: number;
   staffUserId: string | null;
@@ -107,6 +118,11 @@ export interface OpsSeriousPending {
   requestId: string;
   /** The same thing was already waiting, and this is that request. */
   repeat?: true;
+}
+
+/** On a serious action's normal answer, when it ran because nobody else could approve it. */
+export interface OpsActedAlone {
+  actedAlone?: true;
 }
 
 export interface OpsApprovalApproved {
@@ -238,6 +254,15 @@ export const ISSUE_OUTCOMES = [
   'account_secured',
 ] as const;
 export type OpsIssueOutcome = (typeof ISSUE_OUTCOMES)[number];
+
+/** Outcomes in plain words: for the screens, and fixed into a request's summary when asked. */
+export const OPS_ISSUE_OUTCOME_WORDS: Record<OpsIssueOutcome, string> = {
+  resolved_by_provider: 'Settled by the provider',
+  recipient_owes: 'The recipient owes the money',
+  written_off: 'Written off by TipMe',
+  account_secured: 'The real owner has the account back',
+  staff_confirmed_absent: 'Staff confirmed the provider has no such payout',
+};
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
 
 /** What an issue is about: ids only (no names, messages or numbers). */

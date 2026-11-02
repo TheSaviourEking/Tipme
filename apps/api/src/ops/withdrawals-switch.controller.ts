@@ -1,10 +1,11 @@
-import { Body, Controller, HttpCode, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post } from '@nestjs/common';
 import {
   opsWithdrawalsSwitchSchema,
   type ApiDataResponse,
+  type OpsWithdrawalsSwitch,
   type OpsWithdrawalsSwitchRequest,
 } from '@tipme/contracts';
-import { setWithdrawalsPaused } from '@tipme/database';
+import { setWithdrawalsPaused, withdrawalsSwitchState } from '@tipme/database';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { requireFreshCode } from './fresh-code.guard.js';
@@ -17,6 +18,16 @@ export class OpsWithdrawalsSwitchController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
   ) {}
+
+  /** Apart from the Overview's numbers: stopping must not depend on them, or on analytics.view. */
+  @Get()
+  @OpsPermission('payouts.resolve')
+  async state(): Promise<ApiDataResponse<OpsWithdrawalsSwitch>> {
+    const { paused, changedAt } = await withdrawalsSwitchState(
+      this.database.db,
+    );
+    return { data: { paused, changedAt: changedAt?.toISOString() ?? null } };
+  }
 
   @Post()
   @HttpCode(200)

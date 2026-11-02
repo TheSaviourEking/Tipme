@@ -55,7 +55,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | Permission | Routes it unlocks |
 | --- | --- |
 | `analytics.view` | GET `/v1/ops/market`<br>GET `/v1/ops/market/series`<br>GET `/v1/ops/metrics/health`<br>GET `/v1/ops/metrics/visibility` |
-| `audit.view` | GET `/v1/ops/audit` |
+| `audit.view` | GET `/v1/ops/audit`<br>GET `/v1/ops/staff-activity` |
 | `email.export` | GET `/v1/ops/email/export.csv` |
 | `email.read` | GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline` |
 | `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
@@ -66,7 +66,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `pages.suspend` | POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
 | `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation` |
-| `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/withdrawals-switch` |
+| `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `providers.manage` | POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
@@ -259,6 +259,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/search` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/staff` | `staff.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/staff` | `staff.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/staff-activity` | `audit.view` | n/a (read) | – | – |
 | GET | `/v1/ops/staff/{userId}/access` | `staff.manage` | n/a (read) | – | – |
 | PUT | `/v1/ops/staff/{userId}/access` | `staff.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/staff/{userId}/remove` | `staff.manage` | yes | – | – |
@@ -271,6 +272,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/ops/staff/roles/{roleId}/delete` | `staff.manage` | yes | – | – |
 | POST | `/v1/ops/staff/roles/{roleId}/impact` | `staff.manage` | yes | – | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
+| GET | `/v1/ops/withdrawals-switch` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/withdrawals-switch` | `payouts.resolve` | yes | – | – |
 
 #### Staff with a live admin grant (the operation checks each request)

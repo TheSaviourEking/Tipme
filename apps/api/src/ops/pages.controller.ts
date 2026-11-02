@@ -19,6 +19,7 @@ import {
   type OpsPage,
   type OpsPageFeeRequest,
   type OpsPagePlanRequest,
+  type OpsActedAlone,
   type OpsPagePricing,
   type OpsReasonRequest,
   type OpsSeriousPending,
@@ -146,7 +147,9 @@ export class OpsPagesController {
     @Param('profileId') profileId: string,
     @Body(new ZodValidationPipe(opsPageFeeSchema)) body: OpsPageFeeRequest,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<ApiDataResponse<OpsPagePricing | OpsSeriousPending>> {
+  ): Promise<
+    ApiDataResponse<(OpsPagePricing & OpsActedAlone) | OpsSeriousPending>
+  > {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
     const answer = pendingOr<{ revalidateHandle: string }>(
       await requestSeriousAction(this.database.db, {
@@ -162,7 +165,12 @@ export class OpsPagesController {
     if ('pending' in answer) return { data: answer.pending };
     // After the commit. The public page shows what the recipient receives after fees.
     this.revalidator.revalidate(answer.result.revalidateHandle);
-    return { data: (await pagePricing(this.database.db, profileId))! };
+    return {
+      data: {
+        ...(await pagePricing(this.database.db, profileId))!,
+        ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
+      },
+    };
   }
 
   @Post(':profileId/fee-free')
@@ -176,7 +184,9 @@ export class OpsPagesController {
     @Body(new ZodValidationPipe(opsFeeFreeGrantSchema))
     body: OpsFeeFreeGrantRequest,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<ApiDataResponse<OpsPagePricing | OpsSeriousPending>> {
+  ): Promise<
+    ApiDataResponse<(OpsPagePricing & OpsActedAlone) | OpsSeriousPending>
+  > {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
     const answer = pendingOr(
       await requestSeriousAction(this.database.db, {
@@ -190,6 +200,11 @@ export class OpsPagesController {
       response,
     );
     if ('pending' in answer) return { data: answer.pending };
-    return { data: (await pagePricing(this.database.db, profileId))! };
+    return {
+      data: {
+        ...(await pagePricing(this.database.db, profileId))!,
+        ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
+      },
+    };
   }
 }

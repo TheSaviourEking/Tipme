@@ -664,3 +664,125 @@ test('M5: signing in finds its own code while mail is landing in the inbox', asy
     await writer;
   }
 });
+
+test('alone, a serious route says it acted alone; with a second person it never does', async () => {
+  const { id } = await profile();
+  const fee = (feeBps) =>
+    call(stack.api, 'POST', `/v1/ops/pages/${id}/fee`, first.cookie, {
+      feeBps,
+      reason: REASON,
+    });
+  const waited = await fee(700);
+  assert.equal(waited.status, 202);
+  assert.equal((await waited.json()).data.actedAlone, undefined);
+  await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [secondId]);
+  try {
+    const alone = await fee(800);
+    assert.equal(alone.status, 200);
+    const { data } = await alone.json();
+    assert.equal(data.actedAlone, true);
+    assert.equal(data.customFeeBps, 800);
+    const issue = await ops.openIssue(database.db, {
+      dedupeKey: `payment_reversed.${randomUUID()}`,
+      kind: 'payment_reversed',
+      subject: { profileId: id },
+      now: new Date(),
+    });
+    const closed = await call(
+      stack.api,
+      'POST',
+      `/v1/ops/issues/${issue.id}/resolve`,
+      first.cookie,
+      { reason: REASON, outcome: 'written_off' },
+    );
+    assert.deepEqual((await closed.json()).data, {
+      resolved: true,
+      actedAlone: true,
+    });
+    const free = await call(
+      stack.api,
+      'POST',
+      `/v1/ops/pages/${id}/fee-free`,
+      first.cookie,
+      { count: 1, reason: REASON },
+    );
+    assert.equal((await free.json()).data.actedAlone, true);
+  } finally {
+    await q(`UPDATE staff SET revoked_at = NULL WHERE user_id = $1`, [
+      secondId,
+    ]);
+  }
+});
+
+test('a money close asks in plain words: what it is, the outcome, and the written checks', async () => {
+  const { id } = await profile();
+  const issue = await ops.openIssue(database.db, {
+    dedupeKey: `payment_reversed.${randomUUID()}`,
+    kind: 'payment_reversed',
+    subject: { profileId: id },
+    now: new Date(),
+  });
+  const asked = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/issues/${issue.id}/resolve`,
+    first.cookie,
+    { reason: REASON, outcome: 'recipient_owes' },
+  );
+  assert.equal(asked.status, 202);
+  const list = await call(
+    stack.api,
+    'GET',
+    '/v1/ops/approvals?status=pending',
+    second.cookie,
+  );
+  const row = (await list.json()).data.find(
+    (each) => each.action === 'money_issue.close',
+  );
+  assert.equal(
+    row.summary,
+    `Close the money issue ending ${issue.id.slice(-6)} (payment reversed) as: The recipient owes the money`,
+  );
+  assert.equal(row.payload, undefined, 'never the raw payload');
+});
+
+test('the staff activity feed: who did what, by fixed name, with no reasons or private details', async () => {
+  const roleId = await roleWith(['search.view']);
+  const edit = await call(
+    stack.api,
+    'PATCH',
+    `/v1/ops/staff/roles/${roleId}`,
+    first.cookie,
+    { permissions: ['search.view', 'analytics.view'], reason: REASON },
+  );
+  assert.equal(edit.status, 200);
+  await q(`UPDATE ops_sessions SET last_totp_at = ${stale}`);
+  const feed = await call(
+    stack.api,
+    'GET',
+    '/v1/ops/staff-activity',
+    first.cookie,
+  );
+  await q(`UPDATE ops_sessions SET last_totp_at = now()`);
+  assert.equal(feed.status, 200, 'an Overview read asks for no code');
+  const body = await feed.text();
+  assert.ok(!body.includes(REASON));
+  const rows = JSON.parse(body).data;
+  const row = rows.find((each) => each.action === 'role.updated');
+  assert.ok(row);
+  assert.ok(row.at);
+  assert.equal(row.staffUserId, firstId);
+});
+
+test('the withdrawals switch can be read without analytics or a code', async () => {
+  await q(`UPDATE ops_sessions SET last_totp_at = ${stale}`);
+  const read = await call(
+    stack.api,
+    'GET',
+    '/v1/ops/withdrawals-switch',
+    first.cookie,
+  );
+  await q(`UPDATE ops_sessions SET last_totp_at = now()`);
+  assert.equal(read.status, 200);
+  assert.equal(typeof (await read.json()).data.paused, 'boolean');
+});

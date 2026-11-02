@@ -7628,6 +7628,43 @@
         "x-tipme-permission": "staff.manage"
       }
     },
+    "/v1/ops/staff-activity": {
+      "get": {
+        "operationId": "OpsAccess.activity",
+        "tags": [
+          "OpsAccess"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "audit.view"
+      }
+    },
     "/v1/ops/staff/roles": {
       "get": {
         "operationId": "OpsStaff.roles",
@@ -8557,6 +8594,41 @@
       }
     },
     "/v1/ops/withdrawals-switch": {
+      "get": {
+        "operationId": "OpsWithdrawalsSwitch.state",
+        "tags": [
+          "OpsWithdrawalsSwitch"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payouts.resolve"
+      },
       "post": {
         "operationId": "OpsWithdrawalsSwitch.set",
         "tags": [

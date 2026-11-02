@@ -1,5 +1,6 @@
 import {
   OPS_CATALOGUE,
+  OPS_ISSUE_OUTCOME_WORDS,
   type OpsIssueOutcome,
   type OpsPermission,
 } from '@tipme/contracts';
@@ -375,13 +376,15 @@ const moneyIssueClose = acting<{
     ];
   },
   target: ({ issueId }) => issueId,
-  describe: async (tx, { issueId, outcome }) => {
+  describe: async (tx, { issueId, outcome, bankAndSignInChecked }) => {
     const [issue] = await tx
       .select({ kind: issues.kind })
       .from(issues)
       .where(eq(issues.id, issueId));
     if (!issue) throw new OperationError('ISSUE_NOT_FOUND');
-    return `Close money issue ending ${issueId.slice(-6)} (${issue.kind}) as ${outcome ?? 'no outcome'}`;
+    return `Close the money issue ending ${issueId.slice(-6)} (${issue.kind.replaceAll('_', ' ')}) as: ${
+      outcome ? OPS_ISSUE_OUTCOME_WORDS[outcome] : 'no outcome given'
+    }${bankAndSignInChecked ? '. Bank and sign-in checked with the real owner' : ''}`;
   },
   act: async (tx, { issueId, outcome, bankAndSignInChecked }, context) => {
     const access = await readStaffAccess(tx, context.actorId);
