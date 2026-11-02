@@ -550,6 +550,8 @@ test('the screens fit 320px and work by keyboard', async ({
   page,
   browser,
 }, testInfo) => {
+  // Two enrolments and five accessibility scans: 17-24s normally, and over 30s on a busy machine.
+  test.slow();
   const { handle } = await signUpRecipient(
     await (await browser.newContext()).newPage(),
     testInfo,
