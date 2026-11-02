@@ -3,6 +3,11 @@
 - Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, committed, not pushed. C1 is deliberately not fixed here. Nothing is recorded as approved in `docs/00-DECISIONS.md`.
 - Evidence and every failure by name: `.superpowers/sdd/2026-11-01-admin-roles/final-fix-report.md`. CI's new `e2e (alone)` entry has not run on GitHub.
 - Open for the owner: `payout-resume` and `bachs/account-recovery` stay one-person with audit, listed in the runbook. `docs/runbooks/live-activation.md` line 40 still says approval hasn't shipped; update it when this reaches production.
+# Current handoff — takeover freeze, second report (2 November 2026)
+
+- Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev`, committed, not pushed. No migration.
+- `freezeWithdrawals` now reads the hold's issue status under the profile lock. Closed: new issue, new hold, old row ended, `withdrawals.freeze_reopened` audited. Every new issue queues `withdrawals.freeze_opened`, which the worker posts to the alert route with ids only.
+- Verified results, untested areas and the read-only production queries are in `.worktrees/freeze-fix-report.md`. Nothing ran against staging or production.
 
 # Current handoff — home page LCP, second pass (2 November 2026)
 

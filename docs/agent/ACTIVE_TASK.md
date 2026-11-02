@@ -20,6 +20,11 @@
 - Done: every name in `SERIOUS_ACTIONS` is registered in `serious-actions-registered.ts` and its route goes through the approval engine. Provider reads happen in `prepare`, before the transaction. Evidence and open questions: `.superpowers/sdd/2026-11-01-admin-roles/task-6-report.md`.
 - Not done: the screens don't yet handle a route's `202 { requestId }` (Task 7). No decision is approved by this work.
 - Next exact step: review Task 6, then Task 7.
+# Current task — takeover freeze, second report (2 November 2026)
+
+- Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev` at `a232891`. Committed, not pushed.
+- Finding C1: a report after the takeover issue closed, with another hold issue open, was answered `already_frozen` on the closed issue, and closing the other issue then lifted the freeze. Now it opens a new issue, moves the hold to it and alerts staff. No migration. Full report: `.worktrees/freeze-fix-report.md`.
+- Next: owner reviews and opens the PR; run the report's read-only detection queries in production only if the owner chooses to. `feat/admin-roles` must take this before it merges.
 
 # Current task — withdrawal hold clock skew (2 November 2026)
 
