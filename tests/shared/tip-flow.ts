@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 type TipChoices = { amount?: string; name?: string; message?: string };
 
