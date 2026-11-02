@@ -501,9 +501,9 @@ test('where ₦2,000 is not offered the closest preset starts selected, the lowe
   expect(sent.events.join()).not.toContain('amount_selected');
   await at('live', '/@tiekeys', page);
   await expect(page.getByRole('radio', { name: '1,500 NGN' })).toBeChecked();
-  // The first tap on Tip only asks for the total, as with ₦2,000.
+  // One tap on Tip pays, with no total step, and the starting amount still isn't a person choosing.
   await tipButton(page).click();
-  expect(sent.intents).toEqual([]);
+  await expect.poll(() => sent.intents.length).toBe(1);
   expect(sent.events.join()).not.toContain('amount_selected');
 });
 
