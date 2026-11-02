@@ -26,6 +26,10 @@ const ACCESS = [
   ['recipient', 'Signed-in recipient (their own page and data only)'],
   ['staff', 'Signed-in staff, before an admin grant'],
   ['staff-grant', 'Staff with a live admin grant and the permission'],
+  [
+    'staff-any',
+    'Staff with a live admin grant (the operation checks each request)',
+  ],
 ];
 const CHANGES = new Set(['post', 'put', 'patch', 'delete']);
 
@@ -78,11 +82,13 @@ function routeTables(routes) {
 
 function permissionTable(routes) {
   const byPermission = new Map();
+  // A route may open to any of several: it unlocks under each.
   for (const r of routes.filter((x) => x.permission)) {
-    byPermission.set(r.permission, [
-      ...(byPermission.get(r.permission) ?? []),
-      `${r.method} \`${r.path}\``,
-    ]);
+    for (const permission of [r.permission].flat())
+      byPermission.set(permission, [
+        ...(byPermission.get(permission) ?? []),
+        `${r.method} \`${r.path}\``,
+      ]);
   }
   return [
     '| Permission | Routes it unlocks |',

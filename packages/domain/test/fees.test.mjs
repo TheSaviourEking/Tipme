@@ -112,3 +112,39 @@ test('a staff-set share replaces the 10% for one account; processing still comes
       RangeError,
     );
 });
+
+// Owner decision, 2 Nov 2026: the supporter sees only "Tip ₦2,000". That is honest only because the
+// charge is exactly the tip on every path, so this must fail loudly if it ever stops being true.
+test('the supporter’s charge equals the tip on every path: normal, fee-free and any staff-set share', () => {
+  const tips = [
+    100000n,
+    100001n,
+    123457n,
+    200000n,
+    999999n,
+    10_000_000n,
+    999_999_999_999n,
+  ];
+  const options = [
+    {},
+    { feeFree: true },
+    { minTipMinor: 100000n },
+    { feeFree: true, minTipMinor: 100000n },
+    ...[0n, 1n, 100n, 800n, 1000n, 2500n, 9999n, 10000n].map((shareBps) => ({
+      shareBps,
+    })),
+    { feeFree: true, shareBps: 800n },
+  ];
+  for (const tip of tips)
+    for (const option of options) {
+      const priced = priceTip(tip, FEE_POLICY_V1, option);
+      assert.equal(priced.payerTotalMinor, tip);
+      assert.equal(priced.tipMinor, tip);
+      assert.equal(
+        priced.recipientNetMinor +
+          priced.platformFeeMinor +
+          priced.providerFeeMinor,
+        tip,
+      );
+    }
+});

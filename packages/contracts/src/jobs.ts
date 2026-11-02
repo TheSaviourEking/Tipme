@@ -7,6 +7,8 @@ export const JOB_NAMES = { traceProbe: 'diagnostics.trace-probe' } as const;
 export const PAYOUT_START_EVENT = 'payouts.start';
 /** Staff switched all withdrawals: the worker tells the alert route. */
 export const WITHDRAWALS_SWITCH_EVENT = 'withdrawals.switch_changed';
+/** A takeover report opened a new issue and froze a page: the worker tells the alert route. */
+export const WITHDRAWAL_FREEZE_OPENED_EVENT = 'withdrawals.freeze_opened';
 /** The provider refused TipMe itself (empty reserve, or a bad key): the worker tells the alert route. */
 export const PLATFORM_REFUSAL_EVENT = 'payouts.platform_refused';
 

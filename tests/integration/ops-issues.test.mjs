@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
+import { OPS_PERMISSIONS } from '../../packages/contracts/dist/index.js';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
@@ -35,6 +36,7 @@ before(async () => {
     apiEnv: {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
       RATE_LIMIT_QUOTES_PER_MIN: '1000',
       RATE_LIMIT_INTENTS_PER_MIN: '1000',
     },
@@ -53,6 +55,14 @@ const call = (method, path, cookie, body) =>
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 const json = async (response) => (await response.json()).data;
+
+/** Money closes wait for a second person: alone, they run at once. The waiting path is in ops-serious-routes. */
+const aloneAmongStaff = (phone) =>
+  database.pool.query(
+    `UPDATE staff SET revoked_at = now() WHERE revoked_at IS NULL
+     AND user_id <> (SELECT id FROM users WHERE phone_e164 = $1)`,
+    [phone],
+  );
 
 async function waitFor(check, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;
@@ -272,6 +282,7 @@ const issueStatusOf = async (id) =>
 
 test('staff must pick an outcome to resolve a money issue, and resolving releases the hold', async () => {
   const owner = await opsSignIn(stack.api, database.db, '+2348039990021');
+  await aloneAmongStaff('+2348039990021');
   const profileId = await profileIdOf('ada');
   const issueId = await moneyIssue(profileId);
   await placeHold(profileId, issueId);
@@ -299,7 +310,7 @@ test('staff must pick an outcome to resolve a money issue, and resolving release
     (
       await call('POST', path, owner.cookie, {
         reason: REASON,
-        outcome: 'written_off',
+        outcome: 'recipient_owes',
       })
     ).status,
     200,
@@ -312,15 +323,16 @@ test('staff must pick an outcome to resolve a money issue, and resolving release
       [issueId],
     )
   ).rows[0];
-  assert.equal(stored.resolution_outcome, 'written_off');
+  assert.equal(stored.resolution_outcome, 'recipient_owes');
   const shown = await json(
     await call('GET', `/v1/ops/issues/${issueId}`, owner.cookie),
   );
-  assert.equal(shown.issue.resolutionOutcome, 'written_off');
+  assert.equal(shown.issue.resolutionOutcome, 'recipient_owes');
 });
 
 test('the hold stays while another money issue for the recipient is open', async () => {
   const owner = await opsSignIn(stack.api, database.db, '+2348039990022');
+  await aloneAmongStaff('+2348039990022');
   const profileId = await profileIdOf('ada');
   const first = await moneyIssue(profileId);
   const second = await moneyIssue(profileId, 'provider_in_debt');
@@ -350,12 +362,27 @@ test('the withdrawal tools need payouts.resolve, on the owner role only, and rea
   const path = `/v1/ops/issues/${issueId}/payout-read`;
   // Not a withdrawal issue: nothing to read.
   assert.equal((await call('POST', path, owner.cookie, {})).status, 404);
+  // Owner always holds every permission, so the test person is on a role holding everything else:
+  // a 403 can then only come from payouts.resolve itself.
+  const other = await opsSignIn(stack.api, database.db, '+2348039990099');
   await database.pool.query(
-    `DELETE FROM role_permissions WHERE permission = 'payouts.resolve'`,
+    `INSERT INTO roles (id, name) VALUES ('no_payouts', 'No payouts') ON CONFLICT DO NOTHING`,
   );
-  assert.equal((await call('POST', path, owner.cookie, {})).status, 403);
   await database.pool.query(
-    `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
+    `INSERT INTO role_permissions (role_id, permission)
+     SELECT 'no_payouts', p FROM unnest($1::text[]) AS p ON CONFLICT DO NOTHING`,
+    [OPS_PERMISSIONS.filter((p) => p !== 'payouts.resolve')],
+  );
+  await database.pool.query(
+    `UPDATE staff SET role_id = 'no_payouts' WHERE user_id = (SELECT id FROM users WHERE phone_e164 = '+2348039990099')`,
+  );
+  assert.equal((await call('POST', path, other.cookie, {})).status, 403);
+  await database.pool.query(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ('no_payouts', 'payouts.resolve')`,
+  );
+  assert.equal((await call('POST', path, other.cookie, {})).status, 404);
+  await database.pool.query(
+    `DELETE FROM role_permissions WHERE role_id = 'no_payouts' AND permission = 'payouts.resolve'`,
   );
   const { rows } = await database.pool.query(
     `SELECT role_id FROM role_permissions WHERE permission = 'payouts.resolve'`,
@@ -385,6 +412,7 @@ test('the withdrawal tools need payouts.resolve, on the owner role only, and rea
 
 test('a held withdrawal is read at the pretend provider, resumed, and only then started', async () => {
   const owner = await opsSignIn(stack.api, database.db, '+2348039990024');
+  await aloneAmongStaff('+2348039990024');
   const profileId = await profileIdOf('ada');
   const payoutId = randomUUID();
   await database.pool.query(
@@ -448,9 +476,23 @@ const MONEY_KINDS = [
 
 test('issues.resolve alone cannot close a money issue or lift a hold, and still closes the rest', async () => {
   const staff = await opsSignIn(stack.api, database.db, '+2348039990025');
+  await aloneAmongStaff('+2348039990025');
   const profileId = await profileIdOf('ada');
+  // Owner always holds every permission, so this person is on a role holding everything else:
+  // a 403 can then only come from payouts.resolve itself.
   await database.pool.query(
-    `DELETE FROM role_permissions WHERE permission = 'payouts.resolve'`,
+    `INSERT INTO roles (id, name) VALUES ('no_payouts', 'No payouts') ON CONFLICT DO NOTHING`,
+  );
+  await database.pool.query(
+    `INSERT INTO role_permissions (role_id, permission)
+     SELECT 'no_payouts', p FROM unnest($1::text[]) AS p ON CONFLICT DO NOTHING`,
+    [OPS_PERMISSIONS.filter((p) => p !== 'payouts.resolve')],
+  );
+  await database.pool.query(
+    `DELETE FROM role_permissions WHERE role_id = 'no_payouts' AND permission = 'payouts.resolve'`,
+  );
+  await database.pool.query(
+    `UPDATE staff SET role_id = 'no_payouts' WHERE user_id = (SELECT id FROM users WHERE phone_e164 = '+2348039990025')`,
   );
   try {
     const held = await moneyIssue(profileId);
@@ -462,7 +504,7 @@ test('issues.resolve alone cannot close a money issue or lift a hold, and still 
         'POST',
         `/v1/ops/issues/${id}/resolve`,
         staff.cookie,
-        { reason: REASON, outcome: 'written_off' },
+        { reason: REASON, outcome: 'recipient_owes' },
       );
       assert.equal(response.status, 403, kind);
       assert.equal(await issueStatusOf(id), 'open', kind);
@@ -478,9 +520,6 @@ test('issues.resolve alone cannot close a money issue or lift a hold, and still 
       200,
     );
   } finally {
-    await database.pool.query(
-      `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
-    );
     await database.pool.query(
       `UPDATE issues SET status = 'resolved', resolved_at = now(), resolved_by = 'system'
         WHERE status = 'open' AND severity = 'money' AND subject->>'profileId' = $1`,
@@ -512,7 +551,7 @@ test('the API refuses a hand close while the payout is unfinished, and says wher
     'POST',
     `/v1/ops/issues/${issue.id}/resolve`,
     owner.cookie,
-    { reason: REASON, outcome: 'written_off' },
+    { reason: REASON, outcome: 'recipient_owes' },
   );
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error.code, 'ISSUE_PAYOUT_UNFINISHED');

@@ -28,6 +28,8 @@ type RateLimitedRoute =
   | 'reports'
   | 'unsubscribe'
   | 'avatars'
+  | 'ops_code'
+  | 'ops_request'
   | 'cover_designs'
   | 'qr_art'
   | 'qr_thumb'
@@ -143,6 +145,16 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
         windowMs: 3_600_000,
       },
+      // Per person, not per address: staff re-enter a code about every 5 minutes while working.
+      ops_code: {
+        limit: this.config.RATE_LIMIT_OPS_CODE_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // Per person: each ask can mail everyone who could decide it.
+      ops_request: {
+        limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
+        windowMs: 3_600_000,
+      },
       // Each change writes and asks the web app to refresh the page. Generous and per address:
       // mobile carriers share addresses, and saving is a deliberate step, not browsing.
       cover_designs: {
@@ -170,10 +182,23 @@ export class RateLimitGuard implements CanActivate {
         windowMs: 3_600_000,
       },
     }[route];
-    // The list pictures are counted per signed-in person (see qr_thumb above).
+    // Counted per signed-in person: see ops_code, ops_request and qr_thumb above.
     const subject =
-      route === 'qr_thumb' && request.auth ? `user:${userId}` : ip;
+      (route === 'ops_code' ||
+        route === 'ops_request' ||
+        route === 'qr_thumb') &&
+      request.auth
+        ? `user:${request.auth.userId}`
+        : ip;
     return this.count(route, subject, window);
+  }
+
+  /** For a route where only some requests count: the limit `ops_request` sets, per person. */
+  async consumeForPerson(route: 'ops_request', userId: string): Promise<void> {
+    await this.count(route, `user:${userId}`, {
+      limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
+      windowMs: 3_600_000,
+    });
   }
 
   private async count(

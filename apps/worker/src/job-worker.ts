@@ -4,6 +4,7 @@ import {
   JOB_QUEUE,
   PAYOUT_START_EVENT,
   PLATFORM_REFUSAL_EVENT,
+  WITHDRAWAL_FREEZE_OPENED_EVENT,
   WITHDRAWALS_SWITCH_EVENT,
   traceCarrierSchema,
 } from '@tipme/contracts';
@@ -18,6 +19,7 @@ import { configuredMailProviders, type MailProviderName } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   autoResolveIssues,
+  expireRequests,
   createDatabase,
   expireStalePaymentAccountCreations,
   expireStaleAttemptStarts,
@@ -38,6 +40,7 @@ import {
   purgeProfileReports,
   sweepRehearsals,
   rollupAnalytics,
+  registerRealSeriousActions,
 } from '@tipme/database';
 import {
   createBachsProvider,
@@ -53,12 +56,14 @@ import { SERVICE_NAME, type WorkerConfig } from './config.js';
 import {
   DOMAIN_EVENT_NAMES,
   handleDomainEvent,
+  staffAlertPoster,
 } from './handlers/domain-events.js';
 import {
   handlePaymentReserve,
   warnIfNoAlertRoute,
 } from './handlers/payment-reserve.js';
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
+import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
@@ -71,6 +76,7 @@ const WEEKLY_REPORTS_JOB = 'reports.weekly';
 const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
+const APPROVALS_EXPIRE_JOB = 'approvals.expire';
 const PAYOUT_SETUP_JOB = 'payment-accounts.payout-setup';
 const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
 // A long sweep (a backlog, or a slow provider) must not run beside the next one. Under the interval
@@ -163,6 +169,8 @@ export async function startJobWorker(
   config: WorkerConfig,
   options: JobWorkerOptions = {},
 ): Promise<JobWorker> {
+  // Mail about a waiting request goes to who may decide it, which each action says.
+  registerRealSeriousActions();
   const logger = createLogger({
     service: SERVICE_NAME,
     level: config.LOG_LEVEL,
@@ -243,6 +251,13 @@ export async function startJobWorker(
     queue,
     id: ANALYTICS_DAILY_JOB,
     repeat: { pattern: '0 1 * * *', tz: 'Africa/Lagos' },
+    logger,
+  });
+  // Its own job, so a slow provider in reconciliation can't hold it up. Approving checks expiry too.
+  const approvalsSchedule = ensureSchedule({
+    queue,
+    id: APPROVALS_EXPIRE_JOB,
+    every: 60_000,
     logger,
   });
   // Test copies only (RELEASE_KIND=test): every hour, erase what crashed release checks left.
@@ -414,6 +429,14 @@ export async function startJobWorker(
             processed.add(1, { outcome: 'celebrated' });
             return 'celebrated';
           }
+          if (job.name === APPROVALS_EXPIRE_JOB) {
+            const result = await expireRequests(database.db, {
+              now: new Date(),
+            });
+            logger.info({ event: 'approvals.expired', ...result });
+            processed.add(1, { outcome: 'approvals_swept' });
+            return 'approvals_swept';
+          }
           if (job.name === REHEARSAL_SWEEP_JOB) {
             // Never on a live copy, even if the job was queued before RELEASE_KIND changed.
             if (config.RELEASE_KIND !== 'test') return 'skipped';
@@ -509,6 +532,14 @@ export async function startJobWorker(
             processed.add(1, { outcome: `withdrawals_switch_${outcome}` });
             return outcome;
           }
+          if (job.name === WITHDRAWAL_FREEZE_OPENED_EVENT) {
+            const outcome = await handleWithdrawalFreezeOpened(job.data, {
+              url: config.ALERT_WEBHOOK_URL,
+              log: (entry) => logger.warn({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome: `withdrawal_freeze_${outcome}` });
+            return outcome;
+          }
           if (job.name === PLATFORM_REFUSAL_EVENT) {
             const outcome = await handlePlatformRefusal(job.data, {
               url: config.ALERT_WEBHOOK_URL,
@@ -537,6 +568,10 @@ export async function startJobWorker(
               analyticsEnabled,
               sealing,
               pretendPayment: config.PAYMENT_PROVIDER === 'mock',
+              postStaffAlert: staffAlertPoster({
+                url: config.ALERT_WEBHOOK_URL,
+                log: (entry) => logger.warn({ ...entry, ...fields }),
+              }),
             });
             processed.add(1, { outcome });
             return outcome;
@@ -656,6 +691,7 @@ export async function startJobWorker(
       await payoutSetupSchedule?.stop();
       await reserveSchedule?.stop();
       await rehearsalSchedule?.stop();
+      await approvalsSchedule.stop();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

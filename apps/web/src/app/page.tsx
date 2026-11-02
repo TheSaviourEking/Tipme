@@ -91,7 +91,6 @@ export default function Home() {
                     paymentMode={mode}
                     recipient="Ada"
                     handle="ada"
-                    collapseExtras
                   />
                 ) : copy.homeDemo === 'closed' ? (
                   <TippingOpensSoon />

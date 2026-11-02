@@ -119,6 +119,8 @@ ssh tipme-prod@<server>
 
 Then roll back the web in Vercel (Deployments → the previous one → Instant Rollback) and run the release check with `--expect-version <old sha> --expect-provider bachs-live --expect-live <true|false>` (read-only, never `--full`). `--expect-live` must say what `production.env` says. The last 5 deployed versions and both colours' versions stay on the server.
 
+**Rolling back past admin roles** weakens access with no warning: the schema stays, but the older code reads only the role. Personal removals stop applying, `issues.view` can again read email content and export it, `payments.recheck` can again run repairs, and serious actions run with one person and no alert. Review who holds what first (`admin-roles.md`), and treat Approvals as stopped: waiting requests just wait, then expire after the next deploy.
+
 **A stuck lock** ("Another deploy or rollback is running"): check that no Deploy production run and no script is running, then `rm -rf /srv/tipme-production/releases/.deploy.lock`.
 
 ## 8. Evidence: the no-downtime rehearsal
@@ -166,3 +168,7 @@ The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xy
 - **It is a server setting, not a build one:** the web app reads it for each request, and it has no `NEXT_PUBLIC_` twin, so nothing about it reaches the browser bundle. Vercel still applies a changed variable only to a **new deployment**: after adding or removing it, **redeploy** (Deployments → the latest → Redeploy). Instant Rollback to an older deployment restores that deployment's value of the variable.
 - **Check after step 5:** open `/@<a real handle>` (the line sits under the Tip button), a receipt and `/dashboard`; each shows it with a `mailto:support@usetipme.xyz` link. A brief API outage makes the web treat the copy as closed for a few seconds, and the line disappears with it.
 - Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.
+
+## Staff access
+
+Add and remove staff in the dashboard: `docs/runbooks/admin-roles.md`. `pnpm ops:grant-owner` on the server is only for when every owner is locked out, and it is logged. Server access and GitHub deploy rights go around every role and approval, so keep them with very few people.

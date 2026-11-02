@@ -393,7 +393,7 @@ export function recoverUnknownPaymentAccount(
       await recordAudit(tx, {
         staffUserId: input.staffUserId,
         action: 'payment_account.recovered',
-        permission: 'payments.recheck',
+        permission: 'payments.repair',
         subjectType: 'payment_account',
         subjectId: account.id,
         reason: `${input.reason} [dashboard identity and platform-fee settings checked; provider status fetched]`,
@@ -402,7 +402,7 @@ export function recoverUnknownPaymentAccount(
       await recordAudit(tx, {
         staffUserId: input.staffUserId,
         action: 'issue.resolved',
-        permission: 'payments.recheck',
+        permission: 'payments.repair',
         subjectType: 'issue',
         subjectId: issue.id,
         reason: `${input.reason} [Bachs recipient account status verified and linked]`,

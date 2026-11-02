@@ -19,6 +19,8 @@ export type PaymentModeCopy = {
   formDisclaimer: string | null;
   /** Beside the Tip button on the public page, wherever a supporter can pay. */
   formTrust: string | null;
+  /** Beside the Tip action, wherever a supporter can pay: who handles the payment, and where. */
+  formPartner: string | null;
   profileMetaSuffix: string;
   homeRecipientNotice: string | null;
   homeClarity: string;
@@ -40,11 +42,10 @@ const CLOSED_TITLE = 'Tipping opens soon';
 const CLOSED_BODY = 'TipMe isn’t taking tips yet. Please come back soon.';
 const SIGN_UP =
   'An email address and a handle is all it takes to start receiving thanks.';
-const CLARITY =
-  'You see the full cost and what the person receives before you pay.';
-const PAY_STEP = 'Review the full amount and what they receive, then pay.';
-const TRUST =
-  'No account needed. You’ll see the full total before you pay, and our payment partner handles your payment securely.';
+const CLARITY = 'You pay exactly the amount you choose.';
+const PAY_STEP = 'Choose an amount and pay exactly that.';
+const TRUST = 'No account needed. You pay exactly this amount.';
+const PARTNER = 'Our payment partner handles this. You’ll confirm on its page.';
 const EXAMPLE_TITLE = 'Tip the people you know';
 const EXAMPLE_BODY =
   'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to thank.';
@@ -69,6 +70,8 @@ const TEST: PaymentModeCopy = {
   formBadge: 'Test payments',
   formDisclaimer: 'TipMe is in test mode: no real money moves yet.',
   formTrust: TRUST,
+  // No real partner takes a test tip: the pretend provider's page does.
+  formPartner: 'A test page stands in for our payment partner. Confirm there.',
   profileMetaSuffix: ' Test mode.',
   homeRecipientNotice:
     'Payments are in test mode. Real payments and payout setup are not available until provider and funds-flow approvals are complete.',
@@ -101,6 +104,7 @@ const LIVE: PaymentModeCopy = {
   formBadge: null,
   formDisclaimer: null,
   formTrust: TRUST,
+  formPartner: PARTNER,
   profileMetaSuffix: '',
   homeRecipientNotice: null,
   homeClarity: CLARITY,
@@ -123,6 +127,7 @@ const CLOSED: PaymentModeCopy = {
   payable: false,
   homeDemo: 'closed',
   formTrust: null,
+  formPartner: null,
   homeRecipientNotice: `${CLOSED_TITLE}. You can create your page now.`,
   homeClarity: `${CLARITY} ${CLOSED_TITLE}.`,
   howItWorksPay: `${PAY_STEP} ${CLOSED_TITLE}.`,

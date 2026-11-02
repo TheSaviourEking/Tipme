@@ -36,11 +36,18 @@ export function webhookAlert(options: {
   url: string | undefined;
   fetchImpl?: typeof fetch;
   log?: PaymentReserveLog;
+  /** What the log calls an alert with nowhere to go. */
+  unroutedEvent?: string;
 }): (text: string) => Promise<void> {
-  const { url, fetchImpl = fetch, log } = options;
+  const {
+    url,
+    fetchImpl = fetch,
+    log,
+    unroutedEvent = 'reserve.alert_unrouted',
+  } = options;
   return async (text) => {
     if (!url) {
-      log?.({ event: 'reserve.alert_unrouted', text });
+      log?.({ event: unroutedEvent, text });
       throw new Error('alert_route_missing');
     }
     let status: number;

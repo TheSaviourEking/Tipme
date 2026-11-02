@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { OpsAuditEntry } from '@tipme/contracts';
 import { Button, EmptyState, Notice, Skeleton } from '@tipme/ui';
 import { when } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 /** Every staff view, reveal and action, newest first. The log cannot be edited. */
 export default function AuditPage() {
@@ -12,7 +12,7 @@ export default function AuditPage() {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    void apiFetch<OpsAuditEntry[]>('/v1/ops/audit').then((result) => {
+    void opsFetch<OpsAuditEntry[]>('/v1/ops/audit').then((result) => {
       if (!result.ok) return setFailed(true);
       setRows(result.data);
       setMore(result.data.length === 50);
@@ -22,7 +22,7 @@ export default function AuditPage() {
   const loadMore = async () => {
     const last = rows?.at(-1);
     if (!last) return;
-    const result = await apiFetch<OpsAuditEntry[]>(
+    const result = await opsFetch<OpsAuditEntry[]>(
       `/v1/ops/audit?cursor=${last.seq}`,
     );
     if (result.ok) {

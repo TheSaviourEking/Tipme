@@ -168,14 +168,18 @@ test('it is staff only, needs payouts.resolve, a written reason, and a real page
   assert.equal((await rows('SELECT id FROM withdrawal_holds')).length, 0);
 
   // A role without payouts.resolve is refused.
+  // An owner holds the whole catalogue, whatever is stored: move them to a role without it.
   await database.pool.query(
-    `DELETE FROM role_permissions WHERE role_id = 'owner' AND permission = 'payouts.resolve'`,
+    `INSERT INTO roles (id, name) VALUES ('no_payouts', 'No payouts') ON CONFLICT DO NOTHING`,
+  );
+  await database.pool.query(
+    `UPDATE staff SET role_id = 'no_payouts' WHERE role_id = 'owner'`,
   );
   try {
     assert.equal((await freeze()).status, 403);
   } finally {
     await database.pool.query(
-      `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
+      `UPDATE staff SET role_id = 'owner' WHERE role_id = 'no_payouts'`,
     );
   }
 });
@@ -298,9 +302,9 @@ test('a second report while frozen keeps its written reason in the audit, and th
         })
       ).json()
     ).data;
-  assert.deepEqual(await state(), { issueId: null });
+  assert.deepEqual(await state(), { issueId: null, issueOpen: false });
   const { issueId } = (await (await freeze()).json()).data;
-  assert.deepEqual(await state(), { issueId });
+  assert.deepEqual(await state(), { issueId, issueOpen: true });
   const second = 'A second person rang about the same account.';
   await freeze(owner.cookie, TOBI, second);
   const [audit] = await rows(
@@ -309,6 +313,51 @@ test('a second report while frozen keeps its written reason in the audit, and th
   );
   assert.equal(audit.reason, second);
   assert.equal(audit.subject_id, TOBI);
+});
+
+test('a new report after the last closed, with a reversal still holding, opens an issue only it can release', async () => {
+  const { issueId: first } = (await (await freeze()).json()).data;
+  const [{ id: reversal }] = await rows(
+    `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
+     VALUES ($1, $2, 'payment_reversed', 'money', $3, 'x', now()) RETURNING id`,
+    [randomUUID(), `test.${randomUUID()}`, { profileId: TOBI }],
+  );
+  await resolve(first, {
+    outcome: 'account_secured',
+    bankAndSignInChecked: true,
+  });
+  const report = (await (await freeze()).json()).data;
+  assert.equal(report.state, 'frozen');
+  assert.notEqual(report.issueId, first);
+  const screen = await fetch(
+    `${stack.api}/v1/ops/pages/${TOBI}/withdrawal-freeze`,
+    { headers: { cookie: owner.cookie } },
+  );
+  assert.deepEqual((await screen.json()).data, {
+    issueId: report.issueId,
+    issueOpen: true,
+  });
+  await resolve(reversal, { outcome: 'resolved_by_provider' });
+  assert.equal(await withdrawalsFrozen(database.db, { profileId: TOBI }), true);
+  assert.deepEqual(
+    await rows(
+      `SELECT id FROM issues WHERE kind = 'account_takeover_reported' AND status = 'open'`,
+    ),
+    [{ id: report.issueId }],
+  );
+  assert.equal(
+    (
+      await resolve(report.issueId, {
+        outcome: 'account_secured',
+        bankAndSignInChecked: true,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    await withdrawalsFrozen(database.db, { profileId: TOBI }),
+    false,
+  );
 });
 
 test('staff can end all of an account’s sessions, audited; not a staff account, and only with the permission', async () => {

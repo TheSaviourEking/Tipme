@@ -42,14 +42,12 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
 
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(`/@${handle}`);
-  const quoteResponse = visitor.waitForResponse(
-    (response) =>
-      response.url().endsWith('/v1/tip-quotes') &&
-      response.request().method() === 'POST',
-  );
-  await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
+  const quoteResponse = visitor.request.post(`${API_ORIGIN}/v1/tip-quotes`, {
+    data: { handle, amountMinor: '200000', currency: 'NGN' },
+  });
   // Milestones grant nothing by themselves: the quote still uses the normal 10% (ADR-0014).
   const quote = await (await quoteResponse).json();
+  expect(quote.data.payerTotalMinor).toBe('200000');
   expect(
     BigInt(quote.data.platformFeeMinor) + BigInt(quote.data.providerFeeMinor),
   ).toBe(20000n);
@@ -65,15 +63,21 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
       visitor.getByText(`Celebrating ${handle}’s 10th tip`),
     ).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10_000 });
-  await visitor.getByRole('button', { name: 'Add to the celebration' }).click();
-  await expect(
-    visitor.getByRole('button', { name: 'Add to the celebration' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  const join = visitor.getByRole('checkbox', {
+    name: 'Add to the celebration',
+  });
+  await expect(join).not.toBeChecked();
+  await join.check();
   await expectAccessible(visitor);
   await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
-  await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible();
   await visitor.getByRole('button', { name: /^Tip ₦/ }).click();
   await visitor.waitForURL(/\/mock-checkout\//);
+  // The paid tip counts towards the moment, not only the started one.
+  await visitor.getByRole('button', { name: /^Pay/ }).click();
+  await visitor.waitForURL(/\/tip\//);
+  await expect(visitor.getByRole('heading', { name: /^Paid\. / })).toBeVisible({
+    timeout: 20_000,
+  });
 
   const { openTestDatabase } =
     await import('../../packages/database/dist/test-support.js');
@@ -81,7 +85,8 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   try {
     const { rows } = await database.pool.query(
       `SELECT count(*)::int AS n FROM tips t JOIN profiles p ON p.id = t.profile_id
-        WHERE p.handle_lower = $1 AND t.celebration_moment_id IS NOT NULL`,
+        WHERE p.handle_lower = $1 AND t.celebration_moment_id IS NOT NULL
+          AND t.status = 'SUCCEEDED'`,
       [handle],
     );
     expect(rows[0].n).toBe(1);

@@ -37,7 +37,7 @@ Each of these is open. Each has a line in the acceptance.
 - [ ] **BLOCKING, the limits of the takeover freeze:** it stops withdrawals not yet started and bank changes. It can't recall a withdrawal already with the provider, it depends on someone reporting the takeover, and checking the bank is by hand. Practise it once: Pages → the page → **Freeze withdrawals…**, **End all sessions…**, then resolve the issue. **Accept the limits.**
 - [ ] **BLOCKING, a public hint:** `/health/payments` tells anyone whether the reserve is low, and whether the live record matches. It shows no amount. **Accept it.**
 - [ ] **BLOCKING, small withdrawals:** the reserve pays ₦50 on each withdrawal, however small. **Accept it** (the default), or ask for a change.
-- [ ] **BLOCKING, one admin only:** second-person approval has not shipped here. Until it has, production has **one** admin, the owner. A second admin before then is the owner's risk to decide in writing.
+- [ ] **BLOCKING, more than one admin:** check `/ops/approvals` is in the production release before adding a second admin. Second-person approval starts by itself once a second qualified person is set up ([admin-roles.md](admin-roles.md)); with one admin, serious actions run alone and alert. It covers the serious actions listed there, not `payout-resume`, `bachs/account-recovery` or releasing a freeze, which stay one person with audit: **accept that list**, or ask for a change.
 - [ ] **BLOCKING, the pilot notice wording:** the owner has read "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" and approves it, or sends new wording.
 - [ ] **BLOCKING, Q7:** public launch or closed pilot.
 - [ ] **BLOCKING, the withdrawals switch:** read [Stopping withdrawals](#stopping-withdrawals), including what it doesn't stop. **Accept it.**
@@ -194,6 +194,8 @@ Stops new tips. **It doesn't stop withdrawals;** for that see the next section. 
 **To stop one account at once:** freeze it (Pages), rather than switching everyone off.
 
 ## Stopping withdrawals
+
+Switching off, freezing a page and ending sessions need no fresh authenticator code, so they work first time in an incident; the permission, the reason and the alert still apply. Switching back on needs a fresh code.
 
 Ops → Overview → **Switch off all withdrawals…**, with a written reason. Needs `payouts.resolve`. It takes effect at the next request and job on every copy, with no deploy, is audited, and posts to the alert route (the reason stays in the audit log). It doesn't depend on `PAYMENTS_LIVE_ENABLED`: tips can stay open with withdrawals off, or the reverse.
 

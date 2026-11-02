@@ -1,46 +1,34 @@
 'use client';
+import Link from 'next/link';
 import { Card } from '@tipme/ui';
-import { useOpsAccess } from '@/lib/ops-client';
+import { OPS_CATALOGUE, type OpsPermission } from '@tipme/contracts';
+import { can, useOpsAccess } from '@/lib/ops-client';
 
-const DESCRIPTIONS: Record<string, string> = {
-  'analytics.view': 'See health, visibility and market numbers',
-  'audit.view': 'Read the audit log',
-  'fees.manage': 'Set a page’s fee and grant fee-free tips, with a reason',
-  'issues.resolve': 'Resolve issues',
-  'issues.view': 'See issues and their evidence, add notes',
-  'market.edit': 'Add and change market observations',
-  'pages.plan': 'Move a page between Free and Pro, with a reason',
-  'pages.suspend':
-    'Pause and restore recipient pages, and review or remove their images',
-  'payments.recheck': 'Ask the provider about a payment or withdrawal',
-  'payouts.resolve':
-    'Act on a stuck withdrawal after asking the provider: record its answer, resume a held start, or release one it doesn’t have',
-  'private.view': 'Reveal private details, with a reason',
-  'recoveries.cancel': 'Cancel a pending phone recovery',
-  'search.view': 'Search pages, tips, withdrawals and ledger entries',
-};
-
-/** Read-only for now: roles are granted with `pnpm ops:grant-owner` (ADR-0010). */
+/** Everyone's own access; the people and roles behind it are for those who manage staff. */
 export default function StaffPage() {
   const access = useOpsAccess();
   return (
     <section className="dashboard-section">
-      <h1>Staff &amp; roles</h1>
+      <h1>Your access</h1>
+      {can(access, 'staff.manage') && (
+        <p>
+          <Link href="/ops/staff/people">People</Link> ·{' '}
+          <Link href="/ops/staff/roles">Roles</Link> ·{' '}
+          <Link href="/ops/approvals">Approvals</Link>
+        </p>
+      )}
       <Card className="settings-section">
         <h2>Your role: {access.role === 'owner' ? 'Owner' : access.role}</h2>
         <ul className="ops-permissions">
           {access.permissions.map((permission) => (
             <li key={permission}>
               <code>{permission}</code>
-              <span className="tm-hint">{DESCRIPTIONS[permission] ?? ''}</span>
+              <span className="tm-hint">
+                {OPS_CATALOGUE[permission as OpsPermission]?.description ?? ''}
+              </span>
             </li>
           ))}
         </ul>
-        <p className="tm-hint">
-          Staff are added only with <code>pnpm ops:grant-owner</code>. More
-          roles (for example Support or Finance) are sets of these permissions
-          and need no code change.
-        </p>
       </Card>
     </section>
   );

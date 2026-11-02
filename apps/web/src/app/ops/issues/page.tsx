@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import type { OpsIssue } from '@tipme/contracts';
 import { Badge, Button, EmptyState, Notice, Skeleton } from '@tipme/ui';
 import { age, ISSUE_KIND_LABELS, SEVERITY_LABELS } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 type Filters = { status: string; severity: string };
 
@@ -30,7 +30,7 @@ export default function IssuesPage() {
 
   useEffect(() => {
     const load = () =>
-      void apiFetch<OpsIssue[]>(query(filters)).then((result) => {
+      void opsFetch<OpsIssue[]>(query(filters)).then((result) => {
         setNow(Date.now());
         if (!result.ok) return setFailed(true);
         setFailed(false);
@@ -47,7 +47,7 @@ export default function IssuesPage() {
   const loadMore = async () => {
     const last = issues?.at(-1);
     if (!last) return;
-    const result = await apiFetch<OpsIssue[]>(query(filters, last.id));
+    const result = await opsFetch<OpsIssue[]>(query(filters, last.id));
     if (result.ok) {
       setIssues([...(issues ?? []), ...result.data]);
       setMore(result.data.length === 50);

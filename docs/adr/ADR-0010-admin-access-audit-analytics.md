@@ -156,3 +156,11 @@ There is one admin today, but "we should make provision for roles to be added in
 ## Validation evidence
 
 `docs/PR-009-VERIFICATION.md`.
+
+## Amendment, 2 November 2026: many staff, custom roles, second-person approval
+
+This records what was built; it approves no regulatory, payment-partner or funds-flow decision.
+
+Staff are now added from the dashboard, with custom roles and per-person adjustments. Serious actions wait for a second qualified person, and run alone with an alert when nobody else qualifies. Stopping actions need no fresh code. Releasing a takeover freeze is one person with a fresh code, audited and alerted, and not on your own page while someone else could do it. `pnpm ops:grant-owner` stays as the way back in, and is logged.
+
+See `docs/superpowers/specs/2026-11-01-admin-roles-design.md` and `docs/runbooks/admin-roles.md`. The consequence above about who may run the grant command stands.

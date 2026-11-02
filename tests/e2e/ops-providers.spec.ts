@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, fitsViewport } from './helpers';
-import { enrolOwner, withDatabase } from './ops-helpers';
+import { enrolOwner, noOtherStaff, withDatabase } from './ops-helpers';
 
 // Only the pretend provider is configured in e2e, and it is the default. Choosing a provider
 // without keys here means no card is active, so the pretend one can be switched to.
@@ -40,9 +40,10 @@ async function testEmailLink(page: import('@playwright/test').Page) {
   return /(\/ops\/providers\/confirm\S*#t=[\w-]+)/.exec(text)?.[1] ?? '';
 }
 
-test('staff send a test, confirm it from the inbox, and make the provider active', async ({
+test('@alone staff send a test, confirm it from the inbox, and make the provider active', async ({
   page,
 }, testInfo) => {
+  await noOtherStaff();
   await enrolOwner(page, testInfo);
   await page.goto('/ops/providers');
   await expect(page.getByRole('heading', { name: 'Providers' })).toBeVisible();
@@ -79,7 +80,7 @@ test('staff send a test, confirm it from the inbox, and make the provider active
   await expect(ready.getByText('Active', { exact: true })).toBeVisible();
 });
 
-test('an override can be set and removed with a reason', async ({
+test('@alone an override can be set and removed with a reason (needs the confirmed test above)', async ({
   page,
 }, testInfo) => {
   await enrolOwner(page, testInfo);

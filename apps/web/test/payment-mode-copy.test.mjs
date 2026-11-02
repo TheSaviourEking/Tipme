@@ -33,13 +33,37 @@ test('test copy keeps today’s wording', () => {
     copy.signUpLede,
     'An email address and a handle is all it takes to start receiving thanks. Payments are in test mode.',
   );
-  assert.match(copy.formTrust, /^No account needed\./);
+  assert.equal(
+    copy.formTrust,
+    'No account needed. You pay exactly this amount.',
+  );
+  assert.equal(
+    copy.formPartner,
+    'A test page stands in for our payment partner. Confirm there.',
+  );
+  assert.equal(
+    paymentModeCopy('live').formPartner,
+    'Our payment partner handles this. You’ll confirm on its page.',
+  );
+  assert.equal(paymentModeCopy('closed').formPartner, null);
   assert.equal(
     copy.withdrawNotice,
     'No real money moves in test mode. The test bank pays straight away.',
   );
   assert.equal(copy.receiptBanner, 'Test payment · no real money moved');
   assert.equal(copy.footerNote, 'Development preview · Test mode');
+});
+
+test('supporters are never told about totals or what the person receives, or that there are no fees', () => {
+  for (const mode of ['test', 'live', 'closed']) {
+    const copy = paymentModeCopy(mode);
+    for (const key of ['formTrust', 'homeClarity', 'howItWorksPay'])
+      assert.doesNotMatch(
+        copy[key] ?? '',
+        /receive|full total|full cost|no fees?|free/i,
+        `${mode}.${key}`,
+      );
+  }
 });
 
 test('closed copy says tipping opens soon where a supporter would pay', () => {

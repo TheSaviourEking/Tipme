@@ -59,6 +59,33 @@ export const apiErrorCodes = [
   'SAME_AS_SIGN_IN_EMAIL',
   'SIGN_IN_CODE_REQUIRED',
   'PROVIDER_NOT_ALLOWED',
+  'PERMISSION_NOT_HELD',
+  'FRESH_CODE_REQUIRED',
+  'CODE_ALREADY_USED',
+  'STAFF_ADMIN_BUSY',
+  'ISSUE_OWN_ALERT',
+  'APPROVAL_OWN_REQUEST',
+  'APPROVAL_NOT_YOURS',
+  'APPROVAL_SUBJECT',
+  'APPROVAL_CLOSED',
+  'APPROVAL_EXPIRED',
+  'APPROVAL_STALE',
+  'APPROVAL_ALREADY_PENDING',
+  'PAYOUT_CHANGED',
+  'SELF_ACCESS_CHANGE',
+  'ROLE_NAME_TAKEN',
+  'ROLE_IN_USE',
+  'ROLE_PROTECTED',
+  'STAFF_PROTECTED',
+  'STAFF_CHANGED',
+  'LAST_OWNER',
+  'ROLE_HAS_FORMER_HOLDERS',
+  'STAFF_EMAIL_TAKEN',
+  'STAFF_NO_EMAIL',
+  'STAFF_EMAIL_LOCKED',
+  'STAFF_PHONE_LOCKED',
+  'STAFF_CANNOT_DELETE',
+  'STAFF_ALREADY_ENROLLED',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];
@@ -70,6 +97,8 @@ export interface ApiErrorResponse {
     message: string;
     reference: string;
     fields?: string[];
+    /** A fixed code saying more about the refusal, never request data. */
+    reason?: string;
   };
 }
 

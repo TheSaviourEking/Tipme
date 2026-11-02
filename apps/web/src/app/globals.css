@@ -943,10 +943,48 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   gap: var(--space-1);
 }
 
+/* Keys per row come from the form (tip-amounts.ts, keyLayout), by the card's real width: whole
+   amounts always fit, rows are even, and no key is left alone on a row. */
+.tip-instrument .amount-fit {
+  container-type: inline-size;
+}
+
 .tip-instrument .amount-options {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin: var(--space-2) 0 0;
+  --keys: var(--keys-small);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+}
+
+@container (min-width: 18rem) {
+  .tip-instrument .amount-options {
+    --keys: var(--keys-medium);
+  }
+}
+
+@container (min-width: 21.25rem) {
+  .tip-instrument .amount-options {
+    --keys: var(--keys-large);
+  }
+}
+
+.tip-instrument .amount-options .tm-amount-choice {
+  flex: 1 1 calc((100% - (var(--keys) - 1) * 0.375rem) / var(--keys));
+}
+
+/* The dot sits in the key's corner, so choosing never moves or squeezes the amount. */
+.tip-instrument .tm-amount-choice span {
+  position: relative;
+  padding-inline: 0.125rem;
+  white-space: nowrap;
+}
+
+.tip-instrument .tm-amount-choice input:checked + span::after {
+  position: absolute;
+  top: 0.3125rem;
+  right: 0.3125rem;
+  margin: 0;
 }
 
 .tip-instrument .tm-amount-choice span {
@@ -1021,11 +1059,21 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   display: grid;
   gap: var(--space-4);
   padding-top: var(--space-2);
+  /* Opacity and transform only: nothing above moves, and the page's layout changes once. */
+  animation: composer-extras-open var(--duration-component) var(--ease-physical);
 }
 
-/* The live price region stays rendered for announcements; while empty it takes no gap. */
-.tip-instrument .tip-quote:empty {
-  margin-top: calc(var(--space-4) * -1);
+@keyframes composer-extras-open {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-instrument .composer-extras__body {
+    animation: none;
+  }
 }
 
 .tip-instrument .tip-remember {
@@ -1073,27 +1121,12 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     right: var(--space-5);
   }
 
-  .tip-instrument .amount-options {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.375rem;
-  }
-
   .tip-instrument .tm-amount-choice span {
-    padding-inline: 0.25rem;
     font-size: 0.875rem;
-  }
-
-  .tip-instrument .tm-amount-choice input:checked + span::after {
-    margin-left: 0.25rem;
   }
 }
 
-/* Four keys stop fitting their labels below about 360px: two rows instead. */
 @media (max-width: 359px) {
-  .tip-instrument .amount-options {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .tip-instrument .appreciation-card h2 {
     padding-right: 0;
     padding-top: var(--space-8);
@@ -1360,36 +1393,51 @@ body:has(.profile-page) .brand__mark {
   animation: none !important;
 }
 
+.profile-composer[data-taller-than-window] {
+  position: relative;
+  top: 0;
+}
+
 .profile-composer .appreciation-card {
-  padding: 1.75rem;
+  padding: 1.375rem;
   border-radius: 1.625rem;
 }
 
+.profile-composer .appreciation-card form {
+  gap: 0.625rem;
+}
+
 .profile-composer .appreciation-card h2 {
+  padding: 0;
   font-size: 1.375rem;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 
-.profile-composer .amount-options {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
 .profile-composer .tm-amount-choice span {
-  min-height: 3.75rem;
-  padding-inline: 0.25rem;
+  min-height: 3rem;
   border-radius: 0.875rem;
 }
 
-/* The total's line is held open beside the button, so choosing an amount moves nothing. */
-.profile-composer .tip-quote {
-  min-height: 1.75rem;
-  margin: 0 0 var(--space-3);
+/* Two 44px targets, close together: the space is already in the targets themselves. */
+.profile-composer .tip-celebrate {
+  align-items: center;
+  min-height: 2.75rem;
+  margin-bottom: -0.625rem;
+  font-weight: 600;
 }
 
-.profile-composer .tip-quote:empty {
-  display: block;
-  margin-top: 0;
+.profile-composer .composer-extras summary {
+  min-height: 2.75rem;
+}
+
+/* Who handles the payment, with the button at every width, in the phone's Tip bar too. */
+.composer-action__partner {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  text-align: center;
 }
 
 /* Shown only in the phone's Tip bar; elsewhere the wording under the button carries it. */
@@ -1399,7 +1447,7 @@ body:has(.profile-page) .brand__mark {
 
 .profile-composer .composer-submit,
 .profile-composer .composer-submit:hover {
-  min-height: 3.5rem;
+  min-height: 3.25rem;
   border-color: #000;
   background: #000;
   color: #fff;
@@ -1414,19 +1462,38 @@ body:has(.profile-page) .brand__mark {
   }
 }
 
-/* The promise beside the button; the wording directly under the button stays its own block. */
+/* The one promise in the card. */
 .composer-trust {
-  display: flex;
-  gap: 0.5625rem;
   margin: 0;
   color: var(--text-secondary);
-  font-size: 0.84375rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: center;
 }
 
-.composer-trust svg {
+/* The moment this page shared: in the identity column, before the card on a phone. */
+.profile-celebration {
+  display: flex;
+  gap: 0.625rem;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--space-4) 0 0;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.profile-celebration[hidden] {
+  display: none;
+}
+
+.profile-celebration svg {
   flex: none;
-  margin-top: 0.125rem;
 }
 
 .profile-foot {
@@ -1588,11 +1655,6 @@ body:has(.profile-page) .brand__mark {
     font-size: 1.25rem;
   }
 
-  .profile-composer .tm-amount-choice span {
-    min-height: 3.625rem;
-    font-size: 0.875rem;
-  }
-
   .profile-foot {
     max-width: 36rem;
     margin: var(--space-6) auto 0;
@@ -1638,6 +1700,11 @@ body:has(.profile-page) .brand__mark {
       text-align: center;
     }
 
+    .profile-composer .composer-action__partner {
+      margin-top: var(--space-1);
+      font-size: 0.6875rem;
+    }
+
     .profile-composer .composer-action__notice a {
       color: var(--text-primary);
       text-underline-offset: 3px;
@@ -1645,18 +1712,13 @@ body:has(.profile-page) .brand__mark {
 
     /* The bar carries the mode wording on these phones, so the copy under the button goes (from
        sight and from screen readers alike): the person meets it once, beside the Tip action. */
-    .profile-composer .composer-disclaimer__mode {
+    .profile-composer .composer-disclaimer {
       display: none;
     }
 
     .profile-composer .composer-action .tip-quote {
-      min-height: 0;
       margin: 0 0 var(--space-1);
       text-align: center;
-    }
-
-    .profile-composer .composer-action .tip-quote:empty {
-      display: none;
     }
 
     .profile-composer .composer-action .tip-quote p {
@@ -1674,17 +1736,6 @@ body:has(.profile-page) .brand__mark {
       .composer-action {
       visibility: hidden;
     }
-
-    /* The button has left the flow: the wording below it needs no pull towards it. */
-    .profile-composer .composer-disclaimer {
-      margin-top: 0;
-    }
-  }
-}
-
-@media (max-width: 359px) {
-  .profile-composer .amount-options {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2167,13 +2218,6 @@ body:has(.profile-page) .brand__mark {
 
 .tip-breakdown dd {
   margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.tip-payment-total {
-  margin: 0;
-  font-weight: 700;
-  color: var(--brand-ink);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4573,22 +4617,6 @@ html:has(.confirm-dialog[open]) {
   margin: 0;
 }
 
-/* Moments (PR-008 Task 11). */
-.celebration-banner {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-left: 3px solid var(--brand-primary);
-  border-radius: var(--radius-sm);
-  background: var(--brand-soft);
-  color: var(--brand-ink);
-}
-
-.celebration-banner p {
-  margin: 0;
-  font-weight: 700;
-}
-
 /* ---- Admin area (PR-009) ---- */
 .ops-banner {
   display: flex;
@@ -5177,6 +5205,66 @@ body > .coming-soon-page {
   .launch-countdown__tile {
     transition: none;
   }
+}
+
+/* The admin's serious-action screens: nearly still (EXPERIENCE-AND-MOTION 7.10), so no transitions. */
+.ops-code-dialog {
+  width: min(28rem, calc(100vw - var(--space-6)));
+  max-height: calc(100dvh - var(--space-6));
+  overflow: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+  color: var(--text-primary);
+}
+
+.ops-code-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.ops-picker {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.ops-picker fieldset {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.ops-picker legend {
+  padding-inline: var(--space-1);
+  font-weight: 600;
+}
+
+.ops-picker__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+
+.ops-picker__row input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-block-start: 0.15rem;
+}
+
+.ops-row h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ops-row .ops-summary {
+  overflow-wrap: anywhere;
 }
 
 /* The cover chooser in Settings (design spec §6, motion §7.6). */

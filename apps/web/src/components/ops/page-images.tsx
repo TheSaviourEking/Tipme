@@ -4,7 +4,7 @@ import type { OpsPage, OpsPageImage } from '@tipme/contracts';
 import { Button, Card, Notice } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { API_ORIGIN } from '@/lib/avatar-source';
-import { apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 const LABELS: Record<OpsPageImage, { name: string; title: string }> = {
   cover: { name: 'cover', title: 'Cover' },
@@ -44,7 +44,7 @@ function PageImage({
     }
   };
   const remove = async (reason: string) => {
-    const result = await apiFetch<{ removed: boolean }>(
+    const result = await opsFetch<{ removed: boolean }>(
       `/v1/ops/pages/${page.profileId}/images/${image}/remove`,
       { method: 'POST', body: { reason } },
     );

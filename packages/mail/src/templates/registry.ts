@@ -3,6 +3,7 @@ import type { MailContext, MailType, RenderedMail } from './define.js';
 import {
   emailChangedNotice,
   newSignInNotice,
+  recoveryCancelledNotice,
   recoveryCompletedNotice,
   recoveryStartedNotice,
   welcome,
@@ -34,6 +35,15 @@ import { payoutDestinationChanged } from './types/payout-destination-changed.js'
 import { phoneChangeWarning } from './types/phone-change-warning.js';
 import { providerTest } from './types/provider-test.js';
 import { recoveryLink } from './types/recovery-link.js';
+import {
+  staffActedAlone,
+  staffFreezeReleased,
+  staffApprovalOutcome,
+  staffApprovalPending,
+  staffLastApproverRemoved,
+  staffInvitation,
+  staffInvitationDeclined,
+} from './types/staff-invitation.js';
 import { tipReceived } from './types/tip-received.js';
 import { weeklyReport } from './types/weekly-report.js';
 
@@ -45,6 +55,13 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     weeklyReport,
     emailVerificationLink,
     recoveryLink,
+    staffInvitation,
+    staffInvitationDeclined,
+    staffActedAlone,
+    staffFreezeReleased,
+    staffApprovalOutcome,
+    staffApprovalPending,
+    staffLastApproverRemoved,
     phoneChangeWarning,
     providerTest,
     signInCode,
@@ -59,6 +76,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     recoveryCode,
     recoveryNewEmailCode,
     recoveryStartedNotice,
+    recoveryCancelledNotice,
     recoveryCompletedNotice,
     staffAccessNotice,
     accountDeletedNotice,

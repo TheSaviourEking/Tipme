@@ -94,6 +94,7 @@ test('quotes', async (t) => {
       assert.equal(custom.breakdown.platformFeeMinor, 3500n);
       assert.equal(custom.breakdown.providerFeeMinor, 1500n);
       assert.equal(custom.breakdown.recipientNetMinor, 95000n);
+      assert.equal(custom.breakdown.payerTotalMinor, custom.breakdown.tipMinor);
       assert.equal(custom.feePolicyVersion, 'proposed-v1.1-custom-500');
       assert.deepEqual(await pagePricing(database.db, ADA), {
         customFeeBps: 500,
@@ -110,6 +111,7 @@ test('quotes', async (t) => {
       // Honoured although Ada has never paid TipMe a fee: staff grants have no lifetime cap.
       const free = await quoteAda();
       assert.equal(free.feeFree, true);
+      assert.equal(free.breakdown.payerTotalMinor, free.breakdown.tipMinor);
       assert.equal(free.breakdown.recipientNetMinor, 100000n);
       assert.equal(free.feePolicyVersion, 'proposed-v1.1-custom-500-fee-free');
       // The one credit is reserved by the open fee-free quote: the next quote pays the fee.

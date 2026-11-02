@@ -10,9 +10,11 @@ import {
   Post,
   Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   OPS_PAGE_IMAGES,
   opsFeeFreeGrantSchema,
+  OPS_PAGE_LOOKUP_PERMISSIONS,
   opsHandleChangesGrantSchema,
   opsPageFeeSchema,
   opsPagePlanSchema,
@@ -24,26 +26,29 @@ import {
   type OpsPageFeeRequest,
   type OpsPageImage,
   type OpsPagePlanRequest,
+  type OpsActedAlone,
   type OpsPagePricing,
   type OpsReasonRequest,
+  type OpsSeriousPending,
   type OpsWithdrawalFreeze,
   type OpsWithdrawalFreezeState,
 } from '@tipme/contracts';
 import {
   freezeWithdrawals,
-  grantFeeFreeTips,
   grantHandleChanges,
   opsPageByHandle,
   pagePricing,
-  setAccountFee,
+  requestSeriousAction,
+  type SeriousActionServices,
   setPagePlan,
   staffRemovePageImage,
   staffViewPageImage,
   type MailSealing,
   type PhotoStore,
-  withdrawalFreezeIssue,
+  withdrawalFreezeState,
 } from '@tipme/database';
-import type { Response } from 'express';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -52,7 +57,8 @@ import { sendPrivateImage } from '../profiles/image-upload.js';
 import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
-import { OpsPermission } from './permission.decorator.js';
+import { FreshCode } from './fresh-code.guard.js';
+import { OpsAnyStaff, OpsPermission } from './permission.decorator.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const uuidOf = (value: string) => {
@@ -69,12 +75,16 @@ const imageOf = (value: string): OpsPageImage => {
  * Free and Pro (PR-012): staff look a page up and change its plan. Staff also set one page's
  * fee and grant fee-free tips (ADR-0014); nothing about pricing is automatic. No billing; audited.
  */
+const holdsOneOf = (held: ReadonlySet<string>, wanted: readonly string[]) =>
+  wanted.some((permission) => held.has(permission));
+
 @Controller('v1/ops/pages')
 export class OpsPagesController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Optional()
     @Inject(PHOTO_STORE)
@@ -82,10 +92,13 @@ export class OpsPagesController {
   ) {}
 
   @Get(':handle')
-  @OpsPermission('pages.plan')
+  @OpsAnyStaff()
   async page(
+    @CurrentOps() ops: OpsContext,
     @Param('handle') handle: string,
   ): Promise<ApiDataResponse<OpsPage>> {
+    if (!holdsOneOf(ops.permissions, OPS_PAGE_LOOKUP_PERMISSIONS))
+      throw new CodedHttpException(403, 'FORBIDDEN');
     const page = await opsPageByHandle(this.database.db, handle);
     if (!page) throw new CodedHttpException(404, 'NOT_FOUND');
     return { data: page };
@@ -93,6 +106,7 @@ export class OpsPagesController {
 
   @Post(':profileId/plan')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('pages.plan')
   async plan(
     @CurrentOps() ops: OpsContext,
@@ -166,6 +180,7 @@ export class OpsPagesController {
   /** More handle changes for one page; no public effect, so nothing to refresh. */
   @Post(':handle/handle-changes')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('pages.plan')
   async handleChanges(
     @CurrentOps() ops: OpsContext,
@@ -201,9 +216,7 @@ export class OpsPagesController {
   ): Promise<ApiDataResponse<OpsWithdrawalFreezeState>> {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
     return {
-      data: {
-        issueId: await withdrawalFreezeIssue(this.database.db, { profileId }),
-      },
+      data: await withdrawalFreezeState(this.database.db, { profileId }),
     };
   }
 
@@ -228,40 +241,72 @@ export class OpsPagesController {
 
   @Post(':profileId/fee')
   @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
   @OpsPermission('fees.manage')
   async fee(
     @CurrentOps() ops: OpsContext,
     @Param('profileId') profileId: string,
     @Body(new ZodValidationPipe(opsPageFeeSchema)) body: OpsPageFeeRequest,
-  ): Promise<ApiDataResponse<OpsPagePricing>> {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<(OpsPagePricing & OpsActedAlone) | OpsSeriousPending>
+  > {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
-    const { handle } = await setAccountFee(this.database.db, {
-      staffUserId: ops.userId,
-      profileId,
-      feeBps: body.feeBps,
-      reason: body.reason,
-    });
-    // The public page shows what the recipient receives after fees.
-    this.revalidator.revalidate(handle.toLowerCase());
-    return { data: (await pagePricing(this.database.db, profileId))! };
+    const answer = pendingOr<{ revalidateHandle: string }>(
+      await requestSeriousAction(this.database.db, {
+        name: 'fee.change',
+        payload: { profileId, feeBps: body.feeBps },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    if ('pending' in answer) return { data: answer.pending };
+    // After the commit. The public page shows what the recipient receives after fees.
+    this.revalidator.revalidate(answer.result.revalidateHandle);
+    return {
+      data: {
+        ...(await pagePricing(this.database.db, profileId))!,
+        ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
+      },
+    };
   }
 
   @Post(':profileId/fee-free')
   @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
   @OpsPermission('fees.manage')
   async feeFree(
     @CurrentOps() ops: OpsContext,
     @Param('profileId') profileId: string,
     @Body(new ZodValidationPipe(opsFeeFreeGrantSchema))
     body: OpsFeeFreeGrantRequest,
-  ): Promise<ApiDataResponse<OpsPagePricing>> {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<(OpsPagePricing & OpsActedAlone) | OpsSeriousPending>
+  > {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
-    await grantFeeFreeTips(this.database.db, {
-      staffUserId: ops.userId,
-      profileId,
-      count: body.count,
-      reason: body.reason,
-    });
-    return { data: (await pagePricing(this.database.db, profileId))! };
+    const answer = pendingOr(
+      await requestSeriousAction(this.database.db, {
+        name: 'fee.free',
+        payload: { profileId, count: body.count },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    if ('pending' in answer) return { data: answer.pending };
+    return {
+      data: {
+        ...(await pagePricing(this.database.db, profileId))!,
+        ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
+      },
+    };
   }
 }

@@ -11,6 +11,7 @@ import type { PayoutStatus } from '@tipme/domain';
 import {
   bachsEnvironment,
   PAYOUT_START_EVENT,
+  WITHDRAWAL_FREEZE_OPENED_EVENT,
   recordedProviderName,
 } from '@tipme/contracts';
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
@@ -223,7 +224,8 @@ export async function holdWithdrawals(
  * Audited with the written reason, which stays out of the issue's summary and the recipient's view.
  * It stops money leaving and moves none: a payout already with the provider isn't recalled. It ends
  * by its own issue closing as "the owner has the account back", once no other hold's cause is open. Under the profile
- * lock, so a second report finds the first.
+ * lock, so a second report finds the first. A report while that issue is open adds to it; one after it
+ * closed, even with withdrawals still held by another issue, opens a new issue that the hold moves to.
  */
 export function freezeWithdrawals(
   db: Database,
@@ -243,9 +245,16 @@ export function freezeWithdrawals(
         .where(eq(profiles.id, input.profileId))
         .for('update');
       if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
-      const [existing] = await tx
-        .select({ issueId: withdrawalHolds.issueId })
+      // Read under the profile lock, so a close that has committed is seen. One still in flight has
+      // the issue row and waits for this lock; locking the issue here would deadlock against it.
+      const held = await tx
+        .select({
+          id: withdrawalHolds.id,
+          issueId: withdrawalHolds.issueId,
+          issueStatus: issues.status,
+        })
         .from(withdrawalHolds)
+        .innerJoin(issues, eq(issues.id, withdrawalHolds.issueId))
         .where(
           and(
             eq(withdrawalHolds.profileId, input.profileId),
@@ -253,7 +262,8 @@ export function freezeWithdrawals(
             isNull(withdrawalHolds.releasedAt),
           ),
         );
-      if (existing) {
+      const working = held.find(({ issueStatus }) => issueStatus === 'open');
+      if (working) {
         // A second report: its written reason is evidence, though it changes nothing else.
         await recordAudit(tx, {
           staffUserId: input.staffUserId,
@@ -264,20 +274,37 @@ export function freezeWithdrawals(
           reason: input.reason,
           now,
         });
-        return { state: 'already_frozen' as const, issueId: existing.issueId };
+        return { state: 'already_frozen' as const, issueId: working.issueId };
       }
+      const earlier = held.map(({ issueId }) => issueId).join(', ');
       const issue = await openIssue(tx, {
         // A takeover can be reported again after the last one closed.
         dedupeKey: `account_takeover.${input.profileId}.${newId()}`,
         kind: 'account_takeover_reported',
         subject: { profileId: input.profileId },
         now,
+        note: earlier ? `Earlier report, now closed: ${earlier}.` : undefined,
       });
       await holdWithdrawals(tx, {
         profileId: input.profileId,
         reason: 'account_takeover',
         issueId: issue.id,
       });
+      // A row left by a closed takeover, kept only by another hold issue, would be released when that
+      // closes: the new row is what holds now. Ended in this transaction, so there is no gap.
+      if (held.length > 0)
+        await tx
+          .update(withdrawalHolds)
+          .set({
+            releasedAt: sql`clock_timestamp()`,
+            releasedBy: input.staffUserId,
+          })
+          .where(
+            inArray(
+              withdrawalHolds.id,
+              held.map(({ id }) => id),
+            ),
+          );
       await recordAudit(tx, {
         staffUserId: input.staffUserId,
         action: 'withdrawals.frozen',
@@ -286,6 +313,22 @@ export function freezeWithdrawals(
         subjectId: input.profileId,
         reason: input.reason,
         now,
+      });
+      if (earlier)
+        await recordAudit(tx, {
+          staffUserId: input.staffUserId,
+          action: 'withdrawals.freeze_reopened',
+          permission: 'payouts.resolve',
+          subjectType: 'profile',
+          subjectId: input.profileId,
+          reason: `New report after ${earlier} closed. Issue ${issue.id} now holds withdrawals, frozen until it closes as account_secured.`,
+          now,
+        });
+      // Ids only: the alert route is a chat room, and the written reason stays in the audit log.
+      await enqueueOutbox(tx, {
+        eventType: WITHDRAWAL_FREEZE_OPENED_EVENT,
+        aggregateId: issue.id,
+        payload: { issueId: issue.id, profileId: input.profileId },
       });
       return { state: 'frozen' as const, issueId: issue.id };
     }),
@@ -309,6 +352,34 @@ export function withdrawalFreezeIssue(
         ),
       );
     return row?.issueId ?? null;
+  });
+}
+
+/**
+ * For staff screens: the issue holding the freeze, and whether it can still be worked. It can be
+ * closed while another open issue keeps the hold; a new report then opens a new issue.
+ */
+export function withdrawalFreezeState(
+  db: Database | Tx,
+  input: { profileId: string },
+): Promise<{ issueId: string | null; issueOpen: boolean }> {
+  return guarded(async () => {
+    const rows = await db
+      .select({ issueId: withdrawalHolds.issueId, status: issues.status })
+      .from(withdrawalHolds)
+      .innerJoin(issues, eq(issues.id, withdrawalHolds.issueId))
+      .where(
+        and(
+          eq(withdrawalHolds.profileId, input.profileId),
+          eq(withdrawalHolds.reason, 'account_takeover'),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      );
+    const row = rows.find(({ status }) => status === 'open') ?? rows[0];
+    return {
+      issueId: row?.issueId ?? null,
+      issueOpen: row?.status === 'open',
+    };
   });
 }
 

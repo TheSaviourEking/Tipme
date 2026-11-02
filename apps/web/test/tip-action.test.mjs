@@ -32,14 +32,28 @@ test('a notice node of any kind sits directly above the button', () => {
       TipAction,
       {
         notice: createElement('span', { id: 'stand-in' }, 'Pilot terms apply.'),
-        quote: createElement('p', null, 'You pay'),
+        quote: createElement('p', null, 'Could not get the amount'),
       },
       createElement('button', null, 'Tip'),
     ),
   );
   assert.match(
     html,
-    /<p>You pay<\/p><p class="composer-action__notice"><span id="stand-in">Pilot terms apply\.<\/span><\/p><button>/,
+    /<p>Could not get the amount<\/p><p class="composer-action__notice"><span id="stand-in">Pilot terms apply\.<\/span><\/p><button>/,
+  );
+});
+
+test('the partner line sits directly under the button', () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      TipAction,
+      { partner: 'A partner handles this.' },
+      createElement('button', null, 'Tip'),
+    ),
+  );
+  assert.match(
+    html,
+    /<button>Tip<\/button><p class="composer-action__partner">A partner handles this\.<\/p>/,
   );
 });
 

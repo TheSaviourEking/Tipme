@@ -4,7 +4,9 @@
 
 ## Getting in
 
-1. **Become staff (once):** run `pnpm ops:grant-owner --email <your address>` against the local database. It prints a one-time **enrolment code**, valid 30 minutes.
+People, roles, approvals, lost phones and a locked-out owner are in `docs/runbooks/admin-roles.md`. A money issue closed by hand waits for a second person when there is one, so "Waiting for a second person" means it hasn't closed yet. Releasing a freeze doesn't wait.
+
+1. **Become staff (once):** an owner adds you under People and you get an emailed link. For the first owner, or locally, run `pnpm ops:grant-owner --email <your address>`, which prints a one-time **enrolment code**, valid 30 minutes.
 2. **Sign in:** open `/ops` and sign in with that number (6-digit code, as usual).
 3. **Set up the authenticator:** enter the enrolment code, scan the QR code with an authenticator app, and enter its first code.
 4. **Later visits:** enter the current code from the app. Access lasts 12 hours at most, or 1 hour idle, and ends when you sign out.
@@ -52,7 +54,7 @@ Every action asks for a written reason (10–500 characters) and is recorded wit
   - The recipient sees your reason on their dashboard, so write it for them.
 - **Cancel the phone recovery.**
 
-- **Freeze withdrawals (Pages, needs `payouts.resolve`):** for a reported account takeover only. It stops withdrawals not yet started and bank changes, moves no money, and recalls nothing already with the provider. The recipient sees only "paused while support checks your account". A second report records its reason in the audit log.
+- **Freeze withdrawals (Pages, needs `payouts.resolve`):** for a reported account takeover only. It stops withdrawals not yet started and bank changes, moves no money, and recalls nothing already with the provider. The recipient sees only "paused while support checks your account". A report while the takeover issue is open records its reason in the audit log and answers with that issue. A report after it closed always opens a new issue and alerts staff, even if withdrawals were still held by another issue; the hold moves to the new issue (`withdrawals.freeze_reopened` in the audit log), and only that issue closing as secured, with no other hold issue open, releases it.
 - **End all sessions (Pages, needs `recoveries.manage`):** signs an account out everywhere, audited. Not for staff accounts.
 - **Switch off all withdrawals (Overview, needs `payouts.resolve`):** see `live-activation.md`, "Stopping withdrawals".
 

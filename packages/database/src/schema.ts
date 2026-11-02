@@ -1,6 +1,8 @@
 import {
   ISSUE_KINDS,
   ISSUE_OUTCOMES,
+  OPS_PERMISSIONS,
+  type OpsPermission,
   type OpsIssueKind as IssueKind,
   type OpsIssueSeverity as IssueSeverity,
   type OpsIssueSubject as IssueSubject,
@@ -1381,31 +1383,29 @@ export const paymentReserveReadings = pgTable(
 
 // ---- Staff access and audit (PR-009, ADR-0010) ----
 
-export const OPS_PERMISSIONS = [
-  'issues.view',
-  'issues.resolve',
-  'pages.suspend',
-  'recoveries.cancel',
-  'analytics.view',
-  'market.edit',
-  'audit.view',
-  'payments.recheck',
-  'private.view',
-  'pages.plan',
-  'search.view',
-  'fees.manage',
-  'providers.manage',
-  'recoveries.manage',
-  'payouts.resolve',
-] as const;
-export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
+// The list lives in @tipme/contracts (OPS_CATALOGUE) so every app reads one source.
+export { OPS_PERMISSIONS };
+export type { OpsPermission };
 
-/** A role is a named set of permissions, so new roles need no code change. Only `owner` is seeded. */
-export const roles = pgTable('roles', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  createdAt: createdAt(),
-});
+/**
+ * A role is a named set of permissions, so new roles need no code change. `system` roles (`owner`,
+ * `release_check`) can't be edited or deleted; the rest are generated ids, and names are unique
+ * whatever their case.
+ */
+export const roles = pgTable(
+  'roles',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    system: boolean('system').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex('roles_name_lower').on(sql`lower(${table.name})`)],
+);
 
 export const rolePermissions = pgTable(
   'role_permissions',
@@ -1434,7 +1434,37 @@ export const staff = pgTable('staff', {
     .references(() => roles.id),
   grantedAt: timestamp('granted_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  // First confirmed an authenticator. Outlives losing it (a reset, grant-owner); only being granted
+  // access again after removal clears it. Null is what makes someone a mere invitee.
+  enrolledAt: timestamp('enrolled_at', { withTimezone: true }),
 });
+
+/** A person's adjustments on top of their role; they stay when the role changes. */
+export const staffPermissionOverrides = pgTable(
+  'staff_permission_overrides',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    permission: text('permission').notNull(),
+    effect: text('effect').notNull(),
+    grantedBy: uuid('granted_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.permission] }),
+    check(
+      'staff_permission_overrides_known',
+      sql`permission IN (${sql.raw(OPS_PERMISSIONS.map((p) => `'${p}'`).join(', '))})`,
+    ),
+    check(
+      'staff_permission_overrides_effect',
+      sql`effect IN ('add', 'remove')`,
+    ),
+  ],
+);
 
 /** One-time codes that allow registering an authenticator; only the SHA-256 is stored. */
 export const staffEnrolments = pgTable('staff_enrolments', {
@@ -1474,8 +1504,54 @@ export const opsSessions = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    // When an authenticator code was last entered for this grant; sensitive routes ask for a recent one.
+    lastTotpAt: timestamp('last_totp_at', { withTimezone: true }),
   },
   (table) => [index('ops_sessions_user').on(table.userId)],
+);
+
+export const APPROVAL_STATUSES = [
+  'pending',
+  'approved',
+  'rejected',
+  'cancelled',
+  'expired',
+  'stale',
+] as const;
+
+/** A serious action waiting for a second person. It stores the action and what to run it with. */
+export const approvalRequests = pgTable(
+  'approval_requests',
+  {
+    id: uuid('id').primaryKey(),
+    action: text('action').notNull(),
+    payload: jsonb('payload').notNull(),
+    // The action's `current` value when asked for: if it has moved at approval, the action stops.
+    pinned: jsonb('pinned'),
+    // Exactly what will change, in words, fixed when requested.
+    summary: text('summary').notNull(),
+    permission: text('permission').notNull(),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id),
+    reason: text('reason').notNull(),
+    status: text('status').notNull().default('pending'),
+    decidedBy: uuid('decided_by').references(() => users.id),
+    decidedReason: text('decided_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      'approval_requests_status',
+      sql`status IN (${sql.raw(APPROVAL_STATUSES.map((s) => `'${s}'`).join(', '))})`,
+    ),
+    index('approval_requests_pending')
+      .on(table.expiresAt)
+      .where(sql`status = 'pending'`),
+    index('approval_requests_created').on(table.createdAt),
+  ],
 );
 
 export const opsLockouts = pgTable('ops_lockouts', {
