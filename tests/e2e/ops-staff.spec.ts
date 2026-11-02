@@ -764,8 +764,8 @@ test('a real role change and a real role edit wait, and neither shows as done', 
   await other.page.goto('/ops/approvals');
   const asked = other.page
     .getByRole('article')
-    .filter({ hasText: `to the role ${name}` });
-  await expect(asked.getByText(/Add audit\.view/)).toBeVisible();
+    .filter({ hasText: `the role ${name}` });
+  await expect(asked.getByText(/add audit\.view/)).toBeVisible();
   await expect(asked.getByText(/remove search\.view/)).toBeVisible();
   await sql(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
     user!.id,

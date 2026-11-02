@@ -54,6 +54,7 @@ import {
   updateRole,
 } from './staff-admin.js';
 import {
+  composeAccess,
   lockStaffAdmin,
   mailboxesOf,
   readOverrides,
@@ -200,6 +201,10 @@ const emailRecovery = acting<RecoveryPayload>({
   permission: 'recoveries.manage',
   subjects: ({ userId }) => [userId],
   mailboxes: ({ newEmail }) => [newEmail],
+  afterClose: (payload) => ({
+    ...payload,
+    newEmail: maskEmail(payload.newEmail),
+  }),
   target: ({ userId }) => userId,
   // The address stays masked (the owner's ruling), with whether it matches anyone on staff.
   describe: async (tx, { userId, newEmail, checks }) =>
@@ -502,17 +507,83 @@ const grantSubjects = (payload: GrantPayload, db: Database | Tx) =>
     ? accountOfEmail(db, payload.email)
     : Promise.resolve([payload.userId]);
 
+const grantAfterClose = (payload: GrantPayload): GrantPayload =>
+  payload.kind === 'add'
+    ? { ...payload, email: maskEmail(payload.email) }
+    : payload;
+
 const grantTarget = (payload: GrantPayload) =>
   payload.kind === 'add' ? `email:${payload.email}` : `user:${payload.userId}`;
 
+const sorted = (names: Iterable<string>) => [...names].sort();
+
+interface AccessEffect {
+  gains: string[];
+  losses: string[];
+}
+
+const effectOf = (
+  before: ReadonlySet<string>,
+  after: ReadonlySet<string>,
+): AccessEffect => ({
+  gains: sorted([...after].filter((p) => !before.has(p))),
+  losses: sorted([...before].filter((p) => !after.has(p))),
+});
+
+/** What replacing a person's adjustments with these would change. */
+async function accessEffect(
+  db: Database | Tx,
+  userId: string,
+  additions: readonly string[],
+  removals: readonly string[],
+): Promise<AccessEffect> {
+  const before = await readStaffAccess(db, userId);
+  if (!before) return { gains: [], losses: [] };
+  const after = new Set([
+    ...(await readRolePermissions(db, before.roleId)),
+    ...additions,
+  ]);
+  for (const permission of removals) after.delete(permission);
+  return effectOf(before.permissions, after);
+}
+
+/** What moving a person to this role would change: adjustments stay, except moving to owner. */
+async function roleMoveEffect(
+  db: Database | Tx,
+  userId: string,
+  roleId: string,
+): Promise<AccessEffect> {
+  const before = await readStaffAccess(db, userId);
+  if (!before) return { gains: [], losses: [] };
+  const next = await readRolePermissions(db, roleId);
+  const after = composeAccess(
+    roleId,
+    next,
+    roleId === 'owner' ? [] : await readOverrides(db, userId),
+  );
+  return effectOf(before.permissions, after.permissions);
+}
+
+/** Sorted: the words are compared at approval, and a table's row order isn't fixed. */
+const effectWords = ({ gains, losses }: AccessEffect) => {
+  const parts = [
+    ...(gains.length ? [`gains ${gains.join(', ')}`] : []),
+    ...(losses.length ? [`loses ${losses.join(', ')}`] : []),
+  ];
+  return parts.length ? parts.join('; ') : 'what they hold stays the same';
+};
+
+// The change itself, by comparing before and after: re-ticking a removed permission sends no
+// adjustments at all, and hands the permission back.
 const grantDescribe = async (tx: Tx, payload: GrantPayload) => {
-  if (payload.kind === 'add')
-    return `Add ${maskEmail(payload.email)} as staff with the role ${await roleName(tx, payload.roleId)}`;
+  if (payload.kind === 'add') {
+    const holds = sorted(await readRolePermissions(tx, payload.roleId));
+    return `Add ${maskEmail(payload.email)} as staff with the role ${await roleName(tx, payload.roleId)}, which holds ${holds.join(', ') || 'nothing'}`;
+  }
   const who = await personHint(tx, payload.userId);
   if (payload.kind === 'role')
-    return `Move ${who} to the role ${await roleName(tx, payload.roleId)}`;
-  const list = (names: string[]) => (names.length ? names.join(', ') : 'none');
-  return `Set ${who}'s personal access: adds ${list(payload.additions)}; removes ${list(payload.removals)}`;
+    return `Move ${who} to the role ${await roleName(tx, payload.roleId)}: ${effectWords(await roleMoveEffect(tx, payload.userId, payload.roleId))}`;
+  return `Change ${who}'s personal access: ${effectWords(await accessEffect(tx, payload.userId, payload.additions, payload.removals))}`;
 };
 
 /** The role a grant hands out moved, or the person's access did: the request stops. */
@@ -565,6 +636,7 @@ const grantOwnerAction = acting<GrantPayload>({
   permission: 'staff.manage',
   mayDecide: async (_db, _payload, approver) => isOwner(approver),
   subjects: grantSubjects,
+  afterClose: grantAfterClose,
   target: grantTarget,
   current: grantCurrent,
   describe: grantDescribe,
@@ -572,20 +644,12 @@ const grantOwnerAction = acting<GrantPayload>({
 });
 
 /** What personal adjustments would leave them holding that they don't hold now. */
-async function accessGains(
+const accessGains = async (
   db: Database | Tx,
   userId: string,
   additions: readonly string[],
   removals: readonly string[],
-): Promise<string[]> {
-  const before = await readStaffAccess(db, userId);
-  if (!before) return [];
-  const roleHas = await readRolePermissions(db, before.roleId);
-  return [...new Set([...additions, ...roleHas])].filter(
-    (permission) =>
-      !removals.includes(permission) && !before.permissions.has(permission),
-  );
-}
+) => (await accessEffect(db, userId, additions, removals)).gains;
 
 /** What the person would be given: someone who doesn't hold it all can't decide it. */
 const permissionsGranted = async (db: Database | Tx, payload: GrantPayload) =>
@@ -601,6 +665,7 @@ const grantSensitive = acting<GrantPayload>({
       approver.access.permissions.has(permission),
     ),
   subjects: grantSubjects,
+  afterClose: grantAfterClose,
   target: grantTarget,
   current: grantCurrent,
   describe: grantDescribe,
@@ -636,13 +701,20 @@ const roleAddSensitive = acting<RoleEditPayload>({
   },
   target: ({ roleId }) => roleId,
   current: (tx, { roleId }) => roleStamp(tx, roleId),
-  // The run replaces the whole list, so the words must name what goes as well as what comes.
+  // The run replaces the whole list, so the words name what goes as well as what comes, and the
+  // run also writes any new name and description.
   describe: async (tx, payload) => {
     const stored = await readRolePermissions(tx, payload.roleId);
     const removed = stored.filter((p) => !payload.permissions.includes(p));
-    return `Add ${(await addedBy(tx, payload)).join(', ') || 'nothing'}${
-      removed.length ? ` and remove ${removed.join(', ')}` : ''
-    } to the role ${await roleName(tx, payload.roleId)}`;
+    const changes = [
+      `add ${sorted(await addedBy(tx, payload)).join(', ') || 'nothing'}`,
+      ...(removed.length ? [`remove ${sorted(removed).join(', ')}`] : []),
+      ...(payload.name === undefined ? [] : [`rename it to "${payload.name}"`]),
+      ...(payload.description === undefined
+        ? []
+        : [`describe it as "${payload.description}"`]),
+    ];
+    return `In the role ${await roleName(tx, payload.roleId)}: ${changes.join('; ')}`;
   },
   act: (tx, payload, context) =>
     updateRole(tx, {
@@ -774,7 +846,15 @@ async function applyUnlessSerious<Result>(
   );
   if ('applied' in first)
     return { state: 'applied', result: first.applied as Result };
-  return requestSeriousAction(db, { ...first.serious, ...asking });
+  // Only what asking means: a caller's input can also hold a field called `name` (a role's).
+  const { actorId, grantId, reason, services } = asking;
+  return requestSeriousAction(db, {
+    ...first.serious,
+    actorId,
+    grantId,
+    reason,
+    services,
+  });
 }
 
 const hasSensitive = (permissions: readonly string[]) =>

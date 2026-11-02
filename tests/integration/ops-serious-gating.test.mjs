@@ -1583,3 +1583,190 @@ test('N4: the server command and a declined invitation say what they are', async
   assert.equal(rows.length, 1);
   assert.equal(rows[0].payload.targetId, invited.userId);
 });
+
+/* What the approver reads: what would really change, not what was typed. */
+
+const summaryOf = async (outcome) => (await rowOf(outcome.requestId)).summary;
+const removePersonally = (userId, permission, by) =>
+  q(
+    `INSERT INTO staff_permission_overrides (user_id, permission, effect, granted_by) VALUES ($1, $2, 'remove', $3)`,
+    [userId, permission, by],
+  );
+
+test('re-ticking a removed permission names it as gained, never "none"', async () => {
+  const requester = await person();
+  await person();
+  const userId = await person({
+    roleId: await roleWith([SENSITIVE, HARMLESS]),
+  });
+  await removePersonally(userId, SENSITIVE, requester);
+  const words = await summaryOf(
+    await ops.setPersonalAccessOrAsk(database.db, {
+      ...asking(requester),
+      userId,
+      additions: [],
+      removals: [],
+    }),
+  );
+  assert.match(words, new RegExp(`gains ${SENSITIVE}`));
+  assert.doesNotMatch(words, /none|loses/);
+});
+
+test('one change named beside a cleared removal names both; a stored addition is not new', async () => {
+  const requester = await person();
+  await person();
+  const userId = await person({ roleId: await roleWith([SENSITIVE]) });
+  await removePersonally(userId, SENSITIVE, requester);
+  await q(
+    `INSERT INTO staff_permission_overrides (user_id, permission, effect, granted_by) VALUES ($1, $2, 'add', $3)`,
+    [userId, HARMLESS, requester],
+  );
+  const words = await summaryOf(
+    await ops.setPersonalAccessOrAsk(database.db, {
+      ...asking(requester),
+      userId,
+      additions: [HARMLESS, 'analytics.view'],
+      removals: [],
+    }),
+  );
+  assert.match(words, /gains analytics\.view, fees\.manage/);
+  assert.doesNotMatch(words, new RegExp(HARMLESS.replace('.', '\\.')));
+});
+
+test('a gain and a loss in one change are both named', async () => {
+  const requester = await person();
+  await person();
+  const userId = await person({ roleId: await roleWith([HARMLESS]) });
+  const words = await summaryOf(
+    await ops.setPersonalAccessOrAsk(database.db, {
+      ...asking(requester),
+      userId,
+      additions: [SENSITIVE],
+      removals: [HARMLESS],
+    }),
+  );
+  assert.match(words, /gains fees\.manage; loses search\.view/);
+});
+
+test('moving someone to a role names what they gain and lose, through their own adjustments', async () => {
+  const requester = await person();
+  await person();
+  const userId = await person({ roleId: await roleWith([HARMLESS]) });
+  const next = await roleWith([SENSITIVE, 'audit.view']);
+  await removePersonally(userId, 'audit.view', requester);
+  const words = await summaryOf(
+    await ops.changeRoleOrAsk(database.db, {
+      ...asking(requester),
+      userId,
+      roleId: next,
+    }),
+  );
+  assert.match(words, /gains fees\.manage; loses search\.view/);
+  assert.doesNotMatch(words, /audit\.view/);
+});
+
+test('adding someone names everything the role gives them', async () => {
+  const requester = await person();
+  await person();
+  const role = await roleWith([SENSITIVE, HARMLESS]);
+  const words = await summaryOf(
+    await ops.addStaffOrAsk(database.db, {
+      ...asking(requester),
+      email: `added.${randomUUID().slice(0, 6)}@example.com`,
+      roleId: role,
+    }),
+  );
+  assert.match(words, /which holds fees\.manage, search\.view/);
+});
+
+test('M1: a role edit with a new name still asks, and the approver reads the name', async () => {
+  const requester = await person();
+  const second = await person();
+  const roleId = await roleWith([HARMLESS]);
+  const name = `Renamed ${randomUUID().slice(0, 6)}`;
+  const outcome = await ops.updateRoleOrAsk(database.db, {
+    ...asking(requester),
+    roleId,
+    name,
+    description: 'Now reads the fees',
+    permissions: [HARMLESS, SENSITIVE],
+  });
+  assert.equal(outcome.state, 'pending');
+  const row = await rowOf(outcome.requestId);
+  assert.equal(row.action, 'role.add_sensitive');
+  assert.match(row.summary, /add fees\.manage/);
+  assert.match(row.summary, new RegExp(`rename it to "${name}"`));
+  assert.match(row.summary, /Now reads the fees/);
+  assert.equal((await approve(outcome.requestId, second)).status, 'approved');
+  const [role] = await q(`SELECT name FROM roles WHERE id = $1`, [roleId]);
+  assert.equal(role.name, name);
+});
+
+test('M7: a closed request keeps no address in the clear, however it closed', async () => {
+  const plain = /[a-z0-9.]{4,}@example\.com/;
+  const addressed = async (requester) =>
+    ask(requester, 'staff.grant_sensitive', {
+      kind: 'add',
+      email: `invited.${randomUUID().slice(0, 6)}@example.com`,
+      roleId: await roleWith([SENSITIVE]),
+    });
+  const requester = await person();
+  const second = await person();
+
+  const waiting = await addressed(requester);
+  assert.match(JSON.stringify((await rowOf(waiting.requestId)).payload), plain);
+
+  const closings = [
+    [waiting, (id) => approve(id, second), 'approved'],
+    [
+      await addressed(requester),
+      (id) =>
+        ops.rejectRequest(database.db, {
+          requestId: id,
+          actorId: second,
+          grantId: people.get(second).grantId,
+          reason: REASON,
+        }),
+      'rejected',
+    ],
+    [
+      await addressed(requester),
+      (id) =>
+        ops.cancelRequest(database.db, {
+          requestId: id,
+          actorId: requester,
+          reason: REASON,
+        }),
+      'cancelled',
+    ],
+    [
+      await addressed(requester),
+      async (id) => {
+        await q(
+          `UPDATE approval_requests SET expires_at = now() - interval '1 minute' WHERE id = $1`,
+          [id],
+        );
+        await ops.expireRequests(database.db, { now: new Date() });
+      },
+      'expired',
+    ],
+  ];
+  for (const [asked, close, status] of closings) {
+    await close(asked.requestId);
+    const row = await rowOf(asked.requestId);
+    assert.equal(row.status, status);
+    assert.doesNotMatch(JSON.stringify(row.payload), plain, status);
+    assert.match(row.payload.email, /•/, status);
+  }
+
+  const recovery = await ask(requester, 'email_recovery.start', {
+    userId: await ownerOf(),
+    newEmail: `moved.${randomUUID().slice(0, 6)}@example.com`,
+    checks: 'Selfie and a call',
+  });
+  assert.equal((await approve(recovery.requestId, second)).status, 'approved');
+  assert.doesNotMatch(
+    JSON.stringify((await rowOf(recovery.requestId)).payload),
+    plain,
+  );
+});

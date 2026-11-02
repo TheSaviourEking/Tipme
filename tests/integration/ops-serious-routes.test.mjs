@@ -811,7 +811,7 @@ test('I1: a role edit tells the approver what it adds and what it takes away', a
   const row = (await list.json()).data.find(
     (each) => each.action === 'role.add_sensitive',
   );
-  assert.match(row.summary, /Add payouts\.resolve/);
+  assert.match(row.summary, /add payouts\.resolve/);
   assert.match(row.summary, /remove audit\.view/);
 });
 

@@ -147,6 +147,11 @@ export interface SeriousActionDefinition<Payload> {
   /** Addresses the change would hand something to: nobody behind one can decide it. */
   mailboxes?(payload: Payload): string[];
   /**
+   * The payload to keep once decided, in the transaction that closes it: addresses are only needed
+   * to run the action, and the summary already holds them masked.
+   */
+  afterClose?(payload: Payload): Payload;
+  /**
    * What the action applies to, say the role or page. Acting alone closes the requester's other
    * requests with the same target. Leave out and the whole action counts as one target.
    */
@@ -637,6 +642,9 @@ async function closeRequest(
       decidedBy: close.decidedBy ?? null,
       decidedReason: close.decidedReason ?? null,
       decidedAt: close.now,
+      payload:
+        registry.get(request.action)?.afterClose?.(request.payload) ??
+        request.payload,
     })
     .where(eq(approvalRequests.id, request.id));
   await recordAudit(tx, {
