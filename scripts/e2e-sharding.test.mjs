@@ -47,7 +47,13 @@ test('@alone tests are never in a sharded run, and have a run of their own', () 
 
 test('CI gives @alone its own job in the matrix, not behind a shard', () => {
   const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
-  assert.match(ci, /shard: \[1, 2, 3, alone\]/);
+  const job = (name) =>
+    new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z-]+:\\n)`).exec(
+      ci,
+    )?.[1] ?? '';
+  assert.match(job('e2e'), /shard: \[1, 2, 3, alone\]/);
+  // scripts/test-integration.mjs only takes numbered shards.
+  assert.match(job('integration'), /shard: \[1, 2, 3\]/);
   assert.match(ci, /fail-fast: false/);
   assert.match(ci, /test:e2e --alone/);
 });
