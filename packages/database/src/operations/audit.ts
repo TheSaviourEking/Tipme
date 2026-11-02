@@ -1,10 +1,11 @@
-import { desc, lt } from 'drizzle-orm';
+import { desc, lt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { auditEvents } from '../schema.js';
 import { guarded } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 
 export interface AuditInput {
+  databaseClock?: boolean;
   /** null when the system acted (for example an issue resolving itself). */
   staffUserId: string | null;
   action: string;
@@ -30,7 +31,10 @@ export async function recordAudit(
     subjectId: input.subjectId ?? null,
     reason: input.reason ?? null,
     traceId: input.traceId ?? activeTraceId(),
-    createdAt: input.now ?? new Date(),
+    // When a later check compares this with a time the database set, both must come from it.
+    createdAt: input.databaseClock
+      ? sql`clock_timestamp()`
+      : (input.now ?? new Date()),
   });
 }
 

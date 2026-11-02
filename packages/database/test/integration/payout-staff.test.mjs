@@ -142,11 +142,15 @@ test('the read says what the provider says, and changes nothing', async (t) => {
   const payoutId = await s.withdraw();
   const issueId = await s.issueFor(payoutId);
   const before = await s.ledgerRows();
+  // The wait for a payout never tried goes by the database's clock, so its age is set there.
+  await s.q(
+    `UPDATE payouts SET created_at = now() - interval '31 minutes' WHERE id = $1`,
+    [payoutId],
+  );
   const absent = await readPayoutIssue(s.db, {
     issueId,
     staffUserId: STAFF,
     provider: resolver(fakeProvider()),
-    now: s.later(),
   });
   assert.equal(absent.read.state, 'absent');
   assert.equal(absent.startStep, null);
