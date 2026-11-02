@@ -17,6 +17,7 @@ import { SessionGuard } from '../auth/session.guard.js';
 import { RATE_LIMIT_ROUTE } from '../checkout/rate-limit.guard.js';
 import { loadApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
+import { OPENAPI_IMAGE, type ImageResponseDoc } from './image.js';
 import { OPS_PERMISSION, OpsGuard, StaffGuard } from '../ops/ops.guard.js';
 
 // OpenAPI 3.1 (PR-011, PRD §8), generated from what Nest actually registers: each controller's
@@ -132,6 +133,15 @@ function operation(
         schema: property,
       });
   }
+  const image = Reflect.getMetadata(OPENAPI_IMAGE, handler) as
+    ImageResponseDoc | undefined;
+  if (image?.size)
+    parameters.push({
+      name: 'size',
+      in: 'query',
+      required: false,
+      schema: { type: 'integer', enum: [...image.size] },
+    });
   const bodySchema = of(RouteParamtypes.BODY)
     .map(([, body]) => pipeSchema(body.pipes))
     .find(Boolean);
@@ -156,14 +166,33 @@ function operation(
       [String(status)]:
         status === 204
           ? { description: 'Done; no body.' }
-          : {
-              description: 'Success.',
-              content: {
-                'application/json': {
-                  schema: { $ref: '#/components/schemas/DataResponse' },
+          : image
+            ? {
+                description: image.description,
+                ...(image.headers
+                  ? {
+                      headers: Object.fromEntries(
+                        Object.entries(image.headers).map(([name, text]) => [
+                          name,
+                          { description: text, schema: { type: 'string' } },
+                        ]),
+                      ),
+                    }
+                  : {}),
+                content: {
+                  'image/png': {
+                    schema: { type: 'string', format: 'binary' },
+                  },
+                },
+              }
+            : {
+                description: 'Success.',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/DataResponse' },
+                  },
                 },
               },
-            },
       default: {
         description:
           'An error with a stable code; never echoes request values.',

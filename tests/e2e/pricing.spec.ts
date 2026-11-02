@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
-import { enrolOwner } from './ops-helpers';
+import { enrolOwner, makePagePro } from './ops-helpers';
 
 // Staff-set pricing (ADR-0014): nothing changes a page's fee except staff, with a reason, and
 // the resulting quote remains financially correct without exposing the recipient's fee details.
@@ -20,9 +20,11 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
   await expect(staff.getByText('(standard)')).toBeVisible();
 
   await staff.getByLabel('New TipMe fee (%)').fill('8');
-  await staff
+  // Other cards on the page have reason fields too, so each is found by its own form.
+  const formOf = (label: string) =>
+    staff.locator('form').filter({ has: staff.getByLabel(label) });
+  await formOf('New TipMe fee (%)')
     .getByLabel('Reason')
-    .first()
     .fill('Launch partner with a reduced fee');
   await staff.getByRole('button', { name: 'Set this page’s fee' }).click();
   await expect(
@@ -49,7 +51,7 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
           response.url().endsWith('/v1/tip-quotes') &&
           response.request().method() === 'POST',
       );
-      await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
+      await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
       await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible({
         timeout: 2000,
       });
@@ -72,7 +74,9 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
   });
 
   await staff.getByLabel('Fee-free tips to grant').fill('1');
-  await staff.getByLabel('Reason').nth(1).fill('Apology for the outage');
+  await formOf('Fee-free tips to grant')
+    .getByLabel('Reason')
+    .fill('Apology for the outage');
   await staff.getByRole('button', { name: 'Grant fee-free tips' }).click();
   await expect(staff.getByText('1 fee-free tip granted.')).toBeVisible();
   await quoteFor({
@@ -81,4 +85,38 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
     recipientNetMinor: '200000',
     feeFree: true,
   });
+});
+
+// Settings explains Free and Pro in one place (#pro). It says what Pro includes and that staff
+// switch it on, and it names no price: pricing is still open (docs/00-DECISIONS.md).
+test('the Pro explanation lists QR designs, three handle changes and no footer link, with no price', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  const pro = page.locator('#pro');
+  await expect(pro.getByRole('heading', { name: 'TipMe Pro' })).toBeVisible();
+  await expect(pro).toContainText('Your page is on the Free plan.');
+  await expect(pro).toContainText('Pro QR designs');
+  await expect(pro).toContainText('Three changes to your handle');
+  await expect(pro).toContainText(
+    'No “Get your own TipMe page” link at the foot of your page',
+  );
+  await expect(pro).toContainText('Covers are free on every plan');
+  await expect(pro).not.toContainText(
+    /₦|NGN|\$|£|€|per month|\/month|monthly|price/i,
+  );
+  await expect(pro.getByRole('link', { name: /upgrade|buy/i })).toHaveCount(0);
+  await expect(pro.getByRole('button', { name: /upgrade|buy/i })).toHaveCount(
+    0,
+  );
+
+  await makePagePro(browser, handle, testInfo);
+  await page.reload();
+  await expect(pro).toContainText('Your page is on TipMe Pro.');
+  await expect(pro).not.toContainText(
+    /₦|NGN|\$|£|€|per month|\/month|monthly|price/i,
+  );
+  await expectAccessible(page);
 });

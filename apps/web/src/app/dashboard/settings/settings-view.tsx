@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
+  HandleStatus,
   PendingEmailRecovery,
   RecoveryEmailStatus,
   MyProfile,
@@ -13,11 +14,14 @@ import type {
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Avatar } from '@/components/avatar';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { hasAvatar } from '@/lib/avatar-source';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { CoverSettings } from '@/components/account/cover-settings';
 import { GetPaidCard } from '@/components/account/get-paid-card';
 import { PaymentAccountCard } from './payment-account-card';
+import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 
@@ -157,11 +161,6 @@ function NotificationSettings() {
   );
 }
 
-const photoErrors: Record<string, string> = {
-  INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
-  PAYLOAD_TOO_LARGE: 'That photo is over 5 MB. Please choose a smaller one.',
-};
-
 /** The page's photo (PR-013): resized to a square and stripped of location data by TipMe. */
 function PhotoSettings() {
   const id = useId();
@@ -169,13 +168,22 @@ function PhotoSettings() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
+  const chooser = useRef<HTMLInputElement>(null);
+  const refocusChooser = useRef(false);
+  // After Remove photo the button is gone, and focus would fall to the page body: it goes to the
+  // chooser instead, once that is enabled again.
+  useEffect(() => {
+    if (busy || !refocusChooser.current) return;
+    refocusChooser.current = false;
+    chooser.current?.focus();
+  }, [busy]);
   const send = async (method: 'PUT' | 'DELETE', file?: File) => {
     setBusy(true);
     setError('');
     setDone('');
     // Shrunk here first: a phone photo uploads in seconds instead of timing out.
     const photoFile = file ? await shrinkPhoto(file) : undefined;
-    if (photoFile && photoFile.size > 5 * 1024 * 1024) {
+    if (photoFile && photoFile.size > PHOTO_LIMIT_BYTES) {
       setBusy(false);
       setError(photoErrors['PAYLOAD_TOO_LARGE']!);
       return;
@@ -188,6 +196,7 @@ function PhotoSettings() {
     if (result.ok) {
       setProfile(result.data);
       setDone(method === 'PUT' ? 'Photo saved.' : 'Photo removed.');
+      if (method === 'DELETE') refocusChooser.current = true;
     } else
       setError(
         photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
@@ -197,7 +206,7 @@ function PhotoSettings() {
   if (!('avatarPath' in profile)) return null;
   const photo = profile.avatarPath ?? null;
   return (
-    <Card className="settings-section">
+    <Card id="photo" className="settings-section">
       <h2>Your photo</h2>
       <p className="tm-hint">
         Optional. TipMe crops it to a square and removes hidden details such as
@@ -213,6 +222,7 @@ function PhotoSettings() {
           {photo ? 'Choose a new photo' : 'Choose a photo'}
         </label>
         <input
+          ref={chooser}
           id={`${id}-photo`}
           type="file"
           accept="image/jpeg,image/png,image/webp"
@@ -249,50 +259,185 @@ function PhotoSettings() {
 
 const renameErrors: Record<string, string> = {
   HANDLE_TAKEN: 'That handle is taken. Please choose another.',
-  HANDLE_RENAME_LIMIT:
-    'Your page already keeps 5 old handles. You can switch back to one of them.',
+  HANDLE_CHANGE_PRO_REQUIRED: 'Handle changes are part of TipMe Pro.',
+  HANDLE_CHANGE_LIMIT: 'You’ve used all your handle changes.',
   VALIDATION_FAILED:
     'Use 3 to 30 letters, numbers or underscores, with no spaces.',
 };
 
+/** Long enough for a slow phone connection; a modal can't wait on a request for ever. */
+const HANDLE_REQUEST_TIMEOUT_MS = 15_000;
+
+const changesLeft = (n: number) =>
+  n === 0 ? 'no changes left' : `${n} ${n === 1 ? 'change' : 'changes'} left`;
+
+/**
+ * Free pages keep the handle they claimed; Pro pages get a counted number of changes, and at the
+ * end the form gives way to how to reach the team. The server decides all of this.
+ */
 function HandleChange() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
   const host = useSiteHost();
   // An API older than PR-011 does not send it (the web app deploys first).
   const previous = profile.previousHandles ?? [];
+  // Nor does an API older than the handle rule send the count: no number to show, but it can go on.
+  const counted = profile.handleChanges;
+  const left = counted ? Math.max(0, counted.allowed - counted.used) : null;
   const [handle, setHandle] = useState(profile.handle);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Counts each error, so the same message a second time still moves focus to it.
+  const [errorCount, setErrorCount] = useState(0);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
-  const save = async (event: FormEvent) => {
+  const savedMessage = useRef<HTMLParagraphElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const closeConfirm = useCallback(() => setConfirming(null), []);
+  const wanted = handle.trim().replace(/^@/, '').toLowerCase();
+
+  // Keyboard and screen reader users land on the outcome once the dialog has gone.
+  useEffect(() => {
+    if (saved) savedMessage.current?.focus();
+  }, [saved]);
+  // The field, or the heading when the card has just swapped to one with no form.
+  useEffect(() => {
+    if (errorCount > 0)
+      (document.getElementById(`${id}-handle`) ?? heading.current)?.focus();
+  }, [errorCount, id]);
+  const fail = (message: string) => {
+    setError(message);
+    setErrorCount((count) => count + 1);
+  };
+
+  /** Only asks to confirm a handle that can work; the server still has the last word. */
+  const review = async (event: FormEvent) => {
     event.preventDefault();
-    setBusy(true);
+    if (busy) return;
     setError('');
     setSaved(false);
-    const result = await apiFetch<MyProfile>('/v1/me/handle', {
-      method: 'PUT',
-      body: { handle: handle.trim().replace(/^@/, '') },
-    });
-    setBusy(false);
-    if (result.ok) {
-      setProfile(result.data);
-      setHandle(result.data.handle);
-      setSaved(true);
+    if (wanted.length < 3) {
+      fail(renameErrors.VALIDATION_FAILED!);
       return;
     }
-    setError(
-      renameErrors[result.code] ?? 'We couldn’t change that. Please try again.',
+    setBusy(true);
+    const check = await apiFetch<{ status: HandleStatus }>(
+      `/v1/handles/${encodeURIComponent(wanted)}/availability`,
+      { timeoutMs: HANDLE_REQUEST_TIMEOUT_MS },
+    );
+    setBusy(false);
+    const status = check.ok ? check.data.status : 'available';
+    if (status === 'invalid') fail(renameErrors.VALIDATION_FAILED!);
+    else if (
+      status === 'reserved' ||
+      (status === 'taken' && !previous.includes(wanted))
+    )
+      fail(renameErrors.HANDLE_TAKEN!);
+    else setConfirming(wanted);
+  };
+
+  const save = async (next: string) => {
+    setBusy(true);
+    const result = await apiFetch<MyProfile>('/v1/me/handle', {
+      method: 'PUT',
+      body: { handle: next },
+      timeoutMs: HANDLE_REQUEST_TIMEOUT_MS,
+    });
+    const succeeded = (mine: MyProfile) => {
+      setProfile(mine);
+      setHandle(mine.handle);
+      setSaved(true);
+    };
+    if (result.ok) {
+      setBusy(false);
+      setConfirming(null);
+      succeeded(result.data);
+      return;
+    }
+    // Refused for a reason, or the outcome is unknown (a lost connection, a timeout, a 5xx): either
+    // way, show what is true now. Only a request that failed validation changed nothing for sure.
+    const fresh =
+      result.code === 'VALIDATION_FAILED'
+        ? null
+        : await apiFetch<MyProfile>('/v1/me/profile', {
+            timeoutMs: HANDLE_REQUEST_TIMEOUT_MS,
+          });
+    setBusy(false);
+    setConfirming(null);
+    if (fresh?.ok && fresh.data.handle === next) {
+      succeeded(fresh.data);
+      return;
+    }
+    if (fresh?.ok) setProfile(fresh.data);
+    fail(
+      renameErrors[result.code] ??
+        (fresh?.ok
+          ? 'We couldn’t change that. Please try again.'
+          : 'We couldn’t tell whether that went through. Reload this page to see your handle.'),
     );
   };
+
+  const oldHandles = previous.length > 0 && (
+    <p className="tm-hint">
+      Old handles that lead here: {previous.map((old) => `@${old}`).join(', ')}
+    </p>
+  );
+  const savedNotice = saved && (
+    <p
+      key={profile.handle}
+      ref={savedMessage}
+      role="status"
+      tabIndex={-1}
+      className="tm-hint handle-saved"
+    >
+      Saved. Your page is now at {host}/@{profile.handle}.
+    </p>
+  );
+
+  if (profile.plan !== 'pro')
+    return (
+      <Card id="handle" className="settings-section">
+        <h2 ref={heading} tabIndex={-1}>
+          Your handle
+        </h2>
+        <p className="tm-hint" role={error ? 'alert' : undefined}>
+          Your page is at {host}/@{profile.handle}. Handle changes are part of
+          TipMe Pro.
+        </p>
+        {oldHandles}
+      </Card>
+    );
+
+  if (left === 0)
+    return (
+      <Card className="settings-section">
+        <h2 ref={heading} tabIndex={-1}>
+          Your handle
+        </h2>
+        {savedNotice}
+        <p role={error ? 'alert' : undefined}>
+          You’ve used all your handle changes.{' '}
+          <a href="mailto:support@usetipme.xyz">Contact the TipMe team</a> to
+          change it again.
+        </p>
+        {oldHandles}
+      </Card>
+    );
+
   return (
     <Card className="settings-section">
       <h2>Your handle</h2>
       <p className="tm-hint">
-        Your old links and printed QR codes keep working: they lead to your new
-        handle, and nobody else can take them.
+        {left !== null && <strong>{changesLeft(left)}. </strong>}
+        Switching back to an old handle counts as a change. Your old links and
+        printed QR codes keep working: they lead to your new handle, and nobody
+        else can take them.
       </p>
-      <form className="settings-form" onSubmit={save} noValidate>
+      <form
+        className="settings-form"
+        onSubmit={(event) => void review(event)}
+        noValidate
+      >
         <InputField
           id={`${id}-handle`}
           label="Handle"
@@ -303,28 +448,38 @@ function HandleChange() {
           onChange={(e) => {
             setHandle(e.target.value);
             setSaved(false);
+            setError('');
           }}
           error={error || undefined}
         />
-        {previous.length > 0 && (
-          <p className="tm-hint">
-            Old handles that lead here:{' '}
-            {previous.map((old) => `@${old}`).join(', ')}
-          </p>
-        )}
-        {saved && (
-          <p role="status" className="tm-hint">
-            Saved. Your page is now at {host}/@{profile.handle}.
-          </p>
-        )}
+        {oldHandles}
+        {savedNotice}
+        {/* Stays enabled while checking: a disabled button would drop keyboard focus. */}
         <Button
           type="submit"
-          disabled={busy || handle.trim().toLowerCase() === profile.handle}
+          disabled={wanted === profile.handle}
           aria-busy={busy}
         >
           Change handle
         </Button>
       </form>
+      {confirming && (
+        <ConfirmDialog
+          title={`Change your handle to @${confirming}?`}
+          confirm="Yes, change it"
+          busy={busy}
+          onConfirm={() => void save(confirming)}
+          onCancel={closeConfirm}
+        >
+          <p>
+            Your page moves to {host}/@{confirming}. Old links and printed QR
+            codes keep working.
+          </p>
+          {left !== null && (
+            <p>You’ll have {changesLeft(left - 1)} after this.</p>
+          )}
+        </ConfirmDialog>
+      )}
     </Card>
   );
 }
@@ -1173,15 +1328,52 @@ function DeletePage() {
   );
 }
 
+/** What Pro includes, for every plan. Nothing to buy here: staff arrange Pro for now. No price is named. */
+function ProPlan() {
+  const { profile } = useRecipient();
+  const pro = profile.plan === 'pro';
+  return (
+    <Card id="pro" className="settings-section">
+      <h2>TipMe Pro</h2>
+      <p className="tm-hint">
+        {pro ? 'Your page is on TipMe Pro.' : 'Your page is on the Free plan.'}{' '}
+        Pro includes:
+      </p>
+      <ul className="settings-list">
+        <li>
+          Pro QR designs, and print formats such as a counter card, poster or
+          sticker. Free pages keep the three standard QR looks.
+        </li>
+        <li>
+          Three changes to your handle. Free pages keep the handle they claimed.
+        </li>
+        <li>Your own tip amounts</li>
+        <li>No “Get your own TipMe page” link at the foot of your page</li>
+      </ul>
+      <p className="tm-hint">
+        Covers are free on every plan, so choosing one below costs nothing.
+      </p>
+      {!pro && (
+        <p className="tm-hint">
+          The TipMe team turns Pro on for your page, and this page will show it
+          when they do.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export function SettingsView() {
   return (
     <div className="settings-grid">
       <h1>Settings</h1>
       <PendingRecovery />
       <PageState />
+      <ProPlan />
       <PaymentAccountCard />
       <GetPaidCard />
       <HandleChange />
+      <CoverSettings />
       <PhotoSettings />
       <TipAmountsSettings />
       <AboutYou />

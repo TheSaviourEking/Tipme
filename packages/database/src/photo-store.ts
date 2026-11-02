@@ -6,9 +6,10 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 
-// Where page photos are kept when not in Postgres (31 Oct 2026): a private Cloudflare R2 bucket,
-// reached with the S3 API. The bucket is never public: the API serves each photo itself, so a
-// hidden page's photo stays hidden. Keys are opaque (`avatars/<profile>/<random>.webp`).
+// Where page photos and covers are kept when not in Postgres (31 Oct 2026): a private Cloudflare
+// R2 bucket, reached with the S3 API. The bucket is never public: the API serves each image
+// itself, so a hidden page's photo stays hidden. Keys are opaque
+// (`avatars/<profile>/<random>.webp`, `covers/<profile>/<random>.webp`).
 
 export interface PhotoStore {
   readonly endpoint: string;

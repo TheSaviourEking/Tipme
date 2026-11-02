@@ -316,6 +316,10 @@ test('the database itself refuses inconsistent Pro amounts (any future code path
 
 test('staff can find a renamed page by one of its old handles', async () => {
   const cookie = await livePage('+2348031260008', 'old_name');
+  const page = await json(
+    await call('GET', '/v1/ops/pages/old_name', staff.cookie),
+  );
+  assert.equal((await setPlan(page.profileId, 'pro')).status, 200);
   assert.equal(
     (await call('PUT', '/v1/me/handle', cookie, { handle: 'new_name' })).status,
     200,

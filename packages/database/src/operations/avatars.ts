@@ -1,10 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { MyProfile } from '@tipme/contracts';
-import { and, eq, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
-import { profileAvatars, profiles } from '../schema.js';
-import { guarded, OperationError } from './errors.js';
+import { profileAvatars, profileCovers, profiles } from '../schema.js';
+import { guarded } from './errors.js';
+import {
+  lockLivePage,
+  moveRowsToStore,
+  myPageId,
+  removeObjects,
+} from './page-images.js';
 import { getMyProfile } from './profiles.js';
 
 // Profile photos (PR-013). The bytes stored here are always the server's own re-encoding
@@ -14,23 +20,8 @@ import { getMyProfile } from './profiles.js';
 // so a served URL never points at a missing object; a crash between the two can leave an
 // unreferenced object behind, never a broken photo.
 
-/** Removes objects after the database change committed; a failure only leaves an orphan. */
-async function removeObjects(store: PhotoStore | undefined, keys: string[]) {
-  if (!store) return;
-  for (const key of keys) await store.remove(key).catch(() => undefined);
-}
-
 export const avatarPathOf = (profileId: string, version: number) =>
   `/v1/avatars/${profileId}/${version}.webp`;
-
-async function myPageId(db: Database, userId: string) {
-  const [page] = await db
-    .select({ id: profiles.id })
-    .from(profiles)
-    .where(and(eq(profiles.userId, userId), ne(profiles.pageState, 'deleted')));
-  if (!page) throw new OperationError('NO_PAGE');
-  return page.id;
-}
 
 /** Replaces the page's photo with already re-encoded WebP bytes; a new version, a new URL. */
 export function setAvatar(
@@ -49,6 +40,7 @@ export function setAvatar(
     let previous: string | null = null;
     try {
       await db.transaction(async (tx) => {
+        await lockLivePage(tx, profileId);
         const [old] = await tx
           .select({ objectKey: profileAvatars.objectKey })
           .from(profileAvatars)
@@ -96,6 +88,7 @@ export function removeAvatar(
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const removed = await db.transaction(async (tx) => {
+      await lockLivePage(tx, profileId);
       const rows = await tx
         .delete(profileAvatars)
         .where(eq(profileAvatars.profileId, profileId))
@@ -146,40 +139,37 @@ export function avatarFor(
 }
 
 /**
- * Moves photos still kept in Postgres to the object store (once, when R2 is switched on).
- * Each row changes only if its photo is the one copied, so a photo replaced meanwhile wins.
+ * Moves page photos and covers still kept in Postgres to the object store (once, when R2 is
+ * switched on). Returns how many moved.
  */
 export function movePhotosToStore(
   db: Database,
   store: PhotoStore,
 ): Promise<number> {
+  return guarded(
+    async () =>
+      (await moveRowsToStore(db, store, profileAvatars, 'avatars')) +
+      (await moveRowsToStore(db, store, profileCovers, 'covers')),
+  );
+}
+
+/** The owner's own photo bytes, live or not, for the photo-mosaic QR design. Null without one. */
+export function myAvatar(
+  db: Database,
+  userId: string,
+  store?: PhotoStore,
+): Promise<Buffer | null> {
   return guarded(async () => {
-    const rows = await db
+    const profileId = await myPageId(db, userId);
+    const [row] = await db
       .select({
-        profileId: profileAvatars.profileId,
-        version: profileAvatars.version,
         bytes: profileAvatars.bytes,
+        objectKey: profileAvatars.objectKey,
       })
       .from(profileAvatars)
-      .where(isNotNull(profileAvatars.bytes));
-    let moved = 0;
-    for (const row of rows) {
-      const objectKey = `avatars/${row.profileId}/${randomUUID()}.webp`;
-      await store.put(objectKey, row.bytes!);
-      const updated = await db
-        .update(profileAvatars)
-        .set({ bytes: null, objectKey })
-        .where(
-          and(
-            eq(profileAvatars.profileId, row.profileId),
-            eq(profileAvatars.version, row.version),
-            isNotNull(profileAvatars.bytes),
-          ),
-        )
-        .returning({ profileId: profileAvatars.profileId });
-      if (updated.length) moved += 1;
-      else await removeObjects(store, [objectKey]);
-    }
-    return moved;
+      .where(eq(profileAvatars.profileId, profileId));
+    if (!row) return null;
+    if (row.bytes) return row.bytes;
+    return row.objectKey && store ? store.get(row.objectKey) : null;
   });
 }

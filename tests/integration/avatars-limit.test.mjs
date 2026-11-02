@@ -27,6 +27,7 @@ before(async () => {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_AVATARS_PER_HOUR: '2',
+      RATE_LIMIT_COVER_DESIGNS_PER_HOUR: '2',
     },
   });
 });
@@ -55,6 +56,49 @@ test('photo uploads are limited per hour', async () => {
           method: 'PUT',
           headers: { ...browserHeaders(cookie), 'content-type': 'image/png' },
           body,
+        })
+      ).status,
+    );
+  assert.deepEqual(statuses, [200, 200, 429]);
+});
+
+// Runs after the test above, which used up this address's allowance: covers share it.
+test('cover uploads count against the same limit as photos', async () => {
+  const { cookie } = await signIn(stack.api, '+2348031280011');
+  await fetch(`${stack.api}/v1/me/page`, {
+    method: 'POST',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ handle: 'cover_limit' }),
+  });
+  const body = await sharp({
+    create: { width: 100, height: 100, channels: 3, background: '#7A32F9' },
+  })
+    .png()
+    .toBuffer();
+  const response = await fetch(`${stack.api}/v1/me/cover`, {
+    method: 'PUT',
+    headers: { ...browserHeaders(cookie), 'content-type': 'image/png' },
+    body,
+  });
+  assert.equal(response.status, 429);
+});
+
+test('design choices have their own limit, separate from uploads', async () => {
+  const { cookie } = await signIn(stack.api, '+2348031280012');
+  await fetch(`${stack.api}/v1/me/page`, {
+    method: 'POST',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ handle: 'design_limit' }),
+  });
+  const statuses = [];
+  // The upload allowance is already used up above, so these pass only on their own bucket.
+  for (const design of ['danfo', 'vinyl', 'flow'])
+    statuses.push(
+      (
+        await fetch(`${stack.api}/v1/me/cover-design`, {
+          method: 'PUT',
+          headers: browserHeaders(cookie),
+          body: JSON.stringify({ design }),
         })
       ).status,
     );

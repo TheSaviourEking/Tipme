@@ -67,7 +67,8 @@ const nextConfig: NextConfig = {
   },
   // The portraits are 960px wide, so a candidate above that only re-encodes the same pixels under
   // another URL (and the resizer never enlarges). Cap the ladder at the real width.
-  images: { deviceSizes: [640, 750, 828, 960] },
+  // Cover artwork asks for quality 85 so the optimiser doesn't add a second visible lossy pass.
+  images: { deviceSizes: [640, 750, 828, 960], qualities: [75, 85] },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

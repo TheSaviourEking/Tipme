@@ -7,7 +7,8 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
 
 // Handle renames (PR-011, FR-015): old handles stay with the page as permanent aliases, so printed
-// QR codes keep working and nobody else can take them over.
+// QR codes keep working and nobody else can take them over. Who may rename, and how often, is in
+// handle-rule.test.mjs; these pages are Pro so they can.
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,
@@ -66,11 +67,20 @@ async function livePage(phone, handle) {
   return cookie;
 }
 
+async function proPage(phone, handle) {
+  const cookie = await livePage(phone, handle);
+  await database.pool.query(
+    `UPDATE profiles SET plan = 'pro' WHERE handle_lower = $1`,
+    [handle],
+  );
+  return cookie;
+}
+
 const rename = (cookie, handle) =>
   call('PUT', '/v1/me/handle', cookie, { handle });
 
 test('a renamed page answers on its new handle, and the old one points there for good', async () => {
-  const cookie = await livePage('+2348031250001', 'ada_old');
+  const cookie = await proPage('+2348031250001', 'ada_old');
   revalidations = [];
   const renamed = await rename(cookie, 'Ada_New');
   assert.equal(renamed.status, 200);
@@ -106,7 +116,7 @@ test('a renamed page answers on its new handle, and the old one points there for
 });
 
 test('renaming back to an old handle works without a redirect loop; case-only changes add no alias', async () => {
-  const cookie = await livePage('+2348031250003', 'loop_a');
+  const cookie = await proPage('+2348031250003', 'loop_a');
   assert.equal((await rename(cookie, 'loop_b')).status, 200);
   assert.equal((await rename(cookie, 'loop_a')).status, 200);
   assert.equal((await call('GET', '/v1/profiles/loop_a')).status, 200);
@@ -125,20 +135,8 @@ test('renaming back to an old handle works without a redirect loop; case-only ch
   );
 });
 
-test('a page keeps at most five old handles; taken, reserved and invalid handles are refused', async () => {
-  const cookie = await livePage('+2348031250004', 'many_0');
-  for (let i = 1; i <= 5; i++)
-    assert.equal(
-      (await rename(cookie, `many_${i}`)).status,
-      200,
-      `rename ${i}`,
-    );
-  const sixth = await rename(cookie, 'many_6');
-  assert.equal(sixth.status, 409);
-  assert.equal((await sixth.json()).error.code, 'HANDLE_RENAME_LIMIT');
-  // Going back to one of its own old handles is still allowed (it swaps places).
-  assert.equal((await rename(cookie, 'many_0')).status, 200);
-
+test('taken, reserved and invalid handles are refused', async () => {
+  const cookie = await proPage('+2348031250004', 'refused_0');
   await livePage('+2348031250005', 'someone');
   assert.equal((await rename(cookie, 'someone')).status, 409);
   assert.equal((await rename(cookie, 'admin')).status, 409);
@@ -146,7 +144,7 @@ test('a page keeps at most five old handles; taken, reserved and invalid handles
 });
 
 test('an old handle of a page that is not live reveals nothing, and deleting the page holds its old handles', async () => {
-  const cookie = await livePage('+2348031250006', 'quiet_old');
+  const cookie = await proPage('+2348031250006', 'quiet_old');
   await rename(cookie, 'quiet_new');
   await call('PUT', '/v1/me/page/state', cookie, { state: 'not_live' });
   const old = await call('GET', '/v1/profiles/quiet_old');
@@ -169,7 +167,7 @@ test('an old handle of a page that is not live reveals nothing, and deleting the
 });
 
 test('the database itself refuses another page an old handle (a rolled-back release cannot hand it out)', async () => {
-  const cookie = await livePage('+2348031250007', 'guard_old');
+  const cookie = await proPage('+2348031250007', 'guard_old');
   assert.equal((await rename(cookie, 'guard_new')).status, 200);
   await livePage('+2348031250008', 'guard_other');
   // What the previous release's claim or rename would do: write the handle without checking aliases.

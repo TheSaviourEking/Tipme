@@ -75,7 +75,8 @@ export function HandleClaim({ onClaimed }: { onClaimed: () => void }) {
     <form className="auth-form" onSubmit={claim} noValidate>
       <h2>Choose your handle</h2>
       <p className="tm-hint">
-        It becomes your link. You can change it later in Settings.
+        It becomes your link, so choose one you’ll keep. Changing it later is
+        part of TipMe Pro.
       </p>
       <p className="handle-link" aria-hidden="true">
         {host}/@<span>{raw.trim() || 'yourhandle'}</span>
