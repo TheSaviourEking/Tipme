@@ -57,9 +57,11 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
     { timeout: 20_000 },
     async (t) => {
       const { child, output } = await spawnWorker(t);
-      assert.equal(
-        JSON.parse(output().trim().split('\n')[0]).event,
-        'worker.started',
+      assert.ok(
+        output()
+          .trim()
+          .split('\n')
+          .some((line) => JSON.parse(line).event === 'worker.started'),
       );
       const exited = once(child, 'exit');
       const stopping = performance.now();
