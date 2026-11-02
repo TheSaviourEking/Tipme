@@ -282,7 +282,10 @@ export function createRole(
         subjectId: id,
         reason: withAuditChange(reason, { name, permissions }),
       });
-      await alertStaffChange(tx, 'role_created', actor.id);
+      await alertStaffChange(tx, 'role_created', actor.id, {
+        targetId: id,
+        roleName: name,
+      });
       return roleView(tx, id);
     });
   });
@@ -395,7 +398,10 @@ export function updateRole(
             : {}),
         }),
       });
-      await alertStaffChange(tx, 'role_updated', actor.id);
+      await alertStaffChange(tx, 'role_updated', actor.id, {
+        targetId: input.roleId,
+        roleName: name ?? role.name,
+      });
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       return { role: await roleView(tx, input.roleId), affected };
     });
@@ -439,7 +445,10 @@ export function deleteRole(
         subjectId: input.roleId,
         reason: withAuditChange(reason, { name: role.name, permissions }),
       });
-      await alertStaffChange(tx, 'role_deleted', actor.id);
+      await alertStaffChange(tx, 'role_deleted', actor.id, {
+        targetId: input.roleId,
+        roleName: role.name,
+      });
     });
   });
 }
@@ -557,7 +566,10 @@ export function setPersonalAccess(
             .sort(),
         }),
       });
-      await alertStaffChange(tx, 'access_changed', actor.id);
+      await alertStaffChange(tx, 'access_changed', actor.id, {
+        targetId: target.id,
+        roleName: target.access.roleId,
+      });
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       const after = await readStaffAccess(tx, target.id);
       return {
@@ -639,7 +651,10 @@ export function changeRole(
           ...cleared,
         }),
       });
-      await alertStaffChange(tx, 'role_changed', actor.id);
+      await alertStaffChange(tx, 'role_changed', actor.id, {
+        targetId: userId,
+        roleName: role.name,
+      });
       await alertIfLastApproverGone(tx, holdersBefore, actor.id);
       return { ...after, permissions: [...after.permissions].sort() };
     });
@@ -956,7 +971,10 @@ export function addStaff(
         }),
         now,
       });
-      await alertStaffChange(tx, 'added', actor.id);
+      await alertStaffChange(tx, 'added', actor.id, {
+        targetId: userId,
+        roleName: role.name,
+      });
       return { userId, roleId: role.id, ...link };
     });
   });
@@ -1092,7 +1110,10 @@ export function removeStaff(
         }),
         now,
       });
-      await alertStaffChange(tx, 'removed', actor.id);
+      await alertStaffChange(tx, 'removed', actor.id, {
+        targetId: userId,
+        roleName: role.name,
+      });
       await closePendingRequestsOf(tx, {
         userId,
         why: 'requester_removed',

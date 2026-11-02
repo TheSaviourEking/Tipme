@@ -34,6 +34,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Another staff change is in progress and nothing was changed. Please try again in a moment.',
   ISSUE_OWN_ALERT:
     'Someone else has to close this one, because it records your own action. With nobody else, it closes by itself after 30 days.',
+  PAYOUT_CHANGED:
+    'This withdrawal changed, so nothing was done. Look at it again.',
   APPROVAL_OWN_REQUEST:
     'Someone else has to decide this one, because you asked for it.',
   APPROVAL_NOT_YOURS: 'Only the person who asked can cancel this request.',
@@ -225,6 +227,7 @@ const operationErrors: Partial<
   APPROVAL_EXPIRED: { status: 409, code: 'APPROVAL_EXPIRED' },
   APPROVAL_ALREADY_PENDING: { status: 409, code: 'APPROVAL_ALREADY_PENDING' },
   RECOVERY_STAFF_ACCOUNT: { status: 409, code: 'FORBIDDEN' },
+  PAYOUT_CHANGED: { status: 409, code: 'PAYOUT_CHANGED' },
   NO_CONFIRMED_TEST: { status: 409, code: 'NO_CONFIRMED_TEST' },
   PROVIDER_NOT_ALLOWED: { status: 409, code: 'PROVIDER_NOT_ALLOWED' },
   PROVIDER_STATUS_UNKNOWN: { status: 503, code: 'DEPENDENCY_UNAVAILABLE' },

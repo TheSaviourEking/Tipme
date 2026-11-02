@@ -299,6 +299,10 @@ export async function revokeUnenrolled(
     .where(eq(roles.id, row.roleId));
   await dropOpsAccess(tx, userId, now);
   const cleared = await clearOverrides(tx, userId);
+  await alertStaffChange(tx, 'invitation_declined', userId, {
+    targetId: userId,
+    roleName: role?.name ?? row.roleId,
+  });
   await recordAudit(tx, {
     staffUserId: userId,
     action: 'staff.invitation_declined',
@@ -664,14 +668,17 @@ export const alertStaffChange = (
     | 'access_changed'
     | 'role_updated'
     | 'role_created'
-    | 'role_deleted',
-  actorId: string | null,
+    | 'role_deleted'
+    | 'granted_from_server'
+    | 'invitation_declined',
+  actorId: string,
+  about: { targetId: string; roleName: string },
 ) =>
   enqueueOutbox(tx, {
     eventType: 'ops.staff_changed',
     // Each occurrence is its own alert.
     aggregateId: newId(),
-    payload: { action, requestedBy: actorId },
+    payload: { action, requestedBy: actorId, ...about },
   });
 
 /** The permissions of an active staff member, or null for everyone else. */
@@ -856,7 +863,10 @@ export function grantOwner(
           now,
         });
       await alertIfLastApproverGone(tx, holdersBefore, null);
-      await alertStaffChange(tx, 'added', null);
+      await alertStaffChange(tx, 'granted_from_server', 'server command', {
+        targetId: userId,
+        roleName: role === 'owner' ? 'Owner' : 'Release check',
+      });
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
           userId,

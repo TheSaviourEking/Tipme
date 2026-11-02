@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Res,
+  SetMetadata,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -51,7 +52,10 @@ import {
   type MockProvider,
 } from '@tipme/payments';
 import type { Logger } from '@tipme/observability';
-import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
+import {
+  RATE_LIMIT_ROUTE,
+  RateLimitGuard,
+} from '../checkout/rate-limit.guard.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import {
   BACHS_PROVIDER_TOKEN,
@@ -95,6 +99,8 @@ export class OpsActionsController {
 
   @Post('issues/:id/resolve')
   @HttpCode(200)
+  // For the document: the handler counts money closes only, so the guard isn't on this route.
+  @SetMetadata(RATE_LIMIT_ROUTE, 'ops_request (money closes only)')
   @FreshCode()
   @OpsPermission('issues.resolve')
   async resolve(

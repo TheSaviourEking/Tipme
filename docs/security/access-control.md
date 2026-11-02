@@ -229,7 +229,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/ops/issues/{id}/payout-mark-failed` | `payouts.resolve` | yes | `ops_request` | – |
 | POST | `/v1/ops/issues/{id}/payout-read` | `payouts.resolve` | yes | – | – |
 | POST | `/v1/ops/issues/{id}/payout-resume` | `payouts.resolve` | yes | – | – |
-| POST | `/v1/ops/issues/{id}/resolve` | `issues.resolve` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/resolve` | `issues.resolve` | yes | `ops_request (money closes only)` | – |
 | POST | `/v1/ops/issues/{id}/reveal` | `private.view` | yes | – | – |
 | GET | `/v1/ops/market` | `analytics.view` | n/a (read) | – | – |
 | POST | `/v1/ops/market` | `market.edit` | yes | – | – |

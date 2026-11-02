@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
@@ -472,6 +473,11 @@ test('I2: stopping needs no fresh code; switching back on does, and refuses unti
     const { issueId } = (await read.json()).data;
     assert.ok(issueId);
     const { user_id: userId } = await profile('ada');
+    await q(
+      `INSERT INTO sessions (id, user_id, token_sha256, created_at, last_seen_at, expires_at)
+       VALUES (gen_random_uuid(), $1, $2, now(), now(), now() + interval '1 day')`,
+      [userId, randomUUID()],
+    );
     const ended = await call(
       stack.api,
       'POST',
@@ -481,7 +487,16 @@ test('I2: stopping needs no fresh code; switching back on does, and refuses unti
         reason: REASON,
       },
     );
-    assert.notEqual(ended.status, 403);
+    assert.equal(ended.status, 200, await ended.clone().text());
+    assert.equal(
+      (
+        await q(
+          `SELECT 1 FROM sessions WHERE user_id = $1 AND revoked_at IS NULL`,
+          [userId],
+        )
+      ).length,
+      0,
+    );
     const release = await call(
       stack.api,
       'POST',
@@ -531,6 +546,31 @@ test('M4, M6: asking is limited per person, not per address, and routine closes 
   for (let i = 0; i < 3; i += 1) assert.equal((await ask(a)).status, 202);
   assert.equal((await ask(a)).status, 429);
   assert.equal((await ask(b)).status, 202, 'another person, same address');
+});
+
+test('N5: money closes count against the limit, per person', async () => {
+  const c = await opsSignIn(limited.api, database.db, '+2348037770005');
+  const closeOne = async () =>
+    call(
+      limited.api,
+      'POST',
+      `/v1/ops/issues/${await moneyIssue()}/resolve`,
+      c.cookie,
+      { reason: REASON, outcome: 'recipient_owes' },
+    );
+  for (let i = 0; i < 3; i += 1) assert.equal((await closeOne()).status, 202);
+  assert.equal((await closeOne()).status, 429);
+});
+
+test('N5: the document says money closes are limited', async () => {
+  const document = JSON.parse(
+    readFileSync(
+      new URL('../../docs/api/openapi.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const route = document.paths['/v1/ops/issues/{id}/resolve'].post;
+  assert.match(route['x-tipme-rate-limit'], /ops_request/);
 });
 
 test('M5: signing in finds its own code while mail is landing in the inbox', async () => {

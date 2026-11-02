@@ -1006,10 +1006,10 @@ test('I3: a settlement refused inside the run is not approved-and-ran, and the m
   );
   // Another reference lands after the read and before the lock.
   const racing = scripted(async () => {
-    await q(
-      `UPDATE payouts SET provider_reference = 'someone_else' WHERE id = $1`,
-      [payoutId],
-    );
+    await q(`UPDATE payouts SET provider_reference = $2 WHERE id = $1`, [
+      payoutId,
+      `someone_else_${randomUUID()}`,
+    ]);
     return FOUND('paid');
   });
   const outcome = await approveWith(asked.requestId, second, racing);
@@ -1178,33 +1178,141 @@ test('I4: recovery can’t move an account to the requester’s or the approver�
     }),
     { code: 'APPROVAL_SUBJECT' },
   );
-  const asked = await ask(requester, 'email_recovery.start', {
-    userId,
-    newEmail: tagged(approver),
-    checks,
-  });
-  assert.equal(asked.state, 'pending');
-  await assert.rejects(approve(asked.requestId, approver), {
-    code: 'APPROVAL_SUBJECT',
-  });
-  const row = await rowOf(asked.requestId);
-  assert.match(row.summary, /Matched their last three tips/);
-  assert.ok(
-    !row.summary.includes(tagged(approver)),
-    'the address stays masked',
+  await assert.rejects(
+    ask(requester, 'email_recovery.start', {
+      userId,
+      newEmail: tagged(approver),
+      checks,
+    }),
+    { code: 'APPROVAL_SUBJECT' },
   );
   // Gmail's dots are the same mailbox.
   await q(`UPDATE users SET email = 'first.last@gmail.com' WHERE id = $1`, [
     other,
   ]);
-  const dotted = await ask(requester, 'email_recovery.start', {
+  await assert.rejects(
+    ask(requester, 'email_recovery.start', {
+      userId,
+      newEmail: 'firstlast+y@gmail.com',
+      checks,
+    }),
+    { code: 'APPROVAL_SUBJECT' },
+  );
+  // Asked for an outsider, who then turns out to reach the approver's mailbox: they can't decide.
+  const outsider = `out.${randomUUID().slice(0, 6)}@example.com`;
+  const asked = await ask(requester, 'email_recovery.start', {
     userId,
-    newEmail: 'firstlast+y@gmail.com',
+    newEmail: outsider,
     checks,
   });
-  await assert.rejects(approve(dotted.requestId, other), {
+  assert.equal(asked.state, 'pending');
+  const row = await rowOf(asked.requestId);
+  assert.match(row.summary, /Matched their last three tips/);
+  assert.match(row.summary, /matches no staff mailbox/);
+  assert.ok(!row.summary.includes(outsider), 'the address stays masked');
+  await q(
+    `UPDATE users SET recovery_email = $2, recovery_email_verified_at = now() WHERE id = $1`,
+    [approver, outsider],
+  );
+  await assert.rejects(approve(asked.requestId, approver), {
     code: 'APPROVAL_SUBJECT',
   });
+});
+
+test('N1: with exactly two staff, recovery can’t go to the other one’s mailbox, even alone', async () => {
+  const requester = await person();
+  const only = await person();
+  const userId = await ownerOf();
+  await q(
+    `UPDATE users SET email = $2, email_verified_at = now() WHERE id = $1`,
+    [userId, `page.${randomUUID().slice(0, 6)}@example.com`],
+  );
+  await q(`DELETE FROM email_recoveries WHERE user_id = $1`, [userId]);
+  await assert.rejects(
+    ask(requester, 'email_recovery.start', {
+      userId,
+      newEmail: people.get(only).email.replace('@', '+x@'),
+      checks: 'Matched their last three tips',
+    }),
+    { code: 'APPROVAL_SUBJECT' },
+  );
+  assert.equal(
+    (await q(`SELECT 1 FROM email_recoveries WHERE user_id = $1`, [userId]))
+      .length,
+    0,
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'ops.acted_alone'`,
+      )
+    ).length,
+    0,
+  );
+});
+
+test('I7: the provider now answering differently from what was asked stops it, and books nothing', async () => {
+  const requester = await person();
+  const second = await person();
+  const { issueId, payoutId } = await unresolvedPayoutIssue();
+  const asked = await ask(
+    requester,
+    'payout.settle',
+    { issueId, how: 'apply', reported: 'paid' },
+    { services: scripted(() => FOUND('paid')) },
+  );
+  const outcome = await approveWith(
+    asked.requestId,
+    second,
+    scripted(() => FOUND('failed')),
+  );
+  assert.equal(outcome.status, 'stale');
+  assert.equal(await statusOf(payoutId), 'REQUESTED');
+  await noFalseSuccess(asked.requestId);
+});
+
+test('N2, N6: a reference racing in keeps a conflict for a person, on both paths, in neutral words', async () => {
+  const requester = await person();
+  const second = await person();
+  const conflicts = (payoutId) =>
+    q(
+      `SELECT 1 FROM issues WHERE kind = 'payout_conflict' AND subject->>'payoutId' = $1`,
+      [payoutId],
+    );
+  const racing = (payoutId) =>
+    scripted(async () => {
+      await q(`UPDATE payouts SET provider_reference = $2 WHERE id = $1`, [
+        payoutId,
+        `someone_else_${randomUUID()}`,
+      ]);
+      return FOUND('paid');
+    });
+  const waited = await unresolvedPayoutIssue();
+  const asked = await ask(
+    requester,
+    'payout.settle',
+    { issueId: waited.issueId, how: 'apply', reported: 'paid' },
+    { services: scripted(() => FOUND('paid')) },
+  );
+  assert.equal(
+    (await approveWith(asked.requestId, second, racing(waited.payoutId)))
+      .status,
+    'stale',
+  );
+  assert.equal((await conflicts(waited.payoutId)).length, 1);
+
+  await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [second]);
+  const alone = await unresolvedPayoutIssue();
+  await assert.rejects(
+    ask(
+      requester,
+      'payout.settle',
+      { issueId: alone.issueId, how: 'apply', reported: 'paid' },
+      { services: racing(alone.payoutId) },
+    ),
+    { code: 'PAYOUT_CHANGED' },
+  );
+  assert.equal((await conflicts(alone.payoutId)).length, 1);
 });
 
 test('I5: new staff, removals and role changes each queue an alert, by id and name only', async () => {
@@ -1263,6 +1371,11 @@ test('I5: new staff, removals and role changes each queue an alert, by id and na
     ),
   );
   assert.ok(!raw.includes(email), 'no address in an alert');
+  const [{ payload: moved }] = await q(
+    `SELECT payload FROM outbox_events WHERE event_type = 'ops.staff_changed' AND payload->>'action' = 'role_changed'`,
+  );
+  assert.equal(moved.targetId, target);
+  assert.ok(moved.roleName, 'names the role');
 });
 
 test('I5, M4: each alert event reaches the webhook, and an unset route logs under its own name', async () => {
@@ -1340,6 +1453,20 @@ test('I5, M4: each alert event reaches the webhook, and an unset route logs unde
     requestedBy: requester,
   });
   assert.ok(logs.includes('staff_alert.unrouted'), logs.join());
+  const posted = [];
+  await handleDomainEvent(
+    'ops.staff_changed',
+    {
+      action: 'role_changed',
+      requestedBy: requester,
+      targetId: 'the-target',
+      roleName: 'Finance',
+    },
+    { ...context('x').deps, postStaffAlert: async (a) => posted.push(a) },
+  );
+  assert.match(posted[0].action, /role_changed/);
+  assert.match(posted[0].action, /the-target/);
+  assert.match(posted[0].action, /Finance/);
   assert.ok(!logs.includes('reserve.alert_unrouted'));
 });
 
@@ -1424,4 +1551,30 @@ test('M4: a process that loaded only the worker has the real actions registered'
   );
   assert.match(output, /\bREGISTERED\b/);
   assert.doesNotMatch(output, /NOT_REGISTERED/);
+});
+
+test('N4: the server command and a declined invitation say what they are', async () => {
+  const phone = `+23480999${String(++seq).padStart(5, '0')}`;
+  await ops.grantOwner(database.db, { phone });
+  const [granted] = await q(
+    `SELECT payload FROM outbox_events WHERE event_type = 'ops.staff_changed' ORDER BY created_at DESC, id DESC LIMIT 1`,
+  );
+  assert.equal(granted.payload.action, 'granted_from_server');
+  assert.equal(granted.payload.requestedBy, 'server command');
+  assert.equal(granted.payload.roleName, 'Owner');
+
+  const actor = await person();
+  const invited = await ops.addStaff(database.db, {
+    actorId: actor,
+    email: `decline.${randomUUID().slice(0, 6)}@example.com`,
+    roleId: await roleWith([HARMLESS]),
+    reason: REASON,
+    sealing,
+  });
+  await ops.declineInvitation(database.db, { userId: invited.userId, sealing });
+  const rows = await q(
+    `SELECT payload FROM outbox_events WHERE event_type = 'ops.staff_changed' AND payload->>'action' = 'invitation_declined'`,
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].payload.targetId, invited.userId);
 });

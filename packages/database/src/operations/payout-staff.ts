@@ -334,8 +334,10 @@ const staffAudit = (
   action: string,
   now: Date,
   note?: string,
+  databaseClock?: boolean,
 ) =>
   recordAudit(tx, {
+    ...(databaseClock ? { databaseClock } : {}),
     staffUserId: input.staffUserId,
     action,
     permission: 'payouts.resolve',
@@ -520,7 +522,16 @@ export async function resumeHeldPayout(
           profileId: kase.payout.profileId,
         },
       });
-      await staffAudit(tx, input, kase, 'payout.staff_resumed', now);
+      // Compared with when holds ended, so it takes the same clock.
+      await staffAudit(
+        tx,
+        input,
+        kase,
+        'payout.staff_resumed',
+        now,
+        undefined,
+        true,
+      );
       return true;
     }),
   );

@@ -132,14 +132,16 @@ export async function handleDomainEvent(
   }
   await mailForDomainEvent(deps.db, deps.sealing, name, data, deps.dedupeKey);
   if (POSTED_ONLY_EVENTS.has(name) && deps.postStaffAlert) {
-    const { action, outcome, requestedBy } = (data ?? {}) as Record<
-      string,
-      unknown
-    >;
+    const { action, outcome, requestedBy, targetId, roleName } = (data ??
+      {}) as Record<string, unknown>;
     const what = typeof action === 'string' ? action : 'unknown';
+    const about =
+      typeof targetId === 'string'
+        ? `${what}: ${targetId}${typeof roleName === 'string' ? `, ${roleName}` : ''}`
+        : what;
     await deps.postStaffAlert({
       event: name,
-      action: typeof outcome === 'string' ? `${what}: ${outcome}` : what,
+      action: typeof outcome === 'string' ? `${what}: ${outcome}` : about,
       requestedBy: typeof requestedBy === 'string' ? requestedBy : 'unknown',
     });
   }

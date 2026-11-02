@@ -8,6 +8,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   issues,
+  payouts,
   profiles,
   providerSettings,
   roles,
@@ -52,7 +53,7 @@ import {
 } from './staff-admin.js';
 import {
   lockStaffAdmin,
-  readMailboxes,
+  mailboxesOf,
   readOverrides,
   readRolePermissions,
   readStaffAccess,
@@ -170,6 +171,20 @@ const roleName = async (db: Database | Tx, roleId: string) => {
 
 /* Email recovery */
 
+const reachesStaffMailbox = async (db: Database | Tx, address: string) => {
+  const box = normaliseStaffEmail(address);
+  const everyone = await db
+    .select({
+      email: users.email,
+      recoveryEmail: users.recoveryEmail,
+      recoveryVerifiedAt: users.recoveryEmailVerifiedAt,
+    })
+    .from(staff)
+    .innerJoin(users, eq(users.id, staff.userId))
+    .where(isNull(staff.revokedAt));
+  return everyone.some((person) => mailboxesOf(person).has(box));
+};
+
 interface RecoveryPayload {
   userId: string;
   newEmail: string;
@@ -182,13 +197,17 @@ const emailRecovery = acting<RecoveryPayload>({
   subjects: ({ userId }) => [userId],
   mailboxes: ({ newEmail }) => [newEmail],
   target: ({ userId }) => userId,
-  // The address stays masked (spec 6.4). The server refuses staff's own mailboxes, so what the
-  // approver judges is the written checks.
+  // The address stays masked (the owner's ruling), with whether it matches anyone on staff.
   describe: async (tx, { userId, newEmail, checks }) =>
-    `Move ${await personHint(tx, userId)} to the email address ${maskEmail(newEmail)}. Identity checks: ${checks}`,
+    `Move ${await personHint(tx, userId)} to the email address ${maskEmail(newEmail)}, which ${
+      (await reachesStaffMailbox(tx, newEmail))
+        ? 'MATCHES a staff mailbox'
+        : 'matches no staff mailbox'
+    }. Identity checks: ${checks}`,
   act: async (tx, payload, context) => {
-    const own = await readMailboxes(tx, context.actorId);
-    if (own.has(normaliseStaffEmail(payload.newEmail)))
+    // Anyone's, not just the people deciding: someone refused as an approver stops counting, and
+    // the action would then run alone, to the mailbox of the person who could have stopped it.
+    if (await reachesStaffMailbox(tx, payload.newEmail))
       throw new OperationError('APPROVAL_SUBJECT');
     const outcome = await startStaffRecovery(tx, servicesOf(context).sealing, {
       staffUserId: context.actorId,
@@ -304,8 +323,27 @@ const payoutSettle = acting<SettlePayload>({
           )
         : await markFailedAfterRead(tx, input, prepared));
     if (settled.outcome !== 'applied' && settled.outcome !== 'marked_failed')
-      throw new OperationError('STAFF_CHANGED', `payout_${settled.outcome}`);
+      throw new OperationError('PAYOUT_CHANGED', `payout_${settled.outcome}`);
     return settled;
+  },
+  // The run's own conflict went with its rollback, and someone must look at this.
+  afterRefusal: async (db, _payload, { detail }, check) => {
+    if (detail !== 'payout_mismatch') return;
+    const { answer, kase, now } = check.facts as PreparedPayoutRead;
+    if (!('found' in answer)) return;
+    const [current] = await db
+      .select({ reference: payouts.providerReference })
+      .from(payouts)
+      .where(eq(payouts.id, kase.payout.id));
+    const two =
+      current?.reference &&
+      current.reference !== answer.found.providerReference;
+    await openPayoutConflict(db, {
+      payoutId: kase.payout.id,
+      why: two ? 'two_references' : 'mismatch',
+      fields: answer.differing,
+      now,
+    });
   },
 });
 

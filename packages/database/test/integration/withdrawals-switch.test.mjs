@@ -562,3 +562,57 @@ test('the row is seeded on, and with no row at all everything reads as off', asy
     'started',
   );
 });
+
+/*
+ * Holds and payouts get some times from the database and, before this was fixed, others from the
+ * app. The two clocks differ: a request must not pass, or stop, because of which one is ahead.
+ */
+for (const [label, skewMs] of [
+  ['ahead of', 5000],
+  ['behind', -5000],
+]) {
+  const skewed = (t) => {
+    const real = Date.now();
+    t.mock.timers.enable({ apis: ['Date'], now: real + skewMs });
+  };
+
+  test(`app clock ${label} the database: a hold after Resume still stops it, and a Resume after it counts`, async (t) => {
+    const s = await setup(t);
+    skewed(t);
+    const payoutId = await s.withdraw();
+    const { issueId } = await freeze(s);
+    await secure(s, issueId);
+    const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+    const resume = () =>
+      resumeHeldPayout(s.db, {
+        issueId: heldIssue,
+        reason: REASON,
+        staffUserId: STAFF,
+        provider: () => provider(),
+      });
+    assert.equal((await resume()).outcome, 'resumed');
+    await new Promise((resolve) => setImmediate(resolve));
+    await rawHold(s, { released: true });
+    const fake = provider();
+    assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+    assert.equal(fake.calls.creates, 0);
+    assert.equal((await resume()).outcome, 'resumed');
+    assert.equal(
+      await startPayout(s.db, { payoutId, provider: fake }),
+      'started',
+    );
+  });
+
+  test(`app clock ${label} the database: a hold released before the request has no bearing`, async (t) => {
+    const s = await setup(t);
+    skewed(t);
+    const { issueId } = await freeze(s);
+    await secure(s, issueId);
+    const payoutId = await s.withdraw();
+    const fake = provider();
+    assert.equal(
+      await startPayout(s.db, { payoutId, provider: fake }),
+      'started',
+    );
+  });
+}

@@ -134,6 +134,16 @@ export interface SeriousActionDefinition<Payload> {
   ): Promise<boolean>;
   /** Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox. */
   subjects?(payload: Payload, db: Database | Tx): string[] | Promise<string[]>;
+  /**
+   * After a refusal has undone the run, so what it records stays: on approval, in the transaction
+   * that closes the request; when asking, on its own after the rollback.
+   */
+  afterRefusal?(
+    db: Database,
+    payload: Payload,
+    refusal: { detail: string | undefined },
+    check: SeriousActionCheck,
+  ): Promise<void>;
   /** Addresses the change would hand something to: nobody behind one can decide it. */
   mailboxes?(payload: Payload): string[];
   /**
@@ -402,167 +412,186 @@ export function requestSeriousAction(
       actorId: input.actorId,
       services: input.services,
     });
-    return db.transaction(async (tx): Promise<SeriousActionOutcome> => {
-      await lockStaffAdmin(tx);
-      const now = input.now ?? new Date();
-      const actorId = canonicalId(input.actorId);
-      const access = actorId ? await readStaffAccess(tx, actorId) : null;
-      if (
-        !actorId ||
-        !access?.permissions.has(action.permission) ||
-        !(await canEnterCode(tx, actorId))
-      )
-        throw new OperationError('PERMISSION_NOT_HELD');
-      await assertFreshCode(tx, {
-        grantId: input.grantId,
-        userId: actorId,
-        now,
-      });
-
-      const check = {
-        actorId,
-        reason,
-        now,
-        services: input.services,
-        facts,
-      };
-      await whileHoldingStaffAdmin(() => action.validate(tx, payload, check));
-      const summary = await action.describe(tx, payload);
-      const pinned = action.current
-        ? plainPayload((await action.current(tx, payload)) ?? null)
-        : null;
-      const approvers = await qualifiedApprovers(tx, {
-        permission: action.permission,
-        requesterId: actorId,
-        action: action.name,
-        payload,
-      });
-      const waiting = await tx
-        .select({
-          id: approvalRequests.id,
-          requestedBy: approvalRequests.requestedBy,
-        })
-        .from(approvalRequests)
-        .where(
-          and(
-            eq(approvalRequests.status, 'pending'),
-            eq(approvalRequests.action, action.name),
-            gt(approvalRequests.expiresAt, now),
-            sql`${approvalRequests.payload} = ${JSON.stringify(payload)}::jsonb`,
-            sql`${approvalRequests.pinned} IS NOT DISTINCT FROM ${pinned === null ? null : JSON.stringify(pinned)}::jsonb`,
-          ),
-        );
-      if (
-        approvers.length === 0 &&
-        waiting.some((row) => row.requestedBy === actorId)
-      )
-        throw new OperationError('APPROVAL_ALREADY_PENDING');
-      if (approvers.length > 0 && waiting[0]) {
-        // Their reason goes nowhere else, and the owner's ruling is a full log.
-        await recordAudit(tx, {
-          staffUserId: actorId,
-          action: 'serious_action.repeated',
-          permission: action.permission,
-          subjectType: 'approval_request',
-          subjectId: waiting[0].id,
-          reason: withAuditChange(reason, {
-            action: action.name,
-            summary,
-            requestedBy: waiting[0].requestedBy,
-            alsoAskedBy: actorId,
-          }),
+    let attempted: SeriousActionCheck | null = null;
+    return db
+      .transaction(async (tx): Promise<SeriousActionOutcome> => {
+        await lockStaffAdmin(tx);
+        const now = input.now ?? new Date();
+        const actorId = canonicalId(input.actorId);
+        const access = actorId ? await readStaffAccess(tx, actorId) : null;
+        if (
+          !actorId ||
+          !access?.permissions.has(action.permission) ||
+          !(await canEnterCode(tx, actorId))
+        )
+          throw new OperationError('PERMISSION_NOT_HELD');
+        await assertFreshCode(tx, {
+          grantId: input.grantId,
+          userId: actorId,
           now,
         });
-        return { state: 'pending', requestId: waiting[0].id, repeat: true };
-      }
 
-      if (approvers.length > 0) {
-        const requestId = newId();
-        await tx.insert(approvalRequests).values({
-          id: requestId,
+        const check = {
+          actorId,
+          reason,
+          now,
+          services: input.services,
+          facts,
+        };
+        // The check is a dry run, so a refusal there is as real as one in the run.
+        attempted = check;
+        await whileHoldingStaffAdmin(() => action.validate(tx, payload, check));
+        const summary = await action.describe(tx, payload);
+        const pinned = action.current
+          ? plainPayload((await action.current(tx, payload)) ?? null)
+          : null;
+        const approvers = await qualifiedApprovers(tx, {
+          permission: action.permission,
+          requesterId: actorId,
           action: action.name,
           payload,
-          pinned,
-          summary,
-          permission: action.permission,
-          requestedBy: actorId,
-          reason,
-          createdAt: now,
-          expiresAt: new Date(now.getTime() + REQUEST_TTL_MS),
         });
+        const waiting = await tx
+          .select({
+            id: approvalRequests.id,
+            requestedBy: approvalRequests.requestedBy,
+          })
+          .from(approvalRequests)
+          .where(
+            and(
+              eq(approvalRequests.status, 'pending'),
+              eq(approvalRequests.action, action.name),
+              gt(approvalRequests.expiresAt, now),
+              sql`${approvalRequests.payload} = ${JSON.stringify(payload)}::jsonb`,
+              sql`${approvalRequests.pinned} IS NOT DISTINCT FROM ${pinned === null ? null : JSON.stringify(pinned)}::jsonb`,
+            ),
+          );
+        if (
+          approvers.length === 0 &&
+          waiting.some((row) => row.requestedBy === actorId)
+        )
+          throw new OperationError('APPROVAL_ALREADY_PENDING');
+        if (approvers.length > 0 && waiting[0]) {
+          // Their reason goes nowhere else, and the owner's ruling is a full log.
+          await recordAudit(tx, {
+            staffUserId: actorId,
+            action: 'serious_action.repeated',
+            permission: action.permission,
+            subjectType: 'approval_request',
+            subjectId: waiting[0].id,
+            reason: withAuditChange(reason, {
+              action: action.name,
+              summary,
+              requestedBy: waiting[0].requestedBy,
+              alsoAskedBy: actorId,
+            }),
+            now,
+          });
+          return { state: 'pending', requestId: waiting[0].id, repeat: true };
+        }
+
+        if (approvers.length > 0) {
+          const requestId = newId();
+          await tx.insert(approvalRequests).values({
+            id: requestId,
+            action: action.name,
+            payload,
+            pinned,
+            summary,
+            permission: action.permission,
+            requestedBy: actorId,
+            reason,
+            createdAt: now,
+            expiresAt: new Date(now.getTime() + REQUEST_TTL_MS),
+          });
+          await recordAudit(tx, {
+            staffUserId: actorId,
+            action: 'serious_action.requested',
+            permission: action.permission,
+            subjectType: 'approval_request',
+            subjectId: requestId,
+            reason: withAuditChange(reason, {
+              action: action.name,
+              summary,
+              requestedBy: actorId,
+              approvedBy: null,
+            }),
+            now,
+          });
+          await enqueueOutbox(tx, {
+            eventType: 'ops.approval_pending',
+            aggregateId: requestId,
+            payload: {
+              action: action.name,
+              requestedBy: actorId,
+              requestId,
+              permission: action.permission,
+            },
+          });
+          return { state: 'pending', requestId };
+        }
+
+        const superseded = await closeSuperseded(
+          tx,
+          action,
+          payload,
+          actorId,
+          now,
+        );
+        const result = await runWithinTime(tx, (fencedTx) =>
+          action.run(fencedTx, payload, {
+            actorId,
+            reason,
+            now,
+            approverId: null,
+            services: input.services,
+            facts,
+          }),
+        );
         await recordAudit(tx, {
           staffUserId: actorId,
-          action: 'serious_action.requested',
+          action: 'serious_action.ran_alone',
           permission: action.permission,
-          subjectType: 'approval_request',
-          subjectId: requestId,
+          subjectType: 'serious_action',
+          subjectId: action.name,
           reason: withAuditChange(reason, {
             action: action.name,
             summary,
             requestedBy: actorId,
             approvedBy: null,
+            aloneReason: 'no_second_person',
+            note: 'Ran without a second person because none was available',
           }),
           now,
         });
         await enqueueOutbox(tx, {
-          eventType: 'ops.approval_pending',
-          aggregateId: requestId,
-          payload: {
-            action: action.name,
-            requestedBy: actorId,
-            requestId,
-            permission: action.permission,
-          },
+          eventType: 'ops.acted_alone',
+          // Each occurrence is its own alert.
+          aggregateId: newId(),
+          payload: { action: action.name, requestedBy: actorId },
         });
-        return { state: 'pending', requestId };
-      }
-
-      const superseded = await closeSuperseded(
-        tx,
-        action,
-        payload,
-        actorId,
-        now,
-      );
-      const result = await runWithinTime(tx, (fencedTx) =>
-        action.run(fencedTx, payload, {
-          actorId,
-          reason,
-          now,
-          approverId: null,
-          services: input.services,
-          facts,
-        }),
-      );
-      await recordAudit(tx, {
-        staffUserId: actorId,
-        action: 'serious_action.ran_alone',
-        permission: action.permission,
-        subjectType: 'serious_action',
-        subjectId: action.name,
-        reason: withAuditChange(reason, {
-          action: action.name,
-          summary,
-          requestedBy: actorId,
-          approvedBy: null,
+        return {
+          state: 'ran',
           aloneReason: 'no_second_person',
-          note: 'Ran without a second person because none was available',
-        }),
-        now,
+          result,
+          superseded,
+        };
+      })
+      .catch(async (error: unknown) => {
+        if (
+          attempted &&
+          action.afterRefusal &&
+          error instanceof OperationError &&
+          error.code !== 'STAFF_ADMIN_BUSY'
+        )
+          await action.afterRefusal(
+            db,
+            payload,
+            { detail: error.detail },
+            attempted,
+          );
+        throw error;
       });
-      await enqueueOutbox(tx, {
-        eventType: 'ops.acted_alone',
-        // Each occurrence is its own alert.
-        aggregateId: newId(),
-        payload: { action: action.name, requestedBy: actorId },
-      });
-      return {
-        state: 'ran',
-        aloneReason: 'no_second_person',
-        result,
-        superseded,
-      };
-    });
   });
 }
 
@@ -934,6 +963,19 @@ export function approveRequest(
           change: { ...both, why, ...(detail ? { detail } : {}) },
           now,
         });
+        // Tx is usable as a Database here: this commits with the close.
+        await registry.get(request.action)?.afterRefusal?.(
+          tx,
+          request.payload,
+          { detail },
+          {
+            actorId: request.requestedBy,
+            reason: request.reason,
+            now,
+            services: input.services,
+            facts,
+          },
+        );
         return { status: 'stale', why };
       };
       if (!(await requesterStillHolds(tx, request)))

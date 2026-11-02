@@ -193,13 +193,14 @@ async function asSoleOwner(userId, fn) {
   }
 }
 
-async function inboxMail(email, subject) {
+async function inboxMail(email, subject, wanted = /./) {
   const [local, domain] = email.split('@');
   const hint = `${local[0]}•••@${domain}`;
   for (let i = 0; i < 150; i++) {
     const { data } = await (await fetch(`${stack.api}/v1/dev/inbox`)).json();
     const mail = data.find(
-      (m) => m.to === hint && m.subject?.includes(subject),
+      (m) =>
+        m.to === hint && m.subject?.includes(subject) && wanted.test(m.body),
     );
     if (mail) return mail;
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -253,7 +254,8 @@ async function enrolled(roleId = auditRole.id) {
     reason: REASON,
   });
   assert.equal(added.status, 201);
-  const mail = await inboxMail(email, 'admin');
+  // An alert to every owner may land first: a new owner counts.
+  const mail = await inboxMail(email, 'admin', LINK);
   const session = await emailSignIn(email);
   const grant = await enrol(session.cookie, LINK.exec(mail.body)[1]);
   return { email, userId: session.userId, ...grant };

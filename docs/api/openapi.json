@@ -5714,6 +5714,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request (money closes only)",
         "security": [
           {
             "session": []
@@ -9303,6 +9304,7 @@
                   "APPROVAL_EXPIRED",
                   "APPROVAL_STALE",
                   "APPROVAL_ALREADY_PENDING",
+                  "PAYOUT_CHANGED",
                   "SELF_ACCESS_CHANGE",
                   "ROLE_NAME_TAKEN",
                   "ROLE_IN_USE",
