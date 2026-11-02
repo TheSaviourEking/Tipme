@@ -37,7 +37,15 @@ test('test copy keeps today’s wording', () => {
     copy.formTrust,
     'No account needed. You’ll see the full total before you pay.',
   );
-  assert.match(copy.formPartner, /^Our payment partner handles your payment/);
+  assert.equal(
+    copy.formPartner,
+    'A test page stands in for our payment partner. Confirm there.',
+  );
+  assert.equal(
+    paymentModeCopy('live').formPartner,
+    'Our payment partner handles this. You’ll confirm on its page.',
+  );
+  assert.equal(paymentModeCopy('closed').formPartner, null);
   assert.equal(
     copy.withdrawNotice,
     'No real money moves in test mode. The test bank pays straight away.',

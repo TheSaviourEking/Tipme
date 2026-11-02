@@ -118,3 +118,11 @@ test('longer amounts get fewer keys a row in a narrow card', () => {
   });
   assert.equal(keyLayout(['1,000,000', '2,000,000', '3,000,000']).small, 1);
 });
+
+test('the typed-amount example is the page’s own minimum', () => {
+  assert.equal(amountOptions(undefined).example, '1,000');
+  assert.equal(
+    amountOptions({ presetsMinor: ['1000000'], minMinor: '1000000' }).example,
+    '10,000',
+  );
+});

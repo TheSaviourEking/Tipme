@@ -14,6 +14,10 @@ const TRUST = 'No account needed. You’ll see the full total before you pay.';
 const DISCLOSURE = 'Add a message, reason or your name';
 const WIDTHS = [320, 360, 390, 768, 1280];
 const OTHER = /^Other amount/;
+const PARTNER = {
+  live: 'Our payment partner handles this. You’ll confirm on its page.',
+  test: 'A test page stands in for our payment partner. Confirm there.',
+};
 
 const tipButton = (page: Page) => page.getByRole('button', { name: /^Tip\b/ });
 const card = (page: Page) =>
@@ -387,13 +391,15 @@ for (const m of ['test', 'live'] as const)
     await expect(panel.getByText(words).locator('visible=true')).toHaveCount(1);
     await expect(panel.getByText(/Test payments/)).toHaveCount(0);
     expect((await panel.ariaSnapshot()).split(words).length - 1).toBe(1);
-    // The partner wording moved, not gone: on the page's foot, with no provider named.
-    await expect(page.locator('.profile-foot__partner')).toHaveText(
-      'Our payment partner handles your payment securely, and you’ll confirm on its page.',
-    );
+    // Said once, inside the Tip action, in words true for this mode. No provider named.
+    const partner = panel.locator('.composer-action__partner');
+    await expect(partner).toHaveText(PARTNER[m]);
+    await expect(partner).toBeVisible();
     await expect(
-      panel.getByText(/payment partner|payment provider/),
+      page.locator('.profile-foot').getByText(/partner/),
     ).toHaveCount(0);
+    await expect(panel.getByText(/payment partner/)).toHaveCount(1);
+    expect((await panel.ariaSnapshot()).split(PARTNER[m]).length - 1).toBe(1);
     expect(await page.locator('body').innerText()).not.toMatch(/bachs/i);
     if (m === 'live') {
       const tip = (await tipButton(page).boundingBox())!;
@@ -409,11 +415,11 @@ test('a closed page has no card, no trust line, no partner line and no celebrati
   await at('closed', '/@dr7', page);
   await expect(tipButton(page)).toHaveCount(0);
   await expect(page.getByText(TRUST)).toHaveCount(0);
-  await expect(page.locator('.profile-foot__partner')).toHaveCount(0);
+  await expect(page.locator('.composer-action__partner')).toHaveCount(0);
   await expect(page.getByText(/^Celebrating/)).toHaveCount(0);
   await at('live', '/@closedout', page);
   await expect(page.getByText(/^Celebrating/)).toHaveCount(0);
-  await expect(page.locator('.profile-foot__partner')).toHaveCount(0);
+  await expect(page.locator('.composer-action__partner')).toHaveCount(0);
 });
 
 test('the celebration is announced in the identity column and the tick box starts unticked', async ({
@@ -453,17 +459,17 @@ test('on a phone the announcement comes before the card @mobile', async ({
   expect(announcement.y + announcement.height).toBeLessThanOrEqual(panel.y);
 });
 
-test('ticking sends celebrationMomentId; leaving it unticked sends nothing', async ({
+test('ticking sends celebrationMomentId; ticking then unticking sends nothing', async ({
   page,
 }) => {
   for (const tick of [true, false]) {
     const origin = await at('live', '/@dr7', page);
     await page.unrouteAll();
     const sent = await answerApi(page, origin);
-    if (tick)
-      await page
-        .getByRole('checkbox', { name: 'Add to the celebration' })
-        .check();
+    const box = page.getByRole('checkbox', { name: 'Add to the celebration' });
+    // Changing your mind counts: ticked then unticked sends nothing.
+    await box.check();
+    if (!tick) await box.uncheck();
     await page.getByRole('radio', { name: '20,000 NGN' }).click();
     await expect(page.getByText(/You pay/)).toBeVisible();
     await tipButton(page).click();
@@ -648,7 +654,7 @@ test('the Home demo shares the card and still works: disclosure, typed amount, n
   await panel.getByLabel(OTHER).fill('2500');
   await expect(panel.getByText('You pay NGN 2,500.00')).toBeVisible();
   await expect(
-    panel.getByText('You’ll confirm on the payment provider’s page next.'),
+    panel.locator('.composer-action__partner').getByText(PARTNER.test),
   ).toBeVisible();
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 800 });
@@ -658,4 +664,174 @@ test('the Home demo shares the card and still works: disclosure, typed amount, n
       ),
     ).toBe(true);
   }
+});
+
+test('the partner line shows beside Tip on the phone’s first screen, clear of the fold @mobile', async ({
+  page,
+}) => {
+  for (const width of [320, 360, 390]) {
+    await page.setViewportSize({ width, height: 700 });
+    await at('live', '/@dr7', page, { pilotNotice: true });
+    const partner = page.locator('.composer-action .composer-action__partner');
+    await expect(partner).toHaveText(PARTNER.live);
+    await expect(partner).toBeInViewport({ ratio: 1 });
+    expect(await page.locator('[data-tip-panel]').ariaSnapshot()).toContain(
+      PARTNER.live,
+    );
+  }
+});
+
+test('Go on a phone’s keyboard never starts a tip with the bar and total hidden @mobile', async ({
+  page,
+}) => {
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  const bar = page.locator('.composer-action');
+  // A typed amount with its total ready: Go only closes the keyboard.
+  const field = page.getByLabel(OTHER);
+  await field.fill('15000');
+  await expect(bar).toBeHidden();
+  await expect.poll(() => sent.quotes).toBeGreaterThan(0);
+  await page.waitForTimeout(100);
+  await field.press('Enter');
+  await expect(bar).toBeVisible();
+  await expect(field).not.toBeFocused();
+  await expect(page.getByText(/You pay NGN 15,000/)).toBeVisible();
+  expect(sent.intents).toEqual([]);
+  expect(page.url()).toContain('/@dr7');
+
+  // From the preselected amount, in the optional details: the same, twice over.
+  await at('live', '/@dr7', page);
+  await summary(page).click();
+  const name = page.getByLabel('Your name (optional)');
+  await name.fill('Ngozi');
+  await name.press('Enter');
+  await expect(bar).toBeVisible();
+  expect(sent.intents).toEqual([]);
+  await name.focus();
+  await name.press('Enter');
+  await expect(bar).toBeVisible();
+  expect(sent.intents).toEqual([]);
+  expect(page.url()).toContain('/@dr7');
+});
+
+test('on desktop Enter in a field works as before: the first asks for the total, the next pays', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  await summary(page).click();
+  const name = page.getByLabel('Your name (optional)');
+  await name.fill('Ngozi');
+  await name.press('Enter');
+  await expect(page.getByText(/You pay NGN 10,000/)).toBeVisible();
+  expect(sent.intents).toEqual([]);
+  await page.waitForTimeout(600);
+  await name.press('Enter');
+  await page.waitForURL(/legal\/terms/);
+  expect(sent.intents).toHaveLength(1);
+});
+
+test('a double tap on the preselected amount does not pay the moment the total appears', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  // A second tap in the same moment the total arrives, however fast the answer came.
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => {
+        const button =
+          document.querySelector<HTMLButtonElement>('.composer-submit')!;
+        const seen = new MutationObserver(() => {
+          if (!document.querySelector('.tip-payment-total') || button.disabled)
+            return;
+          seen.disconnect();
+          button.click();
+          done();
+        });
+        seen.observe(document.body, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+        });
+        button.click();
+      }),
+  );
+  await page.waitForTimeout(200);
+  expect(sent.intents).toEqual([]);
+  expect(page.url()).toContain('/@dr7');
+  // A deliberate tap after that pays as normal.
+  await page.waitForTimeout(500);
+  await tipButton(page).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(sent.intents).toHaveLength(1);
+});
+
+test('typing an amount counts once, even after a key cleared the first one', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  const field = page.getByLabel(OTHER);
+  await field.fill('15000');
+  await page.getByRole('radio', { name: '20,000 NGN' }).click();
+  await field.fill('16000');
+  const count = () =>
+    sent.events.join().split('custom_amount_entered').length - 1;
+  await page.waitForTimeout(300);
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event('visibilitychange')),
+  );
+  await expect.poll(count).toBeGreaterThan(0);
+  await page.waitForTimeout(300);
+  expect(count()).toBe(1);
+});
+
+test('when the API says tipping closed after load, the announcement goes with the form', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@dr7', page);
+  const cors = { 'access-control-allow-origin': origin };
+  await page.route('**/v1/tip-quotes', (route) =>
+    route.request().method() === 'OPTIONS'
+      ? route.fulfill({
+          status: 204,
+          headers: { ...cors, 'access-control-allow-headers': '*' },
+        })
+      : route.fulfill({
+          status: 403,
+          headers: cors,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'TIPPING_NOT_OPEN' } }),
+        }),
+  );
+  await expect(page.getByText(/^Celebrating DR7/)).toBeVisible();
+  await page.getByRole('radio', { name: '20,000 NGN' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Tipping opens soon' }),
+  ).toBeVisible();
+  await expect(page.getByText(/^Celebrating DR7/)).toBeHidden();
+});
+
+test('the Other amount example is never below the page’s minimum', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await at('live', '/@dr7', page);
+  await expect(page.getByLabel(OTHER)).toHaveAttribute(
+    'placeholder',
+    'e.g. 10,000',
+  );
+  await at('live', '/@kemi', page);
+  await expect(page.getByLabel(OTHER)).toHaveAttribute(
+    'placeholder',
+    'e.g. 1,000',
+  );
 });

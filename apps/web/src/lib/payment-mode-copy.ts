@@ -19,7 +19,7 @@ export type PaymentModeCopy = {
   formDisclaimer: string | null;
   /** Beside the Tip button on the public page, wherever a supporter can pay. */
   formTrust: string | null;
-  /** The page's foot, wherever a supporter can pay: who handles the payment, and where. */
+  /** Beside the Tip action, wherever a supporter can pay: who handles the payment, and where. */
   formPartner: string | null;
   profileMetaSuffix: string;
   homeRecipientNotice: string | null;
@@ -46,8 +46,7 @@ const CLARITY =
   'You see the full cost and what the person receives before you pay.';
 const PAY_STEP = 'Review the full amount and what they receive, then pay.';
 const TRUST = 'No account needed. You’ll see the full total before you pay.';
-const PARTNER =
-  'Our payment partner handles your payment securely, and you’ll confirm on its page.';
+const PARTNER = 'Our payment partner handles this. You’ll confirm on its page.';
 const EXAMPLE_TITLE = 'Tip the people you know';
 const EXAMPLE_BODY =
   'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to thank.';
@@ -72,7 +71,8 @@ const TEST: PaymentModeCopy = {
   formBadge: 'Test payments',
   formDisclaimer: 'TipMe is in test mode: no real money moves yet.',
   formTrust: TRUST,
-  formPartner: PARTNER,
+  // No real partner takes a test tip: the pretend provider's page does.
+  formPartner: 'A test page stands in for our payment partner. Confirm there.',
   profileMetaSuffix: ' Test mode.',
   homeRecipientNotice:
     'Payments are in test mode. Real payments and payout setup are not available until provider and funds-flow approvals are complete.',

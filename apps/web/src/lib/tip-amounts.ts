@@ -84,6 +84,8 @@ export function amountOptions(amounts: TipAmounts | undefined) {
     /** The preset the picker starts on: NGN 2,000 or the closest to it. Null with no presets. */
     defaultMinor: closestToDefault(presetsMinor.map(Number)),
     rangeText: `NGN ${naira(min)} or more`,
+    /** An example for the typed amount: never below what this page accepts. */
+    example: naira(min),
     /** A typed amount in kobo, or null when it is not a number or below this page's minimum. */
     parse(value: string): number | null {
       // Plain digits, or digits with correctly grouped thousands separators (1,500).

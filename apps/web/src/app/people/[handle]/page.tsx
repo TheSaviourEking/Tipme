@@ -130,9 +130,6 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           </aside>
         </div>
         <footer className="profile-foot">
-          {takesTips && copy.formPartner && (
-            <p className="profile-foot__partner">{copy.formPartner}</p>
-          )}
           <div className="profile-foot__quiet">
             <ReportPage handle={profile.handle} />
             <Link href="/legal/privacy">Privacy</Link>

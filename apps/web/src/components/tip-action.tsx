@@ -10,10 +10,13 @@ import type { ReactNode } from 'react';
 export function TipAction({
   quote,
   notice,
+  partner,
   children,
 }: {
   quote?: ReactNode;
   notice?: ReactNode;
+  /** Who handles the payment and where it is confirmed: with the button at every width. */
+  partner?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -21,6 +24,7 @@ export function TipAction({
       {quote}
       {notice && <p className="composer-action__notice">{notice}</p>}
       {children}
+      {partner && <p className="composer-action__partner">{partner}</p>}
     </div>
   );
 }

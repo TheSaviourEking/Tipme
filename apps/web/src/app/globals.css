@@ -1452,6 +1452,15 @@ body:has(.profile-page) .brand__mark {
   margin-top: 0;
 }
 
+/* Who handles the payment, with the button at every width, in the phone's Tip bar too. */
+.composer-action__partner {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
 /* Shown only in the phone's Tip bar; elsewhere the wording under the button carries it. */
 .composer-action__notice {
   display: none;
@@ -1483,15 +1492,6 @@ body:has(.profile-page) .brand__mark {
   text-align: center;
 }
 
-/* Who handles the payment: said once, in the page's own small print. */
-.profile-foot__partner {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-}
-
 /* The moment this page shared: in the identity column, before the card on a phone. */
 .profile-celebration {
   display: flex;
@@ -1507,6 +1507,10 @@ body:has(.profile-page) .brand__mark {
   font-size: 0.9375rem;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.profile-celebration[hidden] {
+  display: none;
 }
 
 .profile-celebration svg {
@@ -1715,6 +1719,11 @@ body:has(.profile-page) .brand__mark {
       font-size: 0.6875rem;
       line-height: 1.35;
       text-align: center;
+    }
+
+    .profile-composer .composer-action__partner {
+      margin-top: var(--space-1);
+      font-size: 0.6875rem;
     }
 
     .profile-composer .composer-action__notice a {

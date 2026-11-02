@@ -295,6 +295,10 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
+  // The Pay button comes from the page's own fetch: wait for it, so the tip expires only after the
+  // page has loaded as payable, and this tests a stale page rather than racing that fetch.
+  const pay = page.getByRole('button', { name: /^Pay/ });
+  await expect(pay).toBeVisible();
   const reference = new URL(page.url()).pathname.split('/')[2] ?? '';
   const { openTestDatabase } =
     await import('../../packages/database/dist/test-support.js');
@@ -330,10 +334,16 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
   } finally {
     await database.close();
   }
-  await page.getByRole('button', { name: /^Pay/ }).click();
-  await expect(
-    page.getByText('This payment has expired and can no longer be paid.'),
-  ).toBeVisible();
+  // A page still open can't pay it, and says why.
+  await pay.click();
+  const expired = page.getByText(
+    'This payment has expired and can no longer be paid.',
+  );
+  await expect(expired).toBeVisible();
+  // Nor can a fresh look at it: the same words, and no Pay button.
+  await page.reload();
+  await expect(expired).toBeVisible();
+  await expect(pay).toHaveCount(0);
 });
 
 test('fix: going back from the provider page leaves the form usable', async ({

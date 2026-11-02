@@ -757,13 +757,13 @@ test('a failed start is shown clear of the Tip bar @mobile', async ({
     .toBe(true);
 });
 
-test('the trust line stays in the card on a phone, and the partner wording at the page foot @mobile', async ({
+test('the trust line stays in the card on a phone, and the partner wording beside Tip @mobile', async ({
   page,
 }) => {
   await page.goto('/@ada');
   await expect(page.locator('.composer-trust')).toHaveText(TRUST);
-  await expect(page.locator('.profile-foot__partner')).toContainText(
-    'Our payment partner handles your payment securely',
+  await expect(page.locator('.composer-action__partner')).toContainText(
+    'our payment partner',
   );
 });
 

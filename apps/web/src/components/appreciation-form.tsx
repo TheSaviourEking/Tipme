@@ -37,6 +37,7 @@ const PANEL_MARGIN_PX = 32;
 // packages/contracts/src/checkout.ts: what a tip may carry.
 const MESSAGE_LIMIT = 280;
 const NAME_LIMIT = 60;
+const FIRST_TOTAL_PAUSE_MS = 500;
 
 const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   if (failure.code === 'NETWORK')
@@ -121,6 +122,10 @@ export function AppreciationForm({
   // One key per draft (quote + message): retries and double taps reuse it, so one tip at most.
   const draftKey = useRef<string | null>(null);
   const latestQuote = useRef(0);
+  const awaitingFirstTotal = useRef(false);
+  const firstTotalAt = useRef<number | null>(null);
+  // Counted once a page view: choosing a key clears the field, and typing again is the same person.
+  const customCounted = useRef(false);
   const customField = useRef<HTMLInputElement>(null);
   const firstChoice = useRef<HTMLInputElement>(null);
   const messageField = useRef<HTMLTextAreaElement>(null);
@@ -148,6 +153,10 @@ export function AppreciationForm({
         message: failureMessage(result, options.rangeText),
       });
       return null;
+    }
+    if (awaitingFirstTotal.current) {
+      awaitingFirstTotal.current = false;
+      firstTotalAt.current = performance.now();
     }
     setQuote({ kind: 'ready', quote: result.data });
     return result.data;
@@ -193,6 +202,26 @@ export function AppreciationForm({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitting) return;
+    // A phone's Go key, with the Tip bar and its total stepped aside for the keyboard: bring them
+    // back rather than start anything the person can't see.
+    const bar = form.current?.querySelector('.composer-action');
+    const field = document.activeElement;
+    if (
+      bar &&
+      getComputedStyle(bar).position === 'fixed' &&
+      field instanceof HTMLElement &&
+      field.matches('input:not([type="radio"], [type="checkbox"]), textarea')
+    ) {
+      field.blur();
+      return;
+    }
+    // A double tap on the starting amount: the total has only just appeared, so this isn't yet a
+    // decision to pay. The next tap counts.
+    if (
+      firstTotalAt.current !== null &&
+      performance.now() - firstTotalAt.current < FIRST_TOTAL_PAUSE_MS
+    )
+      return;
     track('tip_cta_clicked', { surface: 'profile', handle });
     if (!amount) {
       setError(
@@ -223,6 +252,7 @@ export function AppreciationForm({
     if (!chosen) {
       // The starting amount, not yet confirmed by the person: this tap fetches its total and shows
       // it (in the bar, and read out), and the next tap pays. Nothing is created until then.
+      awaitingFirstTotal.current = true;
       setChosen(true);
       return;
     }
@@ -335,6 +365,15 @@ export function AppreciationForm({
       root.style.removeProperty('--tip-bar');
     };
   }, [onProfile, closed]);
+
+  // Tipping closed since this page loaded: the announcement beside the form goes with it.
+  useEffect(() => {
+    if (!closed) return;
+    const announcement = document.querySelector<HTMLElement>(
+      '.profile-celebration',
+    );
+    if (announcement) announcement.hidden = true;
+  }, [closed]);
 
   // The tipping panel stays in view (CSS, sticky) only while it fits the window: a taller one
   // scrolls with the page, or its Tip button would stay below the fold. Opening the details can
@@ -577,13 +616,15 @@ export function AppreciationForm({
           inputMode="decimal"
           autoComplete="off"
           maxLength={16}
-          placeholder="e.g. 1500.00"
+          placeholder={`e.g. ${options.example}`}
           value={selection === 'other' ? custom : ''}
           disabled={submitting}
           ref={customField}
           onChange={(event) => {
-            if (!custom && event.target.value)
+            if (!customCounted.current && event.target.value) {
+              customCounted.current = true;
               track('custom_amount_entered', { surface: 'profile', handle });
+            }
             setSelection('other');
             setChosen(true);
             setCustom(event.target.value);
@@ -641,6 +682,7 @@ export function AppreciationForm({
         )}
         {/* A fixed bar on a phone's public page (CSS): still this form's one submit button. */}
         <TipAction
+          partner={copy.formPartner}
           {...(onProfile
             ? {
                 quote: quoteArea,
@@ -662,23 +704,15 @@ export function AppreciationForm({
             <Arrow />
           </Button>
         </TipAction>
-        {(pilotNotice || copy.formDisclaimer || !onProfile) && (
+        {(pilotNotice || copy.formDisclaimer) && (
           <p className="composer-disclaimer">
             {/* The mode wording: on a phone with the Tip bar, the bar carries it and CSS removes this
                 copy, so it is seen and read once. A block of its own; outside live mode the pilot
                 notice renders nothing, so no break after it. */}
             <span className="composer-disclaimer__mode">
               {pilotNotice}
-              {copy.formDisclaimer && (
-                <>
-                  {copy.formDisclaimer}
-                  {!onProfile && <br />}
-                </>
-              )}
+              {copy.formDisclaimer && <>{copy.formDisclaimer}</>}
             </span>
-            {/* A person's page says this at its foot (formPartner). */}
-            {!onProfile &&
-              'You’ll confirm on the payment provider’s page next.'}
           </p>
         )}
         {onProfile && copy.formTrust && (
