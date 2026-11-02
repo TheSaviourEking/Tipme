@@ -326,8 +326,8 @@ test('an approver who is removed or mid-reset cannot approve', async () => {
 // ---- Running it ----
 
 /**
- * Starts an approval and lets the other thing arrive while it is mid-run. Starting both together
- * was too gentle: with every lock removed the first was often done before the second read the row.
+ * Starts an approval and lets the other thing arrive while it is mid-run, so the overlap is certain
+ * rather than left to timing: the older expiry race still passes with the row lock removed.
  */
 const whileRunning = async (approval, other) => {
   facts.slowRun = true;
