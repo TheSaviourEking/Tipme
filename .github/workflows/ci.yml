@@ -162,7 +162,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # `alone` is the @alone tests: its own job and database, so a failure in a shard can't skip
+        # them, and record-tested-tree needs it to pass like the rest.
+        shard: [1, 2, 3, alone]
     env:
       NEXT_TELEMETRY_DISABLED: '1'
       TURBO_TELEMETRY_DISABLED: '1'
@@ -225,7 +227,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # `alone` is the @alone tests: its own job and database, so a failure in a shard can't skip
+        # them, and record-tested-tree needs it to pass like the rest.
+        shard: [1, 2, 3, alone]
     env:
       NEXT_TELEMETRY_DISABLED: '1'
       TURBO_TELEMETRY_DISABLED: '1'
@@ -260,7 +264,10 @@ jobs:
           path: .turbo/cache
           key: turbo-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ github.job }}-
-      - run: pnpm test:e2e --shard=${{ matrix.shard }}/3
+      - if: matrix.shard != 'alone'
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/3
+      - if: matrix.shard == 'alone'
+        run: pnpm test:e2e --alone
       - name: Upload Playwright PNG diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

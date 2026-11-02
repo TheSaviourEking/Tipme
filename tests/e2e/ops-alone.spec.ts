@@ -3,7 +3,7 @@ import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { codeFor, codeWentStale, enrolOwner, sql } from './ops-helpers';
 
 // One admin, truly alone: everyone else's staff row goes, and the global switch really changes.
-// So @alone tests have their own project, run after the others (playwright.config.ts).
+// So @alone tests are a run of their own, after the others (playwright.config.ts).
 test.describe.configure({ mode: 'serial' });
 
 const REASON = 'Checked with the person on a call today';
