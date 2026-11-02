@@ -12,6 +12,7 @@ import { ProfileCover } from '@/components/profile/cover';
 import {
   choiceBody,
   draftFromChoice,
+  automaticLabel,
   draftPreview,
   sameDraft,
   takesColours,
@@ -329,6 +330,8 @@ export function CoverSettings() {
               type="radio"
               name={`${id}-design`}
               checked={draft.design === null}
+              aria-label="Let TipMe pick"
+              aria-describedby={`${id}-automatic`}
               onChange={() => apply({ ...draft, design: null })}
             />
             <span className="cover-choice__thumb" aria-hidden="true">
@@ -341,6 +344,13 @@ export function CoverSettings() {
               />
             </span>
             <span className="cover-choice__name">Let TipMe pick</span>
+            <span
+              className="cover-choice__note"
+              id={`${id}-automatic`}
+              data-testid="cover-automatic-note"
+            >
+              Now: {automaticLabel(profile.handle)}
+            </span>
           </label>
           {COVER_DESIGNS.map((design) => (
             <label key={design.id} className="cover-choice">

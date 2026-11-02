@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
-import { COVER_COLOURS, COVER_DARK, COVER_DESIGNS } from '@tipme/contracts';
+import {
+  AUTOMATIC_COLOURS,
+  AUTOMATIC_DESIGNS,
+  COVER_COLOURS,
+  COVER_DARK,
+  COVER_DESIGNS,
+} from '@tipme/contracts';
 import {
   HEART_DESIGNS,
   HEART_LAYOUTS,
@@ -263,6 +269,30 @@ test('outlines are drawn at 3 px on screen, wide enough to be seen', () => {
         Math.abs(shape.strokeWidth * scale - 3) < 0.01,
         `${id} ${shape.strokeWidth}`,
       );
+    }
+  }
+});
+
+// Owner, 2 Nov 2026: automatic covers use violet, forest, ocean and rose. Nothing is written on a
+// cover; the photo's ring is the page's own canvas (packages/ui tokens.css), which must stand
+// out from every automatic base, and each automatic design must show against it.
+const CANVAS = '#f3f2ee';
+test('on the four automatic colours the photo ring stands out and every automatic design shows', () => {
+  for (const id of AUTOMATIC_COLOURS) {
+    const c = COVER_COLOURS.find((x) => x.id === id);
+    assert.ok(
+      contrast(CANVAS, c.base) >= 3,
+      `${id} ring ${contrast(CANVAS, c.base).toFixed(2)}`,
+    );
+    for (const design of AUTOMATIC_DESIGNS) {
+      const view = coverView({ kind: 'design', design, colour: id }, API);
+      assert.equal(view.base, c.base);
+      assert.ok(view.shapes.length > 0, `${design} on ${id}`);
+      assert.ok(
+        view.shapes.every((s) => s.fill === c.tone),
+        `${design} draws filled in the tone`,
+      );
+      assert.ok(contrast(view.base, view.tone) >= 1.45, `${design} on ${id}`);
     }
   }
 });

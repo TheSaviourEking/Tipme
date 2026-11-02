@@ -1,4 +1,6 @@
 import {
+  automaticColour,
+  automaticCover,
   COVER_COLOURS,
   COVER_DESIGNS,
   resolveCover,
@@ -58,3 +60,12 @@ export function draftPreview(draft: CoverDraft, handle: string): ResolvedCover {
 /** Two drafts are the same when they would save the same thing. */
 export const sameDraft = (a: CoverDraft, b: CoverDraft): boolean =>
   JSON.stringify(choiceBody(a)) === JSON.stringify(choiceBody(b));
+
+/** The automatic pick in words ("Rising hearts in Violet"), so the chooser never relies on colour alone. */
+export function automaticLabel(handle: string): string {
+  const design = COVER_DESIGNS.find((d) => d.id === automaticCover(handle));
+  const colour = COVER_COLOURS.find((c) => c.id === automaticColour(handle));
+  return [design?.name, colour && `in ${colour.name}`]
+    .filter(Boolean)
+    .join(' ');
+}

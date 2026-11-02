@@ -50,7 +50,7 @@ export const COVER_DESIGNS: readonly CoverDesign[] = [
 /**
  * Deepened on 2 Nov 2026 at the owner's request (the covers were too pale): each tone is at
  * least 1.45:1 against its base and each line at least 2.5:1, still under 4:1 so they stay calm.
- * Violet and lilac are chosen by the person, never automatic (spec §6). */
+ * Automatic covers (owner, 2 Nov 2026) use violet, forest, ocean and rose. */
 export const COVER_COLOURS: readonly CoverColour[] = [
   {
     id: 'neutral',
@@ -110,30 +110,63 @@ export const COVER_DARK = {
   line: '#7a746a',
 } as const;
 
-const AUTOMATIC = ['scattered', 'large', 'dark'] as const;
+/**
+ * What a page gets when its owner chose nothing (owner decision, 2 Nov 2026: rich colours, so a
+ * new page looks finished from day one). Three filled heart designs and four rich colours, each
+ * picked by the handle. `dark` is not among them: it takes no colour, so a third of pages would
+ * have skipped the decision, and its heart is pale on purpose for people who chose it.
+ */
+export const AUTOMATIC_DESIGNS = ['scattered', 'large', 'rising'] as const;
+export const AUTOMATIC_COLOURS = ['violet', 'forest', 'ocean', 'rose'] as const;
 
 const designById = (id: string) => COVER_DESIGNS.find((d) => d.id === id);
 const colourById = (id: string) => COVER_COLOURS.find((c) => c.id === id);
 
-/**
- * The design a page gets when its owner chose nothing: 32-bit FNV-1a over the lower-case handle.
- * Runs alike in server and browser and is worked out, never stored. Changing this restyles every
- * such page, so test/covers.test.mjs pins some results. If its design has left the catalogue, the
- * next automatic one is used, so other pages keep theirs; with none left, the catalogue's first.
- */
-export function automaticCover(handle: string): string {
+/** 32-bit FNV-1a over the lower-case handle: the same in server and browser, never stored. */
+function handleHash(handle: string): number {
   const lower = handle.toLowerCase();
   let hash = 0x811c9dc5;
   for (let i = 0; i < lower.length; i += 1) {
     hash ^= lower.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193);
   }
-  const start = (hash >>> 0) % AUTOMATIC.length;
-  for (let step = 0; step < AUTOMATIC.length; step += 1) {
-    const id = AUTOMATIC[(start + step) % AUTOMATIC.length]!;
+  return hash >>> 0;
+}
+
+/** Murmur3's finaliser: the colour reads bits the design's remainder does not, so they spread independently. */
+function mixed(hash: number): number {
+  let h = hash;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+/**
+ * The design a page gets when its owner chose nothing. Worked out, never stored, and it follows
+ * the handle: a page that changes handle may change look. Changing this restyles every such
+ * page, so test/covers.test.mjs pins some results. If its design has left the catalogue, the next
+ * automatic one is used, so other pages keep theirs; with none left, the catalogue's first.
+ */
+export function automaticCover(handle: string): string {
+  const start = handleHash(handle) % AUTOMATIC_DESIGNS.length;
+  for (let step = 0; step < AUTOMATIC_DESIGNS.length; step += 1) {
+    const id = AUTOMATIC_DESIGNS[(start + step) % AUTOMATIC_DESIGNS.length]!;
     if (designById(id)) return id;
   }
-  return COVER_DESIGNS[0]?.id ?? AUTOMATIC[start]!;
+  return COVER_DESIGNS[0]?.id ?? AUTOMATIC_DESIGNS[start]!;
+}
+
+/** The colour of that automatic design, with the same fallbacks (then neutral, then the first). */
+export function automaticColour(handle: string): string {
+  const start = mixed(handleHash(handle)) % AUTOMATIC_COLOURS.length;
+  for (let step = 0; step < AUTOMATIC_COLOURS.length; step += 1) {
+    const id = AUTOMATIC_COLOURS[(start + step) % AUTOMATIC_COLOURS.length]!;
+    if (colourById(id)) return id;
+  }
+  return colourById('neutral')?.id ?? COVER_COLOURS[0]?.id ?? 'neutral';
 }
 
 export type ResolvedCover =
@@ -152,8 +185,12 @@ export function resolveCover(p: {
   const id = chosen?.id ?? automaticCover(p.handle);
   if (!(chosen ?? designById(id))?.colours)
     return { kind: 'design', design: id };
-  const picked =
-    chosen && p.coverColour ? colourById(p.coverColour) : undefined;
+  // A chosen design keeps its saved colour, or neutral; nothing chosen gets the handle's colour.
+  const picked = chosen
+    ? p.coverColour
+      ? colourById(p.coverColour)
+      : undefined
+    : colourById(automaticColour(p.handle));
   // Neutral by default; the first colour if neutral itself has been removed.
   const colour = picked ?? colourById('neutral') ?? COVER_COLOURS[0];
   return {

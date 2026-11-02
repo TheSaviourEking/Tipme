@@ -113,5 +113,5 @@ test('staff view a page’s cover and photo with their session, and remove the c
   await page.reload();
   await expect(
     page.getByTestId('cover-preview').locator('[data-profile-cover]'),
-  ).toHaveAttribute('data-profile-cover', /^(scattered|large|dark)$/);
+  ).toHaveAttribute('data-profile-cover', /^(scattered|large|rising)$/);
 });

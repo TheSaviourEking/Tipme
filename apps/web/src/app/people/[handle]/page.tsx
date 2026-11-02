@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { permanentRedirect } from 'next/navigation';
-import type { ResolvedCover } from '@tipme/contracts';
+import { resolveCover } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { PilotNotice } from '@/components/pilot-notice';
 import {
@@ -47,13 +47,6 @@ export async function generateMetadata({ params }: Props) {
     : { title: 'Page unavailable', robots: { index: false, follow: false } };
 }
 
-// An API older than the covers sends none: the same quiet look a cover falls back to.
-const NO_COVER: ResolvedCover = {
-  kind: 'design',
-  design: 'scattered',
-  colour: 'neutral',
-};
-
 export default async function ProfilePage({ params, searchParams }: Props) {
   const { handle } = await params;
   const profile = await loadPublicProfile(handle);
@@ -72,7 +65,19 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
       <div className="profile-sheet">
-        <ProfileCover cover={profile.cover ?? NO_COVER} priority />
+        <ProfileCover
+          // An API older than the covers sends none: work out the same automatic one here.
+          cover={
+            profile.cover ??
+            resolveCover({
+              handle: profile.handle,
+              coverPath: null,
+              coverDesign: null,
+              coverColour: null,
+            })
+          }
+          priority
+        />
         <div className="profile-columns">
           <RecipientIdentity profile={profile} firstName={firstName} />
           <aside

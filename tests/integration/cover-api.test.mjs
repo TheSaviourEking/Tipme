@@ -4,7 +4,10 @@ import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
-import { automaticCover } from '../../packages/contracts/dist/index.js';
+import {
+  automaticColour,
+  automaticCover,
+} from '../../packages/contracts/dist/index.js';
 import {
   coverFor,
   deleteAccount,
@@ -175,15 +178,21 @@ async function userAndPage(handle) {
   return { profileId: rows[0].id, userId: rows[0].user_id };
 }
 
-test('automatic cover is stable and one of the three, and changes nothing in the database', async () => {
+test('automatic cover is stable, one of the twelve designs and colours, and changes nothing in the database', async () => {
   const cookie = await livePage('+2348031290001', 'cover_auto');
   const expected = automaticCover('cover_auto');
   for (let i = 0; i < 2; i += 1) {
     const page = await publicPage('cover_auto');
     assert.equal(page.cover.kind, 'design');
     assert.equal(page.cover.design, expected);
+    assert.equal(page.cover.colour, automaticColour('cover_auto'));
   }
-  assert.ok(['scattered', 'large', 'dark'].includes(expected));
+  assert.ok(
+    ['violet', 'forest', 'ocean', 'rose'].includes(
+      automaticColour('cover_auto'),
+    ),
+  );
+  assert.ok(['scattered', 'large', 'rising'].includes(expected));
   const mine = await myPage(cookie);
   assert.deepEqual(mine.cover, (await publicPage('cover_auto')).cover);
   assert.deepEqual(mine.coverChoice, {
@@ -244,6 +253,10 @@ test('photo beats design beats automatic', async () => {
   assert.equal(
     (await publicPage('cover_order')).cover.design,
     automaticCover('cover_order'),
+  );
+  assert.equal(
+    (await publicPage('cover_order')).cover.colour,
+    automaticColour('cover_order'),
   );
 });
 

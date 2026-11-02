@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { automaticColour, automaticCover } from '@tipme/contracts';
 import {
+  automaticLabel,
   choiceBody,
   draftFromChoice,
   draftPreview,
@@ -77,6 +79,26 @@ test('the preview shows the draft, or the automatic design for the handle', () =
     draftPreview({ design: null, colour: 'neutral' }, 'ada').kind,
     'design',
   );
+});
+
+// Settings' "Let TipMe pick" must show what the page shows, in the same colour, and name it in
+// words so the colour is never the only signal.
+test('"Let TipMe pick" previews the handle’s automatic design and colour whatever the draft colour', () => {
+  for (const handle of ['ada', 'tobi', 'chioma', 'emeka', 'a1b']) {
+    for (const colour of ['neutral', 'rose', 'ocean']) {
+      assert.deepEqual(draftPreview({ design: null, colour }, handle), {
+        kind: 'design',
+        design: automaticCover(handle),
+        colour: automaticColour(handle),
+      });
+    }
+  }
+});
+
+test('the automatic pick is named, design and colour', () => {
+  assert.equal(automaticLabel('ada'), 'One large heart in Ocean');
+  assert.equal(automaticLabel('tobi'), 'Rising hearts in Violet');
+  assert.equal(automaticLabel('emeka'), 'Scattered hearts in Violet');
 });
 
 test('drafts compare by what would be saved', () => {
