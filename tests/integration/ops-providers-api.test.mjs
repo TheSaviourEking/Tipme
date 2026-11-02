@@ -98,9 +98,9 @@ const code = async (promise) => {
 
 test('each route names the permission it needs', () => {
   const expected = {
-    overview: 'issues.view',
+    overview: ['issues.view', 'providers.manage'],
     startTest: 'providers.manage',
-    confirmTest: 'issues.view',
+    confirmTest: ['issues.view', 'providers.manage'],
     switchProvider: 'providers.manage',
     setOverride: 'providers.manage',
     removeOverride: 'providers.manage',
@@ -108,7 +108,7 @@ test('each route names the permission it needs', () => {
     removeAddressSuppression: 'providers.manage',
   };
   for (const [method, permission] of Object.entries(expected))
-    assert.equal(
+    assert.deepEqual(
       Reflect.getMetadata(
         OPS_PERMISSION,
         OpsProvidersController.prototype[method],

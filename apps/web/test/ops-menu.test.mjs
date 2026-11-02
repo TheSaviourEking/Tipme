@@ -35,8 +35,11 @@ test('a permission opens nothing else', () => {
   assert.ok(!hrefs(['issues.view']).includes('/ops/staff/people'));
 });
 
-test('Providers reads under issues.view, so providers.manage alone is not offered it', () => {
-  assert.ok(!hrefs(['providers.manage']).includes('/ops/providers'));
+test('each permission for a screen opens that screen', () => {
+  assert.ok(hrefs(['providers.manage']).includes('/ops/providers'));
+  assert.ok(hrefs(['email.read']).includes('/ops/email'));
+  assert.ok(hrefs(['email.export']).includes('/ops/email'));
+  assert.ok(!hrefs(['email.read']).includes('/ops/providers'));
 });
 
 test('labels are unique, so a screen reader can tell them apart', () => {

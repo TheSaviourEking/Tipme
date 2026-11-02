@@ -91,6 +91,51 @@ test('issues.view alone cannot read email content or export it', async () => {
   assert.equal((await call('GET', emailRoutes[1], exporter)).status, 403);
 });
 
+test('email and provider permissions can open their own screens, and nothing wider', async () => {
+  const email = [
+    '/v1/ops/email/summary?period=today',
+    '/v1/ops/email/series?period=today',
+    '/v1/ops/email/messages?period=today',
+  ];
+  for (const [phone, permission] of [
+    ['+2348037770004', 'email.read'],
+    ['+2348037770005', 'email.export'],
+  ]) {
+    const cookie = await staffWith(phone, `only_${phone}`, [permission]);
+    for (const path of email)
+      assert.equal((await call('GET', path, cookie)).status, 200, path);
+    assert.equal(
+      (await call('GET', '/v1/ops/providers/mail', cookie)).status,
+      403,
+    );
+  }
+  const manager = await staffWith('+2348037770006', 'providers_only', [
+    'providers.manage',
+  ]);
+  assert.equal(
+    (await call('GET', '/v1/ops/providers/mail', manager)).status,
+    200,
+  );
+  assert.notEqual(
+    (
+      await call('POST', '/v1/ops/providers/tests/confirm', manager, {
+        token: 'x'.repeat(40),
+      })
+    ).status,
+    403,
+  );
+  for (const path of email)
+    assert.equal((await call('GET', path, manager)).status, 403, path);
+  const neither = await staffWith('+2348037770007', 'searcher_only', [
+    'search.view',
+  ]);
+  assert.equal(
+    (await call('GET', '/v1/ops/providers/mail', neither)).status,
+    403,
+  );
+  assert.equal((await call('GET', email[0], neither)).status, 403);
+});
+
 test('payments.recheck alone cannot run a repair action', async () => {
   const cookie = await staffWith('+2348037770004', 'rechecker', [
     'payments.recheck',

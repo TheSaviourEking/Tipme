@@ -65,16 +65,16 @@ const code = async (promise) => {
 
 test('each route names the permission it needs', () => {
   const expected = {
-    summary: 'issues.view',
-    series: 'issues.view',
-    messages: 'issues.view',
+    summary: ['issues.view', 'email.read', 'email.export'],
+    series: ['issues.view', 'email.read', 'email.export'],
+    messages: ['issues.view', 'email.read', 'email.export'],
     timeline: 'email.read',
     content: 'email.read',
     revealRecipient: 'private.view',
     exportCsv: 'email.export',
   };
   for (const [method, permission] of Object.entries(expected))
-    assert.equal(
+    assert.deepEqual(
       Reflect.getMetadata(
         OPS_PERMISSION,
         OpsEmailConsoleController.prototype[method],
