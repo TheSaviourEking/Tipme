@@ -319,6 +319,9 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   const url = new URL(database.url);
   url.pathname = `/${name}`;
   const pool = new pg.Pool({ connectionString: url.toString() });
+  // pool.end() returns before its connections have closed, so the forced drop below can end one
+  // that is still closing. Without a listener that error fails the test.
+  pool.on('error', () => undefined);
   const folder = await mkdtemp(join(tmpdir(), 'tipme-migrations-'));
   t.after(async () => {
     await pool.end();
