@@ -1,9 +1,15 @@
-# Current handoff — compact tip card and celebration placement (2 November 2026)
+# Current handoff — merge compact tip card with dev (2 November 2026)
 
-- Branch/worktree: `feat/compact-tip-card` / `.worktrees/tip-card`, from `origin/dev` at `7295866`, committed, not pushed. Web and tests only: no API, contract, migration or payment change.
+- Branch/worktree: `feat/compact-tip-card`. Existing PR #96; merged current `dev` after resolving the continuity-document conflicts. The merge commit is ready for publication.
 - Built: shorter card, keys with exact amounts and no lone key (`keyLayout`), full-width Other field, one disclosure, one trust line, partner wording moved to the page foot, celebration in the identity column with a tick box, closest-to-₦2,000 preselect, sticky only while the panel fits the window. Rulings are in `docs/design/DECISION-LOG.md`, 2 Nov.
 - Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
-- Review round done (partner line beside Tip, phone Go key, M1-M5). Next exact step: regenerate `profile-desktop-desktop-linux.png` and `profile-mobile-mobile-linux.png` from CI's render, then open the PR to `dev`.
+- The Linux profile baselines are present. PR head `49673cd` passed CI before this merge; validation for the merged commit is pending. Next: publish the merge commit and check its CI on the existing PR.
+
+# Current handoff — takeover freeze, second report (2 November 2026)
+
+- Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev`, committed, not pushed. No migration.
+- `freezeWithdrawals` now reads the hold's issue status under the profile lock. Closed: new issue, new hold, old row ended, `withdrawals.freeze_reopened` audited. Every new issue queues `withdrawals.freeze_opened`, which the worker posts to the alert route with ids only.
+- Verified results, untested areas and the read-only production queries are in `.worktrees/freeze-fix-report.md`. Nothing ran against staging or production.
 
 # Current handoff — home page LCP, second pass (2 November 2026)
 
