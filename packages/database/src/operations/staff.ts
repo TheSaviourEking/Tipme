@@ -1,26 +1,37 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes } from 'node:crypto';
+import { SERIOUS_ACTION_PERMISSIONS } from '@tipme/contracts';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '@tipme/domain';
-import { and, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  auditEvents,
   OPS_PERMISSIONS,
+  type OpsPermission,
   opsLockouts,
   opsSessions,
   rolePermissions,
   roles,
   staff,
   staffEnrolments,
+  staffPermissionOverrides,
   staffTotp,
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { normaliseEmail } from './email-address.js';
-import { guarded, OperationError } from './errors.js';
+import {
+  maskEmail,
+  normaliseEmail,
+  normaliseStaffEmail,
+} from './email-address.js';
+import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { mailOwner } from './account-mail.js';
-import type { MailSealing } from './mail-queue.js';
+import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { normalisePhone, phoneHint } from './phone.js';
+import { enqueueOutbox } from './outbox.js';
 import { openSecret, sealSecret } from './secret-box.js';
+import { closePendingRequestsOf } from './serious-actions.js';
 
 const ENROLMENT_TTL_MS = 30 * 60 * 1000;
 const MAX_FAILURES = 5;
@@ -36,14 +47,14 @@ export const RELEASE_CHECK_PERMISSIONS = [
   'issues.resolve',
   'analytics.view',
   'audit.view',
-] as const;
+] as const satisfies readonly OpsPermission[];
 export type StaffRole = 'owner' | 'release_check';
 
 /** The Owner role holds every permission; safe to run any number of times. */
 export async function ensureOwnerRole(tx: Database | Tx): Promise<void> {
   await tx
     .insert(roles)
-    .values({ id: 'owner', name: 'Owner' })
+    .values({ id: 'owner', name: 'Owner', system: true })
     .onConflictDoNothing();
   await tx
     .insert(rolePermissions)
@@ -56,7 +67,7 @@ export async function ensureOwnerRole(tx: Database | Tx): Promise<void> {
 async function ensureReleaseCheckRole(tx: Database | Tx): Promise<void> {
   await tx
     .insert(roles)
-    .values({ id: 'release_check', name: 'Release check' })
+    .values({ id: 'release_check', name: 'Release check', system: true })
     .onConflictDoNothing();
   await tx
     .insert(rolePermissions)
@@ -81,20 +92,603 @@ export async function isActiveStaff(
   return Boolean(row);
 }
 
+// Each waiter holds one of the API's five pooled connections, so only a few may wait in this
+// process: public pages keep the rest. Everyone else gets a retryable refusal straight away.
+const STAFF_ADMIN_MAX_WAITERS = 3;
+let staffAdminWaiters = 0;
+const holdingStaffAdmin = new AsyncLocalStorage<true>();
+
+/**
+ * For work already holding the lock in its transaction (a serious action's `run`): taking it again is
+ * immediate, so that doesn't count as waiting, and those queueing behind can't get it refused.
+ * Taking it on another connection from in here still waits, and is still refused in the end.
+ */
+export const whileHoldingStaffAdmin = <T>(work: () => Promise<T>): Promise<T> =>
+  holdingStaffAdmin.run(true, work);
+
+/**
+ * Serialises every change to who holds what, for the rest of the transaction. Take it first, and
+ * read anything the change depends on after it. Waits about 5 seconds at most, then refuses with
+ * STAFF_ADMIN_BUSY: nothing has changed, so trying again is safe. The limit covers this wait only.
+ */
+export async function lockStaffAdmin(tx: Tx): Promise<void> {
+  const counted = !holdingStaffAdmin.getStore();
+  if (counted && staffAdminWaiters >= STAFF_ADMIN_MAX_WAITERS)
+    throw new OperationError('STAFF_ADMIN_BUSY');
+  if (counted) staffAdminWaiters += 1;
+  try {
+    await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('tipme.staff-admin'))`,
+    );
+    await tx.execute(sql`SET LOCAL lock_timeout TO DEFAULT`);
+  } catch (error) {
+    if (sqlStateOf(error) === '55P03')
+      throw new OperationError('STAFF_ADMIN_BUSY');
+    throw error;
+  } finally {
+    if (counted) staffAdminWaiters -= 1;
+  }
+}
+
+/**
+ * Refuses a change that would leave nobody able to act as owner. Only an owner who is active, has
+ * a confirmed authenticator and a live account counts. Locks those rows, so a writer outside the
+ * staff-admin lock can't take the other owner away before this transaction commits.
+ */
+export async function assertNotLastOwner(
+  tx: Tx,
+  userId: string,
+): Promise<void> {
+  const owners = await tx
+    .select({ userId: staff.userId })
+    .from(staff)
+    .innerJoin(staffTotp, eq(staffTotp.userId, staff.userId))
+    .innerJoin(users, eq(users.id, staff.userId))
+    .where(
+      and(
+        eq(staff.roleId, 'owner'),
+        isNull(staff.revokedAt),
+        isNotNull(staffTotp.confirmedAt),
+        isNull(users.deletedAt),
+      ),
+    )
+    .for('update', { of: staff });
+  if (!owners.some((owner) => owner.userId !== userId))
+    throw new OperationError('LAST_OWNER');
+}
+
+/**
+ * For anything that moves a person's sign-in address: holds the account row and says whether they
+ * are active staff. addStaff takes the same row lock, so the two can't cross. An emailed authenticator
+ * reset goes to this address, so a recipient session must never be able to change it (ADR-0010).
+ */
+export async function lockedActiveStaff(
+  tx: Tx,
+  userId: string,
+): Promise<boolean> {
+  await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .for('update');
+  return isActiveStaff(tx, userId);
+}
+
+/** Whether this person is active staff who has never enrolled: a mere invitee. */
+export async function isUnenrolledInvitee(
+  tx: Database | Tx,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ enrolledAt: staff.enrolledAt })
+    .from(staff)
+    .where(and(eq(staff.userId, userId), isNull(staff.revokedAt)));
+  return Boolean(row) && !row?.enrolledAt;
+}
+
+/**
+ * Tells whoever invited them, and every owner who can act, that an invitation was turned down; and,
+ * when it was declined rather than deleted away, the person, so a stolen session can't do it silently.
+ */
+async function mailInvitationDeclined(
+  tx: Tx,
+  sealing: MailSealing,
+  input: {
+    userId: string;
+    via: 'declined' | 'account_deleted';
+    roleName: string;
+    now: Date;
+  },
+): Promise<void> {
+  const [person] = await tx
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, input.userId));
+  const [invite] = await tx
+    .select({ inviter: auditEvents.staffUserId })
+    .from(auditEvents)
+    .where(
+      and(
+        eq(auditEvents.action, 'staff.added'),
+        eq(auditEvents.subjectId, input.userId),
+      ),
+    )
+    .orderBy(desc(auditEvents.seq))
+    .limit(1);
+  const recipients = await tx
+    .select({ userId: users.id, email: users.email, roleId: staff.roleId })
+    .from(staff)
+    .innerJoin(users, eq(users.id, staff.userId))
+    .innerJoin(staffTotp, eq(staffTotp.userId, staff.userId))
+    .where(
+      and(
+        isNull(staff.revokedAt),
+        isNotNull(staffTotp.confirmedAt),
+        isNotNull(users.emailVerifiedAt),
+        isNull(users.deletedAt),
+        ne(staff.userId, input.userId),
+      ),
+    );
+  for (const recipient of recipients)
+    if (
+      recipient.email &&
+      (recipient.roleId === 'owner' || recipient.userId === invite?.inviter)
+    )
+      await enqueueMail(tx, sealing, {
+        type: 'staff_invitation_declined',
+        to: recipient.email,
+        userId: recipient.userId,
+        data: {
+          personHint: person?.email ? maskEmail(person.email) : 'Someone',
+          roleName: input.roleName,
+        },
+        dedupeKey: `staff_invitation_declined.${input.userId}.${recipient.userId}.${newId()}`,
+        now: input.now,
+      });
+  if (input.via === 'declined')
+    await mailOwner(tx, sealing, {
+      userId: input.userId,
+      type: 'staff_invitation_declined',
+      data: {
+        personHint: person?.email ? maskEmail(person.email) : 'Someone',
+        roleName: input.roleName,
+        own: true,
+      },
+      dedupeKey: `staff_invitation_declined.${input.userId}.own.${newId()}`,
+      now: input.now,
+    });
+}
+
+/**
+ * Ends the staff access of a mere invitee, at their own request: they never had the use of it, so
+ * they need nobody's say-so. The caller holds the staff-admin lock. The update is conditional on
+ * the marker, so a confirmation committing at this moment wins.
+ */
+export async function revokeUnenrolled(
+  tx: Tx,
+  input: {
+    userId: string;
+    via: 'declined' | 'account_deleted';
+    sealing: MailSealing;
+    now: Date;
+  },
+): Promise<void> {
+  const { userId, via, now } = input;
+  const [row] = await tx
+    .update(staff)
+    .set({ revokedAt: now })
+    .where(
+      and(
+        eq(staff.userId, userId),
+        isNull(staff.revokedAt),
+        isNull(staff.enrolledAt),
+      ),
+    )
+    .returning({ roleId: staff.roleId });
+  // A confirmation got in first: refused in the terms of what was asked for.
+  if (!row)
+    throw new OperationError(
+      via === 'account_deleted'
+        ? 'STAFF_CANNOT_DELETE'
+        : 'STAFF_ALREADY_ENROLLED',
+    );
+  const [role] = await tx
+    .select({ id: roles.id, name: roles.name })
+    .from(roles)
+    .where(eq(roles.id, row.roleId));
+  await dropOpsAccess(tx, userId, now);
+  const cleared = await clearOverrides(tx, userId);
+  await alertStaffChange(tx, 'invitation_declined', userId, {
+    targetId: userId,
+    roleName: role?.name ?? row.roleId,
+  });
+  await recordAudit(tx, {
+    staffUserId: userId,
+    action: 'staff.invitation_declined',
+    subjectType: 'user',
+    subjectId: userId,
+    reason: withAuditChange('Declined by the person themselves', {
+      via,
+      role,
+      ...cleared,
+    }),
+    now,
+  });
+  await mailInvitationDeclined(tx, input.sealing, {
+    userId,
+    via,
+    roleName: role?.name ?? row.roleId,
+    now,
+  });
+}
+
+/**
+ * An invited person turning it down, from their own session. Their account stays. Only for someone
+ * who has never enrolled: anyone who has is an owner's decision, even mid-reset.
+ */
+export function declineInvitation(
+  db: Database,
+  input: { userId: string; sealing: MailSealing; now?: Date },
+): Promise<void> {
+  const now = input.now ?? new Date();
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      await lockStaffAdmin(tx);
+      if (!(await lockedActiveStaff(tx, input.userId)))
+        throw new OperationError('STAFF_NOT_FOUND');
+      await revokeUnenrolled(tx, {
+        userId: input.userId,
+        via: 'declined',
+        sealing: input.sealing,
+        now,
+      });
+    }),
+  );
+}
+
+/** Uses up any open enrolment code. */
+export async function voidEnrolments(
+  tx: Database | Tx,
+  userId: string,
+  now: Date,
+): Promise<void> {
+  await tx
+    .update(staffEnrolments)
+    .set({ usedAt: now })
+    .where(
+      and(eq(staffEnrolments.userId, userId), isNull(staffEnrolments.usedAt)),
+    );
+}
+
+/**
+ * Replaces any open enrolment code with a new one, valid for 30 minutes, and clears a lockout so
+ * it can be used at once. Only its SHA-256 is stored; the caller hands the code to the person and
+ * nowhere else.
+ */
+export async function issueEnrolment(
+  tx: Tx,
+  userId: string,
+  now: Date,
+): Promise<{ code: string; expiresAt: Date }> {
+  await voidEnrolments(tx, userId, now);
+  const code = Array.from(randomBytes(10), (byte) => BASE32[byte & 31]).join(
+    '',
+  );
+  const expiresAt = new Date(now.getTime() + ENROLMENT_TTL_MS);
+  await tx
+    .insert(staffEnrolments)
+    .values({ codeSha256: sha256(code), userId, expiresAt });
+  await tx.delete(opsLockouts).where(eq(opsLockouts.userId, userId));
+  return { code, expiresAt };
+}
+
+const AUDIT_CHANGE_MARKER = '[change:';
+
+/** The server's record of a change, after the person's reason. `change` is data, encoded as JSON. */
+export const withAuditChange = (reason: string, change: object): string =>
+  `${reason} ${AUDIT_CHANGE_MARKER} ${JSON.stringify(change)}]`;
+
+/** Whether text could pass for that record; compared as a reader would see it. */
+export const looksLikeAuditChange = (text: string): boolean =>
+  text.normalize('NFKC').toLowerCase().includes(AUDIT_CHANGE_MARKER);
+
+/** A person's written reason, for a staff change or a serious action. */
+export function checkedReason(reason: string): string {
+  const trimmed = typeof reason === 'string' ? reason.trim() : '';
+  if (
+    trimmed.length < 10 ||
+    trimmed.length > 500 ||
+    looksLikeAuditChange(trimmed)
+  )
+    throw new OperationError('INVALID_INPUT');
+  return trimmed;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Postgres reads a uuid in any case, so every comparison and record uses this one form. */
+export const canonicalId = (id: string): string | null =>
+  UUID.test(id) ? id.toLowerCase() : null;
+
+export interface StaffAccess {
+  roleId: string;
+  permissions: Set<string>;
+  additions: string[];
+  removals: string[];
+}
+
+/** Adjustments never apply to the built-in roles: owner has everything, release_check is fixed. */
+export const ignoresAdjustments = (roleId: string): boolean =>
+  roleId === 'owner' || roleId === 'release_check';
+
+/** Effective access: the role's permissions, plus personal additions, minus personal removals. */
+export function composeAccess(
+  roleId: string,
+  rolePermissionNames: readonly string[],
+  overrides: readonly { permission: string; effect: string }[],
+): StaffAccess {
+  // Owner comes from the catalogue, not stored rows, so it holds future permissions too.
+  if (roleId === 'owner')
+    return {
+      roleId,
+      permissions: new Set(OPS_PERMISSIONS),
+      additions: [],
+      removals: [],
+    };
+  if (ignoresAdjustments(roleId))
+    return {
+      roleId,
+      permissions: new Set(rolePermissionNames),
+      additions: [],
+      removals: [],
+    };
+  const additions = overrides
+    .filter((row) => row.effect === 'add')
+    .map((row) => row.permission)
+    .sort();
+  const removals = overrides
+    .filter((row) => row.effect === 'remove')
+    .map((row) => row.permission)
+    .sort();
+  const permissions = new Set([...rolePermissionNames, ...additions]);
+  for (const permission of removals) permissions.delete(permission);
+  return { roleId, permissions, additions, removals };
+}
+
+/** A person's stored adjustments, whether or not their current role applies them. */
+export function readOverrides(
+  db: Database | Tx,
+  userId: string,
+): Promise<{ permission: string; effect: string }[]> {
+  return db
+    .select({
+      permission: staffPermissionOverrides.permission,
+      effect: staffPermissionOverrides.effect,
+    })
+    .from(staffPermissionOverrides)
+    .where(eq(staffPermissionOverrides.userId, userId));
+}
+
+/** Deletes a person's adjustments and says what they were. */
+export async function clearOverrides(
+  tx: Tx,
+  userId: string,
+): Promise<{ clearedAdditions: string[]; clearedRemovals: string[] }> {
+  const rows = await tx
+    .delete(staffPermissionOverrides)
+    .where(eq(staffPermissionOverrides.userId, userId))
+    .returning({
+      permission: staffPermissionOverrides.permission,
+      effect: staffPermissionOverrides.effect,
+    });
+  const named = (effect: string) =>
+    rows
+      .filter((row) => row.effect === effect)
+      .map((row) => row.permission)
+      .sort();
+  return { clearedAdditions: named('add'), clearedRemovals: named('remove') };
+}
+
+/** The permission names stored on a role. */
+export async function readRolePermissions(
+  db: Database | Tx,
+  roleId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ permission: rolePermissions.permission })
+    .from(rolePermissions)
+    .where(eq(rolePermissions.roleId, roleId));
+  return rows.map((row) => row.permission);
+}
+
+/** Read from the database every time, so a change applies on the person's next request. */
+export async function readStaffAccess(
+  db: Database | Tx,
+  userId: string,
+): Promise<StaffAccess | null> {
+  const [row] = await db
+    .select({ roleId: staff.roleId })
+    .from(staff)
+    .where(and(eq(staff.userId, userId), isNull(staff.revokedAt)));
+  if (!row) return null;
+  const [names, overrides] = [
+    await readRolePermissions(db, row.roleId),
+    await readOverrides(db, userId),
+  ];
+  return composeAccess(row.roleId, names, overrides);
+}
+
+const MAILBOX_COLUMNS = {
+  email: users.email,
+  recoveryEmail: users.recoveryEmail,
+  recoveryVerifiedAt: users.recoveryEmailVerifiedAt,
+};
+export interface MailboxFields {
+  email: string | null;
+  recoveryEmail: string | null;
+  recoveryVerifiedAt: Date | null;
+}
+
+/**
+ * The mailboxes that are this person: their sign-in address, and a recovery address they proved.
+ * None at all is never a match, so phone-only staff are told apart by id.
+ */
+export function mailboxesOf(person: MailboxFields): Set<string> {
+  const boxes = new Set<string>();
+  if (person.email) boxes.add(normaliseStaffEmail(person.email));
+  if (person.recoveryEmail && person.recoveryVerifiedAt)
+    boxes.add(normaliseStaffEmail(person.recoveryEmail));
+  return boxes;
+}
+
+export const sharesMailbox = (
+  first: ReadonlySet<string>,
+  second: ReadonlySet<string>,
+): boolean => [...first].some((box) => second.has(box));
+
+/** One person's mailboxes, read now. */
+export async function readMailboxes(
+  db: Database | Tx,
+  userId: string,
+): Promise<Set<string>> {
+  const [row] = await db
+    .select(MAILBOX_COLUMNS)
+    .from(users)
+    .where(eq(users.id, userId));
+  return row ? mailboxesOf(row) : new Set();
+}
+
+/** How many people these are: accounts sharing a mailbox, even by way of a third, count as one. */
+function countPeople(accounts: readonly Set<string>[]): number {
+  const people: Set<string>[] = [];
+  for (const boxes of accounts) {
+    const merged = new Set(boxes);
+    for (let i = people.length - 1; i >= 0; i -= 1)
+      if (sharesMailbox(people[i]!, merged)) {
+        for (const box of people[i]!) merged.add(box);
+        people.splice(i, 1);
+      }
+    people.push(merged);
+  }
+  return people.length;
+}
+
+/**
+ * Everyone who could enter a code right now: active staff with a confirmed authenticator on a live
+ * account. Someone mid-reset has enrolled before, but can't.
+ */
+export function staffAbleToEnterCode(
+  db: Database | Tx,
+): Promise<({ userId: string } & MailboxFields)[]> {
+  return db
+    .select({ userId: staff.userId, ...MAILBOX_COLUMNS })
+    .from(staff)
+    .innerJoin(users, eq(users.id, staff.userId))
+    .innerJoin(staffTotp, eq(staffTotp.userId, staff.userId))
+    .where(
+      and(
+        isNull(staff.revokedAt),
+        isNotNull(staffTotp.confirmedAt),
+        isNull(users.deletedAt),
+      ),
+    );
+}
+
+/** A line of its own in the last-person alert, beside the permissions. */
+const OWNER_ONLY_ACTIONS = 'owner-only actions';
+
+const SERIOUS_PERMISSIONS = new Set<string>(
+  Object.values(SERIOUS_ACTION_PERMISSIONS),
+);
+
+/**
+ * For each permission behind a serious action, who could decide under it, plus owners for the actions
+ * only an owner decides. People, not accounts: two accounts on one mailbox count once, as they can't
+ * approve for each other.
+ */
+export async function seriousPermissionHolders(
+  tx: Database | Tx,
+): Promise<Map<string, number>> {
+  const holders = new Map<string, Set<string>[]>();
+  for (const person of await staffAbleToEnterCode(tx)) {
+    const access = await readStaffAccess(tx, person.userId);
+    const boxes = mailboxesOf(person);
+    // Some actions only an owner may decide, so holding the permission doesn't make a second person.
+    if (access?.roleId === 'owner')
+      holders.set(OWNER_ONLY_ACTIONS, [
+        ...(holders.get(OWNER_ONLY_ACTIONS) ?? []),
+        boxes,
+      ]);
+    for (const permission of access?.permissions ?? [])
+      if (SERIOUS_PERMISSIONS.has(permission))
+        holders.set(permission, [...(holders.get(permission) ?? []), boxes]);
+  }
+  return new Map(
+    [...holders].map(([permission, accounts]) => [
+      permission,
+      countPeople(accounts),
+    ]),
+  );
+}
+
+/**
+ * Spec 6.5: removing colleagues to act alone stays possible, but can't be done quietly. Compares with
+ * `before`, read under the staff-admin lock at the start of the change, and alerts on any permission
+ * that had a second person and no longer does.
+ */
+export async function alertIfLastApproverGone(
+  tx: Tx,
+  before: Map<string, number>,
+  actorId: string | null,
+): Promise<void> {
+  const after = await seriousPermissionHolders(tx);
+  const gone = [...before]
+    .filter(
+      ([permission, people]) => people >= 2 && (after.get(permission) ?? 0) < 2,
+    )
+    .map(([permission]) => permission)
+    .sort();
+  if (gone.length === 0) return;
+  await enqueueOutbox(tx, {
+    eventType: 'ops.last_approver_removed',
+    // Each occurrence is its own alert.
+    aggregateId: newId(),
+    payload: { permissions: gone.join(','), requestedBy: actorId },
+  });
+}
+
+/** Spec 6.4: who holds what changed. Goes to the alert route, by id and name only. */
+export const alertStaffChange = (
+  tx: Tx,
+  action:
+    | 'added'
+    | 'removed'
+    | 'role_changed'
+    | 'access_changed'
+    | 'role_updated'
+    | 'role_created'
+    | 'role_deleted'
+    | 'granted_from_server'
+    | 'invitation_declined',
+  actorId: string,
+  about: { targetId: string; roleName: string },
+) =>
+  enqueueOutbox(tx, {
+    eventType: 'ops.staff_changed',
+    // Each occurrence is its own alert.
+    aggregateId: newId(),
+    payload: { action, requestedBy: actorId, ...about },
+  });
+
 /** The permissions of an active staff member, or null for everyone else. */
 export function staffPermissions(
   db: Database | Tx,
   userId: string,
 ): Promise<Set<string> | null> {
-  return guarded(async () => {
-    if (!(await isActiveStaff(db, userId))) return null;
-    const rows = await db
-      .select({ permission: rolePermissions.permission })
-      .from(staff)
-      .innerJoin(rolePermissions, eq(rolePermissions.roleId, staff.roleId))
-      .where(eq(staff.userId, userId));
-    return new Set(rows.map((row) => row.permission));
-  });
+  return guarded(
+    async () => (await readStaffAccess(db, userId))?.permissions ?? null,
+  );
 }
 
 /** The role id of an active staff member, or null. */
@@ -112,14 +706,16 @@ export function staffRole(
 }
 
 /**
- * Removes the authenticator and ends every admin grant. Runs on any number move (phone change,
- * completed recovery) so a moved account must be granted again; a no-op for non-staff.
+ * Voids open enrolment links, removes the authenticator and ends every admin grant. Runs on any
+ * number move (phone change, completed recovery) so a moved account must be granted again; a no-op
+ * for non-staff. Links go first, so one being used right now can't leave its secret behind.
  */
 export async function dropOpsAccess(
   tx: Database | Tx,
   userId: string,
   now: Date = new Date(),
 ): Promise<void> {
+  await voidEnrolments(tx, userId, now);
   await tx.delete(staffTotp).where(eq(staffTotp.userId, userId));
   await tx
     .update(opsSessions)
@@ -150,11 +746,14 @@ export function grantOwner(
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
+      // Break-glass, but still one change among the others: it waits its turn.
+      await lockStaffAdmin(tx);
+      const holdersBefore = await seriousPermissionHolders(tx);
       await ensureOwnerRole(tx);
       await ensureReleaseCheckRole(tx);
       const role = input.role ?? 'owner';
       const [existing] = await tx
-        .select({ id: users.id })
+        .select({ id: users.id, email: users.email })
         .from(users)
         .where(
           and(
@@ -166,8 +765,54 @@ export function grantOwner(
               : eq(users.phoneE164, phone!),
             isNull(users.deletedAt),
           ),
+        )
+        .for('update');
+      // One person, one staff account: naming a variant must not quietly make a second one. An
+      // account already active is who the operator means, whatever a removed look-alike held. A
+      // phone-only account can still reach a colleague through its recovery address.
+      const named = email ?? existing?.email;
+      const mailboxes = existing
+        ? await readMailboxes(tx, existing.id)
+        : new Set<string>();
+      if (named) mailboxes.add(normaliseStaffEmail(named));
+      if (mailboxes.size > 0) {
+        const staffAccounts = await tx
+          .select({
+            userId: staff.userId,
+            revokedAt: staff.revokedAt,
+            ...MAILBOX_COLUMNS,
+          })
+          .from(staff)
+          .innerJoin(users, eq(users.id, staff.userId));
+        const active = staffAccounts.some(
+          (person) => person.userId === existing?.id && !person.revokedAt,
         );
+        const match = staffAccounts.find(
+          (person) =>
+            person.userId !== existing?.id &&
+            sharesMailbox(mailboxesOf(person), mailboxes) &&
+            !(active && person.revokedAt),
+        );
+        if (match)
+          throw new OperationError(
+            'STAFF_EMAIL_TAKEN',
+            maskEmail(match.email ?? match.recoveryEmail ?? ''),
+          );
+      }
       const userId = existing?.id ?? newId();
+      const [previous] = existing
+        ? await tx
+            .select({ roleId: staff.roleId, revokedAt: staff.revokedAt })
+            .from(staff)
+            .where(eq(staff.userId, userId))
+        : [];
+      // Break-glass may restore anyone, but must not itself be what leaves no owner.
+      if (
+        role !== 'owner' &&
+        previous?.roleId === 'owner' &&
+        !previous.revokedAt
+      )
+        await assertNotLastOwner(tx, userId);
       // The person running this names the address; signing in still needs a code sent to it.
       if (!existing)
         await tx
@@ -182,27 +827,18 @@ export function grantOwner(
         .values({ userId, roleId: role, grantedAt: now })
         .onConflictDoUpdate({
           target: staff.userId,
-          set: { roleId: role, grantedAt: now, revokedAt: null },
+          // Coming back after removal starts over; a lost phone or a repeat keeps the marker.
+          set: {
+            roleId: role,
+            grantedAt: now,
+            revokedAt: null,
+            ...(previous?.revokedAt ? { enrolledAt: null } : {}),
+          },
         });
       await dropOpsAccess(tx, userId, now);
-      await tx
-        .update(staffEnrolments)
-        .set({ usedAt: now })
-        .where(
-          and(
-            eq(staffEnrolments.userId, userId),
-            isNull(staffEnrolments.usedAt),
-          ),
-        );
-      const enrolmentCode = Array.from(
-        randomBytes(10),
-        (byte) => BASE32[byte & 31],
-      ).join('');
-      await tx.insert(staffEnrolments).values({
-        codeSha256: sha256(enrolmentCode),
-        userId,
-        expiresAt: new Date(now.getTime() + ENROLMENT_TTL_MS),
-      });
+      const { code: enrolmentCode } = await issueEnrolment(tx, userId, now);
+      // Neither built-in role uses adjustments, and they must not return on a later move.
+      const cleared = await clearOverrides(tx, userId);
       await recordAudit(tx, {
         staffUserId: null,
         action:
@@ -211,7 +847,25 @@ export function grantOwner(
             : 'staff.release_check_granted',
         subjectType: 'user',
         subjectId: userId,
+        reason: withAuditChange('Granted from the server', {
+          from: previous?.roleId ?? null,
+          to: role,
+          restored: Boolean(previous?.revokedAt),
+          ...cleared,
+        }),
         now,
+      });
+      if (existing)
+        await closePendingRequestsOf(tx, {
+          userId,
+          why: 'requester_reset',
+          actorId: null,
+          now,
+        });
+      await alertIfLastApproverGone(tx, holdersBefore, null);
+      await alertStaffChange(tx, 'granted_from_server', 'server command', {
+        targetId: userId,
+        roleName: role === 'owner' ? 'Owner' : 'Release check',
       });
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
@@ -226,6 +880,28 @@ export function grantOwner(
   );
 }
 
+/**
+ * Takes a person's rows in the order everything that ends their access does: account, then staff,
+ * and only then enrolment links and the authenticator. The account is only shared, as the writes
+ * naming it would share it anyway: taken late, that share would wait on a decline or deletion
+ * already holding the account and waiting on these rows.
+ */
+async function lockPersonForAuthenticator(
+  tx: Tx,
+  userId: string,
+): Promise<void> {
+  await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .for('key share');
+  await tx
+    .select({ userId: staff.userId })
+    .from(staff)
+    .where(eq(staff.userId, userId))
+    .for('update');
+}
+
 /** Uses up the enrolment code and stores a new sealed authenticator secret (not yet confirmed). */
 export function startTotpEnrolment(
   db: Database,
@@ -234,6 +910,7 @@ export function startTotpEnrolment(
   const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
+      await lockPersonForAuthenticator(tx, input.userId);
       if (!(await isActiveStaff(tx, input.userId)))
         throw new OperationError('ENROLMENT_INVALID');
       const used = await tx
@@ -276,7 +953,7 @@ export function startTotpEnrolment(
   );
 }
 
-export type CodeCheck = 'ok' | 'invalid' | 'locked';
+export type CodeCheck = 'ok' | 'invalid' | 'locked' | 'reused';
 
 async function isLocked(tx: Tx, userId: string, now: Date): Promise<boolean> {
   const [row] = await tx
@@ -322,6 +999,7 @@ export async function checkStaffCode(
     confirmed: boolean;
   },
 ): Promise<CodeCheck | 'not_enrolled'> {
+  await lockPersonForAuthenticator(tx, input.userId);
   // Lock first, then read the lockout: parallel guesses queue here and each sees the lockout
   // set by the ones before it (final review fix).
   const [row] = await tx
@@ -338,11 +1016,18 @@ export async function checkStaffCode(
     input.now,
     row.lastStep,
   );
+  // Refused, but not a guess: a double click or two tabs must not walk someone into a lockout.
+  if (!result.ok && result.reused) return 'reused';
   if (!result.ok) return failure(tx, input.userId, input.now);
   await tx
     .update(staffTotp)
     .set({ lastStep: result.step, confirmedAt: row.confirmedAt ?? input.now })
     .where(eq(staffTotp.userId, input.userId));
+  if (!row.confirmedAt)
+    await tx
+      .update(staff)
+      .set({ enrolledAt: input.now })
+      .where(and(eq(staff.userId, input.userId), isNull(staff.enrolledAt)));
   await tx.delete(opsLockouts).where(eq(opsLockouts.userId, input.userId));
   return 'ok';
 }

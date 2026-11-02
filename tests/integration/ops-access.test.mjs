@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import { OPS_PERMISSIONS } from '../../packages/contracts/dist/index.js';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
@@ -74,7 +75,10 @@ test('staff without a grant are asked for the authenticator step, and other rout
   const { cookie } = await signIn(stack.api, '+2348036660002');
   const me = await call('GET', '/v1/ops/me', cookie);
   assert.equal(me.status, 200);
-  assert.deepEqual((await me.json()).data, { state: 'needs_enrolment' });
+  assert.deepEqual((await me.json()).data, {
+    state: 'needs_enrolment',
+    canDecline: true,
+  });
   assert.equal((await call('GET', '/v1/ops/audit', cookie)).status, 404);
   const wrongEnrolment = await call('POST', '/v1/ops/enrol', cookie, {
     enrolmentCode: 'AAAAAAAAAA',
@@ -90,7 +94,7 @@ test('the full flow opens a grant with every Owner permission, and it is audited
   const data = (await me.json()).data;
   assert.equal(data.state, 'granted');
   assert.equal(data.role, 'owner');
-  assert.equal(data.permissions.length, 15);
+  assert.equal(data.permissions.length, OPS_PERMISSIONS.length);
   const audit = (
     await (await call('GET', '/v1/ops/audit', owner.cookie)).json()
   ).data;
@@ -107,7 +111,7 @@ test('the full flow opens a grant with every Owner permission, and it is audited
     code,
   });
   assert.equal(replay.status, 400);
-  assert.equal(await errorCode(replay), 'CODE_INVALID');
+  assert.equal(await errorCode(replay), 'CODE_ALREADY_USED');
 });
 
 test('signing out ends the admin grant, even with the old admin cookie (Review Focus 1)', async () => {

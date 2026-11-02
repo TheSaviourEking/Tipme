@@ -295,6 +295,42 @@ function viewOf(kase: Case, answer: Answer, now: Date): OpsPayoutIssueView {
   };
 }
 
+export type PreparedPayoutRead = Awaited<ReturnType<typeof prepare>>;
+
+/** A serious action's `prepare`: the provider's answer, read outside any transaction. */
+export const readPayoutForAction = (db: Database, input: StaffInput) =>
+  prepare(db, input);
+
+/** That answer against the case as it stands now, inside the action's transaction. */
+export async function withCurrentCase(
+  db: Database | Tx,
+  input: StaffInput,
+  prepared: PreparedPayoutRead,
+): Promise<PreparedPayoutRead> {
+  const kase = await loadCase(db, input.issueId);
+  if (!kase) throw new OperationError('ISSUE_NOT_FOUND');
+  return {
+    ...prepared,
+    kase,
+    view: viewOf(kase, prepared.answer, prepared.now),
+  };
+}
+
+/** Who the withdrawal on this issue belongs to, and its state, or null if it isn't one. */
+export async function payoutCaseFacts(
+  db: Database | Tx,
+  issueId: string,
+): Promise<{ payoutId: string; status: string; profileId: string } | null> {
+  const kase = await loadCase(db, issueId);
+  return (
+    kase && {
+      payoutId: kase.payout.id,
+      status: kase.payout.status,
+      profileId: kase.payout.profileId,
+    }
+  );
+}
+
 async function prepare(db: Database, input: StaffInput) {
   const now = input.now ?? new Date();
   const kase = await guarded(() => loadCase(db, input.issueId));
@@ -330,7 +366,7 @@ const staffAudit = (
 
 /** Refused: said in the audit log too, with what the provider said at that moment. */
 async function refused(
-  db: Database,
+  db: Database | Tx,
   input: StaffInput & { reason: string },
   prepared: Awaited<ReturnType<typeof prepare>>,
   action: string,
@@ -374,6 +410,18 @@ export async function applyReportedPayout(
   input: StaffInput & { reported: 'paid' | 'failed'; reason: string },
 ): Promise<OpsPayoutActionResult> {
   const prepared = await prepare(db, input);
+  return (
+    (await refuseToApply(db, input, prepared)) ??
+    applyAfterRead(db, input, prepared)
+  );
+}
+
+/** The refusal an apply gets from this read, or null if it would go ahead. Logged either way. */
+export async function refuseToApply(
+  db: Database | Tx,
+  input: StaffInput & { reported: 'paid' | 'failed'; reason: string },
+  prepared: PreparedPayoutRead,
+): Promise<OpsPayoutActionResult | null> {
   const { kase, answer, now, view } = prepared;
   const action = 'apply';
   if (kase.issue.status !== 'open')
@@ -395,6 +443,19 @@ export async function applyReportedPayout(
     return refused(db, input, prepared, action, 'mismatch');
   }
   if (view.offers.applyReported !== input.reported || !('found' in answer))
+    return refused(db, input, prepared, action, 'not_offered');
+  return null;
+}
+
+/** The apply itself: no provider call, so a serious action can run it on its transaction. */
+export async function applyAfterRead(
+  db: Database,
+  input: StaffInput & { reported: 'paid' | 'failed'; reason: string },
+  prepared: PreparedPayoutRead,
+): Promise<OpsPayoutActionResult> {
+  const { kase, answer, now } = prepared;
+  const action = 'apply';
+  if (!('found' in answer))
     return refused(db, input, prepared, action, 'not_offered');
 
   // Before the apply, which commits by itself: a crash after it still says who acted and why.
@@ -506,9 +567,32 @@ export async function markPayoutFailedAbsent(
   if (input.dashboardVerified !== true)
     throw new OperationError('INVALID_INPUT');
   const prepared = await prepare(db, input);
-  const { kase, answer, now } = prepared;
-  if (kase.issue.status !== 'open')
+  return (
+    (await refuseToMarkFailed(db, input, prepared)) ??
+    markFailedAfterRead(db, input, prepared)
+  );
+}
+
+/** The refusal marking it failed gets from this read, or null if it would go ahead. */
+export async function refuseToMarkFailed(
+  db: Database | Tx,
+  input: StaffInput & { reason: string },
+  prepared: PreparedPayoutRead,
+): Promise<OpsPayoutActionResult | null> {
+  if (prepared.kase.issue.status !== 'open')
     return refused(db, input, prepared, 'mark_failed', 'not_open');
+  if (!prepared.view.offers.markFailed)
+    return refused(db, input, prepared, 'mark_failed', 'not_offered');
+  return null;
+}
+
+/** The failing itself, checked again under the row lock. No provider call. */
+export async function markFailedAfterRead(
+  db: Database,
+  input: StaffInput & { reason: string },
+  prepared: PreparedPayoutRead,
+): Promise<OpsPayoutActionResult> {
+  const { kase, answer, now } = prepared;
   const done = await guarded(() =>
     db.transaction(async (tx) => {
       await tx

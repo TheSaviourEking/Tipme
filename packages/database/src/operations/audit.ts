@@ -1,6 +1,8 @@
-import { desc, lt, sql } from 'drizzle-orm';
+import { desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import type { OpsStaffActivity } from '@tipme/contracts';
 import type { Database, Tx } from '../client.js';
-import { auditEvents } from '../schema.js';
+import { auditEvents, users } from '../schema.js';
+import { maskEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 
@@ -35,6 +37,58 @@ export async function recordAudit(
     createdAt: input.databaseClock
       ? sql`clock_timestamp()`
       : (input.now ?? new Date()),
+  });
+}
+
+/** Spec 6.4's alerts, as the Overview shows them. */
+const STAFF_ACTIVITY_ACTIONS = [
+  'staff.added',
+  'staff.removed',
+  'staff.role_changed',
+  'staff.access_changed',
+  'staff.authenticator_reset',
+  'staff.invitation_declined',
+  'role.created',
+  'role.updated',
+  'role.deleted',
+  'serious_action.ran',
+  'serious_action.ran_alone',
+  'serious_action.rejected',
+  'serious_action.stale',
+  'withdrawals.released',
+  'withdrawals.freeze_lifted',
+  'withdrawals.freeze_reopened',
+];
+
+/** Newest first. The written reason stays in the audit log, which takes its own permission. */
+export function staffActivity(
+  db: Database,
+  input: { limit: number },
+): Promise<OpsStaffActivity[]> {
+  return guarded(async () => {
+    const rows = await db
+      .select({
+        seq: auditEvents.seq,
+        action: auditEvents.action,
+        staffUserId: auditEvents.staffUserId,
+        subjectId: auditEvents.subjectId,
+        createdAt: auditEvents.createdAt,
+        email: users.email,
+      })
+      .from(auditEvents)
+      .leftJoin(users, eq(users.id, auditEvents.staffUserId))
+      .where(inArray(auditEvents.action, STAFF_ACTIVITY_ACTIONS))
+      .orderBy(desc(auditEvents.seq))
+      .limit(input.limit);
+    return rows.map((row) => ({
+      seq: row.seq,
+      action: row.action,
+      staffUserId: row.staffUserId,
+      staffHint: row.email ? maskEmail(row.email) : null,
+      seriousAction:
+        row.action === 'serious_action.ran_alone' ? row.subjectId : null,
+      at: row.createdAt.toISOString(),
+    }));
   });
 }
 

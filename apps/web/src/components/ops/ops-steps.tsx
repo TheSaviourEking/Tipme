@@ -1,17 +1,30 @@
 'use client';
 import QRCode from 'qrcode';
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { OpsEnrolment } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
+import {
+  ENROL_LINK_KEY,
+  ENROL_LINK_PREFIX,
+  clearEnrolLink,
+} from '@/lib/ops-client';
 import { apiFetch } from '@/lib/session-client';
 
 const problems: Record<string, string> = {
   ENROLMENT_INVALID:
-    'That enrolment code is not right or has expired. Run pnpm ops:grant-owner again for a new one.',
+    'That enrolment code is not right or has expired. Ask an owner for a new one, or run pnpm ops:grant-owner again.',
   CODE_INVALID:
     'That code didn’t work. Wait for the next code in your app and try again.',
+  CODE_ALREADY_USED:
+    'That code has just been used. Wait for the next one in your app.',
   OPS_LOCKED: 'Too many wrong codes. Admin access is locked for 15 minutes.',
   RATE_LIMITED: 'Too many attempts. Please wait a minute and try again.',
+};
+const declineProblems: Record<string, string> = {
+  STAFF_ALREADY_ENROLLED:
+    'You’ve set up admin access before, so it can’t be declined here. Contact the owner.',
+  NOT_FOUND:
+    'This invitation is no longer active, so there’s nothing to decline.',
 };
 const problem = (code: string) =>
   problems[code] ?? 'Something went wrong. Please try again.';
@@ -32,14 +45,77 @@ function CodeField({ id }: { id: string }) {
   );
 }
 
-/** First visit: the enrolment code from `pnpm ops:grant-owner`, then the app's first code. */
-export function OpsEnrol({ onDone }: { onDone: () => void }) {
+/** The code from an emailed link, in this address bar or kept through sign-in; '' if none. */
+function linkedEnrolmentCode(): string {
+  let hash = location.hash;
+  try {
+    if (!hash.startsWith(ENROL_LINK_PREFIX))
+      hash = sessionStorage.getItem(ENROL_LINK_KEY) ?? '';
+  } catch {
+    // Storage blocked: the person can open the link again.
+  }
+  return hash.startsWith(ENROL_LINK_PREFIX)
+    ? hash.slice(ENROL_LINK_PREFIX.length)
+    : '';
+}
+
+/**
+ * First visit: the enrolment code from the emailed link or `pnpm ops:grant-owner`, then the app's
+ * first code.
+ */
+export function OpsEnrol({
+  onDone,
+  canDecline,
+}: {
+  onDone: () => void;
+  canDecline: boolean;
+}) {
   const id = useId();
+  // This step only renders after the client has asked for the admin state, never on the server.
+  const [linkedCode] = useState(linkedEnrolmentCode);
+  useEffect(clearEnrolLink, []);
   const [enrolment, setEnrolment] = useState<
     (OpsEnrolment & { qr: string }) | null
   >(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [declining, setDeclining] = useState(false);
+  const [declineClosed, setDeclineClosed] = useState(false);
+  const declineButton = useRef<HTMLButtonElement>(null);
+  const confirmation = useRef<HTMLDivElement>(null);
+  const errorBox = useRef<HTMLDivElement>(null);
+  const backToButton = useRef(false);
+  useEffect(() => {
+    if (declining) confirmation.current?.focus();
+    else if (backToButton.current) declineButton.current?.focus();
+    backToButton.current = false;
+  }, [declining]);
+
+  const cancelDecline = () => {
+    backToButton.current = true;
+    setDeclining(false);
+  };
+
+  const decline = async () => {
+    setBusy(true);
+    setError('');
+    const result = await apiFetch('/v1/ops/decline', {
+      method: 'POST',
+      body: {},
+    });
+    if (result.ok) {
+      window.location.assign('/dashboard');
+      return;
+    }
+    setBusy(false);
+    setError(declineProblems[result.code] ?? problem(result.code));
+    // An answer, not a hiccup: there is nothing left here to decline.
+    if (declineProblems[result.code]) {
+      setDeclineClosed(true);
+      setDeclining(false);
+    }
+    errorBox.current?.focus();
+  };
 
   const start = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -93,27 +169,75 @@ export function OpsEnrol({ onDone }: { onDone: () => void }) {
         The admin area needs a second step: a code from an authenticator app
         (for example Google Authenticator, 1Password or Authy).
       </p>
-      {error && (
-        <Notice tone="error" title="Not done">
-          {error}
-        </Notice>
-      )}
+      <div ref={errorBox} tabIndex={-1}>
+        {error && (
+          <Notice tone="error" title="Not done">
+            {error}
+          </Notice>
+        )}
+      </div>
       {!enrolment ? (
-        <form className="settings-form" onSubmit={(e) => void start(e)}>
-          <InputField
-            id={`${id}-enrolment`}
-            name="enrolmentCode"
-            label="Enrolment code"
-            hint="The 10-character code printed by pnpm ops:grant-owner."
-            autoComplete="off"
-            autoCapitalize="characters"
-            maxLength={10}
-            required
-          />
-          <Button type="submit" disabled={busy} aria-busy={busy}>
-            Continue
-          </Button>
-        </form>
+        <>
+          <form className="settings-form" onSubmit={(e) => void start(e)}>
+            <InputField
+              id={`${id}-enrolment`}
+              name="enrolmentCode"
+              label="Enrolment code"
+              hint="The 10-character code from your email link, or printed by pnpm ops:grant-owner."
+              defaultValue={linkedCode}
+              autoComplete="off"
+              autoCapitalize="characters"
+              maxLength={10}
+              required
+            />
+            <Button type="submit" disabled={busy} aria-busy={busy}>
+              Continue
+            </Button>
+          </form>
+          {canDecline && !declineClosed && (
+            <div className="settings-form">
+              {!declining ? (
+                <Button
+                  ref={declineButton}
+                  variant="quiet"
+                  disabled={busy}
+                  onClick={() => setDeclining(true)}
+                >
+                  Decline admin access
+                </Button>
+              ) : (
+                <div
+                  ref={confirmation}
+                  tabIndex={-1}
+                  role="group"
+                  aria-labelledby={`${id}-decline`}
+                  className="settings-form"
+                >
+                  <h2 id={`${id}-decline`}>Decline admin access?</h2>
+                  <p>
+                    You won’t have admin access. Your TipMe account stays, and
+                    an owner would need to invite you again.
+                  </p>
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    aria-busy={busy}
+                    onClick={() => void decline()}
+                  >
+                    Yes, decline
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    disabled={busy}
+                    onClick={cancelDecline}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       ) : (
         <form className="settings-form" onSubmit={(e) => void confirm(e)}>
           <p>Scan this with your authenticator app:</p>

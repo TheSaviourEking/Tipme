@@ -10,7 +10,16 @@ export default async function globalSetup() {
   try {
     if (database.url !== E2E_DATABASE_URL)
       throw new Error('e2e must use the tipme_test database');
-    await database.reset();
+    // The worker is already running, and its first sweep can deadlock with the reset's TRUNCATE.
+    for (let tries = 3; ; tries -= 1) {
+      try {
+        await database.reset();
+        break;
+      } catch (error) {
+        const deadlock = (error as { code?: string }).code === '40P01';
+        if (!deadlock || tries <= 1) throw error;
+      }
+    }
     await seedDemoProfiles(database.db);
   } finally {
     await database.close();

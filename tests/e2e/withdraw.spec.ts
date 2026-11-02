@@ -5,7 +5,7 @@ import {
   signUpRecipient,
   tipAsVisitor,
 } from './helpers';
-import { enrolOwner, withDatabase } from './ops-helpers';
+import { enrolOwner, noOtherStaff, withDatabase } from './ops-helpers';
 
 // The pretend provider has no connected accounts and never fails a read, so it can only reach
 // `ready` and (through a real hold) `paused`. The states it can't produce are answered here at the
@@ -168,9 +168,10 @@ test('an idempotency conflict never says to simply try again', async ({
   await expect(page.getByText(/please try again/i)).toHaveCount(0);
 });
 
-test('staff ask the provider first, and are offered only what its answer allows', async ({
+test('@alone staff ask the provider first, and are offered only what its answer allows', async ({
   page,
 }, testInfo) => {
+  await noOtherStaff();
   await enrolOwner(page, testInfo);
   const issueId = await withDatabase(async (db, ops) => {
     const raw = db as Raw;

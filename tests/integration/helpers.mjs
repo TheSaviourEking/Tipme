@@ -152,7 +152,9 @@ export async function signIn(api, phone) {
   if (send.status !== 202)
     throw new Error(`code request failed: ${send.status}`);
   const inbox = await (await fetch(`${api}/v1/dev/inbox`)).json();
-  const code = /\b(\d{6})\b/.exec(inbox.data[0].body)?.[1];
+  // Mail lands in this inbox too, whenever the worker delivers it: the newest entry may not be ours.
+  const message = inbox.data.find((entry) => entry.channel !== 'email');
+  const code = /\b(\d{6})\b/.exec(message?.body ?? '')?.[1];
   const verify = await fetch(`${api}/v1/auth/verify`, {
     method: 'POST',
     headers: browserHeaders(),

@@ -139,12 +139,12 @@ test('recipient and staff routes are never public, and every state-changing one 
     );
 });
 
-test('every admin route that needs a grant names one permission, and the document explains each permission', () => {
+test('every admin route that needs a grant names its permission, and the document explains each permission', () => {
   const doc = read('docs/security/access-control.md');
   const used = new Set();
   for (const route of routes.filter((r) => r.access === 'staff-grant')) {
     assert.ok(route.permission, `${route.key} needs a permission`);
-    used.add(route.permission);
+    for (const permission of [route.permission].flat()) used.add(permission);
   }
   assert.ok(used.size >= 10);
   for (const permission of used)

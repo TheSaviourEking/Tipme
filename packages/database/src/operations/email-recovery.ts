@@ -26,7 +26,12 @@ import { RECOVERY_HOLD_MS } from './email.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
-import { dropOpsAccess, isActiveStaff } from './staff.js';
+import {
+  dropOpsAccess,
+  isActiveStaff,
+  lockedActiveStaff,
+  withAuditChange,
+} from './staff.js';
 
 /** How long after the old account is identified the new address may still be proven. */
 const PROPOSAL_VALID_MS = 30 * 60_000;
@@ -367,6 +372,8 @@ export function confirmRecoveredEmail(
         .from(users)
         .where(verifiedOwner(email));
       if (!owner) return invalid;
+      // Invited after the code went out: same answer as start gives staff.
+      if (await isActiveStaff(tx, owner.id)) return invalid;
       const [proposal] = await tx
         .select({ id: emailRecoveries.id })
         .from(emailRecoveries)
@@ -463,6 +470,35 @@ export function startStaffRecovery(
   );
 }
 
+/**
+ * Tells someone a recovery they may be waiting on won't happen: at the sign-in address, and at the
+ * new address of a confirmed email recovery, which may be the only one they can still read.
+ */
+export async function mailRecoveryCancelled(
+  tx: Tx,
+  sealing: MailSealing,
+  input: {
+    userId: string;
+    signInEmail: string | null;
+    newEmail: string | null;
+    now: Date;
+  },
+): Promise<void> {
+  const data = {
+    newEmailHint: input.newEmail ? maskEmail(input.newEmail) : null,
+  };
+  for (const to of [input.signInEmail, input.newEmail])
+    if (to)
+      await enqueueMail(tx, sealing, {
+        type: 'recovery_cancelled_notice',
+        to,
+        userId: input.userId,
+        data,
+        dedupeKey: `recovery_cancelled_notice.${input.userId}.${newId()}`,
+        now: input.now,
+      });
+}
+
 /** Scheduled. Moves accounts whose hold has ended, unless the address was taken meanwhile. */
 export function completeDueRecoveries(
   db: Database,
@@ -503,6 +539,35 @@ export function completeDueRecoveries(
             .where(eq(emailRecoveries.id, id));
           return false;
         }
+        // Staff accounts are never recovered by email (ADR-0010), even if they became staff during
+        // the hold: an owner's reset is emailed to this address.
+        if (await lockedActiveStaff(tx, row.userId)) {
+          await tx
+            .update(emailRecoveries)
+            .set({ cancelledAt: now })
+            .where(eq(emailRecoveries.id, id));
+          await recordAudit(tx, {
+            staffUserId: null,
+            action: 'account.recovery_refused_staff',
+            subjectType: 'user',
+            subjectId: row.userId,
+            reason: withAuditChange('Recovery due on a staff account', {
+              newEmail: maskEmail(row.newEmail),
+            }),
+            now,
+          });
+          const [person] = await tx
+            .select({ email: users.email })
+            .from(users)
+            .where(eq(users.id, row.userId));
+          await mailRecoveryCancelled(tx, sealing, {
+            userId: row.userId,
+            signInEmail: person?.email ?? null,
+            newEmail: row.newEmail,
+            now,
+          });
+          return false;
+        }
         const [me] = await tx
           .select({ email: users.email, recovery: users.recoveryEmail })
           .from(users)
@@ -529,17 +594,8 @@ export function completeDueRecoveries(
           .where(
             and(eq(sessions.userId, row.userId), isNull(sessions.revokedAt)),
           );
-        const wasStaff = await isActiveStaff(tx, row.userId);
+        // Not staff (checked above), but a removed person's leftovers must not survive the move.
         await dropOpsAccess(tx, row.userId, now);
-        if (wasStaff)
-          await enqueueMail(tx, sealing, {
-            type: 'staff_access_notice',
-            to: row.newEmail,
-            userId: row.userId,
-            data: { change: 'removed' },
-            dedupeKey: `staff_access_notice.${row.userId}.${now.getTime()}`,
-            now,
-          });
         const data = { newEmailHint: maskEmail(row.newEmail) };
         await enqueueMail(tx, sealing, {
           type: 'recovery_completed_notice',

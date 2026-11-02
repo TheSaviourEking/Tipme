@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { OPS_PERMISSION } from '../../apps/api/dist/ops/ops.guard.js';
 import { OpsAccountRecoveryController } from '../../apps/api/dist/ops/account-recovery.controller.js';
-import { mailSealing } from '../../packages/database/dist/index.js';
+import {
+  ensureOwnerRole,
+  mailSealing,
+  registerRealSeriousActions,
+} from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { browserHeaders, startStack, uniquePrefix } from './helpers.mjs';
 
@@ -176,12 +181,36 @@ test('recovery routes are rate limited, and staff recovery names its permission'
 
 test('staff recovery is audited with the checks and refuses a bad account', async () => {
   const { userId } = await signIn(unique());
-  const api = new OpsAccountRecoveryController(
-    { AUTH_CODE_SECRET: 'integration-auth-code-secret-32-characters' },
-    { db: database.db },
-    mailSealing(Buffer.alloc(32, 7)),
+  const { userId: staffId } = await signIn(unique());
+  // It's a serious action: this person is the only staff member, with a fresh code, so it runs alone.
+  registerRealSeriousActions();
+  await ensureOwnerRole(database.db);
+  await database.pool.query(
+    `INSERT INTO staff (user_id, role_id, granted_at, enrolled_at) VALUES ($1, 'owner', now(), now())`,
+    [staffId],
   );
-  const ops = { userId };
+  await database.pool.query(
+    `INSERT INTO staff_totp (user_id, secret_enc, confirmed_at) VALUES ($1, 'unused', now())`,
+    [staffId],
+  );
+  const session = await database.pool.query(
+    `INSERT INTO sessions (id, user_id, token_sha256, created_at, last_seen_at, expires_at)
+     VALUES (gen_random_uuid(), $1, $2, now(), now(), now() + interval '1 day') RETURNING id`,
+    [staffId, randomUUID()],
+  );
+  const grant = await database.pool.query(
+    `INSERT INTO ops_sessions (id, user_id, session_id, token_sha256, created_at, last_seen_at, expires_at, last_totp_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, now(), now(), now() + interval '1 hour', now()) RETURNING id`,
+    [staffId, session.rows[0].id, randomUUID()],
+  );
+  const api = new OpsAccountRecoveryController(
+    { db: database.db },
+    {
+      sealing: mailSealing(Buffer.alloc(32, 7)),
+      authCodeSecret: 'integration-auth-code-secret-32-characters',
+    },
+  );
+  const ops = { userId: staffId, grantId: grant.rows[0].id };
   const body = {
     newEmail: unique(),
     checks: 'Matched their last three tips',
@@ -197,6 +226,6 @@ test('staff recovery is audited with the checks and refuses a bad account', asyn
   assert.match(rows[0].reason, /Matched their last three tips/);
   await assert.rejects(
     api.startEmailRecovery(ops, '00000000-0000-7000-8000-000000000000', body),
-    { code: 'NOT_FOUND' },
+    { code: 'APPROVAL_NOT_FOUND' },
   );
 });

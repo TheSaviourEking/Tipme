@@ -32,21 +32,35 @@ export default defineConfig({
   },
   // One pass at desktop width. Tests tagged @mobile also run at 360px.
   // Reflow at 320px is asserted inside those tests, so the suite is not run twice.
-  projects: [
-    {
-      name: 'desktop',
-      grepInvert: /@mobile/,
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: 'mobile',
-      grep: /@mobile/,
-      use: {
-        ...devices['Desktop Chrome'],
-        viewport: { width: 360, height: 800 },
-      },
-    },
-  ],
+  //
+  // @alone tests remove every other staff member, and some change the global switch, so nothing may
+  // run beside them. A project that depends on the others would stop --shard splitting those, so
+  // they are a separate run: E2E_ALONE=1, as `pnpm test:e2e` does (scripts/run-e2e.mjs).
+  projects: process.env.E2E_ALONE
+    ? [
+        {
+          name: 'desktop-alone',
+          grep: /@alone/,
+          fullyParallel: false,
+          workers: 1,
+          use: { ...devices['Desktop Chrome'] },
+        },
+      ]
+    : [
+        {
+          name: 'desktop',
+          grepInvert: /@mobile|@alone/,
+          use: { ...devices['Desktop Chrome'] },
+        },
+        {
+          name: 'mobile',
+          grep: /@mobile/,
+          use: {
+            ...devices['Desktop Chrome'],
+            viewport: { width: 360, height: 800 },
+          },
+        },
+      ],
   webServer: [
     {
       // Built by test:e2e with NEXT_PUBLIC_API_ORIGIN pointing at the API below.

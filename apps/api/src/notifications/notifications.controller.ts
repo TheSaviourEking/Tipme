@@ -30,6 +30,7 @@ import {
   completeRecovery,
   confirmEmailForUser,
   getMyProfile,
+  isActiveStaff,
   listNotifications,
   markRead,
   pendingRecoveries,
@@ -135,11 +136,17 @@ export class NotificationsController {
     @Body(new ZodValidationPipe(emailChangeCodeSchema))
     body: EmailChangeCodeRequest,
   ): Promise<ApiDataResponse<{ sent: true }>> {
-    await requestEmailChangeCode(this.database.db, this.sealing, {
-      userId: auth.userId,
-      email: body.email,
-      secret: this.config.AUTH_CODE_SECRET,
-    });
+    const { status } = await requestEmailChangeCode(
+      this.database.db,
+      this.sealing,
+      {
+        userId: auth.userId,
+        email: body.email,
+        secret: this.config.AUTH_CODE_SECRET,
+      },
+    );
+    if (status === 'staff_account')
+      throw new CodedHttpException(409, 'STAFF_EMAIL_LOCKED');
     return { data: { sent: true } };
   }
 
@@ -159,6 +166,8 @@ export class NotificationsController {
       secret: this.config.AUTH_CODE_SECRET,
       keepSessionId: auth.sessionId,
     });
+    if (result.status === 'staff_account')
+      throw new CodedHttpException(409, 'STAFF_EMAIL_LOCKED');
     if (result.status === 'locked')
       throw new CodedHttpException(429, 'SIGN_IN_LOCKED');
     if (result.status === 'taken')
@@ -197,6 +206,8 @@ export class NotificationsController {
     const result = await confirmEmailForUser(this.database.db, {
       token: body.token,
     });
+    if (result.status === 'staff_account')
+      throw new CodedHttpException(409, 'STAFF_EMAIL_LOCKED');
     if (result.status !== 'confirmed')
       throw new CodedHttpException(400, 'CODE_INVALID');
     // A public email must appear on the page at once.
@@ -209,9 +220,13 @@ export class NotificationsController {
   @UseGuards(SessionGuard)
   @RateLimit('auth_code')
   async phoneCode(
+    @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(phoneSchema)) body: z.infer<typeof phoneSchema>,
   ): Promise<ApiDataResponse<{ sent: true }>> {
     await this.assertLegacyAllowed();
+    // The change would be refused, so no text is sent for it.
+    if (await isActiveStaff(this.database.db, auth.userId))
+      throw new CodedHttpException(409, 'STAFF_PHONE_LOCKED');
     await requestSignInCode(this.database.db, {
       phone: body.phone,
       purpose: 'change_phone',
@@ -235,6 +250,7 @@ export class NotificationsController {
       code: body.code,
       secret: this.config.AUTH_CODE_SECRET,
       keepSessionId: auth.sessionId,
+      requirePage: true,
     });
     const profile = await getMyProfile(this.database.db, auth.userId);
     // A public phone number must change on the page at once.

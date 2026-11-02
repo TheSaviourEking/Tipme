@@ -5,7 +5,7 @@ import type { OpsSearchResult } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { naira } from '@/lib/money';
 import { can, useOpsAccess } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat('en-GB', {
@@ -39,7 +39,7 @@ export default function OpsSearchPage() {
     }
     setBusy(true);
     setError('');
-    const response = await apiFetch<OpsSearchResult>(
+    const response = await opsFetch<OpsSearchResult>(
       `/v1/ops/search?q=${encodeURIComponent(q)}`,
     );
     setBusy(false);

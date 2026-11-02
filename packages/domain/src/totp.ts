@@ -63,20 +63,22 @@ export function verifyTotp(
   code: string,
   now: Date,
   lastStep: bigint | null,
-): { ok: true; step: bigint } | { ok: false } {
+): { ok: true; step: bigint } | { ok: false; reused?: true } {
   if (!/^\d{6}$/.test(code)) return { ok: false };
   const current = BigInt(Math.floor(now.getTime() / 1000 / STEP_SECONDS));
+  let reused = false;
   for (const step of [current - 1n, current, current + 1n]) {
-    if (lastStep !== null && step <= lastStep) continue;
     if (
-      timingSafeEqual(
+      !timingSafeEqual(
         Buffer.from(totpAt(secretBase32, step)),
         Buffer.from(code),
       )
     )
-      return { ok: true, step };
+      continue;
+    if (lastStep === null || step > lastStep) return { ok: true, step };
+    reused = true;
   }
-  return { ok: false };
+  return reused ? { ok: false, reused: true } : { ok: false };
 }
 
 /** A new 160-bit secret in base32, as authenticator apps expect. */

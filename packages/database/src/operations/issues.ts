@@ -1,4 +1,8 @@
-import type { OpsIssue, OpsIssueOutcome } from '@tipme/contracts';
+import type {
+  OpsFreezeReleased,
+  OpsIssue,
+  OpsIssueOutcome,
+} from '@tipme/contracts';
 import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -16,11 +20,14 @@ import {
   type IssueSeverity,
   type IssueSubject,
 } from '../schema.js';
+import { enqueueOutbox } from './outbox.js';
 import { recordAudit } from './audit.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { canonicalId, readMailboxes, sharesMailbox } from './staff.js';
 
 const STUCK_AFTER_MS = 30 * 60 * 1000;
+const ACTED_ALONE_CLOSES_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * The issues that place a hold, and so the only ones that keep it. A failed withdrawal or an unknown
@@ -46,10 +53,19 @@ const EVENT_KINDS: Record<string, IssueKind> = {
   'payout.failed': 'payout_failed',
   'payout.conflict': 'payout_conflict',
   'provider_event.conflict': 'provider_event_conflict',
+  'ops.acted_alone': 'staff_acted_alone',
+  'ops.approval_pending': 'staff_approval_pending',
+  'ops.last_approver_removed': 'staff_last_approver_removed',
 };
 export const ISSUE_EVENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(EVENT_KINDS),
 );
+/** Alerts about what a staff member did, or asked for: the issue records who. */
+const OWN_ALERT_EVENTS: ReadonlySet<string> = new Set([
+  'ops.acted_alone',
+  'ops.approval_pending',
+  'ops.last_approver_removed',
+]);
 
 const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_mismatch: 'money',
@@ -76,6 +92,9 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   pending_recovery: 'account',
   message_reported: 'account',
   profile_reported: 'account',
+  staff_acted_alone: 'account',
+  staff_approval_pending: 'info',
+  staff_last_approver_removed: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -128,6 +147,12 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
     case 'account_takeover_reported':
       return `Someone reported that ${page}’s account was taken over. Staff froze its withdrawals; the audit log has why. Once the real owner has it back, resolve this to release them.`;
+    case 'staff_acted_alone':
+      return 'A staff member took a serious action without a second person, because none was available.';
+    case 'staff_approval_pending':
+      return 'A serious action is waiting for a second person. Decide it under Approvals.';
+    case 'staff_last_approver_removed':
+      return 'A staff change left nobody else to act as second person, so one person can now take serious actions alone.';
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
@@ -235,6 +260,39 @@ export async function openIssue(
   return { id: existing.id, opened: false };
 }
 
+/** Our own names and ids only, and checked, so the note can't carry anything else. */
+function actedAloneNote(payload: Record<string, unknown>): string {
+  const action =
+    typeof payload.action === 'string' && /^[a-z_.]{1,60}$/.test(payload.action)
+      ? payload.action
+      : 'unknown';
+  return `Action: ${action}. Staff member: ${idOf(payload.requestedBy) ?? 'unknown'}. The audit log has the reason. Someone else must close this; if nobody does, it closes itself after 30 days.`;
+}
+
+const PERMISSION_LIST = /^[a-z_.,]{1,400}$/;
+
+/** Same care as above. A pending request closes its issue once decided; the other asks for a person. */
+function staffAlertNote(
+  eventType: string,
+  payload: Record<string, unknown>,
+): string {
+  const actor = idOf(payload.requestedBy) ?? 'unknown';
+  if (eventType === 'ops.approval_pending') {
+    const action =
+      typeof payload.action === 'string' &&
+      /^[a-z_.]{1,60}$/.test(payload.action)
+        ? payload.action
+        : 'unknown';
+    return `Action: ${action}. Requested by: ${actor}. This closes itself once the request is decided or expires.`;
+  }
+  const permissions =
+    typeof payload.permissions === 'string' &&
+    PERMISSION_LIST.test(payload.permissions)
+      ? payload.permissions
+      : 'unknown';
+  return `Permissions: ${permissions}. Changed by: ${actor}. The audit log has the reason. Someone else must close this; if nobody does, it closes itself after 30 days.`;
+}
+
 /** One issue per outbox alert, keyed by the alert's dedupe key, so redelivery changes nothing. */
 export function openIssueFromEvent(
   db: Database,
@@ -254,6 +312,14 @@ export function openIssueFromEvent(
     const id = idOf(payload[key]);
     if (id) subject[key] = id;
   }
+  // Who acted, so they can't be the one to close it.
+  if (OWN_ALERT_EVENTS.has(input.eventType)) {
+    const actor = idOf(payload.requestedBy);
+    if (actor) subject.userId = actor;
+  }
+  const requestId = idOf(payload.requestId);
+  if (input.eventType === 'ops.approval_pending' && requestId)
+    subject.requestId = requestId;
   return guarded(async () =>
     (
       await openIssue(db, {
@@ -265,6 +331,13 @@ export function openIssueFromEvent(
           ? {
               note: 'It says the withdrawal was paid after TipMe recorded it as failed.',
             }
+          : {}),
+        ...(input.eventType === 'ops.acted_alone'
+          ? { note: actedAloneNote(payload) }
+          : {}),
+        ...(input.eventType === 'ops.approval_pending' ||
+        input.eventType === 'ops.last_approver_removed'
+          ? { note: staffAlertNote(input.eventType, payload) }
           : {}),
       })
     ).opened
@@ -620,6 +693,17 @@ export function autoResolveIssues(
         JOIN release_runs r ON r.id = p.rehearsal_run_id
        WHERE i.status = 'open' AND i.rehearsal AND r.finished_at IS NOT NULL
       UNION ALL
+      -- A lone admin can't close their own alert, and with nobody else it mustn't stay open forever.
+      SELECT i.id, 'Closed automatically after 30 days: nobody else was available to close it.'
+        FROM issues i
+       WHERE i.status = 'open' AND i.kind IN ('staff_acted_alone', 'staff_last_approver_removed')
+         AND i.opened_at < ${new Date(now.getTime() - ACTED_ALONE_CLOSES_AFTER_MS).toISOString()}::timestamptz
+      UNION ALL
+      SELECT i.id, 'The request was decided, cancelled or expired.'
+        FROM issues i JOIN approval_requests r ON r.id = (i.subject->>'requestId')::uuid
+       WHERE i.status = 'open' AND i.kind = 'staff_approval_pending'
+         AND r.status <> 'pending'
+      UNION ALL
       SELECT i.id, 'The recovery was completed or cancelled.'
         FROM issues i JOIN phone_recoveries r ON r.id = (i.subject->>'recoveryId')::uuid
        WHERE i.status = 'open' AND i.kind = 'pending_recovery'
@@ -770,6 +854,22 @@ export function relatedOpenIssues(
  * issue also needs how it was settled, which is stored and changes no balance; the API also asks
  * `payouts.resolve` for one.
  */
+/** By id or by mailbox: a second account on the same address is still the same person. */
+async function isSamePerson(
+  tx: Tx,
+  actedBy: string | undefined,
+  closingBy: string,
+): Promise<boolean> {
+  if (!actedBy) return false;
+  const closer = canonicalId(closingBy);
+  if (closer === actedBy) return true;
+  if (!closer) return false;
+  return sharesMailbox(
+    await readMailboxes(tx, actedBy),
+    await readMailboxes(tx, closer),
+  );
+}
+
 export function resolveIssue(
   db: Database,
   input: {
@@ -780,11 +880,11 @@ export function resolveIssue(
     bankAndSignInChecked?: boolean;
     now?: Date;
   },
-): Promise<void> {
+): Promise<Partial<OpsFreezeReleased>> {
   if (!UUID.test(input.issueId))
     return Promise.reject(new OperationError('ISSUE_NOT_FOUND'));
   return guarded(() =>
-    db.transaction(async (tx) => {
+    db.transaction(async (tx): Promise<Partial<OpsFreezeReleased>> => {
       const [current] = await tx
         .select({
           kind: issues.kind,
@@ -805,6 +905,13 @@ export function resolveIssue(
           : input.outcome === 'account_secured')
       )
         throw new OperationError('ISSUE_OUTCOME_REQUIRED');
+      if (
+        current.status === 'open' &&
+        (current.kind === 'staff_acted_alone' ||
+          current.kind === 'staff_last_approver_removed') &&
+        (await isSamePerson(tx, current.subject.userId, input.staffUserId))
+      )
+        throw new OperationError('ISSUE_OWN_ALERT');
       if (
         current.status === 'open' &&
         current.severity === 'money' &&
@@ -833,6 +940,57 @@ export function resolveIssue(
         now: input.now ?? new Date(),
       });
       if (!resolved) throw new OperationError('ISSUE_RESOLVED');
+      if (!takeover) return {};
+      // Closing it doesn't lift a hold another open issue placed, and staff must not say it does.
+      const { profileId } = current.subject;
+      const [held] = profileId
+        ? await tx
+            .select({ id: withdrawalHolds.id })
+            .from(withdrawalHolds)
+            .where(
+              and(
+                eq(withdrawalHolds.profileId, profileId),
+                isNull(withdrawalHolds.releasedAt),
+              ),
+            )
+            .limit(1)
+        : [];
+      const stillOpen = held
+        ? await tx
+            .select({ id: issues.id, kind: issues.kind })
+            .from(issues)
+            .where(
+              and(
+                eq(issues.status, 'open'),
+                sql`${issues.kind} IN (${HOLD_KINDS_SQL})`,
+                sql`${issues.subject}->>'profileId' = ${profileId}`,
+              ),
+            )
+        : [];
+      const withdrawals: OpsFreezeReleased['withdrawals'] = held
+        ? 'still_held'
+        : 'released';
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'withdrawals.freeze_lifted',
+        permission: 'payouts.resolve',
+        subjectType: 'issue',
+        subjectId: input.issueId,
+        reason: withdrawals,
+        now: input.now,
+      });
+      // One person can lift a freeze, so it is never quiet.
+      await enqueueOutbox(tx, {
+        eventType: 'ops.freeze_released',
+        aggregateId: input.issueId,
+        payload: {
+          action: 'freeze_released',
+          outcome: withdrawals,
+          targetId: input.issueId,
+          requestedBy: input.staffUserId,
+        },
+      });
+      return { withdrawals, stillOpen };
     }),
   );
 }

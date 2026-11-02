@@ -6,7 +6,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { expectAccessible, identity, signInWithEmail } from './helpers';
-import { API_ORIGIN, E2E_DATABASE_URL } from './stack';
+import { API_ORIGIN, E2E_DATABASE_URL, E2E_MAIL_SEAL_KEY } from './stack';
 
 // Admin-area helpers (PR-009): staff are granted through the database, as the command does.
 
@@ -110,6 +110,70 @@ export async function mismatchedTip(
   return issueId;
 }
 
+/** Plain SQL against the e2e database: for the states a test sets up, never for what it checks. */
+export async function sql<T = Record<string, unknown>>(
+  text: string,
+  values: unknown[] = [],
+): Promise<T[]> {
+  const ops = await import('../../packages/database/dist/index.js');
+  const handle = ops.createDatabase(E2E_DATABASE_URL, { max: 1 });
+  try {
+    return (await handle.pool.query(text, values)).rows as T[];
+  } finally {
+    await handle.close();
+  }
+}
+
+/** A code the server will take now, however recently this person used one. */
+export async function codeFor(person: { email: string; secret: string }) {
+  await sql(
+    `UPDATE staff_totp SET last_step = NULL
+      WHERE user_id = (SELECT id FROM users WHERE lower(email) = lower($1))`,
+    [person.email],
+  );
+  return totpNow(person.secret);
+}
+
+/** As if this person's last code was an hour ago: the state an unattended laptop is in. */
+export async function codeWentStale(person: { email: string }) {
+  await sql(
+    `UPDATE ops_sessions SET last_totp_at = now() - interval '1 hour'
+      WHERE user_id = (SELECT id FROM users WHERE lower(email) = lower($1))`,
+    [person.email],
+  );
+}
+
+/** A second staff member, signed in in their own browser. */
+export async function secondOwner(
+  browser: Browser,
+  testInfo: TestInfo & { project: { use: { baseURL?: string } } },
+) {
+  const context = await browser.newContext({
+    baseURL: testInfo.project.use.baseURL,
+    reducedMotion: 'reduce',
+  });
+  const page = await context.newPage();
+  const person = await enrolOwner(page, testInfo);
+  return { context, page, ...person };
+}
+
+/** The enrolment code an invited person was emailed, read as they would from their inbox. */
+export async function emailedEnrolmentCode(email: string): Promise<string> {
+  const { mailSealing, openSecret } =
+    await import('../../packages/database/dist/index.js');
+  const sealing = mailSealing(Buffer.from(E2E_MAIL_SEAL_KEY, 'base64'));
+  const [row] = await sql<{ data_sealed: string }>(
+    `SELECT m.data_sealed FROM mail_messages m JOIN users u ON u.id = m.user_id
+      WHERE lower(u.email) = lower($1) AND m.type = 'staff_invitation'
+      ORDER BY m.created_at DESC, m.id DESC LIMIT 1`,
+    [email],
+  );
+  if (!row) throw new Error('no invitation yet');
+  return (
+    JSON.parse(openSecret(sealing.key, row.data_sealed)) as { code: string }
+  ).code;
+}
+
 /** Staff make the recipient's page Pro from the admin area, in their own browser context. */
 export async function makePagePro(
   browser: Browser,
@@ -128,4 +192,12 @@ export async function makePagePro(
   await staff.getByRole('button', { name: 'Make Pro', exact: true }).click();
   await expect(staff.getByText(`@${handle} is now Pro`)).toBeVisible();
   return staff;
+}
+
+/** For a test that needs to be the only staff: serious actions then run at once (spec 6.5). */
+export async function noOtherStaff() {
+  await sql(`UPDATE staff SET revoked_at = now() WHERE revoked_at IS NULL`);
+  await sql(
+    `UPDATE approval_requests SET status = 'cancelled' WHERE status = 'pending'`,
+  );
 }

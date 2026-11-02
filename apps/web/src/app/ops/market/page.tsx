@@ -12,7 +12,7 @@ import {
 } from '@tipme/ui';
 import { LineChart } from '@/components/ops/charts';
 import { can, useOpsAccess } from '@/lib/ops-client';
-import { apiFetch } from '@/lib/session-client';
+import { opsFetch } from '@/lib/ops-staff-api';
 
 const CATEGORIES: Record<MarketCategory, string> = {
   competitor: 'Competitor',
@@ -39,7 +39,7 @@ function AddObservation({ onSaved }: { onSaved: () => void }) {
     setBusy(true);
     setError('');
     setSaved('');
-    const result = await apiFetch<MarketEntry>('/v1/ops/market', {
+    const result = await opsFetch<MarketEntry>('/v1/ops/market', {
       method: 'POST',
       body: {
         observedOn: text('observedOn'),
@@ -163,7 +163,7 @@ export default function MarketPage() {
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
-    void apiFetch<MarketEntry[]>('/v1/ops/market').then((result) =>
+    void opsFetch<MarketEntry[]>('/v1/ops/market').then((result) =>
       setEntries(result.ok ? result.data : []),
     );
   }, [version]);
@@ -185,13 +185,13 @@ export default function MarketPage() {
       name: seriesName,
       metric: seriesMetric,
     });
-    void apiFetch<Point[]>(`/v1/ops/market/series?${params.toString()}`).then(
+    void opsFetch<Point[]>(`/v1/ops/market/series?${params.toString()}`).then(
       (result) => setSeries(result.ok ? result.data : []),
     );
   }, [seriesName, seriesMetric, version]);
 
   const archive = async (entryId: string) => {
-    await apiFetch(`/v1/ops/market/${entryId}/archive`, {
+    await opsFetch(`/v1/ops/market/${entryId}/archive`, {
       method: 'POST',
       body: {},
     });

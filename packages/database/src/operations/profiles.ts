@@ -45,6 +45,12 @@ import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
+import {
+  isUnenrolledInvitee,
+  lockedActiveStaff,
+  lockStaffAdmin,
+  revokeUnenrolled,
+} from './staff.js';
 import { mailOwner } from './account-mail.js';
 import { removeObjects } from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
@@ -715,6 +721,25 @@ export function deleteAccount(
   const photoKeys: string[] = [];
   return guarded(async () => {
     const result = await db.transaction(async (tx) => {
+      // Locks in one order, so nothing here can deadlock: the staff-admin lock (no invitation while
+      // this runs), recovery rows (as addStaff and completing a recovery), the page (as anything
+      // that mails its owner), then the account. Writing anything naming the account takes a share
+      // of its row, so all of this comes before the first such write.
+      await lockStaffAdmin(tx);
+      await tx
+        .update(phoneRecoveries)
+        .set({ cancelledAt: now })
+        .where(
+          and(
+            eq(phoneRecoveries.userId, input.userId),
+            isNull(phoneRecoveries.cancelledAt),
+            isNull(phoneRecoveries.completedAt),
+          ),
+        );
+      // Deleted, not cancelled: each row holds an address, and it must not move back later.
+      await tx
+        .delete(emailRecoveries)
+        .where(eq(emailRecoveries.userId, input.userId));
       const [row] = await tx
         .select({
           id: profiles.id,
@@ -727,6 +752,21 @@ export function deleteAccount(
         .for('update');
       if (input.rehearsalCleanup && !row?.rehearsalRunId)
         throw new OperationError('INVALID_INPUT');
+      // Someone who has ever enrolled needs removing by someone else first, even mid-reset. A mere
+      // invitee never had the use of it, and an invitation mustn't cost them their account.
+      if (
+        (await lockedActiveStaff(tx, input.userId)) &&
+        !input.rehearsalCleanup
+      ) {
+        if (!(await isUnenrolledInvitee(tx, input.userId)))
+          throw new OperationError('STAFF_CANNOT_DELETE');
+        await revokeUnenrolled(tx, {
+          userId: input.userId,
+          via: 'account_deleted',
+          sealing: input.sealing,
+          now,
+        });
+      }
       if (row && row.pageState !== 'deleted') {
         const balance = await balanceIn(tx, row.id);
         if (
@@ -800,7 +840,7 @@ export function deleteAccount(
               set: { until: new Date(now.getTime() + HANDLE_HOLD_MS) },
             });
       }
-      // Erase what identifies the person, including codes, lockouts and pending links or recoveries.
+      // Erase what identifies the person, including codes, lockouts and pending links.
       const [person] = await tx
         .select({ phone: users.phoneE164, email: users.email })
         .from(users)
@@ -825,16 +865,6 @@ export function deleteAccount(
         .where(
           and(eq(emailTokens.userId, input.userId), isNull(emailTokens.usedAt)),
         );
-      await tx
-        .update(phoneRecoveries)
-        .set({ cancelledAt: now })
-        .where(
-          and(
-            eq(phoneRecoveries.userId, input.userId),
-            isNull(phoneRecoveries.cancelledAt),
-            isNull(phoneRecoveries.completedAt),
-          ),
-        );
       // Before the address goes: this is the last email the account gets (rehearsals get none).
       if (!input.rehearsalCleanup)
         await mailOwner(tx, input.sealing, {
@@ -844,10 +874,6 @@ export function deleteAccount(
           dedupeKey: `account_deleted_notice.${input.userId}`,
           now,
         });
-      // Deleted, not cancelled: each row holds an address, and it must not move back later.
-      await tx
-        .delete(emailRecoveries)
-        .where(eq(emailRecoveries.userId, input.userId));
       await tx
         .update(users)
         .set({

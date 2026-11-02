@@ -589,7 +589,7 @@ export function attachUnknownBachsCheckoutForOperations(
       await recordAudit(tx, {
         staffUserId: input.staffUserId,
         action: 'payment_attempt.checkout_recovered',
-        permission: 'payments.recheck',
+        permission: 'payments.repair',
         subjectType: 'payment_attempt',
         subjectId: input.attemptId,
         reason: `${input.reason} [checkout found in Bachs Dashboard; provider amount and currency matched]`,
