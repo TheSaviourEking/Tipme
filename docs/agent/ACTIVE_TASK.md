@@ -1,3 +1,9 @@
+# Current task — database connection budget (2 November 2026)
+
+- Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Committed, not pushed. No migration.
+- Each API copy and worker now sizes its pool from the server's `max_connections`, with both colours counted, and resizes with no restart. Budget, numbers and checks: `docs/runbooks/remote-database.md`. Full report: `.worktrees/db-budget-report.md`.
+- Next: owner reviews and opens the PR; run the runbook's `backend_type` query on production to replace the margin's assumption. `feat/admin-roles` must take this before it merges.
+
 # Current task — takeover freeze, second report (2 November 2026)
 
 - Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev` at `a232891`. Committed, not pushed.

@@ -5,23 +5,11 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import pg from 'pg';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from './database.js';
 
 export const PG_POOL = Symbol('PG_POOL');
 export const REDIS = Symbol('REDIS');
-
-export function createPgPool(url: string): pg.Pool {
-  const pool = new pg.Pool({
-    connectionString: url,
-    max: 5,
-    connectionTimeoutMillis: 1000,
-  });
-  // Idle-client errors are reported through readiness, not by crashing the process.
-  pool.on('error', () => undefined);
-  return pool;
-}
 
 /** Fails commands immediately while disconnected instead of queueing them (no offline queue). */
 export function createRedis(url: string): Redis {
@@ -38,14 +26,10 @@ export function createRedis(url: string): Redis {
 }
 
 class InfraLifecycle implements OnApplicationShutdown {
-  constructor(
-    @Inject(PG_POOL) private readonly pool: pg.Pool,
-    @Inject(REDIS) private readonly redis: Redis,
-  ) {}
+  constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
-  async onApplicationShutdown(): Promise<void> {
+  onApplicationShutdown(): void {
     this.redis.disconnect();
-    await this.pool.end().catch(() => undefined);
   }
 }
 
@@ -54,8 +38,9 @@ class InfraLifecycle implements OnApplicationShutdown {
   providers: [
     {
       provide: PG_POOL,
-      inject: [API_CONFIG],
-      useFactory: (config: ApiConfig) => createPgPool(config.DATABASE_URL),
+      // The same pool as every request: a second pool would be connections the budget can't spare.
+      inject: [DatabaseProvider],
+      useFactory: (database: DatabaseProvider) => database.pool,
     },
     {
       provide: REDIS,

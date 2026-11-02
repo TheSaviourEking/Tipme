@@ -40,6 +40,14 @@ x-api-env: &api-env
   SHUTDOWN_DRAIN_MS: '7000'
   PORT: ${PORT:-4000}
   DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (the runtime role, sslmode=verify-full)}
+  # Each process sizes its pool from the server's limit (docs/runbooks/remote-database.md). These say
+  # how many processes share it at the worst moment: both colours mid-deploy, three copies each.
+  # scripts/production-compose.test.mjs keeps them equal to the replicas here. Blank pool = computed.
+  DATABASE_BUDGET_API_PROCESSES: '6'
+  DATABASE_BUDGET_WORKER_PROCESSES: '2'
+  DATABASE_BUDGET_MARGIN: ${DATABASE_BUDGET_MARGIN:-7}
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
+  DATABASE_POOL_CONNECT_TIMEOUT_MS: ${DATABASE_POOL_CONNECT_TIMEOUT_MS:-5000}
   REDIS_URL: redis://redis:6379
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
@@ -149,6 +157,12 @@ x-worker: &worker
     RELEASE_KIND: live
     SENTRY_ENVIRONMENT: production
     DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL (the runtime role, sslmode=verify-full)}
+    # As the API's above. Jobs share the pool: one connection per statement, none across a provider call.
+    DATABASE_BUDGET_API_PROCESSES: '6'
+    DATABASE_BUDGET_WORKER_PROCESSES: '2'
+    DATABASE_BUDGET_MARGIN: ${DATABASE_BUDGET_MARGIN:-7}
+    DATABASE_POOL_MAX: ${WORKER_DATABASE_POOL_MAX:-}
+    DATABASE_POOL_CONNECT_TIMEOUT_MS: ${DATABASE_POOL_CONNECT_TIMEOUT_MS:-5000}
     REDIS_URL: redis://redis:6379
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}

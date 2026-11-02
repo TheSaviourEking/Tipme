@@ -1,3 +1,10 @@
+# Current handoff — database connection budget (2 November 2026)
+
+- Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`, committed, not pushed. No migration. Nothing ran against staging or production.
+- One pool per API process, readiness included. `adaptPoolToServer` reads the limit at startup and every minute; 53300 halves the pool for 60 s and backs off new connections. Outbox jobs now retry on database unavailability only.
+- Verified results, untested areas and the owner's options are in `.worktrees/db-budget-report.md`.
+- Assumption to replace: the margin of 7 (5 of Aiven's sessions, 2 spare) until `backend_type` is read on production.
+
 # Current handoff — takeover freeze, second report (2 November 2026)
 
 - Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev`, committed, not pushed. No migration.

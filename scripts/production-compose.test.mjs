@@ -34,7 +34,7 @@ for (const name of readVars) dummyEnv[name] = 'dummy';
 // A path, so the CA mount is a bind mount rather than a named volume.
 dummyEnv.TIPME_HOME = '/srv/dummy-home';
 
-const parse = () => {
+const parse = (env = dummyEnv) => {
   const result = spawnSync(
     'docker',
     [
@@ -47,7 +47,7 @@ const parse = () => {
       '--format',
       'json',
     ],
-    { encoding: 'utf8', env: dummyEnv },
+    { encoding: 'utf8', env },
   );
   assert.equal(result.status, 0, `compose config failed: ${result.stderr}`);
   return JSON.parse(result.stdout);
@@ -298,3 +298,25 @@ test('production.env.example gives the non-secret production values', () => {
     /^# .*payments plan.*bachs-live|^# .*bachs-live.*payments plan/im,
   );
 });
+
+test(
+  'the deploy states the real number of processes sharing the budget',
+  { skip },
+  () => {
+    const config = parse();
+    const colours = ['api-blue', 'api-green'];
+    const workers = ['worker-a', 'worker-b'];
+    const copies = colours.reduce(
+      (sum, name) => sum + config.services[name].deploy.replicas,
+      0,
+    );
+    for (const name of [...colours, ...workers]) {
+      const { environment } = config.services[name];
+      assert.equal(Number(environment.DATABASE_BUDGET_API_PROCESSES), copies);
+      assert.equal(
+        Number(environment.DATABASE_BUDGET_WORKER_PROCESSES),
+        workers.length,
+      );
+    }
+  },
+);

@@ -7,6 +7,7 @@ import { OpsActionsController } from './actions.controller.js';
 import { OpsPayoutIssuesController } from './payout-issues.controller.js';
 import { OpsMetricsController } from './metrics.controller.js';
 import { OpsPagesController } from './pages.controller.js';
+import { OpsDatabaseBudgetController } from './database-budget.controller.js';
 import { OpsWithdrawalsSwitchController } from './withdrawals-switch.controller.js';
 import { OpsSearchController } from './search.controller.js';
 import { OpsMarketController } from './market.controller.js';
@@ -30,6 +31,7 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsMarketController,
     OpsPagesController,
     OpsWithdrawalsSwitchController,
+    OpsDatabaseBudgetController,
     OpsSearchController,
     OpsProvidersController,
     OpsEmailConsoleController,

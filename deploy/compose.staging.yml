@@ -36,6 +36,9 @@ services:
       PREVIEW_COOKIE_DOMAIN: ${PREVIEW_COOKIE_DOMAIN:-}
       PORT: ${PORT:-4000}
       DATABASE_URL: postgres://tipme_runtime:${POSTGRES_RUNTIME_PASSWORD:?}@postgres:5432/tipme
+      # Staging's own Postgres, one API and one worker: its pools size themselves to that.
+      DATABASE_BUDGET_API_PROCESSES: '1'
+      DATABASE_BUDGET_WORKER_PROCESSES: '1'
       REDIS_URL: redis://redis:6379
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}
@@ -136,6 +139,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       RELEASE_KIND: ${RELEASE_KIND:-live}
       DATABASE_URL: postgres://tipme_runtime:${POSTGRES_RUNTIME_PASSWORD:?}@postgres:5432/tipme
+      DATABASE_BUDGET_API_PROCESSES: '1'
+      DATABASE_BUDGET_WORKER_PROCESSES: '1'
       REDIS_URL: redis://redis:6379
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1}

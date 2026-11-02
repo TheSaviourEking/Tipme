@@ -1,4 +1,5 @@
 import { isProductionCopy, parseConfig } from '@tipme/observability';
+import { databaseBudgetSettingsShape } from '@tipme/contracts';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { checkPaymentSettings, paymentSettingsShape } from '@tipme/payments';
@@ -19,6 +20,7 @@ export const workerConfigSchema = z
     RELEASE_KIND: z.enum(['test', 'live']).default('live'),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+    ...databaseBudgetSettingsShape,
     OTEL_EXPORTER_OTLP_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
     OTEL_TRACES_SAMPLER_RATIO: z.coerce.number().min(0).max(1).default(1),
     WORKER_METRICS_PORT: z.coerce
