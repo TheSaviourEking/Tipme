@@ -2,7 +2,7 @@
 
 - Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`.
 - Done: the screens on `/ops`: People, Roles, Approvals, a menu from permissions, a fresh-code prompt on every admin call, waiting and acted-alone wording on every gated action, and pending approvals, staff activity and the switch on the Overview. Releasing a freeze is one person with a fresh code again (spec 6.5). No decision is approved by this work.
-- `tests/e2e/ops-alone.spec.ts` revokes all staff and changes the global switch, so it has its own Playwright project: run it alone with `--project=desktop-alone --no-deps`.
+- Tests tagged `@alone` revoke all staff and some change the global switch, so they have their own Playwright project: run them alone with `--project=desktop-alone --no-deps`.
 - Task 7 fix round 1 and Task 8 (`docs/runbooks/admin-roles.md`) are done, with origin/dev merged: this branch's migrations are now 0064-0070.
 - Next exact step: review, then merge with the payouts plan.
 

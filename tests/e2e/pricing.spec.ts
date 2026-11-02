@@ -1,14 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
-import { enrolOwner, makePagePro } from './ops-helpers';
+import { enrolOwner, noOtherStaff, makePagePro } from './ops-helpers';
 
 // Staff-set pricing (ADR-0014): nothing changes a page's fee except staff, with a reason, and
 // the resulting quote remains financially correct without exposing the recipient's fee details.
 
-test('staff set one page’s fee and grant a fee-free tip; each quote remains correct', async ({
+test('@alone staff set one page’s fee and grant a fee-free tip; each quote remains correct', async ({
   page,
   browser,
 }, testInfo) => {
+  await noOtherStaff();
   const { handle } = await signUpRecipient(page, testInfo);
 
   const staff = await (await browser.newContext()).newPage();

@@ -193,3 +193,11 @@ export async function makePagePro(
   await expect(staff.getByText(`@${handle} is now Pro`)).toBeVisible();
   return staff;
 }
+
+/** For a test that needs to be the only staff: serious actions then run at once (spec 6.5). */
+export async function noOtherStaff() {
+  await sql(`UPDATE staff SET revoked_at = now() WHERE revoked_at IS NULL`);
+  await sql(
+    `UPDATE approval_requests SET status = 'cancelled' WHERE status = 'pending'`,
+  );
+}

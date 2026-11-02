@@ -3,7 +3,7 @@ import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { codeFor, codeWentStale, enrolOwner, sql } from './ops-helpers';
 
 // One admin, truly alone: everyone else's staff row goes, and the global switch really changes.
-// So this has its own project, run after the others (playwright.config.ts).
+// So @alone tests have their own project, run after the others (playwright.config.ts).
 test.describe.configure({ mode: 'serial' });
 
 const REASON = 'Checked with the person on a call today';
@@ -16,7 +16,7 @@ test.beforeEach(async () => {
   await sql(`UPDATE withdrawals_switch SET paused = false`);
 });
 
-test('one admin alone does everything at once, sees that they acted alone, and is never told to find someone', async ({
+test('@alone one admin alone does everything at once, sees that they acted alone, and is never told to find someone', async ({
   page,
   browser,
 }, testInfo) => {
@@ -58,7 +58,7 @@ test('one admin alone does everything at once, sees that they acted alone, and i
   await expectAccessible(page);
 });
 
-test('switching off needs no code and works first time; switching on asks for one', async ({
+test('@alone switching off needs no code and works first time; switching on asks for one', async ({
   page,
 }, testInfo) => {
   const owner = await enrolOwner(page, testInfo);
@@ -114,7 +114,7 @@ test('switching off needs no code and works first time; switching on asks for on
   await expect(control.getByText('Withdrawals: on.')).toBeVisible();
 });
 
-test('a stale session can freeze and end sessions at once, and releasing asks for a code', async ({
+test('@alone a stale session can freeze and end sessions at once, and releasing asks for a code', async ({
   page,
   browser,
 }, testInfo) => {
