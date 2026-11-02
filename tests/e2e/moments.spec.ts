@@ -47,7 +47,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
       response.url().endsWith('/v1/tip-quotes') &&
       response.request().method() === 'POST',
   );
-  await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
+  await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
   // Milestones grant nothing by themselves: the quote still uses the normal 10% (ADR-0014).
   const quote = await (await quoteResponse).json();
   expect(
@@ -70,7 +70,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
     visitor.getByRole('button', { name: 'Add to the celebration' }),
   ).toHaveAttribute('aria-pressed', 'true');
   await expectAccessible(visitor);
-  await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
+  await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible();
   await visitor.getByRole('button', { name: /^Tip ₦/ }).click();
   await visitor.waitForURL(/\/mock-checkout\//);

@@ -34,7 +34,7 @@ async function tip(
   } = {},
 ) {
   await page.goto(`/@${handle}`);
-  await page.getByRole('radio', { name: amount }).check();
+  await page.getByRole('radio', { name: amount }).click();
   if (purpose)
     await page
       .getByLabel('What is this tip for? (optional)')
@@ -75,7 +75,7 @@ test('the tip form shows only the payer total before continuing', async ({
   page,
 }) => {
   await page.goto('/@ada');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await expect(page.locator('.tip-breakdown')).toHaveCount(0);
   await expect(
@@ -206,7 +206,7 @@ test('a double tap on Tip creates one tip', async ({ page }) => {
       keys.add(request.headers()['idempotency-key'] ?? '');
   });
   await page.goto('/@tobi');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await page.getByRole('button', { name: /^Tip ₦/ }).dblclick();
   await page.waitForURL(/\/mock-checkout\//);
@@ -247,7 +247,7 @@ test('the receipt survives a reload but needs its private link elsewhere', async
 test('status and pretend provider pages reflow at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto('/@tobi');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   expect(await fitsViewport(page)).toBe(true);
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
@@ -292,7 +292,7 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
   page,
 }) => {
   await page.goto('/@tobi');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
@@ -341,24 +341,26 @@ test('fix: going back from the provider page leaves the form usable', async ({
   page,
 }) => {
   await page.goto('/@tobi');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
   await page.goBack();
-  // What is shown matches what would be sent: no restored choice without its quote.
+  // What is shown matches what would be sent: the page starts again on its NGN 2,000, with no
+  // price carried over from the earlier visit. Nothing is quoted until the person asks.
+  await expect(page.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
+  await expect(page.getByText(/You pay/)).toHaveCount(0);
   await expect(
-    page.getByRole('radio', { name: '2,000 NGN' }),
-  ).not.toBeChecked();
-  await expect(page.getByRole('button', { name: /^Tip$/ })).toBeEnabled();
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+    page.getByRole('button', { name: /^Tip ₦2,000$/ }),
+  ).toBeEnabled();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Tip ₦2,000/ })).toBeEnabled();
 });
 
 async function chooseTobi2000(page: Page) {
   await page.goto('/@tobi');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
 }
 

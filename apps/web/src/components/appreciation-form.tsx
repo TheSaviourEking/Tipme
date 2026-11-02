@@ -95,7 +95,13 @@ export function AppreciationForm({
   const options = amountOptions(tipAmounts);
   const presets = options.presets;
   const [joining, setJoining] = useState(false);
-  const [selection, setSelection] = useState('');
+  // Starts on the owner's NGN 2,000 where this page offers it (nothing otherwise). This is only a
+  // starting point: nothing is quoted until the person chooses, taps the amount again or taps
+  // Tip, so a page view never creates a quote, and `amount_selected` counts people, not defaults.
+  const [selection, setSelection] = useState(
+    options.defaultMinor === null ? '' : String(options.defaultMinor),
+  );
+  const [chosen, setChosen] = useState(options.defaultMinor === null);
   const [custom, setCustom] = useState('');
   const [message, setMessage] = useState('');
   const [payerName, setPayerName] = useState('');
@@ -150,7 +156,7 @@ export function AppreciationForm({
 
   // Presets quote at once; a typed amount waits until typing pauses.
   useEffect(() => {
-    if (amount === null) {
+    if (amount === null || !chosen) {
       // Drop any answer still in flight for an amount that is no longer chosen.
       latestQuote.current += 1;
       return;
@@ -162,11 +168,11 @@ export function AppreciationForm({
     return () => clearTimeout(timer);
     // fetchQuote is recreated each render; the amount is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amount, selection]);
+  }, [amount, selection, chosen]);
 
   // What is on screen always belongs to the amount chosen now; an older answer counts as loading.
   const shown: QuoteState =
-    amount === null
+    amount === null || !chosen
       ? { kind: 'idle' }
       : quote.kind === 'idle' ||
           (quote.kind === 'ready'
@@ -191,6 +197,12 @@ export function AppreciationForm({
     }
     setError('');
     setNotice('');
+    if (!chosen) {
+      // The starting amount, not yet confirmed by the person: this tap fetches its total and shows
+      // it (in the bar, and read out), and the next tap pays. Nothing is created until then.
+      setChosen(true);
+      return;
+    }
     // Never pay without a current server quote for exactly this amount.
     const current =
       shown.kind === 'ready' ? shown.quote : await fetchQuote(amount);
@@ -434,7 +446,15 @@ export function AppreciationForm({
                 checked={selection === String(preset.minor)}
                 onChange={() => {
                   setSelection(String(preset.minor));
+                  setChosen(true);
                   setError('');
+                  track('amount_selected', { surface: 'profile', handle });
+                }}
+                // Tapping the amount already shown is a choice too: it asks for its total.
+                onClick={() => {
+                  // A different amount is counted by onChange; this is only the one already shown.
+                  if (chosen || selection !== String(preset.minor)) return;
+                  setChosen(true);
                   track('amount_selected', { surface: 'profile', handle });
                 }}
               >
@@ -448,6 +468,7 @@ export function AppreciationForm({
               checked={selection === 'other'}
               onChange={() => {
                 setSelection('other');
+                setChosen(true);
                 setError('');
               }}
             >
@@ -572,14 +593,18 @@ export function AppreciationForm({
           </Button>
         </TipAction>
         <p className="composer-disclaimer">
-          {/* A block of its own; outside live mode it renders nothing, so no break after it. */}
-          {pilotNotice}
-          {copy.formDisclaimer && (
-            <>
-              {copy.formDisclaimer}
-              <br />
-            </>
-          )}
+          {/* The mode wording: on a phone with the Tip bar, the bar carries it and CSS removes this
+              copy, so it is seen and read once. A block of its own; outside live mode the pilot
+              notice renders nothing, so no break after it. */}
+          <span className="composer-disclaimer__mode">
+            {pilotNotice}
+            {copy.formDisclaimer && (
+              <>
+                {copy.formDisclaimer}
+                <br />
+              </>
+            )}
+          </span>
           You’ll confirm on the payment provider’s page next.
         </p>
         {onProfile && copy.formTrust && (

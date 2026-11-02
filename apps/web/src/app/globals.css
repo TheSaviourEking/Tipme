@@ -1638,6 +1638,17 @@ body:has(.profile-page) .brand__mark {
       text-align: center;
     }
 
+    .profile-composer .composer-action__notice a {
+      color: var(--text-primary);
+      text-underline-offset: 3px;
+    }
+
+    /* The bar carries the mode wording on these phones, so the copy under the button goes (from
+       sight and from screen readers alike): the person meets it once, beside the Tip action. */
+    .profile-composer .composer-disclaimer__mode {
+      display: none;
+    }
+
     .profile-composer .composer-action .tip-quote {
       min-height: 0;
       margin: 0 0 var(--space-1);

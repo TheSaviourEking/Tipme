@@ -37,7 +37,27 @@ test('with Global Privacy Control on, the page sends no analytics at all', async
     if (request.url().includes('/v1/events')) sent.push(request.url());
   });
   await page.goto('/@ada');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await page.waitForTimeout(500);
   expect(sent).toEqual([]);
+});
+
+test('the starting NGN 2,000 is not counted as a choice; tapping an amount is', async ({
+  page,
+}) => {
+  const sent: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/v1/events'))
+      sent.push(request.postData() ?? '');
+  });
+  await page.goto('/@ada');
+  await expect(page.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
+  // Let the page's own events (the view) go out first.
+  await expect.poll(() => sent.length).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+  expect(sent.some((body) => body.includes('amount_selected'))).toBe(false);
+  await page.getByRole('radio', { name: '5,000 NGN' }).click();
+  await expect
+    .poll(() => sent.filter((body) => body.includes('amount_selected')).length)
+    .toBe(1);
 });

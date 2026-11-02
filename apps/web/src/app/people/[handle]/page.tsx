@@ -92,7 +92,14 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                 pilotNotice={<PilotNotice />}
                 {...(pilotNoticeShown(process.env, mode)
                   ? {
-                      barNotice: `${PILOT_NOTICE_TEXT} ${PILOT_NOTICE_SUPPORT_EMAIL}`,
+                      barNotice: (
+                        <>
+                          {PILOT_NOTICE_TEXT}{' '}
+                          <a href={`mailto:${PILOT_NOTICE_SUPPORT_EMAIL}`}>
+                            {PILOT_NOTICE_SUPPORT_EMAIL}
+                          </a>
+                        </>
+                      ),
                     }
                   : {})}
                 recipient={firstName}

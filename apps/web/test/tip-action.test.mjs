@@ -6,6 +6,8 @@ import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+// The bar's notice slot is the one copy a phone shows (and a screen reader hears), so it is not
+// hidden from assistive technology; the copy in the panel is removed by CSS on the same phones.
 // The bar's notice slot takes whatever notice the form holds, so a later notice (the live pilot
 // notice) reaches it without changing the bar. TSX: compile this one file and render it.
 const source = new URL('../src/components/tip-action.tsx', import.meta.url);
@@ -37,7 +39,7 @@ test('a notice node of any kind sits directly above the button', () => {
   );
   assert.match(
     html,
-    /<p>You pay<\/p><p class="composer-action__notice" aria-hidden="true"><span id="stand-in">Pilot terms apply\.<\/span><\/p><button>/,
+    /<p>You pay<\/p><p class="composer-action__notice"><span id="stand-in">Pilot terms apply\.<\/span><\/p><button>/,
   );
 });
 

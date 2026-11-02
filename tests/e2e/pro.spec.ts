@@ -64,7 +64,7 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
   await expect(visitor.getByRole('radio', { name: '1,000 NGN' })).toHaveCount(
     0,
   );
-  await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
+  await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible();
   await expect(visitor.locator('.tip-breakdown')).toHaveCount(0);
   await visitor.getByRole('radio', { name: 'Other amount' }).check();

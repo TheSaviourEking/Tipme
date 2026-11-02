@@ -347,6 +347,18 @@ test.describe('the page in each payment state', () => {
         expect(noticeBox.y).toBeGreaterThan(tipBox.y);
         expect(noticeBox.y - (tipBox.y + tipBox.height)).toBeLessThan(80);
       }
+      // One copy to the eye and one to a screen reader, on a phone (the bar's) and elsewhere (the
+      // line under the button): the words, and the help link, are each there once.
+      await expect(
+        page
+          .getByText('TipMe is in a pilot. Payments are real.')
+          .locator('visible=true'),
+      ).toHaveCount(1);
+      const heard = await panel.ariaSnapshot();
+      expect(
+        heard.split('TipMe is in a pilot. Payments are real.').length - 1,
+      ).toBe(1);
+      expect(heard.split('link "support@usetipme.xyz"').length - 1).toBe(1);
       expect(await page.locator('body').innerText()).not.toMatch(/bachs/i);
       // Not live (test mode, or closed): the setting is on but there is nothing real to warn about.
       for (const mode of ['test', 'closed'] as const) {
@@ -621,7 +633,7 @@ test('on a phone the Tip button stays in view and the form still works @mobile',
   await inView();
   await page.evaluate(() => scrollTo({ top: 500, behavior: 'instant' }));
   await inView();
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(tipButton(page)).toHaveText(/^Tip ₦2,000/);
   await expect(page.getByText(/You pay/)).toBeVisible();
   await inView();
@@ -653,9 +665,11 @@ test('the Tip bar never covers a focused field, an error or the Report link @mob
 }) => {
   await page.goto('/@ada');
   const bar = page.locator('.composer-action');
-  // Tapping Tip with nothing chosen: the error is shown clear of the bar.
+  // Tapping Tip with a missing amount (the page starts on 2,000, so choose Other and leave it
+  // empty): the error is shown clear of the bar.
+  await page.getByRole('radio', { name: 'Other amount' }).click();
   await tipButton(page).click();
-  const error = page.getByText('Choose an amount or enter your own.');
+  const error = page.getByText(/Enter an amount of NGN 1,000 or more/);
   await expect(error).toBeVisible();
   await expect
     .poll(() => clearOfBar(page, '.appreciation-card .tm-field-error'))
@@ -720,7 +734,7 @@ test('a failed start is shown clear of the Tip bar @mobile', async ({
   page,
 }) => {
   await page.goto('/@ada');
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(page.getByText(/You pay/)).toBeVisible();
   await page.route('**/v1/tip-intents', (route) =>
     route.fulfill({
@@ -810,7 +824,7 @@ test('the bar names the amount and shows the confirmed total beside it @mobile',
       behavior: 'instant',
     });
   });
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(tipButton(page)).toHaveText(/^Tip ₦2,000/);
   await expect(total).toHaveText(/You pay/);
   await expect(total).toBeInViewport({ ratio: 1 });
@@ -826,30 +840,40 @@ test('the bar names the amount and shows the confirmed total beside it @mobile',
   await expect.poll(() => clearOfBar(page, '.profile-foot')).toBe(true);
 });
 
-test('the notice under the Tip button is also directly above it in the bar @mobile', async ({
+const WORDS = 'TipMe is in test mode: no real money moves yet.';
+/** How many times the words are in what a screen reader is given for the tip panel. */
+const heardTimes = async (page: Page) =>
+  (await page.locator('[data-tip-panel]').ariaSnapshot()).split(WORDS).length -
+  1;
+
+test('on a phone the mode wording is shown once, in the bar directly above the button, and heard once @mobile', async ({
   page,
 }) => {
   await page.goto('/@ada');
   const slot = page.locator('.composer-action .composer-action__notice');
-  await expect(slot).toHaveText(
-    'TipMe is in test mode: no real money moves yet.',
-  );
+  await expect(slot).toHaveText(WORDS);
   await expect(slot).toBeInViewport({ ratio: 1 });
   const notice = await slot.boundingBox();
   const button = await tipButton(page).boundingBox();
   expect(notice!.y + notice!.height).toBeLessThanOrEqual(button!.y);
-  // Read once by a screen reader, from the block under the button.
-  await expect(slot).toHaveAttribute('aria-hidden', 'true');
+  // The copy under the button is gone from sight and from the accessibility tree: one copy only.
+  await expect(page.locator('.composer-disclaimer__mode')).toBeHidden();
+  await expect(page.getByText(WORDS).locator('visible=true')).toHaveCount(1);
+  expect(await heardTimes(page)).toBe(1);
+  // The rest of the line under the button stays.
   await expect(page.locator('.composer-disclaimer')).toContainText(
-    'TipMe is in test mode',
+    'You’ll confirm on the payment provider’s page next.',
   );
 });
 
-test('at desktop width the slot stays out: the wording sits under the button', async ({
+test('at desktop width the bar copy stays out: the wording sits under the button, seen and heard once', async ({
   page,
 }) => {
   await page.goto('/@ada');
   await expect(page.locator('.composer-action__notice')).toBeHidden();
+  await expect(page.locator('.composer-disclaimer__mode')).toHaveText(WORDS);
+  await expect(page.locator('.composer-disclaimer__mode')).toBeVisible();
+  expect(await heardTimes(page)).toBe(1);
 });
 
 test('with no notice to show, the bar has no empty slot @mobile', async ({
@@ -874,7 +898,7 @@ test('at 1280x720 the Tip button and its total line are in view, and choosing mo
   const button = tipButton(page);
   await expect(button).toBeInViewport({ ratio: 1 });
   const before = await button.boundingBox();
-  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await page.getByRole('radio', { name: '2,000 NGN' }).click();
   const total = page.locator('.tip-payment-total');
   await expect(total).toBeInViewport({ ratio: 1 });
   await expect(button).toBeInViewport({ ratio: 1 });

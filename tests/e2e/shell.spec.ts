@@ -53,10 +53,16 @@ test('profile supports keyboard amount selection, validation and a server quote'
       name: 'Portrait of Ada Okafor, a fictional demo recipient',
     }),
   ).toBeVisible();
+  // Owner, 2 Nov 2026: the page starts on NGN 2,000, visibly and for assistive technology. The
+  // page view itself quotes nothing, so no price exists until the person asks for one.
+  await expect(page.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Tip ₦2,000' })).toBeVisible();
+  await expect(page.getByText(/You pay/)).toHaveCount(0);
+  expect(posts).toEqual([]);
+  // The first tap on Tip fetches the total for that amount and shows it; it pays nothing.
   await page.getByRole('button', { name: /^Tip/ }).click();
-  await expect(
-    page.getByText('Choose an amount or enter your own.'),
-  ).toBeVisible();
+  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
+  expect(page.url()).toContain('/@ada');
   const first = page.getByRole('radio', { name: '1,000 NGN' });
   await first.focus();
   await page.keyboard.press('Space');

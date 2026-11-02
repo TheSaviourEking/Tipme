@@ -51,7 +51,7 @@ test('staff set one page’s fee and grant a fee-free tip; each quote remains co
           response.url().endsWith('/v1/tip-quotes') &&
           response.request().method() === 'POST',
       );
-      await visitor.getByRole('radio', { name: '2,000 NGN' }).check();
+      await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
       await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible({
         timeout: 2000,
       });
