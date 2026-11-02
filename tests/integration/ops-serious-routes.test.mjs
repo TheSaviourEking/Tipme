@@ -380,7 +380,9 @@ for (const [name, setup] of Object.entries(routes)) {
   });
 }
 
-test('releasing a freeze waits too', async () => {
+// Spec 6.5: releasing a pause is one authorised person plus the log, with a fresh code. The ruling's
+// cost is one person lifting it, so the log and the alert must both be there.
+test('releasing a freeze is one person with a fresh code, audited and alerted, with a second person available', async () => {
   const { id } = await profile();
   const frozen = await call(
     stack.api,
@@ -393,22 +395,93 @@ test('releasing a freeze waits too', async () => {
   );
   assert.equal(frozen.status, 200);
   const { issueId } = (await frozen.json()).data;
-  const asked = await call(
+  const release = () =>
+    call(stack.api, 'POST', `/v1/ops/issues/${issueId}/resolve`, first.cookie, {
+      reason: REASON,
+      outcome: 'account_secured',
+      bankAndSignInChecked: true,
+    });
+  await q(`UPDATE ops_sessions SET last_totp_at = ${stale}`);
+  const noCode = await release();
+  assert.equal(noCode.status, 403);
+  assert.equal((await noCode.json()).error.code, 'FRESH_CODE_REQUIRED');
+  assert.equal(await issueOutcome(issueId), null);
+  await q(`UPDATE ops_sessions SET last_totp_at = now()`);
+
+  const released = await release();
+  assert.equal(released.status, 200, await released.clone().text());
+  assert.deepEqual((await released.json()).data, { resolved: true });
+  assert.equal(await issueOutcome(issueId), 'account_secured');
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM approval_requests WHERE payload->>'issueId' = $1`,
+        [issueId],
+      )
+    ).length,
+    0,
+    'no request was asked for',
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM audit_events WHERE action = 'issue.resolved' AND subject_id = $1`,
+        [issueId],
+      )
+    ).length,
+    1,
+  );
+  const [alert] = await q(
+    `SELECT payload FROM outbox_events WHERE event_type = 'ops.freeze_released' AND aggregate_id = $1`,
+    [issueId],
+  );
+  assert.equal(alert?.payload.requestedBy, firstId);
+});
+
+test('a takeover can only close as released, and other money closes still wait with a second person', async () => {
+  const { id } = await profile();
+  const frozen = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/pages/${id}/withdrawal-freeze`,
+    first.cookie,
+    { reason: REASON },
+  );
+  const { issueId } = (await frozen.json()).data;
+  const wrong = await call(
     stack.api,
     'POST',
     `/v1/ops/issues/${issueId}/resolve`,
     first.cookie,
-    {
-      reason: REASON,
-      outcome: 'account_secured',
-      bankAndSignInChecked: true,
-    },
+    { reason: REASON, outcome: 'written_off' },
+  );
+  assert.equal(wrong.status, 422);
+  assert.equal(await issueOutcome(issueId), null);
+  const unchecked = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/issues/${issueId}/resolve`,
+    first.cookie,
+    { reason: REASON, outcome: 'account_secured' },
+  );
+  assert.equal(unchecked.status, 422);
+  assert.equal(await issueOutcome(issueId), null);
+
+  const other = await ops.openIssue(database.db, {
+    dedupeKey: `payment_reversed.${randomUUID()}`,
+    kind: 'payment_reversed',
+    subject: { profileId: id },
+    now: new Date(),
+  });
+  const asked = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/issues/${other.id}/resolve`,
+    first.cookie,
+    { reason: REASON, outcome: 'written_off' },
   );
   assert.equal(asked.status, 202);
-  assert.equal(await issueOutcome(issueId), null);
-  const { data } = await asked.json();
-  assert.equal((await approveThroughApi(data.requestId)).status, 200);
-  assert.equal(await issueOutcome(issueId), 'account_secured');
+  assert.equal(await issueOutcome(other.id), null);
 });
 
 test('harmless changes apply at once: a role edit, a move to a harmless role', async () => {

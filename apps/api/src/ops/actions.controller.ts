@@ -114,8 +114,17 @@ export class OpsActionsController {
     const issue = await issueById(this.database.db, uuidParam(id));
     if (issue?.severity === 'money' && !ops.permissions.has('payouts.resolve'))
       throw new CodedHttpException(403, 'FORBIDDEN');
+    // Releasing a freeze is one person with the route's fresh code (spec 6.5); the operation demands
+    // the written check, and it is audited and alerted. Nothing else about a takeover closes it.
+    const releasesFreeze =
+      issue?.kind === 'account_takeover_reported' &&
+      body.outcome === 'account_secured';
     // Closing money by hand takes a second person, when there is one. Only this counts as asking.
-    if (issue?.severity === 'money' && issue.status === 'open') {
+    if (
+      issue?.severity === 'money' &&
+      issue.status === 'open' &&
+      !releasesFreeze
+    ) {
       await this.rateLimit.consumeForPerson('ops_request', ops.userId);
       const outcome = await requestSeriousAction(this.database.db, {
         name: 'money_issue.close',

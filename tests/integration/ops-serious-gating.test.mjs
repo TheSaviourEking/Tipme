@@ -1406,6 +1406,11 @@ test('I5, M4: each alert event reaches the webhook, and an unset route logs unde
       'fee.free',
     ],
     [
+      'ops.freeze_released',
+      { action: 'freeze_released', requestedBy: requester },
+      'freeze_released',
+    ],
+    [
       'ops.approval_closed',
       {
         action: 'fee.free',

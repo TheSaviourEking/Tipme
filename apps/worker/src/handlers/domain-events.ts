@@ -23,6 +23,7 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'ops.approval_ran',
   'ops.approval_closed',
   'ops.staff_changed',
+  'ops.freeze_released',
   'provider_event.conflict',
   'payment.unresolved',
   'payment.conflict',
@@ -43,6 +44,7 @@ const POSTED_ONLY_EVENTS: ReadonlySet<string> = new Set([
   'ops.approval_ran',
   'ops.approval_closed',
   'ops.staff_changed',
+  'ops.freeze_released',
 ]);
 
 export interface StaffAlert {

@@ -16,6 +16,7 @@ import {
   type IssueSeverity,
   type IssueSubject,
 } from '../schema.js';
+import { enqueueOutbox } from './outbox.js';
 import { recordAudit } from './audit.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
@@ -935,6 +936,16 @@ export function resolveIssue(
         now: input.now ?? new Date(),
       });
       if (!resolved) throw new OperationError('ISSUE_RESOLVED');
+      // One person can lift a freeze, so it is never quiet.
+      if (takeover)
+        await enqueueOutbox(tx, {
+          eventType: 'ops.freeze_released',
+          aggregateId: input.issueId,
+          payload: {
+            action: 'freeze_released',
+            requestedBy: input.staffUserId,
+          },
+        });
     }),
   );
 }
