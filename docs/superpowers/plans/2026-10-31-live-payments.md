@@ -420,6 +420,8 @@ Copy (owner reviews before activation): "TipMe is in a pilot. Payments are real.
 
 Preconditions before the switch (in addition to the checklist below):
 
+- If there is more than one admin, serious money actions are behind second-person approval (`docs/runbooks/admin-roles.md`).
+
 - No live payment account has `manual_payouts_at` null (Task 8's sweep has run; check with a query and record the count).
 - `REWARD_CASH_BUDGET_MINOR_PER_MONTH` is resolved (D-05): production keeps it at 0 unless the owner has decided otherwise, and the worker refuses any other value until the config rule is lifted.
 - Remove the temporary `PAYMENTS_LIVE_ENABLED=true` fence in `packages/payments/src/settings.ts` (`LIVE_PAYMENTS_FENCED` and its check), update the `production/bachs-live/true` row of the settings matrix test and the API and worker config tests, and update `tests/release/read-only.spec.ts`'s `paymentsLive` expectation for a live copy.

@@ -9,7 +9,7 @@
 - Least-privilege DB and infrastructure IAM; separate credentials for local/staging/prod; rotate secrets; never commit real `.env`.
 - Malware-safe image uploads: MIME sniff, size limits, transformations, storage policy, signed uploads and public delivery boundaries.
 - Encryption in transit, at-rest provider protections, PII minimization and retention deletion procedures.
-- Strong staff authentication, audit logs, controlled support access, two-person approval for sensitive finance adjustments.
+- Strong staff authentication, audit logs, controlled support access, two-person approval for serious actions when a second person is available (`docs/runbooks/admin-roles.md`).
 - No card PAN/CVV handling. Outsource sensitive card data to compliant payment processor.
 
 ## Abuse prevention

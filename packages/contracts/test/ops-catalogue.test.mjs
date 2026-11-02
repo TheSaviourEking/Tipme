@@ -50,3 +50,19 @@ test('the serious actions are the agreed ten', () => {
   assert.equal(new Set(SERIOUS_ACTIONS).size, 10);
   assert.ok(SERIOUS_ACTIONS.includes('staff.grant_owner'));
 });
+
+test('the runbook names every permission and serious action', () => {
+  const runbook = readFileSync(
+    new URL('../../../docs/runbooks/admin-roles.md', import.meta.url),
+    'utf8',
+  );
+  for (const name of [...OPS_PERMISSIONS, ...SERIOUS_ACTIONS])
+    assert.ok(runbook.includes(`\`${name}\``), `${name} is not in the runbook`);
+  for (const rule of [
+    /one person with a fresh code/,
+    /Stopping takes no code/,
+    /One admin alone/,
+    /approves a regulatory/,
+  ])
+    assert.match(runbook, rule);
+});

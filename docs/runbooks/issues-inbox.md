@@ -4,7 +4,9 @@
 
 ## Getting in
 
-1. **Become staff (once):** run `pnpm ops:grant-owner --email <your address>` against the local database. It prints a one-time **enrolment code**, valid 30 minutes.
+People, roles, approvals, lost phones and a locked-out owner are in `docs/runbooks/admin-roles.md`. A money issue closed by hand waits for a second person when there is one, so "Waiting for a second person" means it hasn't closed yet. Releasing a freeze doesn't wait.
+
+1. **Become staff (once):** an owner adds you under People and you get an emailed link. For the first owner, or locally, run `pnpm ops:grant-owner --email <your address>`, which prints a one-time **enrolment code**, valid 30 minutes.
 2. **Sign in:** open `/ops` and sign in with that number (6-digit code, as usual).
 3. **Set up the authenticator:** enter the enrolment code, scan the QR code with an authenticator app, and enter its first code.
 4. **Later visits:** enter the current code from the app. Access lasts 12 hours at most, or 1 hour idle, and ends when you sign out.
