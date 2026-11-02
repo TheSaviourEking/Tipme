@@ -604,7 +604,7 @@ test('it says when extra alignment patterns would land on a mosaic face, and ref
     alignmentOnFace: true,
   });
   assert.throws(() => qrMosaicFit('http://www.usetipme.xyz/@dr7'), RangeError);
-  // Advice only: the long link still renders and scans.
+  // Advice only: the long link still renders (and scans in software), but the page promises nothing.
   const url = longHome(30);
   const png = await renderQrArt({
     id: 'mosaic',
@@ -618,4 +618,40 @@ test('it says when extra alignment patterns would land on a mosaic face, and ref
 
 test('the ids a page may save are exactly the drawn designs', () => {
   assert.deepEqual([...PRO_QR_STYLES].sort(), QR_ART.map((a) => a.id).sort());
+});
+
+test('a public preview that fails to draw is never cached, and a good one is', async () => {
+  const { QrArtPreviewController } =
+    await import('../dist/qr/qr-art.controller.js');
+  const answer = () => {
+    const sent = { headers: {}, body: undefined };
+    const response = {
+      status: () => response,
+      set: (headers) => {
+        Object.assign(sent.headers, headers);
+        return response;
+      },
+      send: (body) => {
+        sent.body = body;
+      },
+    };
+    return { sent, response };
+  };
+  // An origin the drawing refuses (plain http outside local runs), so the draw rejects.
+  const broken = new QrArtPreviewController({
+    WEB_ORIGIN: 'http://example.test',
+    NODE_ENV: 'production',
+  });
+  const failed = answer();
+  await assert.rejects(broken.preview('heart.png', failed.response));
+  assert.equal(failed.sent.headers['Cache-Control'], undefined);
+  assert.equal(failed.sent.body, undefined);
+  const working = new QrArtPreviewController({
+    WEB_ORIGIN: ORIGIN,
+    NODE_ENV: 'production',
+  });
+  const good = answer();
+  await working.preview('heart.png', good.response);
+  assert.match(good.sent.headers['Cache-Control'], /public, max-age=86400/);
+  assert.ok(Buffer.isBuffer(good.sent.body));
 });

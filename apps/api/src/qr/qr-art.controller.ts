@@ -93,7 +93,7 @@ export class QrArtController {
           }).alignmentOnFace
         )
           note =
-            'Your link is on the long side, so the code has more detail. A few small squares show over your photo, and it still scans.';
+            'Your link is on the long side, so the code has more detail. A few small squares show over your photo. Test-scan it before you print.';
       } catch {
         note = null;
       }
@@ -260,6 +260,9 @@ export class QrArtPreviewController {
       // A failed draw is not kept.
       png.catch(() => this.drawn.delete(art.id));
     }
+    // Awaited before any header is set: a failed draw must reach the error filter without a
+    // day of caching on it.
+    const bytes = await png;
     response
       .status(200)
       .set({
@@ -268,6 +271,6 @@ export class QrArtPreviewController {
         'X-Content-Type-Options': 'nosniff',
         'X-Qr-Preview': '1',
       })
-      .send(await png);
+      .send(bytes);
   }
 }

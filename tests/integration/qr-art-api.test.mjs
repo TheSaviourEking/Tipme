@@ -239,6 +239,9 @@ test('the mosaic carries a plain note when a long link puts patterns on the face
   const items = (await (await art(long.cookie, '')).json()).data.items;
   const mosaic = items.find((item) => item.id === 'mosaic');
   assert.match(mosaic.note ?? '', /long side/);
+  // Not tested on a phone, so the note must not promise a scan; it says to test before printing.
+  assert.doesNotMatch(mosaic.note ?? '', /still scans|always scans/i);
+  assert.match(mosaic.note ?? '', /test-scan it before you print/i);
   assert.ok(
     items.filter((item) => item.id !== 'mosaic').every((i) => i.note === null),
   );
