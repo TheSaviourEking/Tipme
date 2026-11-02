@@ -5,6 +5,12 @@
 - Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
 - Review round done (partner line beside Tip, phone Go key, M1-M5). Next exact step: regenerate `profile-desktop-desktop-linux.png` and `profile-mobile-mobile-linux.png` from CI's render, then open the PR to `dev`.
 
+# Current handoff — takeover freeze, second report (2 November 2026)
+
+- Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev`, committed, not pushed. No migration.
+- `freezeWithdrawals` now reads the hold's issue status under the profile lock. Closed: new issue, new hold, old row ended, `withdrawals.freeze_reopened` audited. Every new issue queues `withdrawals.freeze_opened`, which the worker posts to the alert route with ids only.
+- Verified results, untested areas and the read-only production queries are in `.worktrees/freeze-fix-report.md`. Nothing ran against staging or production.
+
 # Current handoff — home page LCP, second pass (2 November 2026)
 
 - Branch/worktree: `fix/home-lcp-2` / `.worktrees/home-lcp-2`, from `origin/dev`, committed, not pushed. Web-only change: `apps/web/src/app/page.tsx` (`sizes`) and `apps/web/next.config.ts` (`images.deviceSizes`). No payments code touched.

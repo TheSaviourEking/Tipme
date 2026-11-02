@@ -5,6 +5,12 @@
 - Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
 - Review round done (partner line beside Tip, phone Go key, M1-M5). Next exact step: regenerate `profile-desktop-desktop-linux.png` and `profile-mobile-mobile-linux.png` from CI's render, then open the PR to `dev`.
 
+# Current task — takeover freeze, second report (2 November 2026)
+
+- Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev` at `a232891`. Committed, not pushed.
+- Finding C1: a report after the takeover issue closed, with another hold issue open, was answered `already_frozen` on the closed issue, and closing the other issue then lifted the freeze. Now it opens a new issue, moves the hold to it and alerts staff. No migration. Full report: `.worktrees/freeze-fix-report.md`.
+- Next: owner reviews and opens the PR; run the report's read-only detection queries in production only if the owner chooses to. `feat/admin-roles` must take this before it merges.
+
 # Current task — withdrawal hold clock skew (2 November 2026)
 
 - Branch/worktree: `fix/hold-clock-skew` / `.worktrees/hold-clock`, from `origin/dev` at `53edd1c`. Committed, not pushed.

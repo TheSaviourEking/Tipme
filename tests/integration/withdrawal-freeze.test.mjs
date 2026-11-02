@@ -311,6 +311,48 @@ test('a second report while frozen keeps its written reason in the audit, and th
   assert.equal(audit.subject_id, TOBI);
 });
 
+test('a new report after the last closed, with a reversal still holding, opens an issue only it can release', async () => {
+  const { issueId: first } = (await (await freeze()).json()).data;
+  const [{ id: reversal }] = await rows(
+    `INSERT INTO issues (id, dedupe_key, kind, severity, subject, summary, opened_at)
+     VALUES ($1, $2, 'payment_reversed', 'money', $3, 'x', now()) RETURNING id`,
+    [randomUUID(), `test.${randomUUID()}`, { profileId: TOBI }],
+  );
+  await resolve(first, {
+    outcome: 'account_secured',
+    bankAndSignInChecked: true,
+  });
+  const report = (await (await freeze()).json()).data;
+  assert.equal(report.state, 'frozen');
+  assert.notEqual(report.issueId, first);
+  const screen = await fetch(
+    `${stack.api}/v1/ops/pages/${TOBI}/withdrawal-freeze`,
+    { headers: { cookie: owner.cookie } },
+  );
+  assert.deepEqual((await screen.json()).data, { issueId: report.issueId });
+  await resolve(reversal, { outcome: 'resolved_by_provider' });
+  assert.equal(await withdrawalsFrozen(database.db, { profileId: TOBI }), true);
+  assert.deepEqual(
+    await rows(
+      `SELECT id FROM issues WHERE kind = 'account_takeover_reported' AND status = 'open'`,
+    ),
+    [{ id: report.issueId }],
+  );
+  assert.equal(
+    (
+      await resolve(report.issueId, {
+        outcome: 'account_secured',
+        bankAndSignInChecked: true,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    await withdrawalsFrozen(database.db, { profileId: TOBI }),
+    false,
+  );
+});
+
 test('staff can end all of an account’s sessions, audited; not a staff account, and only with the permission', async () => {
   const person = await signIn(stack.api, '+2348031110023');
   const me = () =>
