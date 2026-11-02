@@ -86,6 +86,15 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(payouts)
     .where(eq(payouts.id, payoutId));
   if (!payout) return null;
+  // Its age by the clock that set created_at: the app's may differ, and must not shorten the wait.
+  const [age] = await db
+    .select({
+      ms: sql`extract(epoch from clock_timestamp() - ${payouts.createdAt}) * 1000`.mapWith(
+        Number,
+      ),
+    })
+    .from(payouts)
+    .where(eq(payouts.id, payoutId));
   const [takeover] = await db
     .select({ id: withdrawalHolds.id })
     .from(withdrawalHolds)
@@ -151,6 +160,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
   return {
     issue,
     payout,
+    requestedAgoMs: age?.ms ?? 0,
     holdActive: Boolean(hold),
     holdTouched: Boolean(touched),
     takeoverReported: Boolean(takeover),
@@ -241,7 +251,10 @@ function offersFor(
     kase.openConflict
   )
     return none;
-  const waitingSince = (payout.startUncertainAt ?? payout.createdAt).getTime();
+  // A start's mark was set by the app, so it is measured by the app; a request by the database.
+  const waitedMs = payout.startUncertainAt
+    ? now.getTime() - payout.startUncertainAt.getTime()
+    : kase.requestedAgoMs;
   // The payout call may have reached the provider, whose list could lag, so it gets the long wait.
   const wait =
     payout.startStep === 'payout'
@@ -254,7 +267,7 @@ function offersFor(
       payout.startStep === null &&
       payout.startUncertainAt === null &&
       !kase.holdActive,
-    markFailed: now.getTime() - waitingSince >= wait,
+    markFailed: waitedMs >= wait,
   };
 }
 
@@ -298,8 +311,10 @@ const staffAudit = (
   action: string,
   now: Date,
   note?: string,
+  databaseClock?: boolean,
 ) =>
   recordAudit(tx, {
+    ...(databaseClock ? { databaseClock } : {}),
     staffUserId: input.staffUserId,
     action,
     permission: 'payouts.resolve',
@@ -459,7 +474,16 @@ export async function resumeHeldPayout(
           profileId: kase.payout.profileId,
         },
       });
-      await staffAudit(tx, input, kase, 'payout.staff_resumed', now);
+      // Compared with when holds ended, so it takes the same clock.
+      await staffAudit(
+        tx,
+        input,
+        kase,
+        'payout.staff_resumed',
+        now,
+        undefined,
+        true,
+      );
       return true;
     }),
   );

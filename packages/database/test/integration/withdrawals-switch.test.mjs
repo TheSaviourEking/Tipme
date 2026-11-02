@@ -469,13 +469,16 @@ test('the release notice\'s "mark it failed" is there, before the switch is back
   const { issueId } = await freeze(s);
   await secure(s, issueId);
   const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+  await s.q(
+    `UPDATE payouts SET created_at = now() - interval '31 minutes' WHERE id = $1`,
+    [payoutId],
+  );
   const result = await markPayoutFailedAbsent(s.db, {
     issueId: heldIssue,
     reason: REASON,
     staffUserId: STAFF,
     dashboardVerified: true,
     provider: () => provider(),
-    now: new Date(Date.now() + 31 * 60 * 1000),
   });
   assert.equal(result.outcome, 'marked_failed');
   assert.equal(await payoutStatus(s, payoutId), 'FAILED');
@@ -562,3 +565,194 @@ test('the row is seeded on, and with no row at all everything reads as off', asy
     'started',
   );
 });
+
+/*
+ * Holds and payouts get some times from the database and, before this was fixed, others from the
+ * app. The two clocks differ: a request must not pass, or stop, because of which one is ahead.
+ */
+for (const [label, skewMs] of [
+  ['ahead of', 5000],
+  ['behind', -5000],
+]) {
+  const skewed = (t) => {
+    const real = Date.now();
+    t.mock.timers.enable({ apis: ['Date'], now: real + skewMs });
+  };
+
+  test(`app clock ${label} the database: a hold after Resume still stops it, and a Resume after it counts`, async (t) => {
+    const s = await setup(t);
+    skewed(t);
+    const payoutId = await s.withdraw();
+    const { issueId } = await freeze(s);
+    await secure(s, issueId);
+    const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+    const resume = () =>
+      resumeHeldPayout(s.db, {
+        issueId: heldIssue,
+        reason: REASON,
+        staffUserId: STAFF,
+        provider: () => provider(),
+      });
+    assert.equal((await resume()).outcome, 'resumed');
+    await new Promise((resolve) => setImmediate(resolve));
+    await rawHold(s, { released: true });
+    const fake = provider();
+    assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+    assert.equal(fake.calls.creates, 0);
+    assert.equal((await resume()).outcome, 'resumed');
+    assert.equal(
+      await startPayout(s.db, { payoutId, provider: fake }),
+      'started',
+    );
+  });
+
+  test(`app clock ${label} the database: a hold released before the request has no bearing`, async (t) => {
+    const s = await setup(t);
+    skewed(t);
+    const { issueId } = await freeze(s);
+    await secure(s, issueId);
+    const payoutId = await s.withdraw();
+    const fake = provider();
+    assert.equal(
+      await startPayout(s.db, { payoutId, provider: fake }),
+      'started',
+    );
+  });
+}
+
+/*
+ * The same, through the code that really writes these times, not a table write. Production's API and
+ * workers share one host's clock and the database is another's, so what matters is each pairing.
+ */
+const AT = (ms) => new Date(Date.now() + ms);
+
+/** A hold whose transaction began before the request and commits after it: nothing stopped either. */
+const holdThatRaced = async (s, request) => {
+  const { id: issueId } = await openIssue(s.db, {
+    dedupeKey: `raced.${randomUUID()}`,
+    kind: 'payment_reversed',
+    subject: { profileId: TOBI },
+    now: new Date(),
+  });
+  const client = await s.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT now()');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const made = await request();
+    await client.query(
+      `INSERT INTO withdrawal_holds (id, profile_id, reason, issue_id) VALUES ($1, $2, 'reversal', $3)`,
+      [randomUUID(), TOBI, issueId],
+    );
+    await client.query('COMMIT');
+    return { issueId, made };
+  } finally {
+    client.release();
+  }
+};
+
+for (const [label, skewMs] of [
+  ['ahead of', 5000],
+  ['behind', -5000],
+]) {
+  test(`one app clock ${label} the database: Resume, then a whole new hold, still stops it`, async (t) => {
+    const s = await setup(t);
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() + skewMs });
+    const payoutId = await s.withdraw();
+    const first = await freeze(s);
+    await secure(s, first.issueId);
+    const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+    const resume = () =>
+      resumeHeldPayout(s.db, {
+        issueId: heldIssue,
+        reason: REASON,
+        staffUserId: STAFF,
+        provider: () => provider(),
+      });
+    assert.equal((await resume()).outcome, 'resumed');
+    t.mock.timers.tick(5);
+    const second = await freeze(s);
+    t.mock.timers.tick(5);
+    await secure(s, second.issueId);
+    const fake = provider();
+    assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+    assert.equal(fake.calls.creates, 0);
+  });
+
+  test(`the Resume's clock ${label} the release's: a hold after Resume still stops it, and a Resume after one counts`, async (t) => {
+    const s = await setup(t);
+    const payoutId = await s.withdraw();
+    const first = await freeze(s);
+    await secure(s, first.issueId);
+    const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+    const resume = (now) =>
+      resumeHeldPayout(s.db, {
+        issueId: heldIssue,
+        reason: REASON,
+        staffUserId: STAFF,
+        provider: () => provider(),
+        now,
+      });
+    assert.equal((await resume(AT(skewMs))).outcome, 'resumed');
+    const second = await freeze(s);
+    await secure(s, second.issueId);
+    const fake = provider();
+    assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+    assert.equal(fake.calls.creates, 0);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal((await resume(AT(skewMs))).outcome, 'resumed');
+    assert.equal(
+      await startPayout(s.db, { payoutId, provider: fake }),
+      'started',
+    );
+  });
+
+  test(`app clock ${label} the database: a hold that raced the request, released at once, still stops it`, async (t) => {
+    const s = await setup(t);
+    const { issueId, made: payoutId } = await holdThatRaced(s, s.withdraw);
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() + skewMs });
+    await resolveIssue(s.db, {
+      issueId,
+      staffUserId: STAFF,
+      reason: REASON,
+      outcome: 'written_off',
+    });
+    const fake = provider();
+    assert.equal(await startPayout(s.db, { payoutId, provider: fake }), 'held');
+    assert.equal(fake.calls.creates, 0);
+  });
+}
+
+/*
+ * The wait before "mark failed" for a payout never tried runs from when it was requested, a time the
+ * database set. An app clock ahead must not shorten it, and one behind must not lengthen it.
+ */
+for (const [label, skewMs, ageMs, outcome] of [
+  ['ahead of', 5000, 30 * 60 * 1000 - 2000, 'not_offered'],
+  ['behind', -5000, 30 * 60 * 1000 + 2000, 'marked_failed'],
+]) {
+  test(`app clock ${label} the database: mark failed goes by the payout's real age (${outcome})`, async (t) => {
+    const s = await setup(t);
+    const payoutId = await s.withdraw();
+    const { issueId } = await freeze(s);
+    await secure(s, issueId);
+    const [{ id: heldIssue }] = await heldIssues(s, payoutId);
+    await s.q(
+      `UPDATE payouts SET created_at = now() - make_interval(secs => $2::double precision / 1000) WHERE id = $1`,
+      [payoutId, ageMs],
+    );
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() + skewMs });
+    const result = await markPayoutFailedAbsent(s.db, {
+      issueId: heldIssue,
+      reason: REASON,
+      staffUserId: STAFF,
+      dashboardVerified: true,
+      provider: () => provider(),
+    });
+    assert.equal(result.outcome, outcome);
+    assert.equal(
+      await payoutStatus(s, payoutId),
+      outcome === 'marked_failed' ? 'FAILED' : 'REQUESTED',
+    );
+  });
+}
