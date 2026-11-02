@@ -12,6 +12,19 @@
 - Not done: the screens don't yet handle a route's `202 { requestId }` (Task 7). No decision is approved by this work.
 - Next exact step: review Task 6, then Task 7.
 
+# Current task — withdrawal hold clock skew (2 November 2026)
+
+- Branch/worktree: `fix/hold-clock-skew` / `.worktrees/hold-clock`, from `origin/dev` at `53edd1c`. Committed, not pushed.
+- A hold's release and a Resume now take the database's clock, and "mark failed" for a payout never tried measures its age there. No migration. Full report: `.worktrees/hold-clock-report.md`.
+- Next: owner reviews and opens the PR; `feat/admin-roles` carries the same two lines and will merge over this. Run the report's read-only detection query in production only if the owner chooses to.
+
+# Current task — home page LCP, second pass (2 November 2026)
+
+- Branch/worktree: `fix/home-lcp-2` / `.worktrees/home-lcp-2`, from `origin/dev` at `010ed89` (`fix/home-lcp` and `.worktrees/home-lcp` already existed from the Sentry pass and were left alone). Committed, not pushed.
+- Production run `41364449589` still measured `/` at 2908 ms after the Sentry deferral. Its trace: the HTML's wait was 1197 ms, so every subresource started at about 1400 ms, then the 50 KB portrait shared the link with about 260 KB of fonts, CSS and JS.
+- Changed: the home portrait's `sizes` caps the phone width at 18rem (a 412 px, 2.625x phone now gets the 828 px candidate, 32 KB, instead of 960 px at 50 KB), and `images.deviceSizes` stops at 960, the portraits' real width. Measured: local median 1484 to 1124 ms; for-creators unchanged.
+- Not enough on its own: the CI trace puts the portrait's start about 1230 ms later than local, so this predicts about 2.5 s there. The HTML wait is the larger cost and is not changed here. Next: see the report in the final hand-back; do not raise the 2000 ms budget.
+
 # Current task — production release-check LCP (1 November 2026)
 
 - Branch/worktree: `fix/home-lcp` / `.worktrees/home-lcp`, based on `origin/main` at `26c324e`; changes are uncommitted.

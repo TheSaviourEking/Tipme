@@ -83,6 +83,15 @@ export const apiConfigSchema = z
     RATE_LIMIT_REPORTS_PER_HOUR: z.coerce.number().int().min(1).default(10),
     RATE_LIMIT_UNSUBSCRIBE_PER_MIN: z.coerce.number().int().min(1).default(600),
     RATE_LIMIT_AVATARS_PER_HOUR: z.coerce.number().int().min(1).default(20),
+    RATE_LIMIT_COVER_DESIGNS_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(60),
+    // Full-size designs (print, download, the studio's big picture), per address.
+    RATE_LIMIT_QR_ART_PER_HOUR: z.coerce.number().int().min(1).default(120),
+    // The small pictures in the design list, per signed-in person: a visit asks for up to thirty.
+    RATE_LIMIT_QR_THUMBS_PER_HOUR: z.coerce.number().int().min(1).default(600),
     RATE_LIMIT_BANK_RESOLVE_PER_HOUR: z.coerce
       .number()
       .int()

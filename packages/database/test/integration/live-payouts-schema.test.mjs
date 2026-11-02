@@ -319,6 +319,9 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   const url = new URL(database.url);
   url.pathname = `/${name}`;
   const pool = new pg.Pool({ connectionString: url.toString() });
+  // pool.end() returns before its connections have closed, so the forced drop below can end one
+  // that is still closing. Without a listener that error fails the test.
+  pool.on('error', () => undefined);
   const folder = await mkdtemp(join(tmpdir(), 'tipme-migrations-'));
   t.after(async () => {
     await pool.end();
@@ -345,9 +348,28 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   const old = createDatabase(url.toString());
   t.after(() => old.close());
   // The seed writes today's users columns; this one arrives with a later migration.
+  // Likewise the profile columns that handle changes and covers add (0062, 0063).
+  await pool.query(
+    `ALTER TABLE profiles
+       ADD COLUMN handle_changes_used integer NOT NULL DEFAULT 0,
+       ADD COLUMN handle_changes_extra integer NOT NULL DEFAULT 0,
+       ADD COLUMN cover_design text,
+       ADD COLUMN cover_colour text,
+       ADD COLUMN cover_path text,
+       ADD COLUMN cover_version integer NOT NULL DEFAULT 0`,
+  );
   await pool.query(`ALTER TABLE users ADD COLUMN email_changed_at timestamptz`);
   await seedDemoProfiles(old.db);
   await pool.query(`ALTER TABLE users DROP COLUMN email_changed_at`);
+  await pool.query(
+    `ALTER TABLE profiles
+       DROP COLUMN handle_changes_used,
+       DROP COLUMN handle_changes_extra,
+       DROP COLUMN cover_design,
+       DROP COLUMN cover_colour,
+       DROP COLUMN cover_path,
+       DROP COLUMN cover_version`,
+  );
   const payoutId = randomUUID();
   await pool.query(
     `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)

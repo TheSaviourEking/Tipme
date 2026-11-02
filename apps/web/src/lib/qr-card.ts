@@ -1,56 +1,5 @@
 'use client';
-import {
-  qrMatrix,
-  renderQrPixels,
-  type FrameFill,
-  type QrStyle,
-} from './qr-render';
-
-function frameFill(
-  ctx: CanvasRenderingContext2D,
-  frame: FrameFill,
-  size: number,
-) {
-  switch (frame.kind) {
-    case 'solid':
-      return frame.color;
-    case 'linear': {
-      const g = ctx.createLinearGradient(0, 0, size, size);
-      g.addColorStop(0, frame.from);
-      g.addColorStop(1, frame.to);
-      return g;
-    }
-    case 'radial': {
-      const g = ctx.createRadialGradient(
-        size * 0.3,
-        size * 0.2,
-        0,
-        size * 0.3,
-        size * 0.2,
-        size * 1.1,
-      );
-      g.addColorStop(0, frame.inner);
-      g.addColorStop(1, frame.outer);
-      return g;
-    }
-    case 'stripes': {
-      const tile = document.createElement('canvas');
-      tile.width = tile.height = 56;
-      const t = tile.getContext('2d') as CanvasRenderingContext2D;
-      t.fillStyle = frame.a;
-      t.fillRect(0, 0, 56, 56);
-      t.strokeStyle = frame.b;
-      t.lineWidth = 20;
-      for (let i = -56; i <= 112; i += 56) {
-        t.beginPath();
-        t.moveTo(i, 56);
-        t.lineTo(i + 56, 0);
-        t.stroke();
-      }
-      return ctx.createPattern(tile, 'repeat') ?? frame.a;
-    }
-  }
-}
+import { qrMatrix, renderQrPixels, type QrStyle } from './qr-render';
 
 /** Draws the square share card: frame, "Scan to thank", the code on its light square, name, link. */
 export function drawQrCard(
@@ -68,12 +17,9 @@ export function drawQrCard(
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  ctx.fillStyle = frameFill(ctx, style.frame, size);
+  ctx.fillStyle = style.frame.color;
   ctx.fillRect(0, 0, size, size);
-  if (
-    style.frame.kind === 'solid' &&
-    style.frame.color.toLowerCase() === '#ffffff'
-  ) {
+  if (style.frame.color.toLowerCase() === '#ffffff') {
     ctx.strokeStyle = '#e5e5e5';
     ctx.lineWidth = size * 0.006;
     ctx.strokeRect(0, 0, size, size);

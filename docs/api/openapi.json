@@ -849,6 +849,55 @@
         "x-tipme-access": "public"
       }
     },
+    "/v1/covers/{profileId}/{file}": {
+      "get": {
+        "operationId": "Cover.serve",
+        "tags": [
+          "Cover"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/v1/dev/inbox": {
       "get": {
         "operationId": "PretendInbox.inbox",
@@ -1398,6 +1447,189 @@
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
         "x-tipme-rate-limit": "avatars",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/cover": {
+      "delete": {
+        "operationId": "Cover.remove",
+        "tags": [
+          "Cover"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "Cover.own",
+        "tags": [
+          "Cover"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "Cover.upload",
+        "tags": [
+          "Cover"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "avatars",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/cover-design": {
+      "put": {
+        "operationId": "Cover.chooseDesign",
+        "tags": [
+          "Cover"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "design": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "colour": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "design"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "cover_designs",
         "security": [
           {
             "session": []
@@ -2683,7 +2915,41 @@
                   },
                   "qrStyle": {
                     "type": "string",
-                    "pattern": "^[a-z]{3,12}$"
+                    "enum": [
+                      "purple",
+                      "night",
+                      "clean",
+                      "heart",
+                      "jewel",
+                      "stitch",
+                      "keys",
+                      "petals",
+                      "chips",
+                      "coin",
+                      "heartshape",
+                      "liquid",
+                      "pillars",
+                      "diamond",
+                      "sparkle",
+                      "circles",
+                      "leaf",
+                      "dusk",
+                      "lagoon",
+                      "naira",
+                      "mosaic",
+                      "indigo",
+                      "woven",
+                      "danfo",
+                      "harmattan",
+                      "lagooncard",
+                      "citylights",
+                      "vinyl",
+                      "sunburst",
+                      "engraved",
+                      "contour",
+                      "geometry",
+                      "paper"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -2715,6 +2981,168 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/qr-art": {
+      "get": {
+        "operationId": "QrArt.catalogue",
+        "tags": [
+          "QrArt"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "qr_art",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/qr-art/thumbs/{file}": {
+      "get": {
+        "operationId": "QrArt.thumb",
+        "tags": [
+          "QrArt"
+        ],
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A 256 pixel picture for the design list: a marked preview on a Free page, the real code on a Pro page. Kept privately for five minutes.",
+            "headers": {
+              "X-Qr-Preview": {
+                "description": "Present (1) when the picture is a marked preview.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "qr_thumb",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/qr-art/{file}": {
+      "get": {
+        "operationId": "QrArt.image",
+        "tags": [
+          "QrArt"
+        ],
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                512,
+                1024,
+                1400
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One design as a PNG, never cached: a marked preview on a Free page, the real code on a Pro page.",
+            "headers": {
+              "X-Qr-Preview": {
+                "description": "Present (1) when the picture is a marked preview.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "qr_art",
         "security": [
           {
             "session": []
@@ -6346,6 +6774,81 @@
         "x-tipme-permission": "pages.plan"
       }
     },
+    "/v1/ops/pages/{handle}/handle-changes": {
+      "post": {
+        "operationId": "OpsPages.handleChanges",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "extra": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  }
+                },
+                "required": [
+                  "reason",
+                  "extra"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.plan"
+      }
+    },
     "/v1/ops/pages/{profileId}/fee": {
       "post": {
         "operationId": "OpsPages.fee",
@@ -6503,6 +7006,138 @@
           }
         ],
         "x-tipme-permission": "fees.manage"
+      }
+    },
+    "/v1/ops/pages/{profileId}/images/{image}": {
+      "get": {
+        "operationId": "OpsPages.image",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "image",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
+      }
+    },
+    "/v1/ops/pages/{profileId}/images/{image}/remove": {
+      "post": {
+        "operationId": "OpsPages.removeImage",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "image",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
       }
     },
     "/v1/ops/pages/{profileId}/plan": {
@@ -8836,6 +9471,56 @@
         "x-tipme-rate-limit": "reports"
       }
     },
+    "/v1/qr-art/previews/{file}": {
+      "get": {
+        "operationId": "QrArtPreview.preview",
+        "tags": [
+          "QrArtPreview"
+        ],
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The shared, public preview of a design: a 256 pixel picture marked Preview that leads to the TipMe home page. Kept for a day.",
+            "headers": {
+              "X-Qr-Preview": {
+                "description": "Always 1.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/v1/release/runs": {
       "post": {
         "operationId": "ReleaseRuns.open",
@@ -9322,7 +10007,8 @@
                   "CODE_INVALID",
                   "SIGN_IN_LOCKED",
                   "HANDLE_TAKEN",
-                  "HANDLE_RENAME_LIMIT",
+                  "HANDLE_CHANGE_PRO_REQUIRED",
+                  "HANDLE_CHANGE_LIMIT",
                   "ALREADY_HAS_PAGE",
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",
@@ -9336,6 +10022,9 @@
                   "BANK_CHANGE_HELD",
                   "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
+                  "QR_DESIGN_PRO_REQUIRED",
+                  "QR_ART_PHOTO_REQUIRED",
+                  "QR_ART_PHOTO_TOO_LARGE",
                   "INVALID_IMAGE",
                   "PHONE_TAKEN",
                   "RECOVERY_PENDING",

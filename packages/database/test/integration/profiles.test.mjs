@@ -115,6 +115,12 @@ test('profiles, handles and page states', async (t) => {
       );
       assert.equal('phone' in page, false);
       assert.equal('email' in page, false);
+      // The plan's name, and nothing else about the plan: no dates, reasons or staff.
+      assert.equal(page.plan, 'free');
+      assert.deepEqual(
+        Object.keys(page).filter((key) => /plan|staff|reason/i.test(key)),
+        ['plan'],
+      );
       await updateMyProfile(database.db, kemi, {
         phonePublic: true,
         bioPublic: false,

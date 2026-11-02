@@ -30,6 +30,9 @@ type RateLimitedRoute =
   | 'avatars'
   | 'ops_code'
   | 'ops_request'
+  | 'cover_designs'
+  | 'qr_art'
+  | 'qr_thumb'
   | 'bank_resolve'
   | 'bank_read';
 
@@ -137,7 +140,7 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_UNSUBSCRIBE_PER_MIN,
         windowMs: 60_000,
       },
-      // Photo uploads (PR-013): each one is a full decode and re-encode.
+      // Photo and cover uploads (PR-013): each one is a full decode and re-encode.
       avatars: {
         limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
         windowMs: 3_600_000,
@@ -152,6 +155,23 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
         windowMs: 3_600_000,
       },
+      // Each change writes and asks the web app to refresh the page. Generous and per address:
+      // mobile carriers share addresses, and saving is a deliberate step, not browsing.
+      cover_designs: {
+        limit: this.config.RATE_LIMIT_COVER_DESIGNS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // Each QR design is drawn on demand; the studio asks for a thumbnail of every design.
+      qr_art: {
+        limit: this.config.RATE_LIMIT_QR_ART_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // The list pictures count against the signed-in person, not the address, so a shop's wifi
+      // or a carrier's shared address never runs out, and browsing never costs a print.
+      qr_thumb: {
+        limit: this.config.RATE_LIMIT_QR_THUMBS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
         windowMs: 3_600_000,
@@ -162,8 +182,12 @@ export class RateLimitGuard implements CanActivate {
         windowMs: 3_600_000,
       },
     }[route];
+    // Counted per signed-in person: see ops_code, ops_request and qr_thumb above.
     const subject =
-      (route === 'ops_code' || route === 'ops_request') && request.auth
+      (route === 'ops_code' ||
+        route === 'ops_request' ||
+        route === 'qr_thumb') &&
+      request.auth
         ? `user:${request.auth.userId}`
         : ip;
     return this.count(route, subject, window);

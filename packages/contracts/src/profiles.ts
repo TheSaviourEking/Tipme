@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { ResolvedCover } from './covers.js';
+import { qrStyleSchema } from './qr.js';
 
 /** Social links accepted on a recipient page: https only, on the named site. */
 export const SOCIAL_HOSTS = {
@@ -48,7 +50,7 @@ export const profilePatchSchema = z
     socialsPublic: z.boolean(),
     phonePublic: z.boolean(),
     emailPublic: z.boolean(),
-    qrStyle: z.string().regex(/^[a-z]{3,12}$/),
+    qrStyle: qrStyleSchema,
   })
   .partial()
   .strict();
@@ -66,6 +68,11 @@ export const deleteAccountSchema = z
 
 export type PageState = 'live' | 'not_live' | 'deleted';
 export type HandleStatus = 'available' | 'taken' | 'reserved' | 'invalid';
+
+export interface HandleChanges {
+  used: number;
+  allowed: number;
+}
 
 export interface MyProfile {
   handle: string;
@@ -96,6 +103,19 @@ export interface MyProfile {
   avatarPath?: string | null;
   /** The amounts the page shows now (the standard ones on Free). Optional, as `plan`. */
   tipAmounts?: TipAmounts;
+  /**
+   * Handle changes counted so far and allowed in total (Pro pages only can use them). Optional
+   * until the release after this one: the web app deploys before the API.
+   */
+  handleChanges?: HandleChanges;
+  /** What the page's cover resolves to now. Optional, as `handleChanges`. */
+  cover?: ResolvedCover;
+  /** What the owner chose, as opposed to what shows. Optional, as `handleChanges`. */
+  coverChoice?: {
+    design: string | null;
+    colour: string | null;
+    hasPhoto: boolean;
+  };
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
@@ -119,6 +139,10 @@ export interface PublicProfile {
    * page says so before a supporter fills in the form. Absent from older APIs: treat as true.
    */
   acceptingTips?: boolean;
+  /** The page's cover. Absent from older APIs: the web app deploys first. */
+  cover?: ResolvedCover;
+  /** Free or Pro, and nothing else about the plan. Pro pages hide TipMe's own invitation. */
+  plan?: PagePlan;
   /**
    * Whether this page may take tips at all on this copy right now (closed checkout, or a live copy
    * limited to named pages). Checkout enforces the same rule. Older APIs send nothing.
@@ -126,7 +150,7 @@ export interface PublicProfile {
   tippingOpen?: boolean;
 }
 
-/** Changing the page's handle (PR-011); the old one keeps pointing at the page. */
+/** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */
 export const renameHandleSchema = claimHandleSchema;
 
 // Free and Pro (PR-012). Free pages show the standard amounts; staff can make a page Pro, and

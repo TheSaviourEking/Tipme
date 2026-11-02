@@ -1,5 +1,10 @@
 import {
+  MAX_HANDLE_CHANGE_EXTRA,
+  isProQrStyle,
+  shownQrStyle,
+  MAX_HANDLE_CHANGE_GRANT,
   profilePatchSchema,
+  resolveCover,
   type HandleStatus,
   type MyProfile,
   type NotificationPrefs,
@@ -17,13 +22,14 @@ import {
   normaliseHandle,
   tipAmountsProblem,
 } from '@tipme/domain';
-import { and, asc, count, eq, gt, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   emailTokens,
   handleAliases,
   handleHolds,
   profileAvatars,
+  profileCovers,
   emailRecoveries,
   mailPreferences,
   phoneRecoveries,
@@ -46,6 +52,7 @@ import {
   revokeUnenrolled,
 } from './staff.js';
 import { mailOwner } from './account-mail.js';
+import { removeObjects } from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
@@ -56,8 +63,16 @@ import {
 } from './payment-accounts.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
-/** Old handles a page keeps pointing at itself (PR-011). */
-export const MAX_HANDLE_ALIASES = 5;
+/** Handle changes a Pro page gets in total, including switching back; staff can allow more. */
+export const PRO_HANDLE_CHANGES = 3;
+
+const handleChangesOf = (row: {
+  handleChangesUsed: number;
+  handleChangesExtra: number;
+}) => ({
+  used: row.handleChangesUsed,
+  allowed: PRO_HANDLE_CHANGES + row.handleChangesExtra,
+});
 
 /** Whether the user has claimed a page yet. */
 export function hasProfile(db: Database, userId: string): Promise<boolean> {
@@ -274,6 +289,11 @@ const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   plan: row.plan as PagePlan,
   pageState: row.pageState as OpsPage['pageState'],
   suspended: row.status === 'suspended',
+  handleChanges: handleChangesOf(row),
+  images: {
+    hasCover: row.coverPath !== null,
+    hasPhoto: row.avatarPath !== null,
+  },
 });
 
 /**
@@ -351,7 +371,7 @@ const toMine = async (
   phonePublic: row.profile.phonePublic,
   emailPublic: row.profile.emailPublic,
   pageState: row.profile.pageState as MyProfile['pageState'],
-  qrStyle: row.profile.qrStyle,
+  qrStyle: shownQrStyle(row.profile.qrStyle, row.profile.plan as PagePlan),
   phone: row.phone,
   email: row.email,
   emailVerified: row.emailVerifiedAt !== null,
@@ -361,6 +381,13 @@ const toMine = async (
   plan: row.profile.plan as PagePlan,
   tipAmounts: tipAmountsOf(row.profile),
   avatarPath: row.profile.avatarPath,
+  cover: resolveCover(row.profile),
+  coverChoice: {
+    design: row.profile.coverDesign,
+    colour: row.profile.coverColour,
+    hasPhoto: row.profile.coverPath !== null,
+  },
+  handleChanges: handleChangesOf(row.profile),
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
@@ -382,7 +409,13 @@ export function updateMyProfile(
     if (!parsed.success) throw new OperationError('INVALID_INPUT');
     const row = await myRow(db, userId);
     const values = parsed.data;
-    await db
+    // Pro designs are saved by Pro pages only. Staff may have moved the page to Free since it
+    // was read, so the update below checks the plan again.
+    const proDesign =
+      values.qrStyle !== undefined && isProQrStyle(values.qrStyle);
+    if (proDesign && row.profile.plan !== 'pro')
+      throw new OperationError('QR_DESIGN_PRO_REQUIRED');
+    const updated = await db
       .update(profiles)
       .set({
         ...(values.displayName !== undefined
@@ -405,7 +438,15 @@ export function updateMyProfile(
           : {}),
         ...(values.qrStyle !== undefined ? { qrStyle: values.qrStyle } : {}),
       })
-      .where(eq(profiles.id, row.profile.id));
+      .where(
+        and(
+          eq(profiles.id, row.profile.id),
+          ...(proDesign ? [eq(profiles.plan, 'pro')] : []),
+        ),
+      )
+      .returning({ id: profiles.id });
+    if (updated.length === 0)
+      throw new OperationError('QR_DESIGN_PRO_REQUIRED');
     return toMine(db, await myRow(db, userId));
   });
 }
@@ -445,9 +486,11 @@ export function setPageState(
 }
 
 /**
- * Changes the page's handle (PR-011). The old one becomes an alias that keeps pointing here, so
- * printed QR codes still work; a page keeps at most 5. Going back to one of its own old handles
- * swaps the two, and a change of case alone changes nothing.
+ * Changes the page's handle. Only a Pro page can, PRO_HANDLE_CHANGES times in total plus what staff
+ * allowed; the count never resets and is checked under the row lock, so two changes at once can't
+ * both take the last one. The old handle becomes an alias that keeps pointing here, so printed QR
+ * codes still work. Going back to one of its own old handles swaps the two, and counts. A change of
+ * case alone changes nothing and counts nothing.
  */
 export function renameHandle(
   db: Database,
@@ -465,6 +508,9 @@ export function renameHandle(
             handle: profiles.handle,
             handleLower: profiles.handleLower,
             pageState: profiles.pageState,
+            plan: profiles.plan,
+            handleChangesUsed: profiles.handleChangesUsed,
+            handleChangesExtra: profiles.handleChangesExtra,
           })
           .from(profiles)
           .where(eq(profiles.userId, input.userId))
@@ -474,6 +520,10 @@ export function renameHandle(
         // Handles are stored normalised (as when claimed), so a change of case is no change.
         if (wanted === row.handleLower)
           return { previous: row.handleLower, handle: wanted };
+        if (row.plan !== 'pro')
+          throw new OperationError('HANDLE_CHANGE_PRO_REQUIRED');
+        const { used, allowed } = handleChangesOf(row);
+        if (used >= allowed) throw new OperationError('HANDLE_CHANGE_LIMIT');
         if (isReservedHandle(wanted)) throw new OperationError('HANDLE_TAKEN');
         const reclaimed = await tx
           .delete(handleAliases)
@@ -484,22 +534,18 @@ export function renameHandle(
             ),
           )
           .returning({ handle: handleAliases.handleLower });
-        if (!reclaimed[0]) {
-          if (await isTaken(tx, wanted, now))
-            throw new OperationError('HANDLE_TAKEN');
-          const [kept] = await tx
-            .select({ n: count() })
-            .from(handleAliases)
-            .where(eq(handleAliases.profileId, row.id));
-          if ((kept?.n ?? 0) >= MAX_HANDLE_ALIASES)
-            throw new OperationError('HANDLE_RENAME_LIMIT');
-        }
+        if (!reclaimed[0] && (await isTaken(tx, wanted, now)))
+          throw new OperationError('HANDLE_TAKEN');
         await tx
           .insert(handleAliases)
           .values({ handleLower: row.handleLower, profileId: row.id });
         await tx
           .update(profiles)
-          .set({ handle: wanted, handleLower: wanted })
+          .set({
+            handle: wanted,
+            handleLower: wanted,
+            handleChangesUsed: used + 1,
+          })
           .where(eq(profiles.id, row.id));
         return { previous: row.handleLower, handle: wanted };
       });
@@ -509,6 +555,54 @@ export function renameHandle(
         throw new OperationError('HANDLE_TAKEN');
       throw error;
     }
+  });
+}
+
+/**
+ * Staff allow a page more handle changes (permission `pages.plan`), with a reason; audited as
+ * `page.handle_changes_granted`. Adds to what it has, up to MAX_HANDLE_CHANGE_EXTRA in total; beyond
+ * that nothing changes (INVALID_INPUT). `handle` may be one of its old handles, as in the Pages
+ * lookup. It is an allowance only: a Free page still can't change its handle.
+ */
+export function grantHandleChanges(
+  db: Database,
+  input: { staffId: string; handle: string; extra: number; reason: string },
+): Promise<{ allowed: number }> {
+  const { extra } = input;
+  if (!Number.isInteger(extra) || extra < 1 || extra > MAX_HANDLE_CHANGE_GRANT)
+    return Promise.reject(new OperationError('INVALID_INPUT'));
+  return guarded(async () => {
+    const page = await opsPageByHandle(db, input.handle);
+    if (!page) throw new OperationError('NO_PAGE');
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(profiles)
+        .set({
+          handleChangesExtra: sql`${profiles.handleChangesExtra} + ${extra}`,
+        })
+        .where(
+          and(
+            eq(profiles.id, page.profileId),
+            ne(profiles.pageState, 'deleted'),
+            lte(profiles.handleChangesExtra, MAX_HANDLE_CHANGE_EXTRA - extra),
+          ),
+        )
+        .returning();
+      // The page was there a moment ago, so this is the cap (a page deleted in that moment is
+      // refused all the same).
+      if (!row) throw new OperationError('INVALID_INPUT');
+      const { allowed } = handleChangesOf(row);
+      await recordAudit(tx, {
+        staffUserId: input.staffId,
+        action: 'page.handle_changes_granted',
+        permission: 'pages.plan',
+        subjectType: 'profile',
+        subjectId: row.id,
+        // The audit row has no field for the number, and it must say how many were allowed.
+        reason: `${input.reason} (+${extra}, ${allowed} allowed)`,
+      });
+      return { allowed };
+    });
   });
 }
 
@@ -597,6 +691,8 @@ export function publicProfile(
       ...(celebration ? { celebration } : {}),
       tipAmounts: tipAmountsOf(profile),
       acceptingTips,
+      cover: resolveCover(profile),
+      plan: profile.plan as PagePlan,
     };
   });
 }
@@ -690,6 +786,9 @@ export function deleteAccount(
             craft: null,
             note: null,
             avatarPath: null,
+            coverDesign: null,
+            coverColour: null,
+            coverPath: null,
             socials: {},
             phonePublic: false,
             emailPublic: false,
@@ -700,6 +799,14 @@ export function deleteAccount(
           .delete(profileAvatars)
           .where(eq(profileAvatars.profileId, row.id))
           .returning({ objectKey: profileAvatars.objectKey })
+          .then((removed) => {
+            for (const r of removed)
+              if (r.objectKey) photoKeys.push(r.objectKey);
+          });
+        await tx
+          .delete(profileCovers)
+          .where(eq(profileCovers.profileId, row.id))
+          .returning({ objectKey: profileCovers.objectKey })
           .then((removed) => {
             for (const r of removed)
               if (r.objectKey) photoKeys.push(r.objectKey);
@@ -785,8 +892,7 @@ export function deleteAccount(
       return { handle: row?.handleLower ?? '' };
     });
     // After the commit: an account's photos must not outlive it in the bucket.
-    for (const key of photoKeys)
-      await input.photos?.remove(key).catch(() => undefined);
+    await removeObjects(input.photos, photoKeys);
     return result;
   });
 }

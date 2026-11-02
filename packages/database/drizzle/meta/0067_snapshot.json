@@ -1,6 +1,6 @@
 {
-  "id": "66c78270-63a8-4052-ad23-524b15e2261d",
-  "prevId": "152edd36-b76d-41be-a2f4-a939c9c90ded",
+  "id": "a14b40fa-d69d-4291-ab32-825527fcd7f3",
+  "prevId": "06a1d07b-291e-46de-8d7f-5a512b0c0a98",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1058,7 +1058,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused', 'staff_acted_alone', 'staff_approval_pending', 'staff_last_approver_removed')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused', 'staff_acted_alone')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -4121,6 +4121,45 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "handle_changes_used": {
+          "name": "handle_changes_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "handle_changes_extra": {
+          "name": "handle_changes_extra",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "cover_design": {
+          "name": "cover_design",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_colour": {
+          "name": "cover_colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_path": {
+          "name": "cover_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_version": {
+          "name": "cover_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -4194,6 +4233,10 @@
         "profiles_tip_presets_range": {
           "name": "profiles_tip_presets_range",
           "value": "tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)"
+        },
+        "profiles_handle_changes": {
+          "name": "profiles_handle_changes",
+          "value": "handle_changes_used >= 0 AND handle_changes_extra BETWEEN 0 AND 20"
         }
       },
       "isRLSEnabled": false
@@ -6467,12 +6510,6 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "pinned": {
-          "name": "pinned",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -6535,6 +6572,65 @@
         "approval_requests_status": {
           "name": "approval_requests_status",
           "value": "status IN ('pending', 'approved', 'rejected', 'cancelled', 'expired', 'stale')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.profile_covers": {
+      "name": "profile_covers",
+      "schema": "",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "object_key": {
+          "name": "object_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "profile_covers_profile_id_profiles_id_fk": {
+          "name": "profile_covers_profile_id_profiles_id_fk",
+          "tableFrom": "profile_covers",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "profile_covers_one_place": {
+          "name": "profile_covers_one_place",
+          "value": "(bytes IS NULL) <> (object_key IS NULL)"
         }
       },
       "isRLSEnabled": false

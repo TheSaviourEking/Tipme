@@ -20,7 +20,7 @@ const problem = (answer: { code: string; message?: string }) =>
     : refusalWords(answer);
 
 /** A value and a written reason, sent together (every pricing change is audited). */
-function ValueWithReason({
+export function ValueWithReason({
   label,
   hint,
   submit,

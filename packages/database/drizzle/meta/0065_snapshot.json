@@ -1,6 +1,6 @@
 {
-  "id": "a14b40fa-d69d-4291-ab32-825527fcd7f3",
-  "prevId": "06a1d07b-291e-46de-8d7f-5a512b0c0a98",
+  "id": "ad6334b5-86a9-45bb-8c37-ddd2977937e8",
+  "prevId": "2791bef1-8bed-465a-b72b-a9ac0cfca792",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1058,7 +1058,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused', 'staff_acted_alone')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -2540,12 +2540,6 @@
         },
         "revoked_at": {
           "name": "revoked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_totp_at": {
-          "name": "last_totp_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -4121,6 +4115,45 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "handle_changes_used": {
+          "name": "handle_changes_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "handle_changes_extra": {
+          "name": "handle_changes_extra",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "cover_design": {
+          "name": "cover_design",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_colour": {
+          "name": "cover_colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_path": {
+          "name": "cover_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_version": {
+          "name": "cover_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -4194,6 +4227,10 @@
         "profiles_tip_presets_range": {
           "name": "profiles_tip_presets_range",
           "value": "tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)"
+        },
+        "profiles_handle_changes": {
+          "name": "profiles_handle_changes",
+          "value": "handle_changes_used >= 0 AND handle_changes_extra BETWEEN 0 AND 20"
         }
       },
       "isRLSEnabled": false
@@ -5284,12 +5321,6 @@
         },
         "revoked_at": {
           "name": "revoked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "enrolled_at": {
-          "name": "enrolled_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -6385,67 +6416,30 @@
       },
       "isRLSEnabled": false
     },
-    "public.approval_requests": {
-      "name": "approval_requests",
+    "public.profile_covers": {
+      "name": "profile_covers",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
+        "profile_id": {
+          "name": "profile_id",
           "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
-        "action": {
-          "name": "action",
-          "type": "text",
+        "version": {
+          "name": "version",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "summary": {
-          "name": "summary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "permission": {
-          "name": "permission",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "requested_by": {
-          "name": "requested_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "decided_by": {
-          "name": "decided_by",
-          "type": "uuid",
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
           "primaryKey": false,
           "notNull": false
         },
-        "decided_reason": {
-          "name": "decided_reason",
+        "object_key": {
+          "name": "object_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -6454,69 +6448,17 @@
           "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "now()"
         }
       },
-      "indexes": {
-        "approval_requests_pending": {
-          "name": "approval_requests_pending",
-          "columns": [
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "status = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "approval_requests_created": {
-          "name": "approval_requests_created",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "approval_requests_requested_by_users_id_fk": {
-          "name": "approval_requests_requested_by_users_id_fk",
-          "tableFrom": "approval_requests",
-          "tableTo": "users",
-          "columnsFrom": ["requested_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "approval_requests_decided_by_users_id_fk": {
-          "name": "approval_requests_decided_by_users_id_fk",
-          "tableFrom": "approval_requests",
-          "tableTo": "users",
-          "columnsFrom": ["decided_by"],
+        "profile_covers_profile_id_profiles_id_fk": {
+          "name": "profile_covers_profile_id_profiles_id_fk",
+          "tableFrom": "profile_covers",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -6526,9 +6468,9 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "approval_requests_status": {
-          "name": "approval_requests_status",
-          "value": "status IN ('pending', 'approved', 'rejected', 'cancelled', 'expired', 'stale')"
+        "profile_covers_one_place": {
+          "name": "profile_covers_one_place",
+          "value": "(bytes IS NULL) <> (object_key IS NULL)"
         }
       },
       "isRLSEnabled": false
@@ -6616,7 +6558,7 @@
     "public.transition_cause": {
       "name": "transition_cause",
       "schema": "public",
-      "values": ["provider_event", "system", "expiry", "staff"]
+      "values": ["provider_event", "system", "expiry"]
     }
   },
   "schemas": {},

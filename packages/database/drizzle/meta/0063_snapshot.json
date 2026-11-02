@@ -1,6 +1,6 @@
 {
-  "id": "ad6334b5-86a9-45bb-8c37-ddd2977937e8",
-  "prevId": "2791bef1-8bed-465a-b72b-a9ac0cfca792",
+  "id": "e8ccefef-5fd3-437a-94bb-4f9db6a8da35",
+  "prevId": "5ef607e5-651c-486a-9076-6595b6d669b4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4115,6 +4115,45 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "handle_changes_used": {
+          "name": "handle_changes_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "handle_changes_extra": {
+          "name": "handle_changes_extra",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "cover_design": {
+          "name": "cover_design",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_colour": {
+          "name": "cover_colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_path": {
+          "name": "cover_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_version": {
+          "name": "cover_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {
@@ -4188,6 +4227,10 @@
         "profiles_tip_presets_range": {
           "name": "profiles_tip_presets_range",
           "value": "tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)"
+        },
+        "profiles_handle_changes": {
+          "name": "profiles_handle_changes",
+          "value": "handle_changes_used >= 0 AND handle_changes_extra BETWEEN 0 AND 20"
         }
       },
       "isRLSEnabled": false
@@ -4973,7 +5016,7 @@
       "checkConstraints": {
         "role_permissions_known": {
           "name": "role_permissions_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve')"
         }
       },
       "isRLSEnabled": false
@@ -5000,39 +5043,9 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "system": {
-          "name": "system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         }
       },
-      "indexes": {
-        "roles_name_lower": {
-          "name": "roles_name_lower",
-          "columns": [
-            {
-              "expression": "lower(\"name\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -6296,33 +6309,33 @@
       },
       "isRLSEnabled": false
     },
-    "public.staff_permission_overrides": {
-      "name": "staff_permission_overrides",
+    "public.profile_covers": {
+      "name": "profile_covers",
       "schema": "",
       "columns": {
-        "user_id": {
-          "name": "user_id",
+        "profile_id": {
+          "name": "profile_id",
           "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "permission": {
-          "name": "permission",
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "object_key": {
+          "name": "object_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
-        },
-        "effect": {
-          "name": "effect",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "granted_by": {
-          "name": "granted_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -6334,41 +6347,23 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "staff_permission_overrides_user_id_users_id_fk": {
-          "name": "staff_permission_overrides_user_id_users_id_fk",
-          "tableFrom": "staff_permission_overrides",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "staff_permission_overrides_granted_by_users_id_fk": {
-          "name": "staff_permission_overrides_granted_by_users_id_fk",
-          "tableFrom": "staff_permission_overrides",
-          "tableTo": "users",
-          "columnsFrom": ["granted_by"],
+        "profile_covers_profile_id_profiles_id_fk": {
+          "name": "profile_covers_profile_id_profiles_id_fk",
+          "tableFrom": "profile_covers",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "staff_permission_overrides_user_id_permission_pk": {
-          "name": "staff_permission_overrides_user_id_permission_pk",
-          "columns": ["user_id", "permission"]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "staff_permission_overrides_known": {
-          "name": "staff_permission_overrides_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
-        },
-        "staff_permission_overrides_effect": {
-          "name": "staff_permission_overrides_effect",
-          "value": "effect IN ('add', 'remove')"
+        "profile_covers_one_place": {
+          "name": "profile_covers_one_place",
+          "value": "(bytes IS NULL) <> (object_key IS NULL)"
         }
       },
       "isRLSEnabled": false
@@ -6456,7 +6451,7 @@
     "public.transition_cause": {
       "name": "transition_cause",
       "schema": "public",
-      "values": ["provider_event", "system", "expiry"]
+      "values": ["provider_event", "system", "expiry", "staff"]
     }
   },
   "schemas": {},

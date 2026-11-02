@@ -89,7 +89,8 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
     sensitive: true,
   },
   'pages.suspend': {
-    description: 'Pause and restore recipient pages',
+    description:
+      'Pause and restore recipient pages, and review or remove their images',
     group: 'people',
     sensitive: false,
   },

@@ -173,3 +173,23 @@ export async function emailedEnrolmentCode(email: string): Promise<string> {
     JSON.parse(openSecret(sealing.key, row.data_sealed)) as { code: string }
   ).code;
 }
+
+/** Staff make the recipient's page Pro from the admin area, in their own browser context. */
+export async function makePagePro(
+  browser: Browser,
+  handle: string,
+  testInfo: TestInfo,
+): Promise<Page> {
+  const staff = await (await browser.newContext()).newPage();
+  await enrolOwner(staff, testInfo);
+  await staff.getByRole('link', { name: 'Pages' }).click();
+  await staff.getByLabel('Handle').fill(handle);
+  await staff.getByRole('button', { name: 'Find page' }).click();
+  await staff.getByRole('button', { name: 'Make Pro…' }).click();
+  await staff
+    .getByLabel('Why is this page getting Pro?')
+    .fill('Pilot recipient for Pro features');
+  await staff.getByRole('button', { name: 'Make Pro', exact: true }).click();
+  await expect(staff.getByText(`@${handle} is now Pro`)).toBeVisible();
+  return staff;
+}

@@ -4,6 +4,9 @@
 const API_ORIGIN =
   process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:4000';
 
+/** A path on the API, for images the browser asks for with the session cookie. */
+export const apiUrl = (path: string) => `${API_ORIGIN}${path}`;
+
 export type SessionResult<T> =
   | { ok: true; status: number; data: T }
   | {
@@ -25,13 +28,18 @@ export async function apiFetch<T>(
     /** A file sent as it is (a photo upload, PR-013), with its own content type. */
     file?: Blob;
     headers?: Record<string, string>;
+    /** Gives up after this long, as a network failure; the outcome of a write is then unknown. */
+    timeoutMs?: number;
   } = {},
 ): Promise<SessionResult<T>> {
   const method = init.method ?? 'GET';
+  const abort = init.timeoutMs ? new AbortController() : undefined;
+  if (abort) setTimeout(() => abort.abort(), init.timeoutMs);
   let response: Response;
   try {
     response = await fetch(`${API_ORIGIN}${path}`, {
       method,
+      ...(abort ? { signal: abort.signal } : {}),
       credentials: 'include',
       cache: 'no-store',
       headers: {

@@ -439,50 +439,64 @@
     {
       "idx": 62,
       "version": "7",
-      "when": 1793572371459,
-      "tag": "0062_ops_catalogue_permissions",
+      "when": 1793572370460,
+      "tag": "0062_handle_changes",
       "breakpoints": true
     },
     {
       "idx": 63,
       "version": "7",
-      "when": 1793572372459,
-      "tag": "0063_custom_roles_personal_access",
+      "when": 1793572370461,
+      "tag": "0063_profile_covers",
       "breakpoints": true
     },
     {
       "idx": 64,
       "version": "7",
-      "when": 1793572373459,
-      "tag": "0064_staff_enrolled_at",
+      "when": 1793572371459,
+      "tag": "0064_ops_catalogue_permissions",
       "breakpoints": true
     },
     {
       "idx": 65,
       "version": "7",
-      "when": 1793572374459,
-      "tag": "0065_serious_actions",
+      "when": 1793572372459,
+      "tag": "0065_custom_roles_personal_access",
       "breakpoints": true
     },
     {
       "idx": 66,
       "version": "7",
-      "when": 1793572375459,
-      "tag": "0066_staff_approval_alerts",
+      "when": 1793572373459,
+      "tag": "0066_staff_enrolled_at",
       "breakpoints": true
     },
     {
       "idx": 67,
       "version": "7",
-      "when": 1793572376459,
-      "tag": "0067_approval_pinned",
+      "when": 1793572374459,
+      "tag": "0067_serious_actions",
       "breakpoints": true
     },
     {
       "idx": 68,
       "version": "7",
+      "when": 1793572375459,
+      "tag": "0068_staff_approval_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793572376459,
+      "tag": "0069_approval_pinned",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
       "when": 1793579044023,
-      "tag": "0068_roles_updated_at",
+      "tag": "0070_roles_updated_at",
       "breakpoints": true
     }
   ]

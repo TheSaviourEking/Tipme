@@ -86,8 +86,9 @@ const messages: Record<ApiErrorCode, string> = {
     'That code is not right or has expired. Please check it or ask for a new one.',
   SIGN_IN_LOCKED: 'Too many wrong codes. Please wait 15 minutes and try again.',
   HANDLE_TAKEN: 'That handle is not available. Please choose another.',
-  HANDLE_RENAME_LIMIT:
-    'Your page already keeps 5 old handles. Choose one of them, or keep your current handle.',
+  HANDLE_CHANGE_PRO_REQUIRED: 'Handle changes are part of TipMe Pro.',
+  HANDLE_CHANGE_LIMIT:
+    'You’ve used all your handle changes. Contact the TipMe team at support@usetipme.xyz to change it again.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
@@ -106,6 +107,11 @@ const messages: Record<ApiErrorCode, string> = {
   BANK_CHANGE_HELD:
     'Your sign-in email changed recently, so your bank account can’t be added or changed yet.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
+  QR_DESIGN_PRO_REQUIRED: 'Saving a Pro QR design is part of TipMe Pro.',
+  QR_ART_PHOTO_REQUIRED:
+    'The photo mosaic is made from your page photo. Add a photo to your page first.',
+  QR_ART_PHOTO_TOO_LARGE:
+    'Your page photo is too large for the photo mosaic. Upload a smaller photo and try again.',
   INVALID_IMAGE: 'Please choose a JPEG, PNG or WebP photo.',
   PHONE_TAKEN: 'That number belongs to another account.',
   RECOVERY_PENDING:
@@ -179,7 +185,11 @@ const operationErrors: Partial<
   QUOTE_ALREADY_USED: { status: 409, code: 'QUOTE_ALREADY_USED' },
   TIP_NOT_PAYABLE: { status: 409, code: 'TIP_NOT_PAYABLE' },
   HANDLE_TAKEN: { status: 409, code: 'HANDLE_TAKEN' },
-  HANDLE_RENAME_LIMIT: { status: 409, code: 'HANDLE_RENAME_LIMIT' },
+  HANDLE_CHANGE_PRO_REQUIRED: {
+    status: 403,
+    code: 'HANDLE_CHANGE_PRO_REQUIRED',
+  },
+  HANDLE_CHANGE_LIMIT: { status: 409, code: 'HANDLE_CHANGE_LIMIT' },
   ALREADY_HAS_PAGE: { status: 409, code: 'ALREADY_HAS_PAGE' },
   HAS_BALANCE: { status: 409, code: 'HAS_BALANCE' },
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
@@ -202,6 +212,7 @@ const operationErrors: Partial<
     code: 'PAYOUT_PROVIDER_UNAVAILABLE',
   },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
+  QR_DESIGN_PRO_REQUIRED: { status: 403, code: 'QR_DESIGN_PRO_REQUIRED' },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },
   ENROLMENT_INVALID: { status: 400, code: 'ENROLMENT_INVALID' },

@@ -38,3 +38,30 @@ test('a Pro page’s own presets and minimum are shown and enforced when typing 
   );
   assert.equal(options.parse('abc'), null);
 });
+
+// Owner decision, 2 Nov 2026: the amount picker starts on NGN 2,000. A product default, not an
+// approval of anything. A page that does not offer 2,000 starts with nothing chosen, as before.
+test('the picker starts on NGN 2,000 when the page offers it', () => {
+  assert.equal(amountOptions(undefined).defaultMinor, 200000);
+  assert.equal(
+    amountOptions({
+      presetsMinor: ['200000', '500000', '1000000'],
+      minMinor: '200000',
+    }).defaultMinor,
+    200000,
+  );
+});
+
+test('a page without NGN 2,000 starts with nothing chosen, never a guess', () => {
+  assert.equal(
+    amountOptions({
+      presetsMinor: ['500000', '1000000'],
+      minMinor: '500000',
+    }).defaultMinor,
+    null,
+  );
+  assert.equal(
+    amountOptions({ presetsMinor: [], minMinor: '100000' }).defaultMinor,
+    null,
+  );
+});

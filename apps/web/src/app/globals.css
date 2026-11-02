@@ -872,170 +872,19 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   }
 }
 
-/* Public profile: one portrait-led composition (design reference, Concept A).
-   The scene holds headline, portrait and identity; the tipping panel overlaps the portrait. */
-.profile-page {
-  background: var(--canvas);
-  padding-bottom: var(--space-16);
-}
-
-.profile-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding-block: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.profile-breadcrumb > a {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.profile-stage {
-  /* Concept A, measured: headline 22, card overlap 4, portrait 26 (incl. panel overlap 9), panel 20.
-     Overlaps are percentages of their own grid area, so the composition scales as one object. */
-  display: grid;
-  grid-template-columns: minmax(0, 48fr) minmax(0, 11fr);
-  align-items: start;
-  max-width: 59rem;
-  margin-inline: auto;
-}
-
-.profile-scene {
-  display: grid;
-  grid-template-columns: minmax(0, 22fr) minmax(0, 26fr);
-  grid-template-rows: auto 1fr auto;
-}
-
-.profile-headline {
-  grid-column: 1;
-  grid-row: 1;
-  padding: var(--space-8) var(--space-6) 0 0;
-}
-
-.profile-headline__title {
-  margin: 0 0 var(--space-6);
-  font: 400 clamp(2.75rem, 4vw, 3.5rem) / 1.02 var(--font-editorial);
-  letter-spacing: -0.02em;
-  text-wrap: balance;
-}
-
-.profile-headline__lede {
-  margin: 0;
-  max-width: 17rem;
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-  line-height: 1.55;
-}
-
-.profile-portrait {
-  grid-column: 2;
-  grid-row: 1 / 4;
-  height: clamp(32rem, calc(100svh - 11rem), 44rem);
-  margin: 0;
+.profile-cover {
+  /* The mockup's frame: 300px tall at 1120 wide, 168px on a phone. Images use object-fit cover
+     and the hearts use a slice, so a phone shows the middle of the same artwork. */
+  position: relative;
+  width: 100%;
+  height: 300px;
   overflow: hidden;
-  border-radius: var(--radius-card);
-  outline: 1px solid var(--edge-hairline);
-  outline-offset: -1px;
-  background: var(--surface-recessed);
-  box-shadow: var(--shadow-frame);
 }
 
-.profile-portrait__media {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 30%;
-}
-
-/* No portrait shared (or it failed to load): a matted editorial monogram, never a blank frame.
-   Sized here because the portrait's 100% (.profile-portrait__media) and the generic 120px
-   (.avatar--initials) have equal specificity, and the later one won. */
-.profile-portrait__media.avatar--initials {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(
-    180deg,
-    var(--surface-subtle),
-    var(--surface-recessed)
-  );
-  box-shadow:
-    inset 0 0 0 0.875rem var(--surface-subtle),
-    inset 0 0 0 calc(0.875rem + 1px) var(--edge-hairline);
-  color: var(--text-primary);
-  font: 400 clamp(5rem, 11vw, 8.5rem) / 1 var(--font-editorial);
-  letter-spacing: -0.02em;
-}
-
-.profile-identity-slot {
-  position: relative;
-  z-index: 2;
-  grid-column: 1;
-  grid-row: 3;
-  align-self: end;
-  /* 4/22 of the headline track: the card reaches into the portrait's lower left. */
-  margin: 0 -18.18% var(--space-10) 0;
-}
-
-.profile-identity {
-  padding: var(--space-5) var(--space-6) var(--space-6);
-  border-color: var(--edge-hairline);
-  border-radius: 1.25rem;
-  box-shadow: var(--shadow-card-subtle);
-}
-
-.profile-identity__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-
-.profile-identity__avatar {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: 50% 25%;
-}
-
-.profile-identity h1 {
-  margin: 0;
-  font: 700 var(--text-lg) / 1.25 var(--font-interface);
-  letter-spacing: -0.015em;
-}
-
-.profile-identity__handle {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-}
-
-.profile-role {
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.profile-bio {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
-.profile-composer {
-  position: relative;
-  z-index: 3;
-  /* 9/11 of the panel track: the panel floats over the portrait's right edge. */
-  margin: 5rem 0 0 -81.8%;
+@media (max-width: 860px) {
+  .profile-cover {
+    height: 168px;
+  }
 }
 
 .tip-instrument .appreciation-card {
@@ -1212,115 +1061,8 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   margin: calc(var(--space-1) * -1) 0 0;
 }
 
-.profile-more {
-  display: grid;
-  max-width: 59rem;
-  margin-inline: auto;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-8);
-  margin-top: var(--space-16);
-}
-
-.profile-more__craft {
-  margin: 0 0 var(--space-3);
-  font: 400 var(--text-xl) / 1.25 var(--font-editorial);
-}
-
-.profile-note {
-  margin: 0;
-  max-width: 34rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.share-profile .tm-hint {
-  min-height: 1.5rem;
-  margin-top: 0.5rem;
-}
-
-.profile-safety {
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-}
-
-.profile-safety p {
-  margin: 0 0 var(--space-2);
-}
-
-.profile-safety a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  color: var(--text-primary);
-  font-weight: 700;
-  text-underline-offset: 3px;
-}
-
-/* Tablet and phone: one sequence (portrait, identity sliding over it, then the tipping panel),
-   not the desktop overlap compressed. */
+/* The shared tipping instrument on tablets and phones (home and the public page). */
 @media (max-width: 860px) {
-  .profile-stage,
-  .profile-scene {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* One column wide enough for a phone; centred as a single object on tablets. */
-  .profile-stage,
-  .profile-more {
-    max-width: 34rem;
-    margin-inline: auto;
-  }
-
-  .profile-scene {
-    grid-template-rows: auto auto auto;
-  }
-
-  .profile-headline {
-    padding: var(--space-2) 0 var(--space-6);
-  }
-
-  .profile-headline__title {
-    margin-bottom: var(--space-3);
-    font-size: clamp(2.25rem, 9.5vw, 3.25rem);
-  }
-
-  .profile-portrait {
-    grid-column: 1;
-    grid-row: 2;
-    height: auto;
-    aspect-ratio: 1 / 1.05;
-    border-radius: 1.5rem;
-  }
-
-  .profile-identity-slot {
-    grid-row: 3;
-    align-self: start;
-    max-width: none;
-    margin: -4.5rem var(--space-3) 0;
-  }
-
-  .profile-identity {
-    padding: var(--space-4) var(--space-5) var(--space-5);
-  }
-
-  /* Only the avatar straddles the sheet's top edge; the name stays on the sheet. */
-  .profile-identity__head {
-    align-items: flex-start;
-  }
-
-  .profile-identity__avatar {
-    margin-top: -2.75rem;
-    width: 3.5rem;
-    height: 3.5rem;
-    border: 3px solid var(--surface-raised);
-    box-shadow: 0 2px 6px rgb(20 18 16 / 18%);
-  }
-
-  .profile-composer {
-    margin: var(--space-4) 0 0;
-  }
-
   .tip-instrument .appreciation-card {
     padding: var(--space-5);
     border-radius: 1.25rem;
@@ -1344,12 +1086,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   .tip-instrument .tm-amount-choice input:checked + span::after {
     margin-left: 0.25rem;
   }
-
-  .profile-more {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-6);
-    margin-top: var(--space-12);
-  }
 }
 
 /* Four keys stop fitting their labels below about 360px: two rows instead. */
@@ -1361,6 +1097,600 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   .tip-instrument .appreciation-card h2 {
     padding-right: 0;
     padding-top: var(--space-8);
+  }
+}
+
+/* Public profile (/@handle): the person, then the tip. The site's own navigation and footer links
+   step aside on this page only. */
+body:has(.profile-page) .site-nav,
+body:has(.profile-page) .menu-toggle,
+body:has(.profile-page) > .site-footer {
+  display: none;
+}
+
+body:has(.profile-page) .nav-shell {
+  width: min(70rem, calc(100% - 5rem));
+}
+
+body:has(.profile-page) .brand__mark {
+  height: 1.875rem;
+}
+
+.profile-page {
+  background: var(--canvas);
+  padding-bottom: var(--space-8);
+}
+
+.profile-sheet {
+  width: min(70rem, calc(100% - 5rem));
+  margin-inline: auto;
+}
+
+.profile-page .profile-cover {
+  border-radius: 2rem;
+  box-shadow: var(--shadow-frame);
+}
+
+.profile-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 25.5rem;
+  column-gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: start;
+}
+
+.profile-identity {
+  position: relative;
+  min-width: 0;
+  margin-top: -4.5rem;
+  padding-left: var(--space-10);
+}
+
+/* One share button: beside the name here, beside the photo on a phone. */
+.profile-identity__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'photo photo'
+    'name share';
+  column-gap: var(--space-4);
+  align-items: start;
+}
+
+/* On any of the covers, so its ring is the page's solid canvas, never a tint of the cover. */
+.profile-photo {
+  grid-area: photo;
+  display: block;
+  width: 9rem;
+  height: 9rem;
+  margin-bottom: var(--space-5);
+  border: 5px solid var(--canvas);
+  border-radius: 50%;
+  background: var(--canvas);
+  object-fit: cover;
+  object-position: 50% 25%;
+}
+
+.profile-photo.avatar--initials {
+  width: 9rem;
+  height: 9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-recessed);
+  color: var(--text-primary);
+  font: 400 3.25rem / 1 var(--font-editorial);
+}
+
+.profile-identity__name {
+  grid-area: name;
+  min-width: 0;
+}
+
+.profile-identity h1 {
+  margin: 0;
+  font: 400 clamp(2.875rem, 4.7vw, 4.25rem) / 1 var(--font-editorial);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.profile-identity h1.profile-name--long {
+  font-size: clamp(2rem, 3.2vw, 2.75rem);
+  line-height: 1.1;
+}
+
+.profile-identity__handle {
+  margin: 0.625rem 0 0;
+  color: var(--text-secondary);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.profile-role {
+  margin: 1.625rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  /* A long unbroken role wraps; `main` clips sideways overflow, so it would otherwise be cut off. */
+  overflow-wrap: anywhere;
+}
+
+.profile-bio {
+  margin: 0.625rem 0 0;
+  max-width: 34em;
+  color: var(--text-secondary);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* A row of plain links with icons, optically flush with the text above. */
+.profile-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 1.75rem 0 0 -0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-contact a {
+  display: flex;
+  align-items: center;
+  gap: 0.5625rem;
+  min-height: 44px;
+  padding-inline: 0.75rem;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.profile-contact a:hover {
+  color: var(--brand-ink);
+}
+
+.profile-contact svg {
+  flex: none;
+}
+
+.profile-words {
+  margin-top: var(--space-6);
+}
+
+.profile-words__craft {
+  margin: 0 0 var(--space-2);
+  font: 400 var(--text-xl) / 1.25 var(--font-editorial);
+}
+
+.profile-words__note {
+  margin: 0;
+  max-width: 34em;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.share-profile {
+  position: relative;
+}
+
+.share-profile--icon {
+  grid-area: share;
+  margin-top: var(--space-2);
+}
+
+.share-profile__icon.tm-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+
+/* Over the page rather than in it, so copying moves nothing. */
+.share-profile--icon .share-profile__status:not(:empty) {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  width: max-content;
+  max-width: min(16rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--text-primary);
+  color: var(--surface-base);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.share-profile--icon .share-profile__status:empty {
+  display: block;
+  position: absolute;
+  margin: 0;
+}
+
+.share-profile--text .tm-button {
+  width: 100%;
+  min-height: 52px;
+  margin-top: var(--space-4);
+}
+
+.share-profile--text .share-profile__status {
+  margin: var(--space-2) 0 0;
+}
+
+.share-profile--text .share-profile__status[data-copied] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The tipping panel. It stays in view beside a longer left column and stops at the footer. */
+.profile-composer {
+  position: sticky;
+  top: var(--space-4);
+  z-index: 3;
+  min-width: 0;
+  margin-top: -12.25rem;
+  animation: profile-panel-rise var(--duration-component) var(--ease-physical)
+    backwards;
+}
+
+@keyframes profile-panel-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes profile-panel-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The payment moment stays still: fields going disabled don't fade, only the label changes. */
+.profile-composer form[data-submitting] *,
+.profile-composer form[data-submitting] *::before,
+.profile-composer form[data-submitting] *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+.profile-composer .appreciation-card {
+  padding: 1.75rem;
+  border-radius: 1.625rem;
+}
+
+.profile-composer .appreciation-card h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.profile-composer .amount-options {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.profile-composer .tm-amount-choice span {
+  min-height: 3.75rem;
+  padding-inline: 0.25rem;
+  border-radius: 0.875rem;
+}
+
+/* The total's line is held open beside the button, so choosing an amount moves nothing. */
+.profile-composer .tip-quote {
+  min-height: 1.75rem;
+  margin: 0 0 var(--space-3);
+}
+
+.profile-composer .tip-quote:empty {
+  display: block;
+  margin-top: 0;
+}
+
+/* Shown only in the phone's Tip bar; elsewhere the wording under the button carries it. */
+.composer-action__notice {
+  display: none;
+}
+
+.profile-composer .composer-submit,
+.profile-composer .composer-submit:hover {
+  min-height: 3.5rem;
+  border-color: #000;
+  background: #000;
+  color: #fff;
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A shorter window keeps the Tip button and total in view: the panel rides higher on the cover. */
+@media (min-width: 861px) and (max-height: 50rem) {
+  .profile-composer {
+    margin-top: -16.5rem;
+  }
+}
+
+/* The promise beside the button; the wording directly under the button stays its own block. */
+.composer-trust {
+  display: flex;
+  gap: 0.5625rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.84375rem;
+  line-height: 1.5;
+}
+
+.composer-trust svg {
+  flex: none;
+  margin-top: 0.125rem;
+}
+
+.profile-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  margin-top: var(--space-10);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.profile-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.profile-foot__quiet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-5);
+}
+
+.profile-foot__quiet > a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.profile-foot__own {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.profile-foot .report-page {
+  margin: 0;
+}
+
+.profile-foot form.report-page {
+  flex: 1 1 100%;
+  max-width: 28rem;
+}
+
+.profile-foot .report-page > .tm-button--quiet {
+  padding-inline: 0;
+  color: var(--text-secondary);
+  font-size: inherit;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Tablet and phone: one sequence, with the cover edge to edge. */
+@media (max-width: 860px) {
+  body:has(.profile-page) .nav-shell {
+    width: calc(100% - 2rem);
+    min-height: 60px;
+  }
+
+  body:has(.profile-page) .brand__mark {
+    height: 1.5rem;
+  }
+
+  .profile-sheet {
+    width: 100%;
+  }
+
+  .profile-page .profile-cover {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .profile-columns {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 36rem;
+    margin-inline: auto;
+    padding-inline: var(--space-4);
+  }
+
+  .profile-identity {
+    margin-top: -3.25rem;
+    padding-left: 0;
+  }
+
+  .profile-identity__head {
+    grid-template-areas:
+      'photo share'
+      'name name';
+    align-items: end;
+  }
+
+  .profile-photo {
+    width: 6.5rem;
+    height: 6.5rem;
+    margin-bottom: var(--space-3);
+    border-width: 4px;
+  }
+
+  .profile-photo.avatar--initials {
+    width: 6.5rem;
+    height: 6.5rem;
+    font-size: 2.5rem;
+  }
+
+  .share-profile--icon {
+    margin: 0 0 var(--space-3);
+  }
+
+  .profile-identity h1 {
+    font-size: 2.875rem;
+  }
+
+  .profile-identity h1.profile-name--long {
+    font-size: 2rem;
+  }
+
+  .profile-identity__handle {
+    margin-top: 0.375rem;
+    font-size: 0.9375rem;
+  }
+
+  .profile-role {
+    margin-top: var(--space-4);
+    font-size: 1.0625rem;
+  }
+
+  .profile-bio {
+    margin-top: 0.375rem;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .profile-contact {
+    gap: 2px;
+    margin: 0.625rem 0 0 -0.625rem;
+  }
+
+  .profile-contact a {
+    gap: var(--space-2);
+    padding-inline: 0.625rem;
+    font-size: 0.875rem;
+  }
+
+  /* Opacity only: a transform here would hold the fixed Tip bar inside the moving panel. */
+  .profile-composer {
+    position: static;
+    margin-top: var(--space-4);
+    animation-name: profile-panel-fade;
+  }
+
+  .profile-composer .appreciation-card {
+    padding: var(--space-5);
+  }
+
+  .profile-composer .appreciation-card h2 {
+    font-size: 1.25rem;
+  }
+
+  .profile-composer .tm-amount-choice span {
+    min-height: 3.625rem;
+    font-size: 0.875rem;
+  }
+
+  .profile-foot {
+    max-width: 36rem;
+    margin: var(--space-6) auto 0;
+    padding-inline: var(--space-4);
+  }
+}
+
+/* The Tip bar. It is the form's own submit button, so there is one action and one accessible
+   button at every width, with the confirmed total and any notice beside it. It steps aside while
+   a typing field has focus (the keyboard needs the room; a select opens none). Scroll padding and
+   bottom padding, sized to the bar by the form, keep everything else reachable above it. Only
+   with :has() can it protect those, so older browsers skip this block and keep the button in the
+   form. So does a very short screen, where the bar would take too much of the view. */
+@supports selector(:has(*)) {
+  @media (max-width: 860px) and (min-height: 30rem) {
+    html:has(.profile-page .composer-action) {
+      scroll-padding-bottom: calc(var(--tip-bar, 7rem) + 0.5rem);
+    }
+
+    .profile-page:has(.composer-action) {
+      padding-bottom: calc(var(--tip-bar, 7rem) + 1rem);
+    }
+
+    .profile-composer .composer-action {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: var(--z-nav);
+      padding: var(--space-2) var(--space-4)
+        calc(var(--space-3) + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--edge-hairline);
+      background: var(--surface-raised);
+      box-shadow: 0 -8px 24px rgb(20 18 16 / 8%);
+    }
+
+    .profile-composer .composer-action__notice {
+      display: block;
+      margin: 0 0 var(--space-1);
+      color: var(--text-secondary);
+      font-size: 0.6875rem;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .profile-composer .composer-action__notice a {
+      color: var(--text-primary);
+      text-underline-offset: 3px;
+    }
+
+    /* The bar carries the mode wording on these phones, so the copy under the button goes (from
+       sight and from screen readers alike): the person meets it once, beside the Tip action. */
+    .profile-composer .composer-disclaimer__mode {
+      display: none;
+    }
+
+    .profile-composer .composer-action .tip-quote {
+      min-height: 0;
+      margin: 0 0 var(--space-1);
+      text-align: center;
+    }
+
+    .profile-composer .composer-action .tip-quote:empty {
+      display: none;
+    }
+
+    .profile-composer .composer-action .tip-quote p {
+      margin: 0;
+    }
+
+    .profile-composer .composer-submit,
+    .profile-composer .composer-submit:hover {
+      min-height: 3.25rem;
+    }
+
+    .profile-page:has(
+        :is(input:not([type='radio'], [type='checkbox']), textarea):focus
+      )
+      .composer-action {
+      visibility: hidden;
+    }
+
+    /* The button has left the flow: the wording below it needs no pull towards it. */
+    .profile-composer .composer-disclaimer {
+      margin-top: 0;
+    }
+  }
+}
+
+@media (max-width: 359px) {
+  .profile-composer .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-composer {
+    animation: none;
   }
 }
 
@@ -2287,11 +2617,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.6;
 }
 
-/* While a profile loads, its frames hold their places. */
-.profile-stage--loading .profile-portrait .tm-skeleton {
-  height: 100%;
-}
-
 /* Continuation inside a floating card is black, as on the profile. */
 .auth-card .tm-button--primary,
 .welcome-continue.tm-button--primary {
@@ -2703,13 +3028,27 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
 .settings-grid {
   display: grid;
+  /* One column that may shrink below its widest content; `auto` let a wide child (a long line, a
+     row of controls) stretch the column past a 360px screen, and the right edge was clipped. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   max-width: 44rem;
 }
 
 .settings-section {
   display: grid;
+  /* A single column that can shrink: a file input's own width (about 400px) otherwise held the
+     whole card wider than a 360px screen and clipped it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
+}
+
+.settings-section .tm-field {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-section input[type='file'] {
+  max-width: 100%;
 }
 
 .settings-section h2 {
@@ -2724,6 +3063,129 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 .settings-form {
   display: grid;
   gap: var(--space-4);
+}
+
+.confirm-dialog {
+  /* The site's reset removes the margin that centres a modal dialog. */
+  margin: auto;
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+  padding: var(--space-6);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-raised-2);
+  animation: confirm-dialog-in var(--duration-component) var(--ease-physical);
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+  animation: confirm-dialog-dim var(--duration-component) var(--ease-physical);
+}
+
+/* 160ms out: two-thirds of the entry, the time ConfirmDialog waits. */
+.confirm-dialog[data-leaving] {
+  animation: confirm-dialog-out calc(var(--duration-component) * 2 / 3)
+    var(--ease-physical) forwards;
+}
+
+.confirm-dialog[data-leaving]::backdrop {
+  animation: confirm-dialog-dim calc(var(--duration-component) * 2 / 3)
+    var(--ease-physical) reverse forwards;
+}
+
+/* Page scroll stays put behind it, without the layout shifting. */
+html:has(.confirm-dialog[open]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+.confirm-dialog h2 {
+  margin: 0 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog__body {
+  display: grid;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog__body p {
+  margin: 0;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+/* On a phone it is a sheet rising from the bottom. */
+@media (max-width: 30rem) {
+  .confirm-dialog {
+    margin: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    border-width: 1px 0 0;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+    animation: confirm-dialog-sheet var(--duration-spatial) var(--ease-physical);
+  }
+
+  .confirm-dialog[data-leaving] {
+    animation-name: confirm-dialog-sheet-out;
+  }
+}
+
+.handle-saved {
+  animation: confirm-dialog-dim var(--duration-component) var(--ease-physical);
+}
+
+@keyframes confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes confirm-dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes confirm-dialog-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-dialog-sheet {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes confirm-dialog-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog,
+  .confirm-dialog::backdrop,
+  .confirm-dialog[data-leaving],
+  .confirm-dialog[data-leaving]::backdrop,
+  .handle-saved {
+    animation: none;
+  }
 }
 
 /* Pro tip amounts (PR-012): up to four amounts, two per row, one per row on narrow screens. */
@@ -2774,20 +3236,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 .device-list small {
   display: block;
   color: var(--text-secondary);
-}
-
-.profile-contact {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.profile-contact a {
-  color: var(--brand-ink);
-  font-weight: 700;
 }
 
 .avatar--initials {
@@ -3552,6 +4000,83 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   flex-shrink: 0;
 }
 
+.qr-style__thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--edge-hairline);
+  flex-shrink: 0;
+  background: #ffffff;
+}
+
+.qr-designs,
+.qr-formats {
+  margin-top: var(--space-4);
+}
+
+/* A Pro design's picture. A new one fades in over the old one's place in 240ms; nothing moves. */
+.qr-design__plate {
+  background: #ffffff;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-frame);
+  padding: var(--space-3);
+  max-width: 22rem;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+
+.qr-design__plate {
+  position: relative;
+}
+
+.qr-design__image {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: auto;
+}
+
+/* A new real code fades in over the last one, which stays until it has loaded. A marked preview
+   is present from the first frame and never fades. */
+.qr-design__image--under {
+  position: relative;
+}
+
+.qr-design__image--fade {
+  animation: qr-design-in var(--duration-component) var(--ease-physical);
+}
+
+.qr-design__error,
+.qr-design__wait {
+  margin: 0;
+  text-align: center;
+}
+
+@keyframes qr-design-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.settings-list {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.qr-locked {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  margin-bottom: var(--space-4);
+}
+
+.qr-locked h2,
+.qr-locked p {
+  margin: 0;
+}
+
 .qr-style__premium {
   display: block;
   color: var(--text-secondary);
@@ -3584,9 +4109,28 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   background: #ffffff;
 }
 
-.qr-stage:fullscreen canvas {
+.qr-stage:fullscreen canvas,
+.qr-stage:fullscreen .qr-stage__image {
   width: min(92vw, 92vh);
   height: auto;
+}
+
+/* The picture grows to fill the screen in 420ms, then the code stays completely still. */
+.qr-stage:fullscreen .qr-stage__image {
+  animation: qr-stage-grow var(--duration-spatial) var(--ease-physical);
+}
+
+@keyframes qr-stage-grow {
+  from {
+    transform: scale(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qr-design__image--fade,
+  .qr-stage:fullscreen .qr-stage__image {
+    animation: none;
+  }
 }
 
 .print-card {
@@ -3630,6 +4174,270 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     max-width: none;
     width: 100%;
   }
+
+  /* The business card and the sticker print at their real sizes, on pages of that size. */
+  @page business {
+    size: 90mm 55mm;
+    margin: 0;
+  }
+
+  @page sticker {
+    size: 80mm 80mm;
+    margin: 0;
+  }
+
+  .qr-sheet:has(.qr-format--business) {
+    page: business;
+  }
+
+  .qr-sheet:has(.qr-format--sticker) {
+    page: sticker;
+  }
+
+  .qr-format--business {
+    width: 90mm;
+    height: 55mm;
+    padding: 4mm;
+    border: 0;
+  }
+
+  .qr-format--business .qr-format__big {
+    font-size: 1.6rem;
+  }
+
+  .qr-format--sticker {
+    width: 80mm;
+    height: 80mm;
+    border: 0;
+  }
+
+  /* A format prints at its own size on the page, still, with its colours kept. */
+  .qr-sheet {
+    max-width: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .qr-format,
+  .qr-format * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Print formats: layouts around the server's picture of the code. Still, on screen and on paper. */
+.qr-sheet {
+  width: 100%;
+  max-width: 24rem;
+}
+
+.qr-format {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: 1.5rem;
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid var(--edge-hairline);
+  font-family: var(--font-body, inherit);
+  break-inside: avoid;
+}
+
+.qr-format__code {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qr-format__plate {
+  width: 70%;
+  background: #ffffff;
+  border-radius: 1rem;
+  padding: 0.25rem;
+  box-sizing: border-box;
+}
+
+.qr-format__title,
+.qr-format__big {
+  margin: 0;
+  font-family: var(--font-editorial);
+  line-height: 1.05;
+}
+
+.qr-format__title {
+  font-size: 2rem;
+  overflow-wrap: anywhere;
+}
+
+.qr-format__big {
+  font-size: 3.5rem;
+  overflow-wrap: anywhere;
+  /* A long name is cut after two lines rather than pushing the code off the sheet. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.qr-format__sub,
+.qr-format__link,
+.qr-format__small {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.qr-format__small {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.qr-format--counter,
+.qr-format--hang {
+  background: #7a32f9;
+  color: #ffffff;
+}
+
+.qr-format--hang {
+  border-radius: 1.5rem;
+  position: relative;
+  padding-top: 2.5rem;
+}
+
+.qr-format__hole {
+  position: absolute;
+  top: 0.9rem;
+  width: 2rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: var(--surface-base, #ffffff);
+  border: 1px solid #00000033;
+}
+
+.qr-format--poster {
+  align-items: flex-start;
+  text-align: left;
+  min-height: 30rem;
+}
+
+.qr-format__foot {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.qr-format__foot p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.qr-format__foot .qr-format__code {
+  width: 45%;
+  flex: none;
+}
+
+.qr-format--sticker {
+  position: relative;
+  aspect-ratio: 1;
+  justify-content: center;
+  border-radius: 50%;
+  background: #000000;
+  color: #ffffff;
+}
+
+.qr-format__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.qr-format--sticker .qr-format__plate {
+  width: 58%;
+  border-radius: 1.2rem;
+}
+
+.qr-format--ticket {
+  padding: 0;
+  border-radius: 1.1rem;
+  overflow: hidden;
+}
+
+.qr-format--ticket .qr-format__title {
+  align-self: stretch;
+  background: #4d16a8;
+  color: #ffffff;
+  padding: 1.25rem 1.5rem;
+  text-align: left;
+}
+
+.qr-format__perforated {
+  align-self: stretch;
+  border-top: 2px dashed #00000050;
+  padding: 1rem 2.5rem 0.5rem;
+}
+
+.qr-format--ticket .qr-format__link {
+  padding-bottom: 1rem;
+}
+
+.qr-format--receipt {
+  font-family: 'Courier New', monospace;
+  max-width: 17rem;
+  border-radius: 0;
+}
+
+.qr-format__rule {
+  align-self: stretch;
+  margin: 0;
+  border-top: 1px dashed #000000;
+  padding-top: 0.6rem;
+  font-weight: 700;
+}
+
+.qr-format--lock {
+  max-width: 15rem;
+  min-height: 28rem;
+  border: 8px solid #000000;
+  border-radius: 2.1rem;
+  background: #1f4d3a;
+  color: #ffffff;
+  padding-top: 2.75rem;
+}
+
+.qr-format--business {
+  flex-direction: row;
+  max-width: 24rem;
+  text-align: left;
+  background: #000000;
+  color: #ffffff;
+  border-radius: 0.75rem;
+}
+
+.qr-format__text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.qr-format--business .qr-format__big {
+  font-size: 2.5rem;
+}
+
+.qr-format--business .qr-format__plate {
+  width: 42%;
+  flex: none;
+  border-radius: 0.6rem;
+  padding: 0.125rem;
 }
 
 /* Notifications (PR-008 Task 9). */
@@ -4118,11 +4926,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   margin-top: var(--space-2);
 }
 
-/* The quiet button lines up with the preview note above it. */
-.profile-safety .report-page > .tm-button--quiet {
-  padding-inline: 0;
-}
-
 .tips-tools {
   display: flex;
   flex-wrap: wrap;
@@ -4434,4 +5237,211 @@ body > .coming-soon-page {
 
 .ops-row .ops-summary {
   overflow-wrap: anywhere;
+}
+
+/* The cover chooser in Settings (design spec §6, motion §7.6). */
+.cover-preview {
+  position: relative;
+  border-radius: var(--radius-field);
+  overflow: hidden;
+  background: #e6e4dc;
+  box-shadow: inset 0 0 0 1px var(--edge-hairline);
+}
+
+.cover-preview .profile-cover,
+.cover-choice__thumb .profile-cover {
+  /* The page's frame is 300px tall; here the same shape is drawn at the width available. */
+  height: auto;
+  aspect-ratio: 1120 / 300;
+}
+
+.cover-preview .profile-cover > svg,
+.cover-choice__thumb .profile-cover > svg {
+  position: absolute;
+  inset: 0;
+}
+
+.cover-preview__layer + .cover-preview__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.cover-preview__layer--in {
+  animation: cover-fade-in var(--duration-component) var(--ease-physical) both;
+}
+
+.cover-preview__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes cover-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover-preview__layer--in {
+    animation: none;
+  }
+}
+
+/* A file input dressed as a button; the real input keeps focus, so the ring is drawn on the label. */
+.cover-upload {
+  position: relative;
+  justify-self: start;
+  cursor: pointer;
+}
+
+.cover-upload__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cover-upload:has(input:focus-visible) {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 3px;
+}
+
+.cover-photo-note {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-field);
+  background: var(--brand-soft);
+  color: var(--text-primary);
+}
+
+.cover-photo-note p {
+  margin: 0;
+}
+
+.cover-choices,
+.cover-colours {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cover-choices legend,
+.cover-colours legend {
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.cover-choices__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
+  gap: var(--space-3);
+}
+
+.cover-choice {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.cover-choice input,
+.cover-colour input {
+  /* Covers the choice, invisible and on top, so a click anywhere on it lands on the real radio. */
+  z-index: 1;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cover-choice__thumb {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-control);
+}
+
+.cover-choice:has(input:checked) .cover-choice__thumb {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px var(--brand-primary);
+}
+
+.cover-choice:has(input:focus-visible) .cover-choice__thumb,
+.cover-colour:has(input:focus-visible) {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 3px;
+}
+
+.cover-choice__name {
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.cover-choice__note {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+}
+
+.cover-choice:has(input:checked) .cover-choice__name {
+  font-weight: 700;
+}
+
+.cover-colours__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cover-colour {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.cover-colour:has(input:checked) {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--text-primary);
+  font-weight: 700;
+}
+
+.cover-colour__swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 1px solid rgb(20 18 16 / 20%);
+  flex-shrink: 0;
+}
+
+.cover-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cover-save__status {
+  min-height: 1.5em;
 }
