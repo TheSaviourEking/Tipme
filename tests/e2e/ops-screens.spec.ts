@@ -94,14 +94,18 @@ test('People: the hint matches the role, a dead address warns, and Remove confir
     .selectOption({ label: roleName });
   await page.getByLabel('Why are you adding them?').fill(REASON);
   await page.getByRole('button', { name: 'Add person' }).click();
-  await expect(page.getByText('The link won’t arrive')).toBeVisible();
+  await expect(
+    page.getByText('The link won’t arrive', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('Invitation sent')).toHaveCount(0);
 
   await card.getByRole('button', { name: 'Reset authenticator…' }).click();
   await card.getByLabel('Why reset their authenticator?').fill(REASON);
   await card.getByRole('button', { name: 'Reset authenticator' }).click();
-  await expect(page.getByText('The link won’t arrive')).toBeVisible();
-  await expect(page.getByText('Done', { exact: true })).toHaveCount(0);
+  await expect(
+    card.getByText('The link won’t arrive', { exact: true }),
+  ).toBeVisible();
+  await expect(card.getByText('Done', { exact: true })).toHaveCount(0);
 
   await card.getByRole('button', { name: 'Remove…' }).click();
   await card.getByLabel('Why remove them?').fill(REASON);
@@ -195,6 +199,6 @@ test('holding only providers.manage or email.read opens those screens', async ({
     await expect(
       page.getByRole('heading', { name: heading, level: 1 }),
     ).toBeVisible();
-    await page.unroute('**/v1/ops/me');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   }
 });

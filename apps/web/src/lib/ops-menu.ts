@@ -20,9 +20,13 @@ const LINKS: { href: string; label: string; needs: string[] | null }[] = [
   {
     href: '/ops/providers',
     label: 'Providers',
-    needs: ['issues.view'],
+    needs: ['issues.view', 'providers.manage'],
   },
-  { href: '/ops/email', label: 'Email', needs: ['issues.view'] },
+  {
+    href: '/ops/email',
+    label: 'Email',
+    needs: ['issues.view', 'email.read', 'email.export'],
+  },
   { href: '/ops/audit', label: 'Audit log', needs: ['audit.view'] },
   { href: '/ops/staff/people', label: 'People', needs: ['staff.manage'] },
   { href: '/ops/staff/roles', label: 'Roles', needs: ['staff.manage'] },

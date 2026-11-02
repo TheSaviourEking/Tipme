@@ -75,8 +75,10 @@ export class OpsEmailConsoleController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {}
 
+  // The list is the way to the email you may open or the log you may download: no contents or
+  // recipient here, which stay behind email.read and private.view.
   @Get('summary')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'email.read', 'email.export')
   async summary(
     @Query(new ZodValidationPipe(opsMailPeriodQuerySchema))
     query: z.infer<typeof opsMailPeriodQuerySchema>,
@@ -91,7 +93,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('series')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'email.read', 'email.export')
   async series(
     @Query(new ZodValidationPipe(opsMailPeriodQuerySchema))
     query: z.infer<typeof opsMailPeriodQuerySchema>,
@@ -106,7 +108,7 @@ export class OpsEmailConsoleController {
   }
 
   @Get('messages')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'email.read', 'email.export')
   async messages(
     @Query(new ZodValidationPipe(opsMailListQuerySchema))
     query: z.infer<typeof opsMailListQuerySchema>,

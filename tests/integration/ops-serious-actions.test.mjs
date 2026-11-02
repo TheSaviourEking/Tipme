@@ -321,10 +321,10 @@ test('every route under a sensitive permission asks for a fresh code, enforced i
         if (inline.length) opaque.push(`${route} (no permission)`);
         continue;
       }
-      assert.ok(
-        OPS_CATALOGUE[permission],
-        `${permission} not in the catalogue`,
-      );
+      // A route naming several opens to any one: it needs a code only if all of them would.
+      const opensTo = [permission].flat();
+      for (const one of opensTo)
+        assert.ok(OPS_CATALOGUE[one], `${one} not in the catalogue`);
       const names = inline.map((text) => /^'([^']+)'$/.exec(text)?.[1]);
       if (names.includes(undefined)) opaque.push(`${route} (computed)`);
       const marked = Reflect.getMetadata(FRESH_CODE, handler) === true;
@@ -334,8 +334,14 @@ test('every route under a sensitive permission asks for a fresh code, enforced i
         if (fresh < 0 || fresh < guards.indexOf(OpsGuard))
           misordered.push(route);
       }
-      const held = [permission, ...names.filter(Boolean)];
-      if (!held.some((held1) => OPS_CATALOGUE[held1]?.sensitive)) continue;
+      const sensitiveToOpen = opensTo.every(
+        (one) => OPS_CATALOGUE[one].sensitive,
+      );
+      if (
+        !sensitiveToOpen &&
+        !names.some((one) => one && OPS_CATALOGUE[one]?.sensitive)
+      )
+        continue;
       sensitive += 1;
       const exemption = exemptions[route];
       if (exemption) {

@@ -35,12 +35,15 @@ export const OPS_ANY_STAFF = 'tipme:ops-any-staff';
  * both ways is a mistake, so it refuses everyone rather than guess which was meant.
  */
 export function routeAllows(
-  permission: string | undefined,
+  permission: string | readonly string[] | undefined,
   anyStaff: boolean,
   held: ReadonlySet<string>,
 ): boolean {
   if (permission && anyStaff) return false;
-  return permission ? held.has(permission) : anyStaff;
+  if (!permission) return anyStaff;
+  return typeof permission === 'string'
+    ? held.has(permission)
+    : permission.some((one) => held.has(one));
 }
 
 // Anyone who is not signed-in staff learns nothing about the admin area: every refusal is a 404.
@@ -94,10 +97,9 @@ export class OpsGuard implements CanActivate {
           })
         : null;
     if (!session || !grant || grant.userId !== session.userId) throw hidden();
-    const permission = this.reflector.getAllAndOverride<string | undefined>(
-      OPS_PERMISSION,
-      [context.getHandler(), context.getClass()],
-    );
+    const permission = this.reflector.getAllAndOverride<
+      string | string[] | undefined
+    >(OPS_PERMISSION, [context.getHandler(), context.getClass()]);
     const anyStaff = this.reflector.getAllAndOverride<boolean | undefined>(
       OPS_ANY_STAFF,
       [context.getHandler(), context.getClass()],

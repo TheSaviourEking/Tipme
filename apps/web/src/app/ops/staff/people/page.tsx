@@ -367,12 +367,14 @@ function Person({
   person,
   roles,
   held,
+  mayReset,
   onChanged,
   onRemoved,
 }: {
   person: OpsStaffPerson;
   roles: OpsRole[] | null;
   held: string[];
+  mayReset: boolean;
   onChanged: () => void;
   onRemoved: (text: string) => void;
 }) {
@@ -436,29 +438,32 @@ function Person({
           </p>
         )}
         {person.enrolled ? (
-          <ReasonAction
-            open="Reset authenticator…"
-            field="Why reset their authenticator?"
-            hint="For a lost phone. They get a new link by email. Recorded in the audit log."
-            submit="Reset authenticator"
-            onSubmit={async (reason) => {
-              const answer = await opsAct<OpsEnrolmentLinkSent>(
-                `/v1/ops/staff/${person.userId}/reset-authenticator`,
-                { method: 'POST', body: { reason } },
-              );
-              if (answer.kind === 'refused') return refusalWords(answer);
-              hear(
-                answer.kind === 'done'
-                  ? sentOutcome(
-                      answer,
-                      answer.data,
-                      'Their authenticator is reset. ',
-                    )
-                  : outcomeOf(answer, ''),
-              );
-              return null;
-            }}
-          />
+          // Owners only, on the server too: anyone else would only be refused.
+          mayReset && (
+            <ReasonAction
+              open="Reset authenticator…"
+              field="Why reset their authenticator?"
+              hint="For a lost phone. They get a new link by email. Recorded in the audit log."
+              submit="Reset authenticator"
+              onSubmit={async (reason) => {
+                const answer = await opsAct<OpsEnrolmentLinkSent>(
+                  `/v1/ops/staff/${person.userId}/reset-authenticator`,
+                  { method: 'POST', body: { reason } },
+                );
+                if (answer.kind === 'refused') return refusalWords(answer);
+                hear(
+                  answer.kind === 'done'
+                    ? sentOutcome(
+                        answer,
+                        answer.data,
+                        'Their authenticator is reset. ',
+                      )
+                    : outcomeOf(answer, ''),
+                );
+                return null;
+              }}
+            />
+          )
         ) : (
           <ReasonAction
             open="Resend invitation…"
@@ -576,6 +581,7 @@ export default function PeoplePage() {
               person={person}
               roles={roles}
               held={access.permissions}
+              mayReset={access.role === 'owner'}
               onChanged={() => void load()}
               onRemoved={(text) => {
                 setOutcome({ kind: 'done', actedAlone: false, text });

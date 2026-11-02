@@ -109,7 +109,7 @@ function operation(
   const rateLimit = Reflect.getMetadata(RATE_LIMIT_ROUTE, handler) as
     string | undefined;
   const permission = Reflect.getMetadata(OPS_PERMISSION, handler) as
-    string | undefined;
+    string | string[] | undefined;
   const args = Object.entries(
     (Reflect.getMetadata(
       ROUTE_ARGS_METADATA,

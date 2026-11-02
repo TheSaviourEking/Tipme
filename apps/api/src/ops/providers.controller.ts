@@ -121,8 +121,9 @@ export class OpsProvidersController {
     );
   }
 
+  // Whoever may change the settings has to read them, and open their own test's link.
   @Get('mail')
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'providers.manage')
   async overview(): Promise<ApiDataResponse<OpsMailProviders>> {
     const overview = await mailProviderOverview(this.database.db, {
       configured: [...this.providers.keys()],
@@ -174,7 +175,7 @@ export class OpsProvidersController {
   /** Opened from the test email: any staff member with an ops session may confirm. */
   @Post('tests/confirm')
   @HttpCode(200)
-  @OpsPermission('issues.view')
+  @OpsPermission('issues.view', 'providers.manage')
   async confirmTest(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsProviderTestConfirmSchema))
