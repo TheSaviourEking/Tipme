@@ -591,13 +591,17 @@ export function staffAbleToEnterCode(
     );
 }
 
+/** A line of its own in the last-person alert, beside the permissions. */
+const OWNER_ONLY_ACTIONS = 'owner-only actions';
+
 const SERIOUS_PERMISSIONS = new Set<string>(
   Object.values(SERIOUS_ACTION_PERMISSIONS),
 );
 
 /**
- * For each permission behind a serious action, who could act under it. People, not accounts: two
- * accounts on one mailbox count once, as they can't approve for each other.
+ * For each permission behind a serious action, who could decide under it, plus owners for the actions
+ * only an owner decides. People, not accounts: two accounts on one mailbox count once, as they can't
+ * approve for each other.
  */
 export async function seriousPermissionHolders(
   tx: Database | Tx,
@@ -606,6 +610,12 @@ export async function seriousPermissionHolders(
   for (const person of await staffAbleToEnterCode(tx)) {
     const access = await readStaffAccess(tx, person.userId);
     const boxes = mailboxesOf(person);
+    // Some actions only an owner may decide, so holding the permission doesn't make a second person.
+    if (access?.roleId === 'owner')
+      holders.set(OWNER_ONLY_ACTIONS, [
+        ...(holders.get(OWNER_ONLY_ACTIONS) ?? []),
+        boxes,
+      ]);
     for (const permission of access?.permissions ?? [])
       if (SERIOUS_PERMISSIONS.has(permission))
         holders.set(permission, [...(holders.get(permission) ?? []), boxes]);
@@ -730,14 +740,15 @@ export function grantOwner(
           ),
         )
         .for('update');
+      // One person, one staff account: naming a variant must not quietly make a second one. An
+      // account already active is who the operator means, whatever a removed look-alike held. A
+      // phone-only account can still reach a colleague through its recovery address.
       const named = email ?? existing?.email;
-      if (named) {
-        // One person, one staff account: naming a variant must not quietly make a second one. An
-        // account already active is who the operator means, whatever a removed look-alike held.
-        const mailboxes = existing
-          ? await readMailboxes(tx, existing.id)
-          : new Set<string>();
-        mailboxes.add(normaliseStaffEmail(named));
+      const mailboxes = existing
+        ? await readMailboxes(tx, existing.id)
+        : new Set<string>();
+      if (named) mailboxes.add(normaliseStaffEmail(named));
+      if (mailboxes.size > 0) {
         const staffAccounts = await tx
           .select({
             userId: staff.userId,

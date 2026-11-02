@@ -6,7 +6,9 @@ import {
   Inject,
   Param,
   Post,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   opsFeeFreeGrantSchema,
   opsPageFeeSchema,
@@ -19,18 +21,21 @@ import {
   type OpsPagePlanRequest,
   type OpsPagePricing,
   type OpsReasonRequest,
+  type OpsSeriousPending,
   type OpsWithdrawalFreeze,
   type OpsWithdrawalFreezeState,
 } from '@tipme/contracts';
 import {
   freezeWithdrawals,
-  grantFeeFreeTips,
   opsPageByHandle,
   pagePricing,
-  setAccountFee,
+  requestSeriousAction,
+  type SeriousActionServices,
   setPagePlan,
   withdrawalFreezeIssue,
 } from '@tipme/database';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -51,6 +56,7 @@ export class OpsPagesController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
   ) {}
 
   @Get(':handle')
@@ -99,6 +105,7 @@ export class OpsPagesController {
   }
 
   @Get(':profileId/withdrawal-freeze')
+  @FreshCode()
   @OpsPermission('payouts.resolve')
   async freezeState(
     @Param('profileId') profileId: string,
@@ -114,6 +121,7 @@ export class OpsPagesController {
   /** A reported account takeover: stops withdrawals until the issue it opens is resolved. */
   @Post(':profileId/withdrawal-freeze')
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payouts.resolve')
   async freeze(
     @CurrentOps() ops: OpsContext,
@@ -132,27 +140,36 @@ export class OpsPagesController {
 
   @Post(':profileId/fee')
   @HttpCode(200)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('fees.manage')
   async fee(
     @CurrentOps() ops: OpsContext,
     @Param('profileId') profileId: string,
     @Body(new ZodValidationPipe(opsPageFeeSchema)) body: OpsPageFeeRequest,
-  ): Promise<ApiDataResponse<OpsPagePricing>> {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsPagePricing | OpsSeriousPending>> {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
-    const { handle } = await setAccountFee(this.database.db, {
-      staffUserId: ops.userId,
-      profileId,
-      feeBps: body.feeBps,
-      reason: body.reason,
-    });
-    // The public page shows what the recipient receives after fees.
-    this.revalidator.revalidate(handle.toLowerCase());
+    const answer = pendingOr<{ revalidateHandle: string }>(
+      await requestSeriousAction(this.database.db, {
+        name: 'fee.change',
+        payload: { profileId, feeBps: body.feeBps },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    if ('pending' in answer) return { data: answer.pending };
+    // After the commit. The public page shows what the recipient receives after fees.
+    this.revalidator.revalidate(answer.result.revalidateHandle);
     return { data: (await pagePricing(this.database.db, profileId))! };
   }
 
   @Post(':profileId/fee-free')
   @HttpCode(200)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('fees.manage')
   async feeFree(
@@ -160,14 +177,21 @@ export class OpsPagesController {
     @Param('profileId') profileId: string,
     @Body(new ZodValidationPipe(opsFeeFreeGrantSchema))
     body: OpsFeeFreeGrantRequest,
-  ): Promise<ApiDataResponse<OpsPagePricing>> {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsPagePricing | OpsSeriousPending>> {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
-    await grantFeeFreeTips(this.database.db, {
-      staffUserId: ops.userId,
-      profileId,
-      count: body.count,
-      reason: body.reason,
-    });
+    const answer = pendingOr(
+      await requestSeriousAction(this.database.db, {
+        name: 'fee.free',
+        payload: { profileId, count: body.count },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    if ('pending' in answer) return { data: answer.pending };
     return { data: (await pagePricing(this.database.db, profileId))! };
   }
 }

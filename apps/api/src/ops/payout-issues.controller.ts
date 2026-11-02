@@ -5,7 +5,9 @@ import {
   Inject,
   Param,
   Post,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   opsPayoutApplySchema,
   opsPayoutMarkFailedSchema,
@@ -16,11 +18,15 @@ import {
   type OpsPayoutIssueView,
   type OpsPayoutMarkFailedRequest,
   type OpsReasonRequest,
+  type OpsSeriousPending,
 } from '@tipme/contracts';
 import {
-  applyReportedPayout,
-  markPayoutFailedAbsent,
+  readPayoutForAction,
   readPayoutIssue,
+  refuseToApply,
+  refuseToMarkFailed,
+  requestSeriousAction,
+  type SeriousActionServices,
   resumeHeldPayout,
   type PayoutStartLog,
   type StaffPayoutReader,
@@ -31,6 +37,8 @@ import {
   BACHS_PROVIDER_TOKEN,
   PAYMENT_PROVIDER_TOKEN,
 } from '../checkout/payment-provider.provider.js';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -51,6 +59,7 @@ export class OpsPayoutIssuesController {
     @Inject(BACHS_PROVIDER_TOKEN)
     private readonly bachs: BachsProvider | null,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
   ) {}
 
   private common(ops: OpsContext, issueId: string) {
@@ -81,6 +90,7 @@ export class OpsPayoutIssuesController {
 
   @Post('payout-apply')
   @HttpCode(200)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('payouts.resolve')
   async apply(
@@ -88,14 +98,32 @@ export class OpsPayoutIssuesController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(opsPayoutApplySchema))
     body: OpsPayoutApplyRequest,
-  ): Promise<ApiDataResponse<OpsPayoutActionResult>> {
-    return {
-      data: await applyReportedPayout(this.database.db, {
-        ...this.common(ops, id),
-        reported: body.reported,
-        reason: body.reason,
-      }),
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsPayoutActionResult | OpsSeriousPending>> {
+    const input = {
+      ...this.common(ops, id),
+      reported: body.reported,
+      reason: body.reason,
     };
+    // A request nobody could ever approve isn't asked: the screen hears why, as it always did.
+    const refusal = await refuseToApply(
+      this.database.db,
+      input,
+      await readPayoutForAction(this.database.db, input),
+    );
+    if (refusal) return { data: refusal };
+    const answer = pendingOr<OpsPayoutActionResult>(
+      await requestSeriousAction(this.database.db, {
+        name: 'payout.settle',
+        payload: { issueId: id, how: 'apply', reported: body.reported },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 
   @Post('payout-resume')
@@ -117,6 +145,7 @@ export class OpsPayoutIssuesController {
 
   @Post('payout-mark-failed')
   @HttpCode(200)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('payouts.resolve')
   async markFailed(
@@ -124,13 +153,26 @@ export class OpsPayoutIssuesController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(opsPayoutMarkFailedSchema))
     body: OpsPayoutMarkFailedRequest,
-  ): Promise<ApiDataResponse<OpsPayoutActionResult>> {
-    return {
-      data: await markPayoutFailedAbsent(this.database.db, {
-        ...this.common(ops, id),
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsPayoutActionResult | OpsSeriousPending>> {
+    const input = { ...this.common(ops, id), reason: body.reason };
+    const refusal = await refuseToMarkFailed(
+      this.database.db,
+      input,
+      await readPayoutForAction(this.database.db, input),
+    );
+    if (refusal) return { data: refusal };
+    const answer = pendingOr<OpsPayoutActionResult>(
+      await requestSeriousAction(this.database.db, {
+        name: 'payout.settle',
+        payload: { issueId: id, how: 'mark_failed' },
+        actorId: ops.userId,
+        grantId: ops.grantId,
         reason: body.reason,
-        dashboardVerified: body.dashboardVerified,
+        services: this.services,
       }),
-    };
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 }

@@ -367,14 +367,15 @@ export function updateRole(
           );
       }
       if (name !== undefined) await nameFreeOrThrow(tx, name, input.roleId);
-      if (name !== undefined || description !== undefined)
-        await tx
-          .update(roles)
-          .set({
-            ...(name === undefined ? {} : { name }),
-            ...(description === undefined ? {} : { description }),
-          })
-          .where(eq(roles.id, input.roleId));
+      // Always: a request waiting on this role carries this value, and stops if it moves.
+      await tx
+        .update(roles)
+        .set({
+          ...(name === undefined ? {} : { name }),
+          ...(description === undefined ? {} : { description }),
+          updatedAt: sql`clock_timestamp()`,
+        })
+        .where(eq(roles.id, input.roleId));
       await recordAudit(tx, {
         staffUserId: actor.id,
         action: 'role.updated',

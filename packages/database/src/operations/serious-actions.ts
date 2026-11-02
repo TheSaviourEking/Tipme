@@ -21,6 +21,7 @@ import {
 } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { approvalRequests, staffTotp, users } from '../schema.js';
+import type { MailProviderName } from '@tipme/mail';
 import { recordAudit } from './audit.js';
 import { maskEmail } from './email-address.js';
 import {
@@ -32,6 +33,9 @@ import {
 import { newId } from './ids.js';
 import { assertFreshCode } from './ops-sessions.js';
 import { enqueueOutbox } from './outbox.js';
+import type { MailSealing } from './mail-queue.js';
+import type { PayoutStartLog } from './payout-start.js';
+import type { StaffPayoutReader } from './payout-staff.js';
 import {
   canonicalId,
   checkedReason,
@@ -55,6 +59,25 @@ const SWEEP_BATCH = 100;
 // Names that say a value is a credential. Requests sit in the clear for approvers and the log.
 const SECRET_KEY = /(code|token|secret)$/i;
 
+/**
+ * What real actions need from the running app. The API supplies it when asking and approving. The
+ * worker only reads who may decide, so it never needs it. `sealing` queues mail in the transaction.
+ */
+export interface SeriousActionServices {
+  sealing: MailSealing;
+  authCodeSecret: string;
+  /** Used only by `prepare`, outside the transaction. */
+  payoutReader?: (name: string) => StaffPayoutReader;
+  payoutLog?: PayoutStartLog;
+  mail?: {
+    production: boolean;
+    configured: ReadonlySet<MailProviderName>;
+    fallback: MailProviderName;
+    /** Used only by `prepare`, outside the transaction. Null when it can't be read. */
+    status(name: string): Promise<{ sandbox: boolean | null } | null>;
+  };
+}
+
 export interface SeriousActionContext {
   /** Who asked: their reason is the reason. */
   actorId: string;
@@ -62,6 +85,18 @@ export interface SeriousActionContext {
   now: Date;
   /** The second person, or null when it ran alone. */
   approverId: string | null;
+  services?: SeriousActionServices | undefined;
+  /** What `prepare` found, before the transaction. Never stored. */
+  facts?: unknown;
+}
+
+/** What validate may use besides the payload. */
+export interface SeriousActionCheck {
+  actorId: string;
+  reason: string;
+  now: Date;
+  services?: SeriousActionServices | undefined;
+  facts?: unknown;
 }
 
 /**
@@ -76,7 +111,17 @@ export interface SeriousActionDefinition<Payload> {
   /** Must be sensitive in the catalogue: what the route's fresh code and the second person guard. */
   permission: string;
   /** Throws an OperationError if the facts don't allow it. */
-  validate(tx: Tx, payload: Payload): Promise<void>;
+  validate(tx: Tx, payload: Payload, check: SeriousActionCheck): Promise<void>;
+  /**
+   * Anything that must wait on something other than this database (a provider's answer) goes here.
+   * It runs before the transaction, on both paths, each time. What it returns reaches `validate` and
+   * `run` as `facts`. If it throws, nothing has happened and a waiting request stays waiting.
+   */
+  prepare?(
+    db: Database,
+    payload: Payload,
+    input: { actorId: string; services?: SeriousActionServices | undefined },
+  ): Promise<unknown>;
   /**
    * Whether this person could take the action directly: the action's own rules beyond holding
    * `permission` (owner only, must hold what is being granted). Someone it refuses can't approve and
@@ -88,7 +133,7 @@ export interface SeriousActionDefinition<Payload> {
     approver: { userId: string; access: StaffAccess },
   ): Promise<boolean>;
   /** Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox. */
-  subjects?(payload: Payload): string[];
+  subjects?(payload: Payload, db: Database | Tx): string[] | Promise<string[]>;
   /**
    * What the action applies to, say the role or page. Acting alone closes the requester's other
    * requests with the same target. Leave out and the whole action counts as one target.
@@ -102,9 +147,11 @@ export interface SeriousActionDefinition<Payload> {
   /** Shown to the approver and kept in the log, so server-chosen words, no private details. */
   describe(tx: Tx, payload: Payload): Promise<string>;
   /**
-   * Runs holding the global staff-admin lock, under a 10-second statement timeout. So: database
-   * work only, and NO PROVIDER CALLS. Queue anything external through the outbox. The result is
-   * handed back for the route's normal response. After approval, an OperationError undoes what it
+   * Runs holding the global staff-admin lock, under a 10-second statement timeout. It may only wait
+   * on this transaction: pass `tx` to anything it calls, as another connection would wait on this
+   * one. No mail sending, webhook, provider call or storage: those happen after commit, through the
+   * outbox or the route (read beforehand in `prepare`). The fence below can't make up for breaking
+   * this. The result is handed back for the route's normal response. After approval, an OperationError undoes what it
    * wrote and closes the request as stale, so throw one when the facts turn out not to allow it.
    */
   run(tx: Tx, payload: Payload, ctx: SeriousActionContext): Promise<unknown>;
@@ -121,7 +168,7 @@ export type SeriousActionOutcome =
   | {
       state: 'pending';
       requestId: string;
-      /** The same thing was already waiting: this is that request, and this reason wasn't kept. */
+      /** The same thing was already waiting: this is that request. Their reason is in the audit log. */
       repeat?: true;
     };
 
@@ -194,8 +241,11 @@ function fenced(tx: Tx, gate: { shut: boolean }): Tx {
 /**
  * Runs an action's work holding the global lock, within a per-statement and an overall limit. Past
  * either, STAFF_ADMIN_BUSY: the caller's transaction undoes everything. JavaScript can't be stopped,
- * so work still going after the deadline finds its transaction fenced off, and a client that has gone
- * back to the pool can't be written through. Call this inside the savepoint or transaction to undo.
+ * so a fresh call after the deadline finds its transaction fenced off. That is all the fence does: a
+ * statement built before the deadline and awaited after it, or a savepoint released late, reaches a
+ * client that is back in the pool and may be someone else's. So a run must wait only on the database
+ * (ruling N1), where the connection's own queue keeps those statements in order. Call this inside the
+ * savepoint or transaction to undo.
  */
 async function runWithinTime(
   tx: Tx,
@@ -269,7 +319,7 @@ async function refusalToDecide(
     if (!(await action.mayDecide(db, input.payload, input.decider)))
       return 'PERMISSION_NOT_HELD';
   }
-  for (const subject of action?.subjects?.(input.payload) ?? []) {
+  for (const subject of (await action?.subjects?.(input.payload, db)) ?? []) {
     const subjectId = canonicalId(subject);
     if (subjectId === userId) return 'APPROVAL_SUBJECT';
     if (subjectId && sharesMailbox(theirs, await readMailboxes(db, subjectId)))
@@ -336,6 +386,7 @@ export function requestSeriousAction(
     grantId: string;
     reason: string;
     now?: Date;
+    services?: SeriousActionServices;
   },
 ): Promise<SeriousActionOutcome> {
   return guarded(async () => {
@@ -343,6 +394,10 @@ export function requestSeriousAction(
     if (!action) throw new OperationError('INVALID_INPUT');
     const reason = checkedReason(input.reason);
     const payload = plainPayload(input.payload);
+    const facts = await action.prepare?.(db, payload, {
+      actorId: input.actorId,
+      services: input.services,
+    });
     return db.transaction(async (tx): Promise<SeriousActionOutcome> => {
       await lockStaffAdmin(tx);
       const now = input.now ?? new Date();
@@ -360,7 +415,14 @@ export function requestSeriousAction(
         now,
       });
 
-      await action.validate(tx, payload);
+      const check = {
+        actorId,
+        reason,
+        now,
+        services: input.services,
+        facts,
+      };
+      await whileHoldingStaffAdmin(() => action.validate(tx, payload, check));
       const summary = await action.describe(tx, payload);
       const pinned = action.current
         ? plainPayload((await action.current(tx, payload)) ?? null)
@@ -391,8 +453,24 @@ export function requestSeriousAction(
         waiting.some((row) => row.requestedBy === actorId)
       )
         throw new OperationError('APPROVAL_ALREADY_PENDING');
-      if (approvers.length > 0 && waiting[0])
+      if (approvers.length > 0 && waiting[0]) {
+        // Their reason goes nowhere else, and the owner's ruling is a full log.
+        await recordAudit(tx, {
+          staffUserId: actorId,
+          action: 'serious_action.repeated',
+          permission: action.permission,
+          subjectType: 'approval_request',
+          subjectId: waiting[0].id,
+          reason: withAuditChange(reason, {
+            action: action.name,
+            summary,
+            requestedBy: waiting[0].requestedBy,
+            alsoAskedBy: actorId,
+          }),
+          now,
+        });
         return { state: 'pending', requestId: waiting[0].id, repeat: true };
+      }
 
       if (approvers.length > 0) {
         const requestId = newId();
@@ -448,6 +526,8 @@ export function requestSeriousAction(
           reason,
           now,
           approverId: null,
+          services: input.services,
+          facts,
         }),
       );
       await recordAudit(tx, {
@@ -557,7 +637,13 @@ async function closeRequest(
 const closeStaleQuietly = (
   tx: Tx,
   request: ApprovalRow,
-  input: { why: OpsApprovalStaleReason; actorId: string | null; now: Date },
+  input: {
+    why: OpsApprovalStaleReason;
+    actorId: string | null;
+    now: Date;
+    /** Someone else's request ended by this: they need telling. */
+    tellRequester?: boolean;
+  },
 ) =>
   closeRequest(tx, request, {
     status: 'stale',
@@ -568,7 +654,7 @@ const closeStaleQuietly = (
     reason: 'Closed without running',
     change: { why: input.why },
     now: input.now,
-    quiet: true,
+    quiet: !input.tellRequester,
   });
 
 const lockPendingOf = (tx: Tx, userId: string) =>
@@ -600,6 +686,11 @@ export async function closePendingRequestsOf(
     await closeStaleQuietly(tx, request, input);
 }
 
+/**
+ * Every waiting request on the target ends once someone acts alone, whoever asked: one left waiting
+ * could be approved later and run the same thing twice, or overwrite this (N2). Those from other
+ * people are told. The caller holds the staff-admin lock.
+ */
 async function closeSuperseded(
   tx: Tx,
   action: SeriousActionDefinition<unknown>,
@@ -609,15 +700,23 @@ async function closeSuperseded(
 ): Promise<string[]> {
   const target = action.target?.(payload);
   const closed: string[] = [];
-  for (const request of await lockPendingOf(tx, actorId))
-    if (
-      request.action === action.name &&
-      action.target?.(request.payload) === target
-    ) {
+  const pending = await tx
+    .select()
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.status, 'pending'),
+        eq(approvalRequests.action, action.name),
+      ),
+    )
+    .for('update');
+  for (const request of pending)
+    if (action.target?.(request.payload) === target) {
       await closeStaleQuietly(tx, request, {
         why: 'superseded',
         actorId,
         now,
+        tellRequester: request.requestedBy !== actorId,
       });
       closed.push(request.id);
     }
@@ -700,7 +799,7 @@ async function checkAndRun(
   try {
     const result = await tx.transaction((savepoint) =>
       runWithinTime(savepoint, async (work) => {
-        await action.validate(work, request.payload);
+        await action.validate(work, request.payload, context);
         if (action.current) {
           const now = plainPayload(
             (await action.current(work, request.payload)) ?? null,
@@ -735,6 +834,28 @@ async function checkAndRun(
   }
 }
 
+/**
+ * The waiting on a provider happens here, before any lock. Only for someone who may decide this, on
+ * a request still open: everything is asked again under the lock.
+ */
+async function factsForApproval(
+  db: Database,
+  requestId: string,
+  input: { actorId: string; services?: SeriousActionServices },
+): Promise<unknown> {
+  const [row] = await db
+    .select()
+    .from(approvalRequests)
+    .where(eq(approvalRequests.id, requestId));
+  const prepare = row && registry.get(row.action);
+  if (!row || row.status !== 'pending' || !prepare?.prepare) return undefined;
+  await db.transaction((tx) => deciderOrThrow(tx, row, input.actorId));
+  return prepare.prepare(db, row.payload, {
+    actorId: row.requestedBy,
+    services: input.services,
+  });
+}
+
 export type ApprovalOutcome =
   | { status: 'approved'; result: unknown }
   /** Closed without running: the facts, or the people, changed. */
@@ -763,12 +884,14 @@ export function approveRequest(
     key: Buffer;
     reason?: string;
     now?: Date;
+    services?: SeriousActionServices;
   },
 ): Promise<ApprovalOutcome> {
   return guarded(async () => {
     const requestId = requestIdOrThrow(input.requestId);
     const reason =
       input.reason === undefined ? null : checkedReason(input.reason);
+    const facts = await factsForApproval(db, requestId, input);
     return db.transaction(async (tx): Promise<ApprovalOutcome> => {
       await lockStaffAdmin(tx);
       const now = input.now ?? new Date();
@@ -815,6 +938,8 @@ export function approveRequest(
         reason: request.reason,
         now,
         approverId: actorId,
+        services: input.services,
+        facts,
       });
       if (!outcome.ran) return stop(outcome.why, outcome.detail);
 

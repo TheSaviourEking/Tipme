@@ -24,12 +24,15 @@ import {
   cancelRequest,
   listApprovals,
   rejectRequest,
+  type SeriousActionServices,
 } from '@tipme/database';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { SERIOUS_SERVICES } from './serious-services.js';
 import { uuidParam } from './actions.controller.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
@@ -45,6 +48,9 @@ export class OpsApprovalsController {
   constructor(
     @Inject(API_CONFIG) config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Inject(ProfileRevalidator)
+    private readonly revalidator: ProfileRevalidator,
   ) {
     this.key = Buffer.from(config.OPS_TOTP_KEY, 'base64');
   }
@@ -81,10 +87,18 @@ export class OpsApprovalsController {
       code: body.code,
       key: this.key,
       ...(body.reason ? { reason: body.reason } : {}),
+      services: this.services,
     });
     switch (outcome.status) {
-      case 'approved':
+      case 'approved': {
+        // After the commit: a public page showing the old fee, as the route would refresh it.
+        const { revalidateHandle } = (outcome.result ?? {}) as {
+          revalidateHandle?: unknown;
+        };
+        if (typeof revalidateHandle === 'string')
+          this.revalidator.revalidate(revalidateHandle);
         return { data: { status: 'approved' } };
+      }
       case 'stale':
         throw new CodedHttpException(409, 'APPROVAL_STALE', outcome.why);
       case 'expired':

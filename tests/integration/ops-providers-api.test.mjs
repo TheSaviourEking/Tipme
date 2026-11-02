@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { OPS_PERMISSION } from '../../apps/api/dist/ops/ops.guard.js';
 import { OpsProvidersController } from '../../apps/api/dist/ops/providers.controller.js';
 import {
   DEMO_PROFILES,
+  ensureOwnerRole,
   mailSealing,
+  registerRealSeriousActions,
+  sealSecret,
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import {
@@ -14,7 +18,7 @@ import {
 
 const sealing = mailSealing(Buffer.alloc(32, 7));
 const [ADA, TOBI] = DEMO_PROFILES;
-const ops = { userId: TOBI.userId };
+const ops = { userId: TOBI.userId, grantId: null };
 const reason = 'moving to the launch provider';
 const SECRET = 'zepto-secret-key-value';
 
@@ -46,7 +50,40 @@ async function setup(t, config = {}) {
     { db: database.db },
     sealing,
     providers,
+    {
+      sealing,
+      authCodeSecret: 'unused',
+      mail: {
+        production: (config.NODE_ENV ?? 'test') === 'production',
+        configured: new Set(providers.keys()),
+        fallback: 'mock',
+        status: async (name) => providers.get(name).status(),
+      },
+    },
   );
+  // Switching is a serious action: Tobi is the one owner, with a fresh code, so it runs alone.
+  registerRealSeriousActions();
+  await ensureOwnerRole(database.db);
+  const q = (text, values) => database.pool.query(text, values);
+  await q(
+    `INSERT INTO staff (user_id, role_id, granted_at, enrolled_at) VALUES ($1, 'owner', now(), now())`,
+    [TOBI.userId],
+  );
+  await q(
+    `INSERT INTO staff_totp (user_id, secret_enc, confirmed_at) VALUES ($1, $2, now())`,
+    [TOBI.userId, sealSecret(Buffer.alloc(32, 9), 'SECRET')],
+  );
+  const session = await q(
+    `INSERT INTO sessions (id, user_id, token_sha256, created_at, last_seen_at, expires_at)
+     VALUES (gen_random_uuid(), $1, $2, now(), now(), now() + interval '1 day') RETURNING id`,
+    [TOBI.userId, randomBytes(32).toString('hex')],
+  );
+  const grant = await q(
+    `INSERT INTO ops_sessions (id, user_id, session_id, token_sha256, created_at, last_seen_at, expires_at, last_totp_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, now(), now(), now() + interval '1 hour', now()) RETURNING id`,
+    [TOBI.userId, session.rows[0].id, randomBytes(32).toString('hex')],
+  );
+  ops.grantId = grant.rows[0].id;
   return { ...database, api };
 }
 

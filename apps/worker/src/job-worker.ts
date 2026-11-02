@@ -39,6 +39,7 @@ import {
   purgeProfileReports,
   sweepRehearsals,
   rollupAnalytics,
+  registerRealSeriousActions,
 } from '@tipme/database';
 import {
   createBachsProvider,
@@ -54,6 +55,7 @@ import { SERVICE_NAME, type WorkerConfig } from './config.js';
 import {
   DOMAIN_EVENT_NAMES,
   handleDomainEvent,
+  staffAlertPoster,
 } from './handlers/domain-events.js';
 import {
   handlePaymentReserve,
@@ -165,6 +167,8 @@ export async function startJobWorker(
   config: WorkerConfig,
   options: JobWorkerOptions = {},
 ): Promise<JobWorker> {
+  // Mail about a waiting request goes to who may decide it, which each action says.
+  registerRealSeriousActions();
   const logger = createLogger({
     service: SERVICE_NAME,
     level: config.LOG_LEVEL,
@@ -554,6 +558,10 @@ export async function startJobWorker(
               analyticsEnabled,
               sealing,
               pretendPayment: config.PAYMENT_PROVIDER === 'mock',
+              postStaffAlert: staffAlertPoster({
+                url: config.ALERT_WEBHOOK_URL,
+                log: (entry) => logger.warn({ ...entry, ...fields }),
+              }),
             });
             processed.add(1, { outcome });
             return outcome;

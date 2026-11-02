@@ -50,6 +50,7 @@ export * from './operations/staff.js';
 export * from './operations/staff-admin.js';
 export * from './operations/ops-sessions.js';
 export * from './operations/serious-actions.js';
+export * from './operations/serious-actions-registered.js';
 export * from './operations/issues.js';
 export * from './operations/evidence.js';
 export * from './operations/analytics.js';

@@ -8,7 +8,9 @@ import {
   Patch,
   Post,
   Put,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   opsAddStaffSchema,
   opsChangeRoleSchema,
@@ -30,13 +32,14 @@ import {
   type OpsRoleImpactRequest,
   type OpsRoleUpdateRequest,
   type OpsRoleUpdated,
+  type OpsSeriousPending,
   type OpsStaffAdded,
   type OpsStaffPerson,
 } from '@tipme/contracts';
 import {
   activeStaffList,
-  addStaff,
-  changeRole,
+  addStaffOrAsk,
+  changeRoleOrAsk,
   createRole,
   deleteRole,
   effectiveAccess,
@@ -45,11 +48,14 @@ import {
   OperationError,
   removeStaff,
   resendInvitation,
-  resetAuthenticator,
+  requestSeriousAction,
+  type SeriousActionServices,
   roleImpact,
-  setPersonalAccess,
-  updateRole,
+  setPersonalAccessOrAsk,
+  updateRoleOrAsk,
 } from '@tipme/database';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
@@ -67,7 +73,16 @@ export class OpsStaffController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
   ) {}
+
+  private asking(ops: OpsContext) {
+    return {
+      actorId: ops.userId,
+      grantId: ops.grantId,
+      services: this.services,
+    };
+  }
 
   @Get()
   @FreshCode()
@@ -78,19 +93,22 @@ export class OpsStaffController {
 
   @Post()
   @HttpCode(201)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('staff.manage')
   async addPerson(
     @CurrentOps() ops: OpsContext,
     @Body(new ZodValidationPipe(opsAddStaffSchema)) body: OpsAddStaffRequest,
-  ): Promise<ApiDataResponse<OpsStaffAdded>> {
-    return {
-      data: await addStaff(this.database.db, {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsStaffAdded | OpsSeriousPending>> {
+    const answer = pendingOr<OpsStaffAdded>(
+      await addStaffOrAsk(this.database.db, {
         ...body,
-        actorId: ops.userId,
-        sealing: this.sealing,
+        ...this.asking(ops),
       }),
-    };
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 
   @Post(':userId/remove')
@@ -132,21 +150,25 @@ export class OpsStaffController {
 
   @Post(':userId/reset-authenticator')
   @HttpCode(200)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('staff.manage')
   async resetPersonAuthenticator(
     @CurrentOps() ops: OpsContext,
     @Param('userId') userId: string,
     @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
-  ): Promise<ApiDataResponse<OpsEnrolmentLinkSent>> {
-    return {
-      data: await resetAuthenticator(this.database.db, {
-        ...body,
-        actorId: ops.userId,
-        userId: uuidParam(userId),
-        sealing: this.sealing,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsEnrolmentLinkSent | OpsSeriousPending>> {
+    const answer = pendingOr<OpsEnrolmentLinkSent>(
+      await requestSeriousAction(this.database.db, {
+        name: 'staff.reset_authenticator',
+        payload: { userId: uuidParam(userId) },
+        reason: body.reason,
+        ...this.asking(ops),
       }),
-    };
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 
   @Get('roles')
@@ -173,6 +195,7 @@ export class OpsStaffController {
   }
 
   @Patch('roles/:roleId')
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('staff.manage')
   async update(
@@ -180,18 +203,21 @@ export class OpsStaffController {
     @Param('roleId') roleId: string,
     @Body(new ZodValidationPipe(opsRoleUpdateSchema))
     body: OpsRoleUpdateRequest,
-  ): Promise<ApiDataResponse<OpsRoleUpdated>> {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsRoleUpdated | OpsSeriousPending>> {
     const { name, description, permissions, reason } = body;
-    return {
-      data: await updateRole(this.database.db, {
-        actorId: ops.userId,
+    const answer = pendingOr<OpsRoleUpdated>(
+      await updateRoleOrAsk(this.database.db, {
+        ...this.asking(ops),
         roleId,
         reason,
         ...(name === undefined ? {} : { name }),
         ...(description === undefined ? {} : { description }),
         ...(permissions === undefined ? {} : { permissions }),
       }),
-    };
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 
   /** The dry run behind "who is affected": changes nothing. */
@@ -239,6 +265,7 @@ export class OpsStaffController {
   }
 
   @Put(':userId/access')
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('staff.manage')
   async setAccess(
@@ -246,17 +273,21 @@ export class OpsStaffController {
     @Param('userId') userId: string,
     @Body(new ZodValidationPipe(opsPersonalAccessSchema))
     body: OpsPersonalAccessRequest,
-  ): Promise<ApiDataResponse<OpsEffectiveAccess>> {
-    return {
-      data: await setPersonalAccess(this.database.db, {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsEffectiveAccess | OpsSeriousPending>> {
+    const answer = pendingOr<OpsEffectiveAccess>(
+      await setPersonalAccessOrAsk(this.database.db, {
         ...body,
-        actorId: ops.userId,
+        ...this.asking(ops),
         userId: uuidParam(userId),
       }),
-    };
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 
   @Put(':userId/role')
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('staff.manage')
   async setRole(
@@ -264,13 +295,16 @@ export class OpsStaffController {
     @Param('userId') userId: string,
     @Body(new ZodValidationPipe(opsChangeRoleSchema))
     body: OpsChangeRoleRequest,
-  ): Promise<ApiDataResponse<OpsEffectiveAccess>> {
-    return {
-      data: await changeRole(this.database.db, {
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ApiDataResponse<OpsEffectiveAccess | OpsSeriousPending>> {
+    const answer = pendingOr<OpsEffectiveAccess>(
+      await changeRoleOrAsk(this.database.db, {
         ...body,
-        actorId: ops.userId,
+        ...this.asking(ops),
         userId: uuidParam(userId),
       }),
-    };
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 }

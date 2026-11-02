@@ -1,3 +1,10 @@
+# Current task — admin roles Task 6 (2 November 2026)
+
+- Branch/worktree: `feat/admin-roles` / `.worktrees/admin-roles`, with `origin/dev` merged (this branch's migrations are now 0062-0068).
+- Done: every name in `SERIOUS_ACTIONS` is registered in `serious-actions-registered.ts` and its route goes through the approval engine. Provider reads happen in `prepare`, before the transaction. Evidence and open questions: `.superpowers/sdd/2026-11-01-admin-roles/task-6-report.md`.
+- Not done: the screens don't yet handle a route's `202 { requestId }` (Task 7). No decision is approved by this work.
+- Next exact step: review Task 6, then Task 7.
+
 # Current task — production release-check LCP (1 November 2026)
 
 - Branch/worktree: `fix/home-lcp` / `.worktrees/home-lcp`, based on `origin/main` at `26c324e`; changes are uncommitted.

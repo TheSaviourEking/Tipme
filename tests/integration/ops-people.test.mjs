@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { after, before, test } from 'node:test';
+import { after, before, test, beforeEach } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
@@ -41,7 +41,11 @@ before(async () => {
   await ops.seedDemoProfiles(database.db);
   stack = await startStack({
     databaseUrl: database.url,
-    apiEnv: { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' },
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
+    },
   });
   owner = await opsSignIn(stack.api, database.db, '+2348036668000');
   ownerId = (
@@ -58,6 +62,18 @@ before(async () => {
 after(async () => {
   await stack?.stop();
   await database?.close();
+});
+
+// Each test starts with the owner alone, so what it does runs at once. The serious paths, with a
+// second person, are in ops-serious-gating.test.mjs.
+beforeEach(async () => {
+  await database.pool.query(
+    `UPDATE staff SET revoked_at = now() WHERE revoked_at IS NULL AND user_id <> $1`,
+    [ownerId],
+  );
+  await database.pool.query(
+    `UPDATE approval_requests SET status = 'cancelled' WHERE status = 'pending'`,
+  );
 });
 
 async function rows(text, values = []) {

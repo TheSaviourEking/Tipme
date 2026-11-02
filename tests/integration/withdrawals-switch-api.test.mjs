@@ -59,14 +59,18 @@ test('permission and a written reason are required', async () => {
   const person = await signIn(first.api, '+2348031110032');
   assert.equal((await set(true, person.cookie)).status, 404);
   assert.equal((await set(true, owner.cookie, 'short')).status, 400);
+  // An owner holds the whole catalogue, whatever is stored: move them to a role without it.
   await database.pool.query(
-    `DELETE FROM role_permissions WHERE role_id = 'owner' AND permission = 'payouts.resolve'`,
+    `INSERT INTO roles (id, name) VALUES ('no_payouts', 'No payouts') ON CONFLICT DO NOTHING`,
+  );
+  await database.pool.query(
+    `UPDATE staff SET role_id = 'no_payouts' WHERE role_id = 'owner'`,
   );
   try {
     assert.equal((await set(true)).status, 403);
   } finally {
     await database.pool.query(
-      `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
+      `UPDATE staff SET role_id = 'owner' WHERE role_id = 'no_payouts'`,
     );
   }
   assert.equal((await metrics(first.api)).withdrawalsSwitch.paused, false);

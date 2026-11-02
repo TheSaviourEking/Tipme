@@ -29,6 +29,7 @@ type RateLimitedRoute =
   | 'unsubscribe'
   | 'avatars'
   | 'ops_code'
+  | 'ops_request'
   | 'bank_resolve'
   | 'bank_read';
 
@@ -146,6 +147,11 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_OPS_CODE_PER_HOUR,
         windowMs: 3_600_000,
       },
+      // Per person: each ask can mail everyone who could decide it.
+      ops_request: {
+        limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
+        windowMs: 3_600_000,
+      },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
         windowMs: 3_600_000,
@@ -157,7 +163,9 @@ export class RateLimitGuard implements CanActivate {
       },
     }[route];
     const subject =
-      route === 'ops_code' && request.auth ? `user:${request.auth.userId}` : ip;
+      (route === 'ops_code' || route === 'ops_request') && request.auth
+        ? `user:${request.auth.userId}`
+        : ip;
     return this.count(route, subject, window);
   }
 

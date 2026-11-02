@@ -121,7 +121,7 @@ test('owner holds every permission after migrating', async () => {
   const migration = await import('node:fs').then((fs) =>
     fs.readFileSync(
       new URL(
-        '../../packages/database/drizzle/0055_ops_catalogue_permissions.sql',
+        '../../packages/database/drizzle/0062_ops_catalogue_permissions.sql',
         import.meta.url,
       ),
       'utf8',

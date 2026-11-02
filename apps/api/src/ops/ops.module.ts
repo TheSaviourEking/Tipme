@@ -20,6 +20,7 @@ import { CheckoutModule } from '../checkout/checkout.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
 import { FreshCodeGuard } from './fresh-code.guard.js';
 import { OpsGuard, StaffGuard } from './ops.guard.js';
+import { seriousServicesProvider } from './serious-services.js';
 
 /** The staff admin area (PR-009). */
 @Module({
@@ -40,6 +41,13 @@ import { OpsGuard, StaffGuard } from './ops.guard.js';
     OpsEmailConsoleController,
     OpsAccountRecoveryController,
   ],
-  providers: [CsrfGuard, RateLimitGuard, StaffGuard, OpsGuard, FreshCodeGuard],
+  providers: [
+    CsrfGuard,
+    RateLimitGuard,
+    StaffGuard,
+    OpsGuard,
+    FreshCodeGuard,
+    seriousServicesProvider,
+  ],
 })
 export class OpsModule {}

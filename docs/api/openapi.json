@@ -3781,6 +3781,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -3904,7 +3905,7 @@
             }
           }
         },
-        "x-tipme-access": "staff-grant",
+        "x-tipme-access": "staff-any",
         "security": [
           {
             "session": []
@@ -3975,7 +3976,7 @@
             }
           }
         },
-        "x-tipme-access": "staff-grant",
+        "x-tipme-access": "staff-any",
         "x-tipme-csrf": true,
         "x-tipme-rate-limit": "ops_code",
         "security": [
@@ -4023,7 +4024,7 @@
             }
           }
         },
-        "x-tipme-access": "staff-grant",
+        "x-tipme-access": "staff-any",
         "x-tipme-csrf": true,
         "security": [
           {
@@ -4091,7 +4092,7 @@
             }
           }
         },
-        "x-tipme-access": "staff-grant",
+        "x-tipme-access": "staff-any",
         "x-tipme-csrf": true,
         "security": [
           {
@@ -5439,6 +5440,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -5513,6 +5515,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -5711,6 +5714,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -6416,6 +6420,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -6491,6 +6496,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -6972,6 +6978,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -7612,6 +7619,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -7852,6 +7860,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -8185,6 +8194,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -8392,6 +8402,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -8467,6 +8478,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -9314,6 +9326,10 @@
               },
               "reference": {
                 "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Why a serious action stopped, as a fixed code."
               },
               "fields": {
                 "type": "array",

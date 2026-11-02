@@ -36,6 +36,7 @@ before(async () => {
     apiEnv: {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
       RATE_LIMIT_QUOTES_PER_MIN: '1000',
       RATE_LIMIT_INTENTS_PER_MIN: '1000',
     },
@@ -300,7 +301,7 @@ test('staff must pick an outcome to resolve a money issue, and resolving release
     (
       await call('POST', path, owner.cookie, {
         reason: REASON,
-        outcome: 'written_off',
+        outcome: 'recipient_owes',
       })
     ).status,
     200,
@@ -313,11 +314,11 @@ test('staff must pick an outcome to resolve a money issue, and resolving release
       [issueId],
     )
   ).rows[0];
-  assert.equal(stored.resolution_outcome, 'written_off');
+  assert.equal(stored.resolution_outcome, 'recipient_owes');
   const shown = await json(
     await call('GET', `/v1/ops/issues/${issueId}`, owner.cookie),
   );
-  assert.equal(shown.issue.resolutionOutcome, 'written_off');
+  assert.equal(shown.issue.resolutionOutcome, 'recipient_owes');
 });
 
 test('the hold stays while another money issue for the recipient is open', async () => {
@@ -491,7 +492,7 @@ test('issues.resolve alone cannot close a money issue or lift a hold, and still 
         'POST',
         `/v1/ops/issues/${id}/resolve`,
         staff.cookie,
-        { reason: REASON, outcome: 'written_off' },
+        { reason: REASON, outcome: 'recipient_owes' },
       );
       assert.equal(response.status, 403, kind);
       assert.equal(await issueStatusOf(id), 'open', kind);
@@ -538,7 +539,7 @@ test('the API refuses a hand close while the payout is unfinished, and says wher
     'POST',
     `/v1/ops/issues/${issue.id}/resolve`,
     owner.cookie,
-    { reason: REASON, outcome: 'written_off' },
+    { reason: REASON, outcome: 'recipient_owes' },
   );
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error.code, 'ISSUE_PAYOUT_UNFINISHED');

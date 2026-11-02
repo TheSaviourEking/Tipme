@@ -102,6 +102,13 @@ export interface OpsApproval {
   nobodyElseQualified: boolean;
 }
 
+/** A serious action waiting for a second person: its route answers 202 with this. */
+export interface OpsSeriousPending {
+  requestId: string;
+  /** The same thing was already waiting, and this is that request. */
+  repeat?: true;
+}
+
 export interface OpsApprovalApproved {
   status: 'approved';
 }

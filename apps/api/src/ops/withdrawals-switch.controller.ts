@@ -7,6 +7,7 @@ import {
 import { setWithdrawalsPaused } from '@tipme/database';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { FreshCode } from './fresh-code.guard.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 
@@ -19,6 +20,7 @@ export class OpsWithdrawalsSwitchController {
 
   @Post()
   @HttpCode(200)
+  @FreshCode()
   @OpsPermission('payouts.resolve')
   async set(
     @CurrentOps() ops: OpsContext,

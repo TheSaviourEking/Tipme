@@ -8,6 +8,7 @@ import {
   recordServerEvent,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
+import { webhookAlert } from './payment-reserve.js';
 
 /** Events the database outbox publishes (see packages/database operations). */
 export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
@@ -34,7 +35,6 @@ const STAFF_ALERT_EVENTS: ReadonlySet<string> = new Set([
   'ops.acted_alone',
   'ops.approval_pending',
   'ops.last_approver_removed',
-  'ops.approval_ran',
 ]);
 
 export interface StaffAlert {
@@ -44,11 +44,36 @@ export interface StaffAlert {
 }
 
 /**
- * Where the Slack webhook plugs in (spec 6.4). ALERT_WEBHOOK_URL arrives with the payouts merge;
- * wire it to `postStaffAlert` in job-worker.ts. An event can be delivered again, and the inbox and
+ * The staff alert on the webhook route (spec 6.4). An event can be delivered again, and the inbox and
  * mail steps dedupe but a post won't, so it may repeat; it holds names and ids only.
  */
 export type PostStaffAlert = (alert: StaffAlert) => Promise<void>;
+
+/**
+ * Posts through the webhook alert route. A failure doesn't retry the event, as the inbox and mail
+ * already have it: it logs the route's fixed message, which never holds the address.
+ */
+export function staffAlertPoster(options: {
+  url: string | undefined;
+  fetchImpl?: typeof fetch;
+  log: (entry: { event: string; error?: string }) => void;
+}): PostStaffAlert {
+  const post = webhookAlert({
+    url: options.url,
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    log: ({ event }) => options.log({ event }),
+  });
+  return async ({ event, action, requestedBy }) => {
+    try {
+      await post(`TipMe staff alert: ${event}: ${action} (by ${requestedBy})`);
+    } catch (error) {
+      options.log({
+        event: 'staff_alert.not_posted',
+        error: error instanceof Error ? error.message : 'alert_route_failed',
+      });
+    }
+  };
+}
 
 /**
  * A verified tip notifies its recipient (in-app, and by email when verified); repeats of the same

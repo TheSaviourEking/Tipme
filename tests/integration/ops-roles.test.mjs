@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, before, test } from 'node:test';
+import { after, before, test, beforeEach } from 'node:test';
 import { OPS_PERMISSIONS } from '../../packages/contracts/dist/index.js';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
@@ -46,7 +46,11 @@ before(async () => {
   await seedDemoProfiles(database.db);
   stack = await startStack({
     databaseUrl: database.url,
-    apiEnv: { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' },
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
+    },
   });
   owner = await staffSignIn('+2348036667000');
   ownerId = await userIdOf(owner);
@@ -54,6 +58,18 @@ before(async () => {
 after(async () => {
   await stack.stop();
   await database.close();
+});
+
+// Each test starts with the owner alone, so what it does runs at once. The serious paths, with a
+// second person, are in ops-serious-gating.test.mjs.
+beforeEach(async () => {
+  await database.pool.query(
+    `UPDATE staff SET revoked_at = now() WHERE revoked_at IS NULL AND user_id <> $1`,
+    [ownerId],
+  );
+  await database.pool.query(
+    `UPDATE approval_requests SET status = 'cancelled' WHERE status = 'pending'`,
+  );
 });
 
 const call = (method, path, cookie, body) =>
@@ -641,6 +657,8 @@ test('removing a permission you do not hold is refused, so nobody lowers someone
 });
 
 test('a manager cannot demote or adjust an owner, even holding every permission', async () => {
+  // Another owner, so the last-owner rule isn't what answers.
+  await staffSignIn('+2348036667999');
   const manager = await staffWith([...OPS_PERMISSIONS]);
   const lesser = await createRole(database.db, {
     actorId: ownerId,

@@ -26,6 +26,10 @@ const ACCESS = [
   ['recipient', 'Signed-in recipient (their own page and data only)'],
   ['staff', 'Signed-in staff, before an admin grant'],
   ['staff-grant', 'Staff with a live admin grant and the permission'],
+  [
+    'staff-any',
+    'Staff with a live admin grant (the operation checks each request)',
+  ],
 ];
 const CHANGES = new Set(['post', 'put', 'patch', 'delete']);
 

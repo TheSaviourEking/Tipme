@@ -1384,6 +1384,9 @@ export const roles = pgTable(
     description: text('description').notNull().default(''),
     system: boolean('system').notNull().default(false),
     createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [uniqueIndex('roles_name_lower').on(sql`lower(${table.name})`)],
 );
