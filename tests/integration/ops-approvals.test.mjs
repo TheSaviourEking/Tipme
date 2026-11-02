@@ -64,6 +64,8 @@ registerSeriousAction({
     `Set the test value to ${payload.value}${facts.describeSuffix ?? ''}`,
   run: async (tx, payload, ctx) => {
     await tx.execute(sql`SELECT 1`);
+    // Long enough for anything racing it to arrive while it is mid-run: see `whileRunning`.
+    if (facts.slowRun) await tx.execute(sql`SELECT pg_sleep(0.3)`);
     runs.push({ payload, ctx });
     return { applied: payload.value };
   },
@@ -157,6 +159,7 @@ beforeEach(async () => {
   runs.length = 0;
   facts.refuse = null;
   facts.describeSuffix = undefined;
+  facts.slowRun = false;
   gated.current = 'one';
   await q('DELETE FROM ops_sessions');
   await q('DELETE FROM ops_lockouts');
@@ -321,6 +324,33 @@ test('an approver who is removed or mid-reset cannot approve', async () => {
 });
 
 // ---- Running it ----
+
+/**
+ * Starts an approval and lets the other thing arrive while it is mid-run. Starting both together
+ * was too gentle: with every lock removed the first was often done before the second read the row.
+ */
+const whileRunning = async (approval, other) => {
+  facts.slowRun = true;
+  const running = approval();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  return Promise.allSettled([running, other()]);
+};
+
+test('a second approver arriving mid-run is refused, and the action runs once', async () => {
+  const asker = await person();
+  const first = await person();
+  const second = await person();
+  const id = await ask(asker);
+  const [won, lost] = await whileRunning(
+    () => approve(id, first),
+    () => approve(id, second),
+  );
+  assert.equal(won.value.status, 'approved');
+  assert.equal(lost.reason?.code, 'APPROVAL_CLOSED');
+  assert.equal(runs.length, 1);
+  assert.equal((await rowOf(id)).decided_by, first);
+  assert.equal((await auditOf(id, 'serious_action.ran')).length, 1);
+});
 
 test('approval runs the action once, even with two approvers at once', async () => {
   const asker = await person();
@@ -681,6 +711,36 @@ test('asking for the same thing twice gives the same request, and alerts once', 
 });
 
 // ---- Expiry ----
+
+test('cancelling while it runs is refused: it ran, and the record says only that', async () => {
+  const [asker, approver] = await twoPeople();
+  const id = await ask(asker);
+  const [approval, cancel] = await whileRunning(
+    () => approve(id, approver),
+    () => ops.cancelRequest(database.db, { requestId: id, actorId: asker }),
+  );
+  assert.equal(approval.value.status, 'approved');
+  assert.equal(cancel.reason?.code, 'APPROVAL_CLOSED');
+  assert.equal(runs.length, 1);
+  assert.equal((await rowOf(id)).status, 'approved');
+  assert.equal((await auditOf(id, 'serious_action.cancelled')).length, 0);
+});
+
+test('the sweep passes over a request being approved, even if its time is up', async () => {
+  const [asker, approver] = await twoPeople();
+  const id = await ask(asker);
+  const [approval] = await whileRunning(
+    () => approve(id, approver),
+    () =>
+      ops.expireRequests(database.db, {
+        now: new Date(Date.now() + 25 * 60 * 60 * 1000),
+      }),
+  );
+  assert.equal(approval.value.status, 'approved');
+  assert.equal(runs.length, 1);
+  assert.equal((await rowOf(id)).status, 'approved');
+  assert.equal((await auditOf(id, 'serious_action.expired')).length, 0);
+});
 
 test('requests expire after 24 hours, and approve racing expiry runs at most once', async () => {
   const [asker, approver] = await twoPeople();
