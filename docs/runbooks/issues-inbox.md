@@ -52,7 +52,7 @@ Every action asks for a written reason (10–500 characters) and is recorded wit
   - The recipient sees your reason on their dashboard, so write it for them.
 - **Cancel the phone recovery.**
 
-- **Freeze withdrawals (Pages, needs `payouts.resolve`):** for a reported account takeover only. It stops withdrawals not yet started and bank changes, moves no money, and recalls nothing already with the provider. The recipient sees only "paused while support checks your account". A second report records its reason in the audit log.
+- **Freeze withdrawals (Pages, needs `payouts.resolve`):** for a reported account takeover only. It stops withdrawals not yet started and bank changes, moves no money, and recalls nothing already with the provider. The recipient sees only "paused while support checks your account". A report while the takeover issue is open records its reason in the audit log and answers with that issue. A report after it closed always opens a new issue and alerts staff, even if withdrawals were still held by another issue; the hold moves to the new issue (`withdrawals.freeze_reopened` in the audit log), and only that issue closing as secured, with no other hold issue open, releases it.
 - **End all sessions (Pages, needs `recoveries.manage`):** signs an account out everywhere, audited. Not for staff accounts.
 - **Switch off all withdrawals (Overview, needs `payouts.resolve`):** see `live-activation.md`, "Stopping withdrawals".
 
