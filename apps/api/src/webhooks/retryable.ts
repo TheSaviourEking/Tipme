@@ -1,3 +1,5 @@
+import { isTransientSqlState } from '@tipme/database';
+
 /**
  * Whether a database failure is about availability (the provider should retry: 503) rather than
  * a deterministic problem with this message (retrying would never help: 500). No SQLSTATE means
@@ -8,11 +10,5 @@ export function isRetryablePersistenceError(error: {
   sqlState?: string;
 }): boolean {
   if (error.name !== 'PersistenceError') return false;
-  const state = error.sqlState;
-  return (
-    state === undefined ||
-    /^(08|53|57P)/.test(state) ||
-    state === '40001' ||
-    state === '40P01'
-  );
+  return error.sqlState === undefined || isTransientSqlState(error.sqlState);
 }

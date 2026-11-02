@@ -58,6 +58,8 @@ export async function startStack({
     QUEUE_PREFIX: prefix,
     LOG_LEVEL: 'info',
     MAIL_SEAL_KEY,
+    // Set to run the whole suite at a given pool, such as production's smallest.
+    DATABASE_POOL_MAX: process.env.TEST_DATABASE_POOL_MAX ?? '',
   };
   const app = await createApp(
     loadApiConfig({

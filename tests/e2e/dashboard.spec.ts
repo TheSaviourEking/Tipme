@@ -73,3 +73,31 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
     expect(await fitsViewport(page), path).toBe(true);
   }
 });
+
+test('a moment of 503 on the dashboard retries quietly; a lasting one shows the error', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  const busy = {
+    status: 503,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      error: { code: 'DEPENDENCY_UNAVAILABLE', message: 'x', reference: 'x' },
+    }),
+  };
+  let asked = 0;
+  await page.route('**/v1/me/dashboard', (route) =>
+    ++asked === 1 ? route.fulfill(busy) : route.continue(),
+  );
+  await page.goto('/dashboard');
+  await expect(page.getByTestId('balance')).toBeVisible();
+  await expect(page.getByText('We couldn’t load your dashboard')).toHaveCount(
+    0,
+  );
+  expect(asked).toBe(2);
+
+  await page.unroute('**/v1/me/dashboard');
+  await page.route('**/v1/me/dashboard', (route) => route.fulfill(busy));
+  await page.reload();
+  await expect(page.getByText('We couldn’t load your dashboard')).toBeVisible();
+});

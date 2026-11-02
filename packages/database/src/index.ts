@@ -5,6 +5,7 @@ export * from './local-only.js';
 export * from './migrations.js';
 export * from './seed.js';
 export * as schema from './schema.js';
+export * from './connection-budget.js';
 export * from './operations/errors.js';
 export * from './operations/quotes.js';
 export * from './operations/intents.js';

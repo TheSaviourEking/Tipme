@@ -18,6 +18,7 @@ import {
 import { configuredMailProviders, type MailProviderName } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
+  adaptPoolToServer,
   autoResolveIssues,
   expireRequests,
   createDatabase,
@@ -69,6 +70,7 @@ import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
+import { databaseFailureFields, jobFailure } from './job-retry.js';
 import { runUnlessRunning } from './run-lock.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
@@ -198,7 +200,22 @@ export async function startJobWorker(
     connection: markers,
     prefix: config.QUEUE_PREFIX,
   });
-  const database = createDatabase(config.DATABASE_URL, { max: 4 });
+  const database = createDatabase(config.DATABASE_URL, {
+    connectionTimeoutMillis: config.DATABASE_POOL_CONNECT_TIMEOUT_MS,
+  });
+  const budget = adaptPoolToServer(database, {
+    role: 'worker',
+    override: config.DATABASE_POOL_MAX,
+    refreshMs: config.DATABASE_BUDGET_REFRESH_MS,
+    counts: {
+      apiProcesses: config.DATABASE_BUDGET_API_PROCESSES,
+      workerProcesses: config.DATABASE_BUDGET_WORKER_PROCESSES,
+      margin: config.DATABASE_BUDGET_MARGIN,
+    },
+    log: (level, entry) => logger[level](entry),
+  });
+  // Starts on the small fallback if the read fails or is slow: never refuses to start.
+  await budget.ready;
   const sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
   const reporter = createErrorReporter({
     dsn: config.SENTRY_DSN,
@@ -598,7 +615,12 @@ export async function startJobWorker(
               : error instanceof Error
                 ? error.name
                 : 'unknown';
-          logger.warn({ event: 'job.failed', reason, ...fields });
+          logger.warn({
+            event: 'job.failed',
+            reason,
+            ...databaseFailureFields(error),
+            ...fields,
+          });
           // Expected failures (known reasons) are not errors to chase; anything else is reported.
           if (!(error instanceof Error && knownReasons.has(error.message)))
             reporter.capture(error, {
@@ -607,7 +629,7 @@ export async function startJobWorker(
             });
           span.setStatus({ code: SpanStatusCode.ERROR, message: reason });
           processed.add(1, { outcome: 'failed' });
-          throw error;
+          throw jobFailure(job.name, error);
         } finally {
           span.end();
         }
@@ -705,6 +727,7 @@ export async function startJobWorker(
       await queue.close().catch(() => undefined);
       markers.disconnect();
       connection.disconnect();
+      budget.stop();
       await database.close().catch(() => undefined);
     },
   };

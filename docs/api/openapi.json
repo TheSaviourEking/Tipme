@@ -4797,6 +4797,43 @@
         "x-tipme-permission": "payments.repair"
       }
     },
+    "/v1/ops/database-budget": {
+      "get": {
+        "operationId": "OpsDatabaseBudget.read",
+        "tags": [
+          "OpsDatabaseBudget"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "issues.view"
+      }
+    },
     "/v1/ops/decline": {
       "post": {
         "operationId": "OpsAccess.decline",

@@ -66,7 +66,9 @@ export class BachsWebhookController {
         error instanceof Error &&
         isRetryablePersistenceError(error as Error & { sqlState?: string })
       ) {
-        throw new DependencyUnavailableError('database unavailable');
+        throw new DependencyUnavailableError('database unavailable', {
+          cause: error,
+        });
       }
       throw error;
     }

@@ -1,3 +1,4 @@
+import { connectionErrors } from '../client.js';
 export type OperationErrorCode =
   | 'PROFILE_NOT_FOUND'
   | 'AMOUNT_OUT_OF_RANGE'
@@ -93,17 +94,129 @@ export class OperationError extends Error {
  */
 export class PersistenceError extends Error {
   override readonly name = 'PersistenceError';
-  constructor(readonly sqlState: string | undefined) {
+  constructor(
+    readonly sqlState: string | undefined,
+    /** Why, in fixed words: never the driver's message, which can quote values. */
+    readonly failure?: DatabaseFailure,
+  ) {
     super(
-      `Database operation failed${sqlState ? ` (SQLSTATE ${sqlState})` : ''}`,
+      `Database operation failed${
+        sqlState
+          ? ` (SQLSTATE ${sqlState})`
+          : failure
+            ? ` (${failure.kind}${failure.errno ? ` ${failure.errno}` : ''})`
+            : ''
+      }`,
     );
   }
 }
 
+/**
+ * What stopped a database call, safe to log and report. `pool_wait_timeout` is this process's own
+ * pool being busy; `connect_timeout` is a slow or unreachable server; SQLSTATE 53300 is the server
+ * refusing because it is full. They need different fixes, so a 503 must say which it was.
+ */
+export interface DatabaseFailure {
+  kind:
+    | 'sqlstate'
+    | 'pool_wait_timeout'
+    | 'connect_timeout'
+    | 'connection_lost'
+    | 'network'
+    | 'unknown';
+  sqlState?: string;
+  errno?: string;
+  /** The original error's class name, for `unknown`. */
+  causeName?: string;
+}
+
+// pg and pg-pool throw these fixed strings without a code (checked against the installed versions).
+const driverFailures: [RegExp, DatabaseFailure['kind']][] = [
+  [/^timeout exceeded when trying to connect$/, 'pool_wait_timeout'],
+  [/^Connection terminated due to connection timeout$/, 'connect_timeout'],
+  [/^timeout expired$/, 'connect_timeout'],
+  [/^Connection terminated/, 'connection_lost'],
+  // What drizzle's rollback throws over the first error once the connection has gone.
+  [/^Client has encountered a connection error/, 'connection_lost'],
+  [/^Client was closed/, 'connection_lost'],
+];
+
+// Reaching the server can fail in these ways. ENOENT, EACCES and the like are local, never its.
+const NETWORK_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'EPIPE',
+  'EHOSTUNREACH',
+  'EHOSTDOWN',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+
+/** From the driver: a connection attempt, or a query drizzle wrapped. Not any fetch on the way. */
+const cameThroughDatabase = (seen: unknown[]) =>
+  seen.some(
+    (error) =>
+      (error as { constructor?: { name?: string } }).constructor?.name ===
+        'DrizzleQueryError' ||
+      (typeof error === 'object' &&
+        error !== null &&
+        connectionErrors.has(error)),
+  );
+
+/** Finds a recognised database failure on an error or its causes; null if there is none. */
+export function databaseFailureOf(error: unknown): DatabaseFailure | null {
+  const seen: unknown[] = [];
+  for (let current: unknown = error, depth = 0; current && depth < 5; depth++) {
+    seen.push(current);
+    if (current instanceof PersistenceError) {
+      if (current.failure) return current.failure;
+      if (current.sqlState)
+        return { kind: 'sqlstate', sqlState: current.sqlState };
+    }
+    const { code, message, cause } = current as {
+      code?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (typeof code === 'string') {
+      if (isSqlState(code)) return { kind: 'sqlstate', sqlState: code };
+      if (NETWORK_CODES.has(code) && cameThroughDatabase(seen))
+        return { kind: 'network', errno: code };
+    }
+    if (typeof message === 'string')
+      for (const [pattern, kind] of driverFailures)
+        if (pattern.test(message)) return { kind };
+    current = cause;
+  }
+  return null;
+}
+
+/** The database could not serve right now, and the same call can succeed later. */
+export function isDatabaseAvailabilityFailure(error: unknown): boolean {
+  const failure = databaseFailureOf(error);
+  if (!failure || failure.kind === 'unknown') return false;
+  return failure.kind !== 'sqlstate' || isTransientSqlState(failure.sqlState);
+}
+
+export function isTransientSqlState(state: string | undefined): boolean {
+  return (
+    state !== undefined &&
+    (/^(08|53|57P)/.test(state) || state === '40001' || state === '40P01')
+  );
+}
+
+// Five capitals could also be an errno (EPIPE), which is not a SQLSTATE.
+const isSqlState = (code: string) =>
+  /^[0-9A-Z]{5}$/.test(code) && !/^E[A-Z]{4}$/.test(code);
+
 export function sqlStateOf(error: unknown): string | undefined {
   for (let current: unknown = error, depth = 0; current && depth < 5; depth++) {
     const code = (current as { code?: unknown }).code;
-    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+    if (typeof code === 'string' && isSqlState(code)) return code;
     current = (current as { cause?: unknown }).cause;
   }
   return undefined;
@@ -115,7 +228,13 @@ export async function guarded<T>(operation: () => Promise<T>): Promise<T> {
     return await operation();
   } catch (error) {
     if (error instanceof OperationError) throw error;
-    throw new PersistenceError(sqlStateOf(error));
+    throw new PersistenceError(
+      sqlStateOf(error),
+      databaseFailureOf(error) ?? {
+        kind: 'unknown',
+        causeName: error instanceof Error ? error.name : typeof error,
+      },
+    );
   }
 }
 

@@ -60,6 +60,112 @@ POSTGRES_BACKUP_PASSWORD=
 
 Every container that connects mounts the CA at `/run/secrets/db-ca.pem`, read-only.
 
+## The connection budget
+
+Every API copy and worker works out its own pool from the server's limit. There is nothing to size by hand, and a plan change needs no deploy.
+
+**The rule** (`planBudget`, `packages/database/src/connection-budget.ts`):
+
+```text
+usable = max_connections - reserved - margin
+         (and no more than the role's or database's own CONNECTION LIMIT)
+unit   = usable / (api_processes x 1 + worker_processes x 2)
+API pool    = floor(unit)     clamped to 1..10
+worker pool = floor(unit x 2) clamped to 1..4
+```
+
+- `reserved` is read from the server: `superuser_reserved_connections` plus `reserved_connections` where the version has it.
+- `margin` is `DATABASE_BUDGET_MARGIN`, default 7: Aiven's own sessions (5 measured, 2 November 2026, an assumption until `backend_type` is checked, below) and 2 for one-off tasks.
+- `api_processes` and `worker_processes` are stated in Compose for the worst moment, not guessed: production says 6 (both colours, 3 copies each) and 2. `scripts/production-compose.test.mjs` fails if they stop matching the replicas.
+
+| `max_connections` | usable | API pool | worker pool | steady (3 copies) | mid-deploy (6 copies) | fits?                             |
+| ----------------- | ------ | -------- | ----------- | ----------------- | --------------------- | --------------------------------- |
+| 15                | 5      | 1        | 1           | 5                 | 8                     | **No: over by 3 during a deploy** |
+| 20                | 10     | 1        | 2           | 7                 | 10                    | Yes                               |
+| 50                | 40     | 4        | 4           | 20                | 32                    | Yes                               |
+| 100               | 90     | 9        | 4           | 35                | 62                    | Yes                               |
+
+These assume 3 reserved. Aiven says some services reserve 6; the server's own setting decides.
+
+### Every source of connections in production
+
+| Source                                                                | Role             | Connections     | When                                                             |
+| --------------------------------------------------------------------- | ---------------- | --------------- | ---------------------------------------------------------------- |
+| API copies, serving colour                                            | `tipme_runtime`  | 3 x API pool    | always                                                           |
+| API copies, other colour                                              | `tipme_runtime`  | 3 x API pool    | a deploy or rollback only                                        |
+| `worker-a`, `worker-b`                                                | `tipme_runtime`  | 2 x worker pool | always; replaced one at a time, so never 3                       |
+| `db-roles`                                                            | Aiven's admin    | 1               | deploy, before and after migrating, before the new colour starts |
+| `migrate`                                                             | `tipme_migrator` | 1               | deploy, before the new colour starts                             |
+| `ops:grant-owner`, `set-email`, `move-photos-to-r2` and other scripts | as run           | 1 each          | by hand: from the margin                                         |
+| A person's `psql`, Aiven's console                                    | as run           | 1 each          | by hand: from the margin                                         |
+| Aiven's own sessions                                                  | `postgres`       | 5 measured      | always: from the margin                                          |
+| Web app on Vercel                                                     | none             | 0               | talks to the API; `apps/web` has no database client              |
+| Release check, `watch-production`                                     | none             | 0               | HTTP only                                                        |
+| Staging                                                               | its own Postgres | 0 here          | not on Aiven                                                     |
+
+**How long both colours run.** `start_idle_colour` waits for all three new copies to pass their 10 s health check, then for the public API to answer with the new version, then `switch_to_idle` stops the old colour, which drains for 7 s and closes in up to 10 s more. So about 25 to 40 s in a good deploy. A new colour that never becomes healthy can keep both up for about 2 minutes (12 tries at 10 s) before it is stopped. This is read from the scripts, not timed in production.
+
+### If the limit changes, or the server is full
+
+- **A plan change:** each process reads the limit at startup and every minute (`DATABASE_BUDGET_REFRESH_MS`) and resizes with no restart. node-postgres reads `max` each time it opens a connection, so going up is immediate; going down closes the extras as they free up.
+- **Refused (SQLSTATE 53300):** the process halves its pool for 60 s (never below the minimum) and stops trying new connections for 0.5 s, doubling to 8 s. Open connections keep working. Those requests get a 503 before any work starts.
+- **The read fails:** the process starts on a pool of 1, logs `database.budget_read_failed`, and tries again next minute. It never refuses to start.
+- **An emergency:** `DATABASE_POOL_MAX` (API) and `WORKER_DATABASE_POOL_MAX` override the computed size. Deploying the same version applies them.
+
+### Dead connections and stuck locks
+
+- **TCP keepalive** on every pool, with `sysctls` in `deploy/compose.production.yml`: a dead peer is noticed in about 40 s when idle, about 100 s with a statement unanswered.
+- **`idle_in_transaction_session_timeout` of 60 s** on every pool connection. Only idle time inside a transaction counts, not a long statement or a lock wait. Transactions wait only on the database and Redis, never on a provider, and a serious action gives up at 15 s, so a healthy transaction doesn't come near it. If it fires, the server rolls back and the job or request gets a retryable failure.
+- **No `query_timeout`, on purpose:** the client would give up while the server may still commit.
+- **Migrations** set `lock_timeout` to 10 s. Busy past that, the batch rolls back and the deploy stops before any colour changes. Deploy again when the table is free.
+
+### Under a surge, what happens first
+
+1. Requests queue inside a copy for a free connection. Pages get slower.
+2. After `DATABASE_POOL_CONNECT_TIMEOUT_MS` (5 s) a request gets a 503 `DEPENDENCY_UNAVAILABLE`, logged with `cause: pool_wait_timeout`. It waited before touching anything, so nothing is half done, and a retry with the same `Idempotency-Key` is safe. `connection_lost` is different: if the connection dies while a COMMIT's reply is on its way, the write may have landed even though the answer is 503. Money writes are safe to repeat because of their idempotency keys, but don't read that 503 as "nothing written".
+3. Signed-in reads retry once by themselves (`apiFetch`). Writes never do.
+4. A staff request that would have to wait for the staff lock with no connection to spare is refused straight away with `STAFF_ADMIN_BUSY`, which is retryable. Stopping actions (withdrawals off, a freeze, ending sessions) don't take that lock.
+5. Readiness stays up while a copy is busy, so the edge doesn't take copies out and pile the traffic on the others. It goes down only when connections stop coming back for 15 s or a new one can't be made.
+
+Workers are separate: their jobs wait or retry, and money waits in Postgres.
+
+### Checking it
+
+Read-only. **As `tipme_runtime` or any plain role** this works without stats access:
+
+```sql
+SHOW max_connections;
+SHOW superuser_reserved_connections;
+SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1 ORDER BY 2 DESC;
+```
+
+- A blank `usename` is a background process (`walwriter`, `checkpointer` and so on). It takes no client slot. A plain role does see these rows, so no client session is hidden from this count.
+- A named row is a client session, or a background worker running under the bootstrap role. So the named total is an upper bound on clients: exact for your own role, and at most that for others.
+- **What a plain role can't see:** `backend_type`, `state` and `query` for other roles are blank (`<insufficient privilege>` for `query`), so it can't split the bootstrap role's rows. `WHERE backend_type = 'client backend'` counts only your own sessions: never use it this way.
+
+To split them exactly, run this as a role with `pg_read_all_stats`, such as `avnadmin` if Aiven allows it (not checked on Aiven):
+
+```sql
+SELECT backend_type, usename, state, count(*)
+  FROM pg_stat_activity GROUP BY 1, 2, 3 ORDER BY 4 DESC;
+```
+
+- If Aiven's client sessions are not 5, change `DATABASE_BUDGET_MARGIN`.
+- At steady state expect `tipme_runtime` to show the "steady" column, or fewer. Readiness keeps one connection open per copy.
+- Staff can read one copy's view at `GET /v1/ops/database-budget`: the limit, its share, `roleSessions` (exact, this role only), `namedSessionsAtMost` (an upper bound on all clients), and whether it was cut after a refusal.
+- Each process logs `database.budget` at startup and whenever a number changes, and warns if the minimum pools don't fit (`overcommitted: true`).
+- To tell one 503 from another, search the API log for `http.dependency_unavailable`, or Sentry for its `PersistenceError` title. `cause` is `sqlstate` (with `sql_state`), `pool_wait_timeout`, `connect_timeout`, `connection_lost`, `network` (with `errno`) or `unknown`. A worker's `job.failed` has `db_failure` and `sql_state`. A 53300 can be the process's own back-off repeating the server's answer, so count `database.budget_refused` for real refusals.
+
+### Why no PgBouncer now, and what transaction mode would break
+
+We connect directly. If PgBouncer is added later in transaction mode, each transaction may run on a different server connection, so:
+
+- **Safe:** `pg_advisory_xact_lock` and `SET LOCAL`, the only forms in the code. They end with their transaction.
+- **Breaks:** any session `SET`, session advisory lock, `LISTEN`/`NOTIFY` or named prepared statement. None exist today, and new code must not add them.
+- **Migrations and `db-roles`** should keep connecting directly.
+- **Startup parameters:** the pool sends `idle_in_transaction_session_timeout` when connecting, which PgBouncer rejects unless it is in `ignore_startup_parameters`. Ignored there, it would need setting on the role instead.
+- **The budget's read** would see PgBouncer's view through a pooled connection, so `max_connections` would no longer describe what the clients share. Set `DATABASE_POOL_MAX` explicitly, or rework the rule.
+
 ## Not done yet (production environment work)
 
 - **A production Compose project for this server.** It has no local `postgres`, `backup` or `retention` services, and its own Redis, network and env file.

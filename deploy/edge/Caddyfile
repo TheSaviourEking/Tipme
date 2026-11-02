@@ -43,8 +43,9 @@
 		lb_try_interval 250ms
 		health_uri /health/ready
 		health_interval 2s
-		# Longer than the API's own 1 s probe timeouts, and two failures in a row, so one slow
-		# answer (an Aiven TLS reconnect, a GC pause) does not take a copy out. A draining copy
+		# Longer than the API's own probe timeouts (2 s Postgres, 1 s Redis), and two failures in a
+		# row, so one slow answer (an Aiven TLS reconnect, a GC pause) does not take a copy out. A
+		# copy with every connection busy still answers ready (readiness.service.ts). A draining copy
 		# leaves in about 4-6 s, which SHUTDOWN_DRAIN_MS (compose.production.yml) covers.
 		health_timeout 3s
 		health_fails 2
