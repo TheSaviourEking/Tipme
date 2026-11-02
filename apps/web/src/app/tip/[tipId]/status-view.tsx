@@ -1,5 +1,11 @@
 'use client';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { TipStatusView } from '@tipme/contracts';
@@ -36,7 +42,7 @@ function currentToken(tipId: string): string | null {
 }
 const noSubscription = () => () => undefined;
 
-export function StatusView() {
+export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
   const { tipId } = useParams<{ tipId: string }>();
   const copy = paymentModeCopy(usePaymentMode());
   // undefined while rendering on the server (loading), null when the link has no token.
@@ -262,6 +268,7 @@ export function StatusView() {
           </>
         )}
       </div>
+      {pilotNotice}
       {tip.state === 'paid' && celebration && (
         <aside className="tip-recognition" aria-label="Your tips">
           <span aria-hidden="true">✳</span>

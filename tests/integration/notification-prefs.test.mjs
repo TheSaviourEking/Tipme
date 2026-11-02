@@ -168,8 +168,9 @@ test('turned off: no tip email, no milestone notice, no weekly-report notice or 
   await settle(quiet.userId, 'tip');
   await settle(loud.userId, 'moment');
 
-  // The current week: the tips above count.
-  const now = new Date();
+  // The current week in Lagos, as reports count it: the tips above count. The clock is moved an
+  // hour ahead so the UTC getters read Lagos time, or this fails late on a Sunday night UTC.
+  const now = new Date(Date.now() + 3_600_000);
   const thursday = new Date(now);
   thursday.setUTCDate(now.getUTCDate() + 3 - ((now.getUTCDay() + 6) % 7));
   const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));

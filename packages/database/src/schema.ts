@@ -1,5 +1,6 @@
 import {
   ISSUE_KINDS,
+  ISSUE_OUTCOMES,
   type OpsIssueKind as IssueKind,
   type OpsIssueSeverity as IssueSeverity,
   type OpsIssueSubject as IssueSubject,
@@ -62,6 +63,7 @@ export const transitionCause = pgEnum('transition_cause', [
   'provider_event',
   'system',
   'expiry',
+  'staff',
 ]);
 export const accountKind = pgEnum('account_kind', [
   'asset',
@@ -91,6 +93,8 @@ export const users = pgTable(
     recoveryEmailVerifiedAt: timestamp('recovery_email_verified_at', {
       withTimezone: true,
     }),
+    // When the sign-in address last moved. Bank changes wait after it (BANK_CHANGE_HOLD_MS).
+    emailChangedAt: timestamp('email_changed_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
@@ -155,7 +159,7 @@ export const emailCodes = pgTable(
   (table) => [
     check(
       'email_codes_purpose',
-      sql`purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email')`,
+      sql`purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email', 'payout_destination')`,
     ),
     index('email_codes_email_created').on(table.email, table.createdAt),
   ],
@@ -597,6 +601,19 @@ export const paymentAccounts = pgTable(
       .notNull()
       .default(sql`ARRAY[]::text[]`),
     lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    // Withdrawals for this account are paid by hand on a schedule, not by the provider's own.
+    manualPayoutsAt: timestamp('manual_payouts_at', { withTimezone: true }),
+    // When the payout capabilities were asked of the provider for an account made before them.
+    payoutCapabilitiesRequestedAt: timestamp(
+      'payout_capabilities_requested_at',
+      {
+        withTimezone: true,
+      },
+    ),
+    // The last try at either step above, so a sweep cut short starts with the accounts it missed.
+    payoutSetupAttemptedAt: timestamp('payout_setup_attempted_at', {
+      withTimezone: true,
+    }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -955,11 +972,37 @@ export const payouts = pgTable(
     paidAt: timestamp('paid_at', { withTimezone: true }),
     // When reconciliation last asked the provider about this payout (fair rotation).
     lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
+    destinationId: uuid('destination_id').references(
+      () => payoutDestinations.id,
+    ),
+    // The provider's fee for this payout, in minor units of the payout currency.
+    feeMinor: minor('fee_minor'),
+    feeTransferReference: text('fee_transfer_reference'),
+    // Written and committed before any provider write. The attempt that set it clears it only on a
+    // definite answer of its own; an outcome learned later by a read leaves it as evidence. While it
+    // is set the payout is looked up, never sent again.
+    startUncertainAt: timestamp('start_uncertain_at', { withTimezone: true }),
+    // The provider call about to be made ('fee' or 'payout'), committed before it: staff need to know
+    // whether the payout itself may have left.
+    startStep: text('start_step'),
+    // Set when the provider definitely refused TipMe itself (empty reserve, refused key) on the last
+    // try. Nothing moved and nothing is in doubt: the payout waits to be queued again, and the time
+    // also keys its next top-up, since a provider may replay a refused key for good.
+    platformWaitSince: timestamp('platform_wait_since', { withTimezone: true }),
+    // While the provider itself is checking this payout; the recipient is told so.
+    providerReviewAt: timestamp('provider_review_at', { withTimezone: true }),
+    // The provider's connected account the payout was requested on, recorded at request time.
+    accountReference: text('account_reference'),
     createdAt: createdAt(),
   },
   (table) => [
     currencyCheck('payouts'),
     check('payouts_amount_positive', sql`amount_minor > 0`),
+    check('payouts_fee_not_negative', sql`fee_minor IS NULL OR fee_minor >= 0`),
+    check(
+      'payouts_start_step',
+      sql`start_step IS NULL OR start_step IN ('fee', 'payout')`,
+    ),
     unique('payouts_provider_reference').on(
       table.provider,
       table.providerReference,
@@ -989,6 +1032,96 @@ export const payoutItems = pgTable(
     uniqueIndex('payout_items_active_tip')
       .on(table.tipId)
       .where(sql`active`),
+  ],
+);
+
+/**
+ * The bank account a recipient's withdrawals go to, as the provider holds it. Only the bank and
+ * the last four digits are kept: never the full account number. `provider` is the stored name
+ * ('bachs' for both environments), not an adapter name such as 'bachs-live'.
+ */
+export const payoutDestinations = pgTable(
+  'payout_destinations',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    provider: text('provider').notNull(),
+    destinationReference: text('destination_reference').notNull(),
+    bankCode: text('bank_code').notNull(),
+    bankName: text('bank_name').notNull(),
+    accountLast4: char('account_last4', { length: 4 }).notNull(),
+    status: text('status').notNull(),
+    createdAt: createdAt(),
+    replacedAt: timestamp('replaced_at', { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      'payout_destinations_status',
+      sql`status IN ('usable', 'pending_review', 'rejected')`,
+    ),
+    check('payout_destinations_last4', sql`account_last4 ~ '^[0-9]{4}$'`),
+    check('payout_destinations_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    uniqueIndex('payout_destinations_active')
+      .on(table.profileId, table.provider)
+      .where(sql`replaced_at IS NULL`),
+  ],
+);
+
+/** A reason a recipient cannot withdraw until staff look at the linked issue. */
+export const withdrawalHolds = pgTable(
+  'withdrawal_holds',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    reason: text('reason').notNull(),
+    issueId: uuid('issue_id')
+      .notNull()
+      .references(() => issues.id),
+    createdAt: createdAt(),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    releasedBy: uuid('released_by'),
+  },
+  (table) => [
+    check(
+      'withdrawal_holds_reason',
+      sql`reason IN ('reversal', 'in_debt', 'unexpected_payout', 'account_takeover')`,
+    ),
+    check(
+      'withdrawal_holds_release',
+      sql`released_by IS NULL OR released_at IS NOT NULL`,
+    ),
+    index('withdrawal_holds_active')
+      .on(table.profileId)
+      .where(sql`released_at IS NULL`),
+  ],
+);
+
+/** Fee top-ups sent to a connected account and not yet spent on a payout's fee. */
+export const providerFeeCredits = pgTable(
+  'provider_fee_credits',
+  {
+    accountReference: text('account_reference').notNull(),
+    provider: text('provider').notNull(),
+    currency: currency(),
+    amountMinor: minor('amount_minor').notNull(),
+    transferReference: text('transfer_reference').primaryKey(),
+    payoutId: uuid('payout_id')
+      .notNull()
+      .references(() => payouts.id),
+    usedByPayoutId: uuid('used_by_payout_id').references(() => payouts.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    currencyCheck('provider_fee_credits'),
+    check('provider_fee_credits_amount_positive', sql`amount_minor > 0`),
+    check('provider_fee_credits_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    index('provider_fee_credits_unspent')
+      .on(table.accountReference, table.provider)
+      .where(sql`used_by_payout_id IS NULL`),
   ],
 );
 
@@ -1156,6 +1289,96 @@ export const unmatchedProviderEvents = pgTable(
   ],
 );
 
+/**
+ * When reconciliation last tried a parked payout event (fair rotation). Its own table, because
+ * unmatched_provider_events is append-only.
+ */
+export const parkedPayoutChecks = pgTable('parked_payout_checks', {
+  // No foreign key: one would change how the append-only table refuses TRUNCATE.
+  unmatchedId: uuid('unmatched_id').primaryKey(),
+  lastCheckedAt: timestamp('last_checked_at', {
+    withTimezone: true,
+  }).notNull(),
+});
+
+/**
+ * Staff's switch for all withdrawals, one row, read on every request and start so a change takes
+ * effect at once with no deploy. Seeded on, with no change time; no row at all reads as off. Each change is audited.
+ */
+export const withdrawalsSwitch = pgTable(
+  'withdrawals_switch',
+  {
+    id: text('id').primaryKey().default('global'),
+    paused: boolean('paused').notNull(),
+    changedBy: uuid('changed_by'),
+    changedAt: timestamp('changed_at', { withTimezone: true }),
+  },
+  () => [check('withdrawals_switch_one_row', sql`id = 'global'`)],
+);
+
+/** Each time live payments changed on this copy: the API records one at boot. */
+export const livePaymentSwitches = pgTable(
+  'live_payment_switches',
+  {
+    id: uuid('id').primaryKey(),
+    live: boolean('live').notNull(),
+    provider: text('provider').notNull(),
+    // The deployed commit, or `unknown` when a copy was started without one.
+    version: text('version').notNull(),
+    switchedAt: timestamp('switched_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('live_payment_switches_latest').on(
+      table.switchedAt.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
+
+/**
+ * One read of the platform's payment reserve (the balance that covers payout fees), taken every
+ * 15 minutes by the worker. A read that failed has no amount: `available_minor` and `low` are then
+ * both null ("unknown"), never a guess. `alerted_at` is when staff were told about this reading;
+ * it is how an alert is told once per low spell and again every 6 hours, across restarts.
+ * `provider` is the adapter name (bachs-live or bachs-sandbox), so sandbox readings never count
+ * for live.
+ */
+export const paymentReserveReadings = pgTable(
+  'payment_reserve_readings',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    currency: currency(),
+    availableMinor: minor('available_minor'),
+    thresholdMinor: minor('threshold_minor').notNull(),
+    low: boolean('low'),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
+    // Set while a worker is sending this reading's alert, cleared if the send fails. An old claim
+    // with no `alerted_at` is a worker that died mid-send, so the alert is sent again.
+    alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+  },
+  (table) => [
+    currencyCheck('payment_reserve_readings'),
+    check(
+      'payment_reserve_readings_provider',
+      sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
+    ),
+    // Unknown is both null together; a known balance says low or not, matching the threshold.
+    check(
+      'payment_reserve_readings_known',
+      sql`(available_minor IS NULL AND low IS NULL)
+        OR (available_minor IS NOT NULL AND low IS NOT NULL AND low = (available_minor < threshold_minor))`,
+    ),
+    index('payment_reserve_readings_latest').on(
+      table.provider,
+      table.currency,
+      table.readAt.desc(),
+    ),
+    index('payment_reserve_readings_read_at').on(table.readAt.desc()),
+  ],
+);
+
 // ---- Staff access and audit (PR-009, ADR-0010) ----
 
 export const OPS_PERMISSIONS = [
@@ -1173,6 +1396,7 @@ export const OPS_PERMISSIONS = [
   'fees.manage',
   'providers.manage',
   'recoveries.manage',
+  'payouts.resolve',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -1280,7 +1504,7 @@ export const auditEvents = pgTable(
 
 // ---- Issues inbox (PR-009) ----
 
-export { ISSUE_KINDS };
+export { ISSUE_KINDS, ISSUE_OUTCOMES };
 export type { IssueKind, IssueSeverity, IssueSubject };
 
 /**
@@ -1303,6 +1527,8 @@ export const issues = pgTable(
     resolvedBy: text('resolved_by'),
     // About a release-check page (PR-010): hidden from the default inbox.
     rehearsal: boolean('rehearsal').notNull().default(false),
+    // How staff settled a money issue (with their reason, in the audit log); no balance changes.
+    resolutionOutcome: text('resolution_outcome'),
   },
   (table) => [
     check(
@@ -1311,6 +1537,10 @@ export const issues = pgTable(
     ),
     check('issues_severity', sql`severity IN ('money', 'account', 'info')`),
     check('issues_status', sql`status IN ('open', 'resolved')`),
+    check(
+      'issues_resolution_outcome',
+      sql`resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN (${sql.raw(ISSUE_OUTCOMES.map((o) => `'${o}'`).join(', '))}))`,
+    ),
     check(
       'issues_resolution',
       sql`(status = 'open') = (resolved_at IS NULL AND resolved_by IS NULL)`,

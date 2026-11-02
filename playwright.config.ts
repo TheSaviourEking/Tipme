@@ -60,6 +60,9 @@ export default defineConfig({
         PATH: process.env.PATH ?? '',
         API_INTERNAL_ORIGIN: API_ORIGIN,
         WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
+        // The pilot notice must stay hidden on this pretend-provider stack even when the setting
+        // is on (tests/e2e/pilot-notice.spec.ts), so every e2e run sets it.
+        PILOT_NOTICE: 'on',
       },
       reuseExistingServer: false,
     },

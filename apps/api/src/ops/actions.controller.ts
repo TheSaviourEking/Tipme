@@ -13,6 +13,7 @@ import {
   opsBachsFeeBearerSchema,
   opsReasonSchema,
   opsRecheckSchema,
+  opsResolveIssueSchema,
   type ApiDataResponse,
   type OpsNoteRequest,
   type OpsBachsAccountRecoveryRequest,
@@ -21,6 +22,7 @@ import {
   type OpsReasonRequest,
   type OpsRecheckOutcome,
   type OpsRecheckRequest,
+  type OpsResolveIssueRequest,
 } from '@tipme/contracts';
 import {
   addIssueNote,
@@ -87,12 +89,21 @@ export class OpsActionsController {
   async resolve(
     @CurrentOps() ops: OpsContext,
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+    @Body(new ZodValidationPipe(opsResolveIssueSchema))
+    body: OpsResolveIssueRequest,
   ): Promise<ApiDataResponse<{ resolved: true }>> {
+    // Closing a money issue can lift a hold, so it takes what acting on money takes.
+    const issue = await issueById(this.database.db, uuidParam(id));
+    if (issue?.severity === 'money' && !ops.permissions.has('payouts.resolve'))
+      throw new CodedHttpException(403, 'FORBIDDEN');
     await resolveIssue(this.database.db, {
       issueId: uuidParam(id),
       staffUserId: ops.userId,
       reason: body.reason,
+      ...(body.outcome ? { outcome: body.outcome } : {}),
+      ...(body.bankAndSignInChecked !== undefined
+        ? { bankAndSignInChecked: body.bankAndSignInChecked }
+        : {}),
     });
     return { data: { resolved: true } };
   }

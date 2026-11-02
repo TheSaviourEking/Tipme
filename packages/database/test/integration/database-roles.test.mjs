@@ -105,6 +105,13 @@ test('a non-superuser admin sets up the roles, the migrator migrates, and each r
     'the runtime role cannot change the schema',
   );
 
+  // A deleted row would read as off, with no audit line and no alert: the app can't remove it.
+  await assert.rejects(
+    query(runtime, 'DELETE FROM withdrawals_switch'),
+    /permission denied/,
+  );
+  await query(runtime, 'UPDATE withdrawals_switch SET paused = false');
+
   const backup = urlAs('tipme_backup', PASSWORDS.backup);
   assert.equal(
     (await query(backup, 'SELECT count(*)::int AS n FROM recovery_markers'))

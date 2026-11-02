@@ -82,6 +82,8 @@ export function planScenario(
     case 'no-reply':
     case 'payout-paid':
     case 'payout-failed':
+    case 'payout-review':
+    case 'payout-timeout':
       return [];
   }
 }
@@ -93,9 +95,10 @@ export interface SimulatedPayout {
   currency: string;
 }
 
-/** Payout scenarios: processing, then paid or failed. */
+/** Payout scenarios: processing, then paid or failed; a payout in review reports no outcome. */
 export function planPayoutScenario(
-  scenario: 'payout-paid' | 'payout-failed',
+  scenario:
+    'payout-paid' | 'payout-failed' | 'payout-review' | 'payout-timeout',
   payout: SimulatedPayout,
 ): PlannedDelivery[] {
   const event = (type: MockWebhook['type']): MockWebhook => ({
@@ -109,9 +112,10 @@ export function planPayoutScenario(
       feeMinor: '0',
     },
   });
+  if (scenario === 'payout-review') return [step(event('payout.processing'))];
   return [
     step(event('payout.processing')),
-    step(event(scenario === 'payout-paid' ? 'payout.paid' : 'payout.failed')),
+    step(event(scenario === 'payout-failed' ? 'payout.failed' : 'payout.paid')),
   ];
 }
 

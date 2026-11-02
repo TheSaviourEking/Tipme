@@ -54,6 +54,8 @@ x-api-env: &api-env
   QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
   PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?set PAYMENT_PROVIDER (bachs-live in production)}
   PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
+  # Who may take real tips while it is on: handles, or * for everyone. Blank is nobody.
+  LIVE_CHECKOUT_HANDLES: ${LIVE_CHECKOUT_HANDLES:-}
   # Config refuses bachs-live without the live key and webhook secret, so empty defaults are safe.
   BACHS_LIVE_API_KEY: ${BACHS_LIVE_API_KEY:-}
   BACHS_LIVE_WEBHOOK_SECRET: ${BACHS_LIVE_WEBHOOK_SECRET:-}
@@ -70,6 +72,8 @@ x-api-env: &api-env
   RATE_LIMIT_COVER_DESIGNS_PER_HOUR: ${RATE_LIMIT_COVER_DESIGNS_PER_HOUR:-60}
   RATE_LIMIT_QR_ART_PER_HOUR: ${RATE_LIMIT_QR_ART_PER_HOUR:-120}
   RATE_LIMIT_QR_THUMBS_PER_HOUR: ${RATE_LIMIT_QR_THUMBS_PER_HOUR:-600}
+  RATE_LIMIT_BANK_RESOLVE_PER_HOUR: ${RATE_LIMIT_BANK_RESOLVE_PER_HOUR:-30}
+  RATE_LIMIT_BANK_READ_PER_MIN: ${RATE_LIMIT_BANK_READ_PER_MIN:-30}
   ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
   RATE_LIMIT_AUTH_PER_HOUR: ${RATE_LIMIT_AUTH_PER_HOUR:-10}
   RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: ${RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR:-3}
@@ -179,6 +183,9 @@ x-worker: &worker
     # The safety net when neither a webhook nor the open receipt confirmed a tip (as staging).
     RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-20000}
     RECONCILE_MIN_AGE_MS: ${RECONCILE_MIN_AGE_MS:-45000}
+    # The payment reserve is low below this many kobo (100000 = ₦1,000); alerts go to the webhook.
+    BACHS_RESERVE_ALERT_MINOR: ${BACHS_RESERVE_ALERT_MINOR:-100000}
+    ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     # 0 until D-05 decides cash rewards: the worker refuses any other value on production.
     REWARD_CASH_BUDGET_MINOR_PER_MONTH: ${REWARD_CASH_BUDGET_MINOR_PER_MONTH:-0}
   depends_on:

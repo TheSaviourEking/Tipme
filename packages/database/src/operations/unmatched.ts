@@ -4,6 +4,7 @@ import type { Database } from '../client.js';
 import { unmatchedProviderEvents } from '../schema.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
+import { jsonSafe } from './provider-events.js';
 
 /** Keeps a verified provider message that matches nothing we know, so none is ever lost. */
 export function recordUnmatchedEvent(
@@ -17,7 +18,7 @@ export function recordUnmatchedEvent(
   },
 ): Promise<'stored' | 'duplicate' | 'conflict'> {
   return guarded(async () => {
-    const payload = input.payload ?? {};
+    const payload = jsonSafe(input.payload ?? {});
     const payloadHash = createHash('sha256')
       .update(JSON.stringify(payload))
       .digest('hex');

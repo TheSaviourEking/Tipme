@@ -548,6 +548,12 @@ test('account creation requests NGN methods and trusts returned fee responsibili
         bank_transfer: { requested: true },
       },
     },
+    recipient: {
+      capabilities: {
+        payouts: { requested: true },
+        transfers: { requested: true },
+      },
+    },
   });
   assert.deepEqual(requestBody.responsibilities, {
     fees: { collector: 'platform' },
@@ -945,26 +951,6 @@ test('legacy Bachs signature headers remain supported during migration', () => {
         feePaidBy: 'unknown',
       },
     },
-  );
-});
-
-test('unsupported payout operations fail explicitly', async () => {
-  const provider = makeProvider(async () => {
-    throw new Error('unsupported calls must not reach Bachs');
-  });
-  assert.equal(provider.capabilities.payouts, false);
-  await assert.rejects(
-    provider.initiatePayout({
-      payoutId: 'payout-123',
-      idempotencyKey: 'payout-123',
-      amountMinor: 100000n,
-      currency: 'NGN',
-    }),
-    /does not support payouts/,
-  );
-  await assert.rejects(
-    provider.fetchPayoutStatus('withdrawal_123'),
-    /does not support payout status lookup/,
   );
 });
 

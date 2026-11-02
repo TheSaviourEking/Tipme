@@ -16,6 +16,7 @@ import type {
 import { bachsOnboardingRequestSchema } from '@tipme/contracts';
 import {
   beginPaymentAccountCreation,
+  ensurePayoutSetup,
   getPaymentAccountForProfile,
   getPaymentAccountRecipient,
   markPaymentAccountCreationFailed,
@@ -214,12 +215,23 @@ export class PaymentAccountsController {
       feeCollector: remoteAccount.feeCollector,
       requirementsDue: remoteAccount.requirementsDue,
     });
+    // A bank entered on the hosted page could be paid to on a provider schedule, with no code and no
+    // record here, so no link goes out below until this is recorded: an account still in setup stops
+    // here until it is. A failure tells staff, and the next visit, event or sweep tries again.
+    const setup = await ensurePayoutSetup(this.database.db, {
+      profileId: recipient.profileId,
+      provider,
+      log: (entry) => this.logger.warn(entry),
+    });
     // The public page says whether tips can be taken; this may have just changed the answer.
     // Webhook and staff updates rely on the page cache's 30-second backstop.
     this.revalidator.revalidate(recipient.handle);
     if (account.status === 'ACTIVE')
       return { data: { status: 'ACTIVE', chargesEnabled: true } };
     if (account.status !== 'ONBOARDING' && account.status !== 'RESTRICTED')
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+
+    if (!setup.manualPayouts)
       throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
 
     const page = new URL(

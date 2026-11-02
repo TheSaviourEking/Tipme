@@ -143,6 +143,11 @@ export interface PublicProfile {
   cover?: ResolvedCover;
   /** Free or Pro, and nothing else about the plan. Pro pages hide TipMe's own invitation. */
   plan?: PagePlan;
+  /**
+   * Whether this page may take tips at all on this copy right now (closed checkout, or a live copy
+   * limited to named pages). Checkout enforces the same rule. Older APIs send nothing.
+   */
+  tippingOpen?: boolean;
 }
 
 /** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */

@@ -12,6 +12,8 @@ export interface ProviderCapabilities {
   lookupByOperationReference: boolean;
 }
 
+export type PayoutFailureReason = 'in_debt' | 'destination' | 'other';
+
 export type NormalizedProviderEvent =
   | {
       kind: 'payment';
@@ -43,6 +45,24 @@ export type NormalizedProviderEvent =
       operationReference: string | null;
     }
   | {
+      /** A payout reached a final state. A trigger only: it still goes through recordPayoutOutcome. */
+      kind: 'payout';
+      eventId: string;
+      eventType: 'payout.paid' | 'payout.failed';
+      providerReference: string;
+      accountReference: string;
+      status: 'paid' | 'failed';
+      failureReason?: PayoutFailureReason;
+      /** The signed event disagrees with itself: only a read of the payout may decide. */
+      contradicted?: true;
+      /** What the event says the payout is, to compare with what TipMe asked for. */
+      amountMinor?: bigint;
+      currency?: string;
+      /** The reference TipMe set when it created the payout: its own payout id. */
+      operationReference?: string;
+      feeMinor?: bigint;
+    }
+  | {
       kind: 'ignored';
       eventId: string;
       eventType: string;
@@ -59,7 +79,9 @@ export type WebhookVerification<TEvent = NormalizedProviderEvent> =
  * What every payment provider adapter must offer (subset of PRD 6.5). Provider-specific formats
  * (signatures, status names, references) stay inside each adapter.
  */
-export interface PaymentProvider<TWebhookEvent = NormalizedProviderEvent> {
+export interface PaymentProvider<
+  TWebhookEvent = NormalizedProviderEvent,
+> extends Partial<PayoutPort> {
   name: string;
   capabilities?: ProviderCapabilities;
   /**
@@ -102,19 +124,133 @@ export interface PaymentProvider<TWebhookEvent = NormalizedProviderEvent> {
     headers: Record<string, string | string[] | undefined>,
     now?: Date,
   ): WebhookVerification<TWebhookEvent>;
-  /** Server-to-server payout status: the authority for payout reconciliation. */
-  fetchPayoutStatus(providerReference: string): Promise<{
-    status: 'paid' | 'failed' | 'pending' | 'not_found';
+}
+
+/**
+ * Paying a recipient out, for providers with `capabilities.payouts`. Money writes raise
+ * UncertainProviderOutcomeError when the outcome is unknown and PayoutRejectedError when the
+ * provider definitely refused; nothing else is safe to read as "no money moved".
+ */
+export interface PayoutPort {
+  /** Whether the account may pay out now. Requirements alone never mean it can. */
+  payoutCapability(accountRef: string): Promise<{
+    status: 'active' | 'restricted' | 'missing';
+    requirementsDue: string[];
   }>;
+  /** Adds what paying out needs to an account made without it. The state comes from payoutCapability. */
+  requestPayoutCapabilities(accountRef: string): Promise<void>;
+  listBanks(country: 'NG'): Promise<{ code: string; name: string }[]>;
+  /** Null when the number did not resolve: the recipient then types the account name. */
+  resolveBankAccount(input: {
+    accountNumber: string;
+    bankCode: string;
+  }): Promise<{ accountName: string } | null>;
+  addPayoutDestination(
+    accountRef: string,
+    input: { accountNumber: string; accountName: string; bankCode: string },
+  ): Promise<{
+    destinationRef: string;
+    usable: boolean;
+    status: 'usable' | 'pending_review' | 'rejected';
+  }>;
+  /**
+   * Where a destination's review stands now. An add can replay an old answer (its key is fixed), and
+   * review can end long after it. Only a stated rejection is 'rejected'; a failed read, including
+   * not found, throws and says nothing about the destination.
+   */
+  payoutDestinationStatus(
+    accountRef: string,
+    destinationRef: string,
+  ): Promise<'usable' | 'pending_review' | 'rejected'>;
+  payoutBalance(
+    accountRef: string,
+    currency: 'NGN',
+  ): Promise<{ availableMinor: bigint }>;
+  platformBalance(currency: 'NGN'): Promise<{ availableMinor: bigint }>;
+  quotePayoutFee(
+    accountRef: string,
+    amountMinor: bigint,
+    currency: 'NGN',
+  ): Promise<{ feeMinor: bigint; exact: boolean }>;
+  /** Moves the payout fee from the platform balance to the account, ahead of the payout. */
+  coverPayoutFee(input: {
+    accountRef: string;
+    feeMinor: bigint;
+    currency: 'NGN';
+    idempotencyKey: string;
+  }): Promise<{ transferRef: string }>;
+  setManualPayouts(accountRef: string): Promise<void>;
   /** Repeated requests with the same key must resolve to the same provider payout. */
   initiatePayout(input: {
     payoutId: string;
-    idempotencyKey: string;
+    accountRef: string;
+    destinationRef: string;
     amountMinor: bigint;
     currency: string;
-    recipientAccountReference?: string;
-    payoutDestinationReference?: string;
-  }): Promise<{ providerReference: string }>;
+    idempotencyKey: string;
+  }): Promise<{
+    providerReference: string;
+    status: 'pending' | 'processing' | 'review';
+    /** What the provider actually charged, when it says. It can differ from the quote. */
+    feeMinor?: bigint;
+  }>;
+  /** Server-to-server payout status: the authority for payout reconciliation. */
+  fetchPayoutStatus(providerReference: string): Promise<{
+    status: 'paid' | 'failed' | 'pending' | 'review' | 'not_found';
+    failureReason?: PayoutFailureReason;
+    feeMinor?: bigint;
+    /** What the provider says this payout is, to compare with what TipMe asked for. */
+    amountMinor?: bigint;
+    currency?: string;
+    destinationRef?: string;
+    /** The reference TipMe set when it created the payout. */
+    operationReference?: string;
+  }>;
+  /**
+   * Finds the payout a lost answer may have created. Null means the provider has none right now;
+   * anything unclear raises UncertainProviderOutcomeError. A null soon after a timed-out create is
+   * not proof, because that request may still be in flight: act on null only once the attempt is
+   * older than an age threshold. The account is required because a provider searches the caller's
+   * own payouts: without it, the answer would be a false "none".
+   */
+  findPayoutByReference(
+    accountRef: string,
+    payoutId: string,
+  ): Promise<{
+    providerReference: string;
+    status: 'paid' | 'failed' | 'pending' | 'review';
+    failureReason?: PayoutFailureReason;
+    feeMinor?: bigint;
+    amountMinor?: bigint;
+    currency?: string;
+    destinationRef?: string;
+    operationReference?: string;
+  } | null>;
+}
+
+/** The provider definitely refused a payout or fee transfer: no money moved for this request. */
+export class PayoutRejectedError extends Error {
+  constructor(
+    readonly failureReason: PayoutFailureReason,
+    readonly providerCode?: string,
+  ) {
+    super('The payment provider refused the payout');
+    this.name = 'PayoutRejectedError';
+  }
+}
+
+/**
+ * The provider definitely refused TipMe itself, not the recipient: the reserve can't cover a top-up,
+ * or the key was refused. No money moved, and the withdrawal waits rather than fails.
+ */
+export class PlatformRefusalError extends Error {
+  constructor(
+    readonly refusal: 'reserve_empty' | 'provider_key',
+    readonly providerCode?: string,
+  ) {
+    super('The payment provider refused the platform');
+    this.name = 'PlatformRefusalError';
+  }
 }
 
 export class UnsupportedProviderCapabilityError extends Error {

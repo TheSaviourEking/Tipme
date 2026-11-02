@@ -8,10 +8,16 @@ import {
 } from '@nestjs/common';
 import {
   opsEmailRecoverySchema,
+  opsReasonSchema,
   type ApiDataResponse,
   type OpsEmailRecoveryRequest,
+  type OpsReasonRequest,
 } from '@tipme/contracts';
-import { startStaffRecovery, type MailSealing } from '@tipme/database';
+import {
+  endAccountSessions,
+  startStaffRecovery,
+  type MailSealing,
+} from '@tipme/database';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -54,6 +60,27 @@ export class OpsAccountRecoveryController {
       throw new CodedHttpException(409, 'FORBIDDEN');
     if (outcome === 'invalid')
       throw new CodedHttpException(400, 'VALIDATION_FAILED');
+    return { data: { outcome } };
+  }
+
+  /** A reported takeover: signs the account out everywhere. Audited with the reason. */
+  @Post(':userId/end-sessions')
+  @HttpCode(200)
+  @OpsPermission('recoveries.manage')
+  async endSessions(
+    @CurrentOps() ops: OpsContext,
+    @Param('userId') userId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ outcome: 'ended' }>> {
+    if (!UUID.test(userId)) throw new CodedHttpException(404, 'NOT_FOUND');
+    const outcome = await endAccountSessions(this.database.db, {
+      staffUserId: ops.userId,
+      userId,
+      reason: body.reason,
+    });
+    if (outcome === 'not_found') throw new CodedHttpException(404, 'NOT_FOUND');
+    if (outcome === 'staff_account')
+      throw new CodedHttpException(409, 'FORBIDDEN');
     return { data: { outcome } };
   }
 }

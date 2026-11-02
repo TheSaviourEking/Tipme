@@ -9,6 +9,8 @@ import {
   claimAttemptStart,
   createPaymentIntent,
   createQuote,
+  pageHandleOf,
+  quoteHandleOf,
   findAttemptStart,
   findQuoteCharge,
   getReadyPaymentAccount,
@@ -22,6 +24,7 @@ import {
   BachsRequestNotSentError,
   UncertainProviderOutcomeError,
   isLiveProvider,
+  liveCheckoutOpenFor,
   recordedProviderName,
   type BachsProvider,
   type MockProvider,
@@ -110,21 +113,27 @@ export class CheckoutService {
   }
 
   /**
-   * A production copy may run Bachs live with live payments still switched off: checkout is
-   * closed, so quotes and new tips are refused before any database write or provider call.
-   * Webhooks and status checks for earlier activity are unaffected. mock and bachs-sandbox
-   * never refuse for this reason.
+   * A production copy may run Bachs live with checkout closed (switched off), or open only to named
+   * pages (LIVE_CHECKOUT_HANDLES). Quotes and new tips are refused before any database write or
+   * provider call. Webhooks and status checks for earlier activity are unaffected. mock and
+   * bachs-sandbox never refuse for this reason. Unknown pages get the same answer as closed ones.
    */
-  private refuseWhileClosed(): void {
-    if (
-      isLiveProvider(this.config.PAYMENT_PROVIDER) &&
-      !this.config.PAYMENTS_LIVE_ENABLED
-    )
+  private async refuseWhileClosed(
+    currentHandle: () => Promise<string | null>,
+  ): Promise<void> {
+    const { PAYMENT_PROVIDER, PAYMENTS_LIVE_ENABLED, LIVE_CHECKOUT_HANDLES } =
+      this.config;
+    if (!isLiveProvider(PAYMENT_PROVIDER)) return;
+    if (PAYMENTS_LIVE_ENABLED && LIVE_CHECKOUT_HANDLES === '*') return;
+    const handle = PAYMENTS_LIVE_ENABLED ? await currentHandle() : null;
+    if (!handle || !liveCheckoutOpenFor(this.config, handle))
       throw new CodedHttpException(409, 'TIPPING_NOT_OPEN');
   }
 
   async quote(request: TipQuoteRequest): Promise<TipQuote> {
-    this.refuseWhileClosed();
+    await this.refuseWhileClosed(async () =>
+      pageHandleOf(this.database.db, request.handle),
+    );
     const result = await createQuote(this.database.db, {
       handle: request.handle,
       tipMinor: BigInt(request.amountMinor),
@@ -152,7 +161,9 @@ export class CheckoutService {
     request: TipIntentRequest,
     idempotencyKey: string,
   ): Promise<TipIntentCreated> {
-    this.refuseWhileClosed();
+    await this.refuseWhileClosed(() =>
+      quoteHandleOf(this.database.db, request.quoteId),
+    );
     const { db } = this.database;
     const intent = await createPaymentIntent(db, {
       quoteId: request.quoteId,

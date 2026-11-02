@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { permanentRedirect } from 'next/navigation';
 import type { ResolvedCover } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
+import { PilotNotice } from '@/components/pilot-notice';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import { PageRetry } from '@/components/profile/page-retry';
@@ -12,6 +13,7 @@ import { ReportPage } from '@/components/report-page';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getPaymentMode } from '@/lib/payment-mode-api';
+import { profileTippingClosed } from '@/lib/payment-mode';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { loadPublicProfile } from '@/lib/profiles-api';
 import ProfileUnavailable from './not-found';
@@ -74,7 +76,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             data-tip-panel
           >
             {/* Closed checkout outranks the owner's own setup: nobody can tip yet. */}
-            {!copy.payable ? (
+            {!copy.payable || profileTippingClosed(mode, profile) ? (
               <TippingOpensSoon handle={profile.handle} />
             ) : profile.acceptingTips === false ? (
               <TipsNotReady recipient={firstName} />
@@ -82,6 +84,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
               <AppreciationForm
                 surface="profile"
                 paymentMode={mode}
+                pilotNotice={<PilotNotice />}
                 recipient={firstName}
                 handle={profile.handle}
                 collapseExtras

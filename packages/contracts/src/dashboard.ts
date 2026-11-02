@@ -67,6 +67,34 @@ export const withdrawalRequestSchema = z
   .object({ amountMinor: z.string().regex(/^\d{1,12}$/) })
   .strict();
 
+/** What the recipient can withdraw now and, if nothing, why. Amounts are minor units of NGN. */
+export type WithdrawalQuote =
+  | {
+      state: 'ready';
+      withdrawableMinor: string;
+      ledgerMinor: string;
+      providerMinor: string;
+      feeMinor: string;
+      destination: { bankName: string; last4: string };
+    }
+  | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
+  | { state: 'no_destination' }
+  | { state: 'destination_pending' }
+  // `review` covers holds whose cause staff keep to themselves (a reported account takeover).
+  | {
+      state: 'paused';
+      reason:
+        | 'reversal'
+        | 'in_debt'
+        | 'unexpected_payout'
+        | 'review'
+        | 'switched_off';
+    }
+  | { state: 'provider_unavailable' };
+
+/** The quote, and whether the provider itself is checking a withdrawal already under way. */
+export type WithdrawalQuoteResponse = WithdrawalQuote & { inReview: boolean };
+
 export interface NotificationView {
   id: string;
   kind: string;

@@ -19,6 +19,7 @@ import { hasAvatar } from '@/lib/avatar-source';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 import { CoverSettings } from '@/components/account/cover-settings';
+import { GetPaidCard } from '@/components/account/get-paid-card';
 import { PaymentAccountCard } from './payment-account-card';
 import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
 import { shrinkPhoto } from '@/lib/shrink-photo';
@@ -1370,6 +1371,7 @@ export function SettingsView() {
       <PageState />
       <ProPlan />
       <PaymentAccountCard />
+      <GetPaidCard />
       <HandleChange />
       <CoverSettings />
       <PhotoSettings />

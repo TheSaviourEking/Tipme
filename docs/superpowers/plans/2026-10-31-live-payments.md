@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- Users never see a provider's name: TipMe's own text, emails and errors say 'our payment partner' or 'the payment provider'; the provider's hosted pages are used as they are; staff screens (/ops) may name providers (owner, 1 Nov 2026).
 - Live base URL `https://api.bachs.io`, keys `sk_live_`; sandbox stays `https://sandbox-api.bachs.io` with `sk_sandbox_`. A key of the wrong kind is refused.
 - Settings: `PAYMENT_PROVIDER` ∈ `mock | bachs-sandbox | bachs-live`; `PAYMENTS_LIVE_ENABLED` `true|false`, default `false`; `BACHS_LIVE_API_KEY`; `BACHS_LIVE_WEBHOOK_SECRET`, `BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET`; `BACHS_RESERVE_ALERT_MINOR=100000` (₦1,000).
 - `bachs-live` only on a production copy (`DEPLOYMENT_MODE=production`, `NODE_ENV=production`), with `PAYMENTS_LIVE_ENABLED` true **or** false. `PAYMENTS_LIVE_ENABLED=true` with any other provider is refused. Mock and sandbox stay refused in production.
@@ -23,7 +24,7 @@
 - Bank details: TipMe stores destination reference, bank name, last 4 digits only. Adding or changing needs a fresh email code; a change emails a security notice from `security@`.
 - A timeout or 5xx on a Bachs write stays unknown until an authoritative read; never re-sent blindly.
 - Reserve job every 15 minutes; alert below `BACHS_RESERVE_ALERT_MINOR`.
-- Pilot notice on public pages, checkout, receipt and dashboard; copy says: TipMe is in a pilot, payments are real and go through Bachs, help at `support@usetipme.xyz`. Shown when web `PILOT_NOTICE=on`. Copy reviewed by the owner.
+- Pilot notice on public pages, checkout, receipt and dashboard; copy says: TipMe is in a pilot, payments are real, help at `support@usetipme.xyz` (exact text: "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz"). Shown when web `PILOT_NOTICE=on`. Copy reviewed by the owner.
 - Integer minor units, explicit currency, append-only ledger (AGENTS.md). Secrets and full account numbers never logged.
 - Activation is last, and it is the owner's.
 - Integration tests need a throwaway Postgres 16 and Redis 7: build with `pnpm turbo run build --filter=!@tipme/web`, then `DATABASE_URL=… REDIS_URL=… node --test <file>`; the whole suite is `pnpm test:integration`. Rebuild after switching branches (stale `dist/` gives false failures). Twelve backup tests fail on macOS only; name them when they do.
@@ -33,7 +34,7 @@
 
 - **A `payout.paid` webhook arriving before the worker recorded the provider reference.** Expected: parked as unmatched and applied by reconciliation, never a duplicate payout or a `payout_unexpected` issue. Test in Task 6 (`a webhook before the start response is applied once the reference is recorded`).
 - **Fee top-up succeeded, payout start then failed definitively.** Expected: the reservation is released, the topped-up ₦50 stays in the recipient's Bachs account and is recorded as a TipMe cost to recover on the next payout (the next payout's top-up is skipped while the account holds an unspent top-up). Test in Task 6 (`a failed payout after a top-up reuses the top-up next time`).
-- **The Bachs balance read fails or times out on the Withdraw page.** Expected: the page shows the ledger balance but disables Withdraw with "We can't check your balance with Bachs right now"; it never shows the ledger amount as withdrawable alone. Test in Task 7.
+- **The Bachs balance read fails or times out on the Withdraw page.** Expected: the page shows the ledger balance but disables Withdraw with "We can't check your balance with our payment partner right now"; it never shows the ledger amount as withdrawable alone. Test in Task 7.
 - **A recipient changes bank account while a payout is in flight.** Expected: the in-flight payout keeps the destination it recorded; the new account is used from the next withdrawal. Test in Task 8.
 - **Two copies of the worker pick the same `payouts.start` job** (production runs two). Expected: one provider call per key; the second sees the reference or the row lock and does nothing. Test in Task 6.
 
@@ -280,7 +281,7 @@ Copy (sentence case; final wording reviewed by the owner):
 - ready: "You can withdraw ₦X to {bank} ••{last4}. TipMe pays the ₦50 transfer fee."
 - paused: "Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz"
 - review: "Your withdrawal is being checked by the payment provider."
-- provider_unavailable: "We can't check your balance with Bachs right now. Try again in a few minutes."
+- provider_unavailable: "We can't check your balance with our payment partner right now. Try again in a few minutes."
 - no_destination: "Add the bank account you want to be paid to." (links to the Get paid card)
 
 - [ ] **Step 1: Write the failing tests**
@@ -395,7 +396,7 @@ test('/health/release reports bachs-live and paymentsLive false', ...);
 - Modify: public profile page, checkout, receipt, dashboard layout; `apps/web/.env.example`
 - Test: `apps/web/test/pilot.test.mjs`, `tests/e2e/pilot-notice.spec.ts`
 
-Copy (owner reviews before activation): "TipMe is in a pilot. Payments are real and go through Bachs. Need help? support@usetipme.xyz". Follows `docs/design/DESIGN-CONSTITUTION.md`; quiet, not a banner that hides content.
+Copy (owner reviews before activation): "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz". Follows `docs/design/DESIGN-CONSTITUTION.md`; quiet, not a banner that hides content.
 
 - [ ] **Step 1: Write the failing tests**: `pilotNoticeOn` unit test; e2e visits profile, checkout, receipt and dashboard with `PILOT_NOTICE=on` and finds the notice with a `mailto:support@usetipme.xyz` link on each, and none with it off; public profiles stay `noindex` while `SITE_INDEXING` is off (existing seo test).
 - [ ] **Step 2: Run to verify they fail.** Expected: FAIL.

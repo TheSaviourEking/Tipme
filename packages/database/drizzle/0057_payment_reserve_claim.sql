@@ -1,0 +1,1 @@
+ALTER TABLE "payment_reserve_readings" ADD COLUMN "alert_claimed_at" timestamp with time zone;

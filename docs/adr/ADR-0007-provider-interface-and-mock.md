@@ -41,3 +41,5 @@ A real adapter must implement the same interface, its own signature check and st
 ## Linked PRD requirements
 
 PRD 6.5 provider abstraction; AGENTS.md webhook and reconciliation invariants; docs/03-DOMAIN-AND-PAYMENTS.md mandatory tests (unknown, duplicate, reordered, forged).
+
+> **Addendum (1 Nov 2026):** the safety gate above is narrower now. `PAYMENTS_LIVE_ENABLED=true` is accepted only on a production copy with `bachs-live` and every setting it needs (`packages/payments/src/settings.ts`). It stays `false` until the owner activates it: `docs/runbooks/live-activation.md`. This is not approval of live payments (`docs/00-DECISIONS.md`).

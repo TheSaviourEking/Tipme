@@ -281,10 +281,21 @@ test('production refuses mock and sandbox, and live payments need bachs-live and
     productionIssues({ PAYMENT_PROVIDER: 'bachs-sandbox' }),
     /PAYMENT_PROVIDER/,
   );
-  // Live payments stay fenced until payouts land (Task 12).
+  // Live payments need the alert address and the key; complete settings pass.
+  assert.equal(
+    productionIssues({
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+    }),
+    '',
+  );
   assert.match(
-    productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
-    /PAYMENTS_LIVE_ENABLED/,
+    productionIssues({
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+      BACHS_LIVE_API_KEY: undefined,
+    }),
+    /BACHS_LIVE_API_KEY/,
   );
   assert.match(
     productionIssues({ BACHS_LIVE_API_KEY: undefined }),
@@ -355,5 +366,94 @@ test('a preview copy keeps the default cash reward budget', () => {
   assert.equal(
     loadWorkerConfig(preview).REWARD_CASH_BUDGET_MINOR_PER_MONTH,
     25_000_000n,
+  );
+});
+
+const reserveBase = {
+  REDIS_URL: 'redis://127.0.0.1:6379',
+  DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+  MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+  MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+  NODE_ENV: 'test',
+};
+
+test('the reserve alert level is ₦1,000 unless set, and the alert route is optional', () => {
+  const config = loadWorkerConfig(reserveBase);
+  assert.equal(config.BACHS_RESERVE_ALERT_MINOR, 100000n);
+  assert.equal(config.ALERT_WEBHOOK_URL, undefined);
+  const set = loadWorkerConfig({
+    ...reserveBase,
+    BACHS_RESERVE_ALERT_MINOR: '250000',
+    ALERT_WEBHOOK_URL: 'https://hooks.example.test/services/T0/B0/token',
+  });
+  assert.equal(set.BACHS_RESERVE_ALERT_MINOR, 250000n);
+  assert.equal(
+    set.ALERT_WEBHOOK_URL,
+    'https://hooks.example.test/services/T0/B0/token',
+  );
+  // An empty value (common in .env files) means not set.
+  const blank = loadWorkerConfig({
+    ...reserveBase,
+    BACHS_RESERVE_ALERT_MINOR: '',
+    ALERT_WEBHOOK_URL: '',
+  });
+  assert.equal(blank.BACHS_RESERVE_ALERT_MINOR, 100000n);
+  assert.equal(blank.ALERT_WEBHOOK_URL, undefined);
+});
+
+test('a bad reserve level or alert route is refused by name, never by value', () => {
+  for (const bad of ['abc', '-1', '1.5', '1e5', '0', '007'])
+    assert.throws(
+      () =>
+        loadWorkerConfig({ ...reserveBase, BACHS_RESERVE_ALERT_MINOR: bad }),
+      { message: 'Invalid configuration: BACHS_RESERVE_ALERT_MINOR' },
+      bad,
+    );
+  const secret = 'ftp://hooks.example.test/services/T0/B0/very-secret-token';
+  assert.throws(
+    () => loadWorkerConfig({ ...reserveBase, ALERT_WEBHOOK_URL: secret }),
+    (error) =>
+      error.message === 'Invalid configuration: ALERT_WEBHOOK_URL' &&
+      !String(error.stack).includes('very-secret-token'),
+  );
+});
+
+test('in production the alert route must be https', () => {
+  assert.equal(
+    productionIssues({
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/T0/B0/x',
+    }),
+    '',
+  );
+  assert.match(
+    productionIssues({
+      ALERT_WEBHOOK_URL: 'http://hooks.example.test/T0/B0/x',
+    }),
+    /ALERT_WEBHOOK_URL/,
+  );
+  // Outside production a local http stand-in is fine.
+  const local = loadWorkerConfig({
+    ...reserveBase,
+    ALERT_WEBHOOK_URL: 'http://127.0.0.1:9999/hook',
+  });
+  assert.equal(local.ALERT_WEBHOOK_URL, 'http://127.0.0.1:9999/hook');
+});
+
+test('with live payments on, production will not start without an alert route; with them off it does', () => {
+  // Off (as today, while checkout is closed): no address needed, the worker only warns.
+  assert.equal(productionIssues({}), '');
+  assert.equal(productionIssues({ PAYMENTS_LIVE_ENABLED: 'false' }), '');
+  // On: the address is required, and it is the only thing missing here.
+  assert.equal(
+    productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
+    'Invalid configuration: ALERT_WEBHOOK_URL',
+  );
+  // The message names the setting, never a value.
+  assert.doesNotMatch(
+    productionIssues({
+      PAYMENTS_LIVE_ENABLED: 'true',
+      ALERT_WEBHOOK_URL: 'http://hooks.example.test/T0/B0/very-secret-token',
+    }),
+    /very-secret-token/,
   );
 });

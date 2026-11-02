@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Container, Skeleton } from '@tipme/ui';
+import { PilotNotice } from '@/components/pilot-notice';
 import { PaymentModeScope } from '@/components/payment-mode-slot';
 import { DashboardShell } from './dashboard-shell';
 
@@ -26,7 +27,9 @@ export default function DashboardLayout({
       }
     >
       <PaymentModeScope>
-        <DashboardShell>{children}</DashboardShell>
+        <DashboardShell pilotNotice={<PilotNotice />}>
+          {children}
+        </DashboardShell>
       </PaymentModeScope>
     </Suspense>
   );

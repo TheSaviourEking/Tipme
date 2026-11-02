@@ -78,7 +78,7 @@ export function AppreciationForm({
   celebration?: { momentId: string; label: string };
   /** A person's own page has its own heading and wording, and a Tip bar on phones. */
   surface?: 'home' | 'profile';
-  /** A notice that must be seen before paying: under the button, and in the phone's Tip bar. */
+  /** The pilot notice, rendered on the server (null outside live mode): it must be seen before paying, under the button and in the phone's Tip bar. */
   pilotNotice?: ReactNode;
 }) {
   const id = useId();

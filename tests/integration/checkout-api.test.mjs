@@ -510,6 +510,117 @@ test('with bachs-live and payments off, a new tip is refused as not open and not
   assert.deepEqual(calls, []);
 });
 
+/** A live copy with payments on, limited to `handles`. The adapter records and never leaves here. */
+function limitedStage(handles) {
+  const calls = [];
+  const live = {
+    name: 'bachs-live',
+    environment: 'live',
+    async initializePayment(input) {
+      calls.push(input);
+      throw new Error('stop here: the gate let this through');
+    },
+    async getCheckoutUrl() {
+      throw new Error('not reached');
+    },
+  };
+  const service = new CheckoutService(
+    {
+      ...livePaymentsOff,
+      PAYMENTS_LIVE_ENABLED: true,
+      LIVE_CHECKOUT_HANDLES: handles,
+    },
+    { db: database.db },
+    live,
+    null,
+    live,
+    silentLogger,
+  );
+  return { service, calls };
+}
+const notOpenError = (error) => {
+  assert.equal(error.code, 'TIPPING_NOT_OPEN');
+  assert.equal(error.getStatus(), 409);
+  return true;
+};
+const quoteFor = (handle) =>
+  createQuote(database.db, { handle, tipMinor: 100000n, currency: 'NGN' });
+const asks = (handle) => ({
+  handle,
+  amountMinor: '100000',
+  currency: 'NGN',
+});
+
+test('limited stage: a named handle can quote and reach the provider, in any letter case', async () => {
+  const { service, calls } = limitedStage(['ada']);
+  assert.equal((await service.quote(asks('ada'))).handle.toLowerCase(), 'ada');
+  assert.equal((await service.quote(asks('ADA'))).handle.toLowerCase(), 'ada');
+  const { quoteId } = await quoteFor('ada');
+  // Past the gate: the account check or the provider stops it, never TIPPING_NOT_OPEN.
+  await service.createIntent({ quoteId }, randomUUID()).catch((error) => {
+    assert.notEqual(error.code, 'TIPPING_NOT_OPEN');
+  });
+  assert.ok(calls.length <= 1);
+});
+
+test('limited stage: anyone else is refused on the server, even with a quote made by hand, writing nothing', async () => {
+  const { service, calls } = limitedStage(['ada']);
+  const { quoteId } = await quoteFor('tobi');
+  const before = await checkoutRows();
+  await assert.rejects(service.quote(asks('tobi')), notOpenError);
+  await assert.rejects(
+    service.createIntent({ quoteId }, randomUUID()),
+    notOpenError,
+  );
+  await assert.rejects(service.quote(asks('nobody_here')), notOpenError);
+  await assert.rejects(
+    service.createIntent({ quoteId: randomUUID() }, randomUUID()),
+    notOpenError,
+  );
+  assert.deepEqual(await checkoutRows(), before);
+  assert.deepEqual(calls, []);
+});
+
+test('limited stage: a page is named by its current handle; an old one in the list opens nothing', async () => {
+  const { rows } = await database.pool.query(
+    `SELECT id FROM profiles WHERE handle_lower = 'tobi'`,
+  );
+  const alias = `tobi_old_${randomUUID().slice(0, 6).replaceAll('-', '')}`;
+  await database.pool.query(
+    `INSERT INTO handle_aliases (handle_lower, profile_id) VALUES ($1, $2)`,
+    [alias, rows[0].id],
+  );
+  const { service: byOld } = limitedStage([alias]);
+  await assert.rejects(byOld.quote(asks(alias)), notOpenError);
+  await assert.rejects(byOld.quote(asks('tobi')), notOpenError);
+});
+
+test('limited stage: an empty list refuses everyone, and a star lets everyone through', async () => {
+  const { service: none } = limitedStage([]);
+  await assert.rejects(none.quote(asks('ada')), notOpenError);
+  const { quoteId } = await quoteFor('ada');
+  await assert.rejects(
+    none.createIntent({ quoteId }, randomUUID()),
+    notOpenError,
+  );
+  const { service: all } = limitedStage('*');
+  assert.ok((await all.quote(asks('tobi'))).quoteId);
+  assert.ok((await all.quote(asks('ada'))).quoteId);
+});
+
+test('limited stage: a setting left out of the config refuses everyone', async () => {
+  const live = { name: 'bachs-live', environment: 'live' };
+  const service = new CheckoutService(
+    { ...livePaymentsOff, PAYMENTS_LIVE_ENABLED: true },
+    { db: database.db },
+    live,
+    null,
+    live,
+    silentLogger,
+  );
+  await assert.rejects(service.quote(asks('ada')), notOpenError);
+});
+
 test('webhooks are still verified and recorded with payments off', async () => {
   const eventId = `evt_${randomUUID()}`;
   const live = {

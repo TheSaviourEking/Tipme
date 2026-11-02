@@ -28,6 +28,7 @@ const CROSS_ORIGIN_PATHS = [
 const CREDENTIALED_PATHS = [
   '/v1/auth/',
   '/v1/me/',
+  '/v1/payout-banks',
   '/v1/dev/',
   '/v1/handles/',
   '/v1/ops/',

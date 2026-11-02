@@ -5,7 +5,9 @@ import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
+  holdWithdrawals,
   listIssues,
+  openIssue,
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import {
@@ -234,5 +236,294 @@ test('staff without private.view get 403 on reveal; non-staff get 404 on issues 
       )
     ).status,
     404,
+  );
+});
+
+const moneyIssue = async (profileId, kind = 'payment_reversed') =>
+  (
+    await openIssue(database.db, {
+      dedupeKey: `test.${randomUUID()}`,
+      kind,
+      subject: { profileId },
+      now: new Date(),
+    })
+  ).id;
+const placeHold = async (profileId, issueId) =>
+  database.db.transaction((tx) =>
+    holdWithdrawals(tx, { profileId, reason: 'reversal', issueId }),
+  );
+const activeHolds = async (profileId) =>
+  (
+    await database.pool.query(
+      'SELECT 1 FROM withdrawal_holds WHERE profile_id = $1 AND released_at IS NULL',
+      [profileId],
+    )
+  ).rows.length;
+const profileIdOf = async (handle) =>
+  (
+    await database.pool.query('SELECT id FROM profiles WHERE handle = $1', [
+      handle,
+    ])
+  ).rows[0].id;
+const REASON = 'The provider settled this in its dashboard.';
+const issueStatusOf = async (id) =>
+  (await database.pool.query('SELECT status FROM issues WHERE id = $1', [id]))
+    .rows[0].status;
+
+test('staff must pick an outcome to resolve a money issue, and resolving releases the hold', async () => {
+  const owner = await opsSignIn(stack.api, database.db, '+2348039990021');
+  const profileId = await profileIdOf('ada');
+  const issueId = await moneyIssue(profileId);
+  await placeHold(profileId, issueId);
+  const path = `/v1/ops/issues/${issueId}/resolve`;
+
+  const missing = await call('POST', path, owner.cookie, { reason: REASON });
+  assert.equal(missing.status, 422);
+  assert.equal((await missing.json()).error.code, 'ISSUE_OUTCOME_REQUIRED');
+  assert.equal(
+    (
+      await call('POST', path, owner.cookie, {
+        reason: REASON,
+        outcome: 'forgiven',
+      })
+    ).status,
+    400,
+  );
+  assert.equal(await activeHolds(profileId), 1);
+
+  const balanceRows = async () =>
+    (await database.pool.query('SELECT count(*)::int AS n FROM ledger_entries'))
+      .rows[0].n;
+  const before = await balanceRows();
+  assert.equal(
+    (
+      await call('POST', path, owner.cookie, {
+        reason: REASON,
+        outcome: 'written_off',
+      })
+    ).status,
+    200,
+  );
+  assert.equal(await activeHolds(profileId), 0);
+  assert.equal(await balanceRows(), before);
+  const stored = (
+    await database.pool.query(
+      'SELECT resolution_outcome FROM issues WHERE id = $1',
+      [issueId],
+    )
+  ).rows[0];
+  assert.equal(stored.resolution_outcome, 'written_off');
+  const shown = await json(
+    await call('GET', `/v1/ops/issues/${issueId}`, owner.cookie),
+  );
+  assert.equal(shown.issue.resolutionOutcome, 'written_off');
+});
+
+test('the hold stays while another money issue for the recipient is open', async () => {
+  const owner = await opsSignIn(stack.api, database.db, '+2348039990022');
+  const profileId = await profileIdOf('ada');
+  const first = await moneyIssue(profileId);
+  const second = await moneyIssue(profileId, 'provider_in_debt');
+  await placeHold(profileId, first);
+  const resolve = (id) =>
+    call('POST', `/v1/ops/issues/${id}/resolve`, owner.cookie, {
+      reason: REASON,
+      outcome: 'resolved_by_provider',
+    });
+  assert.equal((await resolve(first)).status, 200);
+  assert.equal(await activeHolds(profileId), 1);
+  assert.equal((await resolve(second)).status, 200);
+  assert.equal(await activeHolds(profileId), 0);
+  const released = (
+    await database.pool.query(
+      'SELECT released_by FROM withdrawal_holds WHERE issue_id = $1',
+      [first],
+    )
+  ).rows[0];
+  assert.ok(released.released_by);
+});
+
+test('the withdrawal tools need payouts.resolve, on the owner role only, and read before acting', async () => {
+  const owner = await opsSignIn(stack.api, database.db, '+2348039990023');
+  const profileId = await profileIdOf('ada');
+  const issueId = await moneyIssue(profileId);
+  const path = `/v1/ops/issues/${issueId}/payout-read`;
+  // Not a withdrawal issue: nothing to read.
+  assert.equal((await call('POST', path, owner.cookie, {})).status, 404);
+  await database.pool.query(
+    `DELETE FROM role_permissions WHERE permission = 'payouts.resolve'`,
+  );
+  assert.equal((await call('POST', path, owner.cookie, {})).status, 403);
+  await database.pool.query(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
+  );
+  const { rows } = await database.pool.query(
+    `SELECT role_id FROM role_permissions WHERE permission = 'payouts.resolve'`,
+  );
+  assert.deepEqual(
+    rows.map((r) => r.role_id),
+    ['owner'],
+  );
+  for (const [action, body] of [
+    ['payout-apply', { reason: REASON }],
+    ['payout-mark-failed', { reason: REASON }],
+    ['payout-mark-failed', { dashboardVerified: true }],
+  ])
+    assert.equal(
+      (
+        await call(
+          'POST',
+          `/v1/ops/issues/${issueId}/${action}`,
+          owner.cookie,
+          body,
+        )
+      ).status,
+      400,
+      action,
+    );
+});
+
+test('a held withdrawal is read at the pretend provider, resumed, and only then started', async () => {
+  const owner = await opsSignIn(stack.api, database.db, '+2348039990024');
+  const profileId = await profileIdOf('ada');
+  const payoutId = randomUUID();
+  await database.pool.query(
+    `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint, provider)
+     VALUES ($1, $2, 'NGN', 100, 'REQUESTED', $3, 'f', 'mock')`,
+    [payoutId, profileId, randomUUID()],
+  );
+  const issue = await openIssue(database.db, {
+    dedupeKey: `payout_held.${payoutId}`,
+    kind: 'payout_held',
+    subject: { payoutId },
+    now: new Date(),
+  });
+  const base = `/v1/ops/issues/${issue.id}`;
+  const view = await json(
+    await call('POST', `${base}/payout-read`, owner.cookie, {}),
+  );
+  assert.equal(view.read.state, 'absent');
+  assert.equal(view.offers.resume, true);
+  assert.equal(view.offers.markFailed, false);
+  const resumed = await json(
+    await call('POST', `${base}/payout-resume`, owner.cookie, {
+      reason: REASON,
+    }),
+  );
+  assert.equal(resumed.outcome, 'resumed');
+  await waitFor(
+    async () =>
+      (
+        await database.pool.query(
+          'SELECT provider_reference FROM payouts WHERE id = $1',
+          [payoutId],
+        )
+      ).rows[0].provider_reference,
+    20_000,
+  );
+  const again = await json(
+    await call('POST', `${base}/payout-resume`, owner.cookie, {
+      reason: REASON,
+    }),
+  );
+  assert.equal(again.outcome, 'not_offered');
+});
+
+const MONEY_KINDS = [
+  'payment_mismatch',
+  'payment_conflict',
+  'payment_unresolved',
+  'payment_attempt_unresolved',
+  'payment_reversed',
+  'payment_settlement_currency',
+  'payout_failed',
+  'payout_conflict',
+  'payout_unexpected',
+  'payout_unresolved',
+  'payout_fee_short',
+  'payout_held',
+  'provider_in_debt',
+  'provider_event_conflict',
+];
+
+test('issues.resolve alone cannot close a money issue or lift a hold, and still closes the rest', async () => {
+  const staff = await opsSignIn(stack.api, database.db, '+2348039990025');
+  const profileId = await profileIdOf('ada');
+  await database.pool.query(
+    `DELETE FROM role_permissions WHERE permission = 'payouts.resolve'`,
+  );
+  try {
+    const held = await moneyIssue(profileId);
+    await placeHold(profileId, held);
+    for (const kind of MONEY_KINDS) {
+      const id =
+        kind === 'payment_reversed' ? held : await moneyIssue(profileId, kind);
+      const response = await call(
+        'POST',
+        `/v1/ops/issues/${id}/resolve`,
+        staff.cookie,
+        { reason: REASON, outcome: 'written_off' },
+      );
+      assert.equal(response.status, 403, kind);
+      assert.equal(await issueStatusOf(id), 'open', kind);
+    }
+    assert.equal(await activeHolds(profileId), 1);
+    const plain = await moneyIssue(profileId, 'message_reported');
+    assert.equal(
+      (
+        await call('POST', `/v1/ops/issues/${plain}/resolve`, staff.cookie, {
+          reason: REASON,
+        })
+      ).status,
+      200,
+    );
+  } finally {
+    await database.pool.query(
+      `INSERT INTO role_permissions (role_id, permission) VALUES ('owner', 'payouts.resolve')`,
+    );
+    await database.pool.query(
+      `UPDATE issues SET status = 'resolved', resolved_at = now(), resolved_by = 'system'
+        WHERE status = 'open' AND severity = 'money' AND subject->>'profileId' = $1`,
+      [profileId],
+    );
+    await database.pool.query(
+      `UPDATE withdrawal_holds SET released_at = now() WHERE profile_id = $1 AND released_at IS NULL`,
+      [profileId],
+    );
+  }
+});
+
+test('the API refuses a hand close while the payout is unfinished, and says where to go', async () => {
+  const owner = await opsSignIn(stack.api, database.db, '+2348039990026');
+  const profileId = await profileIdOf('ada');
+  const payoutId = randomUUID();
+  await database.pool.query(
+    `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint, provider)
+     VALUES ($1, $2, 'NGN', 100, 'REQUESTED', $3, 'f', 'mock')`,
+    [payoutId, profileId, randomUUID()],
+  );
+  const issue = await openIssue(database.db, {
+    dedupeKey: `payout_unresolved.${payoutId}`,
+    kind: 'payout_unresolved',
+    subject: { payoutId },
+    now: new Date(),
+  });
+  const response = await call(
+    'POST',
+    `/v1/ops/issues/${issue.id}/resolve`,
+    owner.cookie,
+    { reason: REASON, outcome: 'written_off' },
+  );
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, 'ISSUE_PAYOUT_UNFINISHED');
+  // The hand-picked outcomes don't include the one only the tool can state.
+  assert.equal(
+    (
+      await call('POST', `/v1/ops/issues/${issue.id}/resolve`, owner.cookie, {
+        reason: REASON,
+        outcome: 'staff_confirmed_absent',
+      })
+    ).status,
+    400,
   );
 });

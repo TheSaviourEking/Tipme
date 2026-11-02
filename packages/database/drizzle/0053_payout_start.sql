@@ -1,0 +1,10 @@
+CREATE TABLE "parked_payout_checks" (
+	"unmatched_id" uuid PRIMARY KEY NOT NULL,
+	"last_checked_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "issues" DROP CONSTRAINT "issues_kind";--> statement-breakpoint
+ALTER TABLE "payouts" ADD COLUMN "start_step" text;--> statement-breakpoint
+ALTER TABLE "payouts" ADD COLUMN "provider_review_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "issues" ADD CONSTRAINT "issues_kind" CHECK (kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported'));--> statement-breakpoint
+ALTER TABLE "payouts" ADD CONSTRAINT "payouts_start_step" CHECK (start_step IS NULL OR start_step IN ('fee', 'payout'));

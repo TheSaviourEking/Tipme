@@ -129,6 +129,8 @@ Until then, the withdrawable amount must leave room for the fee in the recipient
 
   The copy is reviewed by the owner.
 
+  _Amendment, 1 Nov 2026 (owner):_ the notice no longer names the provider. It reads "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz". Users never see a provider's name anywhere in TipMe's own text.
+
 - **Visibility:** search indexing stays off (`SITE_INDEXING=false`), and public profiles stay `noindex`.
 
 ### 6.5 Refunds, disputes and negative balances (pilot handling)

@@ -2,7 +2,7 @@
 
 PRD §15 (7). Who may do what in TipMe, and the proof that the server enforces it. The route and permission tables below are **generated from the API's committed description**, `docs/api/openapi.json`, which is itself generated from the running API and checked by `pnpm api:openapi --check` and its test (`pnpm docs:generate` rewrites the tables), and `scripts/generate-docs.test.mjs` fails when they are stale or when a route is added that nobody has reviewed. Everything is enforced on the server; hiding a button is never the control.
 
-Status: money is pretend. Nothing here approves real payments (`docs/00-DECISIONS.md`).
+Status: the code can move real money once the owner works through `docs/runbooks/live-activation.md`, and it stays pretend until then. Nothing here approves real payments (`docs/00-DECISIONS.md`).
 
 ## Who the actors are
 
@@ -25,8 +25,8 @@ Status: money is pretend. Nothing here approves real payments (`docs/00-DECISION
 5. **Public routes that change state are rate-limited** per client address (a /64 for IPv6), in Redis. The exceptions are the pretend-only routes (mock checkout, diagnostics, the weekly-report trigger), which are refused in production; the test lists them so a new one is reviewed too. If Redis is down the limiter lets requests through and logs the failure (availability over throttling; see the threat model).
 6. **No route returns phone numbers, emails or supporter messages to staff by default.** A message is revealed only through the `private.view` permission with a written reason, and every reveal is audited. The same reveal also shows the recipient's full phone number and email.
 7. **CORS** allows only the web app's origin. Credentials are allowed only on `/v1/auth/`, `/v1/me/`, `/v1/ops/`, `/v1/handles/` and `/v1/dev/` (and on every route in a private preview, where the preview cookie must travel). Checkout never sends them.
-8. **Private previews** (staging) put a password gate in front of the web app and the API; only health, release info, backup health and signed webhooks pass without it.
-9. **Every privileged change is audited** (who, what, when, why) in an append-only table. Admin actions never move money: there are no refunds, adjustments or payout holds in the admin yet.
+8. **Private previews** (staging) put a password gate in front of the web app and the API; only health, release info, backup health, payment reserve health and signed webhooks pass without it.
+9. **Every privileged change is audited** (who, what, when, why) in an append-only table. Most admin actions move no money, and there are no refunds or ledger adjustments in the admin. Three can affect money leaving: the takeover freeze and the withdrawals switch stop withdrawals, and Resume queues a payout that was never tried, which then sends real money on a live copy.
 
 ## Staff roles and permissions
 
@@ -63,10 +63,11 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | `pages.plan` | GET `/v1/ops/pages/{handle}`<br>POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/recheck` |
+| `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `providers.manage` | POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
-| `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery` |
+| `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
 | `search.view` | GET `/v1/ops/search` |
 
 <!-- /generated:permissions -->
@@ -84,6 +85,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/health` | n/a (read) | – | – |
 | GET | `/health/backups` | n/a (read) | – | – |
 | GET | `/health/live` | n/a (read) | – | – |
+| GET | `/health/payments` | n/a (read) | – | – |
 | GET | `/health/ready` | n/a (read) | – | – |
 | GET | `/health/release` | n/a (read) | – | – |
 | POST | `/v1/auth/code` | yes | `auth_code` | – |
@@ -165,6 +167,10 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | PUT | `/v1/me/page/state` | yes | – | – |
 | GET | `/v1/me/payment-account` | n/a (read) | – | – |
 | POST | `/v1/me/payment-account/onboarding` | yes | `intents` | – |
+| GET | `/v1/me/payout-destination` | n/a (read) | `bank_read` | – |
+| PUT | `/v1/me/payout-destination` | yes | `auth_verify` | – |
+| POST | `/v1/me/payout-destination/code` | yes | `auth_code` | – |
+| POST | `/v1/me/payout-destination/resolve` | yes | `bank_resolve` | – |
 | PUT | `/v1/me/phone` | yes | `auth_verify` | – |
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
@@ -189,7 +195,9 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/me/tips/{tipId}` | n/a (read) | – | – |
 | POST | `/v1/me/tips/{tipId}/message/hide` | yes | – | – |
 | POST | `/v1/me/tips/{tipId}/message/report` | yes | – | – |
+| GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
+| GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
 #### Signed-in staff, before an admin grant
 
@@ -206,6 +214,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | Method | Path | Permission | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- | --- |
 | POST | `/v1/ops/accounts/{userId}/email-recovery` | `recoveries.manage` | yes | – | – |
+| POST | `/v1/ops/accounts/{userId}/end-sessions` | `recoveries.manage` | yes | – | – |
 | GET | `/v1/ops/audit` | `audit.view` | n/a (read) | – | – |
 | POST | `/v1/ops/bachs/account-recovery` | `payments.recheck` | yes | – | – |
 | POST | `/v1/ops/bachs/checkout-recovery` | `payments.recheck` | yes | – | – |
@@ -220,6 +229,10 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/issues` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/issues/{id}` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/issues/{id}/notes` | `issues.view` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/payout-apply` | `payouts.resolve` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/payout-mark-failed` | `payouts.resolve` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/payout-read` | `payouts.resolve` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/payout-resume` | `payouts.resolve` | yes | – | – |
 | POST | `/v1/ops/issues/{id}/resolve` | `issues.resolve` | yes | – | – |
 | POST | `/v1/ops/issues/{id}/reveal` | `private.view` | yes | – | – |
 | GET | `/v1/ops/market` | `analytics.view` | n/a (read) | – | – |
@@ -239,6 +252,8 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
+| GET | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | n/a (read) | – | – |
+| POST | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | yes | – | – |
 | GET | `/v1/ops/providers/mail` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | – | – |
@@ -250,6 +265,7 @@ Two roles exist today. **Owner** holds every permission; staff are created only 
 | POST | `/v1/ops/recheck` | `payments.recheck` | yes | – | – |
 | GET | `/v1/ops/search` | `search.view` | n/a (read) | – | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
+| POST | `/v1/ops/withdrawals-switch` | `payouts.resolve` | yes | – | – |
 
 <!-- /generated:routes -->
 <!-- prettier-ignore-end -->
@@ -265,6 +281,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `GET /health`, `/health/live`, `/health/ready`                                         | Load balancers and uptime checks                                      | Reveal only "up/down"                                                                                              |
 | `GET /health/release`                                                                  | The release check and the watcher read the deployed version and mode  | No secrets; says nothing about people                                                                              |
 | `GET /health/backups`                                                                  | The 15-minute watcher reads backup ages                               | Ages and counts only, no file names; cached 30 s                                                                   |
+| `GET /health/payments`                                                                 | The production watcher reads whether reserve checks have stopped      | Low, unreadable or stale, when read: no amount or name                                                             |
 | `GET /v1/profiles/{handle}`                                                            | The public tipping page                                               | Only live, active pages; nothing else answers differently from "not found"                                         |
 | `POST /v1/profiles/{handle}/report`                                                    | Anyone can report a page                                              | A reason from a fixed list; always answers the same; rate-limited                                                  |
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |

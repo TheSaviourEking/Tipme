@@ -11,7 +11,7 @@ import type { Database, Tx } from '../client.js';
 import { feeFreeCredits, profiles, tipQuotes } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { tipAmountsOf } from './profiles.js';
+import { opsPageByHandle, tipAmountsOf } from './profiles.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -195,4 +195,28 @@ async function openFeeFreeQuotes(
        AND (t.id IS NULL OR t.status IN ('AWAITING_PAYMENT', 'PENDING_VERIFICATION'))`);
   const row = result.rows[0];
   return { count: row?.n ?? 0, waivedMinor: BigInt(row?.waived ?? '0') };
+}
+
+/** The current handle, lower-cased, of the page a quote is for; null when there is no such quote. */
+export function quoteHandleOf(
+  db: Database,
+  quoteId: string,
+): Promise<string | null> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({ handle: profiles.handleLower })
+      .from(tipQuotes)
+      .innerJoin(profiles, eq(profiles.id, tipQuotes.profileId))
+      .where(eq(tipQuotes.id, quoteId));
+    return row?.handle ?? null;
+  });
+}
+
+/** A handle or old handle as the page's current handle, lower-cased; null when there is no page. */
+export async function pageHandleOf(
+  db: Database,
+  raw: string,
+): Promise<string | null> {
+  const page = await opsPageByHandle(db, raw);
+  return page ? page.handle.toLowerCase() : null;
 }

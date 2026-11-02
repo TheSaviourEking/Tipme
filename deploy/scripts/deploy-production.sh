@@ -7,19 +7,24 @@
 # If the new colour is unhealthy it is stopped and the old colour keeps serving (nothing else
 # changes). Migrations are forward-only and must stay compatible with the release still serving.
 #
-#   deploy/scripts/deploy-production.sh <version>     # version = git sha
+#   deploy/scripts/deploy-production.sh <version> [live]
+#     version = git sha. live = true|false, what the env file must say about live payments (default
+#     false). Deploying the version already running applies a changed env file, with no new build.
 set -euo pipefail
 TIPME_STACK=production
 source "$(dirname "$0")/lib.sh"
 
-version=${1:?usage: deploy-production.sh <version>}
+version=${1:?usage: deploy-production.sh <version> [true|false]}
+expected_live=${2:-false}
 [[ "$version" =~ ^[0-9a-f]{7,40}$ ]] || { echo "Not a version (git sha): $version" >&2; exit 2; }
 take_lock
 preflight
+preflight_live_payments "$expected_live"
 shipped "$version" || {
   echo "tipme-app:$version is not loaded, or its files are not in $RELEASES/$version: ship it with the deploy-production workflow first." >&2
   exit 2
 }
+compose_agrees_on_live "$version" "$expected_live"
 
 echo "==> Queue"
 # --no-recreate: started if absent, never restarted (a changed Compose file would recreate it).

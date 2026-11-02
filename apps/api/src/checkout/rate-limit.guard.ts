@@ -14,6 +14,7 @@ import type { Logger } from '@tipme/observability';
 import type { Request } from 'express';
 import type { Redis } from 'ioredis';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { CodedHttpException } from '../http/coded.exception.js';
 import { REDIS } from '../infra/infra.module.js';
 import { LOGGER } from '../tokens.js';
 
@@ -29,7 +30,15 @@ type RateLimitedRoute =
   | 'avatars'
   | 'cover_designs'
   | 'qr_art'
-  | 'qr_thumb';
+  | 'qr_thumb'
+  | 'bank_resolve'
+  | 'bank_read';
+
+// Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
+const BANK_RESOLVES_PER_USER_PER_DAY = 10;
+const DAY_MS = 86_400_000;
+
+type LimitedRequest = Request & { auth?: { userId: string } };
 
 /**
  * Who a request counts against: an IPv4 address (IPv4-mapped IPv6 unwrapped), or an IPv6 /64,
@@ -63,8 +72,9 @@ export class RateLimitedException extends HttpException {
 }
 
 /**
- * Fixed one-minute window per client IP in Redis. Fails open when Redis errors: availability
- * matters more than throttling, and the failure is logged.
+ * Fixed window per client IP in Redis (per signed-in person for bank routes). Fails open when Redis
+ * errors, because availability matters more than throttling, and the failure is logged. The one
+ * exception is bank_resolve: an unmetered lookup can map strangers' accounts to names, so it stops.
  */
 @Injectable()
 export class RateLimitGuard implements CanActivate {
@@ -81,8 +91,26 @@ export class RateLimitGuard implements CanActivate {
       context.getHandler(),
     );
     if (!route) return true;
+    const request = context.switchToHttp().getRequest<LimitedRequest>();
+    const ip = rateLimitSubject(request.ip);
+    const userId = request.auth?.userId ?? 'anonymous';
+    if (route === 'bank_read')
+      return this.count(route, `user:${userId}`, {
+        limit: this.config.RATE_LIMIT_BANK_READ_PER_MIN,
+        windowMs: 60_000,
+      });
+    if (route === 'bank_resolve') {
+      await this.count(route, ip, {
+        limit: this.config.RATE_LIMIT_BANK_RESOLVE_PER_HOUR,
+        windowMs: 3_600_000,
+      });
+      return this.count(route, `user:${userId}`, {
+        limit: BANK_RESOLVES_PER_USER_PER_DAY,
+        windowMs: DAY_MS,
+      });
+    }
     // Sign-in codes are limited per hour; everything else per minute.
-    const { limit, windowMs } = {
+    const window = {
       quotes: {
         limit: this.config.RATE_LIMIT_QUOTES_PER_MIN,
         windowMs: 60_000,
@@ -142,15 +170,19 @@ export class RateLimitGuard implements CanActivate {
         windowMs: 3_600_000,
       },
     }[route];
-    const request = context
-      .switchToHttp()
-      .getRequest<Request & { auth?: { userId: string } }>();
-    const ip =
-      route === 'qr_thumb' && request.auth
-        ? `user:${request.auth.userId}`
-        : rateLimitSubject(request.ip);
+    // The list pictures are counted per signed-in person (see qr_thumb above).
+    const subject =
+      route === 'qr_thumb' && request.auth ? `user:${userId}` : ip;
+    return this.count(route, subject, window);
+  }
+
+  private async count(
+    route: RateLimitedRoute,
+    subject: string,
+    { limit, windowMs }: { limit: number; windowMs: number },
+  ): Promise<boolean> {
     const now = Date.now();
-    const key = `rl:${this.config.QUEUE_PREFIX}:${route}:${ip}:${Math.floor(now / windowMs)}`;
+    const key = `rl:${this.config.QUEUE_PREFIX}:${route}:${subject}:${Math.floor(now / windowMs)}`;
     let count: number;
     try {
       const results = await this.redis
@@ -163,6 +195,8 @@ export class RateLimitGuard implements CanActivate {
       count = Number(incr[1]);
     } catch {
       this.logger.warn({ event: 'rate_limit.unavailable', route });
+      if (route === 'bank_resolve')
+        throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
       return true;
     }
     if (count > limit)

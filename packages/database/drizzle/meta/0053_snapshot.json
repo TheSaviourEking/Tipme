@@ -1,6 +1,6 @@
 {
-  "id": "b7eaeee9-767b-4a96-b98b-1fb30248591f",
-  "prevId": "caa1070f-8dd2-4d85-8960-51f0841cb9d1",
+  "id": "31ae2f88-3baf-47d6-96e4-fb4c9b10419c",
+  "prevId": "915f54bc-a0fe-41c3-82d6-65118254f7e2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1014,6 +1014,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "resolution_outcome": {
+          "name": "resolution_outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1052,7 +1058,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -1061,6 +1067,10 @@
         "issues_status": {
           "name": "issues_status",
           "value": "status IN ('open', 'resolved')"
+        },
+        "issues_resolution_outcome": {
+          "name": "issues_resolution_outcome",
+          "value": "resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off'))"
         },
         "issues_resolution": {
           "name": "issues_resolution",
@@ -2616,6 +2626,31 @@
       },
       "isRLSEnabled": false
     },
+    "public.parked_payout_checks": {
+      "name": "parked_payout_checks",
+      "schema": "",
+      "columns": {
+        "unmatched_id": {
+          "name": "unmatched_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "last_checked_at": {
+          "name": "last_checked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.payment_accounts": {
       "name": "payment_accounts",
       "schema": "",
@@ -2688,6 +2723,18 @@
         },
         "last_synced_at": {
           "name": "last_synced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manual_payouts_at": {
+          "name": "manual_payouts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_capabilities_requested_at": {
+          "name": "payout_capabilities_requested_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -2969,6 +3016,126 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.payout_destinations": {
+      "name": "payout_destinations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "profile_id": {
+          "name": "profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destination_reference": {
+          "name": "destination_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bank_code": {
+          "name": "bank_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bank_name": {
+          "name": "bank_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_last4": {
+          "name": "account_last4",
+          "type": "char(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "replaced_at": {
+          "name": "replaced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payout_destinations_active": {
+          "name": "payout_destinations_active",
+          "columns": [
+            {
+              "expression": "profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "replaced_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payout_destinations_profile_id_profiles_id_fk": {
+          "name": "payout_destinations_profile_id_profiles_id_fk",
+          "tableFrom": "payout_destinations",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payout_destinations_status": {
+          "name": "payout_destinations_status",
+          "value": "status IN ('usable', 'pending_review', 'rejected')"
+        },
+        "payout_destinations_last4": {
+          "name": "payout_destinations_last4",
+          "value": "account_last4 ~ '^[0-9]{4}$'"
+        },
+        "payout_destinations_provider": {
+          "name": "payout_destinations_provider",
+          "value": "provider ~ '^[a-z][a-z0-9_]*$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.payout_items": {
       "name": "payout_items",
       "schema": "",
@@ -3113,6 +3280,48 @@
           "primaryKey": false,
           "notNull": false
         },
+        "destination_id": {
+          "name": "destination_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fee_minor": {
+          "name": "fee_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fee_transfer_reference": {
+          "name": "fee_transfer_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_uncertain_at": {
+          "name": "start_uncertain_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_step": {
+          "name": "start_step",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_review_at": {
+          "name": "provider_review_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_reference": {
+          "name": "account_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3162,6 +3371,15 @@
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "payouts_destination_id_payout_destinations_id_fk": {
+          "name": "payouts_destination_id_payout_destinations_id_fk",
+          "tableFrom": "payouts",
+          "tableTo": "payout_destinations",
+          "columnsFrom": ["destination_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3186,6 +3404,14 @@
         "payouts_amount_positive": {
           "name": "payouts_amount_positive",
           "value": "amount_minor > 0"
+        },
+        "payouts_fee_not_negative": {
+          "name": "payouts_fee_not_negative",
+          "value": "fee_minor IS NULL OR fee_minor >= 0"
+        },
+        "payouts_start_step": {
+          "name": "payouts_start_step",
+          "value": "start_step IS NULL OR start_step IN ('fee', 'payout')"
         }
       },
       "isRLSEnabled": false
@@ -3404,65 +3630,6 @@
       "checkConstraints": {
         "profile_avatars_one_place": {
           "name": "profile_avatars_one_place",
-          "value": "(bytes IS NULL) <> (object_key IS NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.profile_covers": {
-      "name": "profile_covers",
-      "schema": "",
-      "columns": {
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bytes": {
-          "name": "bytes",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "object_key": {
-          "name": "object_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "profile_covers_profile_id_profiles_id_fk": {
-          "name": "profile_covers_profile_id_profiles_id_fk",
-          "tableFrom": "profile_covers",
-          "tableTo": "profiles",
-          "columnsFrom": ["profile_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "profile_covers_one_place": {
-          "name": "profile_covers_one_place",
           "value": "(bytes IS NULL) <> (object_key IS NULL)"
         }
       },
@@ -3690,31 +3857,6 @@
           "notNull": true,
           "default": 0
         },
-        "cover_design": {
-          "name": "cover_design",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cover_colour": {
-          "name": "cover_colour",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cover_path": {
-          "name": "cover_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cover_version": {
-          "name": "cover_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "first_published_at": {
           "name": "first_published_at",
           "type": "timestamp with time zone",
@@ -3766,20 +3908,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "handle_changes_used": {
-          "name": "handle_changes_used",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "handle_changes_extra": {
-          "name": "handle_changes_extra",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -3840,10 +3968,6 @@
         "profiles_plan": {
           "name": "profiles_plan",
           "value": "plan IN ('free', 'pro')"
-        },
-        "profiles_handle_changes": {
-          "name": "profiles_handle_changes",
-          "value": "handle_changes_used >= 0 AND handle_changes_extra BETWEEN 0 AND 20"
         },
         "profiles_custom_fee_bps": {
           "name": "profiles_custom_fee_bps",
@@ -3980,6 +4104,123 @@
         "provider_events_verified": {
           "name": "provider_events_verified",
           "value": "signature_verified"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.provider_fee_credits": {
+      "name": "provider_fee_credits",
+      "schema": "",
+      "columns": {
+        "account_reference": {
+          "name": "account_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "char(3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_minor": {
+          "name": "amount_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transfer_reference": {
+          "name": "transfer_reference",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "payout_id": {
+          "name": "payout_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_by_payout_id": {
+          "name": "used_by_payout_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "provider_fee_credits_unspent": {
+          "name": "provider_fee_credits_unspent",
+          "columns": [
+            {
+              "expression": "account_reference",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "used_by_payout_id IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "provider_fee_credits_payout_id_payouts_id_fk": {
+          "name": "provider_fee_credits_payout_id_payouts_id_fk",
+          "tableFrom": "provider_fee_credits",
+          "tableTo": "payouts",
+          "columnsFrom": ["payout_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "provider_fee_credits_used_by_payout_id_payouts_id_fk": {
+          "name": "provider_fee_credits_used_by_payout_id_payouts_id_fk",
+          "tableFrom": "provider_fee_credits",
+          "tableTo": "payouts",
+          "columnsFrom": ["used_by_payout_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "provider_fee_credits_currency_iso": {
+          "name": "provider_fee_credits_currency_iso",
+          "value": "currency ~ '^[A-Z]{3}$'"
+        },
+        "provider_fee_credits_amount_positive": {
+          "name": "provider_fee_credits_amount_positive",
+          "value": "amount_minor > 0"
+        },
+        "provider_fee_credits_provider": {
+          "name": "provider_fee_credits_provider",
+          "value": "provider ~ '^[a-z][a-z0-9_]*$'"
         }
       },
       "isRLSEnabled": false
@@ -5673,6 +5914,107 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.withdrawal_holds": {
+      "name": "withdrawal_holds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "profile_id": {
+          "name": "profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issue_id": {
+          "name": "issue_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "released_at": {
+          "name": "released_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "released_by": {
+          "name": "released_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "withdrawal_holds_active": {
+          "name": "withdrawal_holds_active",
+          "columns": [
+            {
+              "expression": "profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "released_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "withdrawal_holds_profile_id_profiles_id_fk": {
+          "name": "withdrawal_holds_profile_id_profiles_id_fk",
+          "tableFrom": "withdrawal_holds",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "withdrawal_holds_issue_id_issues_id_fk": {
+          "name": "withdrawal_holds_issue_id_issues_id_fk",
+          "tableFrom": "withdrawal_holds",
+          "tableTo": "issues",
+          "columnsFrom": ["issue_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "withdrawal_holds_reason": {
+          "name": "withdrawal_holds_reason",
+          "value": "reason IN ('reversal', 'in_debt', 'unexpected_payout')"
+        },
+        "withdrawal_holds_release": {
+          "name": "withdrawal_holds_release",
+          "value": "released_by IS NULL OR released_at IS NOT NULL"
+        }
+      },
       "isRLSEnabled": false
     }
   },
