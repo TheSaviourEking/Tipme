@@ -13,6 +13,7 @@ import './globals.css';
 // build never downloads them and no page makes a third-party font request.
 const manrope = localFont({
   src: '../fonts/Manrope-Latin.woff2',
+  preload: false,
   weight: '200 800',
   variable: '--font-manrope',
   display: 'swap',
