@@ -35,7 +35,6 @@ import {
 } from '@tipme/contracts';
 import {
   freezeWithdrawals,
-  grantFeeFreeTips,
   grantHandleChanges,
   opsPageByHandle,
   pagePricing,
