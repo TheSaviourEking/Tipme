@@ -82,11 +82,13 @@ function routeTables(routes) {
 
 function permissionTable(routes) {
   const byPermission = new Map();
+  // A route may open to any of several: it unlocks under each.
   for (const r of routes.filter((x) => x.permission)) {
-    byPermission.set(r.permission, [
-      ...(byPermission.get(r.permission) ?? []),
-      `${r.method} \`${r.path}\``,
-    ]);
+    for (const permission of [r.permission].flat())
+      byPermission.set(permission, [
+        ...(byPermission.get(permission) ?? []),
+        `${r.method} \`${r.path}\``,
+      ]);
   }
   return [
     '| Permission | Routes it unlocks |',
