@@ -126,8 +126,9 @@ for (const m of mode)
   }) => {
     await page.setViewportSize({ width: 1280, height: 1000 });
     for (const [path, ceiling] of [
-      ['/@dr7', 500],
-      ['/@sixkeys', 560],
+      // Linux fonts run a little wider than a Mac's and can wrap a line.
+      ['/@dr7', 520],
+      ['/@sixkeys', 580],
     ] as const) {
       await at(m, path, page, { pilotNotice: m === 'live' });
       // The pilot notice streams in after the form; measure the card as the supporter gets it.
