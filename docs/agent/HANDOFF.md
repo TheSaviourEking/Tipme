@@ -1,3 +1,10 @@
+# Current handoff — home page LCP, second pass (2 November 2026)
+
+- Branch/worktree: `fix/home-lcp-2` / `.worktrees/home-lcp-2`, from `origin/dev`, committed, not pushed. Web-only change: `apps/web/src/app/page.tsx` (`sizes`) and `apps/web/next.config.ts` (`images.deviceSizes`). No payments code touched.
+- Local (production build, 412 px, DPR 2.625, 150 ms / 1.6 Mbps / 4x CPU, 9 fresh contexts): home LCP median 1484 ms before, 1124 ms after; for-creators 1496 before, 1492 after; CLS 0 throughout.
+- Tried and dropped, no gain: no font preload (1128 to 1112 ms, and a visible swap), lazy-loading the demo form (no change; its chunk still loads).
+- Still open: the CI trace's HTML wait (1197 ms) on a cache HIT. Requests that skip `proxy.ts` (`/_next/image`) waited about 15 ms plus the emulated 150 ms, while `/` passes through it. The Proxy also carries the production launch gate, so it was not changed. Measure a preview deployment with `/` excluded from the matcher before deciding.
+
 # Current handoff — live payments, Task 12: fence removed, nothing activated (1 November 2026)
 
 - Branch/worktree: `feat/live-payments-payouts` / `.worktrees/live-payouts`, not pushed. Migrations `0058_live_payment_switches`, `0059_account_takeover_hold`.
