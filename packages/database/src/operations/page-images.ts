@@ -8,9 +8,12 @@ import { OperationError } from './errors.js';
 // What page photos and covers share. Not part of the package's public surface.
 
 /**
- * Removes objects after the database change committed; a failure only leaves an orphan, and says
- * so, because nothing can find that object later (`PhotoStore` can't list). The log names the kind
- * of image and never the key, which holds the page id. This package isn't handed a logger.
+ * Removes objects after the database change committed. A failure leaves an orphan that nothing
+ * else can find (the row is gone and `PhotoStore` can't list), so the warning carries the object
+ * key: that line is the only record, and docs/runbooks/photos.md says how to erase from it.
+ * Chosen over a retry queue, which needs a table and a worker loop and so a migration; revisit if
+ * failures turn up in practice. The key is `<kind>/<page id>/<random>.webp`: opaque ids, with no
+ * handle, name or email in it. This package isn't handed a logger.
  */
 export async function removeObjects(
   store: PhotoStore | undefined,
@@ -24,6 +27,7 @@ export async function removeObjects(
           level: 'warn',
           event: 'photo_object.remove_failed',
           kind: key.split('/')[0],
+          objectKey: key,
         }),
       );
     });

@@ -577,21 +577,43 @@ test('concurrent first photos leave one object too', async () => {
   assert.deepEqual([...store.objects.keys()], [rows[0].object_key]);
 });
 
-test('a failed object removal is logged, with no key or page id in the log', async (t) => {
+test('a failed object removal is logged with the object key, so the file can be found and erased', async (t) => {
   await livePage('+2348031290014', 'cover_logged');
-  const { profileId, userId } = await userAndPage('cover_logged');
+  const { userId } = await userAndPage('cover_logged');
   const store = memoryStore();
   await setCover(database.db, userId, fakeWebp('one'), store);
+  const [oldKey] = [...store.objects.keys()];
   store.beforeRemove = async () => {
     throw new Error('bucket unavailable');
   };
   const warn = t.mock.method(console, 'warn', () => undefined);
   await setCover(database.db, userId, fakeWebp('two'), store);
   assert.equal(warn.mock.callCount(), 1);
-  const line = warn.mock.calls[0].arguments.join(' ');
-  assert.match(line, /photo_object\.remove_failed/);
-  assert.match(line, /covers/);
-  assert.equal(line.includes(profileId), false, line);
+  const line = JSON.parse(warn.mock.calls[0].arguments.join(' '));
+  assert.equal(line.event, 'photo_object.remove_failed');
+  assert.equal(line.kind, 'covers');
+  assert.equal(line.objectKey, oldKey);
+});
+
+test('a failed removal after an account is deleted logs the key, and never the handle', async (t) => {
+  await livePage('+2348031290090', 'cover_strand');
+  const { userId } = await userAndPage('cover_strand');
+  const store = memoryStore();
+  await setCover(database.db, userId, fakeWebp('mine'), store);
+  const [key] = [...store.objects.keys()];
+  store.beforeRemove = async () => {
+    throw new Error('bucket unavailable');
+  };
+  const warn = t.mock.method(console, 'warn', () => undefined);
+  await deleteAccount(database.db, {
+    userId,
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+    photos: store,
+  });
+  const lines = warn.mock.calls.map((call) => call.arguments.join(' '));
+  assert.equal(lines.length, 1);
+  assert.equal(JSON.parse(lines[0]).objectKey, key);
+  assert.equal(lines[0].includes('cover_strand'), false, lines[0]);
 });
 
 test('a failed upload to the store changes nothing, and the old cover stays', async () => {
