@@ -65,6 +65,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },
+  // The portraits are 960px wide, so a candidate above that only re-encodes the same pixels under
+  // another URL (and the resizer never enlarges). Cap the ladder at the real width.
+  images: { deviceSizes: [640, 750, 828, 960] },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

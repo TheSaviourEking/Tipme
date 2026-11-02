@@ -1,3 +1,10 @@
+# Current task — home page LCP, second pass (2 November 2026)
+
+- Branch/worktree: `fix/home-lcp-2` / `.worktrees/home-lcp-2`, from `origin/dev` at `010ed89` (`fix/home-lcp` and `.worktrees/home-lcp` already existed from the Sentry pass and were left alone). Committed, not pushed.
+- Production run `41364449589` still measured `/` at 2908 ms after the Sentry deferral. Its trace: the HTML's wait was 1197 ms, so every subresource started at about 1400 ms, then the 50 KB portrait shared the link with about 260 KB of fonts, CSS and JS.
+- Changed: the home portrait's `sizes` caps the phone width at 18rem (a 412 px, 2.625x phone now gets the 828 px candidate, 32 KB, instead of 960 px at 50 KB), and `images.deviceSizes` stops at 960, the portraits' real width. Measured: local median 1484 to 1124 ms; for-creators unchanged.
+- Not enough on its own: the CI trace puts the portrait's start about 1230 ms later than local, so this predicts about 2.5 s there. The HTML wait is the larger cost and is not changed here. Next: see the report in the final hand-back; do not raise the 2000 ms budget.
+
 # Current task — production release-check LCP (1 November 2026)
 
 - Branch/worktree: `fix/home-lcp` / `.worktrees/home-lcp`, based on `origin/main` at `26c324e`; changes are uncommitted.

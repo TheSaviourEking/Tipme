@@ -64,7 +64,7 @@ export default function Home() {
                 alt="Ada Okafor, a fictional demo recipient"
                 width={960}
                 height={1200}
-                sizes="(max-width: 860px) calc(100vw - 2.5rem), 30vw"
+                sizes="(max-width: 860px) min(calc(100vw - 2.5rem), 18rem), 30vw"
                 loading="eager"
                 fetchPriority="high"
               />
