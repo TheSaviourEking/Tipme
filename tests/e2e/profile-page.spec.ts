@@ -14,7 +14,7 @@ import {
 // The public page (spec section 5). Test mode runs on the full e2e stack. The other payment states
 // and the worst-case pages run the same built web app against a stand-in API (profile-fixtures).
 
-const TRUST = 'No account needed. You’ll see the full total before you pay.';
+const TRUST = 'No account needed. You pay exactly this amount.';
 const openDetails = (page: Page) =>
   page.getByText('Add a message, reason or your name').click();
 const tipButton = (page: Page) => page.getByRole('button', { name: /^Tip\b/ });
@@ -634,7 +634,6 @@ test('on a phone the Tip button stays in view and the form still works @mobile',
   await inView();
   await page.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(tipButton(page)).toHaveText(/^Tip ₦2,000/);
-  await expect(page.getByText(/You pay/)).toBeVisible();
   await inView();
   // Nothing moves while it starts: only the button's busy state.
   await page.route('**/v1/tip-intents', async (route) => {
@@ -738,7 +737,6 @@ test('a failed start is shown clear of the Tip bar @mobile', async ({
 }) => {
   await page.goto('/@ada');
   await page.getByRole('radio', { name: '2,000 NGN' }).click();
-  await expect(page.getByText(/You pay/)).toBeVisible();
   await page.route('**/v1/tip-intents', (route) =>
     route.fulfill({
       status: 503,
@@ -810,12 +808,10 @@ test('choosing a reason keeps the Tip bar: a select opens no keyboard @mobile', 
   await expect.poll(() => clearOfBar(page, 'select')).toBe(true);
 });
 
-test('the bar names the amount and shows the confirmed total beside it @mobile', async ({
+test('the bar names the amount, with no total line @mobile', async ({
   page,
 }) => {
   await page.goto('/@ada');
-  const total = page.locator('.composer-action .tip-payment-total');
-  await expect(total).toHaveCount(0);
   // Keys just clear of the bar, as a thumb would have them.
   await page.evaluate(() => {
     const keys = document.querySelector('.amount-options')!;
@@ -828,16 +824,14 @@ test('the bar names the amount and shows the confirmed total beside it @mobile',
       behavior: 'instant',
     });
   });
-  await page.getByRole('radio', { name: '2,000 NGN' }).click();
-  await expect(tipButton(page)).toHaveText(/^Tip ₦2,000/);
-  await expect(total).toHaveText(/You pay/);
-  await expect(total).toBeInViewport({ ratio: 1 });
+  await page.getByRole('radio', { name: '1,000 NGN' }).click();
+  await expect(tipButton(page)).toHaveText(/^Tip ₦1,000/);
   await expect(tipButton(page)).toBeInViewport({ ratio: 1 });
-  await expect(page.getByText(/You pay/)).toHaveCount(1);
-  // Small on a phone: notice, total and button together.
+  await expect(page.locator('.tip-payment-total')).toHaveCount(0);
+  // Small on a phone: notice, partner line and button together.
   const bar = await page.locator('.composer-action').boundingBox();
   expect(bar!.height).toBeLessThanOrEqual(140);
-  // The Report link still clears the taller bar at the page's end.
+  // The Report link still clears the bar at the page's end.
   await page.evaluate(() =>
     scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }),
   );
@@ -890,7 +884,7 @@ test('with no notice to show, the bar has no empty slot @mobile', async ({
   }
 });
 
-test('at 1280x720 the Tip button and its total line are in view, and choosing moves nothing', async ({
+test('at 1280x720 the Tip button is in view, and choosing moves nothing', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -898,12 +892,10 @@ test('at 1280x720 the Tip button and its total line are in view, and choosing mo
   const button = tipButton(page);
   await expect(button).toBeInViewport({ ratio: 1 });
   const before = await button.boundingBox();
-  await page.getByRole('radio', { name: '2,000 NGN' }).click();
-  const total = page.locator('.tip-payment-total');
-  await expect(total).toBeInViewport({ ratio: 1 });
+  await page.getByRole('radio', { name: '1,000 NGN' }).click();
+  await expect(button).toHaveText(/^Tip ₦1,000/);
   await expect(button).toBeInViewport({ ratio: 1 });
   expect((await button.boundingBox())!.y).toBe(before!.y);
-  expect((await total.boundingBox())!.y).toBeLessThan(before!.y);
 });
 
 // Older browsers ignore the whole block: simulated by removing it, and every :has() rule.
@@ -1107,28 +1099,20 @@ test.describe('when the API fails on a page not in the cache', () => {
   });
 });
 
-test('typing an amount on a phone is still announced: one live region, outside the bar @mobile', async ({
+test('a failed quote on a phone is announced once, from one live region outside the bar @mobile', async ({
   page,
 }) => {
   await page.goto('/@ada');
-  const field = page.getByLabel(/^Other amount/);
-  await field.focus();
-  await field.fill('2500');
-  await expect(page.locator('.composer-action')).toBeHidden();
+  await page.route('**/v1/tip-quotes', (route) => route.abort());
+  await tipButton(page).click();
   await expect(page.locator('[data-tip-panel] [aria-live]')).toHaveCount(1);
   const live = page.locator('.tip-quote-live');
-  await expect(live).toHaveText('Total to pay: NGN 2,500.00');
+  await expect(live).toHaveText(
+    'We couldn’t reach TipMe. Check your connection and try again.',
+  );
   expect(
     await live.evaluate((el) => el.closest('.composer-action') === null),
   ).toBe(true);
-  // In the accessibility tree while the field is focused, with the bar out of it.
   const tree = await page.locator('[data-tip-panel]').ariaSnapshot();
-  expect(tree).toContain('Total to pay: NGN 2,500.00');
-  expect(tree).not.toContain('You pay');
-  // The visible total is hidden from assistive technology when the bar is back: read once.
-  await field.blur();
-  await expect(page.getByText(/You pay NGN 2,500/)).toBeVisible();
-  const back = await page.locator('[data-tip-panel]').ariaSnapshot();
-  expect(back).not.toContain('You pay');
-  expect(back.match(/Total to pay/g)).toHaveLength(1);
+  expect(tree.match(/We couldn’t reach TipMe/g)).toHaveLength(1);
 });

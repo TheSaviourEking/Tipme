@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 type TipChoices = { amount?: string; name?: string; message?: string };
 
@@ -13,8 +13,6 @@ export async function startTip(
   { amount = '2,000 NGN', name, message }: TipChoices = {},
 ) {
   await page.getByRole('radio', { name: amount }).click();
-  // The tip summary shows only what the supporter pays.
-  await expect(page.getByText(/^You pay NGN [\d,]+\.\d\d$/)).toBeVisible();
   if (message || name)
     // The optional details sit behind one disclosure.
     await page.getByText('Add a message, reason or your name').click();

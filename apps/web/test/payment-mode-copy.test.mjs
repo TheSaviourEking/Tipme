@@ -35,7 +35,7 @@ test('test copy keeps today’s wording', () => {
   );
   assert.equal(
     copy.formTrust,
-    'No account needed. You’ll see the full total before you pay.',
+    'No account needed. You pay exactly this amount.',
   );
   assert.equal(
     copy.formPartner,
@@ -52,6 +52,18 @@ test('test copy keeps today’s wording', () => {
   );
   assert.equal(copy.receiptBanner, 'Test payment · no real money moved');
   assert.equal(copy.footerNote, 'Development preview · Test mode');
+});
+
+test('supporters are never told about totals or what the person receives, or that there are no fees', () => {
+  for (const mode of ['test', 'live', 'closed']) {
+    const copy = paymentModeCopy(mode);
+    for (const key of ['formTrust', 'homeClarity', 'howItWorksPay'])
+      assert.doesNotMatch(
+        copy[key] ?? '',
+        /receive|full total|full cost|no fees?|free/i,
+        `${mode}.${key}`,
+      );
+  }
 });
 
 test('closed copy says tipping opens soon where a supporter would pay', () => {

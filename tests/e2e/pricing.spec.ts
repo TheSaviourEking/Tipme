@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { enrolOwner, noOtherStaff, makePagePro } from './ops-helpers';
+import { API_ORIGIN } from './stack';
 
 // Staff-set pricing (ADR-0014): nothing changes a page's fee except staff, with a reason, and
 // the resulting quote remains financially correct without exposing the recipient's fee details.
@@ -47,16 +48,14 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
   }) =>
     expect(async () => {
       await visitor.goto(`/@${handle}`);
-      const quoteResponse = visitor.waitForResponse(
-        (response) =>
-          response.url().endsWith('/v1/tip-quotes') &&
-          response.request().method() === 'POST',
-      );
-      await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
-      await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible({
-        timeout: 2000,
-      });
-      const quote = await (await quoteResponse).json();
+      await expect(
+        visitor.getByRole('radio', { name: '2,000 NGN' }),
+      ).toBeVisible({ timeout: 2000 });
+      const quote = await (
+        await visitor.request.post(`${API_ORIGIN}/v1/tip-quotes`, {
+          data: { handle, amountMinor: '200000', currency: 'NGN' },
+        })
+      ).json();
       expect(quote.data).toMatchObject({
         platformFeeMinor,
         providerFeeMinor,

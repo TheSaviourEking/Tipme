@@ -55,10 +55,9 @@ test('every route reflows at 320px (equivalent to 1280px at 400% zoom)', async (
   }
 });
 
-test('the quoted payer total is accessible', async ({ page }) => {
+test('a chosen amount is accessible', async ({ page }) => {
   await page.goto('/@tobi');
   await page.getByRole('radio', { name: '2,000 NGN' }).click();
-  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
   await expectAccessible(page);
 });
 
