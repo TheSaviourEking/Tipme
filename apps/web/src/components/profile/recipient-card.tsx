@@ -116,9 +116,12 @@ function Contact({
 export function RecipientIdentity({
   profile,
   firstName,
+  celebrationLabel = null,
 }: {
   profile: PublicProfile;
   firstName: string;
+  /** A moment this page shared and supporters can add a tip to, such as "10th tip". */
+  celebrationLabel?: string | null;
 }) {
   return (
     <section
@@ -152,6 +155,19 @@ export function RecipientIdentity({
       </div>
       {profile.role && <p className="profile-role">{profile.role}</p>}
       {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+      {celebrationLabel && (
+        <p className="profile-celebration">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z"
+            />
+          </svg>
+          <span>
+            Celebrating {firstName}’s {celebrationLabel}
+          </span>
+        </p>
+      )}
       <Contact profile={profile} firstName={firstName} />
       {(profile.craft ?? profile.note) && (
         <div className="profile-words">

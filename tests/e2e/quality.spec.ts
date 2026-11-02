@@ -116,13 +116,12 @@ test('arrowing through amounts never pulls focus out of the radio group', async 
 }) => {
   await page.goto('/@ada');
   await page.getByRole('radio', { name: '1,000 NGN' }).focus();
-  await page.keyboard.press('ArrowLeft'); // wraps to "Other"
-  await expect(page.getByRole('radio', { name: 'Other amount' })).toBeFocused();
+  await page.keyboard.press('ArrowLeft'); // wraps to the last preset
+  await expect(page.getByRole('radio', { name: '5,000 NGN' })).toBeFocused();
   await page.keyboard.press('ArrowRight'); // wraps back to the first preset
   await expect(page.getByRole('radio', { name: '1,000 NGN' })).toBeChecked();
-  await page.getByRole('radio', { name: 'Other amount' }).check();
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel('Your amount (NGN)')).toBeFocused();
+  await expect(page.getByLabel(/^Other amount/)).toBeFocused();
 });
 
 test('reduced motion disables skeleton animation', async ({ page }) => {

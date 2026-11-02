@@ -1,3 +1,10 @@
+# Current task — merge compact tip card with dev (2 November 2026)
+
+- Branch/worktree: `feat/compact-tip-card`. Existing PR #96; merged current `dev` after resolving the continuity-document conflicts. The merge commit is ready for publication.
+- Built: shorter card, keys with exact amounts and no lone key (`keyLayout`), full-width Other field, one disclosure, one trust line, partner wording moved to the page foot, celebration in the identity column with a tick box, closest-to-₦2,000 preselect, sticky only while the panel fits the window. Rulings are in `docs/design/DECISION-LOG.md`, 2 Nov.
+- Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
+- The Linux profile baselines are present. PR head `49673cd` passed CI before this merge; validation for the merged commit is pending. Next: publish the merge commit and check its CI on the existing PR.
+
 # Current task — takeover freeze, second report (2 November 2026)
 
 - Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev` at `a232891`. Committed, not pushed.
