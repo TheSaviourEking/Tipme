@@ -1076,11 +1076,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   }
 }
 
-/* The live price region stays rendered for announcements; while empty it takes no gap. */
-.tip-instrument .tip-quote:empty {
-  margin-top: calc(var(--space-4) * -1);
-}
-
 .tip-instrument .tip-remember {
   font-size: 0.8125rem;
 }
@@ -1436,22 +1431,6 @@ body:has(.profile-page) .brand__mark {
   min-height: 2.75rem;
 }
 
-/* The total's line is held open beside the button, so choosing an amount moves nothing. */
-.profile-composer .tip-quote {
-  min-height: 1.375rem;
-  margin: 0 0 var(--space-1);
-  line-height: 1.375rem;
-}
-
-.profile-composer .tip-quote p {
-  line-height: inherit;
-}
-
-.profile-composer .tip-quote:empty {
-  display: block;
-  margin-top: 0;
-}
-
 /* Who handles the payment, with the button at every width, in the phone's Tip bar too. */
 .composer-action__partner {
   margin: var(--space-2) 0 0;
@@ -1738,13 +1717,8 @@ body:has(.profile-page) .brand__mark {
     }
 
     .profile-composer .composer-action .tip-quote {
-      min-height: 0;
       margin: 0 0 var(--space-1);
       text-align: center;
-    }
-
-    .profile-composer .composer-action .tip-quote:empty {
-      display: none;
     }
 
     .profile-composer .composer-action .tip-quote p {
@@ -2244,13 +2218,6 @@ body:has(.profile-page) .brand__mark {
 
 .tip-breakdown dd {
   margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.tip-payment-total {
-  margin: 0;
-  font-weight: 700;
-  color: var(--brand-ink);
   font-variant-numeric: tabular-nums;
 }
 

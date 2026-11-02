@@ -32,14 +32,13 @@ type QuoteState =
   | { kind: 'failed'; amount: number; message: string };
 
 const newIdempotencyKey = newUuid;
+const AMOUNT_MISMATCH =
+  'We couldn’t confirm this amount, so nothing was charged. Please refresh the page and try again.';
 // The sticky panel's top offset and a little room under it (globals.css).
 const PANEL_MARGIN_PX = 32;
 // packages/contracts/src/checkout.ts: what a tip may carry.
 const MESSAGE_LIMIT = 280;
 const NAME_LIMIT = 60;
-const FIRST_TOTAL_PAUSE_MS = 500;
-// Read only in event handlers and the answers they await, never while rendering.
-const clock = () => performance.now();
 
 const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   if (failure.code === 'NETWORK')
@@ -102,12 +101,12 @@ export function AppreciationForm({
   const presets = options.presets;
   const layout = keyLayout(presets.map((preset) => preset.label));
   const [joining, setJoining] = useState(false);
-  // Starts on the owner's NGN 2,000, or the preset closest to it. This is only a starting point: nothing is quoted until the person chooses, taps the amount again or taps
-  // Tip, so a page view never creates a quote, and `amount_selected` counts people, not defaults.
+  // Starts on the owner's NGN 2,000, or the preset closest to it. Only a starting point: a page view
+  // quotes nothing, and `amount_selected` counts people, not defaults.
   const [selection, setSelection] = useState(
     options.defaultMinor === null ? '' : String(options.defaultMinor),
   );
-  const [chosen, setChosen] = useState(options.defaultMinor === null);
+  const choseAmount = useRef(false);
   const [custom, setCustom] = useState('');
   const [message, setMessage] = useState('');
   const [payerName, setPayerName] = useState('');
@@ -124,8 +123,6 @@ export function AppreciationForm({
   // One key per draft (quote + message): retries and double taps reuse it, so one tip at most.
   const draftKey = useRef<string | null>(null);
   const latestQuote = useRef(0);
-  const awaitingFirstTotal = useRef(false);
-  const firstTotal = useRef<{ amount: number; at: number } | null>(null);
   // Counted once a page view: choosing a key clears the field, and typing again is the same person.
   const customCounted = useRef(false);
   const customField = useRef<HTMLInputElement>(null);
@@ -156,10 +153,6 @@ export function AppreciationForm({
       });
       return null;
     }
-    if (awaitingFirstTotal.current) {
-      awaitingFirstTotal.current = false;
-      firstTotal.current = { amount: minor, at: clock() };
-    }
     setQuote({ kind: 'ready', quote: result.data });
     return result.data;
   };
@@ -174,32 +167,16 @@ export function AppreciationForm({
     return () => removeEventListener('pageshow', restored);
   }, []);
 
-  // Presets quote at once; a typed amount waits until typing pauses.
-  useEffect(() => {
-    if (amount === null || !chosen) {
-      // Drop any answer still in flight for an amount that is no longer chosen.
-      latestQuote.current += 1;
-      return;
-    }
-    const timer = setTimeout(
-      () => void fetchQuote(amount),
-      selection === 'other' ? 300 : 0,
-    );
-    return () => clearTimeout(timer);
-    // fetchQuote is recreated each render; the amount is what matters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amount, selection, chosen]);
-
-  // What is on screen always belongs to the amount chosen now; an older answer counts as loading.
+  // The answer on screen belongs to the amount chosen now. A ready quote for this amount, with its
+  // draft key, is what a retry replays, so a retried tip is never a second one.
   const shown: QuoteState =
-    amount === null || !chosen
+    amount === null ||
+    quote.kind === 'idle' ||
+    (quote.kind === 'ready'
+      ? Number(quote.quote.tipMinor) !== amount
+      : quote.amount !== amount)
       ? { kind: 'idle' }
-      : quote.kind === 'idle' ||
-          (quote.kind === 'ready'
-            ? Number(quote.quote.tipMinor) !== amount
-            : quote.amount !== amount)
-        ? { kind: 'loading', amount }
-        : quote;
+      : quote;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -217,13 +194,6 @@ export function AppreciationForm({
       field.blur();
       return;
     }
-    // A double tap on the starting amount: its total has only just appeared, so this isn't yet a
-    // decision to pay. The next tap counts, and so does any tap once the amount has changed.
-    if (
-      firstTotal.current?.amount === amount &&
-      clock() - firstTotal.current.at < FIRST_TOTAL_PAUSE_MS
-    )
-      return;
     track('tip_cta_clicked', { surface: 'profile', handle });
     if (!amount) {
       setError(
@@ -251,19 +221,27 @@ export function AppreciationForm({
       (tooLongMessage ? messageField : nameField).current?.focus();
       return;
     }
-    if (!chosen) {
-      // The starting amount, not yet confirmed by the person: this tap fetches its total and shows
-      // it (in the bar, and read out), and the next tap pays. Nothing is created until then.
-      awaitingFirstTotal.current = true;
-      setChosen(true);
-      return;
-    }
     // Never pay without a current server quote for exactly this amount.
+    // Disabled from here on, so a double tap starts one tip.
+    setSubmitting(true);
     const current =
       shown.kind === 'ready' ? shown.quote : await fetchQuote(amount);
-    if (!current) return;
+    if (!current) {
+      setSubmitting(false);
+      return;
+    }
+    // The button says exactly what is charged. If the server ever disagrees, charge nothing.
+    if (
+      Number(current.tipMinor) !== amount ||
+      Number(current.payerTotalMinor) !== amount
+    ) {
+      latestQuote.current += 1;
+      draftKey.current = null;
+      setQuote({ kind: 'failed', amount, message: AMOUNT_MISMATCH });
+      setSubmitting(false);
+      return;
+    }
     draftKey.current ??= newIdempotencyKey();
-    setSubmitting(true);
     const trimmed = message.trim();
     const result = await createTip(draftKey.current, {
       quoteId: current.quoteId,
@@ -301,12 +279,10 @@ export function AppreciationForm({
       result.code === 'QUOTE_EXPIRED' ||
       result.code === 'QUOTE_ALREADY_USED'
     ) {
-      // A fresh quote, shown for confirmation: nothing is charged without the supporter's tap.
-      // If the refresh itself fails, the quote area already says why.
+      // Nothing is charged without the supporter's tap. If the refresh itself fails, the quote area
+      // already says why.
       if (await fetchQuote(amount))
-        setNotice(
-          'Your price was refreshed. Please check it and tap Tip again.',
-        );
+        setNotice('That took a little too long. Please tap Tip again.');
       return;
     }
     setNotice(failureMessage(result, options.rangeText));
@@ -410,8 +386,7 @@ export function AppreciationForm({
     };
   }, [onProfile, closed]);
 
-  const ready = shown.kind === 'ready' ? shown.quote : null;
-  const busy = submitting || shown.kind === 'loading';
+  const busy = submitting;
   const extras = (
     <>
       <div className="tm-field">
@@ -492,7 +467,7 @@ export function AppreciationForm({
       </label>
     </>
   );
-  // On a person's page the visible figure rides in the Tip bar, which hides while a field has
+  // On a person's page a failed quote rides in the Tip bar, which hides while a field has
   // focus and takes a live region with it. So the words are read from one hidden region outside
   // the bar, and the visible copies stay out of the accessibility tree. Try again stays in it.
   const shownOnly = onProfile ? ({ 'aria-hidden': true } as const) : {};
@@ -501,11 +476,6 @@ export function AppreciationForm({
       className="tip-quote"
       {...(onProfile ? {} : { 'aria-live': 'polite' })}
     >
-      {shown.kind === 'loading' && (
-        <p className="tm-hint" {...shownOnly}>
-          Getting the latest price…
-        </p>
-      )}
       {shown.kind === 'failed' && (
         <div className="tip-quote__failed">
           <p className="tm-field-error" {...shownOnly}>
@@ -513,16 +483,12 @@ export function AppreciationForm({
           </p>
           <Button
             variant="secondary"
-            onClick={() => void fetchQuote(shown.amount)}
+            disabled={submitting}
+            onClick={() => form.current?.requestSubmit()}
           >
             Try again
           </Button>
         </div>
-      )}
-      {ready && (
-        <p className="tip-payment-total" {...shownOnly}>
-          You pay {formatDemoAmount(Number(ready.payerTotalMinor))}
-        </p>
       )}
     </div>
   );
@@ -588,16 +554,20 @@ export function AppreciationForm({
                   checked={selection === String(preset.minor)}
                   onChange={() => {
                     setSelection(String(preset.minor));
-                    setChosen(true);
+                    choseAmount.current = true;
                     setCustom('');
                     setError('');
                     track('amount_selected', { surface: 'profile', handle });
                   }}
-                  // Tapping the amount already shown is a choice too: it asks for its total.
+                  // Tapping the amount already shown is a choice too.
                   onClick={() => {
                     // A different amount is counted by onChange; this is only the one already shown.
-                    if (chosen || selection !== String(preset.minor)) return;
-                    setChosen(true);
+                    if (
+                      choseAmount.current ||
+                      selection !== String(preset.minor)
+                    )
+                      return;
+                    choseAmount.current = true;
                     track('amount_selected', { surface: 'profile', handle });
                   }}
                 >
@@ -628,7 +598,7 @@ export function AppreciationForm({
               track('custom_amount_entered', { surface: 'profile', handle });
             }
             setSelection('other');
-            setChosen(true);
+            choseAmount.current = true;
             setCustom(event.target.value);
             setError('');
           }}
@@ -636,13 +606,7 @@ export function AppreciationForm({
         />
         {onProfile ? (
           <p className="tip-quote-live sr-only" aria-live="polite">
-            {shown.kind === 'loading'
-              ? 'Getting the latest price…'
-              : shown.kind === 'failed'
-                ? shown.message
-                : ready
-                  ? `Total to pay: ${formatDemoAmount(Number(ready.payerTotalMinor))}`
-                  : ''}
+            {shown.kind === 'failed' ? shown.message : ''}
           </p>
         ) : (
           quoteArea

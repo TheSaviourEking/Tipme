@@ -10,7 +10,7 @@ import {
 // The owner-approved compact tip card (2 Nov 2026), on the built web app against the stand-in API.
 // Calls the browser makes for prices and tips are answered here: nothing reaches any provider.
 
-const TRUST = 'No account needed. You’ll see the full total before you pay.';
+const TRUST = 'No account needed. You pay exactly this amount.';
 const DISCLOSURE = 'Add a message, reason or your name';
 const WIDTHS = [320, 360, 390, 768, 1280];
 const OTHER = /^Other amount/;
@@ -51,7 +51,11 @@ test.afterAll(async () => {
 });
 
 /** Answers the browser's API calls and records what the form sent. */
-async function answerApi(page: Page, origin: string) {
+async function answerApi(
+  page: Page,
+  origin: string,
+  overrides: Record<string, string> = {},
+) {
   const sent = {
     quotes: 0,
     intents: [] as Record<string, unknown>[],
@@ -87,6 +91,7 @@ async function answerApi(page: Page, origin: string) {
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
           feePolicyVersion: 'test',
           feeFree: false,
+          ...overrides,
         },
       }),
     });
@@ -366,7 +371,6 @@ test('an error inside the disclosure opens it and takes focus', async ({
   await summary(page).click();
   await expect(page.locator('.composer-extras')).not.toHaveAttribute('open');
   await page.getByRole('radio', { name: '20,000 NGN' }).click();
-  await expect(page.getByText(/You pay/)).toBeVisible();
   await tipButton(page).click();
   await expect(page.locator('.composer-extras')).toHaveAttribute('open');
   await expect(
@@ -472,7 +476,6 @@ test('ticking sends celebrationMomentId; ticking then unticking sends nothing', 
     await box.check();
     if (!tick) await box.uncheck();
     await page.getByRole('radio', { name: '20,000 NGN' }).click();
-    await expect(page.getByText(/You pay/)).toBeVisible();
     await tipButton(page).click();
     await page.waitForURL(/legal\/terms/);
     expect(sent.intents).toHaveLength(1);
@@ -500,7 +503,6 @@ test('where ₦2,000 is not offered the closest preset starts selected, the lowe
   await expect(page.getByRole('radio', { name: '1,500 NGN' })).toBeChecked();
   // The first tap on Tip only asks for the total, as with ₦2,000.
   await tipButton(page).click();
-  await expect(page.getByText(/You pay NGN 1,500/)).toBeVisible();
   expect(sent.intents).toEqual([]);
   expect(sent.events.join()).not.toContain('amount_selected');
 });
@@ -653,7 +655,6 @@ test('the Home demo shares the card and still works: disclosure, typed amount, n
   await panel.getByText(DISCLOSURE).click();
   await panel.getByLabel('Personal message (optional)').fill('Thanks');
   await panel.getByLabel(OTHER).fill('2500');
-  await expect(panel.getByText('You pay NGN 2,500.00')).toBeVisible();
   await expect(
     panel.locator('.composer-action__partner').getByText(PARTNER.test),
   ).toBeVisible();
@@ -682,22 +683,19 @@ test('the partner line shows beside Tip on the phone’s first screen, clear of 
   }
 });
 
-test('Go on a phone’s keyboard never starts a tip with the bar and total hidden @mobile', async ({
+test('Go on a phone’s keyboard never starts a tip with the bar hidden @mobile', async ({
   page,
 }) => {
   const origin = await at('live', '/@dr7', page);
   const sent = await answerApi(page, origin);
   const bar = page.locator('.composer-action');
-  // A typed amount with its total ready: Go only closes the keyboard.
+  // Go only closes the keyboard: the person sees the Tip button and its amount before paying.
   const field = page.getByLabel(OTHER);
   await field.fill('15000');
   await expect(bar).toBeHidden();
-  await expect.poll(() => sent.quotes).toBeGreaterThan(0);
-  await page.waitForTimeout(100);
   await field.press('Enter');
   await expect(bar).toBeVisible();
   await expect(field).not.toBeFocused();
-  await expect(page.getByText(/You pay NGN 15,000/)).toBeVisible();
   expect(sent.intents).toEqual([]);
   expect(page.url()).toContain('/@dr7');
 
@@ -716,60 +714,125 @@ test('Go on a phone’s keyboard never starts a tip with the bar and total hidde
   expect(page.url()).toContain('/@dr7');
 });
 
-test('on desktop Enter in a field works as before: the first asks for the total, the next pays', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  const origin = await at('live', '/@dr7', page);
-  const sent = await answerApi(page, origin);
-  await summary(page).click();
-  const name = page.getByLabel('Your name (optional)');
-  await name.fill('Ngozi');
-  await name.press('Enter');
-  await expect(page.getByText(/You pay NGN 10,000/)).toBeVisible();
-  expect(sent.intents).toEqual([]);
-  await page.waitForTimeout(600);
-  await name.press('Enter');
-  await page.waitForURL(/legal\/terms/);
-  expect(sent.intents).toHaveLength(1);
-});
-
-test('a double tap on the preselected amount does not pay the moment the total appears', async ({
+test('on desktop Enter in a field pays the amount shown, as the button does', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const origin = await at('live', '/@dr7', page);
   const sent = await answerApi(page, origin);
   await tipButton(page).waitFor();
-  // A second tap in the same moment the total arrives, however fast the answer came.
-  await page.evaluate(
-    () =>
-      new Promise<void>((done) => {
-        const button =
-          document.querySelector<HTMLButtonElement>('.composer-submit')!;
-        const seen = new MutationObserver(() => {
-          if (!document.querySelector('.tip-payment-total') || button.disabled)
-            return;
-          seen.disconnect();
-          button.click();
-          done();
-        });
-        seen.observe(document.body, {
-          subtree: true,
-          childList: true,
-          attributes: true,
-        });
-        button.click();
-      }),
-  );
-  await page.waitForTimeout(200);
-  expect(sent.intents).toEqual([]);
-  expect(page.url()).toContain('/@dr7');
-  // A deliberate tap after that pays as normal.
-  await page.waitForTimeout(500);
-  await tipButton(page).click();
+  await page.waitForTimeout(300);
+  await summary(page).click();
+  const name = page.getByLabel('Your name (optional)');
+  await name.fill('Ngozi');
+  await name.press('Enter');
   await page.waitForURL(/legal\/terms/);
   expect(sent.intents).toHaveLength(1);
+});
+
+test('one tap pays: a page view and choosing quote nothing, the tap quotes then starts, and a double tap starts one tip', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  await page.getByRole('radio', { name: '20,000 NGN' }).click();
+  await page.getByLabel(OTHER).fill('15000');
+  await page.getByRole('radio', { name: '20,000 NGN' }).click();
+  await page.waitForTimeout(400);
+  expect(sent.quotes).toBe(0);
+  await tipButton(page).dblclick();
+  await page.waitForURL(/legal\/terms/);
+  expect(sent.quotes).toBe(1);
+  expect(sent.intents).toHaveLength(1);
+  expect(sent.intents[0]!.quoteId).toBe('22222222-2222-4222-8222-222222222222');
+});
+
+for (const [what, wrong] of [
+  ['payer total', { payerTotalMinor: '2500000' }],
+  ['tip amount', { tipMinor: '1000000' }],
+] as const)
+  test(`a server ${what} that differs from the amount shown stops before charging`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const origin = await at('live', '/@dr7', page);
+    const sent = await answerApi(page, origin, wrong);
+    await tipButton(page).waitFor();
+    await page.waitForTimeout(300);
+    await page.getByRole('radio', { name: '20,000 NGN' }).click();
+    await tipButton(page).click();
+    await expect(
+      page.locator('.tip-quote').getByText(/nothing was charged/i),
+    ).toBeVisible();
+    await page.waitForTimeout(300);
+    expect(sent.intents).toEqual([]);
+    expect(page.url()).toContain('/@dr7');
+  });
+
+test('a quote that fails on the tap offers a retry, and the retry pays once', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  let fail = true;
+  await page.route('**/v1/tip-quotes', (route) =>
+    fail ? route.abort() : route.fallback(),
+  );
+  await tipButton(page).click();
+  await expect(
+    page
+      .locator('.tip-quote')
+      .getByText(
+        'We couldn’t reach TipMe. Check your connection and try again.',
+      ),
+  ).toBeVisible();
+  expect(sent.intents).toEqual([]);
+  await expect(tipButton(page)).toBeEnabled();
+  fail = false;
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(sent.intents).toHaveLength(1);
+});
+
+test('a retry after an unknown outcome replays the same tip, never a second one', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  const keys: string[] = [];
+  let first = true;
+  await page.route('**/v1/tip-intents', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    keys.push(route.request().headers()['idempotency-key'] ?? '');
+    if (first) {
+      first = false;
+      return route.fulfill({
+        status: 502,
+        headers: { 'access-control-allow-origin': origin },
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'PROVIDER_OUTCOME_UNKNOWN' } }),
+      });
+    }
+    return route.fallback();
+  });
+  await tipButton(page).click();
+  await expect(
+    page.getByText(/We couldn’t confirm whether your payment started/),
+  ).toBeVisible();
+  await tipButton(page).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(sent.quotes).toBe(1);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBe(keys[1]);
 });
 
 test('typing an amount counts once, even after a key cleared the first one', async ({
@@ -814,7 +877,7 @@ test('when the API says tipping closed after load, the announcement goes with th
         }),
   );
   await expect(page.getByText(/^Celebrating DR7/)).toBeVisible();
-  await page.getByRole('radio', { name: '20,000 NGN' }).click();
+  await tipButton(page).click();
   await expect(
     page.getByRole('heading', { name: 'Tipping opens soon' }),
   ).toBeVisible();

@@ -87,7 +87,7 @@ Hover effects are subtle and never carry information. Everything must also work 
 
 1. **Arrive from a QR or link:** the cover, photo and name are visible straight away, as server-rendered content. No entrance animation holds them back. The tipping panel rises 12px and fades in over 240ms.
 2. **Choose an amount:** the key presses and the Tip button's amount changes instantly.
-3. **Another amount:** the keyboard opens and the field stays in view. The quote updates after a short pause in typing, with the previous figure kept until the new one is ready, so numbers don't blink.
+3. **Another amount:** the keyboard opens and the field stays in view, and the Tip button's amount follows it. Nothing is quoted until the person taps Tip.
 4. **Add a note:** the disclosure opens in 240ms, with no layout jump above it.
 5. **Pay:** the button shows busy, then the provider's page. Stillness here signals seriousness.
 6. **Return, waiting:** a calm screen with one quiet pulse. Plain words only, with no confetti, no checkmark and no progress bar. Copy changes without animation, and screen readers are told politely.

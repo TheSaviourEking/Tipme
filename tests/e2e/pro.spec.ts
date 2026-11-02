@@ -65,7 +65,6 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
     0,
   );
   await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
-  await expect(visitor.getByText('You pay NGN 2,000.00')).toBeVisible();
   await expect(visitor.locator('.tip-breakdown')).toHaveCount(0);
   await visitor.getByLabel(/^Other amount/).fill('1500');
   await visitor.getByRole('button', { name: /^Tip/ }).click();

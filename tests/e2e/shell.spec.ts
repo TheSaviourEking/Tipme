@@ -54,15 +54,11 @@ test('profile supports keyboard amount selection, validation and a server quote'
     }),
   ).toBeVisible();
   // Owner, 2 Nov 2026: the page starts on NGN 2,000, visibly and for assistive technology. The
-  // page view itself quotes nothing, so no price exists until the person asks for one.
+  // page view itself quotes nothing: a quote is fetched on the tap on Tip.
   await expect(page.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
   await expect(page.getByRole('button', { name: 'Tip ₦2,000' })).toBeVisible();
-  await expect(page.getByText(/You pay/)).toHaveCount(0);
+  await expect(page.getByText(/You pay NGN|Total to pay/)).toHaveCount(0);
   expect(posts).toEqual([]);
-  // The first tap on Tip fetches the total for that amount and shows it; it pays nothing.
-  await page.getByRole('button', { name: /^Tip/ }).click();
-  await expect(page.getByText('You pay NGN 2,000.00')).toBeVisible();
-  expect(page.url()).toContain('/@ada');
   const first = page.getByRole('radio', { name: '1,000 NGN' });
   await first.focus();
   await page.keyboard.press('Space');
@@ -81,13 +77,11 @@ test('profile supports keyboard amount selection, validation and a server quote'
   await page
     .getByLabel('Personal message (optional)')
     .fill('Thank you for making this easier.');
-  await expect(page.getByText('You pay NGN 1,234.50')).toBeVisible();
   await expect(
     page.getByRole('button', { name: /^Tip ₦1,234\.50/ }),
   ).toBeEnabled();
-  // Quoting sends only the amount: no tip is created and the message stays in the page.
-  expect(posts.length).toBeGreaterThan(0);
-  expect(posts.every((path) => path === '/v1/tip-quotes')).toBe(true);
+  // Choosing and typing create nothing: no quote, no tip, and the message stays in the page.
+  expect(posts).toEqual([]);
   expect(events.some((body) => body.includes('Thank you'))).toBe(false);
   expect(page.url()).not.toContain('Thank');
   expect(
