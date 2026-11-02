@@ -15,7 +15,7 @@ function tooManyClients() {
  * A little door in front of the test Postgres. Counts the connections going through it, and while
  * `full` answers new ones exactly as a full server does.
  */
-export async function startPgGate(databaseUrl) {
+export async function startPgGate(databaseUrl, { roundTripMs = 0 } = {}) {
   const target = new URL(databaseUrl);
   const open = new Set();
   const gate = { full: false, peak: 0 };
@@ -34,7 +34,15 @@ export async function startPgGate(databaseUrl) {
       upstream.destroy();
     });
     upstream.on('close', () => client.destroy());
-    client.pipe(upstream).pipe(client);
+    if (roundTripMs === 0) {
+      client.pipe(upstream).pipe(client);
+      return;
+    }
+    // Half the delay each way; timers of equal length keep the bytes in order.
+    const later = (to) => (chunk) =>
+      setTimeout(() => to.writable && to.write(chunk), roundTripMs / 2);
+    client.on('data', later(upstream));
+    upstream.on('data', later(client));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const url = new URL(databaseUrl);

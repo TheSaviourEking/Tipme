@@ -320,3 +320,19 @@ test(
     }
   },
 );
+
+test('every app service notices a dead connection soon', { skip }, () => {
+  const config = parse();
+  for (const name of [
+    'api-blue',
+    'api-green',
+    'worker-a',
+    'worker-b',
+    'migrate',
+  ])
+    assert.equal(
+      String(config.services[name].sysctls['net.ipv4.tcp_retries2']),
+      '8',
+      name,
+    );
+});

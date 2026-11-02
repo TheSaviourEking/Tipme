@@ -8,8 +8,14 @@ import {
   sqlStateOf,
 } from '../dist/index.js';
 
-const wrapped = (cause) =>
-  Object.assign(new Error('Failed query: select secret'), { cause });
+// As drizzle wraps what the driver throws: the one route for a network code to count.
+class DrizzleQueryError extends Error {
+  constructor(cause) {
+    super('Failed query: select secret');
+    this.cause = cause;
+  }
+}
+const wrapped = (cause) => new DrizzleQueryError(cause);
 
 test('each way of failing is told apart, through a wrapper', () => {
   const cases = [
@@ -52,4 +58,30 @@ test('guarded keeps the cause, and never the driver’s message', async () => {
   }).catch((caught) => caught);
   assert.deepEqual(bug.failure, { kind: 'unknown', causeName: 'TypeError' });
   assert.equal(isDatabaseAvailabilityFailure(bug), false);
+});
+
+test('a network code counts only from the database layer, and only a real one', () => {
+  const fetchFailed = (code) =>
+    Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('x'), { code }),
+    });
+  for (const code of ['ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'EPIPE']) {
+    assert.equal(databaseFailureOf(fetchFailed(code)), null, code);
+    assert.equal(isDatabaseAvailabilityFailure(fetchFailed(code)), false, code);
+  }
+  for (const code of ['ENOENT', 'EACCES', 'EISDIR', 'EMFILE']) {
+    const error = wrapped(Object.assign(new Error('x'), { code }));
+    assert.equal(databaseFailureOf(error), null, code);
+  }
+});
+
+test('a client that lost its connection is connection_lost', () => {
+  for (const message of [
+    'Client has encountered a connection error and is not queryable',
+    'Client was closed and is not queryable',
+  ])
+    assert.equal(
+      databaseFailureOf(new Error(message))?.kind,
+      'connection_lost',
+    );
 });

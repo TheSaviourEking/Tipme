@@ -1,3 +1,4 @@
+import { sqlStateOf } from '../operations/errors.js';
 import { createDatabase } from '../client.js';
 import { runMigrations } from '../migrations.js';
 
@@ -27,10 +28,23 @@ if (process.env['MIGRATE_BACKUP_DONE'] !== '1')
     'Refusing to migrate: take a backup first (deploy.sh sets MIGRATE_BACKUP_DONE=1 after it).',
   );
 
-const handle = createDatabase(url, { max: 1 });
+// Queued for a table lock, a migration holds up every statement on that table behind it. Giving up
+// rolls the whole batch back (drizzle runs it in one transaction) and stops the deploy before any
+// colour changes. Run the deploy again when whatever held the lock has finished.
+const LOCK_TIMEOUT_MS = 10_000;
+const handle = createDatabase(url, {
+  max: 1,
+  lockTimeoutMillis: LOCK_TIMEOUT_MS,
+});
 try {
   await runMigrations(handle.db);
   console.log(`Migrations applied to ${database}.`);
+} catch (error) {
+  if (sqlStateOf(error) === '55P03')
+    fail(
+      'A table was busy for 10 s, so the migrations were rolled back and nothing changed. Deploy again once it is free.',
+    );
+  throw error;
 } finally {
   await handle.close();
 }

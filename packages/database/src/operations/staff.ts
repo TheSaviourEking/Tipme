@@ -1,3 +1,4 @@
+import { currentPoolMax } from '../client.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes } from 'node:crypto';
 import { SERIOUS_ACTION_PERMISSIONS } from '@tipme/contracts';
@@ -92,9 +93,14 @@ export async function isActiveStaff(
   return Boolean(row);
 }
 
-// Each waiter holds one of the API's five pooled connections, so only a few may wait in this
-// process: public pages keep the rest. Everyone else gets a retryable refusal straight away.
+// Each waiter holds one of the API's pooled connections, so only a few may wait in this process:
+// public pages keep at least one. Everyone else gets a retryable refusal straight away.
 const STAFF_ADMIN_MAX_WAITERS = 3;
+const POOL_MAX_UNKNOWN = 5;
+
+/** Read per call: the pool's size follows the server's limit, and can change while running. */
+export const staffLockWaitersAllowed = (poolMax: number): number =>
+  Math.min(STAFF_ADMIN_MAX_WAITERS, Math.max(0, poolMax - 1));
 let staffAdminWaiters = 0;
 const holdingStaffAdmin = new AsyncLocalStorage<true>();
 
@@ -110,10 +116,20 @@ export const whileHoldingStaffAdmin = <T>(work: () => Promise<T>): Promise<T> =>
  * Serialises every change to who holds what, for the rest of the transaction. Take it first, and
  * read anything the change depends on after it. Waits about 5 seconds at most, then refuses with
  * STAFF_ADMIN_BUSY: nothing has changed, so trying again is safe. The limit covers this wait only.
+ * With no connection to spare it doesn't wait at all: it takes the lock if free, or refuses. Stopping
+ * actions (withdrawals off, a freeze, ending sessions) don't take this lock, so they aren't refused.
  */
 export async function lockStaffAdmin(tx: Tx): Promise<void> {
   const counted = !holdingStaffAdmin.getStore();
-  if (counted && staffAdminWaiters >= STAFF_ADMIN_MAX_WAITERS)
+  const allowed = staffLockWaitersAllowed(currentPoolMax() ?? POOL_MAX_UNKNOWN);
+  if (counted && allowed === 0) {
+    const { rows } = await tx.execute<{ taken: boolean }>(
+      sql`SELECT pg_try_advisory_xact_lock(hashtext('tipme.staff-admin')) AS taken`,
+    );
+    if (!rows[0]?.taken) throw new OperationError('STAFF_ADMIN_BUSY');
+    return;
+  }
+  if (counted && staffAdminWaiters >= allowed)
     throw new OperationError('STAFF_ADMIN_BUSY');
   if (counted) staffAdminWaiters += 1;
   try {

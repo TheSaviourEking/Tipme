@@ -59,5 +59,8 @@ export interface OpsDatabaseBudget {
   poolTotal: number;
   poolInUse: number;
   poolWaiting: number;
-  serverClients: number | null;
+  /** This role's own sessions: exact. */
+  roleSessions: number | null;
+  /** All named sessions: an upper bound on clients, as a plain role can't see backend_type. */
+  namedSessionsAtMost: number | null;
 }

@@ -16,6 +16,13 @@ x-app: &app
   tmpfs: ['/tmp']
   security_opt: ['no-new-privileges:true']
   networks: [internal]
+  # Notices a dead connection to Aiven in about 40 s when idle (10 s, then 3 probes 10 s apart; the
+  # delay is in client.ts) and in about 100 s with a statement unanswered, not 15 minutes. Pools are
+  # small, so one stuck connection can be a whole copy's.
+  sysctls:
+    net.ipv4.tcp_keepalive_intvl: 10
+    net.ipv4.tcp_keepalive_probes: 3
+    net.ipv4.tcp_retries2: 8
   logging: &logging
     driver: json-file
     options: { max-size: 10m, max-file: '3' }

@@ -89,8 +89,14 @@ export interface BudgetSnapshot {
   poolTotal: number;
   poolInUse: number;
   poolWaiting: number;
-  /** Client sessions the server shows, from the last read. */
-  serverClients: number | null;
+  /** This role's own sessions, from the last read: exact. */
+  roleSessions: number | null;
+  /**
+   * Named sessions in pg_stat_activity, from the last read. An upper bound on all clients: a plain
+   * role sees other roles' sessions without their backend_type, and background workers can carry the
+   * bootstrap role's name. Unnamed rows are background processes and take no client slot.
+   */
+  namedSessionsAtMost: number | null;
 }
 
 export interface AdaptiveBudget {
@@ -105,7 +111,8 @@ const READ = `SELECT current_setting('max_connections')::int AS max_connections,
   COALESCE(current_setting('reserved_connections', true), '0')::int AS reserved,
   (SELECT rolconnlimit FROM pg_roles WHERE rolname = current_user) AS role_limit,
   (SELECT datconnlimit FROM pg_database WHERE datname = current_database()) AS database_limit,
-  (SELECT count(*)::int FROM pg_stat_activity WHERE backend_type = 'client backend') AS clients`;
+  (SELECT count(*)::int FROM pg_stat_activity WHERE usename = current_user) AS role_sessions,
+  (SELECT count(*)::int FROM pg_stat_activity WHERE usename IS NOT NULL) AS named_sessions`;
 
 const FIRST_READ_MS = 3000;
 const REFUSED_HOLD_MS = 60_000;
@@ -129,13 +136,15 @@ export function adaptPoolToServer(
   const { pool } = handle;
   let limits: ServerLimits | null = null;
   let plan: BudgetPlan | null = null;
-  let serverClients: number | null = null;
+  let roleSessions: number | null = null;
+  let namedSessions: number | null = null;
   let reducedTo: number | null = null;
   let reducedUntil = 0;
   let readFailed = false;
   let logged = '';
   let stopped = false;
   let trimming = false;
+  let holdTimer: NodeJS.Timeout | undefined;
 
   const planned = () =>
     input.override ??
@@ -199,7 +208,8 @@ export function adaptPoolToServer(
         reserved: number;
         role_limit: number | null;
         database_limit: number | null;
-        clients: number;
+        role_sessions: number;
+        named_sessions: number;
       }>(READ);
       const row = rows[0];
       if (!row) throw new Error('no row');
@@ -212,7 +222,8 @@ export function adaptPoolToServer(
         ownLimit: own.length > 0 ? Math.min(...own) : null,
       };
       plan = planBudget(limits, input.counts);
-      serverClients = row.clients;
+      roleSessions = row.role_sessions;
+      namedSessions = row.named_sessions;
       readFailed = false;
     } catch (error) {
       if (!readFailed) {
@@ -234,6 +245,9 @@ export function adaptPoolToServer(
     const before = pool.options.max ?? FALLBACK_POOL;
     reducedTo = Math.max(BOUNDS[input.role].min, Math.floor(before / 2));
     reducedUntil = Date.now() + REFUSED_HOLD_MS;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(apply, REFUSED_HOLD_MS);
+    holdTimer.unref();
     input.log('warn', {
       event: 'database.budget_refused',
       sql_state: '53300',
@@ -243,6 +257,11 @@ export function adaptPoolToServer(
     apply();
   };
 
+  // A busy pool keeps reusing the extras, so trim as each one comes back: the moment it matters.
+  const trimOnRelease = () => {
+    if (pool.totalCount > (pool.options.max ?? 0)) void trim();
+  };
+  pool.on('release', trimOnRelease);
   pool.options.max = input.override ?? FALLBACK_POOL;
   let firstTimer: NodeJS.Timeout | undefined;
   const ready = Promise.race([
@@ -268,11 +287,14 @@ export function adaptPoolToServer(
       poolTotal: pool.totalCount,
       poolInUse: pool.totalCount - pool.idleCount,
       poolWaiting: pool.waitingCount,
-      serverClients,
+      roleSessions,
+      namedSessionsAtMost: namedSessions,
     }),
     stop() {
       stopped = true;
       clearInterval(refresh);
+      clearTimeout(holdTimer);
+      pool.off('release', trimOnRelease);
       handle.connectGate.onRefused = undefined;
     },
   };

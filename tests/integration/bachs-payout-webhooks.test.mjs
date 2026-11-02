@@ -40,6 +40,13 @@ import {
   UncertainProviderOutcomeError,
 } from '../../packages/payments/dist/index.js';
 
+import {
+  createDatabase,
+  isDatabaseAvailabilityFailure,
+} from '../../packages/database/dist/index.js';
+import { jobFailure } from '../../apps/worker/dist/job-retry.js';
+import { startPgGate } from './pg-gate.mjs';
+
 // The money path, against a scripted provider: nothing here reaches a payment provider.
 
 const ACCOUNT = 'acct_tobi';
@@ -189,6 +196,7 @@ async function fixture(t) {
     reconcilePayouts({ db, provider, now, minAgeMs: 0 });
   return {
     db,
+    url: database.url,
     q,
     withdraw,
     row,
@@ -240,6 +248,53 @@ test('a payout starts with the fee transfer, then the payout, each with its own 
   // A redelivered job changes nothing.
   assert.equal(await startPayout(db, { payoutId, provider }), 'already');
   assert.equal(writes(provider).length, 2);
+});
+
+test('a connection lost right after the provider accepted: the retry reads, never sends again', async (t) => {
+  const { url, withdraw, row, db } = await fixture(t);
+  const payoutId = await withdraw();
+  const gate = await startPgGate(url);
+  const handle = createDatabase(gate.url, { max: 1 });
+  t.after(async () => {
+    await handle.close();
+    await gate.close();
+  });
+  const provider = scripted({
+    async initiatePayout(input) {
+      provider.calls.push({ call: 'payout', ...input });
+      gate.fill(); // The money left; the database goes away before it's written down.
+      return {
+        providerReference: `${ACCOUNT}:po_${input.payoutId}`,
+        status: 'pending',
+      };
+    },
+  });
+  provider.found = {
+    providerReference: `${ACCOUNT}:po_${payoutId}`,
+    status: 'pending',
+    feeMinor: FEE,
+  };
+  const failed = await startPayout(handle.db, { payoutId, provider }).catch(
+    (error) => error,
+  );
+  assert.equal(writes(provider).filter((w) => w.call === 'payout').length, 1);
+  assert.equal(isDatabaseAvailabilityFailure(failed), true, String(failed));
+  assert.equal(jobFailure('payout.start', failed), failed);
+  gate.drain();
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  // What the queue's next try does.
+  await startPayout(handle.db, { payoutId, provider });
+  await startPayout(db, { payoutId, provider });
+  assert.equal(
+    writes(provider).filter((w) => w.call === 'payout').length,
+    1,
+    'sent twice',
+  );
+  assert.equal(
+    (await row(payoutId)).provider_reference,
+    provider.found.providerReference,
+    JSON.stringify(provider.calls.map(({ call }) => call)),
+  );
 });
 
 test('paid posts the payout and the fee as its own TipMe cost line', async (t) => {

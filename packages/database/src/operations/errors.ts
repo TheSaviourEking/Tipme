@@ -1,3 +1,4 @@
+import { connectionErrors } from '../client.js';
 export type OperationErrorCode =
   | 'PROFILE_NOT_FOUND'
   | 'AMOUNT_OUT_OF_RANGE'
@@ -135,11 +136,42 @@ const driverFailures: [RegExp, DatabaseFailure['kind']][] = [
   [/^Connection terminated due to connection timeout$/, 'connect_timeout'],
   [/^timeout expired$/, 'connect_timeout'],
   [/^Connection terminated/, 'connection_lost'],
+  // What drizzle's rollback throws over the first error once the connection has gone.
+  [/^Client has encountered a connection error/, 'connection_lost'],
+  [/^Client was closed/, 'connection_lost'],
 ];
+
+// Reaching the server can fail in these ways. ENOENT, EACCES and the like are local, never its.
+const NETWORK_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'EPIPE',
+  'EHOSTUNREACH',
+  'EHOSTDOWN',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+
+/** From the driver: a connection attempt, or a query drizzle wrapped. Not any fetch on the way. */
+const cameThroughDatabase = (seen: unknown[]) =>
+  seen.some(
+    (error) =>
+      (error as { constructor?: { name?: string } }).constructor?.name ===
+        'DrizzleQueryError' ||
+      (typeof error === 'object' &&
+        error !== null &&
+        connectionErrors.has(error)),
+  );
 
 /** Finds a recognised database failure on an error or its causes; null if there is none. */
 export function databaseFailureOf(error: unknown): DatabaseFailure | null {
+  const seen: unknown[] = [];
   for (let current: unknown = error, depth = 0; current && depth < 5; depth++) {
+    seen.push(current);
     if (current instanceof PersistenceError) {
       if (current.failure) return current.failure;
       if (current.sqlState)
@@ -152,7 +184,8 @@ export function databaseFailureOf(error: unknown): DatabaseFailure | null {
     };
     if (typeof code === 'string') {
       if (isSqlState(code)) return { kind: 'sqlstate', sqlState: code };
-      if (/^E[A-Z]+$/.test(code)) return { kind: 'network', errno: code };
+      if (NETWORK_CODES.has(code) && cameThroughDatabase(seen))
+        return { kind: 'network', errno: code };
     }
     if (typeof message === 'string')
       for (const [pattern, kind] of driverFailures)

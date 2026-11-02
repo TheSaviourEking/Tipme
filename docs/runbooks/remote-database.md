@@ -112,29 +112,47 @@ These assume 3 reserved. Aiven says some services reserve 6; the server's own se
 - **The read fails:** the process starts on a pool of 1, logs `database.budget_read_failed`, and tries again next minute. It never refuses to start.
 - **An emergency:** `DATABASE_POOL_MAX` (API) and `WORKER_DATABASE_POOL_MAX` override the computed size. Deploying the same version applies them.
 
+### Dead connections and stuck locks
+
+- **TCP keepalive** on every pool, with `sysctls` in `deploy/compose.production.yml`: a dead peer is noticed in about 40 s when idle, about 100 s with a statement unanswered.
+- **`idle_in_transaction_session_timeout` of 60 s** on every pool connection. Only idle time inside a transaction counts, not a long statement or a lock wait. Transactions wait only on the database and Redis, never on a provider, and a serious action gives up at 15 s, so a healthy transaction doesn't come near it. If it fires, the server rolls back and the job or request gets a retryable failure.
+- **No `query_timeout`, on purpose:** the client would give up while the server may still commit.
+- **Migrations** set `lock_timeout` to 10 s. Busy past that, the batch rolls back and the deploy stops before any colour changes. Deploy again when the table is free.
+
 ### Under a surge, what happens first
 
 1. Requests queue inside a copy for a free connection. Pages get slower.
-2. After `DATABASE_POOL_CONNECT_TIMEOUT_MS` (5 s) a request gets a 503 `DEPENDENCY_UNAVAILABLE`, logged with `cause: pool_wait_timeout`. It waited before touching anything, so nothing is half done, and a retry with the same `Idempotency-Key` is safe.
+2. After `DATABASE_POOL_CONNECT_TIMEOUT_MS` (5 s) a request gets a 503 `DEPENDENCY_UNAVAILABLE`, logged with `cause: pool_wait_timeout`. It waited before touching anything, so nothing is half done, and a retry with the same `Idempotency-Key` is safe. `connection_lost` is different: if the connection dies while a COMMIT's reply is on its way, the write may have landed even though the answer is 503. Money writes are safe to repeat because of their idempotency keys, but don't read that 503 as "nothing written".
 3. Signed-in reads retry once by themselves (`apiFetch`). Writes never do.
-4. Readiness stays up while a copy is busy, so the edge doesn't take copies out and pile the traffic on the others. It goes down only when connections stop coming back for 15 s or a new one can't be made.
+4. A staff request that would have to wait for the staff lock with no connection to spare is refused straight away with `STAFF_ADMIN_BUSY`, which is retryable. Stopping actions (withdrawals off, a freeze, ending sessions) don't take that lock.
+5. Readiness stays up while a copy is busy, so the edge doesn't take copies out and pile the traffic on the others. It goes down only when connections stop coming back for 15 s or a new one can't be made.
 
 Workers are separate: their jobs wait or retry, and money waits in Postgres.
 
 ### Checking it
 
-Read-only, as any role. Only `backend_type` can tell background processes from hidden sessions: blank user names alone can't.
+Read-only. **As `tipme_runtime` or any plain role** this works without stats access:
 
 ```sql
 SHOW max_connections;
 SHOW superuser_reserved_connections;
+SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1 ORDER BY 2 DESC;
+```
+
+- A blank `usename` is a background process (`walwriter`, `checkpointer` and so on). It takes no client slot. A plain role does see these rows, so no client session is hidden from this count.
+- A named row is a client session, or a background worker running under the bootstrap role. So the named total is an upper bound on clients: exact for your own role, and at most that for others.
+- **What a plain role can't see:** `backend_type`, `state` and `query` for other roles are blank (`<insufficient privilege>` for `query`), so it can't split the bootstrap role's rows. `WHERE backend_type = 'client backend'` counts only your own sessions: never use it this way.
+
+To split them exactly, run this as a role with `pg_read_all_stats`, such as `avnadmin` if Aiven allows it (not checked on Aiven):
+
+```sql
 SELECT backend_type, usename, state, count(*)
   FROM pg_stat_activity GROUP BY 1, 2, 3 ORDER BY 4 DESC;
 ```
 
-- Client sessions compete for slots (`backend_type = 'client backend'`). Background processes (`walwriter`, `checkpointer`, `autovacuum launcher` and so on) don't. If Aiven's client sessions are not 5, change `DATABASE_BUDGET_MARGIN`.
+- If Aiven's client sessions are not 5, change `DATABASE_BUDGET_MARGIN`.
 - At steady state expect `tipme_runtime` to show the "steady" column, or fewer. Readiness keeps one connection open per copy.
-- Staff can read one copy's view at `GET /v1/ops/database-budget`: the limit, its share, current use, and whether it was cut after a refusal.
+- Staff can read one copy's view at `GET /v1/ops/database-budget`: the limit, its share, `roleSessions` (exact, this role only), `namedSessionsAtMost` (an upper bound on all clients), and whether it was cut after a refusal.
 - Each process logs `database.budget` at startup and whenever a number changes, and warns if the minimum pools don't fit (`overcommitted: true`).
 - To tell one 503 from another, search the API log for `http.dependency_unavailable`, or Sentry for its `PersistenceError` title. `cause` is `sqlstate` (with `sql_state`), `pool_wait_timeout`, `connect_timeout`, `connection_lost`, `network` (with `errno`) or `unknown`. A worker's `job.failed` has `db_failure` and `sql_state`. A 53300 can be the process's own back-off repeating the server's answer, so count `database.budget_refused` for real refusals.
 
@@ -145,6 +163,7 @@ We connect directly. If PgBouncer is added later in transaction mode, each trans
 - **Safe:** `pg_advisory_xact_lock` and `SET LOCAL`, the only forms in the code. They end with their transaction.
 - **Breaks:** any session `SET`, session advisory lock, `LISTEN`/`NOTIFY` or named prepared statement. None exist today, and new code must not add them.
 - **Migrations and `db-roles`** should keep connecting directly.
+- **Startup parameters:** the pool sends `idle_in_transaction_session_timeout` when connecting, which PgBouncer rejects unless it is in `ignore_startup_parameters`. Ignored there, it would need setting on the role instead.
 - **The budget's read** would see PgBouncer's view through a pooled connection, so `max_connections` would no longer describe what the clients share. Set `DATABASE_POOL_MAX` explicitly, or rework the rule.
 
 ## Not done yet (production environment work)

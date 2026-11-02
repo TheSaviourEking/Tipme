@@ -26,8 +26,9 @@ export class ReadinessService {
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
-    pool.on('release', (error?: Error) => {
-      if (!error) this.lastHealthy = Date.now();
+    // Drizzle releases without an error even after a failed transaction, so ask the client too.
+    pool.on('release', (error, client) => {
+      if (!error && (client as { _queryable?: boolean })._queryable !== false) this.lastHealthy = Date.now();
     });
   }
 

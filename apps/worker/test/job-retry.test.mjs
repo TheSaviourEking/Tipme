@@ -14,7 +14,7 @@ test('the database being unavailable earns another try', () => {
     new PersistenceError('53300', { kind: 'sqlstate', sqlState: '53300' }),
     new Error('timeout exceeded when trying to connect'),
     new Error('Connection terminated unexpectedly'),
-    Object.assign(new Error('x'), { code: 'ECONNRESET' }),
+    new Error('Client has encountered a connection error and is not queryable'),
   ])
     assert.equal(jobFailure('tip.succeeded', error), error);
 });
@@ -22,6 +22,10 @@ test('the database being unavailable earns another try', () => {
 test('anything else fails once, as before', () => {
   for (const error of [
     new TypeError('bug'),
+    // An alert webhook's network failure is not the database's.
+    Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('x'), { code: 'ECONNRESET' }),
+    }),
     new PersistenceError('23505', { kind: 'sqlstate', sqlState: '23505' }),
     new PersistenceError(undefined, {
       kind: 'unknown',
