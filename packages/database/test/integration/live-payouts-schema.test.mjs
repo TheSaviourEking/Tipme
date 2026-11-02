@@ -344,7 +344,10 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   // A payout written by the previous release, before the new columns exist.
   const old = createDatabase(url.toString());
   t.after(() => old.close());
+  // The seed writes today's users columns; this one arrives with a later migration.
+  await pool.query(`ALTER TABLE users ADD COLUMN email_changed_at timestamptz`);
   await seedDemoProfiles(old.db);
+  await pool.query(`ALTER TABLE users DROP COLUMN email_changed_at`);
   const payoutId = randomUUID();
   await pool.query(
     `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)

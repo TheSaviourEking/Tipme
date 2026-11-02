@@ -46,6 +46,8 @@ The `deploy-production` workflow (hand-run, from `main` only) and `watch-product
 
 **Repository secret:** `ALERT_WEBHOOK_URL` (Slack incoming webhook) for the watcher's alerts.
 
+The worker posts payment reserve alerts to the same kind of webhook: set `ALERT_WEBHOOK_URL` (https) in the server's production env file too. It is a secret, and blank means the alert is only written to the worker log (with a startup warning, and the alert is not counted as sent, so it goes out as soon as the address is set). Once `PAYMENTS_LIVE_ENABLED` is true, the production worker refuses to start without it. Optionally set `BACHS_RESERVE_ALERT_MINOR` (kobo, a positive whole number; blank means 100000, which is ₦1,000). The worker reads the reserve every 15 minutes, alerts at the first low reading and at the first unreadable one, then again every 6 hours while it lasts, shows the latest reading on the staff Overview (`analytics.view`), and deletes readings older than 90 days on each check. `GET /health/payments` tells the watcher `reserveLow`, `unreadable` and `stale`, with no amount; the watcher only prints the first two and alarms on `stale`, meaning live payments are on and nothing was read for over 45 minutes (a stopped worker cannot alert for itself). Staging runs the same check against the sandbox: if its `ALERT_WEBHOOK_URL` is the production channel, a sandbox balance under ₦1,000 alerts there every 6 hours; the text says `bachs-sandbox`, so it can be told apart.
+
 ## 3. The edge (once, then only through deploys)
 
 - **The move** (one-off, about a minute of staging downtime): `staging-setup.md` → "Move an existing staging server to the edge Caddy". After it, staging and production share the edge.
@@ -115,7 +117,7 @@ ssh tipme-prod@<server>
 /srv/tipme-production/live/scripts/rollback-production.sh <version>  # an earlier one still on the server
 ```
 
-Then roll back the web in Vercel (Deployments → the previous one → Instant Rollback) and run the release check with `--expect-version <old sha>` (read-only, never `--full`). The last 5 deployed versions and both colours' versions stay on the server.
+Then roll back the web in Vercel (Deployments → the previous one → Instant Rollback) and run the release check with `--expect-version <old sha> --expect-provider bachs-live --expect-live <true|false>` (read-only, never `--full`). `--expect-live` must say what `production.env` says. The last 5 deployed versions and both colours' versions stay on the server.
 
 **A stuck lock** ("Another deploy or rollback is running"): check that no Deploy production run and no script is running, then `rm -rf /srv/tipme-production/releases/.deploy.lock`.
 
@@ -145,11 +147,22 @@ To repeat: `scripts/rehearse-production.sh` (builds both images, about 5 minutes
 
 ## 9. Launch day (spec §6.11)
 
-`usetipme.xyz` keeps the countdown page until step 6; nobody outside sees production before then.
+The public site stays open with checkout closed (owner, 1 Nov), so everyone can reach it before and during these steps. The API is public too. Real tips are held back by the server: `PAYMENTS_LIVE_ENABLED` and `LIVE_CHECKOUT_HANDLES`, not by the site being hidden.
 
 1. **Owner prerequisites:** the owner's answers to spec §9 (Q2–Q8); Aiven (§4 above) with its CA; ZeptoMail's production agent and webhook; the production R2 bucket (`photos.md`); the Bachs live key and webhook; the Vercel production variables (spec §6.8); the production Sentry DSN; a funded reserve; sections 1–3 and 5–6 of this runbook done.
 2. **Setup deploy, not public,** with `PAYMENT_PROVIDER=bachs-live` and `PAYMENTS_LIVE_ENABLED=false`. This is the first boot in production mode (the rehearsal could not cover it): the API and workers must start, `/health/release` must report `deploymentMode: production`, `paymentProvider: bachs-live`, `paymentsLive: false`. The release check (read-only) passes, and the owner enrols in the admin area.
 3. **Make ZeptoMail active** in Ops → Providers: send a test, open its link, switch.
 4. **Verify the Bachs live webhook** with a real delivery: `live-activation.md`.
-5. **Switch payments on:** `PAYMENTS_LIVE_ENABLED=true`, deploy, set the repository variable `PRODUCTION_PAYMENTS_LIVE=true`, then the ₦1,000 smoke tip to the owner's page, confirmed and withdrawn: `live-activation.md`.
-6. **Open the site:** `usetipme.xyz` switches from the countdown to TipMe, as Q7 decides (public, or the pilot first).
+5. **Switch payments on for the owner's page only:** follow `live-activation.md` sections 4 and 5: set the repository variable and the env file (`PAYMENTS_LIVE_ENABLED=true`, `LIVE_CHECKOUT_HANDLES=<the owner's handle>`), deploy, then the ₦1,000 smoke tip and withdrawal.
+6. **Widen checkout:** named recipients, then `*` as a separate decision (`live-activation.md` section 6), as Q7 decides.
+
+### The pilot notice (web, Vercel)
+
+The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" shows next to the money action when the web app has `PILOT_NOTICE=on` **and** this copy's payment mode is `live` (`/health/release` says `bachs-live` with live payments on). On a test copy, or while payments are still switched off (launch step 5), it shows nothing even with the variable set. The owner reviews the wording before activation.
+
+- **When:** set `PILOT_NOTICE=on` and redeploy **before** launch step 5. It has no effect until payments are on, then appears with the first live page. Nothing to do at the switch itself.
+- **Where it appears:** directly under the Tip button on a person's page; one line on the receipt after the status message; under the dashboard toolbar; and under "Available" on the Withdraw page. Not in the footer, not on the marketing and legal pages, and not on the pretend checkout.
+- **How to set it:** Vercel → the `tipme` project → Settings → Environment Variables → **Production only**. Add `PILOT_NOTICE` = `on`. Unset, or any other value, means no notice.
+- **It is a server setting, not a build one:** the web app reads it for each request, and it has no `NEXT_PUBLIC_` twin, so nothing about it reaches the browser bundle. Vercel still applies a changed variable only to a **new deployment**: after adding or removing it, **redeploy** (Deployments → the latest → Redeploy). Instant Rollback to an older deployment restores that deployment's value of the variable.
+- **Check after step 5:** open `/@<a real handle>` (the line sits under the Tip button), a receipt and `/dashboard`; each shows it with a `mailto:support@usetipme.xyz` link. A brief API outage makes the web treat the copy as closed for a few seconds, and the line disappears with it.
+- Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.

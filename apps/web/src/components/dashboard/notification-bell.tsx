@@ -120,7 +120,8 @@ export function NotificationBell() {
         )}
       </Button>
       {open && (
-        <div id="notification-list" className="bell__panel">
+        // Focusable because a long list scrolls inside it, and keyboards must be able to scroll.
+        <div id="notification-list" className="bell__panel" tabIndex={0}>
           <h2>Notifications</h2>
           {needsRecoveryEmail && (
             <p className="tm-hint">

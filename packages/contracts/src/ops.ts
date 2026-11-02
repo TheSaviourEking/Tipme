@@ -110,8 +110,15 @@ export interface OpsApprovalApproved {
 export const opsResolveIssueSchema = opsReasonSchema
   .extend({
     outcome: z
-      .enum(['resolved_by_provider', 'recipient_owes', 'written_off'])
+      .enum([
+        'resolved_by_provider',
+        'recipient_owes',
+        'written_off',
+        'account_secured',
+      ])
       .optional(),
+    // Closing a reported takeover: staff confirm they checked the current bank and the sign-in.
+    bankAndSignInChecked: z.boolean().optional(),
   })
   .strict();
 export type OpsResolveIssueRequest = z.infer<typeof opsResolveIssueSchema>;
@@ -137,12 +144,16 @@ export interface OpsPayoutIssueView {
   startStep: 'fee' | 'payout' | null;
   startAttemptedAt: string | null;
   holdActive: boolean;
+  /** This recipient has had a reported takeover: the bank on this withdrawal may be the thief's. */
+  takeoverReported: boolean;
   /** A signed event names this payout, so "the provider has none" isn't believed. */
   parkedEvent: boolean;
   /** Another open conflict is about this payout. */
   openConflict: boolean;
   /** The recipient has changed bank since; a resumed payout still goes to the recorded one. */
   destinationReplaced: boolean;
+  /** A hold was in force at some point since this withdrawal was requested. */
+  holdTouched: boolean;
   read: {
     state:
       | 'paid'
@@ -182,6 +193,7 @@ export const ISSUE_KINDS = [
   'payment_unresolved',
   'payment_attempt_unresolved',
   'payment_account_unresolved',
+  'payment_account_setup_failed',
   'payment_reversed',
   'payment_settlement_currency',
   'payout_failed',
@@ -197,6 +209,9 @@ export const ISSUE_KINDS = [
   'pending_recovery',
   'message_reported',
   'profile_reported',
+  'account_takeover_reported',
+  'reserve_empty',
+  'provider_key_refused',
   'staff_acted_alone',
   'staff_approval_pending',
   'staff_last_approver_removed',
@@ -212,6 +227,8 @@ export const ISSUE_OUTCOMES = [
   'written_off',
   // Only the mark-failed tool states this: staff looked, and the provider has no such payout.
   'staff_confirmed_absent',
+  // Staff froze withdrawals after a reported takeover, and the owner has the account back.
+  'account_secured',
 ] as const;
 export type OpsIssueOutcome = (typeof ISSUE_OUTCOMES)[number];
 export type OpsIssueSeverity = 'money' | 'account' | 'info';
@@ -377,6 +394,11 @@ export interface OpsIssueEvidence {
   } | null;
   traceId: string | null;
   related: OpsIssue[];
+  /**
+   * The recipient's withdrawals are on hold: these open issues keep them there. Empty otherwise.
+   * Optional for the copy of the web that deploys before the API.
+   */
+  holdPins?: OpsIssue[];
   private: {
     message: boolean;
     supporterLabel: boolean;
@@ -472,6 +494,23 @@ export interface OpsWeekMoney {
   lastWeek: string;
 }
 
+/**
+ * The latest read of the platform's payment reserve, for staff only (the public health route says
+ * only low or not). `availableMinor` and `low` are null when the balance could not be read.
+ */
+export interface OpsPaymentReserve {
+  /** The adapter name, e.g. bachs-live. Staff screens may name providers. */
+  provider: string;
+  currency: string;
+  availableMinor: string | null;
+  /** The alert level: below this the reserve is low. */
+  thresholdMinor: string;
+  low: boolean | null;
+  readAt: string;
+  /** Older than the worker's checks should allow: they may have stopped. */
+  stale: boolean;
+}
+
 /** Overall health. Money and reliability come from the money tables; the funnel from events. */
 export interface OpsHealth {
   weekStarts: { thisWeek: string; lastWeek: string };
@@ -508,6 +547,45 @@ export interface OpsHealth {
   /** Real-user web vitals, mobile, last 28 days (PR-011). Optional for the same reason as
    *  `MyProfile.previousHandles`: an older API does not send it. */
   webVitals?: WebVitalSummary[];
+  /** Null before the first read (a copy without a payment provider reserve). Optional for the
+   *  same reason as `webVitals`. */
+  reserve?: OpsPaymentReserve | null;
+  /** Null until live payments have ever been switched on. Optional as above. */
+  liveSwitch?: OpsLiveSwitch | null;
+  /** Optional as above. */
+  liveNow?: OpsLiveNow;
+  /** Optional as above. */
+  withdrawalsSwitch?: OpsWithdrawalsSwitch;
+}
+
+/** All withdrawals stopped or restarted by staff: always with a written reason (audited). */
+export const opsWithdrawalsSwitchSchema = opsReasonSchema
+  .extend({ paused: z.boolean() })
+  .strict();
+export type OpsWithdrawalsSwitchRequest = z.infer<
+  typeof opsWithdrawalsSwitchSchema
+>;
+export interface OpsWithdrawalsSwitch {
+  paused: boolean;
+  changedAt: string | null;
+}
+
+/** What the API answering now was started with, from its own config: the truth for this moment. */
+export interface OpsLiveNow {
+  live: boolean;
+  provider: string;
+  /** test: a test provider. closed: live provider, switched off. Else who may take real tips. */
+  checkout: 'test' | 'closed' | 'nobody' | 'named' | 'everyone';
+  handles: string[];
+}
+
+/** Latest change of live payments on this copy; the API records one at boot when it differs. */
+export interface OpsLiveSwitch {
+  live: boolean;
+  provider: string;
+  /** The deployed commit, or `unknown`. */
+  version: string;
+  switchedAt: string;
 }
 
 /** How people find recipients' pages, over the last `days` days (Lagos). */
@@ -620,6 +698,17 @@ export const opsPagePlanSchema = opsReasonSchema
   .extend({ plan: z.enum(['free', 'pro']) })
   .strict();
 export type OpsPagePlanRequest = z.infer<typeof opsPagePlanSchema>;
+
+/** Staff froze a page's withdrawals after a reported takeover; `issueId` is the case that holds it. */
+export interface OpsWithdrawalFreeze {
+  state: 'frozen' | 'already_frozen';
+  issueId: string;
+}
+
+/** Whether a page's withdrawals are frozen now, and the issue that holds them. */
+export interface OpsWithdrawalFreezeState {
+  issueId: string | null;
+}
 
 /** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
 export interface OpsPagePricing {

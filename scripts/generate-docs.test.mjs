@@ -35,6 +35,7 @@ const PUBLIC_REVIEWED = [
   'GET /health',
   'GET /health/backups',
   'GET /health/live',
+  'GET /health/payments',
   'GET /health/ready',
   'GET /health/release',
   'POST /v1/auth/code',

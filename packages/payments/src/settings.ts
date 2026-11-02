@@ -44,6 +44,51 @@ export const paymentWebhookSettingsShape = {
   BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET: z.string().min(16).optional(),
 };
 
+const CHECKOUT_HANDLE = /^[a-z0-9_-]{1,64}$/;
+
+/**
+ * Who may take real tips while live payments are on: the limited stage (docs/runbooks/live-activation.md).
+ * A comma-separated list of current handles; `*` alone opens checkout to everyone. Unset or blank is
+ * nobody, so turning live payments on never opens checkout by itself. API only.
+ */
+export const liveCheckoutSettingsShape = {
+  LIVE_CHECKOUT_HANDLES: z
+    .string()
+    .optional()
+    .transform((raw, context): '*' | string[] => {
+      const items = (raw ?? '')
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+      if (items.length === 1 && items[0] === '*') return '*';
+      if (items.some((item) => !CHECKOUT_HANDLE.test(item)))
+        context.addIssue({
+          code: 'custom',
+          message: 'must be handles separated by commas, or * alone',
+        });
+      return items;
+    }),
+};
+
+/**
+ * Whether a page can take a tip now: the one rule behind checkout and the public page. `handle` is
+ * the page's current handle, lower-cased, so an old name in the list never opens it. Test copies
+ * never close for this; Bachs live needs the switch on and the page named.
+ */
+export function liveCheckoutOpenFor(
+  config: {
+    PAYMENT_PROVIDER: string;
+    PAYMENTS_LIVE_ENABLED?: boolean | undefined;
+    LIVE_CHECKOUT_HANDLES?: '*' | readonly string[] | undefined;
+  },
+  handle: string,
+): boolean {
+  if (!isLiveProvider(config.PAYMENT_PROVIDER)) return true;
+  if (!config.PAYMENTS_LIVE_ENABLED) return false;
+  const allowed = config.LIVE_CHECKOUT_HANDLES ?? [];
+  return allowed === '*' || allowed.includes(handle);
+}
+
 export interface PaymentSettings {
   NODE_ENV?: string | undefined;
   DEPLOYMENT_MODE?: string | undefined;
@@ -60,13 +105,6 @@ export interface PaymentSettings {
 export function isLiveProvider(name: string): name is 'bachs-live' {
   return name === 'bachs-live';
 }
-
-/**
- * TEMPORARY FENCE: live payments cannot be switched on until live payouts, manual payout
- * schedules, the reserve alert and the pilot notice exist (live-payments plan, Tasks 3-9, 11).
- * Task 12 removes this constant and its one check below, and updates the settings matrix test.
- */
-const LIVE_PAYMENTS_FENCED = true;
 
 /**
  * Validation shared by both configs (use inside their superRefine). `webhooks` is true where
@@ -103,11 +141,6 @@ export function checkPaymentSettings(
   }
   if (s.PAYMENTS_LIVE_ENABLED && !isLiveProvider(provider))
     issue('PAYMENTS_LIVE_ENABLED', 'requires the bachs-live provider');
-  if (s.PAYMENTS_LIVE_ENABLED && LIVE_PAYMENTS_FENCED)
-    issue(
-      'PAYMENTS_LIVE_ENABLED',
-      'PAYMENTS_LIVE_ENABLED=true is not available until live payouts land (live-payments plan, Task 12)',
-    );
   if (
     production &&
     (s.BACHS_SANDBOX_API_KEY ||

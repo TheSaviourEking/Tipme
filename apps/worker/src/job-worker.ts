@@ -3,6 +3,8 @@ import {
   JOB_NAMES,
   JOB_QUEUE,
   PAYOUT_START_EVENT,
+  PLATFORM_REFUSAL_EVENT,
+  WITHDRAWALS_SWITCH_EVENT,
   traceCarrierSchema,
 } from '@tipme/contracts';
 import {
@@ -30,6 +32,7 @@ import {
   runWeeklyReports,
   reconcileAttempts,
   reconcilePayouts,
+  sweepPayoutSetup,
   runIssueDetectors,
   lagosDaysBefore,
   purgeAnalytics,
@@ -52,10 +55,17 @@ import {
   DOMAIN_EVENT_NAMES,
   handleDomainEvent,
 } from './handlers/domain-events.js';
+import {
+  handlePaymentReserve,
+  warnIfNoAlertRoute,
+} from './handlers/payment-reserve.js';
+import { handlePlatformRefusal } from './handlers/platform-refusal.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
+import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
+import { runUnlessRunning } from './run-lock.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
 const WEEKLY_REPORTS_JOB = 'reports.weekly';
@@ -63,6 +73,16 @@ const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
 const APPROVALS_EXPIRE_JOB = 'approvals.expire';
+const PAYOUT_SETUP_JOB = 'payment-accounts.payout-setup';
+const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
+// A long sweep (a backlog, or a slow provider) must not run beside the next one. Under the interval
+// so a run lost with its worker costs at most one missed turn.
+const PAYOUT_SETUP_LOCK_TTL_MS = 14 * 60_000;
+const PAYMENT_RESERVE_JOB = 'payments.reserve';
+const PAYMENT_RESERVE_INTERVAL_MS = 15 * 60_000;
+// A reserve check takes seconds (the provider client gives up within 10 s, so does the alert). The
+// lock outlasts any run and frees itself well before the next one if the process dies mid-run.
+const PAYMENT_RESERVE_LOCK_TTL_MS = 5 * 60_000;
 /** A release check takes minutes: anything still tagged after this was left behind. */
 const REHEARSAL_GRACE_MS = 2 * 3_600_000;
 const ANALYTICS_RETENTION_MS = 90 * 86_400_000;
@@ -244,6 +264,29 @@ export async function startJobWorker(
           logger,
         })
       : null;
+  // Only the provider this copy actually runs: a mock copy's sandbox reader answers old tips only.
+  const payoutSetupProvider =
+    bachsProvider?.name === config.PAYMENT_PROVIDER ? bachsProvider : null;
+  const payoutSetupSchedule = payoutSetupProvider
+    ? ensureSchedule({
+        queue,
+        id: PAYOUT_SETUP_JOB,
+        every: PAYOUT_SETUP_INTERVAL_MS,
+        logger,
+      })
+    : null;
+  // The platform reserve is read for the same provider only. A run still going when the next one
+  // fires makes it skip (see runUnlessRunning), so a slow provider never stacks up reads.
+  if (payoutSetupProvider)
+    warnIfNoAlertRoute(config.ALERT_WEBHOOK_URL, (entry) => logger.warn(entry));
+  const reserveSchedule = payoutSetupProvider
+    ? ensureSchedule({
+        queue,
+        id: PAYMENT_RESERVE_JOB,
+        every: PAYMENT_RESERVE_INTERVAL_MS,
+        logger,
+      })
+    : null;
   queue.on('error', () => undefined);
 
   const meter = getMeter(SERVICE_NAME);
@@ -418,6 +461,79 @@ export async function startJobWorker(
             processed.add(1, { outcome: 'rolled_up' });
             return 'rolled_up';
           }
+          if (job.name === PAYOUT_SETUP_JOB) {
+            if (!payoutSetupProvider) return 'skipped';
+            const swept = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${PAYOUT_SETUP_JOB}`,
+                ttlMs: PAYOUT_SETUP_LOCK_TTL_MS,
+              },
+              () =>
+                sweepPayoutSetup(database.db, {
+                  provider: payoutSetupProvider,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                }),
+            );
+            if (!swept.ran) {
+              logger.info({ event: 'payout_setup.skipped_running', ...fields });
+              processed.add(1, { outcome: 'payout_setup_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'payout_setup.swept',
+              ...swept.value,
+              ...fields,
+            });
+            processed.add(1, { outcome: 'payout_setup' });
+            return 'swept';
+          }
+          if (job.name === PAYMENT_RESERVE_JOB) {
+            if (!payoutSetupProvider) return 'skipped';
+            const result = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${PAYMENT_RESERVE_JOB}`,
+                ttlMs: PAYMENT_RESERVE_LOCK_TTL_MS,
+              },
+              () =>
+                handlePaymentReserve({
+                  db: database.db,
+                  provider: payoutSetupProvider,
+                  thresholdMinor: config.BACHS_RESERVE_ALERT_MINOR,
+                  alertWebhookUrl: config.ALERT_WEBHOOK_URL,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                }),
+            );
+            if (!result.ran) {
+              logger.info({ event: 'reserve.skipped_running', ...fields });
+              processed.add(1, { outcome: 'reserve_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'reserve.checked',
+              outcome: result.value,
+              ...fields,
+            });
+            processed.add(1, { outcome: `reserve_${result.value}` });
+            return result.value;
+          }
+          if (job.name === WITHDRAWALS_SWITCH_EVENT) {
+            const outcome = await handleWithdrawalsSwitchChanged(job.data, {
+              url: config.ALERT_WEBHOOK_URL,
+              log: (entry) => logger.warn({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome: `withdrawals_switch_${outcome}` });
+            return outcome;
+          }
+          if (job.name === PLATFORM_REFUSAL_EVENT) {
+            const outcome = await handlePlatformRefusal(job.data, {
+              url: config.ALERT_WEBHOOK_URL,
+              log: (entry) => logger.warn({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome: `platform_refusal_${outcome}` });
+            return outcome;
+          }
           if (job.name === PAYOUT_START_EVENT) {
             const outcome = await handlePayoutStart(job.data, {
               db: database.db,
@@ -554,6 +670,8 @@ export async function startJobWorker(
       await weeklySchedule.stop();
       await monthlySchedule.stop();
       await analyticsSchedule.stop();
+      await payoutSetupSchedule?.stop();
+      await reserveSchedule?.stop();
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
       await relay.stop();

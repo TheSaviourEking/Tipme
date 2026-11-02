@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type {
   BachsPaymentAccountStatus,
   MyProfile,
@@ -26,7 +26,14 @@ const links = [
  * Loads the signed-in recipient's page. Signed out → sign in (and come back here); signed in
  * without a page → choose a handle.
  */
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({
+  children,
+  pilotNotice,
+}: {
+  children: React.ReactNode;
+  /** The pilot notice, rendered on the server (null outside live mode). */
+  pilotNotice?: ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const copy = paymentModeCopy(usePaymentMode());
@@ -102,6 +109,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
         )}
+        {/* Withdraw carries its own beside the Withdraw action. */}
+        {pathname !== '/dashboard/welcome' &&
+          pathname !== '/dashboard/withdraw' &&
+          pilotNotice}
         {profile?.suspended && (
           <Notice tone="neutral" title="TipMe has paused your page">
             Visitors see “This page isn’t available right now” and nobody can

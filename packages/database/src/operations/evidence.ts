@@ -17,7 +17,7 @@ import {
 import { maskEmail } from './email.js';
 import { pageReportCounts } from './profile-reports.js';
 import { guarded } from './errors.js';
-import { issueById, relatedOpenIssues } from './issues.js';
+import { issueById, relatedOpenIssues, withdrawalHoldPins } from './issues.js';
 import { phoneHint } from './phone.js';
 import { tipProof } from './proof.js';
 
@@ -234,6 +234,9 @@ export function issueEvidence(
         : null,
       traceId,
       related: await relatedOpenIssues(db, issue),
+      holdPins: issue.subject.profileId
+        ? await withdrawalHoldPins(db, { profileId: issue.subject.profileId })
+        : [],
       private: {
         message: Boolean(message),
         supporterLabel: Boolean(tip?.label),

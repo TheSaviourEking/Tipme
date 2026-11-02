@@ -80,7 +80,16 @@ export type WithdrawalQuote =
   | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
   | { state: 'no_destination' }
   | { state: 'destination_pending' }
-  | { state: 'paused'; reason: 'reversal' | 'in_debt' | 'unexpected_payout' }
+  // `review` covers holds whose cause staff keep to themselves (a reported account takeover).
+  | {
+      state: 'paused';
+      reason:
+        | 'reversal'
+        | 'in_debt'
+        | 'unexpected_payout'
+        | 'review'
+        | 'switched_off';
+    }
   | { state: 'provider_unavailable' };
 
 /** The quote, and whether the provider itself is checking a withdrawal already under way. */

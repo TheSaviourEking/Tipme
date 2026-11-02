@@ -140,7 +140,7 @@ async function liveCopy(info, t, { webhookStatus = 401 } = {}) {
   const record = join(dir, 'suite.json');
   writeFileSync(
     join(dir, 'pnpm'),
-    `#!/usr/bin/env bash\necho "{\\"full\\":\\"$RELEASE_FULL\\",\\"provider\\":\\"$RELEASE_PAYMENT_PROVIDER\\"}" > "${record}"\n`,
+    `#!/usr/bin/env bash\necho "{\\"full\\":\\"$RELEASE_FULL\\",\\"provider\\":\\"$RELEASE_PAYMENT_PROVIDER\\",\\"expectLive\\":\\"$RELEASE_EXPECT_LIVE\\"}" > "${record}"\n`,
   );
   chmodSync(join(dir, 'pnpm'), 0o755);
   return {
@@ -199,6 +199,31 @@ test('an unexpected provider fails the check before the suite starts', async (t)
   assert.match(result.stderr, /bachs-live/);
   assert.match(result.stderr, /bachs-sandbox/);
   assert.equal(copy.suite(), null);
+});
+
+test('--expect-live is compared with the copy, before the suite, and handed to it', async (t) => {
+  const copy = await liveCopy({}, t);
+  const wrong = await check(copy, ['--expect-live', 'false']);
+  assert.equal(wrong.code, 1);
+  assert.match(wrong.stderr, /takes real payments, expected it not to/);
+  assert.equal(copy.suite(), null);
+
+  const right = await check(copy, ['--expect-live', 'true']);
+  assert.equal(right.code, 0, right.stderr);
+  assert.equal(copy.suite()?.expectLive, 'true');
+
+  const off = await liveCopy({ paymentsLive: false }, t);
+  const closed = await check(off, ['--expect-live', 'true']);
+  assert.equal(closed.code, 1);
+  assert.match(closed.stderr, /does not take real payments, expected it to/);
+  assert.equal(off.suite(), null);
+  assert.equal((await check(off, ['--expect-live', 'yes'])).code, 2);
+});
+
+test('unless told otherwise the suite expects a copy with no live payments', async (t) => {
+  const copy = await liveCopy({ paymentsLive: false }, t);
+  assert.equal((await check(copy)).code, 0);
+  assert.equal(copy.suite()?.expectLive, 'false');
 });
 
 test('the read-only check posts an unsigned empty body to the Bachs webhook and wants 401', async (t) => {

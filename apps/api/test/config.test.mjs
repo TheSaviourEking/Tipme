@@ -350,11 +350,18 @@ test('production refuses mock and sandbox, and sandbox credentials beside bachs-
   );
 });
 
-test('production refuses live payments until payouts land (Task 12); other copies refuse bachs-live', () => {
-  assert.match(
-    productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }),
-    /PAYMENTS_LIVE_ENABLED/,
+test('production takes live payments only with the live key and webhook secret; other copies refuse bachs-live', () => {
+  assert.equal(productionIssues({ PAYMENTS_LIVE_ENABLED: 'true' }), '');
+  assert.equal(
+    loadApiConfig({ ...productionBase, PAYMENTS_LIVE_ENABLED: 'true' })
+      .PAYMENTS_LIVE_ENABLED,
+    true,
   );
+  for (const missing of ['BACHS_LIVE_API_KEY', 'BACHS_LIVE_WEBHOOK_SECRET'])
+    assert.match(
+      productionIssues({ PAYMENTS_LIVE_ENABLED: 'true', [missing]: undefined }),
+      new RegExp(missing),
+    );
   assert.match(
     productionIssues({ BACHS_LIVE_API_KEY: undefined }),
     /BACHS_LIVE_API_KEY/,

@@ -24,6 +24,21 @@ import { canonicalId, readMailboxes, sharesMailbox } from './staff.js';
 const STUCK_AFTER_MS = 30 * 60 * 1000;
 const ACTED_ALONE_CLOSES_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * The issues that place a hold, and so the only ones that keep it. A failed withdrawal or an unknown
+ * start says nothing about why a hold was placed, and some of them never close.
+ */
+const HOLD_KINDS = [
+  'payment_reversed',
+  'provider_in_debt',
+  'payout_unexpected',
+  'account_takeover_reported',
+] as const satisfies readonly IssueKind[];
+const HOLD_KINDS_SQL = sql.join(
+  HOLD_KINDS.map((kind) => sql`${kind}`),
+  sql`, `,
+);
+
 /** Outbox alerts that need a person, and the issue kind each becomes. */
 const EVENT_KINDS: Record<string, IssueKind> = {
   'payment.mismatch': 'payment_mismatch',
@@ -53,6 +68,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payment_unresolved: 'money',
   payment_attempt_unresolved: 'money',
   payment_account_unresolved: 'account',
+  payment_account_setup_failed: 'account',
   payment_reversed: 'money',
   payment_settlement_currency: 'money',
   payout_failed: 'money',
@@ -61,7 +77,10 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payout_unresolved: 'money',
   payout_fee_short: 'money',
   payout_held: 'money',
+  account_takeover_reported: 'money',
   provider_in_debt: 'money',
+  reserve_empty: 'money',
+  provider_key_refused: 'money',
   provider_event_conflict: 'money',
   stuck_tip: 'info',
   unmatched_event: 'info',
@@ -87,6 +106,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A Bachs checkout for a tip to ${page} has an unknown outcome. Find and verify the checkout in Bachs Dashboard; do not retry it.`;
     case 'payment_account_unresolved':
       return `Bachs account setup for ${page} has an unknown outcome. Confirm the recipient account in Bachs Dashboard before linking it.`;
+    case 'payment_account_setup_failed':
+      return `Manual payouts could not be set on the payment account for ${page}. They can't withdraw, and can't finish setup if it isn't done. TipMe keeps trying, and this closes itself once it works. If it stays open, check the account at the provider.`;
     case 'payment_reversed':
       return `Bachs reported a refund or dispute on a paid tip to ${page}. TipMe changed no balance: review it in Bachs Dashboard.`;
     case 'payment_settlement_currency':
@@ -105,6 +126,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A withdrawal for ${page} was not started because their withdrawals went on hold first. Nothing was sent, and the money stays reserved.`;
     case 'provider_in_debt':
       return `The provider reports ${page}’s account owes it money. Withdrawals for them are on hold until it is settled.`;
+    case 'reserve_empty':
+      return 'The platform reserve could not cover a payout fee, so withdrawals are waiting. Nothing failed and the recipients were not told. Top up the reserve: they start again once a reading is at the alert level, and this closes itself.';
+    case 'provider_key_refused':
+      return 'The provider refused TipMe’s API key. Withdrawals are waiting and adding a bank account is unavailable; recipients are told to try later. Check the key and its permissions, then resolve this. Waiting withdrawals start again at the next reserve reading at the alert level.';
     case 'provider_event_conflict':
       return `The provider sent the same event twice with different contents (tip to ${page}).`;
     case 'stuck_tip':
@@ -115,6 +140,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `${page} reported a supporter’s message. Reveal it (with a reason) to review it.`;
     case 'profile_reported':
       return `Visitors reported ${page} (impersonation, a scam or abuse). Check the page, and pause it if needed.`;
+    case 'account_takeover_reported':
+      return `Someone reported that ${page}’s account was taken over. Staff froze its withdrawals; the audit log has why. Once the real owner has it back, resolve this to release them.`;
     case 'staff_acted_alone':
       return 'A staff member took a serious action without a second person, because none was available.';
     case 'staff_approval_pending':
@@ -505,10 +532,9 @@ export async function markResolved(
 }
 
 /**
- * The recipient's withdrawals resume once none of their money issues is open, however the last one
- * closed. A payout waiting on the hold doesn't count: it is a result of the hold, not a cause, and
- * it can only resume once the hold has gone. The profile lock makes two closes take turns, so
- * neither misses the other.
+ * The recipient's withdrawals resume once none of the issues that place holds is open for them,
+ * however the last one closed. A takeover freeze goes only by its own issue closing as "the owner has
+ * the account back". The profile lock makes two closes take turns, so neither misses the other.
  */
 async function releaseHoldsIfClear(
   tx: Tx,
@@ -519,19 +545,39 @@ async function releaseHoldsIfClear(
     .from(profiles)
     .where(eq(profiles.id, input.profileId))
     .for('update');
-  const [other] = await tx
-    .select({ id: issues.id })
+  const other = await tx
+    .select({ kind: issues.kind })
     .from(issues)
     .where(
       and(
         eq(issues.status, 'open'),
-        eq(issues.severity, 'money'),
-        sql`${issues.kind} <> 'payout_held'`,
+        sql`${issues.kind} IN (${HOLD_KINDS_SQL})`,
         sql`${issues.subject}->>'profileId' = ${input.profileId}`,
       ),
-    )
-    .limit(1);
-  if (other) return;
+    );
+  if (other.length > 0) {
+    const [held] = await tx
+      .select({ id: withdrawalHolds.id })
+      .from(withdrawalHolds)
+      .where(
+        and(
+          eq(withdrawalHolds.profileId, input.profileId),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      )
+      .limit(1);
+    if (held)
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'withdrawals.still_held',
+        permission: input.staffUserId ? 'payouts.resolve' : undefined,
+        subjectType: 'profile',
+        subjectId: input.profileId,
+        reason: `Still open: ${[...new Set(other.map(({ kind }) => kind))].join(', ')}.`,
+        now: input.now,
+      });
+    return;
+  }
   const released = await tx
     .update(withdrawalHolds)
     .set({ releasedAt: input.now, releasedBy: input.staffUserId })
@@ -543,7 +589,9 @@ async function releaseHoldsIfClear(
         // goes only once its own cause has closed, so a new one can't be released as it is placed.
         sql`EXISTS (
           SELECT 1 FROM issues i
-           WHERE i.id = ${withdrawalHolds.issueId} AND i.status <> 'open')`,
+           WHERE i.id = ${withdrawalHolds.issueId} AND i.status <> 'open'
+             AND (${withdrawalHolds.reason} <> 'account_takeover'
+                  OR i.resolution_outcome = 'account_secured'))`,
       ),
     )
     .returning({ id: withdrawalHolds.id });
@@ -554,7 +602,8 @@ async function releaseHoldsIfClear(
       permission: input.staffUserId ? 'payouts.resolve' : undefined,
       subjectType: 'profile',
       subjectId: input.profileId,
-      reason: 'None of the recipient’s money issues is open.',
+      reason:
+        'None of the issues that hold the recipient’s withdrawals is open.',
       now: input.now,
     });
 }
@@ -602,6 +651,12 @@ export function autoResolveIssues(
               AND a.status = 'UNKNOWN'
               AND a.provider_account_reference IS NULL)
       UNION ALL
+      SELECT i.id, 'Manual payouts are now set on the account.'
+        FROM issues i
+        JOIN payment_accounts a ON i.dedupe_key = 'payment_account_setup.' || a.id
+       WHERE i.status = 'open' AND i.kind = 'payment_account_setup_failed'
+         AND a.manual_payouts_at IS NOT NULL
+      UNION ALL
       SELECT i.id, 'The withdrawal was found at the provider or reached a final state.'
         FROM issues i JOIN payouts p ON p.id = (i.subject->>'payoutId')::uuid
        WHERE i.status = 'open' AND i.kind IN ('payout_unresolved', 'payout_held')
@@ -609,6 +664,20 @@ export function autoResolveIssues(
          AND (p.status NOT IN ('REQUESTED', 'PROCESSING')
               OR (p.provider_reference IS NOT NULL
                   AND i.dedupe_key NOT LIKE 'payout_stuck.%'))
+      UNION ALL
+      -- A payout with its own open issue is a person's now, and no longer the reserve's to answer for.
+      SELECT i.id, 'No withdrawal is waiting on the reserve any more.'
+        FROM issues i
+       WHERE i.status = 'open' AND i.kind = 'reserve_empty'
+         AND NOT EXISTS (
+           SELECT 1 FROM payouts p
+            WHERE p.status = 'REQUESTED'
+              AND p.platform_wait_since IS NOT NULL
+              AND p.provider_reference IS NULL
+              AND p.start_uncertain_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM issues pi
+                 WHERE pi.status = 'open' AND pi.subject->>'payoutId' = p.id::text))
       UNION ALL
       -- Raised after its release check finished (the misreported tip never confirms).
       SELECT i.id, 'The release check that raised it has finished.'
@@ -708,6 +777,40 @@ export function issueById(db: Database, id: string): Promise<IssueView | null> {
   });
 }
 
+/**
+ * What keeps a recipient's withdrawals on hold, so staff can see why a hold didn't release: the open
+ * hold-placing issues about them, and any open cause of a hold in force. Empty with no hold in force.
+ */
+export function withdrawalHoldPins(
+  db: Database,
+  input: { profileId: string },
+): Promise<IssueView[]> {
+  return guarded(async () => {
+    const rows = await db
+      .select()
+      .from(issues)
+      .where(
+        and(
+          eq(issues.status, 'open'),
+          sql`EXISTS (
+            SELECT 1 FROM withdrawal_holds h
+             WHERE h.profile_id = ${input.profileId} AND h.released_at IS NULL)`,
+          sql`(
+            (${issues.kind} IN (${HOLD_KINDS_SQL})
+              AND ${issues.subject}->>'profileId' = ${input.profileId})
+            OR EXISTS (
+              SELECT 1 FROM withdrawal_holds h
+               WHERE h.issue_id = ${issues.id}
+                 AND h.profile_id = ${input.profileId}
+                 AND h.released_at IS NULL))`,
+        ),
+      )
+      .orderBy(desc(issues.id))
+      .limit(20);
+    return rows.map(view);
+  });
+}
+
 /** Open issues about the same tip, payout, page or person (for the evidence view). */
 export function relatedOpenIssues(
   db: Database,
@@ -767,6 +870,7 @@ export function resolveIssue(
     staffUserId: string;
     reason: string;
     outcome?: OpsIssueOutcome;
+    bankAndSignInChecked?: boolean;
     now?: Date;
   },
 ): Promise<void> {
@@ -784,6 +888,16 @@ export function resolveIssue(
         .from(issues)
         .where(eq(issues.id, input.issueId));
       if (!current) throw new OperationError('ISSUE_NOT_FOUND');
+      // Releasing a freeze sends the next withdrawal to the current bank, which may be the thief's.
+      const takeover = current.kind === 'account_takeover_reported';
+      if (
+        current.status === 'open' &&
+        (takeover
+          ? input.outcome !== 'account_secured' ||
+            input.bankAndSignInChecked !== true
+          : input.outcome === 'account_secured')
+      )
+        throw new OperationError('ISSUE_OUTCOME_REQUIRED');
       if (
         current.status === 'open' &&
         (current.kind === 'staff_acted_alone' ||
@@ -812,7 +926,9 @@ export function resolveIssue(
         issueId: input.issueId,
         resolvedBy: input.staffUserId,
         staffUserId: input.staffUserId,
-        reason: input.reason,
+        reason: takeover
+          ? `Current bank and sign-in checked. ${input.reason}`
+          : input.reason,
         outcome: current.severity === 'money' ? input.outcome : undefined,
         now: input.now ?? new Date(),
       });

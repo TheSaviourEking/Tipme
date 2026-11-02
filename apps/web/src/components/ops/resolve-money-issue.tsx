@@ -5,8 +5,11 @@ import { ISSUE_OUTCOME_CHOICES } from '@/lib/ops-client';
 
 /** Resolving a money issue: how it was settled, and why. Neither changes a balance. */
 export function ResolveMoneyIssue({
+  takeover = false,
   onSubmit,
 }: {
+  /** Closing a reported takeover: it releases the freeze, so staff confirm their checks first. */
+  takeover?: boolean;
   onSubmit: (reason: string, outcome: string) => Promise<string | null>;
 }) {
   const id = useId();
@@ -20,6 +23,10 @@ export function ResolveMoneyIssue({
     const outcome = String(data.get('outcome') ?? '');
     if (!outcome) {
       setError('Choose how it was settled.');
+      return;
+    }
+    if (takeover && data.get('checked') !== 'on') {
+      setError('Confirm you checked the bank and the sign-in.');
       return;
     }
     if (reason.length < 10) {
@@ -53,16 +60,34 @@ export function ResolveMoneyIssue({
           <option value="" disabled>
             Choose an outcome
           </option>
-          {Object.entries(ISSUE_OUTCOME_CHOICES).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
+          {Object.entries(ISSUE_OUTCOME_CHOICES)
+            .filter(([value]) => (value === 'account_secured') === takeover)
+            .map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
         </select>
         <span className="tm-hint">
           Stored with your reason. It changes no balance.
         </span>
       </div>
+      {takeover && (
+        <>
+          <Notice tone="error" title="This releases the freeze">
+            The next withdrawal goes to the current bank, which may be the
+            thief’s, and whoever is signed in stays signed in. Check them first:
+            the current bank belongs to the real owner, any withdrawal waiting
+            is theirs (if not, mark it failed), and sessions were ended.
+          </Notice>
+          <label className="ops-recovery__confirm">
+            <input type="checkbox" name="checked" required />
+            <span>
+              I checked the current bank and the sign-in with the real owner.
+            </span>
+          </label>
+        </>
+      )}
       <TextareaField
         id={`${id}-reason`}
         name="reason"

@@ -292,6 +292,10 @@ export function createMockProvider(options: {
       };
     },
 
+    async payoutDestinationStatus() {
+      return 'usable';
+    },
+
     async payoutBalance() {
       return { availableMinor: PRETEND_BALANCE_MINOR };
     },

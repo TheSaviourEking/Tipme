@@ -19,6 +19,7 @@ import {
 } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { openIssue } from './issues.js';
+import { withdrawalsSwitchState } from './withdrawals-switch.js';
 import { guarded, OperationError } from './errors.js';
 import { enqueueOutbox } from './outbox.js';
 import { findPayoutByReference } from './attempts.js';
@@ -479,25 +480,35 @@ export async function reconcilePayouts(input: {
 
   // A job lost before it ever ran would otherwise hold the money silently. On hold is another
   // matter: that payout is waiting on purpose, and has its own issue.
-  const neverStarted = await db
-    .select({ id: payouts.id, startStep: payouts.startStep })
-    .from(payouts)
-    .where(
-      and(
-        eq(payouts.status, 'REQUESTED'),
-        input.payoutId ? eq(payouts.id, input.payoutId) : undefined,
-        isNull(payouts.providerReference),
-        isNull(payouts.startUncertainAt),
-        isNotNull(payouts.provider),
-        lte(payouts.createdAt, notFoundBefore),
-        sql`NOT EXISTS (
+  // Nor is one waiting on the switch, or just released by it: its job has only now been queued.
+  const switchState = await withdrawalsSwitchState(db).catch(() => null);
+  const waitingOnSwitch =
+    !switchState ||
+    switchState.paused ||
+    (switchState.changedAt !== null && switchState.changedAt > notFoundBefore);
+  const neverStarted = waitingOnSwitch
+    ? []
+    : await db
+        .select({ id: payouts.id, startStep: payouts.startStep })
+        .from(payouts)
+        .where(
+          and(
+            eq(payouts.status, 'REQUESTED'),
+            input.payoutId ? eq(payouts.id, input.payoutId) : undefined,
+            isNull(payouts.providerReference),
+            isNull(payouts.startUncertainAt),
+            // Waiting on the platform, with its own issue, and queued again once funded.
+            isNull(payouts.platformWaitSince),
+            isNotNull(payouts.provider),
+            lte(payouts.createdAt, notFoundBefore),
+            sql`NOT EXISTS (
           SELECT 1 FROM withdrawal_holds h
            WHERE h.profile_id = ${payouts.profileId} AND h.released_at IS NULL)`,
-        sql`NOT EXISTS (
+            sql`NOT EXISTS (
           SELECT 1 FROM issues i WHERE i.dedupe_key = 'payout_unresolved.' || ${payouts.id})`,
-      ),
-    )
-    .limit(limit);
+          ),
+        )
+        .limit(limit);
   for (const payout of neverStarted)
     try {
       const issue = await openUnresolved(

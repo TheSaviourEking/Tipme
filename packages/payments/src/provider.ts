@@ -153,6 +153,15 @@ export interface PayoutPort {
     usable: boolean;
     status: 'usable' | 'pending_review' | 'rejected';
   }>;
+  /**
+   * Where a destination's review stands now. An add can replay an old answer (its key is fixed), and
+   * review can end long after it. Only a stated rejection is 'rejected'; a failed read, including
+   * not found, throws and says nothing about the destination.
+   */
+  payoutDestinationStatus(
+    accountRef: string,
+    destinationRef: string,
+  ): Promise<'usable' | 'pending_review' | 'rejected'>;
   payoutBalance(
     accountRef: string,
     currency: 'NGN',
@@ -227,6 +236,20 @@ export class PayoutRejectedError extends Error {
   ) {
     super('The payment provider refused the payout');
     this.name = 'PayoutRejectedError';
+  }
+}
+
+/**
+ * The provider definitely refused TipMe itself, not the recipient: the reserve can't cover a top-up,
+ * or the key was refused. No money moved, and the withdrawal waits rather than fails.
+ */
+export class PlatformRefusalError extends Error {
+  constructor(
+    readonly refusal: 'reserve_empty' | 'provider_key',
+    readonly providerCode?: string,
+  ) {
+    super('The payment provider refused the platform');
+    this.name = 'PlatformRefusalError';
   }
 }
 

@@ -8,7 +8,10 @@ import type {
 } from '@tipme/contracts';
 import { Notice, Skeleton } from '@tipme/ui';
 import { Funnel, Tile } from '@/components/ops/charts';
+import { WithdrawalsSwitch } from '@/components/ops/withdrawals-switch';
 import { change, naira } from '@/lib/money';
+import { liveSwitchView } from '@/lib/live-switch-view';
+import { reserveView } from '@/lib/payment-reserve';
 import { apiFetch } from '@/lib/session-client';
 
 const count = (n: { thisWeek: number; lastWeek: number }) => ({
@@ -50,6 +53,8 @@ export default function OpsOverviewPage() {
     null,
   );
   const [failed, setFailed] = useState(false);
+  // When the page opened, for "read 12 min ago" (the data is fetched right after).
+  const [openedAt] = useState(() => Date.now());
   useEffect(() => {
     void apiFetch<OpsMetricsEnvelope<OpsHealth>>('/v1/ops/metrics/health').then(
       (result) => (result.ok ? setHealth(result.data) : setFailed(true)),
@@ -70,7 +75,14 @@ export default function OpsOverviewPage() {
     recipients,
     funnel,
     webVitals = [],
+    // An API older than the reserve alert sends none.
+    reserve = null,
+    liveSwitch = null,
+    liveNow,
+    withdrawalsSwitch,
   } = health.metrics;
+  const live = liveSwitchView(liveNow, liveSwitch);
+  const reserveNow = reserveView(reserve, openedAt);
   const tips = change(
     String(money.tipCount.thisWeek),
     String(money.tipCount.lastWeek),
@@ -83,9 +95,33 @@ export default function OpsOverviewPage() {
     <div className="ops-dashboard">
       <h1>Overview</h1>
       <p className="tm-hint">
-        This week (from Monday, Lagos time) against all of last week. Test money
-        only.
+        This week (from Monday, Lagos time) against all of last week.
+        {live.testMoney ? ' Test money only.' : ''}
       </p>
+      {live.current && <p data-testid="live-now">{live.current}</p>}
+      {live.history && <p className="tm-hint">{live.history}</p>}
+      {withdrawalsSwitch && (
+        <WithdrawalsSwitch
+          state={withdrawalsSwitch}
+          onChanged={(next) =>
+            setHealth(
+              (current) =>
+                current && {
+                  ...current,
+                  metrics: { ...current.metrics, withdrawalsSwitch: next },
+                },
+            )
+          }
+        />
+      )}
+      {live.disagrees && (
+        <Notice tone="error" title="The record of live payments disagrees">
+          This API’s setting and the last recorded change don’t match: a record
+          that failed to write, or a deploy that failed partway. The first line
+          above is what this API is doing now. Check the API log and the last
+          deploy.
+        </Notice>
+      )}
       {!health.collecting && (
         <Notice tone="neutral" title="Anonymous collection is off">
           The funnel stays empty until the privacy decision (D-07) turns it on.
@@ -108,6 +144,41 @@ export default function OpsOverviewPage() {
             {...amount(money.platformFeeMinor)}
           />
           <Tile label="Reward cost" {...amount(money.rewardCostMinor)} />
+        </div>
+      </section>
+      <section aria-labelledby="ops-reserve" className="dashboard-section">
+        <h2 id="ops-reserve">Payment reserve</h2>
+        <p className="tm-hint">
+          The platform balance that pays recipients’ payout fees
+          {reserve ? ` (${reserve.provider})` : ''}. Staff are alerted when it
+          drops below the alert level.
+        </p>
+        {reserveNow.status === 'low' && (
+          <Notice tone="error" title="The payment reserve is low">
+            Top it up so payout fees can be paid.
+          </Notice>
+        )}
+        {reserveNow.status === 'unreadable' && (
+          <Notice tone="error" title="The payment reserve can’t be read">
+            The last check could not read the balance. Check the payment
+            provider and the worker.
+          </Notice>
+        )}
+        {reserveNow.stale && (
+          <Notice
+            tone="error"
+            title="The payment reserve checks may have stopped"
+          >
+            The last reading is more than 45 minutes old, and the worker reads
+            every 15 minutes. Check the worker and the payment provider key.
+          </Notice>
+        )}
+        <div className="ops-tiles">
+          <Tile
+            label="Reserve available"
+            value={reserveNow.value}
+            previous={reserveNow.hint}
+          />
         </div>
       </section>
       <section aria-labelledby="ops-funnel" className="dashboard-section">

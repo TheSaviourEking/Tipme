@@ -12,7 +12,11 @@ import {
 import type { Database, Tx } from '../client.js';
 import { emailRecoveries, sessions, users } from '../schema.js';
 import { recordAudit } from './audit.js';
-import { maskEmail, normaliseEmail } from './email-address.js';
+import {
+  emailChangedAtFor,
+  maskEmail,
+  normaliseEmail,
+} from './email-address.js';
 import {
   checkEmailCode,
   issueEmailCode,
@@ -574,6 +578,7 @@ export function completeDueRecoveries(
           .set({
             email: row.newEmail,
             emailVerifiedAt: now,
+            emailChangedAt: emailChangedAtFor(row.newEmail, now),
             ...(me?.recovery?.toLowerCase() === row.newEmail
               ? { recoveryEmail: null, recoveryEmailVerifiedAt: null }
               : {}),

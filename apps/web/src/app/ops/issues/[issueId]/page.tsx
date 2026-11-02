@@ -336,6 +336,7 @@ export default function IssuePage() {
 
   const { issue, page, person, tipProof, payout } = evidence;
   const open = issue.status === 'open';
+  const holdPins = evidence.holdPins ?? [];
   const hasPrivate = Object.values(evidence.private).some(Boolean);
   const recheckTarget = issue.subject.attemptId
     ? { attemptId: issue.subject.attemptId }
@@ -388,10 +389,13 @@ export default function IssuePage() {
             issue.severity === 'money' &&
             !payoutUnfinished && (
               <ResolveMoneyIssue
+                takeover={issue.kind === 'account_takeover_reported'}
                 onSubmit={(reason, outcome) =>
                   act(
                     `/v1/ops/issues/${issue.id}/resolve`,
-                    { reason, outcome },
+                    issue.kind === 'account_takeover_reported'
+                      ? { reason, outcome, bankAndSignInChecked: true }
+                      : { reason, outcome },
                     'The issue is resolved.',
                   )
                 }
@@ -490,9 +494,23 @@ export default function IssuePage() {
           The actions here send no money and never edit the ledger: no refunds
           or adjustments, and an outcome changes no balance. The one thing that
           can lead to a payout is Resume, below, which queues a start that was
-          never tried. When the last of a recipient’s money issues closes, their
-          withdrawals resume.
+          never tried. When the last issue that placed a hold on a recipient
+          closes, their withdrawals resume.
         </p>
+        {holdPins.length > 0 && (
+          <Notice tone="error" title="Withdrawals stay on hold">
+            This recipient’s withdrawals stay on hold until these close:{' '}
+            {holdPins.map((pin, index) => (
+              <span key={pin.id}>
+                {index > 0 && ', '}
+                <Link href={`/ops/issues/${pin.id}`}>
+                  {ISSUE_KIND_LABELS[pin.kind] ?? pin.kind}
+                </Link>
+              </span>
+            ))}
+            .
+          </Notice>
+        )}
       </Section>
 
       {open &&

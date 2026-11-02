@@ -32,6 +32,11 @@ import {
 } from '../schema.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, safeError } from './errors.js';
+import { recordAudit } from './audit.js';
+import {
+  withdrawalsSwitchedOff,
+  withdrawalsSwitchState,
+} from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
@@ -167,7 +172,7 @@ export async function holdWithdrawals(
   tx: Tx,
   input: {
     profileId: string;
-    reason: 'reversal' | 'in_debt' | 'unexpected_payout';
+    reason: 'reversal' | 'in_debt' | 'unexpected_payout' | 'account_takeover';
     issueId: string;
   },
 ): Promise<void> {
@@ -189,6 +194,130 @@ export async function holdWithdrawals(
     );
   if (existing) return;
   await tx.insert(withdrawalHolds).values({ id: newId(), ...input });
+  // Each payout not yet started is a person's to decide from now on, and they need its issue to do
+  // it: while withdrawals are switched off no job runs to raise it. The start job's own check is
+  // what stops the money, including for a request that raced this.
+  const unstarted = await tx
+    .select({ id: payouts.id })
+    .from(payouts)
+    .where(
+      and(
+        eq(payouts.profileId, input.profileId),
+        eq(payouts.status, 'REQUESTED'),
+        isNull(payouts.providerReference),
+        isNull(payouts.startStep),
+        isNull(payouts.startUncertainAt),
+      ),
+    );
+  for (const payout of unstarted)
+    await openIssue(tx, {
+      dedupeKey: `payout_held.${payout.id}`,
+      kind: 'payout_held',
+      subject: { payoutId: payout.id },
+      now: new Date(),
+    });
+}
+
+/**
+ * Staff freeze a recipient's withdrawals after a reported account takeover, from the Pages screen.
+ * Audited with the written reason, which stays out of the issue's summary and the recipient's view.
+ * It stops money leaving and moves none: a payout already with the provider isn't recalled. It ends
+ * by its own issue closing as "the owner has the account back", once no other hold's cause is open. Under the profile
+ * lock, so a second report finds the first.
+ */
+export function freezeWithdrawals(
+  db: Database,
+  input: {
+    profileId: string;
+    staffUserId: string;
+    reason: string;
+    now?: Date;
+  },
+): Promise<{ state: 'frozen' | 'already_frozen'; issueId: string }> {
+  const now = input.now ?? new Date();
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(eq(profiles.id, input.profileId))
+        .for('update');
+      if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
+      const [existing] = await tx
+        .select({ issueId: withdrawalHolds.issueId })
+        .from(withdrawalHolds)
+        .where(
+          and(
+            eq(withdrawalHolds.profileId, input.profileId),
+            eq(withdrawalHolds.reason, 'account_takeover'),
+            isNull(withdrawalHolds.releasedAt),
+          ),
+        );
+      if (existing) {
+        // A second report: its written reason is evidence, though it changes nothing else.
+        await recordAudit(tx, {
+          staffUserId: input.staffUserId,
+          action: 'withdrawals.freeze_reported_again',
+          permission: 'payouts.resolve',
+          subjectType: 'profile',
+          subjectId: input.profileId,
+          reason: input.reason,
+          now,
+        });
+        return { state: 'already_frozen' as const, issueId: existing.issueId };
+      }
+      const issue = await openIssue(tx, {
+        // A takeover can be reported again after the last one closed.
+        dedupeKey: `account_takeover.${input.profileId}.${newId()}`,
+        kind: 'account_takeover_reported',
+        subject: { profileId: input.profileId },
+        now,
+      });
+      await holdWithdrawals(tx, {
+        profileId: input.profileId,
+        reason: 'account_takeover',
+        issueId: issue.id,
+      });
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'withdrawals.frozen',
+        permission: 'payouts.resolve',
+        subjectType: 'profile',
+        subjectId: input.profileId,
+        reason: input.reason,
+        now,
+      });
+      return { state: 'frozen' as const, issueId: issue.id };
+    }),
+  );
+}
+
+/** The issue holding this page's takeover freeze, or null when it isn't frozen. */
+export function withdrawalFreezeIssue(
+  db: Database | Tx,
+  input: { profileId: string },
+): Promise<string | null> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({ issueId: withdrawalHolds.issueId })
+      .from(withdrawalHolds)
+      .where(
+        and(
+          eq(withdrawalHolds.profileId, input.profileId),
+          eq(withdrawalHolds.reason, 'account_takeover'),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      );
+    return row?.issueId ?? null;
+  });
+}
+
+/** Whether a reported takeover has this page's withdrawals, and so its bank, frozen. */
+export async function withdrawalsFrozen(
+  db: Database | Tx,
+  input: { profileId: string },
+): Promise<boolean> {
+  return (await withdrawalFreezeIssue(db, input)) !== null;
 }
 
 /**
@@ -579,7 +708,15 @@ export type WithdrawalQuoteResult =
   | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
   | { state: 'no_destination' }
   | { state: 'destination_pending' }
-  | { state: 'paused'; reason: 'reversal' | 'in_debt' | 'unexpected_payout' }
+  | {
+      state: 'paused';
+      reason:
+        | 'reversal'
+        | 'in_debt'
+        | 'unexpected_payout'
+        | 'review'
+        | 'switched_off';
+    }
   | { state: 'provider_unavailable' };
 
 // Money can only leave through the provider that collected it. A paid tip collected by any other
@@ -616,6 +753,8 @@ async function payoutRoute(
   /** Whether this provider pays through a connected account at all. */
   accountless: boolean;
   accountReference: string | null;
+  /** The provider will no longer pay this account out by itself. */
+  manualPayouts: boolean;
   destination: {
     id: string;
     bankName: string;
@@ -630,7 +769,10 @@ async function payoutRoute(
     accountless || !environment
       ? []
       : await db
-          .select({ reference: paymentAccounts.providerAccountReference })
+          .select({
+            reference: paymentAccounts.providerAccountReference,
+            manualPayoutsAt: paymentAccounts.manualPayoutsAt,
+          })
           .from(paymentAccounts)
           .where(
             and(
@@ -657,6 +799,7 @@ async function payoutRoute(
   return {
     accountless,
     accountReference: account?.reference ?? null,
+    manualPayouts: Boolean(account?.manualPayoutsAt),
     destination: destination ?? null,
   };
 }
@@ -670,6 +813,9 @@ function routeBlock(
   | { state: 'destination_pending' }
   | null {
   if (!route.accountless && !route.accountReference)
+    return { state: 'setup_needed', requirementsDue: [] };
+  // Otherwise the provider could pay the balance out itself while a withdrawal also spends it.
+  if (!route.accountless && !route.manualPayouts)
     return { state: 'setup_needed', requirementsDue: [] };
   if (route.destination?.status === 'pending_review')
     return { state: 'destination_pending' };
@@ -749,7 +895,7 @@ const notNegative = (a: bigint) => (a < 0n ? 0n : a);
 async function activeHold(
   db: Pick<Database, 'select'>,
   profileId: string,
-): Promise<'reversal' | 'in_debt' | 'unexpected_payout' | null> {
+): Promise<'reversal' | 'in_debt' | 'unexpected_payout' | 'review' | null> {
   const [hold] = await db
     .select({ reason: withdrawalHolds.reason })
     .from(withdrawalHolds)
@@ -761,7 +907,10 @@ async function activeHold(
     )
     .orderBy(asc(withdrawalHolds.createdAt))
     .limit(1);
-  return (hold?.reason as 'reversal' | 'in_debt' | 'unexpected_payout') ?? null;
+  if (!hold) return null;
+  // Whoever holds the account may be the one who took it: a freeze never says what it is about.
+  if (hold.reason === 'account_takeover') return 'review';
+  return hold.reason as 'reversal' | 'in_debt' | 'unexpected_payout';
 }
 
 /** Whether the provider itself is checking one of the recipient's unfinished payouts. */
@@ -794,6 +943,8 @@ export async function withdrawalQuote(
     onReadFailure?: ProviderReadFailureLog;
   },
 ): Promise<WithdrawalQuoteResult> {
+  if (await withdrawalsSwitchedOff(db))
+    return { state: 'paused', reason: 'switched_off' };
   const { hold, route, foreign } = await guarded(async () => ({
     hold: await activeHold(db, input.profileId),
     route: await payoutRoute(db, input),
@@ -889,6 +1040,9 @@ export async function requestWithdrawal(
   const earlier = await guarded(() => replayIn(db));
   if (earlier) return earlier;
   if (input.amountMinor <= 0n) throw new OperationError('INVALID_INPUT');
+  // Before any provider read: while off nothing about this request needs one.
+  if ((await withdrawalsSwitchState(db)).paused)
+    throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
   const providerName = input.provider.name;
   const isForeign = () =>
     collectedElsewhere(db, {
@@ -921,6 +1075,9 @@ export async function requestWithdrawal(
         .for('update');
       const afterLock = await replayIn(tx);
       if (afterLock) return afterLock;
+      // Under the lock too, and read for real: a switch that can't be read refuses here.
+      if ((await withdrawalsSwitchState(tx)).paused)
+        throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
       if (await activeHold(tx, input.profileId))
         throw new OperationError('WITHDRAWALS_PAUSED');
       const { availableMinor } = await balanceIn(tx, input.profileId);

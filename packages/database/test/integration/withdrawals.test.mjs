@@ -437,8 +437,8 @@ test('withdrawals through the provider', async (t) => {
     q(
       `INSERT INTO payment_accounts
          (id, profile_id, provider, environment, provider_account_reference, status,
-          charges_enabled, payouts_enabled, fee_collector)
-       VALUES ($1, $2, 'bachs', 'sandbox', $3, 'ACTIVE', true, true, 'platform')`,
+          charges_enabled, payouts_enabled, fee_collector, manual_payouts_at)
+       VALUES ($1, $2, 'bachs', 'sandbox', $3, 'ACTIVE', true, true, 'platform', now())`,
       [randomUUID(), TOBI.id, ACCOUNT],
     );
   const seedDestination = async (status = 'usable') => {

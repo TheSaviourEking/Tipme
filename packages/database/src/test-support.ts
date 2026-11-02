@@ -121,6 +121,10 @@ export async function openTestDatabase(): Promise<TestDatabase> {
         await client.query(
           `TRUNCATE ${rows.map((row) => `"${row.tablename}"`).join(', ')} CASCADE`,
         );
+        // Migrations seed this row, and no row reads as withdrawals off.
+        await client.query(
+          `INSERT INTO withdrawals_switch (id, paused) VALUES ('global', false)`,
+        );
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK').catch(() => undefined);

@@ -1,6 +1,6 @@
 {
-  "id": "ad6334b5-86a9-45bb-8c37-ddd2977937e8",
-  "prevId": "2791bef1-8bed-465a-b72b-a9ac0cfca792",
+  "id": "00a51689-c53e-471f-91a9-f15df73f95fd",
+  "prevId": "54597dfa-c77c-4494-a91e-4b86084a3045",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -548,7 +548,7 @@
       "checkConstraints": {
         "email_codes_purpose": {
           "name": "email_codes_purpose",
-          "value": "purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email')"
+          "value": "purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email', 'payout_destination')"
         }
       },
       "isRLSEnabled": false
@@ -1058,7 +1058,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -1070,7 +1070,7 @@
         },
         "issues_resolution_outcome": {
           "name": "issues_resolution_outcome",
-          "value": "resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off'))"
+          "value": "resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off', 'staff_confirmed_absent'))"
         },
         "issues_resolution": {
           "name": "issues_resolution",
@@ -2739,6 +2739,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "payout_setup_attempted_at": {
+          "name": "payout_setup_attempted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3014,6 +3020,123 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payment_reserve_readings": {
+      "name": "payment_reserve_readings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "char(3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "available_minor": {
+          "name": "available_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "threshold_minor": {
+          "name": "threshold_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "low": {
+          "name": "low",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alerted_at": {
+          "name": "alerted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payment_reserve_readings_latest": {
+          "name": "payment_reserve_readings_latest",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "currency",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_reserve_readings_read_at": {
+          "name": "payment_reserve_readings_read_at",
+          "columns": [
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_reserve_readings_currency_iso": {
+          "name": "payment_reserve_readings_currency_iso",
+          "value": "currency ~ '^[A-Z]{3}$'"
+        },
+        "payment_reserve_readings_provider": {
+          "name": "payment_reserve_readings_provider",
+          "value": "provider ~ '^[a-z][a-z0-9_-]*$'"
+        },
+        "payment_reserve_readings_known": {
+          "name": "payment_reserve_readings_known",
+          "value": "(available_minor IS NULL AND low IS NULL)\n        OR (available_minor IS NOT NULL AND low IS NOT NULL AND low = (available_minor < threshold_minor))"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.payout_destinations": {
@@ -4773,7 +4896,7 @@
       "checkConstraints": {
         "role_permissions_known": {
           "name": "role_permissions_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve')"
         }
       },
       "isRLSEnabled": false
@@ -4794,20 +4917,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "system": {
-          "name": "system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4816,23 +4925,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "roles_name_lower": {
-          "name": "roles_name_lower",
-          "columns": [
-            {
-              "expression": "lower(\"name\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -5162,83 +5255,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.staff_permission_overrides": {
-      "name": "staff_permission_overrides",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "permission": {
-          "name": "permission",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "effect": {
-          "name": "effect",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "granted_by": {
-          "name": "granted_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "staff_permission_overrides_user_id_users_id_fk": {
-          "name": "staff_permission_overrides_user_id_users_id_fk",
-          "tableFrom": "staff_permission_overrides",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "staff_permission_overrides_granted_by_users_id_fk": {
-          "name": "staff_permission_overrides_granted_by_users_id_fk",
-          "tableFrom": "staff_permission_overrides",
-          "tableTo": "users",
-          "columnsFrom": ["granted_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "staff_permission_overrides_user_id_permission_pk": {
-          "name": "staff_permission_overrides_user_id_permission_pk",
-          "columns": ["user_id", "permission"]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "staff_permission_overrides_known": {
-          "name": "staff_permission_overrides_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
-        },
-        "staff_permission_overrides_effect": {
-          "name": "staff_permission_overrides_effect",
-          "value": "effect IN ('add', 'remove')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.staff_totp": {
@@ -5824,6 +5840,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "email_changed_at": {
+          "name": "email_changed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "deleted_at": {
           "name": "deleted_at",
           "type": "timestamp with time zone",
@@ -6207,7 +6229,7 @@
     "public.transition_cause": {
       "name": "transition_cause",
       "schema": "public",
-      "values": ["provider_event", "system", "expiry"]
+      "values": ["provider_event", "system", "expiry", "staff"]
     }
   },
   "schemas": {},

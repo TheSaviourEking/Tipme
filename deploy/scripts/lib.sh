@@ -57,6 +57,23 @@ compose_for() {
     docker compose -f "$RELEASES/$version/compose.staging.yml" --env-file "$ENV_FILE" "$@"
 }
 
+# What Compose itself reads for the switch, for this version: it alone sees a value from the shell,
+# which beats the env file. `config` starts nothing and needs no daemon. Its output and errors hold
+# settings, so neither is shown. Every service must say the expected value, and something must.
+compose_agrees_on_live() {
+  local version=$1 expected=$2 config said
+  if ! config=$(compose_for "$version" config 2>/dev/null); then
+    echo "Compose could not read this version's config, so PAYMENTS_LIVE_ENABLED can't be confirmed. Nothing was started." >&2
+    exit 2
+  fi
+  said=$(printf '%s\n' "$config" |
+    sed -nE 's/^[[:space:]]+PAYMENTS_LIVE_ENABLED:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | sort -u)
+  if [[ "$said" != "$expected" ]]; then
+    echo "Compose does not read PAYMENTS_LIVE_ENABLED as $expected, which this deploy expects: look for it in the deploy shell's environment and in $ENV_FILE. Nothing was started." >&2
+    exit 2
+  fi
+}
+
 # A version can run only if Actions shipped both its image and its deploy files.
 shipped() {
   local version=$1
@@ -120,6 +137,62 @@ preflight_production() {
   role_passwords POSTGRES_RUNTIME_PASSWORD POSTGRES_MIGRATOR_PASSWORD POSTGRES_BACKUP_PASSWORD
   if ! docker network inspect edge-production >/dev/null 2>&1; then
     echo "The edge-production network does not exist: create it with deploy/edge/setup-networks.sh first." >&2
+    exit 2
+  fi
+}
+
+# How many lines set this name, however they are written. Compose takes the last one and also reads
+# `export NAME=` and `NAME: value`, while `setting` takes the first, so more than one means the two
+# could disagree.
+setting_lines() { grep -cE "^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*[=:]" "$ENV_FILE" || true; }
+
+# Every line but a comment with this exact name in it, whatever surrounds it.
+lines_naming() { grep -E "(^|[^A-Za-z0-9_])$1([^A-Za-z0-9_]|\$)" "$ENV_FILE" | grep -vE '^[[:space:]]*#' || true; }
+
+# Stops a deploy before anything starts when the switch isn't clearly what this deploy was told to
+# expect, or the worker would refuse it after the new API is already serving
+# (apps/worker/src/config.ts keeps that rule). Compose has more ways to read a line than we can list
+# (quotes, comments, `export`, `NAME: true`, the last duplicate), so any line naming the switch that
+# isn't exactly NAME=true or NAME=false is refused rather than interpreted. Only the worker holds the
+# alert address, so it is checked here and not in the API's config. The address is a credential:
+# messages name settings only. No line at all is false, Compose's default.
+preflight_live_payments() {
+  local expected=${1:-false} value=false name address
+  if [[ "$expected" != true && "$expected" != false ]]; then
+    echo "The expected live state must be true or false." >&2
+    exit 2
+  fi
+  local line
+  line=$(lines_naming PAYMENTS_LIVE_ENABLED)
+  if [[ "$line" == *$'\n'* ]]; then
+    echo "PAYMENTS_LIVE_ENABLED is set more than once in $ENV_FILE: keep one line." >&2
+    exit 2
+  fi
+  if [[ -n "$line" ]]; then
+    if [[ "$line" != PAYMENTS_LIVE_ENABLED=true && "$line" != PAYMENTS_LIVE_ENABLED=false ]]; then
+      echo "PAYMENTS_LIVE_ENABLED must be written exactly PAYMENTS_LIVE_ENABLED=true or =false in $ENV_FILE: no quotes, spaces, colons, comments or export." >&2
+      exit 2
+    fi
+    value=${line#PAYMENTS_LIVE_ENABLED=}
+  fi
+  if [[ "$value" != "$expected" ]]; then
+    echo "$ENV_FILE says PAYMENTS_LIVE_ENABLED=$value, but this deploy expects live=$expected (the repository variable PRODUCTION_PAYMENTS_LIVE, or the second argument here). Nothing was started." >&2
+    exit 2
+  fi
+  [[ "$value" == true ]] || return 0
+  for name in ALERT_WEBHOOK_URL LIVE_CHECKOUT_HANDLES; do
+    if (( $(setting_lines "$name") > 1 )); then
+      echo "$name is set more than once in $ENV_FILE: keep one line." >&2
+      exit 2
+    fi
+  done
+  address=$(setting ALERT_WEBHOOK_URL || true)
+  if [[ -z "$address" ]]; then
+    echo "ALERT_WEBHOOK_URL is required in $ENV_FILE once PAYMENTS_LIVE_ENABLED=true: the worker refuses to start without it." >&2
+    exit 2
+  fi
+  if [[ "$address" != https://* ]]; then
+    echo "ALERT_WEBHOOK_URL must be https in $ENV_FILE." >&2
     exit 2
   fi
 }

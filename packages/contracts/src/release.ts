@@ -45,3 +45,23 @@ export type RetentionBlock =
   | 'wal-gap'
   | 'archive-missing'
   | 'other';
+
+/**
+ * GET /health/payments: for the watcher. Public, so it carries no amount, provider or detail.
+ * `reserveLow` means the reserve was read and is low, nothing else; `unreadable` means the last
+ * read failed. The worker alerts on both (once, then every 6 hours), so a watcher only prints them.
+ * `stale` is the one the watcher alarms on, because a stopped worker cannot alert for itself: true
+ * when the provider is Bachs live with payments on and nothing was read for over 45 minutes (or
+ * ever). `readAt` is when the worker last read the reserve (null before the first read).
+ */
+export interface PaymentsHealth {
+  reserveLow: boolean;
+  unreadable: boolean;
+  stale: boolean;
+  readAt: string | null;
+  /**
+   * False when this API's live state isn't what the record of switches says: a failed record, or
+   * a deploy that failed partway. The watcher raises it. Older APIs send nothing.
+   */
+  switchRecordMatches?: boolean;
+}

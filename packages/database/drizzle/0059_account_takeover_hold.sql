@@ -1,0 +1,6 @@
+ALTER TABLE "issues" DROP CONSTRAINT "issues_kind";--> statement-breakpoint
+ALTER TABLE "issues" DROP CONSTRAINT "issues_resolution_outcome";--> statement-breakpoint
+ALTER TABLE "withdrawal_holds" DROP CONSTRAINT "withdrawal_holds_reason";--> statement-breakpoint
+ALTER TABLE "issues" ADD CONSTRAINT "issues_kind" CHECK (kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported'));--> statement-breakpoint
+ALTER TABLE "issues" ADD CONSTRAINT "issues_resolution_outcome" CHECK (resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off', 'staff_confirmed_absent', 'account_secured')));--> statement-breakpoint
+ALTER TABLE "withdrawal_holds" ADD CONSTRAINT "withdrawal_holds_reason" CHECK (reason IN ('reversal', 'in_debt', 'unexpected_payout', 'account_takeover'));

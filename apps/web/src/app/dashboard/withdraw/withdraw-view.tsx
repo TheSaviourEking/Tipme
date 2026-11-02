@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import type {
   DashboardSummary,
   WithdrawalQuoteResponse,
@@ -13,7 +13,12 @@ import { naira, parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 import { withdrawState } from '@/lib/withdraw-state';
 
-export default function WithdrawPage() {
+export default function WithdrawPage({
+  pilotNotice,
+}: {
+  /** The pilot notice, rendered on the server (null outside live mode). */
+  pilotNotice?: ReactNode;
+}) {
   const id = useId();
   const copy = paymentModeCopy(usePaymentMode());
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -61,6 +66,7 @@ export default function WithdrawPage() {
     }
     if (
       result.code === 'WITHDRAWALS_PAUSED' ||
+      result.code === 'WITHDRAWALS_SWITCHED_OFF' ||
       result.code === 'PAYOUT_SETUP_NEEDED' ||
       result.code === 'PAYOUT_DESTINATION_NEEDED' ||
       result.code === 'PAYOUT_PROVIDER_UNAVAILABLE' ||
@@ -95,6 +101,7 @@ export default function WithdrawPage() {
       <p>
         Available: <strong>{naira(summary.availableMinor)}</strong>
       </p>
+      {pilotNotice}
       {state.kind !== 'collected_elsewhere' && copy.withdrawNotice && (
         <Notice title="Test withdrawal">{copy.withdrawNotice}</Notice>
       )}

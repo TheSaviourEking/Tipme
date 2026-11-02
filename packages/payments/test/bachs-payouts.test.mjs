@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import { test } from 'node:test';
 import {
   PayoutRejectedError,
+  PlatformRefusalError,
   UncertainProviderOutcomeError,
   createBachsProvider,
 } from '../dist/index.js';
@@ -238,16 +239,50 @@ test('destination refusals are definite failures with reason destination', async
   }
 });
 
-test('a platform in debt fails the fee transfer without blaming the recipient', async () => {
-  // On a transfer the debt is the platform's own, so it must not pause the recipient.
+test('an empty or indebted reserve on the fee transfer is the platform, not the recipient', async () => {
+  // On a transfer the debited side is the platform, so it must not fail or pause the recipient.
+  for (const code of ['INSUFFICIENT_BALANCE', 'ORGANIZATION_IN_DEBT']) {
+    const { provider } = fake(jsonResponse({ error_code: code }, 400));
+    await assert.rejects(
+      provider.coverPayoutFee(feeInput),
+      (error) =>
+        error instanceof PlatformRefusalError &&
+        error.refusal === 'reserve_empty' &&
+        error.providerCode === code,
+    );
+  }
+});
+
+test('the same code on the payout itself is about the recipient account', async () => {
   const { provider } = fake(
-    jsonResponse({ error_code: 'ORGANIZATION_IN_DEBT' }, 400),
+    jsonResponse({ error_code: 'INSUFFICIENT_BALANCE' }, 400),
   );
   await assert.rejects(
-    provider.coverPayoutFee(feeInput),
+    provider.initiatePayout(payoutInput),
     (error) =>
       error instanceof PayoutRejectedError && error.failureReason === 'other',
   );
+});
+
+test('a 401 or 403 on either money call is the platform key, with or without a code', async () => {
+  for (const [status, body] of [
+    [401, { error_code: 'UNAUTHORIZED' }],
+    [403, { error_code: 'FORBIDDEN' }],
+    [401, {}],
+    [403, {}],
+  ])
+    for (const call of [
+      (provider) => provider.coverPayoutFee(feeInput),
+      (provider) => provider.initiatePayout(payoutInput),
+    ]) {
+      const { provider } = fake(jsonResponse(body, status));
+      await assert.rejects(
+        call(provider),
+        (error) =>
+          error instanceof PlatformRefusalError &&
+          error.refusal === 'provider_key',
+      );
+    }
 });
 
 test('a timeout on a payout or transfer is uncertain, never a failure', async () => {
@@ -448,6 +483,34 @@ test('a destination retry keeps its key, and the key does not reveal the account
   assert.equal(first, retry);
   assert.notEqual(first, other);
   assert.doesNotMatch(first, new RegExp(ACCOUNT_NUMBER));
+});
+
+test('reading a destination asks for it on the account, and is_usable decides', async () => {
+  for (const [answer, status] of [
+    [{ id: 'pd_1', status: 'approved', is_usable: true }, 'usable'],
+    [{ id: 'pd_1', status: 'approved', is_usable: false }, 'pending_review'],
+    [
+      { id: 'pd_1', status: 'pending_review', is_usable: false },
+      'pending_review',
+    ],
+    [{ id: 'pd_1', status: 'rejected', is_usable: false }, 'rejected'],
+  ]) {
+    const { provider, calls } = fake(jsonResponse(answer));
+    assert.equal(
+      await provider.payoutDestinationStatus(ACCOUNT, 'pd_1'),
+      status,
+    );
+    assert.equal(calls[0].method, 'GET');
+    assert.equal(calls[0].path, '/v1/payouts/destinations/pd_1');
+    assert.equal(calls[0].headers['X-Account-Id'], ACCOUNT);
+  }
+});
+
+test('a not-found read is no answer: only a stated rejection rejects', async () => {
+  const gone = fake(jsonResponse({ detail: 'Not found' }, 404));
+  await assert.rejects(gone.provider.payoutDestinationStatus(ACCOUNT, 'pd_1'));
+  const down = fake(jsonResponse({ detail: 'Oops' }, 500));
+  await assert.rejects(down.provider.payoutDestinationStatus(ACCOUNT, 'pd_1'));
 });
 
 test('the bank list comes from the reference endpoint', async () => {

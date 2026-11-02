@@ -3,7 +3,7 @@ import type {
   OpsPayoutIssueView,
 } from '@tipme/contracts';
 import { PAYOUT_START_EVENT } from '@tipme/contracts';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   issues,
@@ -13,6 +13,7 @@ import {
   withdrawalHolds,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
+import { withdrawalsSwitchState } from './withdrawals-switch.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { newId } from './ids.js';
 import { markResolved } from './issues.js';
@@ -23,6 +24,7 @@ import {
   isAmbiguousLookup,
   openPayoutConflict,
   PAYOUT_NOT_FOUND_AFTER_MS,
+  PAYOUT_STUCK_AFTER_MS,
   type FoundPayout,
   type PayoutStartLog,
 } from './payout-start.js';
@@ -84,6 +86,16 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(payouts)
     .where(eq(payouts.id, payoutId));
   if (!payout) return null;
+  const [takeover] = await db
+    .select({ id: withdrawalHolds.id })
+    .from(withdrawalHolds)
+    .where(
+      and(
+        eq(withdrawalHolds.profileId, payout.profileId),
+        eq(withdrawalHolds.reason, 'account_takeover'),
+      ),
+    )
+    .limit(1);
   const [hold] = await db
     .select({ id: withdrawalHolds.id })
     .from(withdrawalHolds)
@@ -91,6 +103,20 @@ async function loadCase(db: Database | Tx, issueId: string) {
       and(
         eq(withdrawalHolds.profileId, payout.profileId),
         isNull(withdrawalHolds.releasedAt),
+      ),
+    )
+    .limit(1);
+  const [touched] = await db
+    .select({ id: withdrawalHolds.id })
+    .from(withdrawalHolds)
+    .where(
+      and(
+        eq(withdrawalHolds.profileId, payout.profileId),
+        or(
+          isNull(withdrawalHolds.releasedAt),
+          gte(withdrawalHolds.createdAt, payout.createdAt),
+          gte(withdrawalHolds.releasedAt, payout.createdAt),
+        ),
       ),
     )
     .limit(1);
@@ -126,6 +152,8 @@ async function loadCase(db: Database | Tx, issueId: string) {
     issue,
     payout,
     holdActive: Boolean(hold),
+    holdTouched: Boolean(touched),
+    takeoverReported: Boolean(takeover),
     parkedEvent: Boolean(parked),
     openConflict: Boolean(conflict),
     destinationReplaced: Boolean(destination?.replacedAt),
@@ -214,6 +242,11 @@ function offersFor(
   )
     return none;
   const waitingSince = (payout.startUncertainAt ?? payout.createdAt).getTime();
+  // The payout call may have reached the provider, whose list could lag, so it gets the long wait.
+  const wait =
+    payout.startStep === 'payout'
+      ? PAYOUT_STUCK_AFTER_MS
+      : PAYOUT_NOT_FOUND_AFTER_MS;
   return {
     applyReported: null,
     // Never tried at all, so sending it for the first time can't send it twice.
@@ -221,9 +254,7 @@ function offersFor(
       payout.startStep === null &&
       payout.startUncertainAt === null &&
       !kase.holdActive,
-    markFailed:
-      payout.startStep !== 'payout' &&
-      now.getTime() - waitingSince >= PAYOUT_NOT_FOUND_AFTER_MS,
+    markFailed: now.getTime() - waitingSince >= wait,
   };
 }
 
@@ -236,6 +267,8 @@ function viewOf(kase: Case, answer: Answer, now: Date): OpsPayoutIssueView {
     startStep: kase.payout.startStep as 'fee' | 'payout' | null,
     startAttemptedAt: kase.payout.startUncertainAt?.toISOString() ?? null,
     holdActive: kase.holdActive,
+    holdTouched: kase.holdTouched,
+    takeoverReported: kase.takeoverReported,
     parkedEvent: kase.parkedEvent,
     openConflict: kase.openConflict,
     destinationReplaced: kase.destinationReplaced,
@@ -414,6 +447,8 @@ export async function resumeHeldPayout(
         .for('update');
       const current = await loadCase(tx, input.issueId);
       if (!current || !offersFor(current, answer, now).resume) return false;
+      // Asked again here: the job would only wait, with the issue left saying it was resumed.
+      if ((await withdrawalsSwitchState(tx)).paused) return false;
       await enqueueOutbox(tx, {
         eventType: PAYOUT_START_EVENT,
         aggregateId: kase.payout.id,
@@ -433,8 +468,9 @@ export async function resumeHeldPayout(
 }
 
 /**
- * Releases the reservation of a payout the provider definitely doesn't have, past the wait, with no
- * payout call ever noted. Staff also say they checked the provider's dashboard. The checks are made
+ * Releases the reservation of a payout the provider definitely doesn't have, past the wait, which is
+ * a day if the payout call was noted. Staff also say they checked the provider's dashboard. If money
+ * did leave after all, a paid event for it is a conflict that a person sees. The checks are made
  * again under the row lock, so a start that began meanwhile stops this, and its fresh mark fails
  * the wait. The ledger is untouched: a reservation is only money not yet posted. A top-up that went
  * through stays in the recipient's account at the provider.
@@ -467,7 +503,7 @@ export async function markPayoutFailedAbsent(
         now,
         `start step ${current.payout.startStep ?? 'none'}; start attempted ${
           current.payout.startUncertainAt?.toISOString() ?? 'never'
-        }; provider had none; dashboard checked`,
+        }; provider had none; dashboardVerified: staff checked the dashboard`,
       );
       await markResolved(tx, {
         issueId: kase.issue.id,

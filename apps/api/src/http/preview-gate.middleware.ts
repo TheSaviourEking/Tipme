@@ -8,7 +8,7 @@ export const PREVIEW_COOKIE = '__Secure-tipme_preview';
 // Open without the preview cookie: health probes, the release check (its own bearer token) and
 // signed provider webhooks. Anything unusual in the path is never treated as open.
 const OPEN = [
-  /^\/health(\/(live|ready|release|backups))?$/,
+  /^\/health(\/(live|ready|release|backups|payments))?$/,
   /^\/v1\/release\//,
   /^\/v1\/webhooks\//,
 ];

@@ -1,6 +1,6 @@
 {
-  "id": "152edd36-b76d-41be-a2f4-a939c9c90ded",
-  "prevId": "a14b40fa-d69d-4291-ab32-825527fcd7f3",
+  "id": "e2a8b564-f806-4d19-af62-d5d2433b84ad",
+  "prevId": "61e77499-89d4-41a9-9ffe-fe858fcb3e89",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -154,154 +154,6 @@
         "analytics_events_minute": {
           "name": "analytics_events_minute",
           "value": "at_minute = date_trunc('minute', at_minute)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.approval_requests": {
-      "name": "approval_requests",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "summary": {
-          "name": "summary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "permission": {
-          "name": "permission",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "requested_by": {
-          "name": "requested_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "decided_by": {
-          "name": "decided_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decided_reason": {
-          "name": "decided_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "approval_requests_pending": {
-          "name": "approval_requests_pending",
-          "columns": [
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "status = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "approval_requests_created": {
-          "name": "approval_requests_created",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "approval_requests_requested_by_users_id_fk": {
-          "name": "approval_requests_requested_by_users_id_fk",
-          "tableFrom": "approval_requests",
-          "tableTo": "users",
-          "columnsFrom": ["requested_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "approval_requests_decided_by_users_id_fk": {
-          "name": "approval_requests_decided_by_users_id_fk",
-          "tableFrom": "approval_requests",
-          "tableTo": "users",
-          "columnsFrom": ["decided_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "approval_requests_status": {
-          "name": "approval_requests_status",
-          "value": "status IN ('pending', 'approved', 'rejected', 'cancelled', 'expired', 'stale')"
         }
       },
       "isRLSEnabled": false
@@ -696,7 +548,7 @@
       "checkConstraints": {
         "email_codes_purpose": {
           "name": "email_codes_purpose",
-          "value": "purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email')"
+          "value": "purpose IN ('sign_in', 'email_change', 'recovery_email', 'recovery', 'recovery_new_email', 'payout_destination')"
         }
       },
       "isRLSEnabled": false
@@ -1206,7 +1058,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'staff_acted_alone', 'staff_approval_pending', 'staff_last_approver_removed')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -1218,7 +1070,7 @@
         },
         "issues_resolution_outcome": {
           "name": "issues_resolution_outcome",
-          "value": "resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off', 'staff_confirmed_absent'))"
+          "value": "resolution_outcome IS NULL OR (status = 'resolved' AND resolution_outcome IN ('resolved_by_provider', 'recipient_owes', 'written_off', 'staff_confirmed_absent', 'account_secured'))"
         },
         "issues_resolution": {
           "name": "issues_resolution",
@@ -1536,6 +1388,71 @@
           "value": "currency ~ '^[A-Z]{3}$'"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.live_payment_switches": {
+      "name": "live_payment_switches",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "live": {
+          "name": "live",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "switched_at": {
+          "name": "switched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "live_payment_switches_latest": {
+          "name": "live_payment_switches_latest",
+          "columns": [
+            {
+              "expression": "switched_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.mail_daily_stats": {
@@ -2626,12 +2543,6 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "last_totp_at": {
-          "name": "last_totp_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -2889,6 +2800,12 @@
         },
         "payout_capabilities_requested_at": {
           "name": "payout_capabilities_requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_setup_attempted_at": {
+          "name": "payout_setup_attempted_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -3168,6 +3085,129 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payment_reserve_readings": {
+      "name": "payment_reserve_readings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "char(3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "available_minor": {
+          "name": "available_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "threshold_minor": {
+          "name": "threshold_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "low": {
+          "name": "low",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alerted_at": {
+          "name": "alerted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alert_claimed_at": {
+          "name": "alert_claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payment_reserve_readings_latest": {
+          "name": "payment_reserve_readings_latest",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "currency",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_reserve_readings_read_at": {
+          "name": "payment_reserve_readings_read_at",
+          "columns": [
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_reserve_readings_currency_iso": {
+          "name": "payment_reserve_readings_currency_iso",
+          "value": "currency ~ '^[A-Z]{3}$'"
+        },
+        "payment_reserve_readings_provider": {
+          "name": "payment_reserve_readings_provider",
+          "value": "provider ~ '^[a-z][a-z0-9_-]*$'"
+        },
+        "payment_reserve_readings_known": {
+          "name": "payment_reserve_readings_known",
+          "value": "(available_minor IS NULL AND low IS NULL)\n        OR (available_minor IS NOT NULL AND low IS NOT NULL AND low = (available_minor < threshold_minor))"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.payout_destinations": {
@@ -4927,7 +4967,7 @@
       "checkConstraints": {
         "role_permissions_known": {
           "name": "role_permissions_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve')"
         }
       },
       "isRLSEnabled": false
@@ -4948,20 +4988,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "system": {
-          "name": "system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4970,23 +4996,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "roles_name_lower": {
-          "name": "roles_name_lower",
-          "columns": [
-            {
-              "expression": "lower(\"name\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -5235,12 +5245,6 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "enrolled_at": {
-          "name": "enrolled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -5322,83 +5326,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.staff_permission_overrides": {
-      "name": "staff_permission_overrides",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "permission": {
-          "name": "permission",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "effect": {
-          "name": "effect",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "granted_by": {
-          "name": "granted_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "staff_permission_overrides_user_id_users_id_fk": {
-          "name": "staff_permission_overrides_user_id_users_id_fk",
-          "tableFrom": "staff_permission_overrides",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "staff_permission_overrides_granted_by_users_id_fk": {
-          "name": "staff_permission_overrides_granted_by_users_id_fk",
-          "tableFrom": "staff_permission_overrides",
-          "tableTo": "users",
-          "columnsFrom": ["granted_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "staff_permission_overrides_user_id_permission_pk": {
-          "name": "staff_permission_overrides_user_id_permission_pk",
-          "columns": ["user_id", "permission"]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "staff_permission_overrides_known": {
-          "name": "staff_permission_overrides_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
-        },
-        "staff_permission_overrides_effect": {
-          "name": "staff_permission_overrides_effect",
-          "value": "effect IN ('add', 'remove')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.staff_totp": {
@@ -5984,6 +5911,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "email_changed_at": {
+          "name": "email_changed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "deleted_at": {
           "name": "deleted_at",
           "type": "timestamp with time zone",
@@ -6275,7 +6208,7 @@
       "checkConstraints": {
         "withdrawal_holds_reason": {
           "name": "withdrawal_holds_reason",
-          "value": "reason IN ('reversal', 'in_debt', 'unexpected_payout')"
+          "value": "reason IN ('reversal', 'in_debt', 'unexpected_payout', 'account_takeover')"
         },
         "withdrawal_holds_release": {
           "name": "withdrawal_holds_release",
