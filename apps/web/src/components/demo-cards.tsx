@@ -15,11 +15,13 @@ import { ProBadge, Surface } from '@tipme/ui';
 // the plain card. Nothing here fetches or navigates.
 const FINE_POINTER = '(hover: hover) and (pointer: fine)';
 const canPlay = () => window.matchMedia(FINE_POINTER).matches;
+/** All three cards show from 75rem; below it only Ada's, which then acts as the centre card. */
+const allShown = () => window.matchMedia('(min-width: 75rem)').matches;
 
 type Slot = 'left' | 'centre' | 'right';
 const SLOTS: Slot[] = ['left', 'centre', 'right'];
-/** Left to right, as the board has them. */
-const START = ['Tobi', 'Ada', 'Zainab'];
+/** Left to right when the page opens: Zainab in the centre (the owner, 3 Nov 2026). */
+const START = ['Ada', 'Zainab', 'Tobi'];
 
 /**
  * The cards as a carousel: their names from left to right, and whether the centre one is turned
@@ -67,7 +69,8 @@ export function DemoStack({ children }: { children: ReactNode }) {
         at === 0
           ? [order[2], order[0], order[1]]
           : [order[1], order[2], order[0]];
-      return { order: turnedRing as string[], turned: false };
+      // Shown alone, the card was already the one in view: it turns over at once.
+      return { order: turnedRing as string[], turned: !allShown() };
     });
   const turnBack = (name: string) =>
     setCarousel((was) =>
@@ -232,7 +235,7 @@ export function PersonCard({
                   data-selected={index === chosen ? 'true' : undefined}
                   onClick={(event) => {
                     // To one side, the click goes on to the card and brings it to the centre.
-                    if (!canPlay() || !centred) return;
+                    if (!canPlay() || (!centred && allShown())) return;
                     event.stopPropagation();
                     setChosen(index);
                   }}
@@ -244,7 +247,7 @@ export function PersonCard({
             <span
               className="home-demo__tip"
               onClick={(event) => {
-                if (!canPlay() || !centred) return;
+                if (!canPlay() || (!centred && allShown())) return;
                 event.stopPropagation();
                 tip();
               }}

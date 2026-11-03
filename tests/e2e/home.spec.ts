@@ -164,6 +164,7 @@ test('pressing the example Tip says thank you for the chosen amount, makes no re
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
   const ada = page.locator('.home-demo__main');
+  await toCentre(page, ada);
   await ada.getByText('₦10,000', { exact: true }).click();
   await ada.getByText('Tip ₦10,000').click();
   await expect(ada).toHaveAttribute('data-flipped', 'true');
@@ -192,17 +193,19 @@ const slots = async (page: import('@playwright/test').Page) => ({
     .getAttribute('data-slot'),
 });
 
-/** Clicks the edge of a side card that the centre card leaves clear. */
-const clickSide = async (
+/** Brings a card to the centre by clicking its edge that the centre card leaves clear. */
+const toCentre = async (
   page: import('@playwright/test').Page,
   card: import('@playwright/test').Locator,
-  side: 'left' | 'right',
 ) => {
+  const slot = await card.getAttribute('data-slot');
+  if (slot === 'centre') return;
   const box = (await card.boundingBox())!;
   await page.mouse.click(
-    side === 'left' ? box.x + 24 : box.x + box.width - 24,
+    slot === 'left' ? box.x + 24 : box.x + box.width - 24,
     box.y + box.height / 2,
   );
+  await expect(card).toHaveAttribute('data-slot', 'centre');
 };
 
 test('clicking a side card turns the carousel to bring it to the centre, without turning it over', async ({
@@ -210,20 +213,21 @@ test('clicking a side card turns the carousel to bring it to the centre, without
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await ready(page);
+  // Zainab is in the centre when the page opens (the owner, 3 Nov 2026).
   expect(await slots(page)).toEqual({
-    tobi: 'left',
-    ada: 'centre',
-    zainab: 'right',
+    ada: 'left',
+    zainab: 'centre',
+    tobi: 'right',
   });
   const tobi = page.locator('.home-demo__card--tobi');
-  await clickSide(page, tobi, 'left');
+  await toCentre(page, tobi);
   expect(await slots(page)).toEqual({
+    zainab: 'left',
     tobi: 'centre',
     ada: 'right',
-    zainab: 'left',
   });
   await expect(tobi).toHaveAttribute('data-flipped', 'false');
-  await clickSide(page, page.locator('.home-demo__main'), 'right');
+  await toCentre(page, page.locator('.home-demo__main'));
   expect(await slots(page)).toEqual({
     tobi: 'left',
     ada: 'centre',
@@ -237,7 +241,7 @@ test('only the centre card turns over to its note, and it turns back when it lea
   await page.setViewportSize({ width: 1280, height: 900 });
   await ready(page);
   const tobi = page.locator('.home-demo__card--tobi');
-  await clickSide(page, tobi, 'left');
+  await toCentre(page, tobi);
   await tobi.click();
   await expect(tobi).toHaveAttribute('data-flipped', 'true');
   const back = tobi.locator('.home-flip__back');
@@ -246,7 +250,7 @@ test('only the centre card turns over to its note, and it turns back when it lea
   await tobi.click();
   await expect(tobi).toHaveAttribute('data-flipped', 'false');
   await tobi.click();
-  await clickSide(page, page.locator('.home-demo__card--zainab'), 'left');
+  await toCentre(page, page.locator('.home-demo__card--zainab'));
   await expect(tobi).toHaveAttribute('data-flipped', 'false');
   await expect(page.locator('.home-flip[data-flipped="true"]')).toHaveCount(0);
 });
@@ -256,12 +260,12 @@ test("Ada's keys and Tip only bring her to the centre while she is to one side",
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await ready(page);
-  await clickSide(page, page.locator('.home-demo__card--tobi'), 'left');
   const ada = page.locator('.home-demo__main');
+  expect((await slots(page)).ada).toBe('left');
   await ada.getByText('₦10,000', { exact: true }).dispatchEvent('click');
   expect((await slots(page)).ada).toBe('centre');
   await expect(ada.locator('.home-key[data-selected]')).toHaveText(/₦5,000/);
-  await clickSide(page, page.locator('.home-demo__card--zainab'), 'right');
+  await toCentre(page, page.locator('.home-demo__card--zainab'));
   await ada.getByText('Tip ₦5,000').dispatchEvent('click');
   expect((await slots(page)).ada).toBe('centre');
   await expect(ada).toHaveAttribute('data-flipped', 'false');
@@ -301,8 +305,8 @@ test('the centre card is always the biggest, as the carousel turns', async ({
       sides: await Promise.all(others.map(size)),
     };
   };
-  for (const turn of ['start', 'tobi', 'zainab'] as const) {
-    if (turn !== 'start') await clickSide(page, cards[turn], 'left');
+  for (const turn of ['start', 'tobi', 'ada', 'zainab'] as const) {
+    if (turn !== 'start') await toCentre(page, cards[turn]);
     const { centre, sides } = await sizes();
     for (const side of sides) {
       expect(centre.width, `${turn}: width`).toBeGreaterThan(side.width);
@@ -317,7 +321,7 @@ test('every card in the centre has amounts and a Tip, and says its own thank-you
   await page.setViewportSize({ width: 1280, height: 900 });
   await ready(page);
   const tobi = page.locator('.home-demo__card--tobi');
-  await clickSide(page, tobi, 'left');
+  await toCentre(page, tobi);
   for (const amount of ['₦2,000', '₦5,000', '₦10,000'])
     await expect(tobi.getByText(amount, { exact: true })).toBeVisible();
   await tobi.getByText('₦10,000', { exact: true }).click();
@@ -347,7 +351,7 @@ test("Zainab's keys are ₦100k, ₦500k and ₦1M, and her Tip and thank-you gi
   await page.setViewportSize({ width: 1280, height: 900 });
   await ready(page);
   const zainab = page.locator('.home-demo__card--zainab');
-  await clickSide(page, zainab, 'right');
+  await toCentre(page, zainab);
   await expect(zainab.locator('.home-key')).toHaveText([
     '₦100k',
     '₦500k',
