@@ -2199,6 +2199,12 @@ body:has(.profile-page) .brand__mark {
     visibility: hidden;
   }
 
+  /* The close key inside the menu is the same 44px key as the header's. */
+  .site-nav .menu-toggle {
+    padding: 0;
+    border-radius: 0.75rem;
+  }
+
   .site-nav__bar {
     display: flex;
     align-items: center;
@@ -2277,7 +2283,7 @@ body:has(.profile-page) .brand__mark {
 
   /* "Sign in" is a plain link here, like the others; "Create your page" is the board's black
      action, pinned to the bottom. */
-  .site-nav .tm-button--secondary {
+  .site-nav .tm-button--secondary:not(.menu-toggle) {
     justify-content: flex-start;
     min-height: 44px;
     padding: 0.625rem 0;
