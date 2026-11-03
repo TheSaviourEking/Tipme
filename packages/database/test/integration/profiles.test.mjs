@@ -169,7 +169,7 @@ test('profiles, handles and page states', async (t) => {
       await errorCode(
         createQuote(database.db, {
           handle: 'kemi',
-          tipMinor: 100000n,
+          tipMinor: 200000n,
           currency: 'NGN',
         }),
       ),
@@ -178,7 +178,7 @@ test('profiles, handles and page states', async (t) => {
     await setPageState(database.db, kemi, 'live');
     const quote = await createQuote(database.db, {
       handle: 'kemi',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     await setPageState(database.db, kemi, 'not_live');
@@ -259,7 +259,7 @@ test('profiles, handles and page states', async (t) => {
       assert.ok(adaUser, 'Ada is a seeded account');
       const quote = await createQuote(database.db, {
         handle: 'ada',
-        tipMinor: 100000n,
+        tipMinor: 200000n,
         currency: 'NGN',
       });
       const intent = await createPaymentIntent(database.db, {

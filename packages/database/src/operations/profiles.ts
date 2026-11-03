@@ -205,12 +205,16 @@ export function tipAmountsOf(profile: {
   tipPresetsMinor: bigint[] | null;
   minTipMinor: bigint | null;
 }): TipAmounts {
-  const own =
-    profile.plan === 'pro' && profile.tipPresetsMinor && profile.minTipMinor;
-  const presets = own
-    ? profile.tipPresetsMinor!
-    : [...STANDARD_TIP_PRESETS_MINOR];
-  const min = own ? profile.minTipMinor! : FEE_POLICY_V1.minTipMinor;
+  const floor = FEE_POLICY_V1.minTipMinor;
+  // A page can hold amounts saved under an older, lower floor: offer only what can be paid.
+  const payable =
+    profile.plan === 'pro' && profile.tipPresetsMinor && profile.minTipMinor
+      ? profile.tipPresetsMinor.filter((amount) => amount >= floor)
+      : [];
+  const own = payable.length > 0;
+  const presets = own ? payable : [...STANDARD_TIP_PRESETS_MINOR];
+  const min =
+    own && profile.minTipMinor! > floor ? profile.minTipMinor! : floor;
   return {
     presetsMinor: presets.map(String),
     minMinor: String(min),

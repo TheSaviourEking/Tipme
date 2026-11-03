@@ -43,7 +43,7 @@ async function waitFor(predicate, timeoutMs = 5000) {
 test('a paid tip reaches the worker through the outbox, carrying its trace, exactly once', async () => {
   const { quoteId } = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { tipId, attemptId } = await createPaymentIntent(database.db, {
@@ -56,7 +56,7 @@ test('a paid tip reaches the worker through the outbox, carrying its trace, exac
     eventType: 'payment.succeeded',
     attemptId,
     providerReference: `ref-${attemptId}`,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     providerFeeMinor: 1500n,
     signatureVerified: true,
@@ -77,7 +77,7 @@ test('a paid tip reaches the worker through the outbox, carrying its trace, exac
   await waitFor(() => received().length === 1);
   assert.equal(received()[0].trace_id, traceId);
   assert.ok(
-    !JSON.stringify(received()).includes('100000'),
+    !JSON.stringify(received()).includes('200000'),
     'amounts are not logged',
   );
 

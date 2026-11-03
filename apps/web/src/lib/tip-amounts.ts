@@ -5,8 +5,8 @@ import type { TipAmounts } from '@tipme/contracts';
 // There is no maximum tip: supporters tip what they want.
 
 const STANDARD: TipAmounts = {
-  presetsMinor: ['100000', '200000', '500000'],
-  minMinor: '100000',
+  presetsMinor: ['200000', '500000', '1000000'],
+  minMinor: '200000',
 };
 // Not a tip limit: the largest amount the API accepts as input (12 digits of kobo).
 const LARGEST_INPUT_MINOR = 999_999_999_999;

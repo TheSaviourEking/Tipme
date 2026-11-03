@@ -4,6 +4,7 @@ import {
   AmountOutOfRangeError,
   FEE_POLICY_V1,
   priceTip,
+  STANDARD_TIP_PRESETS_MINOR,
 } from '../dist/index.js';
 
 // PRD v1.1 proposed commercial rules (pretend money until approved): TipMe keeps 10% of the tip
@@ -28,9 +29,9 @@ test('the PRD example: a ₦5,000 tip gives ₦500 to TipMe (processing included
 
 test('the parts always add up to the tip, rounding half up, and processing never exceeds TipMe’s share', () => {
   for (const tip of [
-    100000n,
-    100001n,
-    123457n,
+    200000n,
+    200001n,
+    223457n,
     999999n,
     10_000_000n,
     999_999_999_999n,
@@ -42,13 +43,13 @@ test('the parts always add up to the tip, rounding half up, and processing never
   }
 });
 
-test('tips below ₦1,000 are refused; there is no maximum: supporters tip what they want', () => {
-  assert.throws(() => priceTip(99999n), AmountOutOfRangeError);
+test('tips below ₦2,000 are refused; there is no maximum: supporters tip what they want', () => {
+  assert.throws(() => priceTip(199999n), AmountOutOfRangeError);
   assert.equal(priceTip(10_000_001n).recipientNetMinor, 9_000_001n);
   assert.equal(priceTip(500_000_000_00n).recipientNetMinor, 450_000_000_00n);
   assert.equal('maxTipMinor' in FEE_POLICY_V1, false);
-  assert.equal(FEE_POLICY_V1.minTipMinor, 100000n);
-  assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 100000n);
+  assert.equal(FEE_POLICY_V1.minTipMinor, 200000n);
+  assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 200000n);
 });
 
 test('a Pro page’s own minimum raises the floor and never lowers it', () => {
@@ -63,7 +64,7 @@ test('a Pro page’s own minimum raises the floor and never lowers it', () => {
   assert.throws(
     () => priceTip(50000n, FEE_POLICY_V1, { minTipMinor: 10000n }),
     AmountOutOfRangeError,
-    'a page minimum below ₦1,000 does not lower the floor',
+    'a page minimum below ₦2,000 does not lower the floor',
   );
 });
 
@@ -71,7 +72,7 @@ test('a Pro page’s amounts: 1–4 unique presets in whole naira, each at least
   const { tipAmountsProblem } = await import('../dist/index.js');
   const ok = (presets, min) => tipAmountsProblem(presets, min) === null;
   assert.equal(ok([200000n, 500000n, 1000000n], 200000n), true);
-  assert.equal(ok([100000n], 100000n), true);
+  assert.equal(ok([200000n], 200000n), true);
   assert.equal(ok([], 200000n), false, 'at least one preset');
   assert.equal(
     ok([200000n, 300000n, 400000n, 500000n, 600000n], 200000n),
@@ -79,7 +80,7 @@ test('a Pro page’s amounts: 1–4 unique presets in whole naira, each at least
     'at most four',
   );
   assert.equal(ok([150000n], 200000n), false, 'below its own minimum');
-  assert.equal(ok([200000n], 50000n), false, 'minimum under ₦1,000');
+  assert.equal(ok([200000n], 50000n), false, 'minimum under ₦2,000');
   assert.equal(ok([200050n], 200000n), false, 'whole naira only');
   assert.equal(ok([200000n], 200050n), false, 'minimum in whole naira');
   assert.equal(ok([200000n, 200000n], 200000n), false, 'no duplicates');
@@ -117,10 +118,10 @@ test('a staff-set share replaces the 10% for one account; processing still comes
 // charge is exactly the tip on every path, so this must fail loudly if it ever stops being true.
 test('the supporter’s charge equals the tip on every path: normal, fee-free and any staff-set share', () => {
   const tips = [
-    100000n,
-    100001n,
-    123457n,
     200000n,
+    200001n,
+    223457n,
+    250000n,
     999999n,
     10_000_000n,
     999_999_999_999n,
@@ -128,8 +129,8 @@ test('the supporter’s charge equals the tip on every path: normal, fee-free an
   const options = [
     {},
     { feeFree: true },
-    { minTipMinor: 100000n },
-    { feeFree: true, minTipMinor: 100000n },
+    { minTipMinor: 200000n },
+    { feeFree: true, minTipMinor: 200000n },
     ...[0n, 1n, 100n, 800n, 1000n, 2500n, 9999n, 10000n].map((shareBps) => ({
       shareBps,
     })),
@@ -147,4 +148,19 @@ test('the supporter’s charge equals the tip on every path: normal, fee-free an
         tip,
       );
     }
+});
+
+test('the smallest tip and the smallest withdrawal are both ₦2,000 (owner, 2 Nov 2026)', () => {
+  assert.equal(FEE_POLICY_V1.minTipMinor, 200_000n);
+  assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 200_000n);
+  assert.throws(() => priceTip(199_900n), AmountOutOfRangeError);
+  assert.equal(priceTip(200_000n).recipientNetMinor, 180_000n);
+});
+
+test('the standard amounts all clear the minimum', () => {
+  assert.deepEqual(STANDARD_TIP_PRESETS_MINOR, [
+    200_000n,
+    500_000n,
+    1_000_000n,
+  ]);
 });

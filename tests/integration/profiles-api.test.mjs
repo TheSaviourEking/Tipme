@@ -111,7 +111,7 @@ test('a tip quoted while live is refused once the page goes not live', async () 
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         handle: 'pausing',
-        amountMinor: '100000',
+        amountMinor: '200000',
         currency: 'NGN',
       }),
     })

@@ -81,7 +81,7 @@ export default function WithdrawPage({
       result.code === 'INSUFFICIENT_BALANCE'
         ? 'That is more than your available balance.'
         : result.code === 'WITHDRAWAL_TOO_SMALL'
-          ? 'The smallest withdrawal is NGN 1,000.'
+          ? 'The smallest withdrawal is NGN 2,000.'
           : result.code === 'IDEMPOTENCY_CONFLICT'
             ? 'This withdrawal may already be on its way. Check your dashboard before asking again.'
             : // Any other failure may have followed a request that arrived. The key stays, so the
@@ -136,7 +136,7 @@ export default function WithdrawPage({
               setError('');
               key.current = null;
             }}
-            hint="The smallest withdrawal is NGN 1,000."
+            hint="The smallest withdrawal is NGN 2,000."
             error={error || undefined}
           />
           <Button

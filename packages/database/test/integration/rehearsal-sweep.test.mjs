@@ -44,7 +44,7 @@ async function fresh(t) {
   const paidTip = async (handle) => {
     const quote = await createQuote(database.db, {
       handle,
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     const { attemptId } = await createPaymentIntent(database.db, {

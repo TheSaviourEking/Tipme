@@ -45,7 +45,7 @@ async function startedTip(t, provider = 'bachs') {
   });
   const quote = await createQuote(db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { tipId, attemptId } = await createPaymentIntent(db, {
@@ -62,7 +62,7 @@ async function startedTip(t, provider = 'bachs') {
 
 const paid = {
   status: 'succeeded',
-  amountMinor: 100000n,
+  amountMinor: 200000n,
   currency: 'NGN',
   feeMinor: 1500n,
 };
@@ -85,7 +85,7 @@ test('the receipt asks Bachs at once, so a paid tip shows paid without a webhook
   const status = receipt(db, tipId, {
     async verifyTransaction(reference, expectation) {
       asked.push(reference);
-      assert.deepEqual(expectation, { platformFeeMinor: 10000n });
+      assert.deepEqual(expectation, { platformFeeMinor: 20000n });
       return paid;
     },
   });

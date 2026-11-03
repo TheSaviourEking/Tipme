@@ -55,7 +55,7 @@ async function post(api, path, body, headers = {}) {
   };
 }
 
-const quote = (api, amountMinor = '100000', handle = 'ada') =>
+const quote = (api, amountMinor = '200000', handle = 'ada') =>
   post(api, '/v1/tip-quotes', { handle, amountMinor, currency: 'NGN' });
 const intent = (api, body, key = randomUUID()) =>
   post(api, '/v1/tip-intents', body, { 'idempotency-key': key });
@@ -63,16 +63,16 @@ const intent = (api, body, key = randomUUID()) =>
 test('a quote shows what the recipient receives', async () => {
   const { status, body } = await quote(stack.api);
   assert.equal(status, 201);
-  assert.equal(body.data.recipientNetMinor, '90000');
-  assert.equal(body.data.tipMinor, '100000');
-  assert.equal(body.data.payerTotalMinor, '100000');
+  assert.equal(body.data.recipientNetMinor, '180000');
+  assert.equal(body.data.tipMinor, '200000');
+  assert.equal(body.data.payerTotalMinor, '200000');
   assert.equal(body.data.displayName.length > 0, true);
   assert.equal(body.data.handle, 'ada');
   assert.equal(body.data.currency, 'NGN');
 });
 
 test('quotes for unknown profiles and invalid amounts are refused', async () => {
-  const unknown = await quote(stack.api, '100000', 'nobody-here');
+  const unknown = await quote(stack.api, '200000', 'nobody-here');
   assert.equal(unknown.status, 404);
   assert.equal(unknown.body.error.code, 'PROFILE_NOT_FOUND');
   const small = await quote(stack.api, '50');
@@ -269,7 +269,7 @@ test('the pretend checkout shows what is being paid', async () => {
   );
   assert.equal(response.status, 200);
   const { data } = await response.json();
-  assert.equal(data.amountMinor, '100000');
+  assert.equal(data.amountMinor, '200000');
   assert.equal(data.currency, 'NGN');
   assert.ok(data.recipientDisplayName.length > 0);
   const unknown = await fetch(
@@ -378,7 +378,7 @@ test('minor: replaying a tip that expired before reaching the provider is refuse
     await import('../../packages/database/dist/index.js');
   const quoted = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const key = randomUUID();
@@ -433,7 +433,7 @@ test('minor: behind a trusted proxy each supporter has their own rate limit', as
       post(
         proxied.api,
         '/v1/tip-quotes',
-        { handle: 'ada', amountMinor: '100000', currency: 'NGN' },
+        { handle: 'ada', amountMinor: '200000', currency: 'NGN' },
         { 'x-forwarded-for': ip },
       );
     assert.equal((await from('203.0.113.7')).status, 201);
@@ -490,7 +490,7 @@ test('with bachs-live and payments off, a new tip is refused as not open and not
   // A quote taken before checkout closed (or by hand): its intent is still refused.
   const { quoteId } = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const before = await checkoutRows();
@@ -500,7 +500,7 @@ test('with bachs-live and payments off, a new tip is refused as not open and not
     return true;
   };
   await assert.rejects(
-    service.quote({ handle: 'ada', amountMinor: '100000', currency: 'NGN' }),
+    service.quote({ handle: 'ada', amountMinor: '200000', currency: 'NGN' }),
     notOpen,
   );
   await assert.rejects(
@@ -545,10 +545,10 @@ const notOpenError = (error) => {
   return true;
 };
 const quoteFor = (handle) =>
-  createQuote(database.db, { handle, tipMinor: 100000n, currency: 'NGN' });
+  createQuote(database.db, { handle, tipMinor: 200000n, currency: 'NGN' });
 const asks = (handle) => ({
   handle,
-  amountMinor: '100000',
+  amountMinor: '200000',
   currency: 'NGN',
 });
 

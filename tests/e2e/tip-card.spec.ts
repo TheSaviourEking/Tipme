@@ -896,6 +896,6 @@ test('the Other amount example is never below the page’s minimum', async ({
   await at('live', '/@kemi', page);
   await expect(page.getByLabel(OTHER)).toHaveAttribute(
     'placeholder',
-    'e.g. 1,000',
+    'e.g. 2,000',
   );
 });

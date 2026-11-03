@@ -79,7 +79,7 @@ const post = async (path, body, headers = {}) => {
 const quote = () =>
   post('/v1/tip-quotes', {
     handle: 'ada',
-    amountMinor: '100000',
+    amountMinor: '200000',
     currency: 'NGN',
   });
 const count = async (sql, params = []) =>
@@ -131,7 +131,7 @@ test('concurrent money requests all succeed on one connection, and it stays one'
       Array.from({ length: 30 }, () =>
         send('/v1/tip-quotes', {
           handle: 'ada',
-          amountMinor: '100000',
+          amountMinor: '200000',
           currency: 'NGN',
         }),
       ),
@@ -235,7 +235,7 @@ test('reconcile.payments failing on 53300 tries again and applies the payment ex
   const failuresBefore = stack.logs.length;
   const { quoteId } = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { tipId, attemptId } = await createPaymentIntent(database.db, {
@@ -244,7 +244,7 @@ test('reconcile.payments failing on 53300 tries again and applies the payment ex
   });
   const { providerReference } = await mock.initializePayment({
     attemptId,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     scenario: 'no-reply',
   });

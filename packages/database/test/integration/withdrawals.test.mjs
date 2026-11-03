@@ -45,7 +45,7 @@ test('withdrawals', async (t) => {
   const paidTip = async () => {
     const quote = await createQuote(db, {
       handle: 'tobi',
-      tipMinor: 200000n,
+      tipMinor: 400000n,
       currency: 'NGN',
     });
     const intent = await createPaymentIntent(db, {
@@ -64,7 +64,7 @@ test('withdrawals', async (t) => {
       eventType: 'payment.succeeded',
       attemptId: intent.attemptId,
       providerReference: reference,
-      amountMinor: 200000n,
+      amountMinor: 400000n,
       currency: 'NGN',
       providerFeeMinor: 3000n,
       signatureVerified: true,
@@ -106,17 +106,17 @@ test('withdrawals', async (t) => {
     async () => {
       await database.fresh();
       await paidTip();
-      assert.equal(await available(), 180000n);
+      assert.equal(await available(), 360000n);
       const provider = mock();
       const key = randomUUID();
       const first = await requestWithdrawal(db, {
         profileId: TOBI.id,
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         idempotencyKey: key,
         provider,
       });
       assert.equal(first.status, 'REQUESTED');
-      assert.equal(await available(), 80000n);
+      assert.equal(await available(), 160000n);
       const reference = await startOnMock(
         provider,
         first.payoutId,
@@ -128,7 +128,7 @@ test('withdrawals', async (t) => {
         (
           await requestWithdrawal(db, {
             profileId: TOBI.id,
-            amountMinor: 100000n,
+            amountMinor: 200000n,
             idempotencyKey: key,
             provider,
           })
@@ -139,7 +139,7 @@ test('withdrawals', async (t) => {
         await errorCode(
           requestWithdrawal(db, {
             profileId: TOBI.id,
-            amountMinor: 150000n,
+            amountMinor: 300000n,
             idempotencyKey: key,
             provider,
           }),
@@ -154,7 +154,7 @@ test('withdrawals', async (t) => {
         )[0].status,
         'PAID',
       );
-      assert.equal(await available(), 80000n);
+      assert.equal(await available(), 160000n);
       const unbalanced =
         await q(`SELECT transaction_id FROM ledger_entries GROUP BY transaction_id
       HAVING SUM(CASE WHEN side = 'debit' THEN amount_minor ELSE -amount_minor END) <> 0`);
@@ -170,7 +170,7 @@ test('withdrawals', async (t) => {
       const provider = mock();
       const withdrawal = await requestWithdrawal(db, {
         profileId: TOBI.id,
-        amountMinor: 180000n,
+        amountMinor: 360000n,
         idempotencyKey: randomUUID(),
         provider,
       });
@@ -179,7 +179,7 @@ test('withdrawals', async (t) => {
         await startOnMock(provider, withdrawal.payoutId, 'payout-failed'),
       );
       await reconcilePayouts({ db, provider, now: new Date(), minAgeMs: 0 });
-      assert.equal(await available(), 180000n);
+      assert.equal(await available(), 360000n);
     },
   );
 
@@ -191,7 +191,7 @@ test('withdrawals', async (t) => {
       const idempotencyKey = randomUUID();
       const input = {
         profileId: TOBI.id,
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         idempotencyKey,
         provider: mock(),
       };
@@ -225,7 +225,7 @@ test('withdrawals', async (t) => {
         await errorCode(
           requestWithdrawal(db, {
             profileId: TOBI.id,
-            amountMinor: 187001n,
+            amountMinor: 374002n,
             idempotencyKey: randomUUID(),
             provider,
           }),
@@ -246,13 +246,13 @@ test('withdrawals', async (t) => {
       const results = await Promise.allSettled([
         requestWithdrawal(db, {
           profileId: TOBI.id,
-          amountMinor: 100000n,
+          amountMinor: 200000n,
           idempotencyKey: randomUUID(),
           provider,
         }),
         requestWithdrawal(db, {
           profileId: TOBI.id,
-          amountMinor: 100000n,
+          amountMinor: 200000n,
           idempotencyKey: randomUUID(),
           provider,
         }),
@@ -262,7 +262,7 @@ test('withdrawals', async (t) => {
         results.find((r) => r.status === 'rejected').reason.code,
         'INSUFFICIENT_BALANCE',
       );
-      assert.equal(await available(), 80000n);
+      assert.equal(await available(), 160000n);
     },
   );
 
@@ -270,24 +270,24 @@ test('withdrawals', async (t) => {
     await database.fresh();
     await grantCashReward(db, {
       profileId: TOBI.id,
-      amountMinor: 100000n,
+      amountMinor: 200000n,
       currency: 'NGN',
       operationKey: `reward.test.${randomUUID()}`,
     });
-    assert.equal(await available(), 100000n);
+    assert.equal(await available(), 200000n);
     const rows =
       await q(`SELECT a.code, e.side, e.amount_minor FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
       JOIN ledger_transactions t ON t.id = e.transaction_id WHERE t.operation_type = 'reward' ORDER BY a.code`);
     assert.deepEqual(
       rows.map((r) => [r.code, r.side, r.amount_minor]),
       [
-        ['promotions_expense', 'debit', '100000'],
-        ['recipient_payable', 'credit', '100000'],
+        ['promotions_expense', 'debit', '200000'],
+        ['recipient_payable', 'credit', '200000'],
       ],
     );
     const withdrawal = await requestWithdrawal(db, {
       profileId: TOBI.id,
-      amountMinor: 100000n,
+      amountMinor: 200000n,
       idempotencyKey: randomUUID(),
       provider: mock(),
     });
@@ -306,7 +306,7 @@ test('money collected by a provider without payouts can never be withdrawn throu
   );
   const quote = await createQuote(db, {
     handle: 'tobi',
-    tipMinor: 200000n,
+    tipMinor: 400000n,
     currency: 'NGN',
   });
   const intent = await createPaymentIntent(db, {
@@ -325,18 +325,18 @@ test('money collected by a provider without payouts can never be withdrawn throu
     eventType: 'payment.succeeded',
     attemptId: intent.attemptId,
     providerReference: reference,
-    amountMinor: 200000n,
+    amountMinor: 400000n,
     currency: 'NGN',
     providerFeeMinor: 3000n,
     signatureVerified: true,
     payload: {},
   });
-  assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 180000n);
+  assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 360000n);
   let started = false;
   await assert.rejects(
     requestWithdrawal(db, {
       profileId: TOBI.id,
-      amountMinor: 180000n,
+      amountMinor: 360000n,
       idempotencyKey: randomUUID(),
       provider: {
         name: 'mock',
@@ -390,7 +390,7 @@ test('withdrawals through the provider', async (t) => {
     },
     async payoutBalance(accountRef, currency) {
       this.reads.push(`balance:${accountRef}:${currency}`);
-      return { availableMinor: 500000n };
+      return { availableMinor: 1000000n };
     },
     async quotePayoutFee() {
       return { feeMinor: 5000n, exact: false };
@@ -407,7 +407,7 @@ test('withdrawals through the provider', async (t) => {
   const bachsTip = async () => {
     const quote = await createQuote(db, {
       handle: 'tobi',
-      tipMinor: 200000n,
+      tipMinor: 400000n,
       currency: 'NGN',
     });
     const intent = await createPaymentIntent(db, {
@@ -426,7 +426,7 @@ test('withdrawals through the provider', async (t) => {
       eventType: 'payment.succeeded',
       attemptId: intent.attemptId,
       providerReference: reference,
-      amountMinor: 200000n,
+      amountMinor: 400000n,
       currency: 'NGN',
       providerFeeMinor: 3000n,
       signatureVerified: true,
@@ -499,26 +499,26 @@ test('withdrawals through the provider', async (t) => {
     'the withdrawable amount is the lower of the ledger and Bachs balances',
     async () => {
       await ready();
-      assert.deepEqual(await quoteOf(withBalance(120000n)), {
+      assert.deepEqual(await quoteOf(withBalance(240000n)), {
         state: 'ready',
-        withdrawableMinor: 120000n,
-        ledgerMinor: 180000n,
-        providerMinor: 120000n,
+        withdrawableMinor: 240000n,
+        ledgerMinor: 360000n,
+        providerMinor: 240000n,
         feeMinor: 5000n,
         destination: { bankName: 'Guaranty Trust Bank', last4: '4321' },
       });
-      const more = await quoteOf(withBalance(900000n));
-      assert.equal(more.withdrawableMinor, 180000n);
+      const more = await quoteOf(withBalance(1800000n));
+      assert.equal(more.withdrawableMinor, 360000n);
       assert.equal(
-        await errorCode(withdraw(withBalance(120000n), 120001n)),
+        await errorCode(withdraw(withBalance(240000n), 240002n)),
         'INSUFFICIENT_BALANCE',
       );
       assert.equal(
-        await errorCode(withdraw(withBalance(900000n), 180001n)),
+        await errorCode(withdraw(withBalance(1800000n), 360002n)),
         'INSUFFICIENT_BALANCE',
       );
       assert.equal(await payoutCount(), 0);
-      assert.ok((await withdraw(withBalance(120000n), 120000n)).payoutId);
+      assert.ok((await withdraw(withBalance(240000n), 240000n)).payoutId);
     },
   );
 
@@ -526,16 +526,16 @@ test('withdrawals through the provider', async (t) => {
     'money queued but not started still counts against the Bachs balance',
     async () => {
       await ready();
-      const provider = withBalance(120000n);
-      await withdraw(provider, 100000n);
+      const provider = withBalance(240000n);
+      await withdraw(provider, 200000n);
       // Bachs still reports 120000 because nothing has left it yet: only 20000 can follow.
       assert.equal(
-        await errorCode(withdraw(provider, 80000n)),
+        await errorCode(withdraw(provider, 160000n)),
         'INSUFFICIENT_BALANCE',
       );
       const quote = await quoteOf(provider);
-      assert.equal(quote.ledgerMinor, 80000n);
-      assert.equal(quote.withdrawableMinor, 20000n);
+      assert.equal(quote.ledgerMinor, 160000n);
+      assert.equal(quote.withdrawableMinor, 40000n);
     },
   );
 
@@ -566,13 +566,13 @@ test('withdrawals through the provider', async (t) => {
           state: 'provider_unavailable',
         });
         assert.equal(
-          await errorCode(withdraw(provider, 100000n)),
+          await errorCode(withdraw(provider, 200000n)),
           'PAYOUT_PROVIDER_UNAVAILABLE',
         );
       }
       assert.equal(await payoutCount(), 0);
       assert.equal(await startJobs(), 0);
-      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 180000n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 360000n);
     },
   );
 
@@ -586,7 +586,7 @@ test('withdrawals through the provider', async (t) => {
         reason: 'in_debt',
       });
       assert.equal(
-        await errorCode(withdraw(bachsLike(), 100000n)),
+        await errorCode(withdraw(bachsLike(), 200000n)),
         'WITHDRAWALS_PAUSED',
       );
       assert.equal(await payoutCount(), 0);
@@ -595,7 +595,7 @@ test('withdrawals through the provider', async (t) => {
         [TOBI.id],
       );
       assert.equal((await quoteOf(bachsLike())).state, 'ready');
-      assert.ok((await withdraw(bachsLike(), 100000n)).payoutId);
+      assert.ok((await withdraw(bachsLike(), 200000n)).payoutId);
     },
   );
 
@@ -606,11 +606,11 @@ test('withdrawals through the provider', async (t) => {
       const provider = bachsLike({
         async payoutBalance() {
           await seedHold('reversal');
-          return { availableMinor: 500000n };
+          return { availableMinor: 1000000n };
         },
       });
       assert.equal(
-        await errorCode(withdraw(provider, 100000n)),
+        await errorCode(withdraw(provider, 200000n)),
         'WITHDRAWALS_PAUSED',
       );
       assert.equal(await payoutCount(), 0);
@@ -622,7 +622,7 @@ test('withdrawals through the provider', async (t) => {
     async () => {
       const destinationId = await ready();
       const provider = bachsLike();
-      const result = await withdraw(provider, 100000n);
+      const result = await withdraw(provider, 200000n);
       assert.equal(result.status, 'REQUESTED');
       assert.equal(result.replayed, false);
       const [row] = await q('SELECT * FROM payouts WHERE id = $1', [
@@ -655,7 +655,7 @@ test('withdrawals through the provider', async (t) => {
     async () => {
       await ready();
       const key = randomUUID();
-      const first = await withdraw(bachsLike(), 100000n, key);
+      const first = await withdraw(bachsLike(), 200000n, key);
       await seedHold();
       const unreachable = bachsLike({
         async payoutCapability() {
@@ -665,7 +665,7 @@ test('withdrawals through the provider', async (t) => {
           throw new Error('a replay must not read the provider');
         },
       });
-      const replay = await withdraw(unreachable, 100000n, key);
+      const replay = await withdraw(unreachable, 200000n, key);
       assert.equal(replay.payoutId, first.payoutId);
       assert.equal(replay.replayed, true);
       assert.equal(replay.status, 'REQUESTED');
@@ -679,13 +679,13 @@ test('withdrawals through the provider', async (t) => {
     async () => {
       const destinationId = await ready();
       const key = randomUUID();
-      const first = await withdraw(bachsLike(), 100000n, key);
+      const first = await withdraw(bachsLike(), 200000n, key);
       await q(
         'UPDATE payout_destinations SET replaced_at = now() WHERE profile_id = $1',
         [TOBI.id],
       );
       await seedDestination();
-      const replay = await withdraw(bachsLike(), 100000n, key);
+      const replay = await withdraw(bachsLike(), 200000n, key);
       assert.equal(replay.replayed, true);
       assert.equal(replay.payoutId, first.payoutId);
       assert.equal(await payoutCount(), 1);
@@ -708,11 +708,11 @@ test('withdrawals through the provider', async (t) => {
             [TOBI.id],
           );
           await seedDestination();
-          return { availableMinor: 500000n };
+          return { availableMinor: 1000000n };
         },
       });
       assert.equal(
-        await errorCode(withdraw(provider, 100000n)),
+        await errorCode(withdraw(provider, 200000n)),
         'PAYOUT_DESTINATION_NEEDED',
       );
       assert.equal(await payoutCount(), 0);
@@ -727,7 +727,7 @@ test('withdrawals through the provider', async (t) => {
       await seedAccount();
       assert.deepEqual(await quoteOf(bachsLike()), { state: 'no_destination' });
       assert.equal(
-        await errorCode(withdraw(bachsLike(), 100000n)),
+        await errorCode(withdraw(bachsLike(), 200000n)),
         'PAYOUT_DESTINATION_NEEDED',
       );
       const pending = await seedDestination('pending_review');
@@ -735,7 +735,7 @@ test('withdrawals through the provider', async (t) => {
         state: 'destination_pending',
       });
       assert.equal(
-        await errorCode(withdraw(bachsLike(), 100000n)),
+        await errorCode(withdraw(bachsLike(), 200000n)),
         'PAYOUT_DESTINATION_NEEDED',
       );
       await q(
@@ -761,7 +761,7 @@ test('withdrawals through the provider', async (t) => {
         requirementsDue: ['id_document'],
       });
       assert.equal(
-        await errorCode(withdraw(restricted, 100000n)),
+        await errorCode(withdraw(restricted, 200000n)),
         'PAYOUT_SETUP_NEEDED',
       );
       const missing = bachsLike({
@@ -785,7 +785,7 @@ test('withdrawals through the provider', async (t) => {
         requirementsDue: [],
       });
       assert.equal(
-        await errorCode(withdraw(provider, 100000n)),
+        await errorCode(withdraw(provider, 200000n)),
         'PAYOUT_SETUP_NEEDED',
       );
       // An account in the other environment is not this provider's account.
@@ -797,19 +797,19 @@ test('withdrawals through the provider', async (t) => {
   );
 
   await t.test(
-    'the ₦1,000 minimum and the withdraw-everything exception still hold',
+    'the ₦2,000 minimum and the withdraw-everything exception still hold',
     async () => {
       await ready();
       assert.equal(
-        await errorCode(withdraw(bachsLike(), 99999n)),
+        await errorCode(withdraw(bachsLike(), 199998n)),
         'WITHDRAWAL_TOO_SMALL',
       );
-      await withdraw(bachsLike(), 100000n);
+      await withdraw(bachsLike(), 200000n);
       assert.equal(
-        await errorCode(withdraw(bachsLike(), 50000n)),
+        await errorCode(withdraw(bachsLike(), 100000n)),
         'WITHDRAWAL_TOO_SMALL',
       );
-      assert.ok((await withdraw(bachsLike(), 80000n)).payoutId);
+      assert.ok((await withdraw(bachsLike(), 160000n)).payoutId);
     },
   );
 
@@ -824,7 +824,7 @@ test('withdrawals through the provider', async (t) => {
         }),
         true,
       );
-      const { payoutId } = await withdraw(bachsLike(), 100000n);
+      const { payoutId } = await withdraw(bachsLike(), 200000n);
       assert.equal(
         (await q('SELECT provider FROM payouts WHERE id = $1', [payoutId]))[0]
           .provider,
@@ -854,18 +854,18 @@ test('withdrawals through the provider', async (t) => {
       });
       await grantCashReward(db, {
         profileId: TOBI.id,
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         currency: 'NGN',
         operationKey: `reward.test.${randomUUID()}`,
       });
       const quote = await quoteOf(provider);
       assert.equal(quote.state, 'ready');
-      assert.equal(quote.withdrawableMinor, 100000n);
+      assert.equal(quote.withdrawableMinor, 200000n);
       assert.deepEqual(quote.destination, {
         bankName: 'Pretend bank',
         last4: '0000',
       });
-      const { payoutId } = await withdraw(provider, 100000n);
+      const { payoutId } = await withdraw(provider, 200000n);
       const [row] = await q('SELECT * FROM payouts WHERE id = $1', [payoutId]);
       assert.equal(row.provider, 'mock');
       assert.equal(row.account_reference, null);

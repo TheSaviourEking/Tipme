@@ -30,7 +30,7 @@ const fakeProvider = () => {
       asked.push(reference);
       return {
         status: answers.get(reference) ?? 'pending',
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         currency: 'NGN',
         feeMinor: 1500n,
       };
@@ -50,7 +50,7 @@ test('stale tip expiry', async (t) => {
   const initiatedTip = async () => {
     const { quoteId } = await createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
       now: quoteTime,
     });
@@ -71,7 +71,7 @@ test('stale tip expiry', async (t) => {
   const unstartedTip = async () => {
     const { quoteId } = await createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
       now: quoteTime,
     });
@@ -319,7 +319,7 @@ test('stale tip expiry', async (t) => {
         eventType: 'payment.succeeded',
         attemptId: tip.attemptId,
         providerReference: tip.reference,
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         currency: 'NGN',
         providerFeeMinor: 1500n,
         signatureVerified: true,

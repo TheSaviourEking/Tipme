@@ -23,7 +23,7 @@ import { ADA, TOBI, useDatabase } from './helpers.mjs';
 async function createAttempt(db, handle) {
   const { quoteId } = await createQuote(db, {
     handle,
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   return createPaymentIntent(db, {

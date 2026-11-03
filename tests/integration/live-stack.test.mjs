@@ -328,7 +328,7 @@ const quoteOn = (api, handle) =>
       origin: 'https://web.example.test',
       'x-tipme-csrf': '1',
     },
-    body: JSON.stringify({ handle, amountMinor: '100000', currency: 'NGN' }),
+    body: JSON.stringify({ handle, amountMinor: '200000', currency: 'NGN' }),
   });
 
 test(

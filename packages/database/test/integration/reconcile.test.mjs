@@ -41,7 +41,7 @@ test('reconciliation', async (t) => {
   const initiated = async ({ scenario = 'succeed', status } = {}) => {
     const { quoteId } = await createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     const { tipId, attemptId } = await createPaymentIntent(database.db, {
@@ -50,7 +50,7 @@ test('reconciliation', async (t) => {
     });
     const { providerReference } = await mock.initializePayment({
       attemptId,
-      amountMinor: 100000n,
+      amountMinor: 200000n,
       currency: 'NGN',
       scenario,
     });

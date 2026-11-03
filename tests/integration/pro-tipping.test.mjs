@@ -13,8 +13,8 @@ import {
 } from './helpers.mjs';
 
 // Free and Pro tipping (PR-012, PRD v1.1 proposed rules; pretend money). Free: 10% fee with
-// processing included, ₦1,000 minimum tip and withdrawal. Pro (granted by staff): the page's own
-// preset amounts and minimum, never below ₦1,000.
+// processing included, ₦2,000 minimum tip and withdrawal. Pro (granted by staff): the page's own
+// preset amounts and minimum, never below ₦2,000.
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,
@@ -81,11 +81,11 @@ const setPlan = (profileId, plan, reason = 'Pilot recipient') =>
   });
 
 const STANDARD = {
-  presetsMinor: ['100000', '200000', '500000'],
-  minMinor: '100000',
+  presetsMinor: ['200000', '500000', '1000000'],
+  minMinor: '200000',
 };
 
-test('a Free page uses the standard amounts and v1.1 fee: 10% with processing included, ₦1,000 minimum', async () => {
+test('a Free page uses the standard amounts and v1.1 fee: 10% with processing included, ₦2,000 minimum', async () => {
   await livePage('+2348031260001', 'free_page');
   const page = await json(await call('GET', '/v1/profiles/free_page'));
   assert.deepEqual(page.tipAmounts, STANDARD);
@@ -95,20 +95,20 @@ test('a Free page uses the standard amounts and v1.1 fee: 10% with processing in
   // No maximum: supporters tip what they want (₦25,000,000 here).
   const large = await json(await quote('free_page', '2500000000'));
   assert.equal(large.recipientNetMinor, '2250000000');
-  const ok = await json(await quote('free_page', '500000'));
+  const ok = await json(await quote('free_page', '1000000'));
   assert.equal(ok.feePolicyVersion, 'proposed-v1.1');
   assert.equal(
     BigInt(ok.platformFeeMinor) + BigInt(ok.providerFeeMinor),
-    50000n,
+    100000n,
   );
-  assert.equal(ok.recipientNetMinor, '450000');
+  assert.equal(ok.recipientNetMinor, '900000');
 });
 
 test('a Free recipient cannot set amounts, even by calling the API directly', async () => {
   const cookie = await livePage('+2348031260002', 'free_only');
   const response = await call('PUT', '/v1/me/tip-amounts', cookie, {
-    presetsMinor: ['200000'],
-    minMinor: '200000',
+    presetsMinor: ['400000'],
+    minMinor: '400000',
   });
   assert.equal(response.status, 403);
   assert.equal(await code(response), 'PRO_REQUIRED');
@@ -193,15 +193,15 @@ test('a Pro page sets its own presets and minimum; quotes below it are refused; 
   const set = (body) => call('PUT', '/v1/me/tip-amounts', cookie, body);
 
   for (const bad of [
-    { presetsMinor: [], minMinor: '200000' },
+    { presetsMinor: [], minMinor: '400000' },
     {
-      presetsMinor: ['200000', '300000', '400000', '500000', '600000'],
-      minMinor: '200000',
+      presetsMinor: ['400000', '600000', '800000', '1000000', '1200000'],
+      minMinor: '400000',
     },
-    { presetsMinor: ['150000'], minMinor: '200000' },
-    { presetsMinor: ['200000'], minMinor: '50000' },
-    { presetsMinor: ['200050'], minMinor: '200000' },
-    { presetsMinor: ['200000', '200000'], minMinor: '200000' },
+    { presetsMinor: ['300000'], minMinor: '400000' },
+    { presetsMinor: ['400000'], minMinor: '100000' },
+    { presetsMinor: ['200050'], minMinor: '400000' },
+    { presetsMinor: ['400000', '400000'], minMinor: '400000' },
   ])
     assert.equal((await set(bad)).status, 400, JSON.stringify(bad));
 
@@ -209,22 +209,22 @@ test('a Pro page sets its own presets and minimum; quotes below it are refused; 
   const fieldsOf = async (body) =>
     (await (await set(body)).json()).error.fields;
   assert.deepEqual(
-    await fieldsOf({ presetsMinor: ['150000'], minMinor: '200000' }),
+    await fieldsOf({ presetsMinor: ['300000'], minMinor: '400000' }),
     ['presetsMinor'],
   );
   assert.deepEqual(
-    await fieldsOf({ presetsMinor: ['200000'], minMinor: '50000' }),
+    await fieldsOf({ presetsMinor: ['400000'], minMinor: '100000' }),
     ['minMinor'],
   );
 
   const saved = await set({
-    presetsMinor: ['200000', '500000', '25000000'],
-    minMinor: '200000',
+    presetsMinor: ['400000', '1000000', '50000000'],
+    minMinor: '400000',
   });
   assert.equal(saved.status, 200);
   const own = {
-    presetsMinor: ['200000', '500000', '25000000'],
-    minMinor: '200000',
+    presetsMinor: ['400000', '1000000', '50000000'],
+    minMinor: '400000',
   };
   assert.deepEqual((await json(saved)).tipAmounts, own);
   assert.deepEqual(
@@ -232,8 +232,8 @@ test('a Pro page sets its own presets and minimum; quotes below it are refused; 
     own,
   );
   // Calling the API directly cannot get under the page's minimum.
-  assert.equal((await quote('pro_amounts', '150000')).status, 400);
-  assert.equal((await quote('pro_amounts', '200000')).status, 201);
+  assert.equal((await quote('pro_amounts', '300000')).status, 400);
+  assert.equal((await quote('pro_amounts', '400000')).status, 201);
 
   // Back to Free: the standard amounts apply again, and the page's own come back with Pro.
   await setPlan(profileId, 'free');
@@ -241,7 +241,7 @@ test('a Pro page sets its own presets and minimum; quotes below it are refused; 
     (await json(await call('GET', '/v1/profiles/pro_amounts'))).tipAmounts,
     STANDARD,
   );
-  assert.equal((await quote('pro_amounts', '150000')).status, 201);
+  assert.equal((await quote('pro_amounts', '300000')).status, 201);
   await setPlan(profileId, 'pro');
   assert.deepEqual(
     (await json(await call('GET', '/v1/profiles/pro_amounts'))).tipAmounts,
@@ -251,7 +251,7 @@ test('a Pro page sets its own presets and minimum; quotes below it are refused; 
 
 test('withdrawals below ₦1,000 are refused, unless they take the whole balance', async () => {
   const cookie = await livePage('+2348031260006', 'withdraw_min');
-  const q = await json(await quote('withdraw_min', '200000'));
+  const q = await json(await quote('withdraw_min', '400000'));
   const intent = await json(
     await call(
       'POST',
@@ -283,13 +283,13 @@ test('withdrawals below ₦1,000 are refused, unless they take the whole balance
   const small = await withdraw('99999');
   assert.equal(small.status, 409);
   assert.equal(await code(small), 'WITHDRAWAL_TOO_SMALL');
-  assert.equal((await withdraw('100000')).status, 201);
+  assert.equal((await withdraw('200000')).status, 201);
   // NGN 800.00 is left (₦1,800 net − ₦1,000): part of it is refused, all of it is allowed,
   // so nobody is left with money they cannot withdraw (or an account they cannot close).
-  const part = await withdraw('50000');
+  const part = await withdraw('100000');
   assert.equal(part.status, 409);
   assert.equal(await code(part), 'WITHDRAWAL_TOO_SMALL');
-  assert.equal((await withdraw('80000')).status, 201);
+  assert.equal((await withdraw('160000')).status, 201);
   const { availableMinor } = await json(
     await call('GET', '/v1/me/dashboard', cookie),
   );

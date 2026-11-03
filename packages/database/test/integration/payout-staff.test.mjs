@@ -37,7 +37,7 @@ function fakeProvider({ find = async () => null, fetch } = {}) {
     name: 'mock',
     capabilities: { connectedAccounts: false },
     payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
-    payoutBalance: async () => ({ availableMinor: 100_000_000n }),
+    payoutBalance: async () => ({ availableMinor: 200000000n }),
     quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
     coverPayoutFee: async () => ({ transferRef: 'transfer' }),
     initiatePayout: async () => {
@@ -57,7 +57,7 @@ async function setup(t) {
     database.pool.query(sql, params).then((r) => r.rows);
   const quote = await createQuote(db, {
     handle: 'tobi',
-    tipMinor: 200000n,
+    tipMinor: 400000n,
     currency: 'NGN',
   });
   const intent = await createPaymentIntent(db, {
@@ -76,7 +76,7 @@ async function setup(t) {
     eventType: 'payment.succeeded',
     attemptId: intent.attemptId,
     providerReference: reference,
-    amountMinor: 200000n,
+    amountMinor: 400000n,
     currency: 'NGN',
     providerFeeMinor: 3000n,
     signatureVerified: true,
@@ -86,7 +86,7 @@ async function setup(t) {
     (
       await requestWithdrawal(db, {
         profileId: TOBI,
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         idempotencyKey: randomUUID(),
         provider: fakeProvider(),
       })
@@ -416,7 +416,7 @@ test('mark failed needs a definite absence past the wait, and the short wait is 
   });
   assert.equal(done.outcome, 'marked_failed');
   assert.equal(await s.statusOf(payoutId), 'FAILED');
-  assert.equal(await s.available(), reserved + 100000n);
+  assert.equal(await s.available(), reserved + 200000n);
   assert.equal(await s.ledgerRows(), ledgerBefore);
   assert.equal(await s.issueStatus(issueId), 'resolved');
   const audit = await s.q(
@@ -467,7 +467,7 @@ test('mark failed needs a definite absence past the wait, and the short wait is 
     now: s.later(),
   });
   assert.equal(again.outcome, 'not_open');
-  assert.equal(await s.available(), reserved + 100000n);
+  assert.equal(await s.available(), reserved + 200000n);
 
   // If the provider later says it paid after all, that is still a conflict someone sees.
   const late = await recordPayoutOutcome(s.db, {
@@ -922,7 +922,7 @@ test('a create that died: 24 hours on, a definite absence and a dashboard check 
   });
   assert.equal(done.outcome, 'marked_failed');
   assert.equal(await s.statusOf(payoutId), 'FAILED');
-  assert.equal(await s.available(), reserved + 100000n);
+  assert.equal(await s.available(), reserved + 200000n);
   const [audit] = await s.q(
     `SELECT reason FROM audit_events WHERE action = 'payout.staff_marked_failed'`,
   );

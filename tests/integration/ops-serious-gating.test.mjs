@@ -204,7 +204,7 @@ async function unresolvedPayoutIssue() {
   const id = await profileId();
   const quote = await ops.createQuote(database.db, {
     handle: 'tobi',
-    tipMinor: 200000n,
+    tipMinor: 400000n,
     currency: 'NGN',
   });
   const intent = await ops.createPaymentIntent(database.db, {
@@ -223,7 +223,7 @@ async function unresolvedPayoutIssue() {
     eventType: 'payment.succeeded',
     attemptId: intent.attemptId,
     providerReference: reference,
-    amountMinor: 200000n,
+    amountMinor: 400000n,
     currency: 'NGN',
     providerFeeMinor: 3000n,
     signatureVerified: true,
@@ -232,13 +232,13 @@ async function unresolvedPayoutIssue() {
   await q(`DELETE FROM withdrawal_holds WHERE profile_id = $1`, [id]);
   const { payoutId } = await ops.requestWithdrawal(database.db, {
     profileId: id,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     idempotencyKey: randomUUID(),
     provider: {
       name: 'mock',
       capabilities: { connectedAccounts: false },
       payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
-      payoutBalance: async () => ({ availableMinor: 100_000_000n }),
+      payoutBalance: async () => ({ availableMinor: 200000000n }),
       quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
       coverPayoutFee: async () => ({ transferRef: 'transfer' }),
       findPayoutByReference: async () => null,

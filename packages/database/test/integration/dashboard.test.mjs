@@ -70,25 +70,25 @@ test('dashboard data', async (t) => {
   const now = lagos('2026-10-14T12:00:00');
   const lateYesterday = await paidTip(
     'tobi',
-    200000n,
+    400000n,
     lagos('2026-10-13T23:30:00'),
     { label: 'Ada M.' },
   );
   const earlyToday = await paidTip(
     'tobi',
-    100000n,
+    200000n,
     lagos('2026-10-14T00:30:00'),
     { message: 'Lovely coffee' },
   );
-  const lastWeek = await paidTip('tobi', 300000n, lagos('2026-10-08T09:00:00'));
-  const older = await paidTip('tobi', 250000n, lagos('2026-10-01T09:00:00'));
+  const lastWeek = await paidTip('tobi', 600000n, lagos('2026-10-08T09:00:00'));
+  const older = await paidTip('tobi', 500000n, lagos('2026-10-01T09:00:00'));
   const confirming = await paidTip(
     'tobi',
-    100000n,
+    200000n,
     lagos('2026-10-14T11:00:00'),
     { pendingOnly: true },
   );
-  await paidTip('ada', 500000n, lagos('2026-10-14T08:00:00'));
+  await paidTip('ada', 1000000n, lagos('2026-10-14T08:00:00'));
 
   await t.test('periods follow Lagos days and weeks', async () => {
     const summary = await dashboardSummary(db, TOBI.id, now);
@@ -171,10 +171,10 @@ test('dashboard data', async (t) => {
     async () => {
       const detail = await myTipDetail(db, TOBI.id, earlyToday.tipId);
       assert.equal(detail.message, 'Lovely coffee');
-      assert.equal(detail.grossMinor, '100000');
+      assert.equal(detail.grossMinor, '200000');
       assert.equal(detail.netMinor, earlyToday.net.toString());
-      assert.equal(detail.platformFeeMinor, '8500');
-      assert.equal(detail.providerFeeMinor, '1500');
+      assert.equal(detail.platformFeeMinor, '17000');
+      assert.equal(detail.providerFeeMinor, '3000');
       assert.equal(detail.proof.verified, true);
       assert.equal(detail.proof.provider, 'mock');
       assert.equal(detail.proof.referenceTail, earlyToday.reference.slice(-6));
@@ -213,7 +213,7 @@ test('fix: an unpaid tip never reaches the dashboard, nor its message', async (t
   const { db } = database;
   const quote = await createQuote(db, {
     handle: 'tobi',
-    tipMinor: 200000n,
+    tipMinor: 400000n,
     currency: 'NGN',
   });
   const intent = await createPaymentIntent(db, {

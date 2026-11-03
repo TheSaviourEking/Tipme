@@ -371,7 +371,7 @@ export default function OpsPagesPage() {
       <h1>Pages</h1>
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
-        below NGN 1,000) and change their handle. The fee and withdrawal minimum
+        below NGN 2,000) and change their handle. The fee and withdrawal minimum
         are the same as Free.
         {copy.opsBilling}
       </p>

@@ -184,7 +184,7 @@ const quote = (origin) =>
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       handle: 'ada',
-      amountMinor: '100000',
+      amountMinor: '200000',
       currency: 'NGN',
     }),
   }).then((response) => response.status);

@@ -240,7 +240,7 @@ test('a BEGIN that fails gives its connection back: the only slot is not lost fo
 test('tip.succeeded retried after a lost connection tells the recipient exactly once', async () => {
   const quote = await createQuote(database.db, {
     handle: 'tobi',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const intent = await createPaymentIntent(database.db, {
@@ -259,7 +259,7 @@ test('tip.succeeded retried after a lost connection tells the recipient exactly 
     eventType: 'payment.succeeded',
     attemptId: intent.attemptId,
     providerReference: reference,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     providerFeeMinor: 0n,
     signatureVerified: true,

@@ -22,7 +22,7 @@ const event = (attemptId, overrides = {}) => ({
   eventType: 'payment.succeeded',
   attemptId,
   providerReference: `ref-${attemptId}`,
-  amountMinor: 100000n,
+  amountMinor: 200000n,
   currency: 'NGN',
   providerFeeMinor: 1500n,
   signatureVerified: true,
@@ -37,7 +37,7 @@ test('issues', async (t) => {
   const newTip = async () => {
     const { quoteId } = await createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     return createPaymentIntent(database.db, {

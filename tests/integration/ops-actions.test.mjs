@@ -78,7 +78,7 @@ async function startTip(handle) {
   const quote = await fetch(`${stack.api}/v1/tip-quotes`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ handle, amountMinor: '200000', currency: 'NGN' }),
+    body: JSON.stringify({ handle, amountMinor: '400000', currency: 'NGN' }),
   });
   if (quote.status !== 200 && quote.status !== 201)
     return {
@@ -241,7 +241,7 @@ test('a suspended page: hidden, no new tips, cannot go live, in-flight tips sett
     'POST',
     '/v1/me/withdrawals',
     recipient.cookie,
-    { amountMinor: '100000' },
+    { amountMinor: '200000' },
     { 'idempotency-key': randomUUID() },
   );
   assert.ok([200, 201].includes(withdrawal.status), `${withdrawal.status}`);

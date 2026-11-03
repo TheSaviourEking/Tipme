@@ -94,7 +94,7 @@ const messages: Record<ApiErrorCode, string> = {
     'You’ve used all your handle changes. Contact the TipMe team at support@usetipme.xyz to change it again.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
-  WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
+  WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 2,000.',
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:

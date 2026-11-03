@@ -9,7 +9,7 @@ test('payment intents', async (t) => {
   const quote = () =>
     createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
 

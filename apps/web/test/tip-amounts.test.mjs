@@ -11,12 +11,12 @@ test('without amounts from the API (an older API), the standard Free amounts app
   assert.deepEqual(
     options.presets.map((p) => [p.label, p.minor]),
     [
-      ['1,000', 100000],
       ['2,000', 200000],
       ['5,000', 500000],
+      ['10,000', 1000000],
     ],
   );
-  assert.equal(options.rangeText, 'NGN 1,000 or more');
+  assert.equal(options.rangeText, 'NGN 2,000 or more');
 });
 
 test('a Pro page’s own presets and minimum are shown and enforced when typing an amount', () => {
@@ -120,7 +120,7 @@ test('longer amounts get fewer keys a row in a narrow card', () => {
 });
 
 test('the typed-amount example is the page’s own minimum', () => {
-  assert.equal(amountOptions(undefined).example, '1,000');
+  assert.equal(amountOptions(undefined).example, '2,000');
   assert.equal(
     amountOptions({ presetsMinor: ['1000000'], minMinor: '1000000' }).example,
     '10,000',
