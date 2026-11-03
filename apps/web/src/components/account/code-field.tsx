@@ -40,7 +40,8 @@ export const CodeField = forwardRef<
           className="tm-code-field__input"
           inputMode="numeric"
           autoComplete="one-time-code"
-          maxLength={CELLS}
+          // No maxlength: the browser would cut a pasted "123 456" to "123 45" before onChange
+          // strips the space. onChange keeps the digits and caps them at six.
           pattern="[0-9]*"
           spellCheck={false}
           value={value}
