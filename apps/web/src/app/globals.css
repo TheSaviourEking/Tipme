@@ -538,44 +538,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.6;
 }
 
-/* A real sequence, so numbered: each step a raised card with a serif numeral. */
-.steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.steps li {
-  padding: var(--space-6);
-  border: 1px solid var(--edge-hairline);
-  border-radius: var(--radius-card);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-card-subtle);
-}
-
-.steps li > span {
-  display: block;
-  margin-bottom: var(--space-6);
-  font: 400 2.5rem / 1 var(--font-editorial);
-}
-
-.steps h3 {
-  margin: 0 0 var(--space-2);
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
-.steps p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
 /* Home (the ScreenHome board). The headline, claim field and cards are server HTML. */
 .home-hero {
   display: grid;
@@ -727,8 +689,9 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   display: none;
 }
 
-.home-demo__card,
-.home-demo__qr {
+/* Below 75rem only the centre card shows: Zainab when the page opens (the owner, 3 Nov 2026). */
+.home-demo__qr,
+.home-demo__stack .home-flip:not([data-slot='centre']) {
   display: none;
 }
 
@@ -1131,7 +1094,8 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     max-width: none;
   }
 
-  .home-demo__card,
+  /* As specific as the narrow rule that hides side cards, and later, so all three show here. */
+  .home-demo__stack .home-flip[data-slot],
   .home-demo__qr {
     display: block;
     position: absolute;
@@ -1596,10 +1560,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 }
 
 @media (max-width: 860px) {
-  .steps {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .section-heading {
     flex-direction: column;
     align-items: flex-start;
@@ -2978,7 +2938,6 @@ body:has(.profile-page) .brand__mark {
     margin-right: 0.15rem;
   }
 
-  .steps,
   .specimen-grid {
     grid-template-columns: 1fr;
   }

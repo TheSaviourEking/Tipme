@@ -15,8 +15,6 @@ import { ProBadge, Surface } from '@tipme/ui';
 // the plain card. Nothing here fetches or navigates.
 const FINE_POINTER = '(hover: hover) and (pointer: fine)';
 const canPlay = () => window.matchMedia(FINE_POINTER).matches;
-/** All three cards show from 75rem; below it only Ada's, which then acts as the centre card. */
-const allShown = () => window.matchMedia('(min-width: 75rem)').matches;
 
 type Slot = 'left' | 'centre' | 'right';
 const SLOTS: Slot[] = ['left', 'centre', 'right'];
@@ -69,8 +67,7 @@ export function DemoStack({ children }: { children: ReactNode }) {
         at === 0
           ? [order[2], order[0], order[1]]
           : [order[1], order[2], order[0]];
-      // Shown alone, the card was already the one in view: it turns over at once.
-      return { order: turnedRing as string[], turned: !allShown() };
+      return { order: turnedRing as string[], turned: false };
     });
   const turnBack = (name: string) =>
     setCarousel((was) =>
@@ -235,7 +232,7 @@ export function PersonCard({
                   data-selected={index === chosen ? 'true' : undefined}
                   onClick={(event) => {
                     // To one side, the click goes on to the card and brings it to the centre.
-                    if (!canPlay() || (!centred && allShown())) return;
+                    if (!canPlay() || !centred) return;
                     event.stopPropagation();
                     setChosen(index);
                   }}
@@ -247,7 +244,7 @@ export function PersonCard({
             <span
               className="home-demo__tip"
               onClick={(event) => {
-                if (!canPlay() || (!centred && allShown())) return;
+                if (!canPlay() || !centred) return;
                 event.stopPropagation();
                 tip();
               }}

@@ -135,7 +135,11 @@ test(
     for (const width of [390, 360]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/');
-      const box = await page.locator('.home-demo__main').boundingBox();
+      // Phones lead with Zainab, as wide screens do (the owner, 3 Nov 2026).
+      const shown = page.locator('.home-demo__stack .home-flip:visible');
+      await expect(shown).toHaveCount(1);
+      await expect(shown).toHaveClass(/home-demo__card--zainab/);
+      const box = await shown.boundingBox();
       expect(box).not.toBeNull();
       const centre = (box?.x ?? 0) + (box?.width ?? 0) / 2;
       expect(Math.abs(centre - width / 2), `${width}px`).toBeLessThanOrEqual(2);
@@ -402,15 +406,20 @@ test('in a narrower desktop window the lone example card still drifts and says t
   // The suite runs with reduced motion; the drift is only for those who welcome it.
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await ready(page);
-  const ada = page.locator('.home-demo__main');
+  // The lone card is the centre one: Zainab when the page opens.
+  const zainab = page.locator('.home-demo__card--zainab');
+  await expect(
+    page.locator('.home-demo__stack .home-flip:visible'),
+  ).toHaveCount(1);
+  await expect(zainab).toBeVisible();
   expect(
-    await ada.evaluate((node) => getComputedStyle(node).animationName),
+    await zainab.evaluate((node) => getComputedStyle(node).animationName),
   ).toBe('home-drift');
   // A drifting card never holds still for a test's click, so the Tip is pressed with it still.
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await ada.getByText('Tip ₦5,000').click();
-  await expect(ada).toHaveAttribute('data-flipped', 'true');
-  await expect(ada.getByText('Thank you for the ₦5,000!')).toBeVisible();
+  await zainab.getByText('Tip ₦500,000').click();
+  await expect(zainab).toHaveAttribute('data-flipped', 'true');
+  await expect(zainab.getByText('Thank you for the ₦500,000!')).toBeVisible();
 });
 
 test('with reduced motion the example cards have no running animation, and without it they do', async ({

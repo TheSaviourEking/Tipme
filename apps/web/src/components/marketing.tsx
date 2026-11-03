@@ -89,7 +89,7 @@ const ZAINAB_AMOUNTS = [
 /**
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
  * technology and holds nothing focusable.
- * On a narrow screen only Ada's card shows, as on the phone board. With a mouse the cards are a
+ * On a narrow screen only the centre card shows (Zainab, as the page opens). With a mouse the cards are a
  * carousel (demo-cards.tsx): a clicked card comes to the centre, the centre card is the biggest,
  * and only it turns over or takes a pretend tip. Small client islands; the headline never waits.
  */
@@ -115,7 +115,7 @@ export function HomeDemo() {
               src="/illustrations/zainab-sunlit-wall.webp"
               alt=""
               fill
-              sizes="320px"
+              sizes="(max-width: 75rem) 90vw, 320px"
               className="home-demo__img"
             />
           }
