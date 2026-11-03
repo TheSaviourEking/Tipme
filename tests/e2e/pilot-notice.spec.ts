@@ -264,7 +264,10 @@ test.describe('live mode', () => {
     await expectAccessible(live);
 
     await live.goto('/dashboard/withdraw');
-    await expect(live.getByRole('heading', { name: 'Withdraw' })).toBeVisible();
+    // Exact: "Your withdrawals" is a heading on this page too.
+    await expect(
+      live.getByRole('heading', { name: 'Withdraw', exact: true }),
+    ).toBeVisible();
     await expect(live.getByTestId('pilot-notice')).toHaveCount(1);
     expect(await fitsViewport(live)).toBe(true);
     await expectAccessible(live);
