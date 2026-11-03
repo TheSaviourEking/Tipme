@@ -798,16 +798,6 @@ test('a Pro page loses "Get your own TipMe page" within seconds of staff changin
   }).toPass({ timeout: 10_000 });
 });
 
-test('home keeps its own form wording', async ({ page }) => {
-  await page.goto('/');
-  await expect(
-    page.getByRole('heading', { name: 'Make Ada’s day.' }),
-  ).toBeVisible();
-  await expect(page.locator('.home-hero__panel .composer-trust')).toHaveCount(
-    0,
-  );
-});
-
 test('choosing a reason keeps the Tip bar: a select opens no keyboard @mobile', async ({
   page,
 }) => {

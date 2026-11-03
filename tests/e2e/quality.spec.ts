@@ -65,22 +65,17 @@ test('homepage makes creating a recipient page a clear next step', async ({
   page,
 }) => {
   await page.goto('/');
+  // The claim field starts sign-up with the handle; the closing band is a plain link to it.
   await expect(
-    page
-      .getByRole('main')
-      .getByRole('link', { name: /Create your page/ })
-      .first(),
+    page.getByRole('form', { name: 'Claim your link' }),
+  ).toHaveAttribute('action', '/sign-up');
+  await expect(
+    page.getByRole('main').getByRole('link', { name: 'Claim your username' }),
   ).toHaveAttribute('href', '/sign-up');
-  await expect(page.getByText('Want to receive tips?')).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Your page. Your link. Your thanks.' }),
-  ).toBeVisible();
   await expect(
     page.getByText(/Payments are in test mode/).last(),
   ).toBeVisible();
-  await expect(page.locator('.home-hero__portrait figcaption')).toContainText(
-    'fictional demo recipient',
-  );
+  await expect(page.getByText('Examples, not real people.')).toBeVisible();
 });
 
 test('business page clearly says accounts are not open yet', async ({
