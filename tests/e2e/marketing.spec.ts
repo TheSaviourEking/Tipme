@@ -60,7 +60,16 @@ test('the businesses page only registers interest', async ({ page }) => {
   );
   await page.getByLabel('Work email').fill('owner@example.com');
   await page.getByRole('button', { name: "Tell me when it's ready" }).click();
-  await expect(page.getByText("You're on the list.")).toBeVisible();
+  // Nothing is sent or stored yet: the card says so and offers the draft.
+  await expect(page.getByText('Your email is ready to send.')).toBeVisible();
+  await expect(page.getByText("You're on the list.")).toHaveCount(0);
+  const href = await page
+    .getByRole('link', { name: 'Open email app' })
+    .getAttribute('href');
+  expect(href).toContain('mailto:usetipme@gmail.com?');
+  expect(decodeURIComponent((href ?? '').replaceAll('+', ' '))).toContain(
+    'owner@example.com',
+  );
   const main = page.getByRole('main');
   await expect(main).not.toContainText(/₦|\bNGN\b|launch date|\bper month\b/i);
   await expect(main).not.toContainText(/20\d\d/);

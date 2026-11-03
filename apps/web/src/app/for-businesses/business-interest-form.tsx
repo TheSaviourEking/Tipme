@@ -37,10 +37,11 @@ export function BusinessInterestForm() {
           role="status"
           data-testid="interest-done"
         >
-          <p className="business-card__big">You&apos;re on the list.</p>
+          <p className="business-card__big">Your email is ready to send.</p>
           <p>
-            One step left: open the draft to {businessContact} and press Send.
-            We’ll email you once, when it’s ready.
+            Sending it is what registers your interest: open the draft to{' '}
+            {businessContact} and press Send. Once it arrives, we’ll write to
+            you when TipMe for businesses is ready.
           </p>
           <ActionLink variant="continue" href={draftUrl}>
             Open email app
@@ -82,7 +83,8 @@ export function BusinessInterestForm() {
         </form>
       )}
       <p className="business-card__note">
-        We’ll only use your email for this. Working for yourself?{' '}
+        If you send it, we’ll use your email only to tell you about TipMe for
+        businesses. Working for yourself?{' '}
         <Link href="/sign-up">You can start today</Link>.
       </p>
     </Surface>
