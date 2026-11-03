@@ -20,11 +20,11 @@ test('quotes', async (t) => {
       const now = new Date('2026-10-18T12:00:00Z');
       const quote = await createQuote(database.db, {
         handle: 'Ada',
-        tipMinor: 100000n,
+        tipMinor: 200000n,
         currency: 'NGN',
         now,
       });
-      assert.equal(quote.breakdown.recipientNetMinor, 90000n);
+      assert.equal(quote.breakdown.recipientNetMinor, 180000n);
       assert.equal(quote.feePolicyVersion, 'proposed-v1.1');
       assert.equal(quote.expiresAt.getTime(), now.getTime() + QUOTE_TTL_MS);
       assert.equal(QUOTE_TTL_MS, 15 * 60 * 1000);
@@ -45,7 +45,7 @@ test('quotes', async (t) => {
         await assert.rejects(
           createQuote(database.db, {
             handle,
-            tipMinor: 100000n,
+            tipMinor: 200000n,
             currency: 'NGN',
           }),
           {
@@ -79,7 +79,7 @@ test('quotes', async (t) => {
       const quoteAda = () =>
         createQuote(database.db, {
           handle: 'ada',
-          tipMinor: 100000n,
+          tipMinor: 200000n,
           currency: 'NGN',
         });
 
@@ -91,9 +91,9 @@ test('quotes', async (t) => {
       });
       const custom = await quoteAda();
       // 5% of ₦1,000 = ₦50 to TipMe, its ₦15 processing estimate inside it (ADR-0014).
-      assert.equal(custom.breakdown.platformFeeMinor, 3500n);
-      assert.equal(custom.breakdown.providerFeeMinor, 1500n);
-      assert.equal(custom.breakdown.recipientNetMinor, 95000n);
+      assert.equal(custom.breakdown.platformFeeMinor, 7000n);
+      assert.equal(custom.breakdown.providerFeeMinor, 3000n);
+      assert.equal(custom.breakdown.recipientNetMinor, 190000n);
       assert.equal(custom.breakdown.payerTotalMinor, custom.breakdown.tipMinor);
       assert.equal(custom.feePolicyVersion, 'proposed-v1.1-custom-500');
       assert.deepEqual(await pagePricing(database.db, ADA), {
@@ -112,7 +112,7 @@ test('quotes', async (t) => {
       const free = await quoteAda();
       assert.equal(free.feeFree, true);
       assert.equal(free.breakdown.payerTotalMinor, free.breakdown.tipMinor);
-      assert.equal(free.breakdown.recipientNetMinor, 100000n);
+      assert.equal(free.breakdown.recipientNetMinor, 200000n);
       assert.equal(free.feePolicyVersion, 'proposed-v1.1-custom-500-fee-free');
       // The one credit is reserved by the open fee-free quote: the next quote pays the fee.
       assert.equal((await quoteAda()).feeFree, false);

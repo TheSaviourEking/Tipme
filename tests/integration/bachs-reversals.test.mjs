@@ -46,7 +46,7 @@ test('a Bachs refund or dispute on a paid tip opens one money issue and books no
   });
   const quote = await createQuote(db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { attemptId } = await createPaymentIntent(db, {
@@ -64,7 +64,7 @@ test('a Bachs refund or dispute on a paid tip opens one money issue and books no
     eventType: 'payment.succeeded',
     attemptId,
     providerReference: REFERENCE,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     providerFeeMinor: 1500n,
     signatureVerified: true,
@@ -146,7 +146,7 @@ test('a reversal opens its issue and pauses that recipient’s withdrawals', asy
   });
   const quote = await createQuote(db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { attemptId } = await createPaymentIntent(db, {

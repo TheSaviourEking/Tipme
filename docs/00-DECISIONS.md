@@ -59,14 +59,14 @@
 > **PR-012 notes (22 Oct 2026), all PROPOSED (pretend money):**
 > - **v1.1 commercial rules applied for testing:**
 >   - TipMe keeps a 10% fee and pays processing out of it, so a ₦5,000 tip gives the recipient ₦4,500.
->   - The minimum tip is ₦1,000 and there is **no maximum**: supporters tip what they want (the user's decision; the API only bounds the input to 12 digits of kobo, and a real provider's own limits will apply). The minimum withdrawal is ₦1,000.
+>   - The minimum tip is ₦2,000 (the owner's decision, 2 Nov 2026; it was ₦1,000) and there is **no maximum**: supporters tip what they want (the user's decision; the API only bounds the input to 12 digits of kobo, and a real provider's own limits will apply). The minimum withdrawal is ₦2,000 (same decision).
 >   - These are the PRD v1.1 *proposed* rules. They are not approved pricing (D-05) and do not enable real money.
 > - **Free and Pro (the user's decision):**
->   - Every page starts on **Free**: standard amounts of ₦1,000, ₦2,000 and ₦5,000, plus any custom amount from ₦1,000.
->   - **Pro** lets the recipient choose 1–4 preset amounts and their own minimum, never below ₦1,000. The fee and withdrawal minimum are the same as Free.
+>   - Every page starts on **Free**: standard amounts of ₦2,000, ₦5,000 and ₦10,000, plus any custom amount from ₦2,000.
+>   - **Pro** lets the recipient choose 1–4 preset amounts and their own minimum, never below ₦2,000. Amounts saved under the old floor are no longer offered. The fee and withdrawal minimum are the same as Free.
 >   - Pro is granted by staff with a written reason and is audited; there is no billing until payments are approved.
 >   - Pro pricing, and whether Pro changes the fee, are open.
->   - **Leftover balances:** a withdrawal under ₦1,000 is allowed only when it takes the whole available balance, so nobody is left with money they cannot withdraw or an account they cannot close (the user's decision).
+>   - **Leftover balances:** a withdrawal under ₦2,000 is allowed only when it takes the whole available balance, so nobody is left with money they cannot withdraw or an account they cannot close (the user's decision).
 > - **What the new fee changes in rewards and reports:**
 >   - A fee-free tip now gives the recipient the whole tip, and costs TipMe its whole 10% (processing included).
 >   - The lifetime cap (half of what TipMe kept) is checked against that full cost. So the 10th-tip reward is 4 fee-free ₦2,000 tips, not 5.

@@ -45,7 +45,7 @@ async function tipTobi(message) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         handle: 'tobi',
-        amountMinor: '200000',
+        amountMinor: '400000',
         currency: 'NGN',
       }),
     })
@@ -77,8 +77,8 @@ test('a recipient sees their balance, tips and a tip with its proof', async () =
   const tipId = await tipTobi('Lovely coffee');
   const { cookie } = await signIn(stack.api, '+2348000000002');
   const summary = (await (await get('/v1/me/dashboard', cookie)).json()).data;
-  assert.equal(summary.availableMinor, '180000');
-  assert.equal(summary.today, '180000');
+  assert.equal(summary.availableMinor, '360000');
+  assert.equal(summary.today, '360000');
   assert.equal(summary.last7Days.length, 7);
   const tips = (await (await get('/v1/me/tips?status=paid', cookie)).json())
     .data;
@@ -128,7 +128,7 @@ test('a withdrawal needs a key, respects the balance and is confirmed by reconci
   assert.equal(quote.state, 'ready');
   assert.equal(quote.withdrawableMinor, before);
   assert.equal(quote.feeMinor, '5000');
-  const ok = await withdraw('100000');
+  const ok = await withdraw('200000');
   assert.equal(ok.status, 201);
   const { payoutId } = (await ok.json()).data;
   // The request reaches no provider: it queues the job the worker starts the payout from.
@@ -147,7 +147,7 @@ test('a withdrawal needs a key, respects the balance and is confirmed by reconci
   ]);
   const after = (await (await get('/v1/me/dashboard', cookie)).json()).data
     .availableMinor;
-  assert.equal(BigInt(after), BigInt(before) - 100000n);
+  assert.equal(BigInt(after), BigInt(before) - 200000n);
   assert.equal(
     (await (await get('/v1/me/activity', cookie)).json()).data.find(
       (row) => row.id === payoutId,
@@ -166,7 +166,7 @@ test('a withdrawal needs a key, respects the balance and is confirmed by reconci
     const { providerReference } = await provider.initiatePayout({
       payoutId,
       idempotencyKey: `payout.${payoutId}`,
-      amountMinor: 100000n,
+      amountMinor: 200000n,
       currency: 'NGN',
     });
     await markPayoutInitiated(database.db, {

@@ -668,7 +668,7 @@ test('the Tip bar never covers a focused field, an error or the Report link @mob
   await page.getByLabel(/^Other amount/).fill('5');
   await page.getByLabel(/^Other amount/).blur();
   await tipButton(page).click();
-  const error = page.getByText(/Enter an amount of NGN 1,000 or more/);
+  const error = page.getByText(/Enter an amount of NGN 2,000 or more/);
   await expect(error).toBeVisible();
   await expect
     .poll(() => clearOfBar(page, '.appreciation-card .tm-field-error'))
@@ -686,7 +686,7 @@ test('the Tip bar never covers a focused field, an error or the Report link @mob
   await expect(bar).toBeVisible();
 
   // Keyboard users: anything focused by Tab is scrolled clear of the bar.
-  await page.getByRole('radio', { name: '1,000 NGN' }).focus();
+  await page.getByRole('radio', { name: '5,000 NGN' }).focus();
   await expect.poll(() => clearOfBar(page, '.tm-amount-choice')).toBe(true);
   await page.locator('.composer-extras summary').focus();
   await expect
@@ -824,8 +824,8 @@ test('the bar names the amount, with no total line @mobile', async ({
       behavior: 'instant',
     });
   });
-  await page.getByRole('radio', { name: '1,000 NGN' }).click();
-  await expect(tipButton(page)).toHaveText(/^Tip ₦1,000/);
+  await page.getByRole('radio', { name: '5,000 NGN' }).click();
+  await expect(tipButton(page)).toHaveText(/^Tip ₦5,000/);
   await expect(tipButton(page)).toBeInViewport({ ratio: 1 });
   await expect(page.locator('.tip-payment-total')).toHaveCount(0);
   // Small on a phone: notice, partner line and button together.
@@ -892,8 +892,8 @@ test('at 1280x720 the Tip button is in view, and choosing moves nothing', async 
   const button = tipButton(page);
   await expect(button).toBeInViewport({ ratio: 1 });
   const before = await button.boundingBox();
-  await page.getByRole('radio', { name: '1,000 NGN' }).click();
-  await expect(button).toHaveText(/^Tip ₦1,000/);
+  await page.getByRole('radio', { name: '5,000 NGN' }).click();
+  await expect(button).toHaveText(/^Tip ₦5,000/);
   await expect(button).toBeInViewport({ ratio: 1 });
   expect((await button.boundingBox())!.y).toBe(before!.y);
 });

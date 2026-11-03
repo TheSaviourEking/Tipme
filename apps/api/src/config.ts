@@ -1,4 +1,5 @@
 import { isProductionCopy, parseConfig } from '@tipme/observability';
+import { databaseBudgetSettingsShape } from '@tipme/contracts';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import {
@@ -44,6 +45,7 @@ export const apiConfigSchema = z
       .optional(),
     PORT: z.coerce.number().int().min(1024).max(65535).default(4000),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+    ...databaseBudgetSettingsShape,
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
     OTEL_TRACES_SAMPLER_RATIO: z.coerce.number().min(0).max(1).default(1),

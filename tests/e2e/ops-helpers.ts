@@ -17,7 +17,8 @@ export async function withDatabase<T>(
   task: (db: unknown, ops: Record<string, any>) => Promise<T>, // eslint-disable-line @typescript-eslint/no-explicit-any -- untyped dist import in tests
 ): Promise<T> {
   const ops = await import('../../packages/database/dist/index.js');
-  const handle = ops.createDatabase(E2E_DATABASE_URL, { max: 1 });
+  // Two connections: at one, the staff lock refuses at once instead of waiting for a parallel test.
+  const handle = ops.createDatabase(E2E_DATABASE_URL, { max: 2 });
   try {
     return await task(handle.db, ops);
   } finally {

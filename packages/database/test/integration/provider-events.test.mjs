@@ -14,7 +14,7 @@ const paidEvent = (attemptId, overrides = {}) => ({
   eventType: 'payment.succeeded',
   attemptId,
   providerReference: `ref-${attemptId}`,
-  amountMinor: 100000n,
+  amountMinor: 200000n,
   currency: 'NGN',
   providerFeeMinor: 1500n,
   signatureVerified: true,
@@ -29,7 +29,7 @@ test('provider events', async (t) => {
   const newTip = async (extra = {}) => {
     const { quoteId } = await createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     return createPaymentIntent(database.db, {
@@ -69,15 +69,15 @@ test('provider events', async (t) => {
         (await q('SELECT count(*)::int AS n FROM ledger_transactions'))[0].n,
         1,
       );
-      assert.equal(await balanceOf('recipient_payable', ADA), '90000');
-      assert.equal(await balanceOf('platform_fee_revenue'), '8500');
+      assert.equal(await balanceOf('recipient_payable', ADA), '180000');
+      assert.equal(await balanceOf('platform_fee_revenue'), '17000');
       const outbox = await q('SELECT dedupe_key, payload FROM outbox_events');
       assert.deepEqual(
         outbox.map((row) => row.dedupe_key),
         [`tip.succeeded.${tipId}`],
       );
       assert.doesNotThrow(() => JSON.stringify(outbox));
-      assert.equal(outbox[0].payload.recipientNetMinor, '90000');
+      assert.equal(outbox[0].payload.recipientNetMinor, '180000');
     },
   );
 
@@ -180,7 +180,7 @@ test('provider events', async (t) => {
       const { tipId, attemptId } = await newTip();
       const wrong = await recordProviderEvent(
         database.db,
-        paidEvent(attemptId, { amountMinor: 99999n }),
+        paidEvent(attemptId, { amountMinor: 199998n }),
       );
       assert.deepEqual(wrong, {
         outcome: 'mismatch',
@@ -228,7 +228,7 @@ test('provider events', async (t) => {
         database.db,
         paidEvent(attemptId, { providerFeeMinor: 2000n }),
       );
-      assert.equal(await balanceOf('recipient_payable', ADA), '90000');
+      assert.equal(await balanceOf('recipient_payable', ADA), '180000');
       const [{ net }] = await q(
         `SELECT sum(CASE side WHEN 'debit' THEN amount_minor ELSE -amount_minor END)::text AS net FROM ledger_entries`,
       );
@@ -309,7 +309,7 @@ test('provider events', async (t) => {
       const { attemptId } = await newTip();
       const result = await recordProviderEvent(
         database.db,
-        paidEvent(attemptId, { providerFeeMinor: 100001n }),
+        paidEvent(attemptId, { providerFeeMinor: 200002n }),
       );
       assert.equal(result.outcome, 'mismatch');
       assert.equal(result.attemptStatus, 'UNKNOWN');
@@ -334,14 +334,14 @@ test('provider events', async (t) => {
           await recordProviderEvent(
             database.db,
             paidEvent(one.attemptId, {
-              payload: { amount: 100000n, note: undefined },
+              payload: { amount: 200000n, note: undefined },
             }),
           )
         ).outcome,
         'applied',
       );
       const [stored] = await q('SELECT payload FROM provider_events');
-      assert.deepEqual(stored.payload, { amount: '100000' });
+      assert.deepEqual(stored.payload, { amount: '200000' });
       const two = await newTip();
       assert.equal(
         (

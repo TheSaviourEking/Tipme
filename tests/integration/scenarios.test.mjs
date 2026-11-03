@@ -59,7 +59,7 @@ const hook = () => `${stack.api}/v1/webhooks/mock`;
 async function play(scenario) {
   const { quoteId } = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { tipId, attemptId } = await createPaymentIntent(database.db, {
@@ -68,7 +68,7 @@ async function play(scenario) {
   });
   const { providerReference } = await mock.initializePayment({
     attemptId,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     scenario,
   });
@@ -80,7 +80,7 @@ async function play(scenario) {
   const payment = {
     reference: providerReference,
     attemptId,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     feeMinor: 1500n,
   };

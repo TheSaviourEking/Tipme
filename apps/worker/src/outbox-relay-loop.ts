@@ -1,6 +1,7 @@
 import { relayOutboxOnce, type Database } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import type { Queue } from 'bullmq';
+import { databaseFailureFields, RELAY_JOB_RETRIES } from './job-retry.js';
 
 const RETENTION_SECONDS = 7 * 24 * 60 * 60;
 
@@ -43,6 +44,7 @@ export function startOutboxRelay(options: {
             // Keep finished relay jobs for 7 days so a re-published row is deduped by job ID.
             removeOnComplete: { age: RETENTION_SECONDS },
             removeOnFail: { age: RETENTION_SECONDS },
+            ...RELAY_JOB_RETRIES,
           },
         );
       });
@@ -51,6 +53,7 @@ export function startOutboxRelay(options: {
       logger.warn({
         event: 'outbox.relay_failed',
         error: error instanceof Error ? error.name : 'unknown',
+        ...databaseFailureFields(error),
       });
       delay = Math.min(delay * 2, maxBackoffMs);
     }

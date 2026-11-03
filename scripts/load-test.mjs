@@ -43,6 +43,8 @@ async function main() {
     databaseUrl: database.url,
     apiEnv: {
       LOG_LEVEL: 'warn',
+      // Blank: sized from the server, as production. A number to compare pool sizes.
+      DATABASE_POOL_MAX: process.env.LOAD_DB_POOL ?? '',
       RATE_LIMIT_AUTH_PER_HOUR: generous,
       RATE_LIMIT_QUOTES_PER_MIN: generous,
       RATE_LIMIT_INTENTS_PER_MIN: generous,

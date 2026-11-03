@@ -1160,7 +1160,7 @@ export async function requestWithdrawal(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
-      // ₦1,000 minimum (PR-012), except to take all that can be taken: nobody is left with money
+      // ₦2,000 minimum, except to take all that can be taken: nobody is left with money
       // they cannot withdraw, or an account they cannot close.
       if (
         input.amountMinor < FEE_POLICY_V1.minWithdrawalMinor &&

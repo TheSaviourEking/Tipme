@@ -1,6 +1,11 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { desc } from 'drizzle-orm';
 import pg from 'pg';
-import { createDatabase, type Database } from './client.js';
+import {
+  createDatabase,
+  type Database,
+  type DatabaseHandle,
+} from './client.js';
 import { assertLocalDatabaseUrl } from './local-only.js';
 import { runMigrations } from './migrations.js';
 import type { MailSealing } from './operations/mail-queue.js';
@@ -72,6 +77,45 @@ export async function dropTestDatabases(template: string): Promise<void> {
   });
 }
 
+/**
+ * Makes a transaction that asks for a second connection fail its test. Production's pools are small
+ * enough (docs/runbooks/remote-database.md) that this would wait on itself until it timed out.
+ * Checks the code path, whatever the pool's size, and refuses the work and again at close.
+ */
+function refuseNestedConnections(handle: DatabaseHandle): () => void {
+  const scope = new AsyncLocalStorage<{ connected: boolean; open: boolean }>();
+  const found: string[] = [];
+  const connect = handle.pool.connect.bind(handle.pool) as (
+    ...args: unknown[]
+  ) => unknown;
+  (handle.pool as { connect: unknown }).connect = (...args: unknown[]) => {
+    const current = scope.getStore();
+    if (current?.open) {
+      if (current.connected) {
+        const problem = new Error(
+          'A transaction asked for a second database connection while holding one.',
+        );
+        found.push(problem.stack ?? problem.message);
+        throw problem;
+      }
+      current.connected = true;
+    }
+    return connect(...args);
+  };
+  const transaction = handle.db.transaction.bind(handle.db);
+  handle.db.transaction = ((...args: Parameters<typeof transaction>) => {
+    const current = { connected: false, open: true };
+    return scope
+      .run(current, () => transaction(...args))
+      .finally(() => {
+        current.open = false;
+      });
+  }) as typeof transaction;
+  return () => {
+    if (found.length > 0) throw new Error(found.join('\n'));
+  };
+}
+
 export interface TestDatabase {
   db: Database;
   pool: pg.Pool;
@@ -102,7 +146,9 @@ export async function openTestDatabase(): Promise<TestDatabase> {
     );
   });
   const url = urlFor(name);
-  const handle = createDatabase(url);
+  // Room for tests that hold transactions open on purpose to race them.
+  const handle = createDatabase(url, { max: 10 });
+  const checkNesting = refuseNestedConnections(handle);
   await runMigrations(handle.db);
   return {
     db: handle.db,
@@ -133,7 +179,10 @@ export async function openTestDatabase(): Promise<TestDatabase> {
         client.release();
       }
     },
-    close: handle.close,
+    async close() {
+      await handle.close();
+      checkNesting();
+    },
   };
 }
 

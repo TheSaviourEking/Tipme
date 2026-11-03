@@ -158,8 +158,8 @@ test('an idempotency conflict never says to simply try again', async ({
     }),
   );
   await page.goto('/dashboard/withdraw');
-  await page.getByLabel('Amount (NGN)').fill('1000');
-  await page.getByRole('button', { name: 'Withdraw NGN 1,000.00' }).click();
+  await page.getByLabel('Amount (NGN)').fill('2000');
+  await page.getByRole('button', { name: 'Withdraw NGN 2,000.00' }).click();
   await expect(
     page.getByText(
       'This withdrawal may already be on its way. Check your dashboard before asking again.',

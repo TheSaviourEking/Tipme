@@ -40,6 +40,13 @@ import {
   UncertainProviderOutcomeError,
 } from '../../packages/payments/dist/index.js';
 
+import {
+  createDatabase,
+  isDatabaseAvailabilityFailure,
+} from '../../packages/database/dist/index.js';
+import { jobFailure } from '../../apps/worker/dist/job-retry.js';
+import { startPgGate } from './pg-gate.mjs';
+
 // The money path, against a scripted provider: nothing here reaches a payment provider.
 
 const ACCOUNT = 'acct_tobi';
@@ -63,7 +70,7 @@ function scripted(overrides = {}) {
       return { status: 'active', requirementsDue: [] };
     },
     async payoutBalance() {
-      return { availableMinor: 900000n };
+      return { availableMinor: 1800000n };
     },
     async quotePayoutFee() {
       return { feeMinor: FEE, exact: false };
@@ -106,7 +113,7 @@ async function fixture(t) {
   for (let i = 0; i < 2; i += 1) {
     const quote = await createQuote(db, {
       handle: 'tobi',
-      tipMinor: 1000000n,
+      tipMinor: 2000000n,
       currency: 'NGN',
     });
     const intent = await createPaymentIntent(db, {
@@ -125,9 +132,9 @@ async function fixture(t) {
       eventType: 'payment.succeeded',
       attemptId: intent.attemptId,
       providerReference: reference,
-      amountMinor: 1000000n,
+      amountMinor: 2000000n,
       currency: 'NGN',
-      providerFeeMinor: 15000n,
+      providerFeeMinor: 30000n,
       signatureVerified: true,
       payload: {},
     });
@@ -145,7 +152,7 @@ async function fixture(t) {
      VALUES ($1, $2, 'bachs', 'ba_tobi', '058', 'Guaranty Trust Bank', '4321', 'usable')`,
     [randomUUID(), TOBI],
   );
-  const withdraw = async (amountMinor = 200000n) =>
+  const withdraw = async (amountMinor = 400000n) =>
     (
       await requestWithdrawal(db, {
         profileId: TOBI,
@@ -189,6 +196,7 @@ async function fixture(t) {
     reconcilePayouts({ db, provider, now, minAgeMs: 0 });
   return {
     db,
+    url: database.url,
     q,
     withdraw,
     row,
@@ -223,7 +231,7 @@ test('a payout starts with the fee transfer, then the payout, each with its own 
       payoutId,
       accountRef: ACCOUNT,
       destinationRef: 'ba_tobi',
-      amountMinor: 200000n,
+      amountMinor: 400000n,
       currency: 'NGN',
       idempotencyKey: `payout.${payoutId}`,
     },
@@ -240,6 +248,53 @@ test('a payout starts with the fee transfer, then the payout, each with its own 
   // A redelivered job changes nothing.
   assert.equal(await startPayout(db, { payoutId, provider }), 'already');
   assert.equal(writes(provider).length, 2);
+});
+
+test('a connection lost right after the provider accepted: the retry reads, never sends again', async (t) => {
+  const { url, withdraw, row, db } = await fixture(t);
+  const payoutId = await withdraw();
+  const gate = await startPgGate(url);
+  const handle = createDatabase(gate.url, { max: 1 });
+  t.after(async () => {
+    await handle.close();
+    await gate.close();
+  });
+  const provider = scripted({
+    async initiatePayout(input) {
+      provider.calls.push({ call: 'payout', ...input });
+      gate.fill(); // The money left; the database goes away before it's written down.
+      return {
+        providerReference: `${ACCOUNT}:po_${input.payoutId}`,
+        status: 'pending',
+      };
+    },
+  });
+  provider.found = {
+    providerReference: `${ACCOUNT}:po_${payoutId}`,
+    status: 'pending',
+    feeMinor: FEE,
+  };
+  const failed = await startPayout(handle.db, { payoutId, provider }).catch(
+    (error) => error,
+  );
+  assert.equal(writes(provider).filter((w) => w.call === 'payout').length, 1);
+  assert.equal(isDatabaseAvailabilityFailure(failed), true, String(failed));
+  assert.equal(jobFailure('payout.start', failed), failed);
+  gate.drain();
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  // What the queue's next try does.
+  await startPayout(handle.db, { payoutId, provider });
+  await startPayout(db, { payoutId, provider });
+  assert.equal(
+    writes(provider).filter((w) => w.call === 'payout').length,
+    1,
+    'sent twice',
+  );
+  assert.equal(
+    (await row(payoutId)).provider_reference,
+    provider.found.providerReference,
+    JSON.stringify(provider.calls.map(({ call }) => call)),
+  );
 });
 
 test('paid posts the payout and the fee as its own TipMe cost line', async (t) => {
@@ -270,13 +325,13 @@ test('paid posts the payout and the fee as its own TipMe cost line', async (t) =
       operation_key: `payout.${payoutId}`,
       code: 'provider_clearing',
       side: 'credit',
-      amount: '200000',
+      amount: '400000',
     },
     {
       operation_key: `payout.${payoutId}`,
       code: 'recipient_payable',
       side: 'debit',
-      amount: '200000',
+      amount: '400000',
     },
   ]);
   const [credit] = await q('SELECT * FROM provider_fee_credits');
@@ -288,7 +343,7 @@ test('failed releases the reservation and emails withdrawal_failed', async (t) =
     await fixture(t);
   const before = await available();
   const payoutId = await withdraw();
-  assert.equal(await available(), before - 200000n);
+  assert.equal(await available(), before - 400000n);
   const provider = scripted();
   await startPayout(db, { payoutId, provider });
   provider.status = { status: 'failed', failureReason: 'destination' };
@@ -376,7 +431,7 @@ test('in debt opens provider_in_debt and pauses withdrawals', async (t) => {
   await assert.rejects(
     requestWithdrawal(db, {
       profileId: TOBI,
-      amountMinor: 200000n,
+      amountMinor: 400000n,
       idempotencyKey: randomUUID(),
       provider: scripted(),
     }),
@@ -438,7 +493,7 @@ test('a timeout leaves the payout unknown, and reconciliation resolves it withou
   const uncertain = await row(payoutId);
   assert.equal(uncertain.status, 'REQUESTED');
   assert.ok(uncertain.start_uncertain_at);
-  assert.equal(await available(), before - 200000n);
+  assert.equal(await available(), before - 400000n);
 
   // Not found yet is not proof while the request may still be in flight.
   await reconcile(provider);
@@ -513,7 +568,7 @@ test('a redelivered job after a timeout reads first and never calls the provider
   );
   assert.equal(provider.calls.filter(({ call }) => call === 'find').length, 1);
   assert.equal((await row(payoutId)).status, 'REQUESTED');
-  assert.equal(await available(), before - 200000n);
+  assert.equal(await available(), before - 400000n);
   // What the read finds decides it.
   provider.found = { providerReference: `${ACCOUNT}:po_x`, status: 'pending' };
   assert.equal(await startPayout(db, { payoutId, provider }), 'started');
@@ -557,7 +612,7 @@ test('no payout found long after an uncertain start opens one issue and keeps th
   await reconcile(provider, late);
   assert.equal((await issues('payout_unresolved')).length, 1);
   assert.equal((await row(payoutId)).status, 'REQUESTED');
-  assert.equal(await available(), before - 200000n);
+  assert.equal(await available(), before - 400000n);
   assert.equal(
     provider.calls.filter(({ call }) => call === 'payout').length,
     1,
@@ -677,7 +732,7 @@ test('a failed payout after a top-up reuses the top-up next time', async (t) => 
 test('two workers starting the same payout make one provider call', async (t) => {
   const { db, withdraw, row } = await fixture(t);
   for (let i = 0; i < 5; i += 1) {
-    const payoutId = await withdraw(100000n);
+    const payoutId = await withdraw(200000n);
     const provider = scripted({
       async initiatePayout(input) {
         provider.calls.push({ call: 'payout', ...input });
@@ -725,7 +780,7 @@ test('a payout TipMe never started opens payout_unexpected and pauses withdrawal
   await assert.rejects(
     requestWithdrawal(db, {
       profileId: TOBI,
-      amountMinor: 200000n,
+      amountMinor: 400000n,
       idempotencyKey: randomUUID(),
       provider: scripted(),
     }),
@@ -831,7 +886,7 @@ test('a hold that appeared after the request stops the start and shows it to sta
   const payout = await row(payoutId);
   assert.equal(payout.status, 'REQUESTED');
   assert.equal(payout.start_uncertain_at, null);
-  assert.equal(await available(), before - 200000n);
+  assert.equal(await available(), before - 400000n);
   assert.equal((await issues('payout_held')).length, 1);
   assert.equal(await startPayout(db, { payoutId, provider }), 'held');
   assert.equal((await issues('payout_held')).length, 1);
@@ -876,10 +931,10 @@ const timingOut = (overrides = {}) => {
 
 for (const [label, wrong] of [
   ['amount', { amountMinor: 999n, currency: 'NGN' }],
-  ['currency', { amountMinor: 200000n, currency: 'USD' }],
+  ['currency', { amountMinor: 400000n, currency: 'USD' }],
   [
     'destination',
-    { amountMinor: 200000n, currency: 'NGN', destinationRef: 'ba_other' },
+    { amountMinor: 400000n, currency: 'NGN', destinationRef: 'ba_other' },
   ],
 ]) {
   test(`a lookup with the wrong ${label} is not booked: conflict, and the money stays reserved`, async (t) => {
@@ -912,7 +967,7 @@ test('a matching lookup is still applied', async (t) => {
   provider.found = {
     providerReference: `${ACCOUNT}:po_ok`,
     status: 'paid',
-    amountMinor: 200000n,
+    amountMinor: 400000n,
     currency: 'NGN',
     destinationRef: 'ba_tobi',
   };
@@ -934,8 +989,8 @@ test('a status read with the wrong amount is not booked', async (t) => {
 
 for (const [label, wrong] of [
   // The docs leave open whether data.amount includes the fee: 200000 + 5000 looks gross.
-  ['a gross-looking amount', { amountMinor: 205000n, currency: 'NGN' }],
-  ['the wrong currency', { amountMinor: 200000n, currency: 'USD' }],
+  ['a gross-looking amount', { amountMinor: 410000n, currency: 'NGN' }],
+  ['the wrong currency', { amountMinor: 400000n, currency: 'USD' }],
 ]) {
   test(`a signed payout.paid with ${label} books once if the read agrees, with no issue`, async (t) => {
     const { db, withdraw, row, issues, ledger, paidEvent, webhooks } =
@@ -945,7 +1000,7 @@ for (const [label, wrong] of [
     await startPayout(db, { payoutId, provider });
     provider.status = {
       status: 'paid',
-      amountMinor: 200000n,
+      amountMinor: 400000n,
       currency: 'NGN',
       destinationRef: 'ba_tobi',
     };
@@ -1000,7 +1055,7 @@ test('a matching signed payout.paid is applied, with the fee it states', async (
   const provider = scripted();
   await startPayout(db, { payoutId, provider });
   const event = paidEvent(payoutId, {
-    amountMinor: 200000n,
+    amountMinor: 400000n,
     currency: 'NGN',
     feeMinor: 6000n,
     operationReference: payoutId,
@@ -1105,7 +1160,7 @@ test('a parked event naming our payout is never unexpected, even through a long 
   await startPayout(db, { payoutId, provider });
   const event = paidEvent(payoutId, {
     operationReference: payoutId,
-    amountMinor: 200000n,
+    amountMinor: 400000n,
     currency: 'NGN',
   });
   assert.equal(await webhooks.applyBachs(event, provider), 'parked');
@@ -1122,7 +1177,7 @@ test('a parked event naming our payout is never unexpected, even through a long 
   // Reads back: the payout is adopted after a read, then settled by the event.
   provider.fetchPayoutStatus = async () => ({
     status: 'paid',
-    amountMinor: 200000n,
+    amountMinor: 400000n,
     currency: 'NGN',
   });
   await reconcile(provider, after(PAYOUT_NOT_FOUND_AFTER_MS * 2));
@@ -1417,7 +1472,7 @@ for (const [label, read, expected, status] of [
     await startPayout(db, { payoutId, provider });
     provider.status = {
       status: 'paid',
-      amountMinor: 200000n,
+      amountMinor: 400000n,
       currency: 'NGN',
       ...read(payoutId),
     };

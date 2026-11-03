@@ -23,7 +23,7 @@ test('admin metrics', async (t) => {
   const tip = async (outcome = 'succeeded') => {
     const quote = await createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     const { tipId, attemptId } = await createPaymentIntent(database.db, {

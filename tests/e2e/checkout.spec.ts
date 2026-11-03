@@ -402,7 +402,7 @@ test('minor: the draft cannot change while a tip is being started', async ({
     await route.continue();
   });
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
-  await expect(page.getByRole('radio', { name: '1,000 NGN' })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: '5,000 NGN' })).toBeDisabled();
   await expect(page.getByLabel('Personal message (optional)')).toBeDisabled();
   release();
   await page.waitForURL(/\/mock-checkout\//);

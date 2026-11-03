@@ -59,26 +59,26 @@ test('profile supports keyboard amount selection, validation and a server quote'
   await expect(page.getByRole('button', { name: 'Tip ₦2,000' })).toBeVisible();
   await expect(page.getByText(/You pay NGN|Total to pay/)).toHaveCount(0);
   expect(posts).toEqual([]);
-  const first = page.getByRole('radio', { name: '1,000 NGN' });
+  const first = page.getByRole('radio', { name: '2,000 NGN' });
   await first.focus();
   await page.keyboard.press('Space');
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: '5,000 NGN' })).toBeChecked();
   const custom = page.getByLabel(/^Other amount/);
   await custom.fill('0');
   await page.getByRole('button', { name: /^Tip/ }).click();
   await expect(
     page.getByText(
-      'Enter an amount of NGN 1,000 or more, like 1,000 or 2,500.50.',
+      'Enter an amount of NGN 2,000 or more, like 2,000 or 2,500.50.',
     ),
   ).toBeVisible();
-  await custom.fill('1234.50');
+  await custom.fill('2234.50');
   await page.getByText('Add a message, reason or your name').click();
   await page
     .getByLabel('Personal message (optional)')
     .fill('Thank you for making this easier.');
   await expect(
-    page.getByRole('button', { name: /^Tip ₦1,234\.50/ }),
+    page.getByRole('button', { name: /^Tip ₦2,234\.50/ }),
   ).toBeEnabled();
   // Choosing and typing create nothing: no quote, no tip, and the message stays in the page.
   expect(posts).toEqual([]);

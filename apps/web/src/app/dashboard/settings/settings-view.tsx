@@ -571,7 +571,7 @@ function TipAmountsSettings() {
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
-        text: 'The smallest tip must be at least NGN 1,000, in whole naira.',
+        text: 'The smallest tip must be at least NGN 2,000, in whole naira.',
       });
     else
       setError({
@@ -614,7 +614,7 @@ function TipAmountsSettings() {
           label="Smallest tip (NGN)"
           inputMode="numeric"
           autoComplete="off"
-          hint="At least NGN 1,000."
+          hint="At least NGN 2,000."
           value={minimum}
           onChange={(e) => {
             setMinimum(e.target.value);

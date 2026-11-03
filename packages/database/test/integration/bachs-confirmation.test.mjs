@@ -31,7 +31,7 @@ test('Bachs confirmation and expiry', async (t) => {
     await database.fresh();
     const quote = await createQuote(db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
       ...(quotedAt ? { now: quotedAt } : {}),
     });
@@ -67,16 +67,16 @@ test('Bachs confirmation and expiry', async (t) => {
     async () => {
       await started();
       const bachs = verifier((expectation) =>
-        expectation?.platformFeeMinor === 10000n
+        expectation?.platformFeeMinor === 20000n
           ? {
               status: 'succeeded',
-              amountMinor: 100000n,
+              amountMinor: 200000n,
               currency: 'NGN',
               feeMinor: 1500n,
             }
           : {
               status: 'pending',
-              amountMinor: 100000n,
+              amountMinor: 200000n,
               currency: 'NGN',
               feeMinor: 0n,
             },
@@ -87,7 +87,7 @@ test('Bachs confirmation and expiry', async (t) => {
         now: new Date(),
         minAgeMs: 0,
       });
-      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 10000n }]);
+      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 20000n }]);
       assert.deepEqual(await status(), {
         attempt: 'VERIFIED_SUCCEEDED',
         tip: 'SUCCEEDED',
@@ -105,7 +105,7 @@ test('Bachs confirmation and expiry', async (t) => {
       await started(quotedAt);
       const bachs = verifier(() => ({
         status: 'pending',
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         currency: 'NGN',
         feeMinor: 0n,
         collected: true,
@@ -116,7 +116,7 @@ test('Bachs confirmation and expiry', async (t) => {
         now: afterExpiry,
       });
       assert.equal(result.expired, 0);
-      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 10000n }]);
+      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 20000n }]);
       // Out of expiry's reach, still unbooked: reconciliation and the issue inbox take over.
       assert.deepEqual(await status(), {
         attempt: 'PENDING',
@@ -129,7 +129,7 @@ test('Bachs confirmation and expiry', async (t) => {
     await started(quotedAt);
     const bachs = verifier(() => ({
       status: 'pending',
-      amountMinor: 100000n,
+      amountMinor: 200000n,
       currency: 'NGN',
       feeMinor: 0n,
     }));

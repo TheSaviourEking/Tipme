@@ -28,7 +28,7 @@ test('backups and the restore drill', async (t) => {
   // A paid tip, so there are ledger rows to prove.
   const quote = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { attemptId } = await createPaymentIntent(database.db, {
@@ -49,7 +49,7 @@ test('backups and the restore drill', async (t) => {
     providerReference: `ref-${attemptId}`,
     amountMinor: BigInt(total),
     currency: 'NGN',
-    providerFeeMinor: 1500n,
+    providerFeeMinor: 3000n,
     signatureVerified: true,
     payload: { kind: 'test' },
   });

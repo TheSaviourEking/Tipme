@@ -114,11 +114,11 @@ test('arrowing through amounts never pulls focus out of the radio group', async 
   page,
 }) => {
   await page.goto('/@ada');
-  await page.getByRole('radio', { name: '1,000 NGN' }).focus();
+  await page.getByRole('radio', { name: '2,000 NGN' }).focus();
   await page.keyboard.press('ArrowLeft'); // wraps to the last preset
-  await expect(page.getByRole('radio', { name: '5,000 NGN' })).toBeFocused();
+  await expect(page.getByRole('radio', { name: '10,000 NGN' })).toBeFocused();
   await page.keyboard.press('ArrowRight'); // wraps back to the first preset
-  await expect(page.getByRole('radio', { name: '1,000 NGN' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
   await page.keyboard.press('Tab');
   await expect(page.getByLabel(/^Other amount/)).toBeFocused();
 });

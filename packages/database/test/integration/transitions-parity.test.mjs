@@ -24,7 +24,7 @@ test('database status rules match the domain transition tables', async (t) => {
   await database.fresh();
   const { quoteId } = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { tipId, attemptId } = await createPaymentIntent(database.db, {
@@ -37,7 +37,7 @@ test('database status rules match the domain transition tables', async (t) => {
     eventType: 'payment.succeeded',
     attemptId,
     providerReference: 'r',
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     providerFeeMinor: 1500n,
     signatureVerified: true,

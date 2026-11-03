@@ -8,6 +8,8 @@ import {
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 
+import { databaseFailureFields } from './job-retry.js';
+
 const HOUSEKEEPING_MS = 60_000;
 
 export interface MailDelivery {
@@ -50,6 +52,7 @@ export function startMailDelivery(options: {
       logger.warn({
         event: 'mail.delivery_failed',
         error: error instanceof Error ? error.name : 'unknown',
+        ...databaseFailureFields(error),
       });
     }
     if (!stopped) timer = setTimeout(() => (running = tick()), intervalMs);

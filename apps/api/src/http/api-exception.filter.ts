@@ -7,8 +7,11 @@ import {
 import type { Response } from 'express';
 import type { ApiErrorCode, ApiErrorResponse } from '@tipme/contracts';
 import {
+  databaseFailureOf,
+  isDatabaseAvailabilityFailure,
   OperationError,
   PersistenceError,
+  type DatabaseFailure,
   type OperationErrorCode,
 } from '@tipme/database';
 import type { ErrorReporter, Logger } from '@tipme/observability';
@@ -91,7 +94,7 @@ const messages: Record<ApiErrorCode, string> = {
     'You’ve used all your handle changes. Contact the TipMe team at support@usetipme.xyz to change it again.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
-  WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 1,000.',
+  WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 2,000.',
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:
@@ -304,6 +307,10 @@ function classify(exception: unknown): {
   if (exception instanceof DependencyUnavailableError) {
     return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
   }
+  // A read outside `guarded` that hit the same wall: still a retryable answer, not a 500.
+  if (isDatabaseAvailabilityFailure(exception)) {
+    return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
+  }
   const status =
     exception instanceof HttpException
       ? exception.getStatus()
@@ -318,6 +325,17 @@ function classify(exception: unknown): {
   if (status >= 400 && status < 500)
     return { status, code: 'VALIDATION_FAILED' };
   return { status: 500, code: 'INTERNAL_ERROR' };
+}
+
+/** Fixed words and codes only: what the next person needs to tell one 503 from another. */
+function dependencyFields(failure: DatabaseFailure | null) {
+  if (!failure) return { cause: 'not_database' };
+  return {
+    cause: failure.kind,
+    ...(failure.sqlState ? { sql_state: failure.sqlState } : {}),
+    ...(failure.errno ? { errno: failure.errno } : {}),
+    ...(failure.causeName ? { cause_name: failure.causeName } : {}),
+  };
 }
 
 @Catch()
@@ -346,6 +364,24 @@ export class ApiExceptionFilter implements ExceptionFilter {
         ...(route ? { route } : {}),
         traceId: reference,
       });
+    }
+    if (code === 'DEPENDENCY_UNAVAILABLE') {
+      const route = host
+        .switchToHttp()
+        .getRequest<{ route?: { path?: string } }>().route?.path;
+      const failure = databaseFailureOf(exception);
+      this.logger.warn({
+        event: 'http.dependency_unavailable',
+        ...dependencyFields(failure),
+        ...(route ? { route } : {}),
+        reference,
+      });
+      // A database failure rebuilt from its fixed words, so the driver's message can't travel.
+      if (failure)
+        this.reporter?.capture(
+          new PersistenceError(failure.sqlState, failure),
+          { ...(route ? { route } : {}), traceId: reference },
+        );
     }
     const body: ApiErrorResponse = {
       error: { code, message: messages[code], reference },

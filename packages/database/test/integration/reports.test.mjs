@@ -56,23 +56,23 @@ test('weekly reports', async (t) => {
   };
 
   // Week 2026-W41 runs Monday 5 to Sunday 11 October (Lagos); W40 is the week before.
-  const prior = await paid('tobi', 100000n, lagos('2026-09-30T10:00:00'), {
+  const prior = await paid('tobi', 200000n, lagos('2026-09-30T10:00:00'), {
     label: 'Zed Q.',
   });
-  const a = await paid('tobi', 200000n, lagos('2026-10-05T09:00:00'), {
+  const a = await paid('tobi', 400000n, lagos('2026-10-05T09:00:00'), {
     label: 'Ada M.',
     message: 'Great coffee',
   });
-  const b = await paid('tobi', 100000n, lagos('2026-10-07T18:00:00'), {
+  const b = await paid('tobi', 200000n, lagos('2026-10-07T18:00:00'), {
     label: 'Bola',
   });
-  const c = await paid('tobi', 300000n, lagos('2026-10-07T19:00:00'), {
+  const c = await paid('tobi', 600000n, lagos('2026-10-07T19:00:00'), {
     label: 'Ada M.',
   });
-  const d = await paid('tobi', 100000n, lagos('2026-10-11T23:30:00'), {
+  const d = await paid('tobi', 200000n, lagos('2026-10-11T23:30:00'), {
     label: 'Bola',
   });
-  await paid('tobi', 500000n, lagos('2026-10-12T00:30:00'));
+  await paid('tobi', 1000000n, lagos('2026-10-12T00:30:00'));
 
   await t.test('ISO weeks follow Lagos time', () => {
     assert.equal(isoWeekOf(lagos('2026-10-11T23:30:00')), '2026-W41');

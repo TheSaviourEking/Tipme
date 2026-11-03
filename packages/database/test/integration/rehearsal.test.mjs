@@ -43,7 +43,7 @@ test('rehearsal runs', async (t) => {
   const paidTip = async (handle, outcome = 'succeed') => {
     const quote = await createQuote(database.db, {
       handle,
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     const { tipId, attemptId } = await createPaymentIntent(database.db, {

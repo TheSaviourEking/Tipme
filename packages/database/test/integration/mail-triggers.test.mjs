@@ -46,7 +46,7 @@ async function fresh(t) {
 async function paidTip(db, handle) {
   const { quoteId } = await createQuote(db, {
     handle,
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const intent = await createPaymentIntent(db, {
@@ -59,7 +59,7 @@ async function paidTip(db, handle) {
     eventType: 'payment.succeeded',
     attemptId: intent.attemptId,
     providerReference: `pay-${intent.attemptId}`,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     providerFeeMinor: 1500n,
     signatureVerified: true,
@@ -204,7 +204,7 @@ test('no account_deleted_notice when a tip still confirming stops the deletion',
     quoteId: (
       await createQuote(db, {
         handle: 'ada',
-        tipMinor: 100000n,
+        tipMinor: 200000n,
         currency: 'NGN',
       })
     ).quoteId,

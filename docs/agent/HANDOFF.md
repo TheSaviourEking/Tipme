@@ -1,9 +1,9 @@
-# Current handoff — compact tip card and celebration placement (2 November 2026)
+# Current handoff — database connection budget (2 November 2026)
 
-- Branch/worktree: `feat/compact-tip-card` / `.worktrees/tip-card`, from `origin/dev` at `7295866`, committed, not pushed. Web and tests only: no API, contract, migration or payment change.
-- Built: shorter card, keys with exact amounts and no lone key (`keyLayout`), full-width Other field, one disclosure, one trust line, partner wording moved to the page foot, celebration in the identity column with a tick box, closest-to-₦2,000 preselect, sticky only while the panel fits the window. Rulings are in `docs/design/DECISION-LOG.md`, 2 Nov.
-- Tests: `tests/e2e/tip-card.spec.ts` (stand-in API, browser calls answered in the test) and `tests/e2e/moments.spec.ts` (real stack, paid tip counted).
-- Review round done (partner line beside Tip, phone Go key, M1-M5). Next exact step: regenerate `profile-desktop-desktop-linux.png` and `profile-mobile-mobile-linux.png` from CI's render, then open the PR to `dev`.
+- Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration. Nothing ran against staging or production.
+- One pool per API process, readiness included. `adaptPoolToServer` reads the limit at startup and every minute; 53300 halves the pool for 60 s and backs off new connections. Outbox jobs now retry on database unavailability only.
+- Verified results, untested areas and the owner's options are in `.worktrees/db-budget-report.md`.
+- Assumption to replace: the margin of 7 (5 of Aiven's sessions, 2 spare) until `backend_type` is read on production.
 
 # Current handoff — admin roles, final review fixes (2 November 2026)
 
@@ -20,7 +20,7 @@
 
 # Current handoff — takeover freeze, second report (2 November 2026)
 
-- Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev`, committed, not pushed. No migration.
+- Branch/worktree: `fix/takeover-freeze-second-report` / `.worktrees/freeze-fix`, from `origin/dev`. Pushed; PR to dev open. No migration.
 - `freezeWithdrawals` now reads the hold's issue status under the profile lock. Closed: new issue, new hold, old row ended, `withdrawals.freeze_reopened` audited. Every new issue queues `withdrawals.freeze_opened`, which the worker posts to the alert route with ids only.
 - Verified results, untested areas and the read-only production queries are in `.worktrees/freeze-fix-report.md`. Nothing ran against staging or production.
 

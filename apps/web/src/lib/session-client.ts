@@ -20,17 +20,52 @@ export type SessionResult<T> =
       message?: string;
     };
 
+interface ApiFetchInit {
+  method?: string;
+  body?: unknown;
+  /** A file sent as it is (a photo upload, PR-013), with its own content type. */
+  file?: Blob;
+  headers?: Record<string, string>;
+  /** Gives up after this long, as a network failure; the outcome of a write is then unknown. */
+  timeoutMs?: number;
+}
+
+const READ_RETRY_MS = 400;
+
+/**
+ * One quiet second try for a read the API couldn't serve for a moment: its own "temporarily
+ * unavailable", or the edge's empty 503 when no copy is ready. Never a write (its outcome is not
+ * ours to guess) and never another 503, such as a payment partner being down.
+ */
+export function readWorthRetrying(
+  method: string,
+  result: SessionResult<unknown>,
+): boolean {
+  return (
+    method === 'GET' &&
+    !result.ok &&
+    result.status === 503 &&
+    (result.code === 'DEPENDENCY_UNAVAILABLE' ||
+      result.code === 'INTERNAL_ERROR')
+  );
+}
+
 export async function apiFetch<T>(
   path: string,
-  init: {
-    method?: string;
-    body?: unknown;
-    /** A file sent as it is (a photo upload, PR-013), with its own content type. */
-    file?: Blob;
-    headers?: Record<string, string>;
-    /** Gives up after this long, as a network failure; the outcome of a write is then unknown. */
-    timeoutMs?: number;
-  } = {},
+  init: ApiFetchInit = {},
+): Promise<SessionResult<T>> {
+  const first = await sendOnce<T>(path, init);
+  if (!readWorthRetrying(init.method ?? 'GET', first)) return first;
+  // Jittered, so a page's several reads don't all come back in the same instant.
+  await new Promise((resolve) =>
+    setTimeout(resolve, READ_RETRY_MS + Math.random() * READ_RETRY_MS),
+  );
+  return sendOnce<T>(path, init);
+}
+
+async function sendOnce<T>(
+  path: string,
+  init: ApiFetchInit,
 ): Promise<SessionResult<T>> {
   const method = init.method ?? 'GET';
   const abort = init.timeoutMs ? new AbortController() : undefined;
