@@ -16,7 +16,7 @@ const STANDARD_AMOUNTS = STANDARD_TIP_PRESETS_MINOR.map((minor) =>
 );
 // "Try yours": amounts a Pro page might choose instead of the standard three.
 const OWN_AMOUNTS = ['₦3,000', '₦6,000', '₦12,000'];
-const ASK_FOR_PRO = 'mailto:support@usetipme.xyz?subject=TipMe%20Pro';
+export const ASK_FOR_PRO = 'mailto:support@usetipme.xyz?subject=TipMe%20Pro';
 
 const HEART =
   'M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z';

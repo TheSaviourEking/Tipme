@@ -1,17 +1,21 @@
 'use client';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { HandleStatus, MyProfile } from '@tipme/contracts';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { CoverSettings, type Layer } from '@/components/account/cover-settings';
 import { Avatar } from '@/components/avatar';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { hasAvatar } from '@/lib/avatar-source';
 import { apiFetch } from '@/lib/session-client';
+import { STANDARD_TIP_AMOUNTS } from '@/lib/tip-amounts';
 import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
+import { PagePreview } from './page-preview';
+import { SettingsChapter } from './section';
 
 // My page (ScreenSettings): whether the page is live, its photo, handle, amounts and words.
 
@@ -35,8 +39,8 @@ export function PageState() {
     else setError('We couldn’t change that. Please try again.');
   };
   return (
-    <Card id="page" className="settings-section">
-      <h2>Your page</h2>
+    <Card className="settings-section">
+      <h3>Your page</h3>
       <p
         role="status"
         className={`page-state page-state--${profile.pageState}`}
@@ -118,7 +122,7 @@ export function PhotoSettings() {
   const photo = profile.avatarPath ?? null;
   return (
     <Card id="photo" className="settings-section">
-      <h2>Your photo</h2>
+      <h3>Your photo</h3>
       <p className="tm-hint">
         Optional. TipMe crops it to a square and removes hidden details such as
         where it was taken. JPEG, PNG or WebP, up to 5 MB.
@@ -307,24 +311,27 @@ export function HandleChange() {
 
   if (profile.plan !== 'pro')
     return (
-      <Card id="handle" className="settings-section">
-        <h2 ref={heading} tabIndex={-1}>
+      <Card id="handle" className="settings-section settings-handle-row">
+        <h3 ref={heading} tabIndex={-1} className="sr-only">
           Your handle
-        </h2>
-        <p className="tm-hint" role={error ? 'alert' : undefined}>
-          Your page is at {host}/@{profile.handle}. Handle changes are part of
-          TipMe Pro.
-        </p>
-        {oldHandles}
+        </h3>
+        <div>
+          <p className="settings-handle-row__name">Handle: @{profile.handle}</p>
+          <p className="tm-hint" role={error ? 'alert' : undefined}>
+            Handle changes are part of TipMe Pro.
+          </p>
+          {oldHandles}
+        </div>
+        <a href="#plan">See Pro</a>
       </Card>
     );
 
   if (left === 0)
     return (
       <Card className="settings-section">
-        <h2 ref={heading} tabIndex={-1}>
+        <h3 ref={heading} tabIndex={-1}>
           Your handle
-        </h2>
+        </h3>
         {savedNotice}
         <p role={error ? 'alert' : undefined}>
           You’ve used all your handle changes.{' '}
@@ -337,7 +344,7 @@ export function HandleChange() {
 
   return (
     <Card className="settings-section">
-      <h2>Your handle</h2>
+      <h3>Your handle</h3>
       <p className="tm-hint">
         {left !== null && <strong>{changesLeft(left)}. </strong>}
         Switching back to an old handle counts as a change. Your old links and
@@ -409,10 +416,7 @@ export function TipAmountsSettings() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
   // An API older than PR-012 sends neither: treat the page as Free with the standard amounts.
-  const amounts = profile.tipAmounts ?? {
-    presetsMinor: ['100000', '200000', '500000'],
-    minMinor: '100000',
-  };
+  const amounts = profile.tipAmounts ?? STANDARD_TIP_AMOUNTS;
   const pro = profile.plan === 'pro';
   const [presets, setPresets] = useState(() =>
     [0, 1, 2, 3].map((i) =>
@@ -430,7 +434,7 @@ export function TipAmountsSettings() {
   if (!pro)
     return (
       <Card className="settings-section">
-        <h2>Tip amounts</h2>
+        <h3>Tip amounts</h3>
         <p className="tm-hint">
           Your page offers NGN {amounts.presetsMinor.map(nairaText).join(', ')},
           and supporters can tip any amount from NGN{' '}
@@ -489,7 +493,7 @@ export function TipAmountsSettings() {
   };
   return (
     <Card className="settings-section">
-      <h2>Tip amounts (Pro)</h2>
+      <h3>Tip amounts (Pro)</h3>
       <p className="tm-hint">
         Choose the amounts on your page and the smallest tip you accept.
         Supporters can still type their own amount, from your minimum up.
@@ -552,20 +556,30 @@ const fieldLabels: Record<string, string> = {
   'socials.x': 'X (Twitter) link',
 };
 
-export function AboutYou() {
+export /** What About you edits, before it is saved. */
+const aboutFrom = (profile: MyProfile) => ({
+  displayName: profile.displayName,
+  role: profile.role ?? '',
+  bio: profile.bio ?? '',
+  facebook: profile.socials.facebook ?? '',
+  instagram: profile.socials.instagram ?? '',
+  x: profile.socials.x ?? '',
+  bioPublic: profile.bioPublic,
+  socialsPublic: profile.socialsPublic,
+  phonePublic: profile.phonePublic,
+});
+export type AboutForm = ReturnType<typeof aboutFrom>;
+
+/** The form's state lives with the My page section, which shows it in the preview as it is typed. */
+export function AboutYou({
+  form,
+  setForm,
+}: {
+  form: AboutForm;
+  setForm: Dispatch<SetStateAction<AboutForm>>;
+}) {
   const id = useId();
   const { profile, setProfile } = useRecipient();
-  const [form, setForm] = useState({
-    displayName: profile.displayName,
-    role: profile.role ?? '',
-    bio: profile.bio ?? '',
-    facebook: profile.socials.facebook ?? '',
-    instagram: profile.socials.instagram ?? '',
-    x: profile.socials.x ?? '',
-    bioPublic: profile.bioPublic,
-    socialsPublic: profile.socialsPublic,
-    phonePublic: profile.phonePublic,
-  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -633,7 +647,7 @@ export function AboutYou() {
 
   return (
     <Card className="settings-section">
-      <h2>About you</h2>
+      <h3>About you</h3>
       <p className="tm-hint">
         Everything here is optional. You decide what supporters see.
       </p>
@@ -715,5 +729,28 @@ export function AboutYou() {
         </p>
       </form>
     </Card>
+  );
+}
+
+/**
+ * My page (ScreenSettings): the editor beside a live preview. The preview reads the About form and
+ * the cover being looked at, so it follows every edit before anything is saved.
+ */
+export function MyPageSection() {
+  const { profile } = useRecipient();
+  const [about, setAbout] = useState(() => aboutFrom(profile));
+  const [cover, setCover] = useState<Layer | null>(null);
+  return (
+    <SettingsChapter id="page" className="settings-chapter--editor">
+      <div className="settings-editor">
+        <PageState />
+        <PhotoSettings />
+        <AboutYou form={about} setForm={setAbout} />
+        <HandleChange />
+        <TipAmountsSettings />
+        <CoverSettings onPreview={setCover} />
+      </div>
+      <PagePreview profile={profile} about={about} cover={cover} />
+    </SettingsChapter>
   );
 }

@@ -8,9 +8,11 @@ import type {
   SessionView,
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { CodeField } from '@/components/account/code-field';
 import { useRecipient } from '@/components/account/recipient-context';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { SettingsChapter } from './section';
 
 // Sign-in and security (ScreenSettings): the sign-in email, the recovery email and devices.
 
@@ -112,13 +114,11 @@ function RemoveRecoveryEmail({ onRemoved }: { onRemoved: () => void }) {
   return (
     <div className="settings-form">
       {asked && (
-        <InputField
+        <CodeField
           id={`${id}-code`}
           label="Code sent to your sign-in email"
-          inputMode="numeric"
-          maxLength={6}
           value={signInCode}
-          onChange={(e) => setSignInCode(e.target.value.replace(/\D/g, ''))}
+          onChange={setSignInCode}
         />
       )}
       <Button variant="quiet" onClick={() => void (asked ? remove() : ask())}>
@@ -231,7 +231,7 @@ export function RecoveryEmailCard() {
   };
   return (
     <Card id="recovery" className="settings-section">
-      <h2>Recovery email</h2>
+      <h3>Recovery email</h3>
       <p>
         {status?.confirmed
           ? `Recovery email: ${status.hint}`
@@ -252,24 +252,19 @@ export function RecoveryEmailCard() {
           disabled={step === 'code'}
         />
         {step === 'code' && (
-          <InputField
+          <CodeField
             id={`${id}-code`}
             label="Code sent to your recovery email"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            onChange={setCode}
           />
         )}
         {step === 'code' && replacing && (
-          <InputField
+          <CodeField
             id={`${id}-sign-in-code`}
             label="Code sent to your sign-in email"
-            inputMode="numeric"
-            maxLength={6}
             value={signInCode}
-            onChange={(e) => setSignInCode(e.target.value.replace(/\D/g, ''))}
+            onChange={setSignInCode}
           />
         )}
         <Button type="submit" variant="secondary" disabled={busy || !status}>
@@ -374,7 +369,7 @@ export function ContactDetails() {
 
   return (
     <Card id="contact" className="settings-section">
-      <h2>Your email</h2>
+      <h3>Your email</h3>
       <p>
         You sign in with:{' '}
         <strong>
@@ -398,14 +393,11 @@ export function ContactDetails() {
           disabled={emailStep === 'code'}
         />
         {emailStep === 'code' && (
-          <InputField
+          <CodeField
             id={`${id}-email-code`}
             label="Code sent to the new address"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            onChange={setCode}
           />
         )}
         <Button type="submit" variant="secondary">
@@ -467,7 +459,7 @@ export function Devices() {
   };
   return (
     <Card className="settings-section">
-      <h2>Devices</h2>
+      <h3>Devices</h3>
       <ul className="device-list">
         {(sessions ?? []).map((session) => (
           <li key={session.id}>
@@ -492,5 +484,17 @@ export function Devices() {
         </Button>
       )}
     </Card>
+  );
+}
+
+/** Sign-in and security (ScreenSettings): a pending move first, then email, recovery and devices. */
+export function SecuritySection() {
+  return (
+    <SettingsChapter id="security">
+      <EmailMoveNotice />
+      <ContactDetails />
+      <RecoveryEmailCard />
+      <Devices />
+    </SettingsChapter>
   );
 }

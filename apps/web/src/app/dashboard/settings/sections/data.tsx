@@ -3,9 +3,43 @@ import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Button, Card, InputField } from '@tipme/ui';
-import { apiFetch } from '@/lib/session-client';
+import { apiDownload, apiFetch } from '@/lib/session-client';
+import { SettingsChapter } from './section';
 
-// Your data and page (ScreenSettings).
+// Your data and page (ScreenSettings): a copy of your tips, and deleting the page.
+
+/** The same file, and the same request, as Download as CSV on Tips. */
+function TipsExport() {
+  const [note, setNote] = useState('');
+  const download = async () => {
+    setNote('Preparing your file…');
+    const day = new Date().toISOString().slice(0, 10);
+    const result = await apiDownload(
+      '/v1/me/exports/tips.csv',
+      `tipme-tips-${day}.csv`,
+    );
+    setNote(
+      result.ok
+        ? 'Downloaded. Amounts and status only; messages stay private.'
+        : 'We couldn’t prepare the file. Please try again.',
+    );
+  };
+  return (
+    <Card className="settings-section">
+      <h3>Your tips</h3>
+      <p className="tm-hint">
+        A file of your paid and confirming tips, with the date, amount and
+        status of each. Messages stay private and are left out.
+      </p>
+      <Button variant="secondary" onClick={() => void download()}>
+        Download as CSV
+      </Button>
+      <p role="status" className="tm-hint">
+        {note}
+      </p>
+    </Card>
+  );
+}
 
 export function DeletePage() {
   const id = useId();
@@ -36,7 +70,7 @@ export function DeletePage() {
   };
   return (
     <Card className="settings-section settings-section--danger">
-      <h2>Delete page</h2>
+      <h3>Delete page</h3>
       <p>
         This removes your page and your details. Records of past tips are kept,
         as the law requires, without your details. Your handle is held for 90
@@ -56,5 +90,14 @@ export function DeletePage() {
         </Button>
       </form>
     </Card>
+  );
+}
+
+export function DataSection() {
+  return (
+    <SettingsChapter id="data">
+      <TipsExport />
+      <DeletePage />
+    </SettingsChapter>
   );
 }

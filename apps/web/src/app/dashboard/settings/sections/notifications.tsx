@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import type { NotificationPrefs } from '@tipme/contracts';
 import { Button, Card, Notice } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
+import { SettingsChapter } from './section';
 
 // Notifications (ScreenSettings).
 
@@ -47,7 +48,7 @@ export function NotificationSettings() {
   };
   return (
     <Card id="emails" className="settings-section">
-      <h2>Notifications</h2>
+      <h3>Emails</h3>
       <p className="tm-hint">
         You always see your tips in TipMe. These emails always reach you:
         sign-in codes, security warnings, changes to your account and payment
@@ -83,5 +84,17 @@ export function NotificationSettings() {
         </Button>
       </form>
     </Card>
+  );
+}
+
+/**
+ * Notifications (ScreenSettings). Its emails card keeps #emails, where unsubscribe pages link.
+ * Live-update settings for the tip pop-ups will join this section later.
+ */
+export function NotificationsSection() {
+  return (
+    <SettingsChapter id="notifications">
+      <NotificationSettings />
+    </SettingsChapter>
   );
 }

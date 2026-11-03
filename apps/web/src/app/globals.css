@@ -8294,3 +8294,374 @@ body > .coming-soon-page {
     border: 1px solid CanvasText;
   }
 }
+
+/* Settings and the page editor (ScreenSettings): the section links, six editorial sections whose
+   parts rest on the canvas between hairlines, and the page as supporters see it beside My page. */
+.settings-grid {
+  max-width: none;
+  gap: var(--space-6);
+}
+
+.settings-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.settings-nav a {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.settings-nav a:hover {
+  color: var(--text-primary);
+}
+
+/* The current one is raised: the same white material and shadow as the board's selected link. */
+.settings-nav a[aria-current] {
+  border-color: var(--edge-hairline);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised-1);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.settings-chapters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-16);
+  min-width: 0;
+}
+
+.settings-chapter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 0;
+  min-width: 0;
+  scroll-margin-top: var(--space-6);
+}
+
+.settings-chapter:focus {
+  outline: none;
+}
+
+.dashboard-page .settings-chapter__title {
+  margin: 0 0 var(--space-4);
+  font: 400 clamp(2.25rem, 4vw, 2.875rem) / 1 var(--font-editorial);
+  letter-spacing: -0.02em;
+}
+
+/* A section's parts are not cards: they sit on the canvas, each opened by a hairline. */
+.dashboard-page .settings-chapter .settings-section.tm-card {
+  padding: var(--space-6) 0;
+  border: 0;
+  border-top: 1px solid rgb(20 18 16 / 10%);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The first part follows the section's title directly, as on the board. */
+.dashboard-page .settings-chapter__title + .settings-section.tm-card,
+.dashboard-page .settings-editor > .settings-section.tm-card:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-chapter .settings-section h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+/* Forms keep the editor's measure: a bank form 1,000px wide reads as nothing but fields. */
+.settings-chapter > .settings-section,
+.settings-chapter > .tm-notice {
+  max-width: 34rem;
+}
+
+/* My page: the editor, and beside it on a wide screen the preview, which stays in view. */
+.settings-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.settings-handle-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.settings-handle-row p {
+  margin: 0;
+}
+
+.settings-handle-row__name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.settings-handle-row > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-preview {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+  margin-top: var(--space-6);
+  padding: var(--space-8) var(--space-4);
+  border-radius: var(--radius-card);
+  background: #e9e7e0;
+}
+
+.settings-preview__caption {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* A phone, drawn: the canvas inside a black frame, as the page opens on a supporter's screen. */
+.settings-preview__phone {
+  width: min(100%, 22.5rem);
+  min-width: 0;
+  overflow: hidden;
+  border: 8px solid var(--text-primary);
+  border-radius: 28px;
+  background: var(--canvas);
+}
+
+.settings-preview__cover {
+  overflow: hidden;
+  background: #e6e4dc;
+}
+
+/* The artwork's own shape, as in the cover chooser: a taller frame would crop the hearts sideways,
+   past the edge of a small screen. */
+.settings-preview__cover .profile-cover {
+  height: auto;
+  aspect-ratio: 1120 / 300;
+}
+
+.settings-preview__cover .profile-cover > svg {
+  position: absolute;
+  inset: 0;
+}
+
+.settings-preview__body {
+  display: grid;
+  min-width: 0;
+  padding: 0 var(--space-4) var(--space-5);
+}
+
+.settings-preview__photo {
+  position: relative;
+  display: block;
+  width: 80px;
+  height: 80px;
+  margin-top: -40px;
+  overflow: hidden;
+  border: 4px solid var(--canvas);
+  border-radius: 50%;
+  background: var(--brand-mid);
+}
+
+.settings-preview__photo img,
+.settings-preview__photo .avatar--initials {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  font-size: 1.75rem;
+}
+
+.settings-preview__body p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-preview__body .settings-preview__name {
+  margin-top: var(--space-3);
+  font: 400 2.125rem / 1.02 var(--font-editorial);
+}
+
+.settings-preview__body .settings-preview__handle {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.settings-preview__body .settings-preview__role {
+  margin-top: var(--space-3);
+  font-weight: 700;
+}
+
+.settings-preview__body .settings-preview__bio {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.settings-preview__tip {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--edge-hairline);
+  border-radius: 22px;
+  background: var(--surface-raised);
+}
+
+.settings-preview__tip-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.settings-preview__keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-preview__keys li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 48px;
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-variant-numeric: var(--numeric-variant);
+}
+
+/* Where the page starts: the signature material, and a white dot so colour is not the only sign. */
+.settings-preview__keys li[data-selected] {
+  background: var(--surface-signature);
+  box-shadow: var(--shadow-raised-signature);
+  color: var(--surface-base);
+}
+
+.settings-preview__keys li[data-selected]::after {
+  content: '';
+  width: 0.35rem;
+  height: 0.35rem;
+  margin-left: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.settings-preview__go {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  border-radius: var(--radius-control);
+  background: var(--text-primary);
+  color: var(--surface-base);
+  font-weight: 700;
+}
+
+.settings-plan__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-plan__ask {
+  justify-self: start;
+}
+
+/* A desktop: the links are a column of their own, kept in view beside the sections. */
+@media (min-width: 64rem) {
+  .settings-grid {
+    grid-template-columns: 13rem minmax(0, 1fr);
+    column-gap: var(--space-10);
+    align-items: start;
+  }
+
+  .settings-grid > * {
+    grid-column: 2;
+  }
+
+  .settings-grid > .settings-nav {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+    position: sticky;
+    top: var(--space-6);
+    grid-template-columns: minmax(0, 1fr);
+    padding-right: var(--space-5);
+    border-right: 1px solid var(--edge-hairline);
+  }
+}
+
+/* Wide enough for both: the editor, and the preview beside it at the board's proportions. */
+@media (min-width: 75rem) {
+  .settings-chapter--editor {
+    grid-template-columns: minmax(0, 34rem) minmax(0, 1fr);
+    column-gap: var(--space-8);
+    align-items: start;
+  }
+
+  .settings-chapter--editor > .settings-chapter__title,
+  .settings-chapter--editor > .settings-editor {
+    grid-column: 1;
+  }
+
+  .settings-chapter--editor > .settings-preview {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    position: sticky;
+    top: var(--space-6);
+    margin-top: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .settings-nav a[aria-current] {
+    border: 2px solid Highlight;
+  }
+
+  .settings-preview__phone {
+    border-color: CanvasText;
+  }
+
+  .settings-preview__keys li {
+    border: 1px solid CanvasText;
+  }
+
+  .settings-preview__keys li[data-selected] {
+    border-width: 3px;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
