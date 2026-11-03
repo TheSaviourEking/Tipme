@@ -19,7 +19,7 @@ export const PRIVATE_PATHS = [
   '/verify-email',
 ];
 
-const MARKETING_PATHS = ['/', '/for-creators'];
+const MARKETING_PATHS = ['/', '/for-creators', '/pro'];
 
 export interface SeoInput {
   indexing: boolean;

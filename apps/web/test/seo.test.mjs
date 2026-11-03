@@ -38,7 +38,11 @@ test('once indexing is on, marketing pages are listed and private areas are alwa
     assert.ok(rule.disallow.includes(path), path);
   assert.deepEqual(rule.disallow, PRIVATE_PATHS);
   const urls = sitemapFor({ indexing: true, origin }).map((entry) => entry.url);
-  assert.deepEqual(urls, [`${origin}/`, `${origin}/for-creators`]);
+  assert.deepEqual(urls, [
+    `${origin}/`,
+    `${origin}/for-creators`,
+    `${origin}/pro`,
+  ]);
   for (const url of urls)
     assert.equal(
       PRIVATE_PATHS.some((p) => new URL(url).pathname.startsWith(p)),

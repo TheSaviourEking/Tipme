@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { ActionLink, Button, Container, Surface } from '@tipme/ui';
 import { Brand, Arrow } from './brand';
 
@@ -39,6 +40,20 @@ function MenuIcon({ path }: { path: string }) {
     >
       <path d={path} />
     </svg>
+  );
+}
+
+/** Reading the address makes a page wait for the browser, so it sits in its own boundary. */
+function ProLink({ onClick }: { onClick(): void }) {
+  const onPro = usePathname() === '/pro';
+  return (
+    <Link
+      href="/pro"
+      aria-current={onPro ? 'page' : undefined}
+      onClick={onClick}
+    >
+      Pro
+    </Link>
   );
 }
 
@@ -214,6 +229,9 @@ export function Navigation() {
               </ul>
             </Surface>
           </div>
+          <Suspense fallback={<Link href="/pro">Pro</Link>}>
+            <ProLink onClick={close} />
+          </Suspense>
           {/* Guest actions; hidden in the dashboard, where someone already has a page (CSS). */}
           <ActionLink
             className="nav-guest"

@@ -11,6 +11,7 @@ const routes = [
   '/@not-a-person',
   '/for-creators',
   '/for-businesses',
+  '/pro',
   '/legal/privacy',
   '/legal/terms',
 ];
@@ -283,6 +284,9 @@ test('main navigation points to the marketing pages', async ({
     'href',
     '/#how-it-works',
   );
+  await expect(
+    nav.getByRole('link', { name: 'Pro', exact: true }),
+  ).toHaveAttribute('href', '/pro');
   // The two pages sit under "Who it's for" now (tests/e2e/navigation.spec.ts opens that menu).
   if (testInfo.project.name !== 'mobile')
     await nav.getByRole('button', { name: "Who it's for" }).click();

@@ -126,3 +126,15 @@ test(
     await expect(close).toBeHidden();
   },
 );
+
+test('the header has a Pro link that marks the Pro page as current', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/pro');
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: 'Open menu' }).click();
+  const nav = page.getByRole('navigation', { name: 'Main navigation' });
+  const pro = nav.getByRole('link', { name: 'Pro', exact: true });
+  await expect(pro).toHaveAttribute('href', '/pro');
+  await expect(pro).toHaveAttribute('aria-current', 'page');
+});
