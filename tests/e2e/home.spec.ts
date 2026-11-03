@@ -103,8 +103,8 @@ test('the claim field says capitals become lowercase', async ({ page }) => {
   ).toBe('lowercase');
 });
 
-// The hero's example cards: centred on a phone; alive, flippable and hiding a thank-you on a wide
-// screen with a fine pointer (the owner's easter egg, 3 Nov 2026). They stay decorative.
+// The hero's example cards: centred on a phone; alive, flippable and hiding a thank-you wherever
+// there is a mouse (the owner's easter egg, 3 Nov 2026). They stay decorative.
 
 test(
   'the example card is centred on a phone @mobile',
@@ -175,6 +175,26 @@ test('pressing the example Tip says thank you for the chosen amount, makes no re
   });
   await ada.getByText('Tip ₦10,000').click();
   await expect(ada.getByText('Thank you for the ₦10,000!')).toBeVisible();
+});
+
+// The owner looked in a laptop window narrower than the three-card spread (3 Nov 2026): the lone
+// card still answers a mouse there.
+test('in a narrower desktop window the lone example card still drifts and says thank you', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  // The suite runs with reduced motion; the drift is only for those who welcome it.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await ready(page);
+  const ada = page.locator('.home-demo__main');
+  expect(
+    await ada.evaluate((node) => getComputedStyle(node).animationName),
+  ).toBe('home-drift');
+  // A drifting card never holds still for a test's click, so the Tip is pressed with it still.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await ada.getByText('Tip ₦5,000').click();
+  await expect(ada).toHaveAttribute('data-flipped', 'true');
+  await expect(ada.getByText('Thank you for the ₦5,000!')).toBeVisible();
 });
 
 test('with reduced motion the example cards have no running animation, and without it they do', async ({

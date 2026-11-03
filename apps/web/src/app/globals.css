@@ -665,7 +665,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   display: grid;
   max-width: 24rem;
   margin-inline: auto;
-  /* Pictures on a phone; the cards answer a pointer only from 75rem (below). */
+  /* Pictures on a touch screen; the cards answer a mouse only (below). */
   pointer-events: none;
 }
 
@@ -1190,8 +1190,8 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   }
 }
 
-/* Wide screen, fine pointer: the cards answer a click. */
-@media (min-width: 75rem) and (hover: hover) and (pointer: fine) {
+/* A mouse at any width: the cards answer a click. Below 75rem only Ada's card is shown. */
+@media (hover: hover) and (pointer: fine) {
   .home-demo__stack {
     pointer-events: auto;
   }
@@ -1240,7 +1240,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 }
 
 /* Ambient motion: a slow, offset drift, and hearts for the Tip. Transforms and opacity only. */
-@media (min-width: 75rem) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .home-demo__main,
   .home-demo__card,
   .home-demo__qr {

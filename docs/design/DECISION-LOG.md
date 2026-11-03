@@ -222,7 +222,7 @@ The example card in the Home hero shows ₦5,000 chosen and a "Tip ₦5,000" but
 
 After seeing Home in the live preview the owner asked for: the example card centred on a phone; the example QR matching the board (navy dot code on a white card over the Indigo Grid cover); and "an easter egg in the desktop view ... something cool that a user can find out ... the cards flip or something. They should have an animation going on there." A product and visual decision, not a regulatory approval; no D-item is affected, and nothing is paid or sent.
 
-- **Where.** Only on a wide screen (75rem) with a fine pointer. Phones and touch screens get the still picture.
+- **Where.** Wherever there is a mouse (a fine pointer that can hover), at any width; below 75rem only Ada's card is shown, and it still drifts, flips and sends hearts. Phones and touch screens get the still picture. (Widened 3 Nov 2026 after the owner looked in a laptop window narrower than 75rem and saw nothing move.)
 - **Ambient.** The three cards drift on a slow, offset loop (a few pixels, under two degrees) and the QR card bobs. Transforms only.
 - **Flip.** Clicking a card turns it in 3D to a paper slip with a short thank-you note from that example person, labelled "Example"; clicking again turns it back.
 - **The hidden moment.** "Tip ₦5,000" on Ada's card (or another key first, then Tip) sends hearts up from the card and turns it to "Thank you for the ₦5,000!" with the chosen standard amount, then it settles back after a few seconds. No request, no navigation, no payment.

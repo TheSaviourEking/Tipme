@@ -3,12 +3,11 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Surface } from '@tipme/ui';
 
 // The Home hero's example cards (docs/design/DECISION-LOG.md, 3 Nov 2026). They are a picture,
-// so the whole stack is aria-hidden and holds nothing focusable: the cards answer a pointer only,
-// and only on a wide screen with a fine pointer (the same test the CSS motion uses). A phone gets
+// so the whole stack is aria-hidden and holds nothing focusable: the cards answer a mouse (a
+// fine pointer that can hover, the same test the CSS motion uses) at any width. A touch screen gets
 // the plain card. Nothing here fetches or navigates.
-const WIDE_FINE_POINTER =
-  '(min-width: 75rem) and (hover: hover) and (pointer: fine)';
-const canPlay = () => window.matchMedia(WIDE_FINE_POINTER).matches;
+const FINE_POINTER = '(hover: hover) and (pointer: fine)';
+const canPlay = () => window.matchMedia(FINE_POINTER).matches;
 
 /** How long Ada's thank-you stays before the card settles back. */
 const THANKS_MS = 4500;
