@@ -30,4 +30,11 @@ export const SCREENS: ReviewScreen[] = [
     board: 'TipJourney',
     open: visit('/@ada'),
   },
+  // No board shows this page; TipJourney and PagePro show the materials it specimens.
+  {
+    group: 'Foundations',
+    name: 'Design system',
+    board: 'TipJourney',
+    open: visit('/design-system'),
+  },
 ];

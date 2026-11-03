@@ -77,3 +77,17 @@ test('shots taken at each size become one entry per screen, in the order taken',
     ],
   );
 });
+
+test('the page header shows the commit it was built from and when', () => {
+  const html = buildGallery([], {
+    sha: 'abc1234',
+    dirty: true,
+    builtAt: '2026-11-03 14:05',
+  });
+  assert.match(html, /Built from abc1234 \+ uncommitted changes/);
+  assert.match(html, /2026-11-03 14:05/);
+  assert.doesNotMatch(
+    buildGallery([], { sha: 'abc1234', dirty: false, builtAt: 'now' }),
+    /uncommitted/,
+  );
+});

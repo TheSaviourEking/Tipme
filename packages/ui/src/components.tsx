@@ -1,7 +1,10 @@
 import type { ComponentPropsWithRef, HTMLAttributes, ReactNode } from 'react';
 
-type Variant = 'primary' | 'secondary' | 'quiet';
-export type Material = 'canvas' | 'raised' | 'recessed' | 'signature';
+/** `continue` is the black continuation action: the one step forward on a screen. */
+type Variant = 'primary' | 'secondary' | 'quiet' | 'continue';
+/** `instrument` is the floating card; `paper` is a receipt or note slip resting on the canvas. */
+export type Material =
+  'canvas' | 'raised' | 'recessed' | 'signature' | 'instrument' | 'paper';
 const classes = (...values: (string | undefined)[]) =>
   values.filter(Boolean).join(' ');
 

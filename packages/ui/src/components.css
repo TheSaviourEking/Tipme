@@ -36,6 +36,24 @@
   box-shadow: var(--shadow-raised-signature);
 }
 
+.tm-surface--instrument {
+  border-color: var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(var(--edge-light), transparent 2px) border-box,
+    var(--surface-raised);
+  box-shadow: var(--shadow-instrument);
+}
+
+.tm-surface--paper {
+  border-color: var(--edge-hairline);
+  border-radius: 1rem;
+  background:
+    linear-gradient(var(--edge-light), transparent 2px) border-box,
+    var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
 .tm-button {
   display: inline-flex;
   align-items: center;
@@ -78,6 +96,19 @@
   box-shadow: var(--shadow-raised-1);
 }
 
+.tm-button--continue {
+  min-height: 56px;
+  gap: var(--space-2);
+  border-color: var(--text-primary);
+  border-radius: var(--radius-field);
+  background:
+    linear-gradient(rgb(255 255 255 / 16%), transparent 30%),
+    var(--text-primary);
+  color: var(--surface-base);
+  font-size: var(--text-base);
+  box-shadow: var(--shadow-raised-continue);
+}
+
 .tm-button--quiet {
   border-color: transparent;
   background: transparent;
@@ -109,9 +140,15 @@
   }
 }
 
+/* A press is immediate; only the release eases back. */
 .tm-button:active {
   transform: translateY(2px);
   box-shadow: 0 1px 1px rgb(20 18 16 / 12%);
+  transition-duration: 0s;
+}
+
+.tm-button--continue:active {
+  box-shadow: var(--shadow-raised-continue-pressed);
 }
 
 .tm-button[aria-busy='true'] {
@@ -298,6 +335,74 @@ textarea.tm-input {
   box-shadow: none;
 }
 
+/* A recessed read-out or field (PagePro, TipJourney .well). */
+.tm-well {
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+  padding: 0 0.875rem;
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+}
+
+/* A two-or-more way switch: a recessed track with a purple thumb that slides under the label. */
+.tm-lever {
+  --lever-pad: 5px;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--lever-count, 2), minmax(0, 1fr));
+  width: min(17.5rem, 100%);
+  padding: var(--lever-pad);
+  border: 1px solid var(--border-material);
+  border-radius: 1rem;
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-lever-track);
+}
+
+.tm-lever__thumb {
+  position: absolute;
+  top: var(--lever-pad);
+  bottom: var(--lever-pad);
+  left: var(--lever-pad);
+  width: calc((100% - 2 * var(--lever-pad)) / var(--lever-count, 2));
+  box-sizing: border-box;
+  border: 1px solid
+    color-mix(in srgb, var(--brand-primary), var(--text-primary) 16%);
+  border-radius: var(--radius-field);
+  background:
+    linear-gradient(rgb(255 255 255 / 22%), transparent 36%),
+    var(--surface-signature);
+  box-shadow: var(--shadow-lever-thumb);
+  transform: translateX(calc(var(--lever-index, 0) * 100%));
+  transition: transform var(--duration-component) var(--ease-spring);
+}
+
+.tm-lever__option {
+  position: relative;
+  z-index: 1;
+  min-height: 50px;
+  border: 0;
+  border-radius: var(--radius-field);
+  background: none;
+  color: var(--text-primary);
+  font: 700 var(--text-base) / 1.25 var(--font-interface);
+  cursor: pointer;
+  transition: color 180ms;
+}
+
+.tm-lever__option[aria-checked='true'] {
+  color: var(--surface-base);
+}
+
+.tm-lever__option:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 3px;
+}
+
 .tm-notice {
   padding: 1rem 1.1rem;
   border: 1px solid var(--edge-hairline);
@@ -402,9 +507,22 @@ textarea.tm-input {
   .tm-button,
   .tm-input,
   .tm-choice span,
+  .tm-well,
+  .tm-lever,
   .tm-notice {
     border: 1px solid CanvasText;
     box-shadow: none;
+  }
+
+  /* The thumb is the selected state; system colours keep it visible when backgrounds are forced. */
+  .tm-lever__thumb {
+    border: 1px solid CanvasText;
+    background: Highlight;
+    box-shadow: none;
+  }
+
+  .tm-lever__option[aria-checked='true'] {
+    color: HighlightText;
   }
 
   .tm-choice input:checked + span {
@@ -424,5 +542,11 @@ textarea.tm-input {
   .tm-input,
   .tm-choice span {
     transition: none;
+  }
+
+  /* The app-wide reduced-motion rule leaves a 0.01ms duration; the lever must not slide at all. */
+  .tm-lever__thumb,
+  .tm-lever__option {
+    transition: none !important;
   }
 }

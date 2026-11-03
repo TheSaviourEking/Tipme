@@ -1930,6 +1930,12 @@ body:has(.profile-page) .brand__mark {
   align-items: center;
 }
 
+.physical-specimen {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-5);
+}
+
 .material-specimens {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

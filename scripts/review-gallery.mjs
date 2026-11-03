@@ -4,6 +4,7 @@
 // the redesign from this page before anything goes to dev.
 //
 //   node scripts/review-gallery.mjs   reads review-screens/shots.jsonl, writes review-screens/index.html
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -50,8 +51,24 @@ const figure = (entry) => `
     </div>
   </figure>`;
 
+/** Which code the pictures were taken from: the short commit, whether the tree had edits, and when. */
+export function readStamp(now = new Date()) {
+  const git = (...args) =>
+    execFileSync('git', args, { encoding: 'utf8' }).trim();
+  return {
+    sha: git('rev-parse', '--short', 'HEAD'),
+    dirty: git('status', '--porcelain') !== '',
+    builtAt: now.toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+  };
+}
+
+const stampLine = (stamp) =>
+  stamp
+    ? `<p class="stamp">Built from ${escape(stamp.sha)}${stamp.dirty ? ' + uncommitted changes' : ''}, ${escape(stamp.builtAt)}</p>`
+    : '';
+
 /** The gallery page: one section per group, each screen at desktop and phone size side by side. */
-export function buildGallery(entries) {
+export function buildGallery(entries, stamp) {
   const groups = new Map();
   for (const entry of entries)
     groups.set(entry.group, [...(groups.get(entry.group) ?? []), entry]);
@@ -76,11 +93,13 @@ export function buildGallery(entries) {
   figcaption span { color: #5d5a54; font-size: 14px; }
   .pair { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
   img { display: block; width: 100%; height: auto; border: 1px solid rgba(20,18,16,.15); border-radius: 8px; background: #fff; }
+  .stamp { margin: 0 0 8px; color: #5d5a54; font-size: 14px; }
   .missing { color: #5d5a54; }
 </style>
 </head>
 <body>
 <h1>TipMe screen review</h1>
+${stampLine(stamp)}
 <p>Each screen at desktop (1440 wide) and phone (390 wide) size. Select a picture to open it full size.</p>
 ${sections}
 </body>
@@ -93,6 +112,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line));
-  writeFileSync(`${OUT}/index.html`, buildGallery(entriesFromShots(shots)));
+  writeFileSync(
+    `${OUT}/index.html`,
+    buildGallery(entriesFromShots(shots), readStamp()),
+  );
   console.log(`Wrote ${OUT}/index.html (${shots.length} pictures).`);
 }
