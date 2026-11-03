@@ -3,9 +3,8 @@
 // redesigned screen at desktop and phone size, beside the board it is built to. The owner approves
 // the redesign from this page before anything goes to dev.
 //
-//   node scripts/review-gallery.mjs   reads review-screens/shots.jsonl, writes review-screens/index.html
-import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+//   node scripts/review-gallery.mjs   reads review-screens/shots.jsonl and stamp.json, writes review-screens/index.html
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const OUT = 'review-screens';
@@ -51,21 +50,24 @@ const figure = (entry) => `
     </div>
   </figure>`;
 
-/** Which code the pictures were taken from: the short commit, whether the tree had edits, and when. */
-export function readStamp(now = new Date()) {
-  const git = (...args) =>
-    execFileSync('git', args, { encoding: 'utf8' }).trim();
-  return {
-    sha: git('rev-parse', '--short', 'HEAD'),
-    dirty: git('status', '--porcelain') !== '',
-    builtAt: now.toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
-  };
+/** The stamp written when the shots were taken, or undefined if it is missing or not a stamp. */
+export function parseStamp(text) {
+  try {
+    const stamp = JSON.parse(text);
+    return typeof stamp?.sha === 'string' &&
+      typeof stamp.dirty === 'boolean' &&
+      typeof stamp.builtAt === 'string'
+      ? stamp
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const stampLine = (stamp) =>
   stamp
     ? `<p class="stamp">Built from ${escape(stamp.sha)}${stamp.dirty ? ' + uncommitted changes' : ''}, ${escape(stamp.builtAt)}</p>`
-    : '';
+    : '<p class="stamp">Built from: unknown (no stamp was written when these pictures were taken)</p>';
 
 /** The gallery page: one section per group, each screen at desktop and phone size side by side. */
 export function buildGallery(entries, stamp) {
@@ -112,9 +114,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+  const stamp = existsSync(`${OUT}/stamp.json`)
+    ? parseStamp(readFileSync(`${OUT}/stamp.json`, 'utf8'))
+    : undefined;
   writeFileSync(
     `${OUT}/index.html`,
-    buildGallery(entriesFromShots(shots), readStamp()),
+    buildGallery(entriesFromShots(shots), stamp),
   );
   console.log(`Wrote ${OUT}/index.html (${shots.length} pictures).`);
 }

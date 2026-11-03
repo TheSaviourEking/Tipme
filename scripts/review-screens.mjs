@@ -6,7 +6,8 @@
 //   pnpm review:serve     build, then keep the same stack running to click through
 //
 // Add --no-build to reuse the last build.
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readStamp } from './review-stamp.mjs';
 import { spawnSync } from 'node:child_process';
 
 const mode = process.argv[2];
@@ -24,6 +25,9 @@ const run = (command, args, env = {}) => {
   });
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
+
+// Taken before the build, so it names the code that is built and shot, not whatever is checked out later.
+const stamp = readStamp();
 
 if (!process.argv.includes('--no-build')) {
   // A reused Next cache once built the old CSS and reported success (3 Nov 2026), and a review of an
@@ -47,6 +51,8 @@ if (mode === 'serve') {
   run('pnpm', [...playwright, '--project=serve', '--reporter=line']);
 } else {
   rmSync('review-screens', { recursive: true, force: true });
+  mkdirSync('review-screens', { recursive: true });
+  writeFileSync('review-screens/stamp.json', JSON.stringify(stamp));
   run('pnpm', [...playwright, '--project=desktop', '--project=phone']);
   run('node', ['scripts/review-gallery.mjs']);
   console.log('Open review-screens/index.html to review.');
