@@ -26,12 +26,40 @@ const WHO = [
   },
 ] as const;
 
+function MenuIcon({ path }: { path: string }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
 export function Navigation() {
   const [open, setOpen] = useState(false);
   const [whoOpen, setWhoOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const who = useRef<HTMLButtonElement>(null);
   const whoGroup = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLElement>(null);
+  // Set by Escape and the close button only: following a link must not pull focus back here.
+  const returnFocus = useRef(false);
+
+  // On a phone the open menu is a page of its own: focus starts on its close button, and goes
+  // back to the button that opened it once it is closed.
+  useEffect(() => {
+    if (open) closeButton.current?.focus();
+    else if (returnFocus.current) toggle.current?.focus();
+    returnFocus.current = false;
+  }, [open]);
 
   // On a wide screen the choices are a popover: a press anywhere else puts it away. On a phone
   // they are always shown inside the open menu, so this has nothing to close.
@@ -49,32 +77,78 @@ export function Navigation() {
     setWhoOpen(false);
   };
 
+  const closeMenu = () => {
+    returnFocus.current = true;
+    close();
+  };
+
   return (
-    <header className="site-header">
+    <header
+      className={`site-header ${open ? 'is-menu-open' : ''}`}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          // Focus goes back to the control that was opened, whichever one is on screen.
+          const popover = whoOpen && who.current?.offsetParent != null;
+          if (popover) {
+            close();
+            who.current?.focus();
+          } else if (open) closeMenu();
+          return;
+        }
+        // The open phone menu covers the page: Tab goes round inside it, never into the page.
+        const nav = menu.current;
+        if (event.key !== 'Tab' || !open || !nav) return;
+        if (getComputedStyle(nav).position !== 'fixed') return;
+        const stops = [
+          ...nav.querySelectorAll<HTMLElement>('a[href], button'),
+        ].filter((el) => el.getClientRects().length > 0);
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        if (!first || !last) return;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }}
+    >
       <Container className="nav-shell">
         <Brand />
         <Button
           className="menu-toggle"
           variant="secondary"
           ref={toggle}
+          aria-label="Open menu"
           aria-expanded={open}
           aria-controls="site-navigation"
           onClick={() => setOpen(!open)}
         >
-          Menu
+          <MenuIcon path="M3 6h18M3 12h18M3 18h18" />
         </Button>
         <nav
           id="site-navigation"
+          ref={menu}
           aria-label="Main navigation"
           className={`site-nav ${open ? 'is-open' : ''}`}
-          onKeyDown={(event) => {
-            if (event.key !== 'Escape') return;
-            // Focus goes back to the control that was opened, whichever one is on screen.
-            const popover = whoOpen && who.current?.offsetParent != null;
-            close();
-            (popover ? who : toggle).current?.focus();
-          }}
         >
+          {/* Phone only, in the open menu (PhonePages): the logo and a close button, in the places
+              the closed header's own logo and button hold. */}
+          <div className="site-nav__bar">
+            <Brand />
+            <Button
+              className="menu-toggle menu-toggle--close"
+              variant="secondary"
+              ref={closeButton}
+              aria-label="Close menu"
+              aria-expanded={open}
+              aria-controls="site-navigation"
+              onClick={closeMenu}
+            >
+              <MenuIcon path="M5 5l14 14M19 5 5 19" />
+            </Button>
+          </div>
           <Link href="/how-it-works" onClick={close}>
             How it works
           </Link>

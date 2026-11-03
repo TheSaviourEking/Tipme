@@ -37,7 +37,7 @@ test(
   async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile', 'Phone width only.');
     await page.goto('/');
-    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('button', { name: 'Open menu' }).click();
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
     const items = [
       nav.getByRole('link', { name: /^Individuals/ }),
@@ -55,5 +55,74 @@ test(
     await expect(nav.getByRole('link', { name: /Infrastructure/ })).toHaveCount(
       0,
     );
+  },
+);
+
+test(
+  'on a phone the open menu is a full page with a close button, and keeps focus inside',
+  { tag: '@mobile' },
+  async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'Phone width only.');
+    await page.goto('/');
+    const open = page.getByRole('button', { name: 'Open menu' });
+    await expect(open).toHaveAttribute('aria-expanded', 'false');
+    await open.click();
+    const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    // The menu takes over the whole screen, and the page beneath does not scroll.
+    const covered = await nav.evaluate((el) => {
+      const { top, left, width, height } = el.getBoundingClientRect();
+      return { top, left, width, height, vw: innerWidth, vh: innerHeight };
+    });
+    expect(covered).toMatchObject({ top: 0, left: 0 });
+    expect(covered.width).toBe(covered.vw);
+    expect(covered.height).toBeGreaterThanOrEqual(covered.vh);
+    expect(
+      await page.evaluate(() => getComputedStyle(document.body).overflow),
+    ).toBe('hidden');
+    // An icon-only close button, at least 44px square, and the order of the board.
+    const close = nav.getByRole('button', { name: 'Close menu' });
+    await expect(close).toBeVisible();
+    const size = (await close.boundingBox()) ?? { width: 0, height: 0 };
+    expect(size.width).toBeGreaterThanOrEqual(44);
+    expect(size.height).toBeGreaterThanOrEqual(44);
+    await expect(close).toBeFocused();
+    // The action to start is pinned to the bottom of the screen.
+    const create = nav.getByRole('link', { name: 'Create your page' });
+    const end = await create.boundingBox();
+    expect((end?.y ?? 0) + (end?.height ?? 0)).toBeGreaterThan(covered.vh - 40);
+    // Tab goes round inside the menu and never reaches the page beneath.
+    const inside = nav.locator('a[href], button');
+    const count = await inside.evaluateAll(
+      (nodes) => nodes.filter((n) => n.getClientRects().length > 0).length,
+    );
+    for (let press = 0; press < count + 2; press += 1) {
+      await page.keyboard.press('Tab');
+      expect(
+        await page.evaluate(() =>
+          document.activeElement?.closest('#site-navigation') ? true : false,
+        ),
+      ).toBe(true);
+    }
+    await page.keyboard.press('Shift+Tab');
+    expect(
+      await page.evaluate(() =>
+        document.activeElement?.closest('#site-navigation') ? true : false,
+      ),
+    ).toBe(true);
+    // Closing with the button puts the focus back on the button that opened it.
+    await close.click();
+    await expect(close).toBeHidden();
+    await expect(open).toBeVisible();
+    await expect(open).toBeFocused();
+    await expect(open).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      await page.evaluate(() => getComputedStyle(document.body).overflow),
+    ).not.toBe('hidden');
+    // Escape closes it too.
+    await open.click();
+    await expect(close).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(open).toBeFocused();
+    await expect(close).toBeHidden();
   },
 );

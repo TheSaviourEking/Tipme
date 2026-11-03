@@ -165,7 +165,7 @@ test(
     const toggle = page.getByRole('button', { name: 'Menu' });
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await toggle.click();
-    // The accessible name stays constant; only aria-expanded conveys state.
+    // "Menu" matches both names (Open menu, Close menu); aria-expanded conveys the state.
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const firstLink = page
       .getByRole('navigation', { name: 'Main navigation' })

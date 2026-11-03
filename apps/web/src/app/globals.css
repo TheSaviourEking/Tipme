@@ -330,7 +330,8 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   margin-left: -0.75rem;
 }
 
-.menu-toggle {
+.menu-toggle,
+.site-nav__bar {
   display: none;
 }
 
@@ -2154,10 +2155,14 @@ body:has(.profile-page) .brand__mark {
 }
 
 @media (max-width: 800px) {
+  /* Icon-only keys, 44px square (PhonePages .menu). */
   .menu-toggle {
     display: inline-flex;
+    width: 44px;
     min-height: 44px;
-    padding: 0.6rem 1rem;
+    height: 44px;
+    padding: 0;
+    border-radius: 0.75rem;
   }
 
   .nav-shell {
@@ -2165,30 +2170,44 @@ body:has(.profile-page) .brand__mark {
     padding-block: 0.75rem;
   }
 
-  /* The open menu floats as a raised card over the page instead of pushing it down. */
+  /* The open menu is a page of its own on the canvas (PhonePages, menu open): it covers the
+     screen, the page beneath stays put, and the action to start is pinned to the bottom. */
   .site-nav {
     display: none;
-    position: absolute;
-    top: calc(100% - 0.25rem);
-    right: 0;
-    left: 0;
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-nav);
     flex-direction: column;
     align-items: stretch;
-    gap: var(--space-1);
-    padding: var(--space-3);
-    border: 1px solid var(--edge-hairline);
-    border-radius: var(--radius-card);
+    gap: 1.125rem;
+    padding: 1.125rem;
+    overflow-y: auto;
     background: var(--canvas);
-    box-shadow: var(--shadow-instrument);
   }
 
   .site-nav.is-open {
     display: flex;
   }
 
+  body:has(.site-nav.is-open) {
+    overflow: hidden;
+  }
+
+  /* The header's own logo and button are under the page; the menu draws its own. */
+  .is-menu-open .nav-shell > .brand,
+  .is-menu-open .nav-shell > .menu-toggle {
+    visibility: hidden;
+  }
+
+  .site-nav__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+  }
+
   .site-nav > a:not(.tm-button) {
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-control);
+    padding: 0.625rem 0;
     font-size: var(--text-lg);
     font-weight: 700;
   }
@@ -2200,7 +2219,7 @@ body:has(.profile-page) .brand__mark {
 
   .who__label {
     display: block;
-    margin: var(--space-2) 0 var(--space-2) 0.75rem;
+    margin: 0;
     color: var(--text-secondary);
     font-size: var(--text-sm);
     font-weight: 700;
@@ -2256,9 +2275,30 @@ body:has(.profile-page) .brand__mark {
     box-shadow: 0 1px 1px rgb(20 18 16 / 12%);
   }
 
-  .site-nav .tm-button {
-    margin-top: var(--space-1);
-    font-size: var(--text-sm);
+  /* "Sign in" is a plain link here, like the others; "Create your page" is the board's black
+     action, pinned to the bottom. */
+  .site-nav .tm-button--secondary {
+    justify-content: flex-start;
+    min-height: 44px;
+    padding: 0.625rem 0;
+    border-color: transparent;
+    background: none;
+    box-shadow: none;
+    font-size: var(--text-lg);
+    font-weight: 700;
+    letter-spacing: normal;
+  }
+
+  .site-nav .tm-button--primary {
+    min-height: 56px;
+    margin-top: auto;
+    border-color: var(--text-primary);
+    border-radius: var(--radius-field);
+    background:
+      linear-gradient(rgb(255 255 255 / 16%), transparent 30%),
+      var(--text-primary);
+    font-size: var(--text-base);
+    box-shadow: var(--shadow-raised-continue);
   }
 
   .site-nav .tm-button--secondary + .tm-button--primary {
@@ -5644,7 +5684,8 @@ body > .coming-soon-page {
     text-decoration-thickness: 2px;
   }
 
-  .who__item {
+  .who__item,
+  .menu-toggle {
     border: 1px solid CanvasText;
   }
 }
