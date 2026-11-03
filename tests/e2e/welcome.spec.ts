@@ -45,7 +45,7 @@ test('a new recipient is welcomed and sets up their page one small step at a tim
   await page.getByLabel('What you do').fill('Hairdresser at Glow Studio');
   // The preview follows what they type before anything is saved.
   await expect(
-    page.getByRole('figure', { name: 'Preview of your page' }),
+    page.getByRole('complementary', { name: 'Preview of your page' }),
   ).toContainText('Kemi Bello');
   await expectAccessible(page);
   await page.screenshot({ path: testInfo.outputPath('welcome-about.png') });

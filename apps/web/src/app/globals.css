@@ -3826,6 +3826,97 @@ body:has(.profile-page) .brand__mark {
   font-weight: 700;
 }
 
+/* The 6-digit code: one real input over six drawn cells (ScreenAccess). */
+.tm-code-field__stage {
+  position: relative;
+}
+
+.tm-code-cells {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tm-code-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3.5rem;
+  border: 1px solid var(--border-material);
+  border-radius: 10px;
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.tm-code-field__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: transparent;
+  caret-color: transparent;
+  /* 16px: a smaller field makes iOS zoom the page on focus. */
+  font-size: 16px;
+}
+
+.tm-code-field__input::selection {
+  background: transparent;
+}
+
+.tm-code-field__stage:focus-within .tm-code-cell.is-now {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px var(--brand-primary);
+}
+
+.tm-code-field__stage:has(input[aria-invalid='true']) .tm-code-cell {
+  border: 2px solid var(--state-danger);
+  background: var(--state-danger-soft);
+}
+
+@media (forced-colors: active) {
+  .tm-code-cell {
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .tm-code-field__stage:focus-within .tm-code-cell.is-now {
+    outline: 3px solid Highlight;
+    outline-offset: 1px;
+  }
+}
+
+.auth-card .auth-form .auth-step-title,
+.auth-step-title,
+.confirm-title {
+  margin: 0;
+  font: 400 clamp(1.75rem, 4vw, 2.25rem) / 1.05 var(--font-editorial);
+  letter-spacing: -0.01em;
+}
+
+.auth-card .auth-form > p[role='status'] {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* Small confirmations: a serif line, one plain sentence, one action. */
+.confirm-body,
+.verify-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
 /* Welcome: the onboarding event after a handle is claimed. */
 .dashboard-page:has(.welcome) {
   background: var(--canvas);
@@ -3939,7 +4030,7 @@ body:has(.profile-page) .brand__mark {
 
 .welcome--setup {
   display: grid;
-  grid-template-columns: minmax(0, 26rem) minmax(0, 20rem);
+  grid-template-columns: minmax(0, 28rem) minmax(0, 22rem);
   gap: clamp(2rem, 6vw, 5rem);
   justify-content: center;
   align-items: center;
@@ -3947,14 +4038,14 @@ body:has(.profile-page) .brand__mark {
 
 .welcome-step {
   display: grid;
-  gap: var(--space-6);
-  padding: var(--space-6);
-  border: 1px solid var(--edge-hairline);
-  border-radius: 1.5rem;
-  background:
-    linear-gradient(var(--edge-light), transparent 2px) border-box,
-    var(--surface-raised);
-  box-shadow: var(--shadow-instrument);
+  gap: var(--space-4);
+}
+
+.welcome-eyebrow {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .welcome-form {
@@ -3994,67 +4085,86 @@ body:has(.profile-page) .brand__mark {
   margin-left: auto;
 }
 
+/* The aside mirrors the fields beside it (ScreenWelcome): a cover, a photo, a name, three amounts. */
 .welcome-preview {
-  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--edge-hairline);
+  border-radius: 1.625rem;
+  background:
+    linear-gradient(var(--edge-light), transparent 2px) border-box,
+    var(--surface-raised);
+  box-shadow: var(--shadow-instrument);
 }
 
-.welcome-preview__portrait {
+.welcome-preview__cover {
+  height: 8rem;
+  background: linear-gradient(var(--surface-subtle), var(--surface-recessed));
+  box-shadow: var(--shadow-recessed);
+}
+
+.welcome-preview__body {
+  padding: 0 var(--space-6) var(--space-6);
+}
+
+.welcome-preview__avatar {
+  position: relative;
   display: grid;
   place-items: center;
-  aspect-ratio: 4 / 4.4;
-  border-radius: var(--radius-card);
-  outline: 1px solid var(--edge-hairline);
-  outline-offset: -1px;
-  background: linear-gradient(var(--surface-subtle), var(--surface-recessed));
-  box-shadow:
-    inset 0 0 0 0.75rem var(--surface-subtle),
-    inset 0 0 0 calc(0.75rem + 1px) var(--edge-hairline),
-    var(--shadow-frame);
-  font: 400 clamp(4rem, 8vw, 6rem) / 1 var(--font-editorial);
-}
-
-.welcome-preview__card {
-  position: relative;
-  margin: -4.5rem var(--space-4) 0;
-  padding: var(--space-4) var(--space-5);
-  border-color: var(--edge-hairline);
-  border-radius: 1.25rem;
+  width: 6rem;
+  height: 6rem;
+  margin-top: -3rem;
+  border: 4px solid var(--surface-raised);
+  border-radius: 50%;
+  background: var(--surface-recessed);
   box-shadow: var(--shadow-card-subtle);
+  font: 400 2rem / 1 var(--font-editorial);
 }
 
-.welcome-preview__card p {
+.welcome-preview__body p,
+.welcome-preview__body h2 {
   margin: 0;
 }
 
 .welcome-preview__name {
-  font-weight: 700;
+  margin-top: var(--space-3) !important;
+  font: 400 clamp(1.75rem, 3vw, 2.375rem) / 1 var(--font-editorial);
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
 .welcome-preview__handle {
-  color: var(--text-tertiary);
+  margin-top: 6px !important;
+  color: var(--text-secondary);
   font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 
 .welcome-preview__role {
-  margin-top: var(--space-2) !important;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  margin-top: var(--space-3) !important;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .welcome-preview__bio {
-  margin-top: var(--space-1) !important;
+  margin-top: var(--space-2) !important;
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
-.welcome-preview figcaption {
-  margin-top: var(--space-3);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  text-align: center;
+.welcome-preview__amounts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.welcome-preview__amounts .tm-well {
+  justify-content: center;
+  padding: 0;
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 /* The page going live is server-confirmed: a short settle, then still. */
@@ -4131,7 +4241,8 @@ body:has(.profile-page) .brand__mark {
   }
 
   .welcome-preview {
-    max-width: 18rem;
+    max-width: 22rem;
+    width: 100%;
     margin-inline: auto;
   }
 }

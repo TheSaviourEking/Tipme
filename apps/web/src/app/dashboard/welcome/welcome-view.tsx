@@ -11,8 +11,10 @@ import {
   Surface,
   TextareaField,
 } from '@tipme/ui';
+import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Arrow } from '@/components/brand';
+import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
 import { useSiteHost } from '@/lib/site-host';
 
@@ -27,33 +29,45 @@ const initialsFor = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-/** The person's page as supporters will meet it, updating while they type. */
+/**
+ * The person's page as supporters will meet it, updating while they type. It mirrors the fields
+ * on this screen only; nothing is saved until the step's own save.
+ */
 function PagePreview({
   handle,
   name,
   role,
   bio,
+  host,
 }: {
   handle: string;
   name: string;
   role: string;
   bio: string;
+  host: string;
 }) {
   return (
-    <figure className="welcome-preview" aria-label="Preview of your page">
-      <div className="welcome-preview__portrait" aria-hidden="true">
-        <span>{initialsFor(name || handle)}</span>
-      </div>
-      <Surface material="raised" className="welcome-preview__card">
-        <p className="welcome-preview__name">{name || handle}</p>
-        <p className="welcome-preview__handle">@{handle}</p>
-        {role && <p className="welcome-preview__role">{role}</p>}
-        <p className="welcome-preview__bio">
-          {bio || 'A line about you will appear here.'}
+    <aside className="welcome-preview" aria-label="Preview of your page">
+      <div className="welcome-preview__cover" aria-hidden="true" />
+      <div className="welcome-preview__body">
+        <span className="welcome-preview__avatar" aria-hidden="true">
+          {initialsFor(name || handle)}
+        </span>
+        <h2 className="welcome-preview__name">{name || handle}</h2>
+        <p className="welcome-preview__handle">
+          {host ? `${host}/@${handle}` : `@${handle}`}
         </p>
-      </Surface>
-      <figcaption>Your page, as supporters will see it</figcaption>
-    </figure>
+        {role && <p className="welcome-preview__role">{role}</p>}
+        {bio && <p className="welcome-preview__bio">{bio}</p>}
+        <div className="welcome-preview__amounts" aria-hidden="true">
+          {STANDARD_TIP_PRESETS_MINOR.map((amount) => (
+            <span key={amount} className="tm-well">
+              {formatNaira(Number(amount))}
+            </span>
+          ))}
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -181,14 +195,18 @@ export function WelcomeView() {
           <strong>@{profile.handle}</strong> is yours now. Let’s make your page
           feel like you. It takes about a minute, and you can skip anything.
         </p>
-        <Surface material="raised" className="welcome-card welcome-plan">
+        <Surface material="instrument" className="welcome-card welcome-plan">
           <ol>
             <li className="is-done">Claim your handle</li>
             <li>Tell people your name and what you do</li>
             <li>Add a line about you</li>
             <li>Put your page online and share it</li>
           </ol>
-          <Button className="welcome-continue" onClick={() => go('about')}>
+          <Button
+            variant="continue"
+            className="welcome-continue"
+            onClick={() => go('about')}
+          >
             Let’s set up your page <Arrow />
           </Button>
           <Link className="welcome-later" href="/dashboard">
@@ -222,7 +240,7 @@ export function WelcomeView() {
             ? 'Your page is live. Anyone with your link or QR code can thank you now.'
             : 'Your page is ready but not online yet. You can put it online from Settings whenever you like.'}
         </p>
-        <Surface material="raised" className="welcome-card welcome-share">
+        <Surface material="instrument" className="welcome-card welcome-share">
           <p className="welcome-share__label">Your link</p>
           <p className="welcome-share__link">{link}</p>
           <div className="welcome-share__actions">
@@ -239,7 +257,11 @@ export function WelcomeView() {
           <p role="status" className="tm-hint">
             {copied}
           </p>
-          <ActionLink className="welcome-continue" href="/dashboard">
+          <ActionLink
+            variant="continue"
+            className="welcome-continue"
+            href="/dashboard"
+          >
             Go to my dashboard <Arrow />
           </ActionLink>
         </Surface>
@@ -249,23 +271,7 @@ export function WelcomeView() {
   return (
     <section className="welcome welcome--setup" aria-labelledby={`${id}-title`}>
       <div className="welcome-step">
-        <ol className="auth-progress" aria-label="Setting up your page">
-          {['Name', 'About you', 'Go live'].map((label, index) => (
-            <li
-              key={label}
-              className={
-                index < position
-                  ? 'is-done'
-                  : index === position
-                    ? 'is-current'
-                    : ''
-              }
-              aria-current={index === position ? 'step' : undefined}
-            >
-              {label}
-            </li>
-          ))}
-        </ol>
+        <p className="welcome-eyebrow">Step {position + 1} of 3</p>
 
         {step === 'about' && (
           <form onSubmit={saveAbout} noValidate className="welcome-form">
@@ -277,6 +283,9 @@ export function WelcomeView() {
             >
               What should people call you?
             </h1>
+            <p className="welcome-copy">
+              People tip faces they recognise. You can change all of this later.
+            </p>
             <InputField
               id={`${id}-name`}
               label="Your name"
@@ -304,9 +313,10 @@ export function WelcomeView() {
                 Back
               </Button>
               <Button variant="quiet" onClick={() => go('bio')}>
-                Skip
+                Skip for now
               </Button>
               <Button
+                variant="continue"
                 className="welcome-continue"
                 type="submit"
                 disabled={busy}
@@ -350,9 +360,10 @@ export function WelcomeView() {
                 Back
               </Button>
               <Button variant="quiet" onClick={() => go('live')}>
-                Skip
+                Skip for now
               </Button>
               <Button
+                variant="continue"
                 className="welcome-continue"
                 type="submit"
                 disabled={busy}
@@ -397,6 +408,7 @@ export function WelcomeView() {
                 Not yet
               </Button>
               <Button
+                variant="continue"
                 className="welcome-continue"
                 disabled={busy || profile.suspended}
                 aria-busy={busy}
@@ -414,6 +426,7 @@ export function WelcomeView() {
         name={name.trim()}
         role={role.trim()}
         bio={bio.trim()}
+        host={host}
       />
     </section>
   );

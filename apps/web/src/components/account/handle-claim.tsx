@@ -102,7 +102,12 @@ export function HandleClaim({
       <p aria-live="polite" className="handle-status">
         {available ? `@${available} is available` : ''}
       </p>
-      <Button type="submit" disabled={!available || busy} aria-busy={busy}>
+      <Button
+        type="submit"
+        variant="continue"
+        disabled={!available || busy}
+        aria-busy={busy}
+      >
         {available ? `Claim @${available}` : 'Claim handle'}
       </Button>
     </form>

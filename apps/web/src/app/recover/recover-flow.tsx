@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { Button, InputField, Notice } from '@tipme/ui';
+import { CodeField } from '@/components/account/code-field';
 import { apiFetch } from '@/lib/session-client';
 
 type Step = 'email' | 'code' | 'confirm' | 'scheduled';
@@ -96,7 +97,6 @@ export function RecoverFlow() {
         with your new email.
       </Notice>
     );
-  const digits = (value: string) => value.replace(/\D/g, '');
   if (step === 'email')
     return (
       <form className="auth-form" onSubmit={(e) => void start(e)} noValidate>
@@ -110,7 +110,7 @@ export function RecoverFlow() {
           error={error || undefined}
           hint="The one you can’t get into. If it has a recovery email, we’ll send a code there."
         />
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" variant="continue" disabled={busy}>
           Send recovery code
         </Button>
         <p className="auth-switch">
@@ -136,18 +136,16 @@ export function RecoverFlow() {
     return (
       <form className="auth-form" onSubmit={(e) => void propose(e)} noValidate>
         <p role="status">
-          If that account has a recovery email, we sent a code to it. It expires
-          in 10 minutes. If nothing arrives, you may have asked too many times:
-          try again in an hour.
+          If that email matches an account, the next step is on its way. A code
+          sent to a recovery email expires in 10 minutes. If nothing arrives,
+          you may have asked too many times: try again in an hour. Your balance
+          stays safe meanwhile.
         </p>
-        <InputField
+        <CodeField
           id={`${id}-recovery-code`}
           label="Code sent to your recovery email"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
           value={recoveryCode}
-          onChange={(e) => setRecoveryCode(digits(e.target.value))}
+          onChange={setRecoveryCode}
           error={codeError || undefined}
         />
         <InputField
@@ -159,7 +157,7 @@ export function RecoverFlow() {
           onChange={(e) => setNewEmail(e.target.value)}
           error={error || undefined}
         />
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" variant="continue" disabled={busy}>
           Send code to new email
         </Button>
       </form>
@@ -184,17 +182,14 @@ export function RecoverFlow() {
           />
         </>
       )}
-      <InputField
+      <CodeField
         id={`${id}-new-code`}
         label="Code sent to your new email"
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        maxLength={6}
         value={newCode}
-        onChange={(e) => setNewCode(digits(e.target.value))}
+        onChange={setNewCode}
         error={error || undefined}
       />
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" variant="continue" disabled={busy}>
         Move my account
       </Button>
       {fromStaff && (

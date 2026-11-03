@@ -45,6 +45,14 @@ function afterTip(held: string | null) {
   };
 }
 
+/** Asks for a sign-in code for a new address and waits for the code step. */
+async function atCodeStep(page: Page, path: string) {
+  await page.goto(path);
+  await page.getByLabel('Email address').fill('ada@example.com');
+  await page.getByRole('button', { name: 'Send code' }).click();
+  await page.getByLabel('6-digit code').waitFor();
+}
+
 /** Each task of the redesign adds the screens it rebuilds, in the order of the plan. */
 export const SCREENS: ReviewScreen[] = [
   { group: 'Public', name: 'Home', board: 'ScreenHome', open: visit('/') },
@@ -152,6 +160,88 @@ export const SCREENS: ReviewScreen[] = [
         );
         await page.waitForTimeout(150);
       }
+    },
+  },
+  {
+    group: 'Accounts',
+    name: 'Sign up',
+    board: 'ScreenAccess',
+    open: visit('/sign-up'),
+  },
+  {
+    group: 'Accounts',
+    name: 'Sign in',
+    board: 'ScreenAccess',
+    open: visit('/sign-in'),
+  },
+  {
+    group: 'Accounts',
+    name: 'Sign in code',
+    board: 'ScreenAccess',
+    async open(page) {
+      await atCodeStep(page, '/sign-in');
+      await page.getByLabel('6-digit code').pressSequentially('4829');
+    },
+  },
+  {
+    group: 'Accounts',
+    name: 'Recovery',
+    board: 'ScreenAccess',
+    open: visit('/recover'),
+  },
+  {
+    group: 'Accounts',
+    name: 'Recovery sent',
+    board: 'ScreenAccess',
+    async open(page) {
+      await page.goto('/recover');
+      await page.getByLabel('Your sign-in email').fill('ada@example.com');
+      await page.getByRole('button', { name: 'Send recovery code' }).click();
+      await page.getByRole('status').waitFor();
+    },
+  },
+  {
+    group: 'Accounts',
+    name: 'Welcome step 2',
+    board: 'ScreenWelcome',
+    async open(page, ctx) {
+      await ctx.recipient();
+      await page.goto('/dashboard/welcome');
+      await page
+        .getByRole('button', { name: 'Let’s set up your page' })
+        .click();
+      await page.getByLabel('Your name').fill('Ada Okafor');
+      await page.getByLabel('What you do').fill('Maths tutor');
+    },
+  },
+  // The server's answer is held at "confirmed" for the page only; no real link is needed.
+  {
+    group: 'Accounts',
+    name: 'Email verified',
+    board: 'ScreenAccess',
+    async open(page) {
+      await page.route('**/v1/auth/email/confirm', (route) =>
+        route.fulfill({ json: { data: { confirmed: true } } }),
+      );
+      await page.goto('/verify-email#v=review');
+      await page
+        .getByRole('heading', { name: 'Your email is verified.' })
+        .waitFor();
+    },
+  },
+  {
+    group: 'Accounts',
+    name: 'Unsubscribed',
+    board: 'ScreenAccess',
+    async open(page) {
+      await page.route('**/v1/mail/unsubscribe*', (route) =>
+        route.fulfill({ json: { data: { type: 'weekly_report' } } }),
+      );
+      await page.goto('/email/unsubscribed?t=review');
+      await page.getByRole('button', { name: 'Turn off this email' }).click();
+      await page
+        .getByRole('heading', { name: 'You’re unsubscribed.' })
+        .waitFor();
     },
   },
 ];
