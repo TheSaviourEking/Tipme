@@ -10,7 +10,6 @@ import {
   signUpRecipient,
   tipAsVisitor,
 } from './helpers';
-import { tipFromProfile } from '../shared/tip-flow';
 
 /** Runs the weekly-report job for this week, as the worker would on a Monday. */
 async function runWeeklyReport(
@@ -178,18 +177,11 @@ test(
   { tag: '@mobile' },
   async ({ page, browser }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile', 'Phone width only.');
-    test.setTimeout(60_000);
     const { handle } = await signUpRecipient(page, testInfo);
-    // The supporter tips from a desktop screen: this test is about the recipient's phone.
-    const visitor = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      isMobile: false,
-      hasTouch: false,
+    await tipAsVisitor(browser, handle, {
+      name: 'Bola',
+      message: 'Thank you.',
     });
-    const supporter = await visitor.newPage();
-    await supporter.goto(`/@${handle}`);
-    await tipFromProfile(supporter, { name: 'Bola', message: 'Thank you.' });
-    await visitor.close();
     await page.goto('/dashboard/tips');
     const row = page.getByRole('link', { name: /Tip from Bola/ });
     await expect(row).toBeVisible();
@@ -209,3 +201,26 @@ test(
     expect(last!.y + last!.height).toBeLessThanOrEqual(barBox!.y);
   },
 );
+
+test('a note that cannot be read leaves the rest of the stack', async ({
+  page,
+  browser,
+  request,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada', message: 'First note.' });
+  await tipAsVisitor(browser, handle, { name: 'Bo', message: 'Second note.' });
+  await runWeeklyReport(page, request, handle);
+  // One tip's detail fails at the network; the other still reads.
+  let failed = false;
+  await page.route(/\/v1\/me\/tips\/[0-9a-f-]{36}$/, async (route) => {
+    if (!failed) {
+      failed = true;
+      await route.abort();
+    } else await route.continue();
+  });
+  await page.goto('/dashboard');
+  await page.getByRole('link', { name: /Your week/ }).click();
+  await expect(page.getByTestId('note-text')).toBeVisible();
+  await expect(page.getByText('1 of 1')).toBeVisible();
+});

@@ -17,6 +17,12 @@ export function feeLine(
   platformFeeMinor: string,
   providerFeeMinor: string,
   grossMinor?: string,
+  /**
+   * Whether the tip was priced under the current rule (its feePolicyVersion starts with
+   * FEE_POLICY_V1.version): processing is paid from TipMe's share. Older tips had processing
+   * on top, so "includes processing" and a single share would be untrue for them.
+   */
+  currentRule = true,
 ): { label: string; minor: string } {
   const platform = BigInt(platformFeeMinor);
   const provider = BigInt(providerFeeMinor);
@@ -26,6 +32,11 @@ export function feeLine(
     return {
       label: 'Payment processing (TipMe’s fee waived)',
       minor: String(provider),
+    };
+  if (!currentRule)
+    return {
+      label: 'TipMe fee and payment processing',
+      minor: String(platform + provider),
     };
   const gross = grossMinor ? BigInt(grossMinor) : ZERO;
   const total = platform + provider;

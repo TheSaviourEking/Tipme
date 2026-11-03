@@ -32,3 +32,23 @@ test('the tip detail’s fee line says what was actually taken', () => {
     minor: '0',
   });
 });
+
+test('only a tip priced under the current rule says "includes processing"', () => {
+  // Current rule, 10%: processing is paid from TipMe's share.
+  assert.equal(
+    feeLine('17000', '3000', '200000', true).label,
+    'TipMe fee (10%, includes processing)',
+  );
+  // Current rule, a staff-set 7.5%.
+  assert.equal(
+    feeLine('12000', '3000', '200000', true).label,
+    'TipMe fee (7.5%, includes processing)',
+  );
+  // Waived under the current rule.
+  assert.equal(feeLine('0', '0', '200000', true).label, 'TipMe fee (waived)');
+  // An older policy (10% plus processing on top): no share, never "includes processing".
+  const old = feeLine('20000', '3000', '200000', false);
+  assert.equal(old.label, 'TipMe fee and payment processing');
+  assert.equal(old.minor, '23000');
+  assert.ok(!old.label.includes('includes processing'));
+});

@@ -45,17 +45,22 @@ export async function loadWeekNotes(week: string): Promise<WeekNote[]> {
   }
   const details = await Promise.all(
     withNote.slice(0, MOST_NOTES).map(async (tip) => {
-      const result = await apiFetch<MyTipDetail>(
-        `/v1/me/tips/${encodeURIComponent(tip.tipId)}`,
-      );
-      if (!result.ok || !result.data.message || result.data.messageHidden)
+      // One note that cannot be read (even by a thrown network error) never loses the rest.
+      try {
+        const result = await apiFetch<MyTipDetail>(
+          `/v1/me/tips/${encodeURIComponent(tip.tipId)}`,
+        );
+        if (!result.ok || !result.data.message || result.data.messageHidden)
+          return null;
+        return {
+          tipId: tip.tipId,
+          note: result.data.message,
+          who: tip.supporterLabel ?? 'a guest',
+          grossMinor: tip.grossMinor,
+        };
+      } catch {
         return null;
-      return {
-        tipId: tip.tipId,
-        note: result.data.message,
-        who: tip.supporterLabel ?? 'a guest',
-        grossMinor: tip.grossMinor,
-      };
+      }
     }),
   );
   return details.filter((note): note is WeekNote => note !== null);
@@ -68,9 +73,14 @@ export function useWeekNotes(week: string): WeekNote[] | null {
   } | null>(null);
   useEffect(() => {
     let current = true;
-    void loadWeekNotes(week).then((notes) => {
-      if (current) setState({ week, notes });
-    });
+    loadWeekNotes(week)
+      .then((notes) => {
+        if (current) setState({ week, notes });
+      })
+      // Whatever went wrong, the stack settles on "no notes" rather than waiting forever.
+      .catch(() => {
+        if (current) setState({ week, notes: [] });
+      });
     return () => {
       current = false;
     };

@@ -43,6 +43,9 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
     receipt.locator('div', { hasText: 'You received' }),
   ).toContainText('₦1,800');
   await expect(receipt.getByText('In your balance')).toBeVisible();
+  await expect(
+    receipt.getByText(/Confirmed by our payment partner/),
+  ).toBeVisible();
   await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
   await expectAccessible(page);
 
