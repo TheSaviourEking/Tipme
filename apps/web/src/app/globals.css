@@ -3058,36 +3058,6 @@ body:has(.profile-page) .brand__mark {
   color: var(--text-secondary);
 }
 
-.tip-status-icon {
-  display: block;
-  font-size: 2.25rem;
-  color: var(--text-secondary);
-}
-
-/* Purple only once the provider has confirmed: the same settle as the welcome. */
-.tip-status-icon--paid {
-  display: grid;
-  place-items: center;
-  width: 4rem;
-  height: 4rem;
-  margin: 0 auto;
-  border-radius: 50%;
-  background: var(--brand-primary);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 26%),
-    0 2px 4px rgb(58 17 131 / 30%);
-  color: var(--surface-base);
-  font-size: 1.75rem;
-  font-weight: 700;
-  animation: welcome-settle var(--duration-appreciation) var(--ease-spring);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tip-status-icon--paid {
-    animation: none;
-  }
-}
-
 .tip-recognition {
   display: flex;
   gap: 0.6rem;
@@ -3108,16 +3078,175 @@ body:has(.profile-page) .brand__mark {
   font-weight: 700;
 }
 
-/* Continuing after a tip (Done, Try again) is black, as on the profile. */
-.tip-status-actions .tm-button--primary {
-  border-color: var(--text-primary);
+/* Waiting: one pulse, once, then stillness. Nothing here celebrates. */
+.tm-pulse {
+  display: block;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin: 0 auto var(--space-4);
+  border-radius: 50%;
+  background: var(--brand-primary);
+  animation: tm-pulse-once 1.4s ease-in-out 1;
+}
+
+@keyframes tm-pulse-once {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.tip-status-card--waiting,
+.tip-status-card--checking,
+.tip-status-card--declined,
+.tip-status-card--cancelled {
+  gap: var(--space-5);
+}
+
+.tip-status-card .tm-button--continue {
+  min-width: min(100%, 16rem);
+}
+
+/* Confirmed: the thank-you is a purple slab, and it becomes the receipt. */
+.tip-status-page:has(.tip-thanks) {
   background:
-    linear-gradient(rgb(255 255 255 / 12%), transparent 45%),
-    var(--text-primary);
-  color: var(--surface-base);
-  box-shadow:
-    0 1px 1px rgb(20 18 16 / 24%),
-    0 8px 16px -8px rgb(20 18 16 / 45%);
+    linear-gradient(rgb(255 255 255 / 10%), transparent 30%),
+    var(--brand-primary);
+}
+
+.tip-thanks {
+  color: #fff;
+  max-width: 26rem;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--space-4);
+  justify-items: center;
+  text-align: center;
+}
+
+.tip-thanks .tip-status-pretend {
+  background: rgb(255 255 255 / 16%);
+  border-color: rgb(255 255 255 / 40%);
+  color: #fff;
+}
+
+.tip-thanks__mark {
+  position: relative;
+  width: 8.25rem;
+  height: 8.25rem;
+  animation: tip-thanks-settle 420ms var(--ease-spring) both;
+}
+
+.tip-thanks__initial {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 5px solid #fff;
+  border-radius: 50%;
+  background: #fffefa;
+  box-shadow: 0 18px 42px -14px rgb(58 17 131 / 80%);
+  color: var(--brand-primary);
+  font: 400 3.5rem / 1 var(--font-editorial);
+}
+
+.tip-thanks__tick {
+  position: absolute;
+  right: -0.375rem;
+  bottom: -0.125rem;
+  display: grid;
+  place-items: center;
+  width: 2.875rem;
+  height: 2.875rem;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--brand-primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.tip-thanks__live h1 {
+  margin: var(--space-2) 0 0;
+  font: 400 clamp(2.5rem, 9vw, 3rem) / 1.05 var(--font-editorial);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.tip-thanks__live p {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+.tip-thanks__receipt {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: 1.625rem;
+  color: var(--text-primary);
+  text-align: left;
+  animation: tip-thanks-rise 240ms var(--ease-spring) 760ms both;
+}
+
+.tip-thanks__receipt h2 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.tip-thanks__receipt dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.tip-thanks__receipt dt {
+  color: var(--text-secondary);
+}
+
+.tip-thanks__receipt dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.tip-thanks__receipt .tm-button {
+  width: 100%;
+}
+
+.tip-thanks .tm-hint,
+.tip-thanks__own {
+  color: #fff;
+}
+
+.tip-thanks__own {
+  display: inline-block;
+  padding: var(--space-3);
+  font-weight: 600;
+}
+
+@keyframes tip-thanks-settle {
+  from {
+    transform: scale(0.92);
+  }
+}
+
+@keyframes tip-thanks-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-pulse,
+  .tip-thanks__mark,
+  .tip-thanks__receipt {
+    animation: none;
+  }
 }
 
 .tip-status-actions {

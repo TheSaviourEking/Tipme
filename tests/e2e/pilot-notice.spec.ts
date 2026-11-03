@@ -242,11 +242,11 @@ test.describe('live mode', () => {
     expect(await fitsViewport(live)).toBe(true);
 
     await live.goto(receipt);
-    await expect(live.locator('.tip-status-card')).toContainText(/Paid\./, {
+    await expect(live.locator('.tip-thanks')).toContainText(/got your thanks\./, {
       timeout: 20_000,
     });
     await expect(
-      live.locator('.tip-status-card').getByTestId('pilot-notice'),
+      live.locator('.tip-thanks').getByTestId('pilot-notice'),
     ).toHaveText(SENTENCE);
     expect(await fitsViewport(live)).toBe(true);
     await expectAccessible(live);

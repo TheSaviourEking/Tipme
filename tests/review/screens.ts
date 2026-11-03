@@ -21,6 +21,30 @@ const visit = (path: string) => async (page: Page) => {
   await page.goto(path);
 };
 
+/**
+ * Tips ₦2,000 to the demo page through the pretend provider and lands on the receipt. With a
+ * state, the status response is held there for this page only; without, it is the real thing.
+ */
+function afterTip(held: string | null) {
+  return async (page: Page) => {
+    if (held)
+      await page.route('**/v1/tips/*/status', async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        await route.fulfill({
+          response,
+          json: { data: { ...body.data, state: held, completedAt: null } },
+        });
+      });
+    await page.goto('/@ada');
+    await page.getByRole('radio', { name: '2,000 NGN' }).click();
+    await page.getByRole('button', { name: /^Tip ₦/ }).click();
+    await page.waitForURL(/\/mock-checkout\/mock_pay_/);
+    await page.getByRole('button', { name: /^Pay/ }).click();
+    await page.waitForURL(/\/tip\/[0-9a-f-]{36}/);
+  };
+}
+
 /** Each task of the redesign adds the screens it rebuilds, in the order of the plan. */
 export const SCREENS: ReviewScreen[] = [
   { group: 'Public', name: 'Home', board: 'ScreenHome', open: visit('/') },
@@ -61,6 +85,25 @@ export const SCREENS: ReviewScreen[] = [
     name: 'Tip page',
     board: 'TipJourney',
     open: visit('/@ada'),
+  },
+  // The three after-tip screens hold the real status response at one state, for the page only.
+  {
+    group: 'Tipping',
+    name: 'Waiting',
+    board: 'TipJourney',
+    open: afterTip('waiting'),
+  },
+  {
+    group: 'Tipping',
+    name: 'Thank you',
+    board: 'ScreenThanks',
+    open: afterTip(null),
+  },
+  {
+    group: 'Tipping',
+    name: "Didn't go through",
+    board: 'TipJourney',
+    open: afterTip('declined'),
   },
   // No board shows this page; TipJourney and PagePro show the materials it specimens.
   {

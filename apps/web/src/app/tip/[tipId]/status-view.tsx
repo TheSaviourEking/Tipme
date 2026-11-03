@@ -9,11 +9,11 @@ import {
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { TipStatusView } from '@tipme/contracts';
-import { Button, Card, Notice, Skeleton } from '@tipme/ui';
+import { ActionLink, Button, Card, Notice, Skeleton, Surface } from '@tipme/ui';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
-import { formatDemoAmount } from '@/lib/demo-amount';
+import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
 import { nextCheckDelay } from '@/lib/status-polling';
 import {
@@ -194,87 +194,17 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
 
   const { view: tip } = screen;
   const name = tip.recipient.displayName;
-  const amount = formatDemoAmount(Number(tip.amountMinor));
+  const firstName = name.split(/\s+/)[0] || name;
+  const amount = formatNaira(Number(tip.amountMinor));
   const profile = `/@${tip.recipient.handle}`;
-  return (
-    <Card className={`tip-status-card tip-status-card--${tip.state}`}>
-      {copy.receiptBanner && (
-        <p className="tip-status-pretend">{copy.receiptBanner}</p>
-      )}
-      <div role="status" aria-live="polite" className="tip-status-live">
-        {tip.state === 'waiting' && (
-          <>
-            <span className="tip-status-icon" aria-hidden="true">
-              ◌
-            </span>
-            <h1>Waiting for confirmation…</h1>
-            <p>
-              {amount} for {name}. We’re waiting for the payment provider to
-              confirm it.
-            </p>
-          </>
-        )}
-        {tip.state === 'checking' && (
-          <>
-            <span className="tip-status-icon" aria-hidden="true">
-              ◌
-            </span>
-            <h1>Still checking</h1>
-            <p>
-              The payment provider hasn’t confirmed your {amount} tip yet. We
-              keep checking, and we only show success once it’s confirmed.
-            </p>
-          </>
-        )}
-        {tip.state === 'collected' && (
-          <>
-            {/* Not the paid styling: the tip is not confirmed until the details are final. */}
-            <span className="tip-status-icon" aria-hidden="true">
-              ◌
-            </span>
-            <h1>Your payment went through</h1>
-            <p>
-              The payment provider has taken your {amount}. We’re confirming the
-              final details with them, and this receipt will show the tip as
-              complete once that’s done. You don’t need to pay again.
-            </p>
-          </>
-        )}
-        {tip.state === 'paid' && (
-          <>
-            <span
-              className="tip-status-icon tip-status-icon--paid"
-              aria-hidden="true"
-            >
-              ✓
-            </span>
-            <h1>Paid. {name} got your thanks.</h1>
-            <p>{amount} · confirmed by the payment provider.</p>
-          </>
-        )}
-        {tip.state === 'declined' && (
-          <>
-            <h1>The payment was declined</h1>
-            <p>Nothing was charged. You can try again whenever you like.</p>
-          </>
-        )}
-        {tip.state === 'cancelled' && (
-          <>
-            <h1>This tip expired</h1>
-            <p>
-              It wasn’t confirmed in time, so it was cancelled. If money left
-              your account anyway, keep this receipt link and contact TipMe.
-            </p>
-          </>
-        )}
-      </div>
-      {pilotNotice}
-      {tip.state === 'paid' && celebration && (
-        <aside className="tip-recognition" aria-label="Your tips">
-          <span aria-hidden="true">✳</span>
-          <p>{celebration}</p>
-        </aside>
-      )}
+  // The tip id is a time-ordered UUID: its tail is the part that tells two receipts apart.
+  const reference = `TM-${tipId.replace(/-/g, '').slice(-8).toUpperCase()}`;
+
+  const banner = copy.receiptBanner && (
+    <p className="tip-status-pretend">{copy.receiptBanner}</p>
+  );
+  const notices = (
+    <>
       {forgotten && (
         <p className="tm-hint" role="status">
           Forgotten. This phone no longer remembers your tips.
@@ -296,25 +226,132 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
           </Button>
         </div>
       )}
-      <div className="tip-status-actions">
-        {(tip.state === 'declined' || tip.state === 'cancelled') && (
-          <Link className="tm-button tm-button--primary" href={profile}>
-            Try again
-          </Link>
-        )}
-        {tip.state === 'paid' && (
-          <Link className="tm-button tm-button--primary" href={profile}>
+    </>
+  );
+
+  // Only a payment the API reports as paid gets the moment, and then the receipt.
+  if (tip.state === 'paid')
+    return (
+      <div className="tip-thanks tm-celebration">
+        {banner}
+        <div className="tip-thanks__mark" aria-hidden="true">
+          <span className="tip-thanks__initial">
+            {firstName.charAt(0).toUpperCase()}
+          </span>
+          <span className="tip-thanks__tick">✓</span>
+        </div>
+        <div role="status" aria-live="polite" className="tip-thanks__live">
+          <h1>{firstName} got your thanks.</h1>
+          <p>{amount}, confirmed by our payment partner.</p>
+        </div>
+        <Surface
+          material="paper"
+          className="tip-thanks__receipt"
+          role="region"
+          aria-labelledby="receipt-title"
+        >
+          <h2 id="receipt-title">Your receipt</h2>
+          <dl>
+            <dt>Your tip</dt>
+            <dd>{amount}</dd>
+            <dt>Reference</dt>
+            <dd>{reference}</dd>
+          </dl>
+          {pilotNotice}
+          {celebration && (
+            <aside className="tip-recognition" aria-label="Your tips">
+              <span aria-hidden="true">✳</span>
+              <p>{celebration}</p>
+            </aside>
+          )}
+          <Button variant="secondary" onClick={() => void copyReceipt()}>
+            {copied ? 'Receipt link copied' : 'Copy receipt link'}
+          </Button>
+          <ActionLink variant="continue" href={profile}>
             Done
-          </Link>
+          </ActionLink>
+          {celebration && (
+            <Button variant="quiet" onClick={forget}>
+              Forget my tips on this phone
+            </Button>
+          )}
+        </Surface>
+        {notices}
+        <Link className="tip-thanks__own" href="/sign-up">
+          Know someone who deserves thanks too? Get your own TipMe page
+        </Link>
+      </div>
+    );
+
+  const retry = tip.state === 'declined' || tip.state === 'cancelled';
+  return (
+    <Card
+      material="instrument"
+      className={`tip-status-card tip-status-card--${tip.state}`}
+    >
+      {banner}
+      <div role="status" aria-live="polite" className="tip-status-live">
+        {tip.state === 'waiting' && (
+          <>
+            <span className="tm-pulse" data-pulse aria-hidden="true" />
+            <h1>Checking your payment</h1>
+            <p>
+              This usually takes a moment. We’ll show you as soon as it’s
+              confirmed.
+            </p>
+          </>
+        )}
+        {tip.state === 'checking' && (
+          <>
+            <span className="tm-pulse" data-pulse aria-hidden="true" />
+            <h1>Still checking</h1>
+            <p>
+              Our payment partner hasn’t confirmed your {amount} tip yet. We
+              keep checking, and we only show success once it’s confirmed.
+            </p>
+          </>
+        )}
+        {tip.state === 'collected' && (
+          <>
+            {/* Not the paid styling: the tip is not confirmed until the details are final. */}
+            <h1>Your payment went through</h1>
+            <p>
+              Our payment partner has taken your {amount}. We’re confirming the
+              final details with them, and this receipt will show the tip as
+              complete once that’s done. You don’t need to pay again.
+            </p>
+          </>
+        )}
+        {tip.state === 'declined' && (
+          <>
+            <h1>This payment didn't go through</h1>
+            <p>
+              Your tip to {firstName} wasn't sent. You can try again with
+              another card or bank.
+            </p>
+          </>
+        )}
+        {tip.state === 'cancelled' && (
+          <>
+            <h1>This tip expired</h1>
+            <p>
+              It wasn’t confirmed in time, so it was cancelled. If money left
+              your account anyway, keep this receipt link and contact TipMe.
+            </p>
+          </>
+        )}
+      </div>
+      {pilotNotice}
+      {notices}
+      <div className="tip-status-actions">
+        {retry && (
+          <ActionLink variant="continue" href={profile}>
+            Try again
+          </ActionLink>
         )}
         <Button variant="secondary" onClick={() => void copyReceipt()}>
           {copied ? 'Receipt link copied' : 'Copy receipt link'}
         </Button>
-        {celebration && (
-          <Button variant="quiet" onClick={forget}>
-            Forget my tips on this phone
-          </Button>
-        )}
       </div>
     </Card>
   );
