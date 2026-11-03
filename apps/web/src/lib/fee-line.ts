@@ -9,6 +9,16 @@ const percent = (bps: number) => {
   return `${Math.floor(bps / 100)}${frac ? `.${frac}` : ''}%`;
 };
 const BPS = BigInt(10000);
+
+/**
+ * Whether a tip was priced under the current fee policy, where processing is paid from TipMe's
+ * share. The quote writer records the policy's version, alone or with its own suffixes
+ * ("-custom-750", "-fee-free"); a later version that only begins with the same characters
+ * ("proposed-v1.10") is not this one.
+ */
+export function followsCurrentRule(recorded: string, current: string) {
+  return recorded === current || recorded.startsWith(`${current}-`);
+}
 /**
  * With the tip's gross, the label names the share this tip really paid ("10%", or whatever a
  * staff-set share was), read from the amounts the API reports; never a hard-coded rate.

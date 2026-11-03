@@ -8,7 +8,7 @@ import { MessageControls } from '@/components/dashboard/message-controls';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { feeLine } from '@/lib/fee-line';
+import { feeLine, followsCurrentRule } from '@/lib/fee-line';
 import { formatNaira } from '@/lib/demo-amount';
 import { purposeLabels } from '@/lib/tip-purpose';
 
@@ -46,7 +46,7 @@ export default function TipDetailPage() {
     tip.platformFeeMinor,
     tip.providerFeeMinor,
     tip.grossMinor,
-    tip.feePolicyVersion.startsWith(FEE_POLICY_V1.version),
+    followsCurrentRule(tip.feePolicyVersion, FEE_POLICY_V1.version),
   );
   return (
     <div className="dashboard-section tip-detail">

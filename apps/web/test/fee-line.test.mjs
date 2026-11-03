@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { feeLine } from '../src/lib/fee-line.ts';
+import { feeLine, followsCurrentRule } from '../src/lib/fee-line.ts';
 
 test('the tip detail’s fee line says what was actually taken', () => {
   // Today's rule: TipMe's 10%, processing paid from it.
@@ -51,4 +51,25 @@ test('only a tip priced under the current rule says "includes processing"', () =
   assert.equal(old.label, 'TipMe fee and payment processing');
   assert.equal(old.minor, '23000');
   assert.ok(!old.label.includes('includes processing'));
+});
+
+test('only the current fee policy and its own suffixes count as the current rule', () => {
+  const base = 'proposed-v1.1';
+  // What the quote writer records today (packages/database/src/operations/quotes.ts).
+  for (const v of [
+    'proposed-v1.1',
+    'proposed-v1.1-custom-750',
+    'proposed-v1.1-fee-free',
+    'proposed-v1.1-custom-750-fee-free',
+  ])
+    assert.equal(followsCurrentRule(v, base), true, v);
+  // Older rules, and a later version that merely starts with the same characters.
+  for (const v of [
+    'mock-v0',
+    'mock-v1',
+    'test',
+    'proposed-v1.10',
+    'proposed-v1.1x',
+  ])
+    assert.equal(followsCurrentRule(v, base), false, v);
 });
