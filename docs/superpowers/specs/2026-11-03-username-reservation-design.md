@@ -384,14 +384,14 @@ These settle the open questions. Where a section above says otherwise, this sect
      (b) the user signing in and the dashboard showing them the take-back banner. The server records the first time the banner is rendered for that signed-in user (`banner_seen_at` on `handle_take_backs`), and that moment starts the clock.
    - Once the banner has been seen, adding or not adding an email changes nothing; the clock is already running. A user who sees the banner and deliberately adds no email cannot hold the name.
    - The banner says which username goes, why (the category's fixed wording), the date it goes, and offers "Choose a new username" now.
-   - **Never told at all:** if neither (a) nor (b) happens within 30 days of approval, the take-back proceeds as at the deadline. The page gets its new username, and the done email goes out if an address exists by then. This is recorded on the take-back.
+   - **Never told at all:** if neither (a) nor (b) happens within 14 days of approval (the owner shortened this from 30, 3 Nov 2026), the take-back proceeds as at the deadline. The page gets its new username, and the done email goes out if an address exists by then. This is recorded on the take-back.
    - Impersonation, trademark and legal cases keep the sooner-or-without-notice path (5.10).
 3. **Why, in the email.** Fixed wording per category only. No staff free text reaches the user. The requester's reason stays internal, in the audit log and the approval.
 4. **After an assigned username.** Yes: one free change within 30 days of TipMe assigning a username, on any plan. It does not use a Pro change.
 5. **The generated username (controller's call, the owner did not choose).** `page_` plus 6 random characters, as proposed, so it never repeats the name being taken. Combined with 4, the person can swap it for a name they like.
 6. **`pro`.** Already in `RESERVED_HANDLES`, in code, on the screen-redesign branch (commit 29cedcc, owner-approved 3 Nov 2026). It reaches `dev` with the redesign PR, so it is not a staff reservation.
 
-**The terms follow these answers.** PR #108's "Your username" section is updated before merge. It says TipMe tells the person by email or on their dashboard, and that if TipMe cannot reach them within 30 days, it goes ahead.
+**The terms follow these answers.** PR #108's "Your username" section is updated before merge. It says TipMe tells the person by email or on their dashboard, and that if TipMe cannot reach them within 14 days, it goes ahead.
 
 ## 13. Where the code and the owner's decisions disagree
 
