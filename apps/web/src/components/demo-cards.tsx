@@ -1,5 +1,14 @@
 'use client';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import { Surface } from '@tipme/ui';
 
 // The Home hero's example cards (docs/design/DECISION-LOG.md, 3 Nov 2026). They are a picture,
@@ -8,6 +17,24 @@ import { Surface } from '@tipme/ui';
 // the plain card. Nothing here fetches or navigates.
 const FINE_POINTER = '(hover: hover) and (pointer: fine)';
 const canPlay = () => window.matchMedia(FINE_POINTER).matches;
+
+/** Which card is turned over: one at a time, by name, or none. */
+const Turned = createContext<{
+  turned: string | null;
+  turn: Dispatch<SetStateAction<string | null>>;
+}>({ turned: null, turn: () => {} });
+
+/** The stack of example cards. Turning one over turns the others back. */
+export function DemoStack({ children }: { children: ReactNode }) {
+  const [turned, turn] = useState<string | null>(null);
+  return (
+    <Turned.Provider value={{ turned, turn }}>
+      <div className="home-demo__stack" aria-hidden="true">
+        {children}
+      </div>
+    </Turned.Provider>
+  );
+}
 
 /** How long Ada's thank-you stays before the card settles back. */
 const THANKS_MS = 4500;
@@ -74,17 +101,20 @@ export function PersonCard({
   note: string;
   name: string;
 }) {
-  const [flipped, setFlipped] = useState(false);
+  const { turned, turn } = useContext(Turned);
+  const flipped = turned === name;
   return (
     <Shell
       className={className}
       flipped={flipped}
-      onClick={() => canPlay() && setFlipped((was) => !was)}
+      onClick={() => canPlay() && turn(flipped ? null : name)}
       front={front}
       back={<Slip note={note} from={name} />}
     />
   );
 }
+
+const ADA = 'Ada';
 
 const BURST = Array.from({ length: 9 }, (_, i) => ({
   dx: Math.round(Math.sin(i * 2.4) * 70),
@@ -111,7 +141,8 @@ export function AdaCard({
   note: string;
 }) {
   const [chosen, setChosen] = useState(initial);
-  const [flipped, setFlipped] = useState(false);
+  const { turned, turn } = useContext(Turned);
+  const flipped = turned === ADA;
   const [thanks, setThanks] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -119,7 +150,8 @@ export function AdaCard({
 
   const settle = () => {
     clearTimeout(timer.current);
-    setFlipped(false);
+    // Only Ada's own card; another may have been turned over since.
+    turn((was) => (was === ADA ? null : was));
     // The thank-you stays on the back until the card has turned away from it.
     timer.current = setTimeout(() => setThanks(null), 700);
   };
@@ -128,7 +160,7 @@ export function AdaCard({
     clearTimeout(timer.current);
     setThanks(amounts[chosen] ?? null);
     setBurst((count) => count + 1);
-    setFlipped(true);
+    turn(ADA);
     timer.current = setTimeout(settle, THANKS_MS);
   };
   const label = amounts[chosen] ?? '';
@@ -142,7 +174,7 @@ export function AdaCard({
         if (flipped) settle();
         else {
           setThanks(null);
-          setFlipped(true);
+          turn(ADA);
         }
       }}
       front={

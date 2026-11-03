@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { Button } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
-import { AdaCard, PersonCard } from './demo-cards';
+import { AdaCard, DemoStack, PersonCard } from './demo-cards';
 import { IndigoQr } from './marketing/indigo-qr';
 import { ModeText } from './payment-mode-slot';
 
@@ -112,13 +112,14 @@ const TIP_LABEL = naira(DEFAULT_TIP);
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
  * technology and holds nothing focusable; the caption says in words that the people are examples.
  * On a narrow screen only the front card shows, as on the phone board. On a wide screen with a
- * fine pointer the cards drift, turn over to a note when clicked, and Ada's Tip says thank you
+ * fine pointer the cards drift, turn over to a note when clicked (one at a time, and the turned
+ * card comes to the front), and Ada's Tip says thank you
  * (demo-cards.tsx): small client islands, and the headline never waits for them.
  */
 export function HomeDemo() {
   return (
     <div className="home-demo">
-      <div className="home-demo__stack" aria-hidden="true">
+      <DemoStack>
         <PersonCard
           className="home-demo__card home-demo__card--zainab"
           name="Zainab"
@@ -197,7 +198,7 @@ export function HomeDemo() {
           }
         />
         <IndigoQr className="home-demo__qr" sizes="164px" />
-      </div>
+      </DemoStack>
       <p className="home-demo__caption">Examples, not real people.</p>
     </div>
   );

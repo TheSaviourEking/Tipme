@@ -177,6 +177,48 @@ test('pressing the example Tip says thank you for the chosen amount, makes no re
   await expect(ada.getByText('Thank you for the ₦10,000!')).toBeVisible();
 });
 
+// The owner, 3 Nov 2026: "One card should flip at a time and it should be visible."
+test('only one example card is turned over at a time', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const tobi = page.locator('.home-demo__card--tobi');
+  const zainab = page.locator('.home-demo__card--zainab');
+  const ada = page.locator('.home-demo__main');
+  await tobi.click({ position: { x: 24, y: 110 } });
+  await expect(tobi).toHaveAttribute('data-flipped', 'true');
+  // Zainab's right edge stays clear of the cards in front of her.
+  const box = (await zainab.boundingBox())!;
+  await page.mouse.click(box.x + box.width - 30, box.y + 150);
+  await expect(zainab).toHaveAttribute('data-flipped', 'true');
+  await expect(tobi).toHaveAttribute('data-flipped', 'false');
+  await ada.getByText('Ada Okafor').click();
+  await expect(ada).toHaveAttribute('data-flipped', 'true');
+  await expect(zainab).toHaveAttribute('data-flipped', 'false');
+});
+
+test('a turned card comes to the front, so its note can be read', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const tobi = page.locator('.home-demo__card--tobi');
+  const box = (await tobi.boundingBox())!;
+  // A point on Tobi's card that Ada's card covers while Tobi faces forward.
+  const point = { x: box.x + box.width * 0.75, y: box.y + box.height / 2 };
+  const onTobi = () =>
+    page.evaluate(
+      ({ x, y }) =>
+        Boolean(
+          document.elementFromPoint(x, y)?.closest('.home-demo__card--tobi'),
+        ),
+      point,
+    );
+  expect(await onTobi()).toBe(false);
+  await tobi.click({ position: { x: 24, y: 110 } });
+  await expect(tobi).toHaveAttribute('data-flipped', 'true');
+  await expect.poll(onTobi).toBe(true);
+});
+
 // The owner looked in a laptop window narrower than the three-card spread (3 Nov 2026): the lone
 // card still answers a mouse there.
 test('in a narrower desktop window the lone example card still drifts and says thank you', async ({

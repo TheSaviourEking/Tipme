@@ -681,7 +681,13 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
 .home-flip__face {
   overflow: hidden;
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+}
+
+/* Safari hides a face's back reliably only once the face has a transform of its own. */
+.home-flip__front {
+  transform: rotateY(0deg);
 }
 
 .home-flip__back {
@@ -1196,8 +1202,15 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     pointer-events: auto;
   }
 
+  /* The turned card rises above the others at once, and sinks back only once it has turned back. */
   .home-flip {
     cursor: pointer;
+    transition: z-index 0s linear 640ms;
+  }
+
+  .home-flip[data-flipped='true'] {
+    z-index: 4;
+    transition-delay: 0s;
   }
 
   .home-flip__inner {
@@ -1583,6 +1596,11 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* The flip is an instant swap, so the turned card comes forward and goes back at once too. */
+  .home-flip {
+    transition: none;
+  }
+
   .tip-instrument .composer-extras__body {
     animation: none;
   }
