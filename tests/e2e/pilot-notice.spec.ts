@@ -155,7 +155,7 @@ test.describe('live mode', () => {
       },
     );
     await expect(async () => {
-      const response = await fetch(`${origin}/how-it-works`);
+      const response = await fetch(`${origin}/for-creators`);
       expect(response.ok).toBe(true);
     }).toPass({ timeout: 90_000 });
   });

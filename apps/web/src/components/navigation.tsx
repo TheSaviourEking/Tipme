@@ -149,7 +149,8 @@ export function Navigation() {
               <MenuIcon path="M5 5l14 14M19 5 5 19" />
             </Button>
           </div>
-          <Link href="/how-it-works" onClick={close}>
+          {/* The steps live on Home (the owner, 3 Nov 2026); on Home the page glides down to them. */}
+          <Link href="/#how-it-works" onClick={close}>
             How it works
           </Link>
           <div

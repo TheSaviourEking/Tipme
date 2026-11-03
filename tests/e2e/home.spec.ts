@@ -62,7 +62,8 @@ test('home states the fee and the minimum plainly', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('TipMe keeps 10% of each tip')).toBeVisible();
   await expect(page.getByText('The smallest tip is ₦2,000.')).toBeVisible();
-  expect(await page.content()).not.toContain('₦1,000');
+  // Not the old ₦1,000 minimum; Zainab's ₦1,000,000 example is another amount.
+  expect(await page.content()).not.toMatch(/₦1,000(?![,\d])/);
 });
 
 test('home names global payments, as the owner decided', async ({ page }) => {
@@ -336,6 +337,49 @@ test("Zainab's example page wears the Pro badge, and the others none", async ({
     page.locator('.home-demo__card--zainab .tm-pro-badge'),
   ).toHaveText('Pro');
   await expect(page.locator('.home-demo__stack .tm-pro-badge')).toHaveCount(1);
+});
+
+// The owner, 3 Nov 2026: "zainab's profile should be 100000, 500000, 1000000. You can use 100k,
+// 500k and 1M if it'd overflow the card."
+test("Zainab's keys are ₦100k, ₦500k and ₦1M, and her Tip and thank-you give the whole amount", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const zainab = page.locator('.home-demo__card--zainab');
+  await clickSide(page, zainab, 'right');
+  await expect(zainab.locator('.home-key')).toHaveText([
+    '₦100k',
+    '₦500k',
+    '₦1M',
+  ]);
+  await expect(zainab.locator('.home-key[data-selected]')).toHaveText('₦500k');
+  await expect(zainab.getByText('Tip ₦500,000')).toBeVisible();
+  for (const key of await zainab.locator('.home-key').all())
+    expect(
+      await key.evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
+  await zainab.getByText('₦1M', { exact: true }).click();
+  await zainab.getByText('Tip ₦1,000,000').click();
+  await expect(
+    zainab
+      .locator('.home-flip__back')
+      .getByText('Thank you for the ₦1,000,000!'),
+  ).toBeVisible();
+});
+
+test("Zainab's cover is her own photo, not one of TipMe's designs", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const src = await page
+    .locator('.home-demo__card--zainab .home-demo__cover img')
+    .getAttribute('src');
+  expect(src).toContain('zainab-cover');
+  // TipMe's own designs are the covers folder; hers comes from outside it.
+  expect(src).not.toContain('covers%2F');
+  expect(src).not.toContain('/covers/');
 });
 
 // The owner looked in a laptop window narrower than the three-card spread (3 Nov 2026): the lone

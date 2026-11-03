@@ -120,7 +120,7 @@ both(
 both(
   'other pages keep the site navigation and footer',
   async ({ page }, info) => {
-    for (const path of ['/', '/how-it-works', '/@not-a-person']) {
+    for (const path of ['/', '/for-creators', '/@not-a-person']) {
       await page.goto(path);
       if (info.project.name === 'mobile')
         await expect(page.getByRole('button', { name: 'Menu' })).toBeVisible();

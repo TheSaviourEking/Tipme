@@ -65,6 +65,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },
+  // How it works is a section of Home now (the owner, 3 Nov 2026); old links land on it.
+  async redirects() {
+    return [
+      {
+        source: '/how-it-works',
+        destination: '/#how-it-works',
+        permanent: true,
+      },
+    ];
+  },
   // The portraits are 960px wide, so a candidate above that only re-encodes the same pixels under
   // another URL (and the resizer never enlarges). Cap the ladder at the real width.
   // Cover artwork asks for quality 85 so the optimiser doesn't add a second visible lossy pass.

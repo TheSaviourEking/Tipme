@@ -172,7 +172,8 @@ export function PersonCard({
   className: string;
   cover: ReactNode;
   avatar: ReactNode;
-  amounts: string[];
+  /** Each key's label, short if the whole amount would not fit, and the whole amount. */
+  amounts: { key: string; full: string }[];
   initial: number;
   note: string;
 }) {
@@ -193,12 +194,12 @@ export function PersonCard({
   const tip = () => {
     if (!canPlay()) return;
     clearTimeout(timer.current);
-    setThanks(amounts[chosen] ?? null);
+    setThanks(amounts[chosen]?.full ?? null);
     setBurst((count) => count + 1);
     if (!flipped) choose();
     timer.current = setTimeout(settle, THANKS_MS);
   };
-  const label = amounts[chosen] ?? '';
+  const label = amounts[chosen]?.full ?? '';
 
   return (
     <Shell
@@ -226,7 +227,7 @@ export function PersonCard({
             <div className="home-keys">
               {amounts.map((amount, index) => (
                 <span
-                  key={amount}
+                  key={amount.key}
                   className="home-key"
                   data-selected={index === chosen ? 'true' : undefined}
                   onClick={(event) => {
@@ -236,7 +237,7 @@ export function PersonCard({
                     setChosen(index);
                   }}
                 >
-                  {amount}
+                  {amount.key}
                 </span>
               ))}
             </div>

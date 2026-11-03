@@ -1,4 +1,4 @@
-/** Marketing pieces shared by the home page and the PRD marketing routes. */
+/** Marketing pieces for the home page. */
 import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
@@ -6,38 +6,6 @@ import { Button } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
 import { DemoStack, PersonCard } from './demo-cards';
 import { IndigoQr } from './marketing/indigo-qr';
-import { ModeText } from './payment-mode-slot';
-
-/** The three steps of a tip, in order. */
-export function HowItWorksSteps() {
-  return (
-    <ol className="steps">
-      <li>
-        <span>01</span>
-        <h3>Find your person.</h3>
-        <p>
-          Open their personal link. Recognize the face, the work, the care that
-          brought you here.
-        </p>
-      </li>
-      <li>
-        <span>02</span>
-        <h3>Make it yours.</h3>
-        <p>
-          Choose a gesture that feels right. Add a few words if you’d like. No
-          pressure, always your choice.
-        </p>
-      </li>
-      <li>
-        <span>03</span>
-        <h3>See the thought behind it.</h3>
-        <p>
-          <ModeText pick="howItWorksPay" />
-        </p>
-      </li>
-    </ol>
-  );
-}
 
 /* ---- Home (ScreenHome board) ---------------------------------------------------------------
    Everything below renders on the server. The only client island on Home is the steps lever
@@ -109,6 +77,16 @@ function Heart({ className }: { className?: string }) {
 const TIP_LABEL = naira(DEFAULT_TIP);
 
 /**
+ * Zainab sets her own amounts, as a page owner can; the keys say them short so ₦1,000,000 fits
+ * (the owner, 3 Nov 2026). Her Tip and thank-you give the whole amount.
+ */
+const ZAINAB_AMOUNTS = [
+  { key: '₦100k', full: '₦100,000' },
+  { key: '₦500k', full: '₦500,000' },
+  { key: '₦1M', full: '₦1,000,000' },
+];
+
+/**
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
  * technology and holds nothing focusable; the caption says in words that the people are examples.
  * On a narrow screen only Ada's card shows, as on the phone board. With a mouse the cards are a
@@ -116,7 +94,10 @@ const TIP_LABEL = naira(DEFAULT_TIP);
  * and only it turns over or takes a pretend tip. Small client islands; the headline never waits.
  */
 export function HomeDemo() {
-  const amounts = STANDARD_TIP_PRESETS_MINOR.map(naira);
+  const amounts = STANDARD_TIP_PRESETS_MINOR.map((amount) => ({
+    key: naira(amount),
+    full: naira(amount),
+  }));
   const initial = STANDARD_TIP_PRESETS_MINOR.indexOf(DEFAULT_TIP);
   return (
     <div className="home-demo">
@@ -126,13 +107,17 @@ export function HomeDemo() {
           role="Streamer"
           pro
           className="home-demo__card home-demo__card--zainab"
-          amounts={amounts}
-          initial={initial}
+          amounts={ZAINAB_AMOUNTS}
+          initial={1}
           note="Thank you for hanging out in chat. You make every stream better."
           cover={
-            <div className="home-demo__cover-fill home-demo__cover--ocean">
-              <Heart className="home-demo__cover-heart" />
-            </div>
+            <Image
+              src="/illustrations/zainab-cover.webp"
+              alt=""
+              fill
+              sizes="320px"
+              className="home-demo__img"
+            />
           }
           avatar={<span className="home-demo__initial">Z</span>}
         />

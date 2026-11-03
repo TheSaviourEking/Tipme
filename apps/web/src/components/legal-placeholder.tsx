@@ -19,7 +19,7 @@ export function LegalPlaceholder({
         <p>
           We are finalising our {title.toLowerCase()} and will publish it before
           TipMe takes real payments. Questions in the meantime? Start from{' '}
-          <Link href="/how-it-works">how TipMe works</Link>.
+          <Link href="/#how-it-works">how TipMe works</Link>.
         </p>
       </Container>
     </main>

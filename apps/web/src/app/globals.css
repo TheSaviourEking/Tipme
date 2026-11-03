@@ -654,8 +654,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
 /* Example pages: a picture of what TipMe makes. Three cards from 75rem, the front card alone below. */
 .home-demo {
-  --demo-ocean: #1c4e8a;
-  --demo-ocean-heart: #3f7cc6;
   min-width: 0;
   user-select: none;
 }
@@ -743,25 +741,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
 .home-flip .home-demo__cover {
   height: 7.75rem;
-}
-
-.home-demo__cover-fill {
-  position: absolute;
-  inset: 0;
-}
-
-.home-demo__cover--ocean {
-  background: var(--demo-ocean);
-}
-
-.home-demo__cover-heart {
-  position: absolute;
-  top: 0.5rem;
-  left: 50%;
-  translate: -50% 0;
-  width: 6.875rem;
-  height: 6.875rem;
-  fill: var(--demo-ocean-heart);
 }
 
 .home-demo__img {

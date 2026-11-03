@@ -9,7 +9,6 @@ const routes = [
   '/design-system',
   '/preview-states',
   '/@not-a-person',
-  '/how-it-works',
   '/for-creators',
   '/for-businesses',
   '/legal/privacy',
@@ -253,15 +252,18 @@ test('short /handle links permanently redirect to /@handle without shadowing pag
     );
 });
 
-test('how it works and creator pages exist as PRD marketing routes', async ({
+// The owner, 3 Nov 2026: How it works lives on Home; "we don't need a seperate page".
+test('the old How it works address lands on the steps on Home', async ({
   page,
 }) => {
   await page.goto('/how-it-works');
-  await expect(page).toHaveTitle(/How it works/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'How TipMe works',
-  );
-  await expect(page.locator('main ol.steps > li')).toHaveCount(3);
+  await expect(page).toHaveURL(/\/#how-it-works$/);
+  await expect(
+    page.getByRole('heading', { name: /in three steps\./ }),
+  ).toBeInViewport();
+});
+
+test('the creator page exists as a PRD marketing route', async ({ page }) => {
   await page.goto('/for-creators');
   await expect(page).toHaveTitle(/For individuals/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
@@ -278,7 +280,7 @@ test('main navigation points to the marketing pages', async ({
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await expect(nav.getByRole('link', { name: 'How it works' })).toHaveAttribute(
     'href',
-    '/how-it-works',
+    '/#how-it-works',
   );
   // The two pages sit under "Who it's for" now (tests/e2e/navigation.spec.ts opens that menu).
   if (testInfo.project.name !== 'mobile')
@@ -291,4 +293,38 @@ test('main navigation points to the marketing pages', async ({
     'href',
     '/for-businesses',
   );
+});
+
+test('How it works in the header glides down Home to the steps', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/');
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: 'Menu' }).click();
+  // Every frame's scroll position from the press on: a jump has one step, a glide many.
+  await page.evaluate(() => {
+    const seen: number[] = [];
+    (window as unknown as { seen: number[] }).seen = seen;
+    const frame = () => {
+      seen.push(window.scrollY);
+      if (seen.length < 120) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+  await page
+    .getByRole('navigation', { name: 'Main navigation' })
+    .getByRole('link', { name: 'How it works' })
+    .click();
+  await expect(page).toHaveURL(/\/#how-it-works$/);
+  await expect(
+    page.getByRole('heading', { name: /in three steps\./ }),
+  ).toBeInViewport();
+  await page.waitForTimeout(2200);
+  const seen = await page.evaluate(
+    () => (window as unknown as { seen: number[] }).seen,
+  );
+  const end = Math.max(...seen);
+  const between = new Set(seen.filter((y) => y > 0 && y < end));
+  expect(between.size).toBeGreaterThanOrEqual(3);
 });
