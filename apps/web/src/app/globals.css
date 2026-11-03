@@ -1788,6 +1788,36 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.6;
 }
 
+/* Tipping opens soon (ScreenSmall): the signature card, white words, one white way on. */
+.tips-not-ready[data-material='signature'] {
+  display: grid;
+  gap: var(--space-3);
+  color: #fff;
+}
+
+.tips-not-ready[data-material='signature'] h2 {
+  font-family: var(--font-editorial);
+  font-size: clamp(1.75rem, 5vw, 2.375rem);
+  font-weight: 400;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.tips-not-ready[data-material='signature'] .composer-description {
+  color: #fff;
+}
+
+.tips-not-ready .tips-not-ready__claim {
+  width: 100%;
+  border-color: #fff;
+  background: #fff;
+  color: #000;
+}
+
+.tips-not-ready[data-material='signature'] .share-profile__status {
+  color: #fff;
+}
+
 .tip-instrument fieldset legend,
 .tip-instrument .tm-field label {
   font-size: 0.8125rem;
@@ -3658,70 +3688,106 @@ body:has(.profile-page) .brand__mark {
   font-weight: 700;
 }
 
-/* Missing pages and failures: one calm card with a way forward. */
+/* Missing pages and failures (ScreenSmall): one floating card, left-aligned, with one black way
+   on. The room under it keeps the update notice (fixed, bottom left) off the card and the footer. */
 .quiet-page {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: var(--space-12) 0 var(--space-16);
+  padding: var(--space-12) 0 calc(var(--space-16) + 4.5rem);
   background: var(--canvas);
 }
 
-.quiet-card {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-4);
-  max-width: 32rem;
-  margin: 0 auto;
-  padding: clamp(1.75rem, 5vw, 2.75rem);
-  border-color: var(--edge-hairline);
-  border-radius: 1.5rem;
-  box-shadow: var(--shadow-instrument);
-  text-align: center;
+.quiet-page > .tm-container {
+  width: min(34rem, calc(100% - 2rem));
 }
 
-.quiet-card__mark {
-  color: var(--brand-primary);
-  font-size: 1.75rem;
-  line-height: 1;
+.quiet-card {
+  display: flex;
+  flex-direction: column;
+  min-height: min(30rem, 70svh);
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+  border-radius: 1.625rem;
+  text-align: left;
 }
 
 .quiet-card__wordmark {
   width: auto;
-  height: 2.5rem;
+  height: 1.625rem;
+  margin-bottom: var(--space-12);
+  align-self: flex-start;
 }
 
 .quiet-card h1 {
-  margin: 0;
-  font: 400 clamp(2rem, 4.5vw, 2.75rem) / 1.08 var(--font-editorial);
-  letter-spacing: -0.02em;
+  margin: auto 0 0;
+  font: 400 clamp(2rem, 6vw, 2.375rem) / 1.05 var(--font-editorial);
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
 .quiet-card__body p {
-  margin: 0;
+  margin: var(--space-3) 0 var(--space-5);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.quiet-card__actions .tm-button {
+  display: flex;
+  width: 100%;
+}
+
+.quiet-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-5);
+  margin-top: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.quiet-card__foot .text-link {
+  color: var(--text-primary);
+}
+
+/* The Legal pages (ScreenSmall): a readable column of paper, never wider than 48rem. */
+.legal-page {
+  padding: var(--space-12) 0 calc(var(--space-16) + 4.5rem);
+}
+
+.legal-page > .tm-container {
+  width: min(var(--container), calc(100% - 2rem));
+}
+
+.legal-page__column {
+  max-width: 48rem;
+  margin-inline: auto;
+  padding: clamp(1.25rem, 5vw, 2.5rem);
+}
+
+.legal-page__column h1 {
+  margin: 0 0 var(--space-3);
+  font: 400 clamp(2rem, 5vw, 2.5rem) / 1.1 var(--font-editorial);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.legal-page__column h2 {
+  margin: var(--space-8) 0 var(--space-2);
+  font-size: 1.0625rem;
+}
+
+.legal-page__column p {
   color: var(--text-secondary);
   line-height: 1.6;
 }
 
-.quiet-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-5);
-  margin-top: var(--space-2);
-}
-
-.quiet-card__actions .tm-button--primary {
-  border-color: var(--text-primary);
-  background:
-    linear-gradient(rgb(255 255 255 / 12%), transparent 45%),
-    var(--text-primary);
-  color: var(--surface-base);
-  box-shadow:
-    0 1px 1px rgb(20 18 16 / 24%),
-    0 8px 16px -8px rgb(20 18 16 / 45%);
+/* Inline links must not rely on colour alone (WCAG 1.4.1). */
+.legal-page__column p a {
+  color: var(--brand-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 /* Email confirmation: one centred card on the canvas. */

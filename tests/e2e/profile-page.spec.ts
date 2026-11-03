@@ -251,6 +251,15 @@ test.describe('the page in each payment state', () => {
       await expect(tipButton(page)).toHaveCount(0);
       await expect(page.locator('.composer-action')).toHaveCount(0);
       await expect(page.getByText(TRUST)).toHaveCount(0);
+      // ScreenSmall: it names the page, and the way on is to claim one's own.
+      await expect(
+        page.getByRole('heading', {
+          name: /^Tipping opens soon on .+’s page\.$/,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('link', { name: 'Claim your username' }),
+      ).toHaveAttribute('href', '/sign-up');
       const copy = page.getByRole('button', { name: 'Copy page link' });
       const before = await copy.boundingBox();
       await copy.click();

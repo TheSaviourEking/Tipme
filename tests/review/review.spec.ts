@@ -49,7 +49,8 @@ for (const screen of SCREENS) {
     mkdirSync(dirname(`${OUT}/${file}`), { recursive: true });
     await page.screenshot({
       path: `${OUT}/${file}`,
-      fullPage: true,
+      // A screen with fixed bars is shot one phone screen tall, so they sit where they really do.
+      fullPage: !(screen.viewport && testInfo.project.name === 'phone'),
       animations: 'disabled',
       caret: 'hide',
     });

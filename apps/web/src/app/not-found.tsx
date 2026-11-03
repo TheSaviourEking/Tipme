@@ -1,27 +1,30 @@
+'use client';
 import Link from 'next/link';
-import { TestModeOnly } from '@/components/payment-mode-slot';
+import { usePathname } from 'next/navigation';
+import { ActionLink } from '@tipme/ui';
 import { QuietScreen } from '@/components/quiet-screen';
+import { missingHandle } from '@/lib/missing-handle';
 
 export default function NotFound() {
+  const handle = missingHandle(usePathname());
   return (
     <QuietScreen
-      title="We can’t find that page"
-      actions={
-        <>
-          <Link className="tm-button tm-button--primary" href="/">
-            Go to TipMe
-          </Link>
-          <TestModeOnly>
-            <Link className="text-link" href="/@ada">
-              See a demo page
-            </Link>
-          </TestModeOnly>
-        </>
+      title={handle ? `We can’t find @${handle}.` : 'We can’t find that page.'}
+      action={
+        <ActionLink variant="continue" href="/">
+          Go to TipMe
+        </ActionLink>
+      }
+      foot={
+        <Link className="text-link" href="/sign-up">
+          Get your own page
+        </Link>
       }
     >
       <p>
-        The link may be mistyped, or the page may have moved. Looking for
-        someone? Ask them for their TipMe link or QR code.
+        {handle
+          ? 'Check the spelling, or ask them for their link. They may have changed their handle.'
+          : 'Check the link, or ask the person for their TipMe link or QR code.'}
       </p>
     </QuietScreen>
   );

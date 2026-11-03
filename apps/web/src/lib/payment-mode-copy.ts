@@ -38,7 +38,8 @@ export type PaymentModeCopy = {
 };
 
 const CLOSED_TITLE = 'Tipping opens soon';
-const CLOSED_BODY = 'TipMe isn’t taking tips yet. Please come back soon.';
+const CLOSED_BODY =
+  'Claim your own page while you wait. No bank details needed yet.';
 const SIGN_UP =
   'An email address and a handle is all it takes to start receiving thanks.';
 const CLARITY = 'You pay exactly the amount you choose.';

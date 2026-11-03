@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { Card } from '@tipme/ui';
+import { ActionLink, Card } from '@tipme/ui';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { ShareProfile } from './share-profile';
 
@@ -9,14 +9,17 @@ import { ShareProfile } from './share-profile';
  * said before a supporter chooses an amount, and no pay button anywhere. `announce` is for the
  * form closing itself after a refusal: the card is a polite live region and its heading takes
  * focus, so a screen reader user is not left on a button that has gone. `handle` is for a
- * person's own page: their supporters can still pass the page on.
+ * person's own page: their supporters can still pass the page on. `name` is their first name,
+ * and the way on is to claim a page of one's own (ScreenSmall: the signature card).
  */
 export function TippingOpensSoon({
   announce = false,
   handle,
+  name,
 }: {
   announce?: boolean;
   handle?: string;
+  name?: string;
 }) {
   const copy = paymentModeCopy('closed');
   const heading = useRef<HTMLHeadingElement>(null);
@@ -25,13 +28,21 @@ export function TippingOpensSoon({
   }, [announce]);
   return (
     <Card
+      material="signature"
       className="appreciation-card tips-not-ready"
       {...(announce ? { role: 'status' } : {})}
     >
       <h2 ref={heading} {...(announce ? { tabIndex: -1 } : {})}>
-        {copy.closedTitle}
+        {name ? `${copy.closedTitle} on ${name}’s page.` : copy.closedTitle}
       </h2>
       <p className="composer-description">{copy.closedBody}</p>
+      <ActionLink
+        href="/sign-up"
+        variant="continue"
+        className="tips-not-ready__claim"
+      >
+        Claim your username
+      </ActionLink>
       {handle && <ShareProfile handle={handle} variant="text" />}
     </Card>
   );

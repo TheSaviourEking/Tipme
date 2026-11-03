@@ -333,3 +333,84 @@ test('How it works in the header glides down Home to the steps', async ({
   const between = new Set(seen.filter((y) => y > 0 && y < end));
   expect(between.size).toBeGreaterThanOrEqual(3);
 });
+
+// The ScreenSmall board. A path under a handle matches no page, so it reaches the site's own
+// "not found" screen. (/@handle itself shows the one "isn't available" screen for every page that
+// cannot be shown, so it never says whether a handle exists.)
+test(
+  'a missing page names the handle and offers a way on',
+  { tag: '@mobile' },
+  async ({ page }) => {
+    await page.goto('/@tobi_s/tips');
+    await expect(
+      page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
+    ).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(
+      main.getByRole('link', { name: 'Go to TipMe' }),
+    ).toHaveAttribute('href', '/');
+    await expect(
+      main.getByRole('link', { name: 'Get your own page' }),
+    ).toHaveAttribute('href', '/sign-up');
+    expect(await fitsViewport(page)).toBe(true);
+    await expectAccessible(page);
+  },
+);
+
+test('a missing page normalises the handle, and never echoes anything else', async ({
+  page,
+}) => {
+  await page.goto('/@Tobi_S/tips');
+  await expect(
+    page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
+  ).toBeVisible();
+  for (const odd of [
+    '/@%3Cscript%3Ealert(1)%3C%2Fscript%3E/tips',
+    `/@${'a'.repeat(60)}/tips`,
+    '/@ab/tips',
+    '/nothing-here/at-all',
+  ]) {
+    await page.goto(odd);
+    await expect(
+      page.getByRole('heading', { name: /^We can.t find that page\.$/ }),
+    ).toBeVisible();
+    await expect(page.locator('main')).not.toContainText('script');
+    await expect(page.locator('main')).not.toContainText('aaaaaaaa');
+  }
+});
+
+test('an error says it is on our side and gives a reference', async ({
+  page,
+}) => {
+  // /dev/crash throws on the server when the test inbox is on, and is a 404 otherwise.
+  await page.goto('/dev/crash');
+  await expect(
+    page.getByRole('heading', { name: /^This page didn.t load\.$/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/It.s a problem on our side and your account is fine\./),
+  ).toBeVisible();
+  // The digest Next logs on the server for this failure.
+  await expect(page.getByText(/^Reference: [0-9a-z]{6,}$/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await expectAccessible(page);
+});
+
+test(
+  'legal pages keep a readable width',
+  { tag: '@mobile' },
+  async ({ page }) => {
+    for (const route of ['/legal/privacy', '/legal/terms']) {
+      await page.goto(route);
+      const column = page.locator('main .legal-page__column');
+      await expect(column.getByRole('heading', { level: 1 })).toBeVisible();
+      const box = await column.boundingBox();
+      const rem = await page.evaluate(() =>
+        parseFloat(getComputedStyle(document.documentElement).fontSize),
+      );
+      expect(box?.width ?? Infinity, route).toBeLessThanOrEqual(48 * rem);
+      expect(await fitsViewport(page)).toBe(true);
+      await expectAccessible(page);
+    }
+  },
+);

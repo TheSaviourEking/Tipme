@@ -14,6 +14,8 @@ export interface ReviewScreen {
   group: string;
   name: string;
   board: string;
+  /** Its phone shot is one screen tall, not the whole page, so fixed bars sit where they do on a phone. */
+  viewport?: boolean;
   open(page: Page, ctx: ReviewContext): Promise<void>;
 }
 
@@ -109,6 +111,7 @@ export const SCREENS: ReviewScreen[] = [
     group: 'Tipping',
     name: 'Tip page',
     board: 'TipJourney',
+    viewport: true,
     open: visit('/@ada'),
   },
   // The three after-tip screens hold the real status response at one state, for the page only.
@@ -248,6 +251,7 @@ export const SCREENS: ReviewScreen[] = [
     group: 'Dashboard',
     name: 'Dashboard with tips',
     board: 'ScreenDashboard',
+    viewport: true,
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
       await page.goto('/dashboard');
@@ -258,6 +262,7 @@ export const SCREENS: ReviewScreen[] = [
     group: 'Dashboard',
     name: 'Before the first tip',
     board: 'ScreenFirstDay',
+    viewport: true,
     async open(page, ctx) {
       await ctx.recipient();
       await page.goto('/dashboard');
@@ -393,4 +398,63 @@ export const SCREENS: ReviewScreen[] = [
         .waitFor();
     },
   })),
+  {
+    group: 'Small screens',
+    name: 'Page not found',
+    board: 'ScreenSmall',
+    open: visit('/@tobi_s/tips'),
+  },
+  {
+    group: 'Small screens',
+    name: 'Page unavailable',
+    board: 'ScreenSmall',
+    open: visit('/@tobi_s'),
+  },
+  {
+    group: 'Small screens',
+    name: 'Something went wrong',
+    board: 'ScreenSmall',
+    open: visit('/dev/crash'),
+  },
+  {
+    group: 'Small screens',
+    name: 'Tipping opens soon',
+    board: 'ScreenSmall',
+    // The API answers that tipping is closed once the supporter presses Tip; the card takes the form's place.
+    async open(page) {
+      await page.goto('/@ada');
+      const origin = new URL(page.url()).origin;
+      const cors = { 'access-control-allow-origin': origin };
+      await page.route('**/v1/tip-quotes', (route) =>
+        route.request().method() === 'OPTIONS'
+          ? route.fulfill({
+              status: 204,
+              headers: { ...cors, 'access-control-allow-headers': '*' },
+            })
+          : route.fulfill({
+              status: 403,
+              headers: cors,
+              contentType: 'application/json',
+              body: JSON.stringify({ error: { code: 'TIPPING_NOT_OPEN' } }),
+            }),
+      );
+      await page.getByRole('radio', { name: '2,000 NGN' }).click();
+      await page.getByRole('button', { name: /^Tip ₦/ }).click();
+      await page
+        .getByRole('heading', { name: /^Tipping opens soon/ })
+        .waitFor();
+    },
+  },
+  {
+    group: 'Small screens',
+    name: 'Privacy',
+    board: 'ScreenSmall',
+    open: visit('/legal/privacy'),
+  },
+  {
+    group: 'Small screens',
+    name: 'Terms',
+    board: 'ScreenSmall',
+    open: visit('/legal/terms'),
+  },
 ];
