@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import { signUpRecipient } from './helpers';
+import { fitsViewport, signUpRecipient } from './helpers';
 import { makePagePro } from './ops-helpers';
 import {
   LONG_NAME,
@@ -640,6 +640,12 @@ test('on a phone the Tip button stays in view and the form still works @mobile',
     await new Promise((done) => setTimeout(done, 400));
     await route.continue();
   });
+  // The panel's entrance can still be playing on a slow machine: only what starting does counts.
+  await page
+    .locator('.profile-composer')
+    .evaluate((panel) =>
+      Promise.all(panel.getAnimations().map((a) => a.finished)),
+    );
   await tipButton(page).click();
   await expect(
     page.getByRole('button', { name: /Starting your tip/ }),
@@ -727,6 +733,14 @@ test('closing the phone keyboard with a field still focused brings the Tip bar b
   await field.focus();
   await page.setViewportSize({ width: 360, height: 500 });
   await expect(page.locator('.composer-action')).toBeHidden();
+  // CSS hides the bar at once, but the page hears of the resize on a later frame. A real keyboard
+  // never opens and closes within one, so let it hear about the smaller screen first.
+  await page.evaluate(
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      ),
+  );
   await page.setViewportSize({ width: 360, height: 800 });
   await expect(page.locator('.composer-action')).toBeVisible();
   await expect(field).not.toBeFocused();
@@ -1115,4 +1129,35 @@ test('a failed quote on a phone is announced once, from one live region outside 
   ).toBe(true);
   const tree = await page.locator('[data-tip-panel]').ariaSnapshot();
   expect(tree.match(/We couldn’t reach TipMe/g)).toHaveLength(1);
+});
+
+for (const [name, width] of [
+  ['desktop', 1800],
+  ['phone', 390],
+] as const) {
+  test(`on a tall ${name} screen the footer sits at the bottom of the page`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 2600 });
+    await page.goto('/@ada');
+    const foot = (await page.locator('.profile-foot').boundingBox())!;
+    const paddingBottom = await page
+      .locator('.profile-page')
+      .evaluate((main) => parseFloat(getComputedStyle(main).paddingBottom));
+    expect(foot.y + foot.height).toBeCloseTo(2600 - paddingBottom, -1);
+    expect(await fitsViewport(page)).toBe(true);
+  });
+}
+
+test('on a short screen the footer keeps its gap below the content', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.goto('/@ada');
+  const foot = page.locator('.profile-foot');
+  const padding = await foot.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return parseFloat(style.paddingTop) + parseFloat(style.marginTop);
+  });
+  expect(padding).toBeGreaterThanOrEqual(40);
 });

@@ -216,6 +216,16 @@ async function loadAndWatch(fleet, rounds = 8, perCopy = 8) {
   return { peak, statuses };
 }
 
+const appConnections = () =>
+  admin(
+    async (client) =>
+      (
+        await client.query(
+          `SELECT count(*)::int AS n FROM pg_stat_activity WHERE usename = 'tipme_app'`,
+        )
+      ).rows[0].n,
+  );
+
 const budgetLines = (fleet, role) =>
   fleet.logs.filter(
     (line) => line.event === 'database.budget' && line.role === role,
@@ -297,8 +307,19 @@ test(
       assert.deepEqual([...new Set(raised.statuses)], [201]);
 
       await changeLimit(20);
+      // Every process shrinks on its own next read, and closes its spare connections then:
+      // measure once all of them have, not when the first one says so.
       assert.ok(
-        await until(() => budgetLines(fleet, 'api').at(-1).pool_max === 1),
+        await until(
+          () =>
+            budgetLines(fleet, 'api').at(-1).pool_max === 1 &&
+            budgetLines(fleet, 'worker').at(-1).pool_max === 2,
+        ),
+        JSON.stringify(budgetLines(fleet, 'worker').at(-1)),
+      );
+      assert.ok(
+        await until(async () => (await appConnections()) <= 10),
+        `still open: ${await appConnections()}`,
       );
       const lowered = await loadAndWatch(fleet);
       assert.ok(lowered.peak <= 10, `peak ${lowered.peak}`);

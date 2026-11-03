@@ -1150,11 +1150,17 @@ body:has(.profile-page) .brand__mark {
 }
 
 .profile-page {
+  display: flex;
+  flex-direction: column;
   background: var(--canvas);
   padding-bottom: var(--space-8);
 }
 
+/* Fills the page, so on a tall screen the footer rests at the bottom. */
 .profile-sheet {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
   width: min(70rem, calc(100% - 5rem));
   margin-inline: auto;
 }
@@ -1502,7 +1508,8 @@ body:has(.profile-page) .brand__mark {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2) var(--space-6);
-  margin-top: var(--space-10);
+  margin-top: auto;
+  padding-top: var(--space-10);
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
@@ -1656,9 +1663,10 @@ body:has(.profile-page) .brand__mark {
   }
 
   .profile-foot {
+    width: 100%;
     max-width: 36rem;
-    margin: var(--space-6) auto 0;
-    padding-inline: var(--space-4);
+    margin: auto auto 0;
+    padding: var(--space-6) var(--space-4) 0;
   }
 }
 
