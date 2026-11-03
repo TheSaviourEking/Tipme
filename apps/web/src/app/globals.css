@@ -1158,29 +1158,58 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     position: absolute;
   }
 
+  /*
+   * A carousel of three places, each named by the card's centre (demo-cards.tsx sets data-slot).
+   * The cards are all Ada's width; to one side each shrinks to its board width (Tobi 17.5rem,
+   * Zainab 15.625rem, Ada 17rem). The place uses translate, scale and rotate, which the drift's
+   * transform adds to rather than replaces.
+   */
+  .home-demo__card,
   .home-demo__main {
-    --r: 0deg;
     position: absolute;
-    top: 0;
-    left: 8.25rem;
-    z-index: 2;
+    top: var(--slot-y);
+    left: var(--slot-x);
+    z-index: var(--slot-z);
     width: 20rem;
+    translate: -50% -50%;
+    scale: var(--slot-scale);
+    rotate: var(--slot-tilt);
   }
 
-  .home-demo__card--zainab {
-    top: 3.375rem;
-    right: 0;
-    width: 15.625rem;
-    --r: 5deg;
-    transform: rotate(var(--r));
+  .home-demo__main {
+    --side-scale: 0.85;
   }
 
   .home-demo__card--tobi {
-    top: 4.375rem;
-    left: 0;
-    width: 17.5rem;
-    --r: -5deg;
-    transform: rotate(var(--r));
+    --side-scale: 0.875;
+  }
+
+  .home-demo__card--zainab {
+    --side-scale: 0.78125;
+  }
+
+  .home-flip[data-slot='centre'] {
+    --slot-x: 18.25rem;
+    --slot-y: 12.5rem;
+    --slot-z: 2;
+    --slot-scale: 1;
+    --slot-tilt: 0deg;
+  }
+
+  .home-flip[data-slot='left'] {
+    --slot-x: 8.75rem;
+    --slot-y: 13rem;
+    --slot-z: 1;
+    --slot-scale: var(--side-scale);
+    --slot-tilt: -5deg;
+  }
+
+  .home-flip[data-slot='right'] {
+    --slot-x: 28rem;
+    --slot-y: 12.25rem;
+    --slot-z: 1;
+    --slot-scale: var(--side-scale);
+    --slot-tilt: 5deg;
   }
 
   .home-demo__qr {
@@ -1202,15 +1231,14 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     pointer-events: auto;
   }
 
-  /* The turned card rises above the others at once, and sinks back only once it has turned back. */
+  /* The carousel turns: a card slides, grows or shrinks, and leans into its new place. */
   .home-flip {
     cursor: pointer;
-    transition: z-index 0s linear 640ms;
-  }
-
-  .home-flip[data-flipped='true'] {
-    z-index: 4;
-    transition-delay: 0s;
+    transition:
+      top 700ms var(--ease-spring),
+      left 700ms var(--ease-spring),
+      scale 700ms var(--ease-spring),
+      rotate 700ms var(--ease-spring);
   }
 
   .home-flip__inner {
@@ -1596,7 +1624,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* The flip is an instant swap, so the turned card comes forward and goes back at once too. */
+  /* The flip is an instant swap, so the carousel moves its cards at once too. */
   .home-flip {
     transition: none;
   }

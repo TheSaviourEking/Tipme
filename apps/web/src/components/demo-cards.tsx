@@ -5,9 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type Dispatch,
   type ReactNode,
-  type SetStateAction,
 } from 'react';
 import { Surface } from '@tipme/ui';
 
@@ -18,21 +16,68 @@ import { Surface } from '@tipme/ui';
 const FINE_POINTER = '(hover: hover) and (pointer: fine)';
 const canPlay = () => window.matchMedia(FINE_POINTER).matches;
 
-/** Which card is turned over: one at a time, by name, or none. */
-const Turned = createContext<{
-  turned: string | null;
-  turn: Dispatch<SetStateAction<string | null>>;
-}>({ turned: null, turn: () => {} });
+type Slot = 'left' | 'centre' | 'right';
+const SLOTS: Slot[] = ['left', 'centre', 'right'];
+const ADA = 'Ada';
 
-/** The stack of example cards. Turning one over turns the others back. */
+/**
+ * The cards as a carousel: their names from left to right, and whether the centre one is turned
+ * over. Only the centre card turns over; any other card, clicked, turns the carousel to the centre.
+ */
+type Carousel = { order: string[]; turned: boolean };
+
+const CarouselContext = createContext<{
+  carousel: Carousel;
+  /** The centre card turns over or back; a side card comes to the centre, face up. */
+  choose(name: string): void;
+  /** Turns the centre card back, if it is still this one. */
+  turnBack(name: string): void;
+}>({
+  carousel: { order: ['Tobi', ADA, 'Zainab'], turned: false },
+  choose: () => {},
+  turnBack: () => {},
+});
+
+/** Where a card sits in the carousel, and whether it shows its note. */
+function useCarouselCard(name: string) {
+  const { carousel, choose, turnBack } = useContext(CarouselContext);
+  const slot = SLOTS[carousel.order.indexOf(name)] ?? 'centre';
+  return {
+    slot,
+    centred: slot === 'centre',
+    flipped: slot === 'centre' && carousel.turned,
+    choose: () => choose(name),
+    turnBack: () => turnBack(name),
+  };
+}
+
+/** The stack of example cards, Tobi to the left of Ada and Zainab to her right. */
 export function DemoStack({ children }: { children: ReactNode }) {
-  const [turned, turn] = useState<string | null>(null);
+  const [carousel, setCarousel] = useState<Carousel>({
+    order: ['Tobi', ADA, 'Zainab'],
+    turned: false,
+  });
+  const choose = (name: string) =>
+    setCarousel(({ order, turned }) => {
+      const at = order.indexOf(name);
+      if (at === 1) return { order, turned: !turned };
+      // Turn the ring one place, so the chosen card moves into the middle.
+      const turnedRing =
+        at === 0
+          ? [order[2], order[0], order[1]]
+          : [order[1], order[2], order[0]];
+      return { order: turnedRing as string[], turned: false };
+    });
+  const turnBack = (name: string) =>
+    setCarousel((was) =>
+      was.order[1] === name ? { ...was, turned: false } : was,
+    );
   return (
-    <Turned.Provider value={{ turned, turn }}>
+    <CarouselContext.Provider value={{ carousel, choose, turnBack }}>
       <div className="home-demo__stack" aria-hidden="true">
         {children}
       </div>
-    </Turned.Provider>
+    </CarouselContext.Provider>
   );
 }
 
@@ -41,6 +86,7 @@ const THANKS_MS = 4500;
 
 function Shell({
   className,
+  slot,
   flipped,
   onClick,
   front,
@@ -48,6 +94,7 @@ function Shell({
   children,
 }: {
   className: string;
+  slot: Slot;
   flipped: boolean;
   onClick(): void;
   front: ReactNode;
@@ -58,6 +105,7 @@ function Shell({
     // Pointer only on purpose: the stack is decorative and hidden from assistive technology.
     <div
       className={`home-flip ${className}`}
+      data-slot={slot}
       data-flipped={flipped ? 'true' : 'false'}
       // Set once the browser has this component, so a click is never lost to hydration.
       ref={(node) => node?.setAttribute('data-ready', 'true')}
@@ -101,20 +149,18 @@ export function PersonCard({
   note: string;
   name: string;
 }) {
-  const { turned, turn } = useContext(Turned);
-  const flipped = turned === name;
+  const { slot, flipped, choose } = useCarouselCard(name);
   return (
     <Shell
       className={className}
+      slot={slot}
       flipped={flipped}
-      onClick={() => canPlay() && turn(flipped ? null : name)}
+      onClick={() => canPlay() && choose()}
       front={front}
       back={<Slip note={note} from={name} />}
     />
   );
 }
-
-const ADA = 'Ada';
 
 const BURST = Array.from({ length: 9 }, (_, i) => ({
   dx: Math.round(Math.sin(i * 2.4) * 70),
@@ -141,8 +187,7 @@ export function AdaCard({
   note: string;
 }) {
   const [chosen, setChosen] = useState(initial);
-  const { turned, turn } = useContext(Turned);
-  const flipped = turned === ADA;
+  const { slot, centred, flipped, choose, turnBack } = useCarouselCard(ADA);
   const [thanks, setThanks] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -150,8 +195,8 @@ export function AdaCard({
 
   const settle = () => {
     clearTimeout(timer.current);
-    // Only Ada's own card; another may have been turned over since.
-    turn((was) => (was === ADA ? null : was));
+    // Only if Ada is still in the centre; the carousel may have turned since.
+    turnBack();
     // The thank-you stays on the back until the card has turned away from it.
     timer.current = setTimeout(() => setThanks(null), 700);
   };
@@ -160,7 +205,7 @@ export function AdaCard({
     clearTimeout(timer.current);
     setThanks(amounts[chosen] ?? null);
     setBurst((count) => count + 1);
-    turn(ADA);
+    if (!flipped) choose();
     timer.current = setTimeout(settle, THANKS_MS);
   };
   const label = amounts[chosen] ?? '';
@@ -168,13 +213,14 @@ export function AdaCard({
   return (
     <Shell
       className="home-demo__main"
+      slot={slot}
       flipped={flipped}
       onClick={() => {
         if (!canPlay()) return;
         if (flipped) settle();
         else {
           setThanks(null);
-          turn(ADA);
+          choose();
         }
       }}
       front={
@@ -191,7 +237,8 @@ export function AdaCard({
                   className="home-key"
                   data-selected={index === chosen ? 'true' : undefined}
                   onClick={(event) => {
-                    if (!canPlay()) return;
+                    // To one side, the click goes on to the card and brings Ada to the centre.
+                    if (!canPlay() || !centred) return;
                     event.stopPropagation();
                     setChosen(index);
                   }}
@@ -203,7 +250,7 @@ export function AdaCard({
             <span
               className="home-demo__tip"
               onClick={(event) => {
-                if (!canPlay()) return;
+                if (!canPlay() || !centred) return;
                 event.stopPropagation();
                 tip();
               }}

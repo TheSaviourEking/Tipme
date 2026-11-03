@@ -134,23 +134,6 @@ const ready = async (page: import('@playwright/test').Page) => {
   );
 };
 
-test('clicking an example card flips it to a note labelled Example, and again flips it back', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await ready(page);
-  const tobi = page.locator('.home-demo__card--tobi');
-  await expect(tobi).toHaveAttribute('data-flipped', 'false');
-  // Only the card's left edge is clear of the front card.
-  await tobi.click({ position: { x: 24, y: 110 } });
-  await expect(tobi).toHaveAttribute('data-flipped', 'true');
-  const back = tobi.locator('.home-flip__back');
-  await expect(back.getByText('Example', { exact: true })).toBeVisible();
-  await expect(back).toContainText('Tobi');
-  await tobi.click({ position: { x: 24, y: 110 } });
-  await expect(tobi).toHaveAttribute('data-flipped', 'false');
-});
-
 test('pressing the example Tip says thank you for the chosen amount, makes no request, then settles', async ({
   page,
 }) => {
@@ -177,46 +160,90 @@ test('pressing the example Tip says thank you for the chosen amount, makes no re
   await expect(ada.getByText('Thank you for the ₦10,000!')).toBeVisible();
 });
 
-// The owner, 3 Nov 2026: "One card should flip at a time and it should be visible."
-test('only one example card is turned over at a time', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await ready(page);
-  const tobi = page.locator('.home-demo__card--tobi');
-  const zainab = page.locator('.home-demo__card--zainab');
-  const ada = page.locator('.home-demo__main');
-  await tobi.click({ position: { x: 24, y: 110 } });
-  await expect(tobi).toHaveAttribute('data-flipped', 'true');
-  // Zainab's right edge stays clear of the cards in front of her.
-  const box = (await zainab.boundingBox())!;
-  await page.mouse.click(box.x + box.width - 30, box.y + 150);
-  await expect(zainab).toHaveAttribute('data-flipped', 'true');
-  await expect(tobi).toHaveAttribute('data-flipped', 'false');
-  await ada.getByText('Ada Okafor').click();
-  await expect(ada).toHaveAttribute('data-flipped', 'true');
-  await expect(zainab).toHaveAttribute('data-flipped', 'false');
+// The owner, 3 Nov 2026: "When a card is clicked, the carousel moves and that card becomes
+// centered, its only the center card that can flip."
+const slots = async (page: import('@playwright/test').Page) => ({
+  tobi: await page.locator('.home-demo__card--tobi').getAttribute('data-slot'),
+  ada: await page.locator('.home-demo__main').getAttribute('data-slot'),
+  zainab: await page
+    .locator('.home-demo__card--zainab')
+    .getAttribute('data-slot'),
 });
 
-test('a turned card comes to the front, so its note can be read', async ({
+/** Clicks the edge of a side card that the centre card leaves clear. */
+const clickSide = async (
+  page: import('@playwright/test').Page,
+  card: import('@playwright/test').Locator,
+  side: 'left' | 'right',
+) => {
+  const box = (await card.boundingBox())!;
+  await page.mouse.click(
+    side === 'left' ? box.x + 24 : box.x + box.width - 24,
+    box.y + box.height / 2,
+  );
+};
+
+test('clicking a side card turns the carousel to bring it to the centre, without turning it over', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  expect(await slots(page)).toEqual({
+    tobi: 'left',
+    ada: 'centre',
+    zainab: 'right',
+  });
+  const tobi = page.locator('.home-demo__card--tobi');
+  await clickSide(page, tobi, 'left');
+  expect(await slots(page)).toEqual({
+    tobi: 'centre',
+    ada: 'right',
+    zainab: 'left',
+  });
+  await expect(tobi).toHaveAttribute('data-flipped', 'false');
+  await clickSide(page, page.locator('.home-demo__main'), 'right');
+  expect(await slots(page)).toEqual({
+    tobi: 'left',
+    ada: 'centre',
+    zainab: 'right',
+  });
+});
+
+test('only the centre card turns over to its note, and it turns back when it leaves the centre', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await ready(page);
   const tobi = page.locator('.home-demo__card--tobi');
-  const box = (await tobi.boundingBox())!;
-  // A point on Tobi's card that Ada's card covers while Tobi faces forward.
-  const point = { x: box.x + box.width * 0.75, y: box.y + box.height / 2 };
-  const onTobi = () =>
-    page.evaluate(
-      ({ x, y }) =>
-        Boolean(
-          document.elementFromPoint(x, y)?.closest('.home-demo__card--tobi'),
-        ),
-      point,
-    );
-  expect(await onTobi()).toBe(false);
-  await tobi.click({ position: { x: 24, y: 110 } });
+  await clickSide(page, tobi, 'left');
+  await tobi.click();
   await expect(tobi).toHaveAttribute('data-flipped', 'true');
-  await expect.poll(onTobi).toBe(true);
+  const back = tobi.locator('.home-flip__back');
+  await expect(back.getByText('Example', { exact: true })).toBeVisible();
+  await expect(back).toContainText('Tobi');
+  await tobi.click();
+  await expect(tobi).toHaveAttribute('data-flipped', 'false');
+  await tobi.click();
+  await clickSide(page, page.locator('.home-demo__card--zainab'), 'left');
+  await expect(tobi).toHaveAttribute('data-flipped', 'false');
+  await expect(page.locator('.home-flip[data-flipped="true"]')).toHaveCount(0);
+});
+
+test("Ada's keys and Tip only bring her to the centre while she is to one side", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  await clickSide(page, page.locator('.home-demo__card--tobi'), 'left');
+  const ada = page.locator('.home-demo__main');
+  await ada.getByText('₦10,000', { exact: true }).dispatchEvent('click');
+  expect((await slots(page)).ada).toBe('centre');
+  await expect(ada.locator('.home-key[data-selected]')).toHaveText(/₦5,000/);
+  await clickSide(page, page.locator('.home-demo__card--zainab'), 'right');
+  await ada.getByText('Tip ₦5,000').dispatchEvent('click');
+  expect((await slots(page)).ada).toBe('centre');
+  await expect(ada).toHaveAttribute('data-flipped', 'false');
+  await expect(ada.locator('.home-burst')).toHaveCount(0);
 });
 
 // The owner looked in a laptop window narrower than the three-card spread (3 Nov 2026): the lone
