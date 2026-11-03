@@ -5206,13 +5206,17 @@ html:has(.confirm-dialog[open]) {
   }
 }
 
-/* On a phone the dashboard navigation is a fixed bar of four, with the safe-area inset under it. */
+/*
+ * On a phone the dashboard navigation is a fixed bar of four, with the safe-area inset under it.
+ * Only the dashboard's own nav: the admin console reuses .dashboard-page and .dashboard-nav, and
+ * its longer nav must keep its own layout.
+ */
 :root {
   --dashboard-tab-bar: calc(68px + env(safe-area-inset-bottom, 0px));
 }
 
 @media (max-width: 40rem) {
-  .dashboard-page .dashboard-nav {
+  .dashboard-page .dashboard-nav[aria-label='Dashboard'] {
     position: fixed;
     inset: auto 0 0;
     z-index: calc(var(--z-nav) - 1);
@@ -5229,7 +5233,7 @@ html:has(.confirm-dialog[open]) {
     box-shadow: none;
   }
 
-  .dashboard-page .dashboard-nav a {
+  .dashboard-page .dashboard-nav[aria-label='Dashboard'] a {
     justify-content: center;
     min-width: 44px;
     min-height: 44px;
@@ -5238,11 +5242,13 @@ html:has(.confirm-dialog[open]) {
     border-radius: 0;
   }
 
-  .dashboard-page .dashboard-nav a[data-desktop-only] {
+  .dashboard-page .dashboard-nav[aria-label='Dashboard'] a[data-desktop-only] {
     display: none;
   }
 
-  .dashboard-page .dashboard-nav a[aria-current='page'] {
+  .dashboard-page
+    .dashboard-nav[aria-label='Dashboard']
+    a[aria-current='page'] {
     background: transparent;
     box-shadow: none;
     font-weight: 700;
@@ -5253,21 +5259,24 @@ html:has(.confirm-dialog[open]) {
   }
 
   /* Room under the page for the bar, footer included. */
-  body:has(.dashboard-page .dashboard-nav) {
+  body:has(.dashboard-page .dashboard-nav[aria-label='Dashboard']) {
     padding-bottom: var(--dashboard-tab-bar);
   }
 
-  html:has(.dashboard-page .dashboard-nav) .update-notice {
+  html:has(.dashboard-page .dashboard-nav[aria-label='Dashboard'])
+    .update-notice {
     bottom: calc(var(--dashboard-tab-bar) + var(--space-3));
   }
 }
 
 @media (forced-colors: active) {
-  .dashboard-page .dashboard-nav {
+  .dashboard-page .dashboard-nav[aria-label='Dashboard'] {
     border-top: 1px solid CanvasText;
   }
 
-  .dashboard-page .dashboard-nav a[aria-current='page'] {
+  .dashboard-page
+    .dashboard-nav[aria-label='Dashboard']
+    a[aria-current='page'] {
     text-decoration-color: Highlight;
   }
 }
