@@ -32,8 +32,15 @@ export const SCREENS: ReviewScreen[] = [
     open: async (page) => {
       await page.goto('/');
       const menu = page.getByRole('button', { name: 'Menu' });
-      if (await menu.isVisible()) await menu.click();
-      else await page.getByRole('button', { name: "Who it's for" }).click();
+      if (await menu.isVisible()) {
+        await menu.click();
+        // The menu covers the screen on a phone; a full-page shot would also show the page
+        // beneath it, past the screen's edge, so that page is set aside for the picture.
+        await page.addStyleTag({
+          content:
+            'body > main, body > .site-footer { display: none !important; }',
+        });
+      } else await page.getByRole('button', { name: "Who it's for" }).click();
     },
   },
   {
