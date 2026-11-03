@@ -2,9 +2,10 @@
 import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
-import { Button, Surface } from '@tipme/ui';
+import { Button } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
-import { ExampleQr } from './marketing/example-qr';
+import { AdaCard, PersonCard } from './demo-cards';
+import { IndigoQr } from './marketing/indigo-qr';
 import { ModeText } from './payment-mode-slot';
 
 /** The three steps of a tip, in order. */
@@ -108,55 +109,74 @@ function Heart({ className }: { className?: string }) {
 const TIP_LABEL = naira(DEFAULT_TIP);
 
 /**
- * Three example pages, as a picture of what TipMe makes. It is decorative (hidden from assistive
- * technology) and the caption says in words that the people are examples. On a narrow screen only
- * the front card shows, as on the phone board.
+ * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
+ * technology and holds nothing focusable; the caption says in words that the people are examples.
+ * On a narrow screen only the front card shows, as on the phone board. On a wide screen with a
+ * fine pointer the cards drift, turn over to a note when clicked, and Ada's Tip says thank you
+ * (demo-cards.tsx): small client islands, and the headline never waits for them.
  */
 export function HomeDemo() {
   return (
     <div className="home-demo">
       <div className="home-demo__stack" aria-hidden="true">
-        <div className="home-demo__card home-demo__card--zainab">
-          <div className="home-demo__cover home-demo__cover--ocean">
-            <Heart className="home-demo__cover-heart" />
-          </div>
-          <div className="home-demo__body">
-            <span className="home-demo__avatar home-demo__avatar--initial">
-              Z
-            </span>
-            <p className="home-demo__name">Zainab</p>
-            <p className="home-demo__role">Streamer</p>
-            <span className="home-demo__tip">Tip Zainab</span>
-          </div>
-        </div>
-        <div className="home-demo__card home-demo__card--tobi">
-          <div className="home-demo__cover">
-            <Image
-              src="/covers/waveform.webp"
-              alt=""
-              fill
-              sizes="280px"
-              className="home-demo__img"
-            />
-          </div>
-          <div className="home-demo__body">
-            <span className="home-demo__avatar">
-              <Image
-                src="/portraits/tobi.webp"
-                alt=""
-                width={76}
-                height={76}
-                sizes="76px"
-                className="home-demo__img"
-              />
-            </span>
-            <p className="home-demo__name">Tobi</p>
-            <p className="home-demo__role">DJ and producer</p>
-            <span className="home-demo__tip">Tip Tobi</span>
-          </div>
-        </div>
-        <Surface material="instrument" className="home-demo__main">
-          <div className="home-demo__cover">
+        <PersonCard
+          className="home-demo__card home-demo__card--zainab"
+          name="Zainab"
+          note="Thank you for hanging out in chat. You make every stream better."
+          front={
+            <>
+              <div className="home-demo__cover home-demo__cover--ocean">
+                <Heart className="home-demo__cover-heart" />
+              </div>
+              <div className="home-demo__body">
+                <span className="home-demo__avatar home-demo__avatar--initial">
+                  Z
+                </span>
+                <p className="home-demo__name">Zainab</p>
+                <p className="home-demo__role">Streamer</p>
+                <span className="home-demo__tip">Tip Zainab</span>
+              </div>
+            </>
+          }
+        />
+        <PersonCard
+          className="home-demo__card home-demo__card--tobi"
+          name="Tobi"
+          note="Thanks for dancing to my set all night. See you at the next one!"
+          front={
+            <>
+              <div className="home-demo__cover">
+                <Image
+                  src="/covers/waveform.webp"
+                  alt=""
+                  fill
+                  sizes="280px"
+                  className="home-demo__img"
+                />
+              </div>
+              <div className="home-demo__body">
+                <span className="home-demo__avatar">
+                  <Image
+                    src="/portraits/tobi.webp"
+                    alt=""
+                    width={76}
+                    height={76}
+                    sizes="76px"
+                    className="home-demo__img"
+                  />
+                </span>
+                <p className="home-demo__name">Tobi</p>
+                <p className="home-demo__role">DJ and producer</p>
+                <span className="home-demo__tip">Tip Tobi</span>
+              </div>
+            </>
+          }
+        />
+        <AdaCard
+          amounts={STANDARD_TIP_PRESETS_MINOR.map(naira)}
+          initial={STANDARD_TIP_PRESETS_MINOR.indexOf(DEFAULT_TIP)}
+          note="Thank you for watching my edits. It means a lot to me."
+          cover={
             <Image
               src="/covers/sunburst.webp"
               alt=""
@@ -164,25 +184,19 @@ export function HomeDemo() {
               sizes="(max-width: 75rem) 90vw, 320px"
               className="home-demo__img"
             />
-          </div>
-          <div className="home-demo__body">
-            <span className="home-demo__avatar">
-              <Image
-                src="/portraits/ada.webp"
-                alt=""
-                width={92}
-                height={92}
-                sizes="92px"
-                className="home-demo__img"
-              />
-            </span>
-            <p className="home-demo__name">Ada Okafor</p>
-            <p className="home-demo__role">Content creator/Video editor</p>
-            <AmountKeys />
-            <span className="home-demo__tip">Tip {TIP_LABEL}</span>
-          </div>
-        </Surface>
-        <ExampleQr className="home-demo__qr" />
+          }
+          avatar={
+            <Image
+              src="/portraits/ada.webp"
+              alt=""
+              width={92}
+              height={92}
+              sizes="92px"
+              className="home-demo__img"
+            />
+          }
+        />
+        <IndigoQr className="home-demo__qr" sizes="164px" />
       </div>
       <p className="home-demo__caption">Examples, not real people.</p>
     </div>
@@ -248,7 +262,7 @@ export function TippedSteps() {
       <Step
         title="Share it anywhere"
         tone="soft"
-        media={<ExampleQr className="home-step__qr" />}
+        media={<IndigoQr className="home-step__qr" sizes="120px" />}
       >
         Put your QR on the counter, or your link in your bio.
       </Step>
@@ -279,7 +293,7 @@ export function TippingSteps() {
       <Step
         title="Scan or tap"
         tone="soft"
-        media={<ExampleQr className="home-step__qr" />}
+        media={<IndigoQr className="home-step__qr" sizes="120px" />}
       >
         Scan their QR code or open their link. No app, no account.
       </Step>

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { identity, signInWithEmail } from './helpers';
+import { API_ORIGIN, WEB_ORIGIN } from './stack';
 
 // Home, rebuilt to the ScreenHome board (docs/design/redesign/boards/ScreenHome.dc.html).
 
@@ -100,4 +101,120 @@ test('the claim field says capitals become lowercase', async ({ page }) => {
   expect(
     await field.evaluate((input) => getComputedStyle(input).textTransform),
   ).toBe('lowercase');
+});
+
+// The hero's example cards: centred on a phone; alive, flippable and hiding a thank-you on a wide
+// screen with a fine pointer (the owner's easter egg, 3 Nov 2026). They stay decorative.
+
+test(
+  'the example card is centred on a phone @mobile',
+  { tag: '@mobile' },
+  async ({ page }) => {
+    for (const width of [390, 360]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/');
+      const box = await page.locator('.home-demo__main').boundingBox();
+      expect(box).not.toBeNull();
+      const centre = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+      expect(Math.abs(centre - width / 2), `${width}px`).toBeLessThanOrEqual(2);
+      expect(
+        await page
+          .locator('.home-demo__caption')
+          .evaluate((node) => getComputedStyle(node).textAlign),
+      ).toBe('center');
+    }
+  },
+);
+
+const ready = async (page: import('@playwright/test').Page) => {
+  await page.goto('/');
+  await expect(page.locator('.home-flip').first()).toHaveAttribute(
+    'data-ready',
+    'true',
+  );
+};
+
+test('clicking an example card flips it to a note labelled Example, and again flips it back', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const tobi = page.locator('.home-demo__card--tobi');
+  await expect(tobi).toHaveAttribute('data-flipped', 'false');
+  // Only the card's left edge is clear of the front card.
+  await tobi.click({ position: { x: 24, y: 110 } });
+  await expect(tobi).toHaveAttribute('data-flipped', 'true');
+  const back = tobi.locator('.home-flip__back');
+  await expect(back.getByText('Example', { exact: true })).toBeVisible();
+  await expect(back).toContainText('Tobi');
+  await tobi.click({ position: { x: 24, y: 110 } });
+  await expect(tobi).toHaveAttribute('data-flipped', 'false');
+});
+
+test('pressing the example Tip says thank you for the chosen amount, makes no request, then settles', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+  const ada = page.locator('.home-demo__main');
+  await ada.getByText('₦10,000', { exact: true }).click();
+  await ada.getByText('Tip ₦10,000').click();
+  await expect(ada).toHaveAttribute('data-flipped', 'true');
+  await expect(ada.getByText('Thank you for the ₦10,000!')).toBeVisible();
+  // Page chrome (link prefetches, the page's own vitals beacon) may talk; nothing about a tip does.
+  expect(
+    requests.filter(
+      (url) => url.startsWith(API_ORIGIN) && !url.endsWith('/v1/vitals'),
+    ),
+  ).toEqual([]);
+  expect(page.url()).toBe(`${WEB_ORIGIN}/`);
+  await expect(ada).toHaveAttribute('data-flipped', 'false', {
+    timeout: 10_000,
+  });
+  await ada.getByText('Tip ₦10,000').click();
+  await expect(ada.getByText('Thank you for the ₦10,000!')).toBeVisible();
+});
+
+test('with reduced motion the example cards have no running animation, and without it they do', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const running = () =>
+    page.evaluate(
+      () =>
+        document
+          .getAnimations()
+          .filter(
+            (a) =>
+              a.playState === 'running' &&
+              (a.effect as KeyframeEffect | null)?.target?.closest(
+                '.home-demo',
+              ),
+          ).length,
+    );
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await ready(page);
+  expect(await running()).toBe(0);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect.poll(running).toBeGreaterThan(0);
+});
+
+test('the example cards hold nothing to focus, so assistive technology skips them cleanly', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  await expect(page.locator('.home-demo__stack')).toHaveAttribute(
+    'aria-hidden',
+    'true',
+  );
+  await expect(
+    page
+      .locator('.home-demo__stack')
+      .locator(
+        'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable]',
+      ),
+  ).toHaveCount(0);
 });

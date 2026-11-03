@@ -217,3 +217,13 @@ The redesigned home page says "Your personalized link and QR code to receive glo
 ## Home's example card starts on ₦5,000 (owner's decision, 3 Nov 2026)
 
 The example card in the Home hero shows ₦5,000 chosen and a "Tip ₦5,000" button, as on the `ScreenHome` board. The owner said on 3 Nov 2026: "it should start selected at 5k". It is a picture of a tip page, not a working one. Real tip pages keep "₦2,000 starts selected" (2 Nov 2026). A product and visual decision, not a regulatory approval; no D-item is affected.
+
+## Home's example cards come alive on desktop (owner's request, 3 Nov 2026)
+
+After seeing Home in the live preview the owner asked for: the example card centred on a phone; the example QR matching the board (navy dot code on a white card over the Indigo Grid cover); and "an easter egg in the desktop view ... something cool that a user can find out ... the cards flip or something. They should have an animation going on there." A product and visual decision, not a regulatory approval; no D-item is affected, and nothing is paid or sent.
+
+- **Where.** Only on a wide screen (75rem) with a fine pointer. Phones and touch screens get the still picture.
+- **Ambient.** The three cards drift on a slow, offset loop (a few pixels, under two degrees) and the QR card bobs. Transforms only.
+- **Flip.** Clicking a card turns it in 3D to a paper slip with a short thank-you note from that example person, labelled "Example"; clicking again turns it back.
+- **The hidden moment.** "Tip ₦5,000" on Ada's card (or another key first, then Tip) sends hearts up from the card and turns it to "Thank you for the ₦5,000!" with the chosen standard amount, then it settles back after a few seconds. No request, no navigation, no payment.
+- **Still decorative.** The stack stays hidden from assistive technology and holds nothing focusable; "Examples, not real people." stays outside it. Reduced motion: no drift and no hearts, and a flip is an instant swap. Forced colours keep each face's edge.
