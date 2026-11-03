@@ -25,6 +25,18 @@ const visit = (path: string) => async (page: Page) => {
 export const SCREENS: ReviewScreen[] = [
   { group: 'Public', name: 'Home', board: 'ScreenHome', open: visit('/') },
   {
+    group: 'Public',
+    name: 'Menu open',
+    board: 'PhonePages',
+    // On a phone this is the whole menu button; wider, the "Who it's for" choices under their button.
+    open: async (page) => {
+      await page.goto('/');
+      const menu = page.getByRole('button', { name: 'Menu' });
+      if (await menu.isVisible()) await menu.click();
+      else await page.getByRole('button', { name: "Who it's for" }).click();
+    },
+  },
+  {
     group: 'Tipping',
     name: 'Tip page',
     board: 'TipJourney',

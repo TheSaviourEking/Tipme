@@ -302,10 +302,15 @@ test('main navigation points to the marketing pages', async ({
     'href',
     '/how-it-works',
   );
-  await expect(
-    nav.getByRole('link', { name: 'For individuals' }),
-  ).toHaveAttribute('href', '/for-creators');
-  await expect(
-    nav.getByRole('link', { name: 'For Businesses' }),
-  ).toHaveAttribute('href', '/for-businesses');
+  // The two pages sit under "Who it's for" now (tests/e2e/navigation.spec.ts opens that menu).
+  if (testInfo.project.name !== 'mobile')
+    await nav.getByRole('button', { name: "Who it's for" }).click();
+  await expect(nav.getByRole('link', { name: /^Individuals/ })).toHaveAttribute(
+    'href',
+    '/for-creators',
+  );
+  await expect(nav.getByRole('link', { name: /^Businesses/ })).toHaveAttribute(
+    'href',
+    '/for-businesses',
+  );
 });
