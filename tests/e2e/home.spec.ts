@@ -327,6 +327,17 @@ test('every card in the centre has amounts and a Tip, and says its own thank-you
   await expect(back).toContainText('Tobi');
 });
 
+test("Zainab's example page wears the Pro badge, and the others none", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  await expect(
+    page.locator('.home-demo__card--zainab .tm-pro-badge'),
+  ).toHaveText('Pro');
+  await expect(page.locator('.home-demo__stack .tm-pro-badge')).toHaveCount(1);
+});
+
 // The owner looked in a laptop window narrower than the three-card spread (3 Nov 2026): the lone
 // card still answers a mouse there.
 test('in a narrower desktop window the lone example card still drifts and says thank you', async ({

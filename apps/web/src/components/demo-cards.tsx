@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Surface } from '@tipme/ui';
+import { ProBadge, Surface } from '@tipme/ui';
 
 // The Home hero's example cards (docs/design/DECISION-LOG.md, 3 Nov 2026). They are a picture,
 // so the whole stack is aria-hidden and holds nothing focusable: the cards answer a mouse (a
@@ -161,10 +161,13 @@ export function PersonCard({
   amounts,
   initial,
   note,
+  pro = false,
 }: {
   /** The name the card is known by in the carousel and signs its notes with. */
   name: string;
   fullName?: string;
+  /** Wears the Pro badge, as a Pro page does. */
+  pro?: boolean;
   role: string;
   className: string;
   cover: ReactNode;
@@ -215,7 +218,10 @@ export function PersonCard({
           <div className="home-demo__cover">{cover}</div>
           <div className="home-demo__body">
             <span className="home-demo__avatar">{avatar}</span>
-            <p className="home-demo__name">{fullName}</p>
+            <p className="home-demo__name">
+              {fullName}
+              {pro && <ProBadge className="home-demo__pro" />}
+            </p>
             <p className="home-demo__role">{role}</p>
             <div className="home-keys">
               {amounts.map((amount, index) => (

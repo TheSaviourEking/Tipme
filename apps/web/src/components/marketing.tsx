@@ -124,6 +124,7 @@ export function HomeDemo() {
         <PersonCard
           name="Zainab"
           role="Streamer"
+          pro
           className="home-demo__card home-demo__card--zainab"
           amounts={amounts}
           initial={initial}

@@ -75,6 +75,28 @@ export function Badge({
   return <span className={classes('tm-badge', className)} {...props} />;
 }
 
+/**
+ * The mark of a Pro page, shown with the person's name. The word is what it says; the spark is
+ * decoration. It names the plan only: never a price.
+ */
+export function ProBadge({
+  className,
+  ...props
+}: HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span className={classes('tm-pro-badge', className)} {...props}>
+      <svg
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        className="tm-pro-badge__spark"
+      >
+        <path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z" />
+      </svg>
+      Pro
+    </span>
+  );
+}
+
 type FieldDetails = {
   id: string;
   label: string;
