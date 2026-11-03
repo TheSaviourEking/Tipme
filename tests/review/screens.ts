@@ -323,4 +323,43 @@ export const SCREENS: ReviewScreen[] = [
       await page.getByRole('heading', { level: 1 }).waitFor();
     },
   },
+  {
+    group: 'Dashboard',
+    name: 'Withdraw',
+    board: 'ScreenWithdraw',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(3);
+      await page.goto('/dashboard/withdraw');
+      await page.getByRole('button', { name: 'Everything' }).click();
+    },
+  },
+  {
+    group: 'Dashboard',
+    name: 'Withdraw, one on its way',
+    board: 'ScreenWithdraw',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(3);
+      // Only the withdrawal list is stubbed; the balance and the quote are the real ones.
+      await page.route('**/v1/me/activity', (route) =>
+        route.fulfill({
+          json: {
+            data: [
+              ['w1', new Date().toISOString(), '2000000', 'processing'],
+              ['w2', '2026-10-24T09:00:00.000Z', '3500000', 'sent'],
+              ['w3', '2026-10-17T09:00:00.000Z', '1250000', 'failed'],
+            ].map(([id, at, amountMinor, state]) => ({
+              kind: 'withdrawal',
+              id,
+              at,
+              amountMinor,
+              state,
+              supporterLabel: null,
+            })),
+          },
+        }),
+      );
+      await page.goto('/dashboard/withdraw');
+      await page.getByRole('list', { name: 'Progress' }).waitFor();
+    },
+  },
 ];

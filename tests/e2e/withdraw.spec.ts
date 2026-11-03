@@ -168,6 +168,127 @@ test('an idempotency conflict never says to simply try again', async ({
   await expect(page.getByText(/please try again/i)).toHaveCount(0);
 });
 
+test('Everything fills the whole balance, and under ₦2,000 it is the only way', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
+  await page.goto('/dashboard/withdraw');
+  const everything = page.getByRole('button', { name: 'Everything' });
+  await expect(everything).toBeVisible();
+  // ₦1,800 is under the ₦2,000 minimum: no other amount key is offered.
+  await expect(
+    page.getByRole('group', { name: 'Quick amounts' }).getByRole('button'),
+  ).toHaveCount(1);
+  await everything.click();
+  await expect(everything).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Amount (NGN)')).toHaveValue('₦1,800');
+  await expect(
+    page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }),
+  ).toBeEnabled();
+  // Typing something else lets go of Everything.
+  await page.getByLabel('Amount (NGN)').fill('1000');
+  await expect(everything).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('the summary says where it goes, what arrives and what is left', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
+  await page.goto('/dashboard/withdraw');
+  await page.getByRole('button', { name: 'Everything' }).click();
+  const summary = page.getByRole('region', { name: 'Summary' });
+  await expect(summary.getByText('Going to')).toBeVisible();
+  await expect(summary.getByText(/••\d{4}/)).toBeVisible();
+  await expect(summary.getByRole('link', { name: 'Change' })).toHaveAttribute(
+    'href',
+    '/dashboard/settings#get-paid',
+  );
+  await expect(summary.getByText('You receive')).toBeVisible();
+  // Withdrawing is free (TipMe pays the transfer fee), so what arrives is the amount.
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦1,800');
+  await expect(summary.getByText('Balance afterwards')).toBeVisible();
+  await expect(summary.getByTestId('balance-afterwards')).toHaveText('₦0');
+  await expectAccessible(page);
+});
+
+test('progress follows the real state only', async ({ page }, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.route('**/v1/me/activity', (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            kind: 'withdrawal',
+            id: 'w1',
+            at: new Date().toISOString(),
+            amountMinor: '2000000',
+            state: 'processing',
+            supporterLabel: null,
+          },
+          {
+            kind: 'withdrawal',
+            id: 'w2',
+            at: '2026-10-24T09:00:00.000Z',
+            amountMinor: '3500000',
+            state: 'sent',
+            supporterLabel: null,
+          },
+          {
+            kind: 'withdrawal',
+            id: 'w3',
+            at: '2026-10-17T09:00:00.000Z',
+            amountMinor: '1250000',
+            state: 'failed',
+            supporterLabel: null,
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto('/dashboard/withdraw');
+  const history = page.getByRole('region', { name: 'Your withdrawals' });
+  const moving = history.getByRole('listitem').filter({ hasText: '₦20,000' });
+  await expect(moving.getByText('On its way')).toBeVisible();
+  const steps = moving.getByRole('list', { name: 'Progress' });
+  await expect(steps.getByRole('listitem')).toHaveCount(3);
+  await expect(steps.locator('[data-filled="true"]')).toHaveCount(2);
+  // Paid only because the API says sent; a failed one says the money is back.
+  await expect(
+    history.getByRole('listitem').filter({ hasText: '₦35,000' }),
+  ).toContainText('Paid');
+  await expect(
+    history.getByRole('listitem').filter({ hasText: '₦12,500' }),
+  ).toContainText('the money is back in your balance');
+  await expectAccessible(page);
+});
+
+test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
+  page,
+  browser,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
+  await page.goto('/dashboard/withdraw');
+  await page.getByRole('button', { name: 'Everything' }).click();
+  expect(await fitsViewport(page)).toBe(true);
+  const button = page.getByRole('button', { name: /^Withdraw NGN/ });
+  await button.scrollIntoViewIfNeeded();
+  const box = (await button.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  const bar = (await page
+    .locator('nav[aria-label="Dashboard"]')
+    .boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(bar.y);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const end = (await button.boundingBox())!;
+  expect(end.y + end.height).toBeLessThanOrEqual(bar.y);
+});
+
 test('@alone staff ask the provider first, and are offered only what its answer allows', async ({
   page,
 }, testInfo) => {

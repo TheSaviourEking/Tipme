@@ -4520,8 +4520,7 @@ html:has(.confirm-dialog[open]) {
 }
 
 /* Dashboard (PR-008 Task 7). */
-.tip-detail,
-.withdraw {
+.tip-detail {
   max-width: 40rem;
 }
 
@@ -5160,20 +5159,8 @@ html:has(.confirm-dialog[open]) {
   box-shadow: var(--shadow-card-subtle);
 }
 
-/* The withdrawal form is an instrument, like the tipping panel. */
-.withdraw .settings-form {
-  padding: clamp(1.5rem, 4vw, 2rem);
-  border: 1px solid var(--edge-hairline);
-  border-radius: 1.5rem;
-  background:
-    linear-gradient(var(--edge-light), transparent 2px) border-box,
-    var(--surface-raised);
-  box-shadow: var(--shadow-instrument);
-}
-
 /* Saving or continuing inside a card is black; purple stays for selection and brand moments. */
-.dashboard-page .tm-card .tm-button--primary,
-.withdraw .settings-form .tm-button--primary {
+.dashboard-page .tm-card .tm-button--primary {
   border-color: var(--text-primary);
   background:
     linear-gradient(rgb(255 255 255 / 12%), transparent 45%),
@@ -8073,5 +8060,237 @@ body > .coming-soon-page {
 
   .stack__press:focus-visible {
     outline-color: Highlight;
+  }
+}
+
+/* Withdraw (ScreenWithdraw): an instrument for the amount, and a ledger of what is on its way. */
+.withdraw {
+  max-width: 68rem;
+}
+
+.withdraw > .tm-notice {
+  max-width: 40rem;
+}
+
+.withdraw__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.withdraw__panel {
+  padding: clamp(1.25rem, 4vw, 2rem);
+}
+
+.withdraw__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.withdraw__form .tm-input {
+  min-height: 84px;
+  padding-inline: 1.25rem;
+  border-color: var(--border-material);
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+  font: 400 clamp(2rem, 6vw, 3rem) / 1 var(--font-editorial);
+}
+
+.withdraw__keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: 0.625rem;
+}
+
+.withdraw__key {
+  position: relative;
+  min-height: 48px;
+  padding: 0 0.875rem;
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-control);
+  background:
+    linear-gradient(var(--edge-light), transparent 2px), var(--surface-recessed);
+  color: var(--text-primary);
+  font: 700 var(--text-sm) / 1.2 var(--font-interface);
+  cursor: pointer;
+  transition:
+    transform var(--duration-tactile) var(--ease-physical),
+    box-shadow var(--duration-tactile) var(--ease-physical);
+}
+
+.withdraw__key:active {
+  transform: translateY(2px);
+}
+
+.withdraw__key[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--brand-primary), #000 16%);
+  background:
+    linear-gradient(rgb(255 255 255 / 22%), transparent 36%),
+    var(--surface-signature);
+  color: var(--surface-base);
+}
+
+.withdraw__key[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.withdraw__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem 1rem;
+  margin: 0;
+  padding: 1.125rem 0;
+  border-block: 1px solid var(--edge-hairline);
+  font-size: 0.9375rem;
+}
+
+.withdraw__summary dt {
+  color: var(--text-secondary);
+}
+
+.withdraw__summary dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+.withdraw__summary dd a {
+  margin-left: 0.375rem;
+  font-weight: 600;
+}
+
+.withdraw__form .tm-hint {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.withdraw__history h2 {
+  margin: 0.5rem 0 var(--space-4);
+  font: 400 1.875rem / 1.1 var(--font-editorial);
+}
+
+.withdraw__history ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.withdraw__row {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--edge-hairline);
+  border-radius: 1.25rem;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card-subtle);
+}
+
+.withdraw__row[data-open='true'] {
+  padding-block: 1.25rem;
+}
+
+.withdraw__row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.withdraw__row p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.84375rem;
+  line-height: 1.4;
+}
+
+.withdraw__state {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.withdraw__state--ok {
+  color: var(--state-success);
+}
+
+.withdraw__state--wait {
+  color: var(--state-warning);
+}
+
+.withdraw__state--bad {
+  color: var(--state-danger);
+}
+
+.withdraw__steps {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.375rem !important;
+  margin: 0.875rem 0 0.5rem !important;
+}
+
+.withdraw__steps li {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-recessed);
+}
+
+.withdraw__steps li[data-filled='true'] {
+  background: var(--surface-signature);
+}
+
+@media (max-width: 56rem) {
+  .withdraw__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 40rem) {
+  /* The summary and the Withdraw button stay above the fixed tab bar (body padding clears it). */
+  .withdraw__panel {
+    margin-bottom: var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .withdraw__key {
+    transition: none;
+  }
+
+  .withdraw__key:active {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .withdraw__key {
+    border: 1px solid ButtonText;
+  }
+
+  .withdraw__key[aria-pressed='true'] {
+    border-width: 3px;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .withdraw__steps li {
+    border: 1px solid CanvasText;
+  }
+
+  .withdraw__steps li[data-filled='true'] {
+    background: Highlight;
+  }
+
+  .withdraw__row {
+    border: 1px solid CanvasText;
   }
 }
