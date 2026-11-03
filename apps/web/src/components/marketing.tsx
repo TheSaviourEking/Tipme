@@ -104,6 +104,7 @@ export function HomeDemo() {
       <DemoStack>
         <PersonCard
           name="Zainab"
+          handle="zainab"
           role="Streamer"
           pro
           className="home-demo__card home-demo__card--zainab"
@@ -132,6 +133,7 @@ export function HomeDemo() {
         />
         <PersonCard
           name="Tobi"
+          handle="tobi"
           role="DJ and producer"
           className="home-demo__card home-demo__card--tobi"
           amounts={amounts}
@@ -159,6 +161,7 @@ export function HomeDemo() {
         />
         <PersonCard
           name="Ada"
+          handle="ada"
           fullName="Ada Okafor"
           role="Content creator/Video editor"
           className="home-demo__main"

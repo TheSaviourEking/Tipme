@@ -234,6 +234,27 @@ test('clicking a side card turns the carousel to bring it to the centre, without
   });
 });
 
+test('a turned card is a postcard: a note from the person, their stamp, and their signature', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const tobi = page.locator('.home-demo__card--tobi');
+  await toCentre(page, tobi);
+  await tobi.click();
+  await expect(tobi).toHaveAttribute('data-flipped', 'true');
+  const back = tobi.locator('.home-flip__back');
+  await expect(back.getByText('A note from Tobi')).toBeVisible();
+  await expect(back.getByText('DJ and producer')).toBeVisible();
+  const stamp = back.locator('.home-postcard__stamp');
+  await expect(stamp.locator('img')).toBeVisible();
+  // The stamp holds Tobi's own cover.
+  expect(await stamp.locator('img').getAttribute('src')).toContain('waveform');
+  await expect(back.locator('.home-postcard__signature')).toHaveText('Tobi');
+  await expect(back.getByText('usetipme.xyz/@tobi')).toBeVisible();
+  await expect(back.getByText('Example')).toHaveCount(0);
+});
+
 test('only the centre card turns over to its note, and it turns back when it leaves the centre', async ({
   page,
 }) => {
@@ -244,7 +265,7 @@ test('only the centre card turns over to its note, and it turns back when it lea
   await tobi.click();
   await expect(tobi).toHaveAttribute('data-flipped', 'true');
   const back = tobi.locator('.home-flip__back');
-  await expect(back.getByText('Example', { exact: true })).toBeVisible();
+  await expect(back.getByText('A note from Tobi')).toBeVisible();
   await expect(back).toContainText('Tobi');
   await tobi.click();
   await expect(tobi).toHaveAttribute('data-flipped', 'false');

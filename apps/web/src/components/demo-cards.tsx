@@ -128,12 +128,45 @@ function Shell({
   );
 }
 
-function Slip({ note, from }: { note: ReactNode; from: string }) {
+/**
+ * The back of a card: a postcard from that person. Their avatar and name head it, their own cover
+ * is the stamp, and the note sits in the middle over their signature and page address.
+ */
+function Postcard({
+  note,
+  name,
+  role,
+  handle,
+  cover,
+  avatar,
+}: {
+  note: ReactNode;
+  name: string;
+  role: string;
+  handle: string;
+  cover: ReactNode;
+  avatar: ReactNode;
+}) {
   return (
-    <div className="home-slip">
-      <span className="home-slip__label">Example</span>
-      <p className="home-slip__note">{note}</p>
-      <p className="home-slip__from">{from}</p>
+    <div className="home-postcard">
+      <div className="home-postcard__stamp">
+        <div className="home-postcard__perf">
+          <div className="home-postcard__art">{cover}</div>
+        </div>
+      </div>
+      <div className="home-postcard__postmark">TipMe</div>
+      <div className="home-postcard__from">
+        <span className="home-postcard__avatar">{avatar}</span>
+        <div>
+          <b>A note from {name}</b>
+          <span>{role}</span>
+        </div>
+      </div>
+      <p className="home-postcard__note">{note}</p>
+      <div className="home-postcard__sign">
+        <em className="home-postcard__signature">{name}</em>
+        <small>usetipme.xyz/@{handle}</small>
+      </div>
     </div>
   );
 }
@@ -153,6 +186,7 @@ const BURST = Array.from({ length: 9 }, (_, i) => ({
  */
 export function PersonCard({
   name,
+  handle,
   fullName = name,
   role,
   className,
@@ -165,6 +199,8 @@ export function PersonCard({
 }: {
   /** The name the card is known by in the carousel and signs its notes with. */
   name: string;
+  /** The lowercase handle printed on the postcard's back. */
+  handle: string;
   fullName?: string;
   /** Wears the Pro badge, as a Pro page does. */
   pro?: boolean;
@@ -255,9 +291,13 @@ export function PersonCard({
         </>
       }
       back={
-        <Slip
+        <Postcard
           note={thanks ? `Thank you for the ${thanks}!` : note}
-          from={name}
+          name={name}
+          role={role}
+          handle={handle}
+          cover={cover}
+          avatar={avatar}
         />
       }
     >

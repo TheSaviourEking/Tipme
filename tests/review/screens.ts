@@ -50,6 +50,23 @@ export const SCREENS: ReviewScreen[] = [
   { group: 'Public', name: 'Home', board: 'ScreenHome', open: visit('/') },
   {
     group: 'Public',
+    name: 'Card turned over',
+    board: 'ScreenHome',
+    // Zainab is in the centre when the page opens; clicking her turns her over to her postcard.
+    // A touch screen gets the plain card (the cards answer a mouse only), so there it stays face up.
+    open: async (page) => {
+      await page.goto('/');
+      const zainab = page.locator('.home-demo__card--zainab');
+      await zainab.locator('.home-flip__front').waitFor();
+      if (!(await page.evaluate(() => matchMedia('(hover: hover)').matches)))
+        return;
+      await page.locator('.home-flip[data-ready="true"]').first().waitFor();
+      await zainab.click();
+      await page.locator('.home-flip[data-flipped="true"]').waitFor();
+    },
+  },
+  {
+    group: 'Public',
     name: 'Menu open',
     board: 'PhonePages',
     // On a phone this is the whole menu button; wider, the "Who it's for" choices under their button.
