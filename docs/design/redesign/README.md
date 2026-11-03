@@ -15,7 +15,7 @@ Where a board and a newer owner decision disagree, the decision wins:
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | ₦1,000 keys, "withdraw from ₦1,000"                   | ₦2,000, ₦5,000 and ₦10,000; minimum tip and withdrawal ₦2,000 (2 Nov 2026)            |
 | "Tipping opens soon", "no bank details needed yet"    | Tipping is live for named pages (`LIVE_CHECKOUT_HANDLES`); copy follows payment mode  |
-| Home hero "global payments (USD, EUR, GBP, NGN, …)"   | Not shipped until the owner confirms it (see the plan's open decisions)               |
+| Home hero "global payments (USD, EUR, GBP, NGN, …)"   | Shipped as on the board: the owner's decision, 3 Nov 2026 (DECISION-LOG) |
 | `[PRICE SET BY STAFF]` on Pro                         | "Ask for Pro" with no amount until staff can set a price (a later plan)               |
 
 | Board                       | Screen                                                     |

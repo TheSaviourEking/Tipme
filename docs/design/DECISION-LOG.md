@@ -209,3 +209,7 @@ Approved direction (product owner): onboarding should feel human and stress-free
 - **A page that changes its handle may change look.** The pick follows the handle, as it did before, so a rename can give a different design and colour. The old handle redirects to the new page, which shows the new look. Choosing a design in Settings fixes it.
 - **Legibility.** Nothing is written on a cover. The name, share button and bio sit on the page's canvas, the photo's ring is the solid canvas (at least 3:1 against all four colours), and the panel is an opaque surface. A test asserts that no text or control sits on the cover except the photo and the panel.
 - **Settings shows what the page shows.** "Let TipMe pick" previews the handle's design in its colour and says it in words ("Now: Rising hearts in Violet"). Violet and lilac remain offered as a person's own choice.
+
+## Home hero names global payments (owner's decision, 3 Nov 2026)
+
+The redesigned home page says "Your personalized link and QR code to receive global payments (USD, EUR, GBP, NGN, Stablecoins)", as on the `ScreenHome` board. The owner chose this wording knowing TipMe takes naira only today ("use global payment. We'd work on that soon"). It is a product and copy decision, not a regulatory approval: payments in other currencies and stablecoins are not built, and nothing in `docs/00-DECISIONS.md` approves them.

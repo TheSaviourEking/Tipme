@@ -18,7 +18,7 @@
 
 ## Open decisions (owner)
 
-1. **Home hero currencies.** The board says "receive global payments (USD, EUR, GBP, NGN, Stablecoins)". TipMe takes naira only today, so Task 4 ships the current naira-only line unless the owner confirms the board's wording in writing first. Record the answer in `docs/design/DECISION-LOG.md`.
+1. **Home hero currencies: decided.** The owner chose the board's wording on 3 Nov 2026 ("use global payment. We'd work on that soon"): "receive global payments (USD, EUR, GBP, NGN, Stablecoins)". Recorded in `docs/design/DECISION-LOG.md`. Today TipMe takes naira only, so this line is a public claim ahead of the product.
 2. **"Infrastructure (coming soon)" in the menu.** Built as a non-link item with that label and "Consume the Tipme APIs." (the owner's wording, with the doubled full stop fixed), unless the owner removes it.
 
 ## Global Constraints
@@ -241,7 +241,7 @@ Expected: new tests pass. The visual spec fails only where the page gained the n
 - [ ] **Step 1: Failing tests**
   - `'home switches between getting tipped and tipping with one lever'`: `getByRole('radiogroup', { name: 'Show the steps for' })`; "If you get tipped" is checked first, and the steps "Make it yours", "Share it anywhere" and "Get your thanks" show. Checking "If you're tipping" shows "Scan or tap", "Choose an amount" and "Say your thanks".
   - `'home states the fee and the minimum plainly'`: the page contains "TipMe keeps 10% of each tip" and no "₦1,000" anywhere (`expect(await page.content()).not.toContain('₦1,000')`).
-  - `'home shows the naira line until the owner confirms other currencies'`: the hero paragraph does not contain "USD" (remove this test only with open decision 1 recorded).
+  - `'home names global payments, as the owner decided'`: the hero paragraph contains "global payments (USD, EUR, GBP, NGN, Stablecoins)".
   - `'the hero tip demo uses the standard amounts'`: the example card shows the keys ₦2,000, ₦5,000 and ₦10,000.
 - [ ] **Step 2: Run, expect FAIL.**
 - [ ] **Step 3: Implement** to the board. Opening copy follows payment mode (`paymentModeCopy`), not the board's "Tipping opens soon".
