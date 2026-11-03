@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>For businesses, coming soon</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+*{-webkit-tap-highlight-color:transparent}
+button{font-family:Manrope,Arial,sans-serif;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32f9;outline-offset:4px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.key{min-height:52px;width:100%;padding:0 4px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);color:#000;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums lining-nums;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1),background-color 150ms}
+.key:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.key.on{position:relative;border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#5d5a54}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1)}
+.go:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3);transition-duration:100ms}
+.soft{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;color:#000;text-decoration:none;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms}
+.soft:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+
+.fade{animation:fade 300ms cubic-bezier(.22,1,.36,1) both}
+@keyframes fade{from{opacity:0;transform:translateY(-14px) rotate(-1deg)}to{opacity:1;transform:none}}
+
+</style>
+</helmet>
+<div style="width: 1440px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; min-height: 620px">
+<header style="width: 1200px; margin: 0 auto; height: 80px; display: flex; align-items: center; justify-content: space-between"><img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 32px; width: auto"><nav aria-label="Main" style="display: flex; align-items: center; gap: 24px; font-size: 15px; font-weight: 600"><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">How it works</a><a href="#" aria-current="page" style="text-decoration: underline; text-underline-offset: 4px; min-height: 44px; display: inline-flex; align-items: center">Who it's for</a><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">Pro</a><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">Sign in</a></nav></header>
+<section style="width: 1200px; margin: 0 auto; padding: 56px 0; display: grid; grid-template-columns: minmax(0, 1fr) 480px; gap: 64px; align-items: center">
+  <div><h1 class="serif" style="margin: 0; font-size: 76px; line-height: 1">TipMe for businesses is on its way.</h1><p style="margin: 20px 0 0; font-size: 19px; line-height: 1.5; color: #5d5a54; max-width: 520px">We're still building it. Leave your email and we'll tell you when it's ready.</p></div>
+  <div class="instrument" style="padding: 26px; display: grid; gap: 14px">
+    <sc-if value="{{ask}}" hint-placeholder-val="{{ true }}"><form aria-label="Register interest" style="display: grid; gap: 14px"><label style="display: grid; gap: 6px; font-size: 14px; font-weight: 700">Work email<input type="email" placeholder="you@yourbusiness.com" class="well" style="font: 600 16px Manrope, Arial, sans-serif"></label><button type="button" class="go" onClick="{{join}}">Tell me when it's ready</button></form></sc-if>
+    <sc-if value="{{done}}" hint-placeholder-val="{{ false }}"><div class="fade" style="display: grid; gap: 10px"><p class="serif" style="margin: 0; font-size: 36px; line-height: 1.05">You're on the list.</p><p style="margin: 0; font-size: 15px; line-height: 1.5; color: #5d5a54">We'll email you once, when it's ready.</p><button type="button" class="soft" onClick="{{again}}">Use a different email</button></div></sc-if>
+    <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #5d5a54">We'll only use your email for this. Working for yourself? <a href="#" style="color: #000; font-weight: 700">You can start today</a>.</p>
+  </div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    return { ask: !s.done, done: Boolean(s.done), join: () => this.setState({ done: true }), again: () => this.setState({ done: false }) };
+  }
+}
+</script>
+</body>
+</html>

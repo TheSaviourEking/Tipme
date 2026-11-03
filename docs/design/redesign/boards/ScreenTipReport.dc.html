@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tip detail and weekly report</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+*{-webkit-tap-highlight-color:transparent}
+button{font-family:Manrope,Arial,sans-serif;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32f9;outline-offset:4px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.key{min-height:52px;width:100%;padding:0 4px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);color:#000;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums lining-nums;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1),background-color 150ms}
+.key:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.key.on{position:relative;border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#5d5a54}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1)}
+.go:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3);transition-duration:100ms}
+.soft{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;color:#000;text-decoration:none;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms}
+.soft:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+
+.receipt{position:relative;background:#fffefa;padding:26px 26px 34px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 30px 50px -26px rgba(20,18,16,.42);border-radius:14px 14px 0 0;-webkit-mask:radial-gradient(8px at 12px 100%,transparent 98%,#000) 0 0/24px 100%;mask:radial-gradient(8px at 12px 100%,transparent 98%,#000) 0 0/24px 100%}
+.rrow{display:flex;justify-content:space-between;gap:16px;padding:9px 0;font-size:15px;border-top:1px dashed rgba(20,18,16,.2)}
+.stack{position:relative;height:210px;width:100%;border:0;background:none;padding:0;text-align:left;color:#000}
+.card{position:absolute;inset:0;box-sizing:border-box;padding:22px 24px;border-radius:16px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.1),0 10px 20px -10px rgba(20,18,16,.26)}
+.c2{transform:translateY(10px) rotate(1.4deg) scale(.98)}.c3{transform:translateY(18px) rotate(-1.6deg) scale(.96)}
+.top{animation:deal 300ms cubic-bezier(.22,1,.36,1) both;transition:transform 180ms}
+.stack:active .top{transform:translateY(2px)}
+@keyframes deal{from{opacity:0;transform:translateY(-14px) rotate(-2deg)}to{opacity:1;transform:none}}
+.stat{display:grid;gap:4px;padding:14px 0;border-top:1px solid rgba(255,255,255,.2);font-size:14px}
+.stat strong{font-size:30px;font-weight:400}
+
+</style>
+</helmet>
+<div style="width: 1500px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; min-height: 900px">
+<div style="display: grid; grid-template-columns: 560px minmax(0, 1fr); gap: 64px; padding: 44px 64px; box-sizing: border-box; align-items: start">
+<section aria-label="Tip detail">
+  <p style="margin: 0 0 14px; font-size: 15px; font-weight: 600"><a href="#">Back to tips</a></p>
+  <div class="receipt">
+    <h1 class="serif" style="margin: 0 0 4px; font-size: 44px; line-height: 1">₦1,800 from Bola</h1>
+    <p style="margin: 0 0 18px; font-size: 14px; color: #5d5a54">2 Nov 2026, 9:42 am</p>
+    <sc-if value="{{showNote}}" hint-placeholder-val="{{ true }}"><blockquote class="serif" style="margin: 0 0 20px; font-size: 27px; line-height: 1.2">Your notes helped me pass. Thank you.</blockquote></sc-if>
+    <sc-if value="{{hidden}}" hint-placeholder-val="{{ false }}"><p style="margin: 0 0 20px; font-size: 15px; line-height: 1.45; color: #5d5a54">This note is hidden from your page. You can still read it here.</p></sc-if>
+    <div class="rrow"><span>Bola tipped</span><strong>₦2,000</strong></div>
+    <div class="rrow"><span>TipMe's 10%</span><strong>−₦200</strong></div>
+    <div class="rrow"><span>You received</span><strong>₦1,800</strong></div>
+    <div class="rrow"><span>Status</span><strong>In your balance</strong></div>
+    <div class="rrow"><span>Reference</span><strong>TM-48213</strong></div>
+  </div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px"><button type="button" class="soft" onClick="{{toggleNote}}">{{hideLabel}}</button><button type="button" class="soft" onClick="{{report}}">{{reportLabel}}</button></div>
+</section>
+<section aria-label="Weekly report" style="display: grid; gap: 24px">
+  <div style="background: #000; color: #fff; border-radius: 26px; padding: 30px 32px">
+    <p style="margin: 0 0 8px; font-size: 15px; font-weight: 600">Your week, 26 Oct to 1 Nov</p>
+    <h2 class="serif" style="margin: 0 0 16px; font-size: 52px; line-height: 1">14 people said thanks.</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px"><div class="stat"><span>You received</span><strong class="serif">₦31,500</strong></div><div class="stat"><span>Tips</span><strong class="serif">14</strong></div><div class="stat"><span>Compared with last week</span><strong class="serif">+₦4,200</strong></div></div>
+  </div>
+  <div>
+    <p style="margin: 0 0 10px; font-size: 15px; font-weight: 700">Notes from this week. Press to read the next one.</p>
+    <button type="button" class="stack" onClick="{{next}}" aria-label="Next note"><span class="card c3"></span><span class="card c2"></span><sc-for list="{{top}}" as="n" hint-placeholder-count="1"><span class="card top"><span class="serif" style="display: block; font-size: 30px; line-height: 1.15; margin-bottom: 10px">"{{n.note}}"</span><span style="font-size: 14px; font-weight: 600">From {{n.who}}, {{n.amount}}</span></span></sc-for></button>
+  </div>
+  <div style="display: grid; grid-template-columns: 240px auto; gap: 18px; align-items: center; justify-content: start; margin-top: 8px"><button type="button" class="go" onClick="{{share}}">{{shareLabel}}</button><a href="#" style="font-size: 15px; font-weight: 600">See all tips</a></div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const notes = [['You made my week easier.', 'Chidi', '₦5,000'], ['Best explanation I have heard all year.', 'Ngozi', '₦2,000'], ['For the extra session. Thank you.', 'Dayo', '₦1,000']];
+    const i = s.i || 0;
+    const hidden = Boolean(s.hidden);
+    const n = notes[i % notes.length];
+    return {
+      showNote: !hidden,
+      hidden,
+      hideLabel: hidden ? 'Show this note' : 'Hide this note',
+      toggleNote: () => this.setState({ hidden: !hidden }),
+      reportLabel: s.reported ? 'Reported' : 'Report this note',
+      report: () => this.setState({ reported: true }),
+      top: [{ note: n[0], who: n[1], amount: n[2], k: i }],
+      next: () => this.setState({ i: i + 1 }),
+      shareLabel: s.shared ? 'Link copied' : 'Share your link',
+      share: () => this.setState({ shared: true }),
+    };
+  }
+}
+</script>
+</body>
+</html>

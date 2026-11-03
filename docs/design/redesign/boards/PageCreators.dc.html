@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>For individuals</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+*{-webkit-tap-highlight-color:transparent}
+button{font-family:Manrope,Arial,sans-serif;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32f9;outline-offset:4px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.key{min-height:52px;width:100%;padding:0 4px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);color:#000;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums lining-nums;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1),background-color 150ms}
+.key:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.key.on{position:relative;border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#5d5a54}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1)}
+.go:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3);transition-duration:100ms}
+.soft{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;color:#000;text-decoration:none;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms}
+.soft:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+
+.slab{background:linear-gradient(rgba(255,255,255,.14),transparent 3px),#7a32f9;border:1px solid #6423d8;border-radius:32px;box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 2px 2px rgba(58,17,131,.3),0 42px 72px -30px rgba(58,17,131,.6);color:#fff}
+.key{font-size:15px}
+.tent{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.1);border-radius:10px 10px 4px 4px;box-shadow:0 1px 1px rgba(20,18,16,.12),0 26px 34px -18px rgba(20,18,16,.42);transform:perspective(900px) rotateX(5deg);transform-origin:bottom}
+.counter{height:30px;border-radius:0 0 22px 22px;background:linear-gradient(#d9d6cc,#c7c3b7);box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.screen{background:#14110f;border-radius:16px;border:6px solid #000;box-shadow:0 30px 44px -22px rgba(20,18,16,.6);color:#fff;overflow:hidden;position:relative}
+.tray{background:#eeede8;border:1px solid rgba(20,18,16,.14);border-radius:14px;box-shadow:inset 0 1px 3px rgba(20,18,16,.14),inset 0 -1px 0 rgba(255,255,255,.8);padding:10px;display:grid;gap:8px;min-height:132px;align-content:start}
+.slip{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:8px;padding:10px 12px;box-shadow:0 1px 1px rgba(20,18,16,.1),0 6px 12px -6px rgba(20,18,16,.2);font-size:14px;line-height:1.35;animation:slip 420ms cubic-bezier(.22,1,.36,1) both}
+@keyframes slip{from{opacity:0;transform:translateY(-16px) rotate(-1.5deg)}to{opacity:1;transform:none}}
+.scene{animation:scene 240ms cubic-bezier(.2,.75,.25,1) both}
+@keyframes scene{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+</style>
+</helmet>
+<div style="width: 1440px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; min-height: 1480px">
+<header style="width: 1200px; margin: 0 auto; height: 80px; display: flex; align-items: center; justify-content: space-between"><img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 32px; width: auto"><nav aria-label="Main" style="display: flex; align-items: center; gap: 24px; font-size: 15px; font-weight: 600"><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">How it works</a><a href="#" aria-current="page" style="text-decoration: underline; text-underline-offset: 4px; min-height: 44px; display: inline-flex; align-items: center">Who it's for</a><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">Pro</a><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">Sign in</a></nav></header>
+<section class="slab" style="width: 1200px; margin: 0 auto; padding: 56px; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 48px; align-items: center">
+  <div>
+    <h1 class="serif" style="margin: 0; font-size: 76px; line-height: .98">People already want to thank you.</h1>
+    <p style="margin: 22px 0 28px; font-size: 19px; line-height: 1.5; max-width: 520px">Barbers, drivers, streamers, creators: put your link in your bio or your QR code on the counter. People tip in a few taps, without an account, and you read every note.</p>
+    <a href="#" class="go" style="width: auto; display: inline-flex; padding: 0 30px; background: linear-gradient(rgba(255,255,255,.16),transparent 30%),#000">Claim your username</a>
+  </div>
+  <div class="instrument" style="color: #000; padding: 18px; display: grid; gap: 14px">
+    <div role="group" aria-label="Where you meet people" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px"><sc-for list="{{places}}" as="p" hint-placeholder-count="3"><button type="button" class="{{p.cls}}" onClick="{{p.pick}}" aria-pressed="{{p.on}}">{{p.label}}</button></sc-for></div>
+    <div style="height: 300px; position: relative">
+      <sc-if value="{{isCounter}}" hint-placeholder-val="{{ true }}"><div class="scene" style="height: 100%; display: flex; flex-direction: column; justify-content: flex-end"><div class="tent" style="width: 190px; margin: 0 auto; padding: 14px; text-align: center; box-sizing: border-box"><img src="/_blob/1e89ecd39918479f5ecf761cc5c23da5" alt="Ada's printed QR code" style="display:block;width:160px;height:160px"><p style="margin: 8px 0 0; font-size: 13px; font-weight: 700">Scan to tip Ada</p></div><div class="counter"></div></div></sc-if>
+      <sc-if value="{{isStream}}" hint-placeholder-val="{{ false }}"><div class="scene screen" style="height: 100%; box-sizing: border-box"><img src="/_blob/aef1b025f8a396e3802ec254cf015be7" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55"><div style="position: absolute; right: 12px; top: 12px; background: #fffefa; border-radius: 10px; padding: 6px"><img src="/_blob/1e89ecd39918479f5ecf761cc5c23da5" alt="Ada's printed QR code" style="display:block;width:92px;height:92px"></div><div style="position: absolute; left: 12px; bottom: 12px; right: 12px; background: rgba(0,0,0,.72); border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.4"><strong>Pinned in chat</strong><br>usetipme.xyz/@ada</div></div></sc-if>
+      <sc-if value="{{isPost}}" hint-placeholder-val="{{ false }}"><div class="scene" style="height: 100%; display: flex; align-items: center; justify-content: center"><div class="tent" style="transform: none; border-radius: 22px; width: 280px; padding: 20px; box-sizing: border-box"><img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="" style="display: block; width: 72px; height: 72px; border-radius: 50%; object-fit: cover; object-position: 50% 12%"><p class="serif" style="margin: 10px 0 2px; font-size: 26px">Ada Okafor</p><p style="margin: 0 0 12px; font-size: 14px; line-height: 1.4">Video editor. New edits every Friday.</p><span class="well" style="min-height: 44px; font-weight: 700; color: #4d16a8">usetipme.xyz/@ada</span></div></div></sc-if>
+    </div>
+    <div style="display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 10px; align-items: start">
+      <button type="button" class="go" onClick="{{tip}}">Tip ₦2,000</button>
+      <div class="tray" aria-live="polite"><sc-if value="{{empty}}" hint-placeholder-val="{{ true }}"><p style="margin: 0; padding: 8px 4px; font-size: 14px; line-height: 1.4; color: #5d5a54">Press Tip. This is where it lands for Ada.</p></sc-if><sc-for list="{{slips}}" as="s" hint-placeholder-count="1"><div class="slip"><strong>{{s.amount}}</strong> from {{s.who}}<br>{{s.note}}</div></sc-for></div>
+    </div>
+  </div>
+</section>
+<section style="width: 1200px; margin: 0 auto; padding: 64px 0">
+  <h2 class="serif" style="margin: 0 0 26px; font-size: 48px; line-height: 1.05">Made for how you already show up.</h2>
+  <div style="display: grid; grid-template-columns: 7fr 5fr; gap: 56px; font-size: 17px; line-height: 1.55">
+    <p style="margin: 0"><strong>If you work with people,</strong> keep a printed QR on your counter, mirror or car seat, or send your link after a job well done. <strong>If you stream,</strong> show your QR on screen and pin your link, so viewers can tip you while you're live.</p>
+    <p style="margin: 0; color: #5d5a54"><strong style="color: #000">If you post,</strong> one link goes in your bio and captions. <strong style="color: #000">If you hit a milestone,</strong> share it on your page and people can add to the celebration.</p>
+  </div>
+</section>
+<section style="width: 1200px; margin: 0 auto 56px; box-sizing: border-box; background: #000; color: #fff; border-radius: 30px; padding: 40px 44px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center"><div><h2 class="serif" style="margin: 0; font-size: 44px; line-height: 1.05">Your name, your page.</h2><p style="margin: 10px 0 0; font-size: 16px; line-height: 1.5">Free to start. TipMe keeps 10% of each tip, and you withdraw to your bank from ₦1,000.</p></div><a href="#" class="soft" style="width: auto; padding: 0 30px; color: #000; text-decoration: none; font-weight: 700">Claim your username</a></section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const place = s.place || 'counter';
+    const slips = s.slips || [];
+    const pool = {
+      counter: [['Tolu', 'Cleanest fade in Lagos.'], ['Bisi', 'Thank you for squeezing me in.']],
+      stream: [['nightowl', 'That last round was unreal.'], ['Kemi', 'Staying up was worth it.']],
+      post: [['Seun', 'Your Friday edit made my week.'], ['Amara', 'Keep making these.']],
+    }[place];
+    return {
+      isCounter: place === 'counter',
+      isStream: place === 'stream',
+      isPost: place === 'post',
+      empty: slips.length === 0,
+      slips,
+      places: [['counter', 'On a counter'], ['stream', 'On stream'], ['post', 'In a post']].map(([id, label]) => ({
+        label,
+        on: id === place,
+        cls: id === place ? 'key on' : 'key',
+        pick: () => this.setState({ place: id, slips: [] }),
+      })),
+      tip: () => {
+        const [who, note] = pool[slips.length % pool.length];
+        this.setState({ slips: [{ amount: '₦2,000', who, note }, ...slips].slice(0, 2) });
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

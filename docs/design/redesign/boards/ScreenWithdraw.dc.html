@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Withdraw redesign</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+</style>
+</helmet>
+<div style="width: 1100px; height: 860px; box-sizing: border-box; padding: 40px; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 36px; align-items: start">
+  <section aria-labelledby="wd" style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 26px; padding: 32px; box-shadow: 0 2px 3px rgba(20,18,16,.1), 0 18px 42px rgba(20,18,16,.08); display: flex; flex-direction: column; gap: 20px">
+    <h1 id="wd" style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 46px; line-height: 1">Withdraw</h1>
+    <label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600">Amount
+      <input type="text" inputmode="decimal" value="₦48,600" style="height: 84px; box-sizing: border-box; padding: 0 20px; border-radius: 16px; border: 1px solid #77736b; background: #eeede8; font: 400 48px 'DM Serif Display', Georgia, serif; box-shadow: inset 0 1px 2px rgba(20,18,16,.11)">
+    </label>
+    <div role="group" aria-label="Quick amounts" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+      <button type="button" style="height: 48px; border-radius: 12px; border: 1px solid rgba(20,18,16,.08); background: #eeede8; font: 700 15px Manrope, Arial, sans-serif">₦5,000</button>
+      <button type="button" style="height: 48px; border-radius: 12px; border: 1px solid rgba(20,18,16,.08); background: #eeede8; font: 700 15px Manrope, Arial, sans-serif">₦20,000</button>
+      <button type="button" aria-pressed="true" style="height: 48px; border-radius: 12px; border: 1px solid #5718cf; background: #7a32f9; color: #fff; font: 700 15px Manrope, Arial, sans-serif">Everything</button>
+    </div>
+    <dl style="margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 12px 16px; padding: 18px 0; border-top: 1px solid rgba(20,18,16,.1); border-bottom: 1px solid rgba(20,18,16,.1); font-size: 15px">
+      <dt style="color: #5d5a54">Going to</dt><dd style="margin: 0; font-weight: 700">[Your bank] ••6789 <a href="#" style="font-weight: 600; margin-left: 6px">Change</a></dd>
+      <dt style="color: #5d5a54">You receive</dt><dd style="margin: 0; font-weight: 700">₦48,600</dd>
+      <dt style="color: #5d5a54">Balance afterwards</dt><dd style="margin: 0; font-weight: 700">₦0</dd>
+    </dl>
+    <button type="button" style="height: 58px; border: 0; border-radius: 12px; background: #000; color: #fff; font: 700 17px Manrope, Arial, sans-serif">Withdraw ₦48,600</button>
+    <p style="margin: 0; font-size: 13.5px; line-height: 1.5; color: #5d5a54">Once sent, a withdrawal can't be cancelled. The smallest withdrawal is ₦1,000, or your whole balance if it's less.</p>
+  </section>
+  <section aria-labelledby="hist">
+    <h2 id="hist" style="margin: 8px 0 14px; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 30px">Your withdrawals</h2>
+    <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px">
+      <li style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; padding: 20px">
+        <div style="display: flex; justify-content: space-between"><strong style="font-size: 18px">₦20,000</strong><span style="font-size: 14px; font-weight: 700; color: #75500b">On its way</span></div>
+        <ol aria-label="Progress" style="list-style: none; display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; padding: 0">
+          <li style="flex: 1; height: 5px; border-radius: 3px; background: #7a32f9"></li><li style="flex: 1; height: 5px; border-radius: 3px; background: #7a32f9"></li><li style="flex: 1; height: 5px; border-radius: 3px; background: #dfded8"></li>
+        </ol>
+        <p style="margin: 0; font-size: 13.5px; color: #5d5a54">Requested today at 09:41. Sent to our payment partner.</p>
+      </li>
+      <li style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; padding: 16px 20px; display: flex; justify-content: space-between"><div><strong style="font-size: 16px">₦35,000</strong><p style="margin: 3px 0 0; font-size: 13.5px; color: #5d5a54">24 Oct to ••6789</p></div><span style="font-size: 14px; font-weight: 700; color: #23623b">Paid</span></li>
+      <li style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; padding: 16px 20px; display: flex; justify-content: space-between; gap: 12px"><div><strong style="font-size: 16px">₦12,500</strong><p style="margin: 3px 0 0; font-size: 13.5px; line-height: 1.4; color: #5d5a54">17 Oct. The bank refused it, so the money is back in your balance.</p></div><span style="font-size: 14px; font-weight: 700; color: #9b2820">Failed</span></li>
+    </ol>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
