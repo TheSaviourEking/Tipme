@@ -566,10 +566,19 @@ The redesign rebuilds the dashboard with "data and API calls unchanged; no live 
 - **Leave room for an "Updated 14:02" line** under the balance.
 - **Make the bell's toast the one `role="status"` announcer** for tips.
 
-## 14. Open questions for the owner
+## 14. The owner's answers (3 Nov 2026)
 
-Most important first. Each changes what gets built.
+These settle the open questions. Where a section above says otherwise, this section wins.
 
-1. **Shared screens.** A recipient whose dashboard is on a counter tablet will now see, and a screen reader will speak, "₦4,500 from Chidi" the moment a tip lands. Today that needs a 10 s poll, so it nearly does already. Keep the name and amount in the live toast and announcement, or offer a setting to hide amounts and names on arrival?
-2. **Background tabs.** Should a new tip also raise a browser notification or a sound when the dashboard tab is in the background? The default is no: it needs a permission prompt and is close to D-11.
-3. **Public pages stay as they are.** A visitor's already-open public page doesn't change when the plan or accepting-tips changes. The server refuses or corrects at checkout, and new loads are fresh within seconds. Is that acceptable, or must an open page update too, at the cost in section 5.3?
+1. **Who tipped, and how much, in the live pop-up.**
+   - By default the toast and the polite announcement name the supporter and the amount ("New tip from Chidi, ₦5,000"), shown once.
+   - A new Settings switch, "Hide who tipped and how much in pop-ups", is for shared screens and shop counters. Turned on, the pop-up says only "You got a new tip"; the tips list still shows the details. It is stored per account and is off by default.
+2. **A new tip in a background tab plays a soft sound.**
+   - It sounds once per new tip and never for anything else. There is no browser notification and no permission prompt.
+   - A "Sound for new tips" switch in Settings mutes it. It is on by default, per account.
+   - Browsers block page audio until the person has clicked or typed on the page once, so the sound begins after their first interaction in that tab. Before that it fails silently, with no error shown.
+   - It plays only when the tab is hidden; a visible tab already shows the toast.
+   - It plays only for a tip the API reports as paid.
+   - Reduced motion has no bearing on sound; the mute switch does.
+   - The sound file is short (under a second), quiet and self-hosted under apps/web/public.
+3. **Public pages are not live.** An open public page refreshes on its next load, as today. Checkout re-checks on the server and refuses safely if something changed.
