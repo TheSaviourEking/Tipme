@@ -119,7 +119,16 @@ export function HomeDemo() {
               className="home-demo__img"
             />
           }
-          avatar={<span className="home-demo__initial">Z</span>}
+          avatar={
+            <Image
+              src="/portraits/zainab.webp"
+              alt=""
+              width={92}
+              height={92}
+              sizes="92px"
+              className="home-demo__img"
+            />
+          }
         />
         <PersonCard
           name="Tobi"

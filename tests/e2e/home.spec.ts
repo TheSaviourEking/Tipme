@@ -382,6 +382,18 @@ test("Zainab's cover is her own photo, not one of TipMe's designs", async ({
   expect(src).not.toContain('/covers/');
 });
 
+test("Zainab's avatar is her photo", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const avatar = page.locator(
+    '.home-demo__card--zainab .home-demo__avatar img',
+  );
+  await expect(avatar).toHaveAttribute('src', /zainab\.webp/);
+  expect(
+    await avatar.evaluate((img: HTMLImageElement) => img.naturalWidth),
+  ).toBeGreaterThan(0);
+});
+
 // The owner looked in a laptop window narrower than the three-card spread (3 Nov 2026): the lone
 // card still answers a mouse there.
 test('in a narrower desktop window the lone example card still drifts and says thank you', async ({
