@@ -76,7 +76,7 @@ test('a withdrawal records payout_requested, and payout_paid_verified once the p
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         handle: 'events_tobi',
-        amountMinor: '200000',
+        amountMinor: '400000',
         currency: 'NGN',
       }),
     })
@@ -108,7 +108,7 @@ test('a withdrawal records payout_requested, and payout_paid_verified once the p
     'POST',
     '/v1/me/withdrawals',
     cookie,
-    { amountMinor: '100000' },
+    { amountMinor: '200000' },
     { 'idempotency-key': randomUUID() },
   );
   assert.equal(withdrawal.status, 201);
@@ -127,7 +127,7 @@ test('a withdrawal records payout_requested, and payout_paid_verified once the p
     const { providerReference } = await provider.initiatePayout({
       payoutId,
       idempotencyKey: `payout.${payoutId}`,
-      amountMinor: 100000n,
+      amountMinor: 200000n,
       currency: 'NGN',
     });
     await markPayoutInitiated(database.db, {

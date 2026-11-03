@@ -48,12 +48,12 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   await expectAccessible(page);
 
   await page.goto('/dashboard/withdraw');
-  await page.getByLabel('Amount (NGN)').fill('1000');
-  await page.getByRole('button', { name: 'Withdraw NGN 1,000.00' }).click();
+  await page.getByLabel('Amount (NGN)').fill('1800');
+  await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   await expectAccessible(page);
   await page.goto('/dashboard');
-  await expect(page.getByTestId('balance')).toHaveText('NGN 800.00');
+  await expect(page.getByTestId('balance')).toHaveText('NGN 0.00');
   await expect(async () => {
     await page.reload();
     await expect(page.getByText(/Withdrawal.*Sent/)).toBeVisible({

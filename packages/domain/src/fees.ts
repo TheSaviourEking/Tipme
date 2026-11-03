@@ -10,8 +10,8 @@ export const FEE_POLICY_V1 = {
   version: 'proposed-v1.1',
   tipmeShareBps: 1000n,
   providerFeeBps: 150n,
-  minTipMinor: 100_000n,
-  minWithdrawalMinor: 100_000n,
+  minTipMinor: 200_000n,
+  minWithdrawalMinor: 200_000n,
 } as const;
 
 export type FeePolicy = typeof FEE_POLICY_V1;
@@ -79,11 +79,11 @@ export function priceTip(
   };
 }
 
-/** The amounts every Free page shows (PR-012): ₦1,000, ₦2,000 and ₦5,000. */
+/** The amounts every Free page shows: ₦2,000, ₦5,000 and ₦10,000. */
 export const STANDARD_TIP_PRESETS_MINOR = [
-  100_000n,
   200_000n,
   500_000n,
+  1_000_000n,
 ] as const;
 
 /**

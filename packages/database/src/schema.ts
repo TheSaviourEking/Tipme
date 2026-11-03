@@ -562,7 +562,8 @@ export const profiles = pgTable(
     index('profiles_handle_prefix').on(
       table.handleLower.op('text_pattern_ops'),
     ),
-    // Amounts in whole naira, never below the ₦1,000 floor (no maximum); 1 to 4 presets.
+    // Amounts in whole naira (no maximum); 1 to 4 presets. The ₦2,000 floor is the app's
+    // (FEE_POLICY_V1): this older ₦1,000 check stays so rows saved under it remain valid.
     check(
       'profiles_min_tip',
       sql`min_tip_minor IS NULL OR (min_tip_minor >= 100000 AND min_tip_minor % 100 = 0)`,

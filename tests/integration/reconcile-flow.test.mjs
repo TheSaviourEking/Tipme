@@ -50,7 +50,7 @@ test('a payment the provider never reported is found by the background check', a
   });
   const { quoteId } = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { tipId, attemptId } = await createPaymentIntent(database.db, {
@@ -59,7 +59,7 @@ test('a payment the provider never reported is found by the background check', a
   });
   const { providerReference } = await mock.initializePayment({
     attemptId,
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     scenario: 'no-reply',
   });

@@ -19,7 +19,7 @@ test('payouts and proof', async (t) => {
   const tipFor = async (handle, { pay = 'succeeded' } = {}) => {
     const { quoteId } = await createQuote(database.db, {
       handle,
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     const { tipId, attemptId } = await createPaymentIntent(database.db, {
@@ -33,9 +33,9 @@ test('payouts and proof', async (t) => {
         eventType: `payment.${pay}`,
         attemptId,
         providerReference: `pay-${attemptId}`,
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         currency: 'NGN',
-        providerFeeMinor: 1500n,
+        providerFeeMinor: 3000n,
         signatureVerified: true,
         payload: {},
       });
@@ -74,7 +74,7 @@ test('payouts and proof', async (t) => {
         tipIds: tips,
         idempotencyKey: key,
       });
-      assert.equal(first.amountMinor, 180000n);
+      assert.equal(first.amountMinor, 360000n);
       assert.equal(first.replayed, false);
       const again = await createPayout(database.db, {
         profileId: ADA,
@@ -119,7 +119,7 @@ test('payouts and proof', async (t) => {
     async () => {
       await database.fresh();
       const tip = await tipFor('ada');
-      assert.equal(await payable(), '90000');
+      assert.equal(await payable(), '180000');
       const { payoutId } = await createPayout(database.db, {
         profileId: ADA,
         tipIds: [tip],
@@ -170,7 +170,7 @@ test('payouts and proof', async (t) => {
         idempotencyKey: randomUUID(),
       });
       assert.notEqual(retry.payoutId, payoutId);
-      assert.equal(await payable(), '90000');
+      assert.equal(await payable(), '180000');
     },
   );
 
@@ -353,15 +353,15 @@ test('payouts and proof', async (t) => {
       const proof = await tipProof(database.db, tip);
       assert.doesNotThrow(() => JSON.stringify(proof));
       assert.equal(proof.tip.status, 'SUCCEEDED');
-      assert.equal(proof.tip.grossMinor, '100000');
+      assert.equal(proof.tip.grossMinor, '200000');
       assert.match(proof.payment.providerReference, /^pay-/);
       assert.ok(proof.payment.providerEventId);
       assert.deepEqual(proof.breakdown, {
-        grossMinor: '100000',
-        platformFeeMinor: '8500',
-        quotedProviderFeeMinor: '1500',
-        actualProviderFeeMinor: '1500',
-        recipientNetMinor: '90000',
+        grossMinor: '200000',
+        platformFeeMinor: '17000',
+        quotedProviderFeeMinor: '3000',
+        actualProviderFeeMinor: '3000',
+        recipientNetMinor: '180000',
       });
       assert.ok(proof.paymentLedgerTransactionId);
       assert.equal(proof.payout.status, 'PAID');

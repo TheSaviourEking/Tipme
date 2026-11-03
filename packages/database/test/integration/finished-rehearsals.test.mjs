@@ -39,7 +39,7 @@ async function rehearsal(t, handle) {
   // The deliberately misreported tip: the provider reports the wrong amount.
   const quote = await createQuote(database.db, {
     handle,
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { attemptId } = await createPaymentIntent(database.db, {
@@ -98,7 +98,7 @@ test('after a release run finishes, its attempts are no longer re-checked', asyn
   // A real page's unfinished tip, alongside: it must keep being checked.
   const quote = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const real = await createPaymentIntent(database.db, {

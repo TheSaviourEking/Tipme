@@ -33,7 +33,7 @@ function provider() {
     name: 'mock',
     capabilities: { connectedAccounts: false },
     payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
-    payoutBalance: async () => ({ availableMinor: 100_000_000n }),
+    payoutBalance: async () => ({ availableMinor: 200000000n }),
     quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
     coverPayoutFee: async () => ({ transferRef: 'transfer' }),
     initiatePayout: async () => {
@@ -54,7 +54,7 @@ async function setup(t) {
   const { db } = database;
   const quote = await createQuote(db, {
     handle: 'tobi',
-    tipMinor: 2000000n,
+    tipMinor: 4000000n,
     currency: 'NGN',
   });
   const intent = await createPaymentIntent(db, {
@@ -73,7 +73,7 @@ async function setup(t) {
     eventType: 'payment.succeeded',
     attemptId: intent.attemptId,
     providerReference: reference,
-    amountMinor: 2000000n,
+    amountMinor: 4000000n,
     currency: 'NGN',
     providerFeeMinor: 3000n,
     signatureVerified: true,
@@ -85,7 +85,7 @@ async function setup(t) {
     (
       await requestWithdrawal(db, {
         profileId: TOBI,
-        amountMinor: 100000n,
+        amountMinor: 200000n,
         idempotencyKey: randomUUID(),
         provider: provider(),
       })
@@ -127,7 +127,7 @@ test('a retry of a request made before the switch still gets its payout', async 
   const ask = () =>
     requestWithdrawal(s.db, {
       profileId: TOBI,
-      amountMinor: 100000n,
+      amountMinor: 200000n,
       idempotencyKey: key,
       provider: provider(),
     });

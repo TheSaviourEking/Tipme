@@ -61,7 +61,7 @@ async function serviceThatFailsWith(t, error) {
   );
   const { quoteId } = await createQuote(database.db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const statuses = async () =>

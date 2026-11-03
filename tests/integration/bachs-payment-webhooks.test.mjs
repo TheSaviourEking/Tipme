@@ -42,7 +42,7 @@ async function startedTip(t) {
   });
   const quote = await createQuote(db, {
     handle: 'ada',
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   const { attemptId } = await createPaymentIntent(db, {
@@ -62,7 +62,7 @@ async function startedTip(t) {
     operationReference: attemptId,
     accountReference: 'acct_ada123',
     status: 'pending',
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     feeMinor: 1500n,
     feePaidBy: 'unknown',
@@ -85,23 +85,23 @@ test('a Bachs payment webhook confirms the tip at once, against the quoted share
     async verifyTransaction(reference, expectation) {
       assert.equal(reference, REFERENCE);
       expectations.push(expectation);
-      return expectation?.platformFeeMinor === 10000n
+      return expectation?.platformFeeMinor === 20000n
         ? {
             status: 'succeeded',
-            amountMinor: 100000n,
+            amountMinor: 200000n,
             currency: 'NGN',
             feeMinor: 1500n,
           }
         : {
             status: 'pending',
-            amountMinor: 100000n,
+            amountMinor: 200000n,
             currency: 'NGN',
             feeMinor: 0n,
           };
     },
   };
   await new WebhookService({ db }).applyBachs(event, bachs);
-  assert.deepEqual(expectations, [{ platformFeeMinor: 10000n }]);
+  assert.deepEqual(expectations, [{ platformFeeMinor: 20000n }]);
   assert.equal(await tipStatus(), 'SUCCEEDED');
 });
 

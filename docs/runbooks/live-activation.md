@@ -77,7 +77,7 @@ B=https://sandbox-api.bachs.io
 Use `curl -K ~/.bachs-h …` below, and delete `~/.bachs-h` when done. Each check ends with a line in the ledger: the date, the payout or account id, and what was seen. Paste the same into the PR.
 
 - [ ] **BLOCKING, payouts work in the sandbox at all:** withdraw through the site. Record the payout id and each status. If the sandbox doesn't support payouts, record that, and treat the later checks as unproved until the smoke test in section 5, which must then cover them.
-- [ ] **BLOCKING, ₦1,000 balance delivers ₦1,000:** a recipient with exactly ₦1,000 withdraws ₦1,000, and ₦1,000 arrives, with the ₦50 cover transfer from the platform balance. If not, the withdraw screen has to show a net amount and the design changes.
+- [ ] **BLOCKING, ₦2,000 balance delivers ₦2,000:** a recipient with exactly ₦2,000 withdraws ₦2,000, and ₦2,000 arrives, with the ₦50 cover transfer from the platform balance. If not, the withdraw screen has to show a net amount and the design changes.
 - [ ] **BLOCKING, the fee on a failed payout:** fail a payout. Is the ₦50 refunded to the connected account? Does the next withdrawal use that credit rather than sending another ₦50?
 - [ ] **BLOCKING, `X-Account-Id` on list:** `curl -K ~/.bachs-h -H "$A" "$B/v1/payouts?reference=<our reference>"` finds the account's payout, and the same call without the header doesn't. If the header is ignored, a missing payout could be misread.
 - [ ] **BLOCKING, `X-Account-Id` on the destination read:** `curl -K ~/.bachs-h -H "$A" "$B/v1/payouts/destinations/$DEST"` answers for the account. A persistent 404 leaves replacement banks pending for good.
@@ -164,10 +164,10 @@ This deploys **the version already running**, so the switch changes one thing an
 
 One real tip and one real withdrawal, and no more until both end well. Only the owner's page can take tips now.
 
-1. Tip **₦1,000** to the owner's own page with a real card. The pilot notice shows under the Tip button.
+1. Tip **₦2,000** to the owner's own page with a real card. The pilot notice shows under the Tip button.
 2. **This is the real webhook check:** in Ops, see the provider event for the payment arrive, signature verified. If the receipt confirms but no event came, confirmation came from reconciliation: the webhook isn't working, so stop here.
 3. See the receipt confirm, and the tip in the dashboard and Ops.
-4. Withdraw **₦1,000** (or what the balance allows) to the owner's bank.
+4. Withdraw **₦1,800** (or what the balance allows) to the owner's bank.
 5. See it reach the bank, in the expected amount, with its `payout.paid` event in Ops.
 6. See in Ops the **₦50 cover transfer** and the **fee line**, and that the reserve dropped by ₦50.
 7. Reconcile by hand: TipMe's ledger, the provider's dashboard and the bank must agree. Record the tip, payout and transfer references.
@@ -244,7 +244,7 @@ A withdrawal keeps the bank recorded when it was requested, even if the recipien
 | --------------------------------------------------- | ----- | ---- | --- |
 | Approving ADR number                                |       |      |     |
 | Sandbox payout id and statuses                      |       |      |     |
-| ₦1,000 delivered ₦1,000                             |       |      |     |
+| ₦2,000 delivered ₦2,000                             |       |      |     |
 | Fee after a failed payout                           |       |      |     |
 | `X-Account-Id` on list and destination read         |       |      |     |
 | Default schedule on a fresh account                 |       |      |     |

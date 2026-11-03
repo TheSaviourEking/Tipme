@@ -14,7 +14,7 @@ test('tip status view', async (t) => {
   const newTip = async () => {
     const { quoteId } = await createQuote(database.db, {
       handle: 'ada',
-      tipMinor: 100000n,
+      tipMinor: 200000n,
       currency: 'NGN',
     });
     return createPaymentIntent(database.db, {
@@ -51,7 +51,7 @@ test('tip status view', async (t) => {
         displayName: view.recipient.displayName,
       });
       assert.ok(view.recipient.displayName.length > 0);
-      assert.equal(view.amountMinor, '100000');
+      assert.equal(view.amountMinor, '200000');
       assert.equal(view.currency, 'NGN');
       assert.equal(view.completedAt, null);
       assert.doesNotMatch(JSON.stringify(view), /private words/);

@@ -24,7 +24,7 @@ import { ADA, TOBI, useDatabase } from './helpers.mjs';
 async function createAttempt(db, handle = 'ada') {
   const { quoteId } = await createQuote(db, {
     handle,
-    tipMinor: 100000n,
+    tipMinor: 200000n,
     currency: 'NGN',
   });
   return createPaymentIntent(db, {
@@ -221,7 +221,7 @@ test('recipient account creation is unique, ambiguous creation is not retryable,
     eventType: 'payment.pending',
     attemptId,
     providerReference: 'acct_123abc:chk_456def',
-    amountMinor: 100000n,
+    amountMinor: 200000n,
     currency: 'NGN',
     providerFeeMinor: 0n,
     signatureVerified: true,
@@ -277,7 +277,7 @@ test('reconciliation resolves each attempt through its persisted provider', asyn
         async verifyTransaction() {
           return {
             status: 'pending',
-            amountMinor: 100000n,
+            amountMinor: 200000n,
             currency: 'NGN',
             feeMinor: 0n,
           };

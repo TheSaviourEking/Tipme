@@ -154,7 +154,7 @@ export interface PublicProfile {
 export const renameHandleSchema = claimHandleSchema;
 
 // Free and Pro (PR-012). Free pages show the standard amounts; staff can make a page Pro, and
-// a Pro page chooses its own preset amounts and minimum (never below the ₦1,000 floor).
+// a Pro page chooses its own preset amounts and minimum (never below the ₦2,000 floor).
 export type PagePlan = 'free' | 'pro';
 
 /** Kobo as strings. Supporters may type any amount from `minMinor` up; there is no maximum. */

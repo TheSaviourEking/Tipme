@@ -5,11 +5,11 @@ import { amountOptions } from '../src/lib/tip-amounts.ts';
 
 test('typed amounts use exact minor units and reject ambiguous input', () => {
   const { parse } = amountOptions(undefined);
-  assert.equal(parse('1234.50'), 123450);
+  assert.equal(parse('2234.50'), 223450);
   assert.equal(parse('100000'), 10000000);
   // Correctly grouped thousands separators are accepted.
-  assert.equal(parse('1,000'), 100000);
-  assert.equal(parse('1,500.50'), 150050);
+  assert.equal(parse('2,000'), 200000);
+  assert.equal(parse('2,500.50'), 250050);
   assert.equal(parse('100,000'), 10000000);
   for (const value of [
     '',
