@@ -38,6 +38,26 @@ export default function TermsPlaceholder() {
           you to withdraw.
         </p>
       </section>
+      {/* The owner's decision, 3 Nov 2026: a username can be taken back, with 7 days of notice. */}
+      <section aria-labelledby="usernames">
+        <h2 id="usernames">Your username</h2>
+        <p>
+          Your username is how people find your page. If TipMe needs a username
+          back, for example to protect a brand, a public figure or one of our
+          own names, we will email you at least 7 days before we take it. The
+          email says why and asks you to choose a new username.
+        </p>
+        <p>
+          Your page, your tips and your balance stay yours under the new
+          username. Links and QR codes that use your old username will stop
+          working, so update them. If you have not chosen a new username by
+          then, we give your page one and email it to you.
+        </p>
+        <p>
+          We may act sooner, or without notice, if a username impersonates
+          someone, infringes a trademark, or the law requires it.
+        </p>
+      </section>
     </LegalPlaceholder>
   );
 }

@@ -234,6 +234,25 @@ test('the terms set out the 10% fee and the NGN 2,000 minimums', async ({
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
 });
 
+// The owner, 3 Nov 2026: TipMe can take a username back, with notice, days before.
+test('the terms say TipMe can take back a username, with 7 days of notice', async ({
+  page,
+}) => {
+  await page.goto('/legal/terms');
+  const usernames = page.getByRole('region', { name: 'Your username' });
+  await expect(usernames).toContainText('at least 7 days before we take it');
+  await expect(usernames).toContainText('asks you to choose a new username');
+  await expect(usernames).toContainText(
+    'Your page, your tips and your balance stay yours',
+  );
+  await expect(usernames).toContainText(
+    'Links and QR codes that use your old username will stop working',
+  );
+  await expect(usernames).toContainText(
+    'impersonates someone, infringes a trademark, or the law requires it',
+  );
+});
+
 test('no legal page promises to publish before real payments, which are live', async ({
   page,
 }) => {
