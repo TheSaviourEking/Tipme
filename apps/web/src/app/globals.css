@@ -6337,9 +6337,13 @@ body > .coming-soon-page {
 
 @media (max-width: 30rem) {
   /* Three options in a phone-width card: keep each label on one line. */
+  .meet {
+    padding: var(--space-4);
+  }
+
   .meet .tm-lever__option {
-    padding-inline: 0.25rem;
-    font-size: var(--text-sm);
+    padding-inline: 0.125rem;
+    font-size: 0.8125rem;
     white-space: nowrap;
   }
 
