@@ -75,7 +75,9 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   // The paid tip counts towards the moment, not only the started one.
   await visitor.getByRole('button', { name: /^Pay/ }).click();
   await visitor.waitForURL(/\/tip\//);
-  await expect(visitor.getByRole('heading', { name: /got your thanks\.$/ })).toBeVisible({
+  await expect(
+    visitor.getByRole('heading', { name: /got your thanks\.$/ }),
+  ).toBeVisible({
     timeout: 20_000,
   });
 
