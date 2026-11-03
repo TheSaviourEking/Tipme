@@ -18,7 +18,8 @@ const canPlay = () => window.matchMedia(FINE_POINTER).matches;
 
 type Slot = 'left' | 'centre' | 'right';
 const SLOTS: Slot[] = ['left', 'centre', 'right'];
-const ADA = 'Ada';
+/** Left to right, as the board has them. */
+const START = ['Tobi', 'Ada', 'Zainab'];
 
 /**
  * The cards as a carousel: their names from left to right, and whether the centre one is turned
@@ -33,7 +34,7 @@ const CarouselContext = createContext<{
   /** Turns the centre card back, if it is still this one. */
   turnBack(name: string): void;
 }>({
-  carousel: { order: ['Tobi', ADA, 'Zainab'], turned: false },
+  carousel: { order: START, turned: false },
   choose: () => {},
   turnBack: () => {},
 });
@@ -54,7 +55,7 @@ function useCarouselCard(name: string) {
 /** The stack of example cards, Tobi to the left of Ada and Zainab to her right. */
 export function DemoStack({ children }: { children: ReactNode }) {
   const [carousel, setCarousel] = useState<Carousel>({
-    order: ['Tobi', ADA, 'Zainab'],
+    order: START,
     turned: false,
   });
   const choose = (name: string) =>
@@ -81,7 +82,7 @@ export function DemoStack({ children }: { children: ReactNode }) {
   );
 }
 
-/** How long Ada's thank-you stays before the card settles back. */
+/** How long a thank-you stays before the card settles back. */
 const THANKS_MS = 4500;
 
 function Shell({
@@ -137,31 +138,6 @@ function Slip({ note, from }: { note: ReactNode; from: string }) {
   );
 }
 
-/** An example person: click to turn the card over to a thank-you note, click again to turn back. */
-export function PersonCard({
-  className,
-  front,
-  note,
-  name,
-}: {
-  className: string;
-  front: ReactNode;
-  note: string;
-  name: string;
-}) {
-  const { slot, flipped, choose } = useCarouselCard(name);
-  return (
-    <Shell
-      className={className}
-      slot={slot}
-      flipped={flipped}
-      onClick={() => canPlay() && choose()}
-      front={front}
-      back={<Slip note={note} from={name} />}
-    />
-  );
-}
-
 const BURST = Array.from({ length: 9 }, (_, i) => ({
   dx: Math.round(Math.sin(i * 2.4) * 70),
   dy: -(90 + ((i * 37) % 70)),
@@ -170,16 +146,27 @@ const BURST = Array.from({ length: 9 }, (_, i) => ({
 }));
 
 /**
- * Ada's card: keys that can be chosen, and a Tip that sends up hearts, turns the card to a thank
- * you for the chosen amount and, a few seconds later, settles back. It pays nothing.
+ * An example person's card, alike for all three so the centre one is always the biggest. In the
+ * centre its keys can be chosen; its Tip sends up hearts, turns the card to a thank you for the
+ * chosen amount and, a few seconds later, settles back; and clicking the card turns it over to a
+ * note. To one side, any click brings it to the centre. It pays nothing.
  */
-export function AdaCard({
+export function PersonCard({
+  name,
+  fullName = name,
+  role,
+  className,
   cover,
   avatar,
   amounts,
   initial,
   note,
 }: {
+  /** The name the card is known by in the carousel and signs its notes with. */
+  name: string;
+  fullName?: string;
+  role: string;
+  className: string;
   cover: ReactNode;
   avatar: ReactNode;
   amounts: string[];
@@ -187,7 +174,7 @@ export function AdaCard({
   note: string;
 }) {
   const [chosen, setChosen] = useState(initial);
-  const { slot, centred, flipped, choose, turnBack } = useCarouselCard(ADA);
+  const { slot, centred, flipped, choose, turnBack } = useCarouselCard(name);
   const [thanks, setThanks] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -195,7 +182,7 @@ export function AdaCard({
 
   const settle = () => {
     clearTimeout(timer.current);
-    // Only if Ada is still in the centre; the carousel may have turned since.
+    // Only if this card is still in the centre; the carousel may have turned since.
     turnBack();
     // The thank-you stays on the back until the card has turned away from it.
     timer.current = setTimeout(() => setThanks(null), 700);
@@ -212,7 +199,7 @@ export function AdaCard({
 
   return (
     <Shell
-      className="home-demo__main"
+      className={className}
       slot={slot}
       flipped={flipped}
       onClick={() => {
@@ -228,8 +215,8 @@ export function AdaCard({
           <div className="home-demo__cover">{cover}</div>
           <div className="home-demo__body">
             <span className="home-demo__avatar">{avatar}</span>
-            <p className="home-demo__name">Ada Okafor</p>
-            <p className="home-demo__role">Content creator/Video editor</p>
+            <p className="home-demo__name">{fullName}</p>
+            <p className="home-demo__role">{role}</p>
             <div className="home-keys">
               {amounts.map((amount, index) => (
                 <span
@@ -237,7 +224,7 @@ export function AdaCard({
                   className="home-key"
                   data-selected={index === chosen ? 'true' : undefined}
                   onClick={(event) => {
-                    // To one side, the click goes on to the card and brings Ada to the centre.
+                    // To one side, the click goes on to the card and brings it to the centre.
                     if (!canPlay() || !centred) return;
                     event.stopPropagation();
                     setChosen(index);
@@ -263,7 +250,7 @@ export function AdaCard({
       back={
         <Slip
           note={thanks ? `Thank you for the ${thanks}!` : note}
-          from="Ada"
+          from={name}
         />
       }
     >

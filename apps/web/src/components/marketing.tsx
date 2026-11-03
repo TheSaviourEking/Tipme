@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { Button } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
-import { AdaCard, DemoStack, PersonCard } from './demo-cards';
+import { DemoStack, PersonCard } from './demo-cards';
 import { IndigoQr } from './marketing/indigo-qr';
 import { ModeText } from './payment-mode-slot';
 
@@ -111,71 +111,64 @@ const TIP_LABEL = naira(DEFAULT_TIP);
 /**
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
  * technology and holds nothing focusable; the caption says in words that the people are examples.
- * On a narrow screen only the front card shows, as on the phone board. On a wide screen with a
- * fine pointer the cards drift, turn over to a note when clicked (one at a time, and the turned
- * card comes to the front), and Ada's Tip says thank you
- * (demo-cards.tsx): small client islands, and the headline never waits for them.
+ * On a narrow screen only Ada's card shows, as on the phone board. With a mouse the cards are a
+ * carousel (demo-cards.tsx): a clicked card comes to the centre, the centre card is the biggest,
+ * and only it turns over or takes a pretend tip. Small client islands; the headline never waits.
  */
 export function HomeDemo() {
+  const amounts = STANDARD_TIP_PRESETS_MINOR.map(naira);
+  const initial = STANDARD_TIP_PRESETS_MINOR.indexOf(DEFAULT_TIP);
   return (
     <div className="home-demo">
       <DemoStack>
         <PersonCard
-          className="home-demo__card home-demo__card--zainab"
           name="Zainab"
+          role="Streamer"
+          className="home-demo__card home-demo__card--zainab"
+          amounts={amounts}
+          initial={initial}
           note="Thank you for hanging out in chat. You make every stream better."
-          front={
-            <>
-              <div className="home-demo__cover home-demo__cover--ocean">
-                <Heart className="home-demo__cover-heart" />
-              </div>
-              <div className="home-demo__body">
-                <span className="home-demo__avatar home-demo__avatar--initial">
-                  Z
-                </span>
-                <p className="home-demo__name">Zainab</p>
-                <p className="home-demo__role">Streamer</p>
-                <span className="home-demo__tip">Tip Zainab</span>
-              </div>
-            </>
+          cover={
+            <div className="home-demo__cover-fill home-demo__cover--ocean">
+              <Heart className="home-demo__cover-heart" />
+            </div>
+          }
+          avatar={<span className="home-demo__initial">Z</span>}
+        />
+        <PersonCard
+          name="Tobi"
+          role="DJ and producer"
+          className="home-demo__card home-demo__card--tobi"
+          amounts={amounts}
+          initial={initial}
+          note="Thanks for dancing to my set all night. See you at the next one!"
+          cover={
+            <Image
+              src="/covers/waveform.webp"
+              alt=""
+              fill
+              sizes="320px"
+              className="home-demo__img"
+            />
+          }
+          avatar={
+            <Image
+              src="/portraits/tobi.webp"
+              alt=""
+              width={92}
+              height={92}
+              sizes="92px"
+              className="home-demo__img"
+            />
           }
         />
         <PersonCard
-          className="home-demo__card home-demo__card--tobi"
-          name="Tobi"
-          note="Thanks for dancing to my set all night. See you at the next one!"
-          front={
-            <>
-              <div className="home-demo__cover">
-                <Image
-                  src="/covers/waveform.webp"
-                  alt=""
-                  fill
-                  sizes="280px"
-                  className="home-demo__img"
-                />
-              </div>
-              <div className="home-demo__body">
-                <span className="home-demo__avatar">
-                  <Image
-                    src="/portraits/tobi.webp"
-                    alt=""
-                    width={76}
-                    height={76}
-                    sizes="76px"
-                    className="home-demo__img"
-                  />
-                </span>
-                <p className="home-demo__name">Tobi</p>
-                <p className="home-demo__role">DJ and producer</p>
-                <span className="home-demo__tip">Tip Tobi</span>
-              </div>
-            </>
-          }
-        />
-        <AdaCard
-          amounts={STANDARD_TIP_PRESETS_MINOR.map(naira)}
-          initial={STANDARD_TIP_PRESETS_MINOR.indexOf(DEFAULT_TIP)}
+          name="Ada"
+          fullName="Ada Okafor"
+          role="Content creator/Video editor"
+          className="home-demo__main"
+          amounts={amounts}
+          initial={initial}
           note="Thank you for watching my edits. It means a lot to me."
           cover={
             <Image
@@ -201,6 +194,47 @@ export function HomeDemo() {
       </DemoStack>
       <p className="home-demo__caption">Examples, not real people.</p>
     </div>
+  );
+}
+
+/** The confetti's colours, as hearts that rise from the avatar while the step is hovered. */
+const FLOATERS = [
+  { x: -14, delay: 0, colour: '#e8608a' },
+  { x: 12, delay: 280, colour: '#7b3cf0' },
+  { x: -4, delay: 560, colour: '#4fc1c6' },
+  { x: 20, delay: 840, colour: '#e8b93c' },
+  { x: -20, delay: 1120, colour: '#17171a' },
+];
+
+function FloatingHearts() {
+  return (
+    <span className="home-step__float">
+      {FLOATERS.map(({ x, delay, colour }) => (
+        <span
+          key={colour}
+          className="home-step__floater"
+          style={
+            {
+              '--x': `${x}px`,
+              '--delay': `${delay}ms`,
+              '--colour': colour,
+            } as React.CSSProperties
+          }
+        >
+          <Heart />
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** The QR, with a scan line that sweeps it while the step is hovered. */
+function ScannedQr() {
+  return (
+    <>
+      <IndigoQr className="home-step__qr" sizes="120px" />
+      <span className="home-step__scan" />
+    </>
   );
 }
 
@@ -255,16 +289,13 @@ export function TippedSteps() {
                 className="home-demo__img"
               />
             </span>
+            <FloatingHearts />
           </>
         }
       >
         Claim your link, add your face, choose your cover.
       </Step>
-      <Step
-        title="Share it anywhere"
-        tone="soft"
-        media={<IndigoQr className="home-step__qr" sizes="120px" />}
-      >
+      <Step title="Share it anywhere" tone="soft" media={<ScannedQr />}>
         Put your QR on the counter, or your link in your bio.
       </Step>
       <Step
@@ -291,11 +322,7 @@ export function TippedSteps() {
 export function TippingSteps() {
   return (
     <ol className="home-steps" aria-label="Steps if you're tipping">
-      <Step
-        title="Scan or tap"
-        tone="soft"
-        media={<IndigoQr className="home-step__qr" sizes="120px" />}
-      >
+      <Step title="Scan or tap" tone="soft" media={<ScannedQr />}>
         Scan their QR code or open their link. No app, no account.
       </Step>
       <Step

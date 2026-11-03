@@ -37,6 +37,27 @@ test('home switches between getting tipped and tipping with one lever', async ({
   ).toBeVisible();
 });
 
+test("the tipping steps' chosen amount reads as chosen on the grey well", async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('radio', { name: "If you're tipping" }).click();
+  const chosen = page
+    .getByRole('list', { name: "Steps if you're tipping" })
+    .locator('.home-key[data-selected="true"]');
+  await expect(chosen).toHaveText(/₦5,000/);
+  // Its white figures need the purple behind them, not the plain keys' light face.
+  expect(
+    await chosen.evaluate((key) => getComputedStyle(key).backgroundColor),
+  ).not.toBe(
+    await page
+      .getByRole('list', { name: "Steps if you're tipping" })
+      .locator('.home-key:not([data-selected])')
+      .first()
+      .evaluate((key) => getComputedStyle(key).backgroundColor),
+  );
+});
+
 test('home states the fee and the minimum plainly', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('TipMe keeps 10% of each tip')).toBeVisible();
@@ -246,6 +267,66 @@ test("Ada's keys and Tip only bring her to the centre while she is to one side",
   await expect(ada.locator('.home-burst')).toHaveCount(0);
 });
 
+// The owner, 3 Nov 2026: "the one in the center should always be the biggest ... They should all
+// have amount buttons when in the middle ... and they should have the easter eggs too."
+test('the centre card is always the biggest, as the carousel turns', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const cards = {
+    tobi: page.locator('.home-demo__card--tobi'),
+    ada: page.locator('.home-demo__main'),
+    zainab: page.locator('.home-demo__card--zainab'),
+  };
+  // Both ways: a card can be as wide yet shorter, and the owner saw exactly that.
+  const sizes = async () => {
+    const at = await slots(page);
+    const size = async (name: keyof typeof cards) => {
+      const { width, height } = await cards[name].evaluate((node) => {
+        const { width, height } = node.getBoundingClientRect();
+        return { width, height };
+      });
+      return { width, height };
+    };
+    const centre = (Object.keys(at) as (keyof typeof cards)[]).find(
+      (name) => at[name] === 'centre',
+    )!;
+    const others = (Object.keys(at) as (keyof typeof cards)[]).filter(
+      (name) => name !== centre,
+    );
+    return {
+      centre: await size(centre),
+      sides: await Promise.all(others.map(size)),
+    };
+  };
+  for (const turn of ['start', 'tobi', 'zainab'] as const) {
+    if (turn !== 'start') await clickSide(page, cards[turn], 'left');
+    const { centre, sides } = await sizes();
+    for (const side of sides) {
+      expect(centre.width, `${turn}: width`).toBeGreaterThan(side.width);
+      expect(centre.height, `${turn}: height`).toBeGreaterThan(side.height);
+    }
+  }
+});
+
+test('every card in the centre has amounts and a Tip, and says its own thank-you', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ready(page);
+  const tobi = page.locator('.home-demo__card--tobi');
+  await clickSide(page, tobi, 'left');
+  for (const amount of ['₦2,000', '₦5,000', '₦10,000'])
+    await expect(tobi.getByText(amount, { exact: true })).toBeVisible();
+  await tobi.getByText('₦10,000', { exact: true }).click();
+  await tobi.getByText('Tip ₦10,000').click();
+  await expect(tobi).toHaveAttribute('data-flipped', 'true');
+  const back = tobi.locator('.home-flip__back');
+  await expect(back.getByText('Thank you for the ₦10,000!')).toBeVisible();
+  await expect(back).toContainText('Tobi');
+});
+
 // The owner looked in a laptop window narrower than the three-card spread (3 Nov 2026): the lone
 // card still answers a mouse there.
 test('in a narrower desktop window the lone example card still drifts and says thank you', async ({
@@ -306,4 +387,35 @@ test('the example cards hold nothing to focus, so assistive technology skips the
         'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable]',
       ),
   ).toHaveCount(0);
+});
+
+// The owner, 3 Nov 2026: "We need some activity/animations on the top of this cards when hovered,
+// e.g the hearts could react or something."
+test("a step's picture moves while the step is hovered, and not otherwise", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/');
+  const steps = page.getByRole('list', { name: 'Steps if you get tipped' });
+  const moving = () =>
+    steps.evaluate(
+      (list) =>
+        list
+          .getAnimations({ subtree: true })
+          .filter((a) => a.playState === 'running').length,
+    );
+  expect(await moving()).toBe(0);
+  for (const step of await steps.locator('.home-step').all()) {
+    await step.hover();
+    await expect
+      .poll(moving, { message: await step.innerText() })
+      .toBeGreaterThan(0);
+    await page.mouse.move(0, 0);
+    await expect.poll(moving).toBe(0);
+  }
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await steps.locator('.home-step').first().hover();
+  await page.waitForTimeout(300);
+  expect(await moving()).toBe(0);
 });

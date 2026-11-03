@@ -741,8 +741,13 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   background: var(--brand-soft);
 }
 
-.home-demo__main .home-demo__cover {
+.home-flip .home-demo__cover {
   height: 7.75rem;
+}
+
+.home-demo__cover-fill {
+  position: absolute;
+  inset: 0;
 }
 
 .home-demo__cover--ocean {
@@ -752,7 +757,8 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 .home-demo__cover-heart {
   position: absolute;
   top: 0.5rem;
-  left: 7rem;
+  left: 50%;
+  translate: -50% 0;
   width: 6.875rem;
   height: 6.875rem;
   fill: var(--demo-ocean-heart);
@@ -766,7 +772,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   padding: 0 1.125rem 1.375rem;
 }
 
-.home-demo__main .home-demo__body {
+.home-flip .home-demo__body {
   padding: 0 1.25rem 1.5rem;
 }
 
@@ -784,16 +790,16 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   background: var(--brand-soft);
 }
 
-.home-demo__main .home-demo__avatar {
+.home-flip .home-demo__avatar {
   width: 5.75rem;
   height: 5.75rem;
   margin-top: -2.875rem;
   border-width: 4px;
 }
 
-.home-demo__avatar--initial {
+.home-demo__initial {
   color: var(--brand-ink);
-  font: 400 1.875rem / 1 var(--font-editorial);
+  font: 400 2.25rem / 1 var(--font-editorial);
 }
 
 .home-demo__avatar img {
@@ -807,7 +813,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   font: 400 1.875rem / 1 var(--font-editorial);
 }
 
-.home-demo__main .home-demo__name {
+.home-flip .home-demo__name {
   font-size: 2.375rem;
 }
 
@@ -817,7 +823,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   font-weight: 600;
 }
 
-.home-demo__main .home-demo__role {
+.home-flip .home-demo__role {
   margin-bottom: 1rem;
   font-size: var(--text-sm);
 }
@@ -838,7 +844,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   font-weight: 700;
 }
 
-.home-demo__main .home-demo__tip {
+.home-flip .home-demo__tip {
   min-height: 3.125rem;
   border-radius: var(--radius-field);
   font-size: 0.9375rem;
@@ -873,7 +879,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   font-weight: 700;
 }
 
-.home-keys[data-tone='dark'] .home-key {
+.home-keys[data-tone='dark'] .home-key:not([data-selected='true']) {
   background: var(--surface-raised);
 }
 
@@ -1160,9 +1166,9 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
   /*
    * A carousel of three places, each named by the card's centre (demo-cards.tsx sets data-slot).
-   * The cards are all Ada's width; to one side each shrinks to its board width (Tobi 17.5rem,
-   * Zainab 15.625rem, Ada 17rem). The place uses translate, scale and rotate, which the drift's
-   * transform adds to rather than replaces.
+   * The cards are alike, so the centre one is always the biggest; to one side a card shrinks to
+   * 82%. The place uses translate, scale and rotate, which the drift's transform adds to rather
+   * than replaces.
    */
   .home-demo__card,
   .home-demo__main {
@@ -1174,18 +1180,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     translate: -50% -50%;
     scale: var(--slot-scale);
     rotate: var(--slot-tilt);
-  }
-
-  .home-demo__main {
-    --side-scale: 0.85;
-  }
-
-  .home-demo__card--tobi {
-    --side-scale: 0.875;
-  }
-
-  .home-demo__card--zainab {
-    --side-scale: 0.78125;
   }
 
   .home-flip[data-slot='centre'] {
@@ -1200,7 +1194,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     --slot-x: 8.75rem;
     --slot-y: 13rem;
     --slot-z: 1;
-    --slot-scale: var(--side-scale);
+    --slot-scale: 0.82;
     --slot-tilt: -5deg;
   }
 
@@ -1208,7 +1202,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     --slot-x: 28rem;
     --slot-y: 12.25rem;
     --slot-z: 1;
-    --slot-scale: var(--side-scale);
+    --slot-scale: 0.82;
     --slot-tilt: 5deg;
   }
 
@@ -1277,6 +1271,226 @@ body:has(.dashboard-page) .site-nav .nav-guest {
     margin: -0.75rem 0 0 -0.75rem;
     fill: var(--brand-primary);
     opacity: 0;
+  }
+}
+
+/* Hearts and a scan line that a hovered step uses; still pictures otherwise. */
+.home-step__float,
+.home-step__scan {
+  display: none;
+}
+
+/*
+ * A hovered step's picture acts out its step (the owner, 3 Nov 2026): hearts rise from the avatar
+ * over the cover, the QR lifts and is scanned, tips arrive and their hearts beat, the amounts are
+ * pressed in turn, the big heart beats. Mouse only, where motion is welcome; transforms and
+ * opacity only. The picture is aria-hidden, so nothing is said or focused.
+ */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .home-step__media > img {
+    transition: scale 900ms var(--ease-spring);
+  }
+
+  .home-step:hover .home-step__media > img {
+    scale: 1.06;
+  }
+
+  .home-step:hover .home-step__avatar {
+    animation: home-step-bob 1.1s ease-in-out infinite alternate;
+  }
+
+  .home-step__float {
+    display: block;
+    position: absolute;
+    bottom: 3.5rem;
+    left: 3.25rem;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* A white edge keeps the rising hearts apart from the confetti printed on the cover. */
+  .home-step__floater {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1.625rem;
+    height: 1.625rem;
+    margin: -0.8125rem 0 0 -0.8125rem;
+    fill: var(--colour);
+    stroke: var(--surface-raised);
+    stroke-width: 2.5px;
+    paint-order: stroke;
+    opacity: 0;
+  }
+
+  .home-step__floater svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .home-step:hover .home-step__floater {
+    animation: home-step-float 1.6s ease-out var(--delay) infinite;
+  }
+
+  .home-step__scan {
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7.375rem;
+    height: 7.375rem;
+    overflow: hidden;
+    border-radius: 0.875rem;
+    translate: -50% -50%;
+    pointer-events: none;
+  }
+
+  .home-step__scan::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 0.75rem;
+    background: linear-gradient(
+      transparent,
+      rgb(123 60 240 / 55%) 70%,
+      rgb(255 255 255 / 90%)
+    );
+    opacity: 0;
+  }
+
+  .home-step:hover .home-step__qr,
+  .home-step:hover .home-step__scan {
+    animation: home-step-lift 1.4s ease-in-out infinite alternate;
+  }
+
+  .home-step:hover .home-step__scan::after {
+    animation: home-step-scan 1.4s ease-in-out infinite;
+  }
+
+  .home-step:hover .home-step__tips li {
+    animation: home-step-arrive 520ms var(--ease-spring) both;
+  }
+
+  .home-step:hover .home-step__tips li:nth-child(2) {
+    animation-delay: 120ms;
+  }
+
+  .home-step:hover .home-step__tips li:nth-child(3) {
+    animation-delay: 240ms;
+  }
+
+  .home-step:hover .home-step__tips svg {
+    animation: home-step-beat 1.2s ease-in-out infinite;
+  }
+
+  .home-step:hover .home-step__tips li:nth-child(2) svg {
+    animation-delay: 200ms;
+  }
+
+  .home-step:hover .home-step__tips li:nth-child(3) svg {
+    animation-delay: 400ms;
+  }
+
+  .home-step:hover .home-step__keys .home-key {
+    animation: home-step-press 1.8s ease-in-out infinite;
+  }
+
+  .home-step:hover .home-step__keys .home-key:nth-child(2) {
+    animation-delay: 300ms;
+  }
+
+  .home-step:hover .home-step__keys .home-key:nth-child(3) {
+    animation-delay: 600ms;
+  }
+
+  .home-step:hover .home-step__keys .home-demo__tip {
+    animation: home-step-press 1.8s ease-in-out 900ms infinite;
+  }
+
+  .home-step:hover .home-step__heart {
+    animation: home-step-beat 1.1s ease-in-out infinite;
+  }
+}
+
+@keyframes home-step-bob {
+  to {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes home-step-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.5);
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), -5.5rem) scale(1);
+  }
+}
+
+@keyframes home-step-lift {
+  to {
+    transform: translateY(-5px) rotate(-2deg);
+  }
+}
+
+@keyframes home-step-scan {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.75rem);
+  }
+
+  15%,
+  85% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(7.375rem);
+  }
+}
+
+@keyframes home-step-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes home-step-beat {
+  0%,
+  60%,
+  100% {
+    transform: scale(1);
+  }
+
+  20% {
+    transform: scale(1.22);
+  }
+
+  40% {
+    transform: scale(0.96);
+  }
+}
+
+@keyframes home-step-press {
+  0%,
+  20%,
+  100% {
+    transform: translateY(0);
+  }
+
+  8% {
+    transform: translateY(2px);
   }
 }
 
