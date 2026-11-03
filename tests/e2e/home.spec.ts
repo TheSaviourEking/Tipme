@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { identity, signInWithEmail } from './helpers';
 
 // Home, rebuilt to the ScreenHome board (docs/design/redesign/boards/ScreenHome.dc.html).
 
@@ -62,10 +63,41 @@ test('the hero tip demo uses the standard amounts', async ({ page }) => {
   await expect(page.getByText(/examples, not real people/i)).toBeVisible();
 });
 
-test('the claim field carries the handle to sign up', async ({ page }) => {
+test('the handle typed on Home is waiting, lowercased, at the handle step of sign-up', async ({
+  page,
+}, testInfo) => {
+  const who = identity(testInfo);
+  // Capitals typed on Home: sign-up lowercases them, as the handle rule requires.
+  const typed = who.handle.toUpperCase();
   await page.goto('/');
   const form = page.getByRole('form', { name: 'Claim your link' });
-  await form.getByLabel('Your handle').fill('kemi_cuts');
+  await form.getByLabel('Your handle').fill(typed);
   await form.getByRole('button', { name: 'Claim your username' }).click();
-  await expect(page).toHaveURL(/\/sign-up\?handle=kemi_cuts$/);
+  await expect(page).toHaveURL(/\/sign-up\?handle=/);
+  // Through the email and the code (the handle must survive both) to the handle step.
+  await signInWithEmail(page, who.email, page.url());
+  const field = page.getByLabel('Handle');
+  await expect(field).toHaveValue(who.handle);
+  await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
+  // Still editable.
+  await field.fill(`${who.handle}_x`);
+  await expect(field).toHaveValue(`${who.handle}_x`);
+});
+
+test('a handle in the sign-up link that breaks the handle rule prefills nothing', async ({
+  page,
+}, testInfo) => {
+  const who = identity(testInfo);
+  await signInWithEmail(page, who.email, '/sign-up?handle=not%20a-handle!');
+  await expect(page.getByLabel('Handle')).toBeVisible();
+  await expect(page.getByLabel('Handle')).toHaveValue('');
+});
+
+test('the claim field says capitals become lowercase', async ({ page }) => {
+  await page.goto('/');
+  const field = page.getByLabel('Your handle');
+  await expect(field).toHaveAttribute('title', /lowercase/);
+  expect(
+    await field.evaluate((input) => getComputedStyle(input).textTransform),
+  ).toBe('lowercase');
 });

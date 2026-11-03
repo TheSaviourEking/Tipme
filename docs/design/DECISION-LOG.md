@@ -213,3 +213,7 @@ Approved direction (product owner): onboarding should feel human and stress-free
 ## Home hero names global payments (owner's decision, 3 Nov 2026)
 
 The redesigned home page says "Your personalized link and QR code to receive global payments (USD, EUR, GBP, NGN, Stablecoins)", as on the `ScreenHome` board. The owner chose this wording knowing TipMe takes naira only today ("use global payment. We'd work on that soon"). It is a product and copy decision, not a regulatory approval: payments in other currencies and stablecoins are not built, and nothing in `docs/00-DECISIONS.md` approves them.
+
+## Home's example card starts on ₦5,000 (owner's decision, 3 Nov 2026)
+
+The example card in the Home hero shows ₦5,000 chosen and a "Tip ₦5,000" button, as on the `ScreenHome` board. The owner said on 3 Nov 2026: "it should start selected at 5k". It is a picture of a tip page, not a working one. Real tip pages keep "₦2,000 starts selected" (2 Nov 2026). A product and visual decision, not a regulatory approval; no D-item is affected.

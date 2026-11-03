@@ -71,7 +71,7 @@ export function HomeClaim() {
           spellCheck={false}
           maxLength={30}
           pattern="[A-Za-z0-9_]{3,30}"
-          title="3 to 30 letters, numbers or underscores"
+          title="3 to 30 letters, numbers or underscores. Capitals become lowercase."
         />
       </label>
       <Button type="submit" variant="continue" className="home-claim__go">

@@ -690,6 +690,8 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   background: none;
   color: var(--text-primary);
   font: 700 1.0625rem / 1.25 var(--font-interface);
+  /* Sign-up lowercases the handle, so the field shows what will be claimed. */
+  text-transform: lowercase;
 }
 
 .home-claim__field input::placeholder {
@@ -1187,6 +1189,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 }
 
 @media (forced-colors: active) {
+  .home-claim__field,
   .home-key,
   .home-demo__main,
   .home-demo__card,

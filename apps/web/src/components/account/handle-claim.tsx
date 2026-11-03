@@ -14,10 +14,17 @@ const describe: Record<HandleStatus, string> = {
 };
 
 /** Choose a handle, with a live availability check, and claim it. */
-export function HandleClaim({ onClaimed }: { onClaimed: () => void }) {
+export function HandleClaim({
+  onClaimed,
+  initial = '',
+}: {
+  onClaimed: () => void;
+  /** A handle to start with (from Home's claim field): editable, and checked like any other. */
+  initial?: string;
+}) {
   const id = useId();
   const host = useSiteHost();
-  const [raw, setRaw] = useState('');
+  const [raw, setRaw] = useState(initial);
   const [check, setCheck] = useState<{
     for: string;
     status: HandleStatus;

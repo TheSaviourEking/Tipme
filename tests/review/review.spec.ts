@@ -31,6 +31,19 @@ for (const screen of SCREENS) {
       },
     };
     await screen.open(page, ctx);
+    // Parts of a page (the payment-mode wording, for one) stream in after the page has loaded. React
+    // marks a part still waiting with a `$?` comment, or `$~` while it holds the reveal back for a
+    // moment, so the picture waits until none is left.
+    await page.waitForFunction(() => {
+      const comments = document.createTreeWalker(
+        document,
+        NodeFilter.SHOW_COMMENT,
+      );
+      while (comments.nextNode())
+        if (['$?', '$~'].includes(String(comments.currentNode.nodeValue)))
+          return false;
+      return true;
+    });
     await page.evaluate(() => document.fonts.ready);
     const file = `${slug(screen.group)}/${slug(screen.name)}-${testInfo.project.name}.png`;
     mkdirSync(dirname(`${OUT}/${file}`), { recursive: true });
