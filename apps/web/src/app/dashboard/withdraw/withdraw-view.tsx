@@ -231,19 +231,29 @@ export default function WithdrawPage({
         ? BigInt(ready.withdrawableMinor)
         : available
       : BigInt(0);
+  const chosen = amount === null ? null : BigInt(amount);
+  // Tapping the amount already chosen changes nothing: the request key and any warning stay, as
+  // they do when typing the same text. Only a different amount starts a new request.
   const choose = (minor: bigint) => {
     setRaw(nairaSign(minor.toString()));
+    if (chosen === minor) return;
     setError('');
     key.current = null;
   };
-  const chosen = amount === null ? null : BigInt(amount);
   const shortcuts = SHORTCUTS_MINOR.filter((minor) => minor < withdrawable);
   const withdrawals =
     activity.data?.filter((row) => row.kind === 'withdrawal') ?? null;
   const smallest = nairaSign(String(FEE_POLICY_V1.minWithdrawalMinor));
-  // Withdrawing is free: TipMe pays the transfer fee (see the terms), so what arrives is the
-  // amount asked for. The quote's feeMinor is TipMe's cost, never taken from the recipient.
-  const covered = chosen !== null && chosen <= available;
+  // Only an amount the server would accept gets figures: within what can be withdrawn, and at
+  // least the minimum unless it is all of it.
+  const sendable =
+    chosen !== null &&
+    chosen <= withdrawable &&
+    (chosen >= FEE_POLICY_V1.minWithdrawalMinor || chosen === withdrawable);
+  // Withdrawing is free: TipMe pays the payout's transfer fee (the terms; buildPayoutFeePosting
+  // books it as TipMe's expense). The quote's feeMinor is that TipMe-paid cost, never taken from
+  // the recipient, so what arrives is the amount asked for.
+  const covered = sendable;
   return (
     <div className="dashboard-section withdraw">
       <h1>Withdraw</h1>
@@ -340,7 +350,9 @@ export default function WithdrawPage({
               <Button
                 type="submit"
                 variant="continue"
-                disabled={busy || !state.canWithdraw}
+                disabled={
+                  busy || !state.canWithdraw || (amount !== null && !sendable)
+                }
                 aria-busy={busy}
               >
                 {amount ? `Withdraw ${naira(amount)}` : 'Withdraw'}
