@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { Button, Surface } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
-import { qrMatrix } from '@/lib/qr-render';
+import { ExampleQr } from './marketing/example-qr';
 import { ModeText } from './payment-mode-slot';
 
 /** The three steps of a tip, in order. */
@@ -101,40 +101,6 @@ function Heart({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
       <path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" />
-    </svg>
-  );
-}
-
-/** A real QR code that points at the site, not at a person; drawn once as a path of row runs. */
-const EXAMPLE_QR = (() => {
-  const { size, isDark } = qrMatrix('https://usetipme.xyz');
-  let path = '';
-  for (let row = 0; row < size; row += 1) {
-    let col = 0;
-    while (col < size) {
-      if (!isDark(row, col)) {
-        col += 1;
-        continue;
-      }
-      const start = col;
-      while (col < size && isDark(row, col)) col += 1;
-      path += `M${start} ${row}h${col - start}v1h-${col - start}z`;
-    }
-  }
-  return { size, path };
-})();
-
-function ExampleQr({ className }: { className?: string }) {
-  const { size, path } = EXAMPLE_QR;
-  return (
-    <svg
-      viewBox={`-2 -2 ${size + 4} ${size + 4}`}
-      aria-hidden="true"
-      className={className}
-      shapeRendering="crispEdges"
-    >
-      <rect x="-2" y="-2" width={size + 4} height={size + 4} fill="#fff" />
-      <path d={path} fill="#000" />
     </svg>
   );
 }

@@ -44,6 +44,18 @@ export const SCREENS: ReviewScreen[] = [
     },
   },
   {
+    group: 'Public',
+    name: 'Individuals',
+    board: 'PageCreators',
+    open: visit('/for-creators'),
+  },
+  {
+    group: 'Public',
+    name: 'Businesses',
+    board: 'PageBusinesses',
+    open: visit('/for-businesses'),
+  },
+  {
     group: 'Tipping',
     name: 'Tip page',
     board: 'TipJourney',

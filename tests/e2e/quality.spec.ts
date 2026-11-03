@@ -78,21 +78,15 @@ test('homepage makes creating a recipient page a clear next step', async ({
   await expect(page.getByText('Examples, not real people.')).toBeVisible();
 });
 
-test('business page clearly says accounts are not open yet', async ({
+test('business page registers interest and sends nothing until the visitor does', async ({
   page,
 }) => {
   await page.goto('/for-businesses');
   await expect(
-    page.getByRole('heading', { name: 'Business pages are not open yet.' }),
+    page.getByRole('heading', { name: 'TipMe for businesses is on its way.' }),
   ).toBeVisible();
-  await expect(
-    page.getByText(/have not announced a launch date/),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('link', { name: /Create an individual page/ }),
-  ).toHaveAttribute('href', '/sign-up');
-  await page.getByLabel('Your email address').fill('business@example.com');
-  await page.getByRole('button', { name: 'Prepare email' }).click();
+  await page.getByLabel('Work email').fill('business@example.com');
+  await page.getByRole('button', { name: "Tell me when it's ready" }).click();
   const emailLink = page.getByRole('link', { name: 'Open email app' });
   const href = await emailLink.getAttribute('href');
   if (!href) throw new Error('The business interest email link has no URL.');
@@ -100,9 +94,7 @@ test('business page clearly says accounts are not open yet', async ({
   expect(decodeURIComponent(href.replaceAll('+', ' '))).toContain(
     'business@example.com',
   );
-  await expect(page.getByRole('status')).toContainText(
-    'press Send to register your interest',
-  );
+  await expect(page.getByRole('status')).toContainText('press Send');
 });
 
 test('arrowing through amounts never pulls focus out of the radio group', async ({
@@ -273,16 +265,7 @@ test('how it works and creator pages exist as PRD marketing routes', async ({
   await page.goto('/for-creators');
   await expect(page).toHaveTitle(/For individuals/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'For the generous minds',
-  );
-  await page
-    .getByRole('main')
-    .getByRole('link', { name: /Meet a demo creator/ })
-    .click();
-  await expect(page).toHaveURL(/\/@ada$/);
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
-    'href',
-    /\/@ada$/,
+    'People already want to thank you.',
   );
 });
 
