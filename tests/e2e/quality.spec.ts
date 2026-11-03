@@ -241,7 +241,11 @@ test('the terms say TipMe can take back a username, with 7 days of notice', asyn
   await page.goto('/legal/terms');
   const usernames = page.getByRole('region', { name: 'Your username' });
   await expect(usernames).toContainText('at least 7 days before we take it');
-  await expect(usernames).toContainText('asks you to choose a new username');
+  await expect(usernames).toContainText('by email or on your dashboard');
+  await expect(usernames).toContainText(
+    'If we cannot reach you either way within 14 days, we go ahead',
+  );
+  await expect(usernames).toContainText('ask you to choose a new username');
   await expect(usernames).toContainText(
     'Your page, your tips and your balance stay yours',
   );

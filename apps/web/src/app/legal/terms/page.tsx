@@ -44,14 +44,17 @@ export default function TermsPlaceholder() {
         <p>
           Your username is how people find your page. If TipMe needs a username
           back, for example to protect a brand, a public figure or one of our
-          own names, we will email you at least 7 days before we take it. The
-          email says why and asks you to choose a new username.
+          own names, we will tell you at least 7 days before we take it, by
+          email or on your dashboard when you sign in. We say why and ask you to
+          choose a new username. If we cannot reach you either way within 14
+          days, we go ahead.
         </p>
         <p>
           Your page, your tips and your balance stay yours under the new
           username. Links and QR codes that use your old username will stop
           working, so update them. If you have not chosen a new username by
-          then, we give your page one and email it to you.
+          then, we give your page one and tell you by email or on your
+          dashboard.
         </p>
         <p>
           We may act sooner, or without notice, if a username impersonates
