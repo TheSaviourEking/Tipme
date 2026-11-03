@@ -29,9 +29,13 @@ export function ActivityList({ rows }: { rows: ActivityRow[] }) {
               {row.kind === 'tip'
                 ? `Tip from ${row.supporterLabel ?? 'a guest'}`
                 : 'Withdrawal'}
-              <small>{when(row.at)}</small>
+              <small>
+                {row.state === 'confirming' ? 'Being confirmed' : when(row.at)}
+              </small>
             </span>
-            <span className="activity-list__amount">
+            <span
+              className={`activity-list__amount${row.state === 'confirming' ? ' activity-list__amount--pending' : ''}`}
+            >
               {row.kind === 'withdrawal' ? '−' : ''}
               {naira(row.amountMinor)}{' '}
               <span className={`status-tag status-tag--${row.state}`}>

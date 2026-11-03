@@ -4638,8 +4638,9 @@ html:has(.confirm-dialog[open]) {
 }
 
 .dashboard-greeting p {
-  margin: var(--space-2) 0 0;
-  color: var(--text-secondary);
+  margin: 0;
+  font: 400 clamp(1.75rem, 4vw, 2.125rem) / 1.05 var(--font-editorial);
+  overflow-wrap: anywhere;
 }
 
 /* The balance is the instrument: ink numerals, its actions inside, no purple block. */
@@ -4662,12 +4663,33 @@ html:has(.confirm-dialog[open]) {
   font-weight: 600;
 }
 
+.balance-card__figures {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The balance never animates: no count-up, no tween. */
 .balance-card strong {
-  font-size: clamp(2.5rem, 6vw, 3.5rem);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-  font-variant-numeric: var(--numeric-variant);
+  font: 400 clamp(2.25rem, 9vw, 4.25rem) / 1.02 var(--font-editorial);
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-home .balance-card h1.balance-card__label {
+  margin: 0;
+  font: 600 var(--text-sm) / 1.4 var(--font-body, inherit);
+  letter-spacing: 0;
+}
+
+.dashboard-refresh-note,
+.dashboard-share-status {
+  margin: 0;
+}
+
+.dashboard-share-status:empty {
+  display: none;
 }
 
 .balance-card > .tm-hint {
@@ -4682,7 +4704,13 @@ html:has(.confirm-dialog[open]) {
 }
 
 .dashboard-actions .tm-button {
-  flex: 1 1 9rem;
+  flex: 1 1 8rem;
+}
+
+.dashboard-actions .balance-card__withdraw {
+  flex-basis: 100%;
+  min-height: 56px;
+  font-size: 1rem;
 }
 
 .balance-card__withdraw.tm-button--primary,
@@ -4709,10 +4737,22 @@ html:has(.confirm-dialog[open]) {
   box-shadow: var(--shadow-card-subtle);
 }
 
-.first-day h2 {
+.first-day h1 {
   margin: 0;
-  font: 400 1.75rem / 1.15 var(--font-editorial);
+  font: 400 clamp(2rem, 5vw, 2.875rem) / 1.05 var(--font-editorial);
   letter-spacing: -0.015em;
+}
+
+.first-day {
+  padding: clamp(1.25rem, 4vw, 1.875rem);
+  border-radius: 1.625rem;
+  box-shadow: var(--shadow-instrument);
+}
+
+/* What is not on the board's checklist: the balance, small, where the board puts it. */
+.first-day-balance {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .recipient-setup {
@@ -4764,9 +4804,17 @@ html:has(.confirm-dialog[open]) {
   font-weight: 700;
 }
 
+.recipient-setup__steps li > .recipient-setup__done {
+  color: var(--state-success);
+}
+
+.recipient-setup__later strong {
+  color: var(--text-secondary);
+}
+
 .recipient-setup__steps li a {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -4845,9 +4893,7 @@ html:has(.confirm-dialog[open]) {
 
 .dashboard-recent__head h2 {
   margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font: 400 1.75rem / 1.1 var(--font-editorial);
 }
 
 .dashboard-recent__head a {
@@ -4881,6 +4927,10 @@ html:has(.confirm-dialog[open]) {
   display: block;
   color: var(--text-secondary);
   font-size: var(--text-xs);
+}
+
+.activity-list__amount--pending {
+  color: var(--text-secondary);
 }
 
 .activity-list__amount {
@@ -4953,7 +5003,15 @@ html:has(.confirm-dialog[open]) {
   font: 400 1.25rem / 1 var(--font-editorial);
 }
 
+.page-card__head > div {
+  min-width: 0;
+}
+
 .page-card__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -5027,8 +5085,15 @@ html:has(.confirm-dialog[open]) {
 }
 
 .week-teaser span {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
   color: var(--text-secondary);
   font-size: var(--text-sm);
+}
+
+.week-teaser b {
+  color: var(--text-primary);
 }
 
 .moments h2 {
@@ -5151,6 +5216,72 @@ html:has(.confirm-dialog[open]) {
     grid-column: 1;
     grid-row: auto;
     justify-content: flex-start;
+  }
+}
+
+/* On a phone the dashboard navigation is a fixed bar of four, with the safe-area inset under it. */
+:root {
+  --dashboard-tab-bar: calc(68px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 40rem) {
+  .dashboard-page .dashboard-nav {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: calc(var(--z-nav) - 1);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    width: auto;
+    height: var(--dashboard-tab-bar);
+    margin: 0;
+    padding: 0 0 env(safe-area-inset-bottom, 0px);
+    border-top: 1px solid var(--edge-hairline);
+    border-radius: 0;
+    background: var(--surface-raised);
+    box-shadow: none;
+  }
+
+  .dashboard-page .dashboard-nav a {
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    height: 68px;
+    padding: 0 var(--space-1);
+    border-radius: 0;
+  }
+
+  .dashboard-page .dashboard-nav a[data-desktop-only] {
+    display: none;
+  }
+
+  .dashboard-page .dashboard-nav a[aria-current='page'] {
+    background: transparent;
+    box-shadow: none;
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: var(--brand-primary);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 5px;
+  }
+
+  /* Room under the page for the bar, footer included. */
+  body:has(.dashboard-page .dashboard-nav) {
+    padding-bottom: var(--dashboard-tab-bar);
+  }
+
+  html:has(.dashboard-page .dashboard-nav) .update-notice {
+    bottom: calc(var(--dashboard-tab-bar) + var(--space-3));
+  }
+}
+
+@media (forced-colors: active) {
+  .dashboard-page .dashboard-nav {
+    border-top: 1px solid CanvasText;
+  }
+
+  .dashboard-page .dashboard-nav a[aria-current='page'] {
+    text-decoration-color: Highlight;
   }
 }
 

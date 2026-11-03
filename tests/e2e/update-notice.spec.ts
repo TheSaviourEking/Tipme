@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { signUpRecipient } from './helpers';
 
 // An open page tells its visitor when TipMe has been updated, and reloads only when asked
 // (owner's request, 3 Nov 2026). The production build is what these tests run against.
@@ -129,4 +130,20 @@ test('on a phone the notice leaves the Tip bar and its button free @mobile', asy
     expect(box!.height).toBeGreaterThanOrEqual(44);
     expect(box!.width).toBeGreaterThanOrEqual(44);
   }
+});
+
+test('on the dashboard the notice and the tab bar never overlap @mobile', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  await serverUpdated(page);
+  await comeBackUntil(page, () => notice(page).isVisible());
+  const bar = await page
+    .getByRole('navigation', { name: 'Dashboard' })
+    .boundingBox();
+  const card = await notice(page).boundingBox();
+  expect(bar).not.toBeNull();
+  expect(card).not.toBeNull();
+  expect(card!.y + card!.height).toBeLessThanOrEqual(bar!.y);
 });

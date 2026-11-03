@@ -244,4 +244,26 @@ export const SCREENS: ReviewScreen[] = [
         .waitFor();
     },
   },
+  {
+    group: 'Dashboard',
+    name: 'Dashboard with tips',
+    board: 'ScreenDashboard',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(3);
+      await page.goto('/dashboard');
+      await page.getByRole('heading', { name: 'Ready to withdraw' }).waitFor();
+    },
+  },
+  {
+    group: 'Dashboard',
+    name: 'Before the first tip',
+    board: 'ScreenFirstDay',
+    async open(page, ctx) {
+      await ctx.recipient();
+      await page.goto('/dashboard');
+      await page
+        .getByRole('heading', { name: 'Get your page ready to share' })
+        .waitFor();
+    },
+  },
 ];

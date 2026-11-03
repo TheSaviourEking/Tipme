@@ -15,12 +15,24 @@ import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
-const links = [
-  { href: '/dashboard', label: 'Home' },
-  { href: '/dashboard/tips', label: 'Tips' },
-  { href: '/dashboard/qr', label: 'My QR' },
-  { href: '/dashboard/settings', label: 'Settings' },
-] as const;
+/**
+ * The dashboard's navigation: a segmented control on a desktop, the fixed four-item tab bar on a
+ * phone (My QR is not in the bar: Show QR sits beside Withdraw on Home).
+ */
+const links = (handle: string | null) =>
+  [
+    { href: '/dashboard', label: 'Home', phone: true },
+    { href: '/dashboard/tips', label: 'Tips', phone: true },
+    ...(handle ? [{ href: `/@${handle}`, label: 'My page', phone: true }] : []),
+    { href: '/dashboard/qr', label: 'My QR', phone: false },
+    { href: '/dashboard/settings', label: 'Settings', phone: true },
+  ] as const;
+
+const isCurrent = (pathname: string, href: string) =>
+  href === '/dashboard'
+    ? pathname === href
+    : !href.startsWith('/@') &&
+      (pathname === href || pathname.startsWith(`${href}/`));
 
 /**
  * Loads the signed-in recipient's page. Signed out → sign in (and come back here); signed in
@@ -85,11 +97,14 @@ export function DashboardShell({
         {pathname !== '/dashboard/welcome' && (
           <div className="dashboard-bar">
             <nav aria-label="Dashboard" className="dashboard-nav">
-              {links.map((link) => (
+              {links(profile?.handle ?? null).map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  aria-current={pathname === link.href ? 'page' : undefined}
+                  aria-current={
+                    isCurrent(pathname, link.href) ? 'page' : undefined
+                  }
+                  data-desktop-only={link.phone ? undefined : ''}
                 >
                   {link.label}
                   {needsFix.has(link.href) && (
@@ -133,11 +148,8 @@ export function DashboardShell({
           pathname !== '/dashboard/welcome' && (
             <section
               className="owner-attention"
-              aria-labelledby="owner-attention-title"
+              aria-label="Needs your attention"
             >
-              <h2 id="owner-attention-title" className="sr-only">
-                Needs your attention
-              </h2>
               {attention.map((item) => (
                 <Notice key={item.id} tone="neutral" title={item.title}>
                   {item.body}
