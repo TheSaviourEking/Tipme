@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
 import { parseProductionLaunchAt } from './src/lib/production-launch';
@@ -5,6 +6,23 @@ import { parseProductionLaunchAt } from './src/lib/production-launch';
 // Validate this at build/start time so a malformed production launch cannot silently expose or
 // indefinitely hide the site. The request-time gate reads the same server-only value.
 parseProductionLaunchAt(process.env.PRODUCTION_LAUNCH_AT);
+
+// The build's identity. The same value is inlined into the pages and into /api/version, so a page
+// can tell when the server has moved on to a newer build.
+function buildVersion(): string {
+  const fromHost =
+    process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA;
+  if (fromHost) return fromHost;
+  try {
+    return execSync('git rev-parse HEAD', {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return String(Date.now());
+  }
+}
 
 const apiOrigin = process.env.NEXT_PUBLIC_API_ORIGIN || 'http://localhost:4000';
 const apiUrl = new URL(apiOrigin);
@@ -56,6 +74,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  env: { TIPME_BUILD_VERSION: buildVersion() },
   // Public profiles live at /@handle (PRD). A folder starting with "@" is a parallel-route slot
   // in the App Router, so /@handle is rewritten to the internal people/[handle] route. The legacy
   // /people/handle redirect lives in Proxy so the production launch gate runs before it.

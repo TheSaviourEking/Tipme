@@ -232,5 +232,14 @@ After seeing Home in the live preview the owner asked for: the example card cent
 ### 2026-11-03 — How it works is a section of Home, not its own page
 
 The owner: "The how it works nav links should smooth scroll to this section in the homepage, we don't need a seperate page when the homepage already covers that information." The header, footer and legal-page links go to `/#how-it-works`; on Home the page glides down to the steps (instantly with reduced motion). `/how-it-works` permanently redirects there, and leaves the sitemap. A product decision; no D-item is affected.
+
 - **The hidden moment.** "Tip ₦5,000" on Ada's card (or another key first, then Tip) sends hearts up from the card and turns it to "Thank you for the ₦5,000!" with the chosen standard amount, then it settles back after a few seconds. No request, no navigation, no payment.
 - **Still decorative.** The stack stays hidden from assistive technology and holds nothing focusable. (The caption "Examples, not real people." under it, and under the Individuals page's examples, was removed on 3 Nov 2026 at the owner's request: "We need this off 'Examples, not real people.' the website.") Reduced motion: no drift and no hearts, and a flip is an instant swap. Forced colours keep each face's edge.
+
+### 2026-11-03 — An open page offers a refresh after an update
+
+The owner: "add an update on the UI so the current user knows that there has been an update and then clicks on it, so it updates the UI." A product request, not a regulatory approval; no D-item is affected and nothing is paid or sent.
+
+- **What it does.** Each build carries a version (the host's deployment id or commit, else the git commit, else the build time), baked into the page and returned by `GET /api/version` (`{ "version": ... }`, never cached, nothing else). An open page checks it when the tab becomes visible again and every 5 minutes while visible, never while hidden. A failed or odd answer is ignored without a sound.
+- **What the person sees.** When the versions differ, a small raised card says "TipMe has been updated." with a black "Refresh" and a quiet "Later". It never reloads by itself, since someone may be typing a note or mid-tip. "Later" hides it until the version changes again.
+- **Where.** Bottom left, announced politely (`role="status"`), 44px targets, no animation, an edge in forced colours. On a phone it lifts above the profile page's fixed Tip bar and sits under the phone menu. `next dev` never shows it.

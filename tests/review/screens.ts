@@ -68,4 +68,29 @@ export const SCREENS: ReviewScreen[] = [
     board: 'TipJourney',
     open: visit('/design-system'),
   },
+  // No board shows this notice; TipJourney shows the materials it uses (a raised card, one black
+  // action). The server is made to answer with a newer build and the tab to come back.
+  {
+    group: 'Foundations',
+    name: 'Update available',
+    board: 'TipJourney',
+    async open(page) {
+      await page.route('**/api/version', (route) =>
+        route.fulfill({
+          json: { version: 'a-newer-build' },
+          headers: { 'cache-control': 'no-store' },
+        }),
+      );
+      await page.goto('/');
+      const notice = page.getByRole('status').filter({
+        hasText: 'TipMe has been updated.',
+      });
+      for (let tries = 0; tries < 20 && !(await notice.isVisible()); tries++) {
+        await page.evaluate(() =>
+          document.dispatchEvent(new Event('visibilitychange')),
+        );
+        await page.waitForTimeout(150);
+      }
+    },
+  },
 ];
