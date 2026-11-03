@@ -222,6 +222,29 @@ test('responses carry baseline security headers', async ({ request }) => {
   }
 });
 
+test('the terms set out the 10% fee and the NGN 2,000 minimums', async ({
+  page,
+}) => {
+  await page.goto('/legal/terms');
+  const fees = page.getByRole('region', { name: 'Fees' });
+  await expect(fees).toContainText('you pay exactly the amount you choose');
+  await expect(fees).toContainText('TipMe keeps 10% of each tip');
+  await expect(fees).toContainText('you receive ₦4,500');
+  await expect(fees).toContainText('The smallest tip is ₦2,000');
+  await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
+});
+
+test('no legal page promises to publish before real payments, which are live', async ({
+  page,
+}) => {
+  for (const path of ['/legal/privacy', '/legal/terms']) {
+    await page.goto(path);
+    await expect(
+      page.getByText(/before TipMe takes real payments/),
+    ).toHaveCount(0);
+  }
+});
+
 test('legal pages say they are coming soon, linked from every page', async ({
   page,
 }) => {
