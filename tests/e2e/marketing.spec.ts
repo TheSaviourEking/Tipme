@@ -32,7 +32,8 @@ test('pressing Tip on the example drops a labelled example note', async ({
   await page.getByRole('button', { name: 'Tip ₦2,000' }).click();
   await expect(tray.getByTestId('example-slip')).toHaveCount(1);
   await expect(tray.getByTestId('example-slip')).toContainText('₦2,000');
-  await expect(page.getByText('Examples, not real people.')).toBeVisible();
+  // The owner, 3 Nov 2026: "We need this off 'Examples, not real people.' the website."
+  await expect(page.getByText(/examples, not real people/i)).toHaveCount(0);
 });
 
 test('the individuals page names creators and streamers and keeps one call to claim', async ({

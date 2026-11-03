@@ -82,8 +82,8 @@ test('the hero tip demo uses the standard amounts', async ({ page }) => {
   const demo = page.locator('.home-demo__main');
   for (const amount of ['₦2,000', '₦5,000', '₦10,000'])
     await expect(demo.getByText(amount, { exact: true })).toBeVisible();
-  // The people on it are labelled as examples.
-  await expect(page.getByText(/examples, not real people/i)).toBeVisible();
+  // The owner, 3 Nov 2026: "We need this off 'Examples, not real people.' the website."
+  await expect(page.getByText(/examples, not real people/i)).toHaveCount(0);
 });
 
 test('the handle typed on Home is waiting, lowercased, at the handle step of sign-up', async ({
@@ -139,11 +139,6 @@ test(
       expect(box).not.toBeNull();
       const centre = (box?.x ?? 0) + (box?.width ?? 0) / 2;
       expect(Math.abs(centre - width / 2), `${width}px`).toBeLessThanOrEqual(2);
-      expect(
-        await page
-          .locator('.home-demo__caption')
-          .evaluate((node) => getComputedStyle(node).textAlign),
-      ).toBe('center');
     }
   },
 );

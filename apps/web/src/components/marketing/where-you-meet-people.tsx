@@ -159,7 +159,6 @@ export function WhereYouMeetPeople() {
           ))}
         </div>
       </div>
-      <p className="meet__caption">Examples, not real people.</p>
     </Surface>
   );
 }

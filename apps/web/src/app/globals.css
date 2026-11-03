@@ -830,13 +830,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   font-size: 0.9375rem;
 }
 
-.home-demo__caption {
-  margin: var(--space-3) 0 0;
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  text-align: center;
-}
-
 .home-keys {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6592,12 +6585,6 @@ body > .coming-soon-page {
     opacity: 1;
     transform: none;
   }
-}
-
-.meet__caption {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
 }
 
 .creators-uses {

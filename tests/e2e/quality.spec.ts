@@ -74,7 +74,8 @@ test('homepage makes creating a recipient page a clear next step', async ({
   await expect(
     page.getByText(/Payments are in test mode/).last(),
   ).toBeVisible();
-  await expect(page.getByText('Examples, not real people.')).toBeVisible();
+  // The owner, 3 Nov 2026: "We need this off 'Examples, not real people.' the website."
+  await expect(page.getByText(/examples, not real people/i)).toHaveCount(0);
 });
 
 test('business page registers interest and sends nothing until the visitor does', async ({

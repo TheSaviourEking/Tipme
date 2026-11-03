@@ -88,7 +88,7 @@ const ZAINAB_AMOUNTS = [
 
 /**
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
- * technology and holds nothing focusable; the caption says in words that the people are examples.
+ * technology and holds nothing focusable.
  * On a narrow screen only Ada's card shows, as on the phone board. With a mouse the cards are a
  * carousel (demo-cards.tsx): a clicked card comes to the centre, the centre card is the biggest,
  * and only it turns over or takes a pretend tip. Small client islands; the headline never waits.
@@ -187,7 +187,6 @@ export function HomeDemo() {
         />
         <IndigoQr className="home-demo__qr" sizes="164px" />
       </DemoStack>
-      <p className="home-demo__caption">Examples, not real people.</p>
     </div>
   );
 }
