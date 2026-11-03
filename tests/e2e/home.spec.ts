@@ -376,7 +376,7 @@ test("Zainab's cover is her own photo, not one of TipMe's designs", async ({
   const src = await page
     .locator('.home-demo__card--zainab .home-demo__cover img')
     .getAttribute('src');
-  expect(src).toContain('zainab-cover');
+  expect(src).toContain('zainab-sunlit-wall');
   // TipMe's own designs are the covers folder; hers comes from outside it.
   expect(src).not.toContain('covers%2F');
   expect(src).not.toContain('/covers/');

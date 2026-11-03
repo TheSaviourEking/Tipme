@@ -112,7 +112,7 @@ export function HomeDemo() {
           note="Thank you for hanging out in chat. You make every stream better."
           cover={
             <Image
-              src="/illustrations/zainab-cover.webp"
+              src="/illustrations/zainab-sunlit-wall.webp"
               alt=""
               fill
               sizes="320px"
