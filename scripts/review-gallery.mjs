@@ -6,6 +6,9 @@
 //   node scripts/review-gallery.mjs   reads review-screens/shots.jsonl and stamp.json, writes review-screens/index.html
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { parseStamp } from './review-stamp.mjs';
+
+export { parseStamp };
 
 const OUT = 'review-screens';
 
@@ -49,20 +52,6 @@ const figure = (entry) => `
       <div class="phone">${image(entry.phone, `${entry.name}, phone`)}</div>
     </div>
   </figure>`;
-
-/** The stamp written when the shots were taken, or undefined if it is missing or not a stamp. */
-export function parseStamp(text) {
-  try {
-    const stamp = JSON.parse(text);
-    return typeof stamp?.sha === 'string' &&
-      typeof stamp.dirty === 'boolean' &&
-      typeof stamp.builtAt === 'string'
-      ? stamp
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 const stampLine = (stamp) =>
   stamp

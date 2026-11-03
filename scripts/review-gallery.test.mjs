@@ -5,7 +5,7 @@ import {
   entriesFromShots,
   parseStamp,
 } from './review-gallery.mjs';
-import { readStamp } from './review-stamp.mjs';
+import { readStamp, stampToCarry } from './review-stamp.mjs';
 
 test('the gallery groups screens and shows desktop and phone side by side', () => {
   const html = buildGallery([
@@ -125,4 +125,20 @@ test('the stamp is taken from git when the shots are taken: short commit, edits,
   });
   assert.deepEqual(calls, ['rev-parse --short HEAD', 'status --porcelain']);
   assert.equal(readStamp(() => '', new Date(0)).dirty, false);
+});
+
+test("a run without a build carries the build's own stamp, never a fresh one from git", () => {
+  const builtStamp = JSON.stringify({
+    sha: 'abc1234',
+    dirty: false,
+    builtAt: '2026-11-03 09:00 UTC',
+  });
+  // Whatever HEAD is by now, the pictures come from the last build, so that is what is carried.
+  assert.equal(stampToCarry(builtStamp), builtStamp);
+});
+
+test('no build stamp, or one that is not a stamp, carries nothing, so the header says unknown', () => {
+  assert.equal(stampToCarry(undefined), undefined);
+  assert.equal(stampToCarry(''), undefined);
+  assert.equal(stampToCarry('{"sha":"abc1234"}'), undefined);
 });
