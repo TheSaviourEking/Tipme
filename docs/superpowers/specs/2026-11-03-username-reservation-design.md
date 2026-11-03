@@ -373,20 +373,31 @@ Run at the levels the repo uses. Do not run the integration or e2e suites while 
 2. **Take-backs.** The take-back table; the serious action; the take-back mode of the username form and the dashboard banner; the worker sweep, revalidation and issue kinds; the emails; the Pages card; search; tests; the runbook (`docs/runbooks/admin-roles.md` gains the permission and the take-back procedure) and a dated note in `docs/00-DECISIONS.md` amending the handle rule (old usernames are unclaimable "while the page exists, unless TipMe takes one back"). **This PR must not reach production before PR #108 (the terms' "Your username" section) is on `main`**, because the emails point to those terms.
 3. Optional, if PR 2 is too large: the without-notice path and the free change after an assignment.
 
-## 12. Open questions for the owner (most important first)
+## 12. The owner's answers (3 Nov 2026)
 
-1. **One admin.** Every serious action today runs alone, with an alert, when no second qualified person exists (your rule of 1 November). Should a take-back do the same, or wait until a second person holds the permission?
-2. **No verified email.** Some accounts have no verified address, so the notice can't be emailed. Should the 7 days start from the dashboard banner instead, or should a take-back wait until the person adds an address (staff can still pause the page)?
-3. **What the email says about why.** May the requester write a short message that goes to the user (the approver sees it first), or should the email use only fixed wording per category?
-4. **After an automatic username.** Should the person get one free change within 30 days (proposed), so a Free page isn't stuck with a generated name?
-5. **The generated username.** `page_` plus 6 random characters (proposed, so it never repeats an impersonating or trademarked name), or something based on the person's display name?
-6. **`pro` is not on the built-in list.** You named it as built-in, but `RESERVED_HANDLES` doesn't contain it. Add it to the code list (it can then never be released), or reserve it from the admin area once this ships?
+These settle the open questions. Where a section above says otherwise, this section wins, and the plan must follow it.
+
+1. **One admin.** As today: with a single qualified admin, a take-back runs on that person's approval and an alert is recorded (the lone-admin rule in `serious-actions.ts`). Once a second person holds the permission, a second approver is required.
+2. **No verified email: the notice must be seen, and seeing it cannot be dodged.**
+   - The 7 days start at the earliest of:
+     (a) the notice email being sent to a verified address; or
+     (b) the user signing in and the dashboard showing them the take-back banner. The server records the first time the banner is rendered for that signed-in user (`banner_seen_at` on `handle_take_backs`), and that moment starts the clock.
+   - Once the banner has been seen, adding or not adding an email changes nothing; the clock is already running. A user who sees the banner and deliberately adds no email cannot hold the name.
+   - The banner says which username goes, why (the category's fixed wording), the date it goes, and offers "Choose a new username" now.
+   - **Never told at all:** if neither (a) nor (b) happens within 30 days of approval, the take-back proceeds as at the deadline. The page gets its new username, and the done email goes out if an address exists by then. This is recorded on the take-back.
+   - Impersonation, trademark and legal cases keep the sooner-or-without-notice path (5.10).
+3. **Why, in the email.** Fixed wording per category only. No staff free text reaches the user. The requester's reason stays internal, in the audit log and the approval.
+4. **After an assigned username.** Yes: one free change within 30 days of TipMe assigning a username, on any plan. It does not use a Pro change.
+5. **The generated username (controller's call, the owner did not choose).** `page_` plus 6 random characters, as proposed, so it never repeats the name being taken. Combined with 4, the person can swap it for a name they like.
+6. **`pro`.** Already in `RESERVED_HANDLES`, in code, on the screen-redesign branch (commit 29cedcc, owner-approved 3 Nov 2026). It reaches `dev` with the redesign PR, so it is not a staff reservation.
+
+**The terms follow these answers.** PR #108's "Your username" section is updated before merge. It says TipMe tells the person by email or on their dashboard, and that if TipMe cannot reach them within 30 days, it goes ahead.
 
 ## 13. Where the code and the owner's decisions disagree
 
-- `RESERVED_HANDLES` (`packages/domain/src/handles.ts:9-81`) has `admin` and `api` but not `pro` (question 6).
+- `RESERVED_HANDLES` (`packages/domain/src/handles.ts:9-81`) on `dev` has `admin` and `api` but not `pro`; the redesign branch adds it (answer 6).
 - The terms' "Your username" section (commit `c928b24`, PR #108) is not on `dev`; this branch is based on `origin/dev` and doesn't have it.
 - `docs/00-DECISIONS.md` (1 Nov 2026 handle rule) says old handles "keep leading to the page and stay unclaimable while it exists", and the rename confirmation says old links and printed QR codes keep working. A take-back breaks both for the name taken, as the terms intend; the decision needs a dated amendment (PR 2).
-- "Needs a second staff member's approval" against the lone-admin rule in `serious-actions.ts:539-590` (question 1).
+- "Needs a second staff member's approval" against the lone-admin rule in `serious-actions.ts:539-590` (answer 1).
 - A Free page can't change its username (`profiles.ts:528`), but the terms ask the person to choose a new one. This design waives the rule for a take-back only.
-- The terms promise an email, but `mailOwner` sends nothing without a verified address (`account-mail.ts:24-56`) (question 2).
+- The terms promise an email, but `mailOwner` sends nothing without a verified address (`account-mail.ts:24-56`) (answer 2: email or a seen dashboard banner).
