@@ -3113,7 +3113,9 @@ body:has(.profile-page) .brand__mark {
     var(--brand-primary);
 }
 
-.tip-thanks {
+.tip-thanks.tm-surface {
+  border: 0;
+  background: none;
   color: #fff;
   max-width: 26rem;
   margin: 0 auto;
@@ -3164,14 +3166,14 @@ body:has(.profile-page) .brand__mark {
   font-weight: 700;
 }
 
-.tip-thanks__live h1 {
+.tip-thanks .tip-status-live h1 {
   margin: var(--space-2) 0 0;
   font: 400 clamp(2.5rem, 9vw, 3rem) / 1.05 var(--font-editorial);
   letter-spacing: -0.02em;
   text-wrap: balance;
 }
 
-.tip-thanks__live p {
+.tip-thanks .tip-status-live p {
   margin: var(--space-3) 0 0;
   font-size: var(--text-base);
   line-height: 1.5;
@@ -3226,6 +3228,24 @@ body:has(.profile-page) .brand__mark {
   display: inline-block;
   padding: var(--space-3);
   font-weight: 600;
+}
+
+/* Forced colours drop every background: the slab, mark and receipt keep an edge. */
+@media (forced-colors: active) {
+  .tip-thanks.tm-surface {
+    border: 1px solid CanvasText;
+    border-radius: 1.625rem;
+    padding: var(--space-5);
+  }
+
+  .tip-thanks__initial,
+  .tip-thanks__tick,
+  .tip-thanks__receipt {
+    border: 2px solid CanvasText;
+    forced-color-adjust: none;
+    background: Canvas;
+    color: CanvasText;
+  }
 }
 
 @keyframes tip-thanks-settle {

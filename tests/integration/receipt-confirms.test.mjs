@@ -134,3 +134,38 @@ test('pretend payments and copies without Bachs never ask Bachs', async (t) => {
   const bachsTip = await startedTip(t);
   assert.equal(await receipt(bachsTip.db, bachsTip.tipId, null)(), 'waiting');
 });
+
+async function viewOf(t, bachs) {
+  const { db, tipId } = await startedTip(t);
+  const controller = new StatusController(
+    { STATUS_TOKEN_SECRET: SECRET },
+    { db },
+    bachs,
+  );
+  return (
+    await controller.status(
+      tipId,
+      `Bearer ${createStatusToken(SECRET, tipId)}`,
+      response,
+    )
+  ).data;
+}
+
+test('the receipt carries the last 6 characters of the paid reference, uppercased, and nothing before payment', async (t) => {
+  const pending = await viewOf(t, {
+    async verifyTransaction() {
+      return { ...paid, status: 'pending', feeMinor: 0n };
+    },
+  });
+  assert.equal(pending.state, 'waiting');
+  assert.equal(pending.reference, null);
+  const done = await viewOf(t, {
+    async verifyTransaction() {
+      return paid;
+    },
+  });
+  assert.equal(done.state, 'paid');
+  assert.equal(done.reference, REFERENCE.slice(-6).toUpperCase());
+  assert.equal(done.reference.length, 6);
+  assert.ok(!JSON.stringify(done).includes('acct_ada123'));
+});

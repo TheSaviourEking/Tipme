@@ -194,15 +194,12 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
 
   const { view: tip } = screen;
   const name = tip.recipient.displayName;
-  const firstName = name.split(/\s+/)[0] || name;
+  const initial = name.charAt(0).toUpperCase();
   const amount = formatNaira(Number(tip.amountMinor));
   const profile = `/@${tip.recipient.handle}`;
-  // The tip id is a time-ordered UUID: its tail is the part that tells two receipts apart.
-  const reference = `TM-${tipId.replace(/-/g, '').slice(-8).toUpperCase()}`;
+  const paid = tip.state === 'paid';
+  const retry = tip.state === 'declined' || tip.state === 'cancelled';
 
-  const banner = copy.receiptBanner && (
-    <p className="tip-status-pretend">{copy.receiptBanner}</p>
-  );
   const notices = (
     <>
       {forgotten && (
@@ -229,68 +226,33 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
     </>
   );
 
-  // Only a payment the API reports as paid gets the moment, and then the receipt.
-  if (tip.state === 'paid')
-    return (
-      <div className="tip-thanks tm-celebration">
-        {banner}
+  // One tree for every state, so the live region below stays mounted from waiting to paid,
+  // declined or expired and only its words change: a region inserted together with its text is
+  // often not announced. Only a payment the API reports as paid gets the moment, then the receipt.
+  return (
+    <Surface
+      material={paid ? 'canvas' : 'instrument'}
+      className={
+        paid
+          ? 'tip-thanks tm-celebration'
+          : `tip-status-card tip-status-card--${tip.state}`
+      }
+    >
+      {copy.receiptBanner && (
+        <p className="tip-status-pretend">{copy.receiptBanner}</p>
+      )}
+      {paid ? (
         <div className="tip-thanks__mark" aria-hidden="true">
-          <span className="tip-thanks__initial">
-            {firstName.charAt(0).toUpperCase()}
-          </span>
+          <span className="tip-thanks__initial">{initial}</span>
           <span className="tip-thanks__tick">✓</span>
         </div>
-        <div role="status" aria-live="polite" className="tip-thanks__live">
-          <h1>{firstName} got your thanks.</h1>
-          <p>{amount}, confirmed by our payment partner.</p>
-        </div>
-        <Surface
-          material="paper"
-          className="tip-thanks__receipt"
-          role="region"
-          aria-labelledby="receipt-title"
-        >
-          <h2 id="receipt-title">Your receipt</h2>
-          <dl>
-            <dt>Your tip</dt>
-            <dd>{amount}</dd>
-            <dt>Reference</dt>
-            <dd>{reference}</dd>
-          </dl>
-          {pilotNotice}
-          {celebration && (
-            <aside className="tip-recognition" aria-label="Your tips">
-              <span aria-hidden="true">✳</span>
-              <p>{celebration}</p>
-            </aside>
-          )}
-          <Button variant="secondary" onClick={() => void copyReceipt()}>
-            {copied ? 'Receipt link copied' : 'Copy receipt link'}
-          </Button>
-          <ActionLink variant="continue" href={profile}>
-            Done
-          </ActionLink>
-          {celebration && (
-            <Button variant="quiet" onClick={forget}>
-              Forget my tips on this phone
-            </Button>
-          )}
-        </Surface>
-        {notices}
-        <Link className="tip-thanks__own" href="/sign-up">
-          Know someone who deserves thanks too? Get your own TipMe page
-        </Link>
-      </div>
-    );
-
-  const retry = tip.state === 'declined' || tip.state === 'cancelled';
-  return (
-    <Card
-      material="instrument"
-      className={`tip-status-card tip-status-card--${tip.state}`}
-    >
-      {banner}
-      <div role="status" aria-live="polite" className="tip-status-live">
+      ) : null}
+      <div
+        role="status"
+        aria-live="polite"
+        className="tip-status-live"
+        data-status-live
+      >
         {tip.state === 'waiting' && (
           <>
             <span className="tm-pulse" data-pulse aria-hidden="true" />
@@ -322,12 +284,18 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
             </p>
           </>
         )}
+        {paid && (
+          <>
+            <h1>{name} got your thanks.</h1>
+            <p>{amount}, confirmed by our payment partner.</p>
+          </>
+        )}
         {tip.state === 'declined' && (
           <>
-            <h1>This payment didn't go through</h1>
+            <h1>This payment didn’t go through</h1>
             <p>
-              Your tip to {firstName} wasn't sent. You can try again with
-              another card or bank.
+              Your tip to {name} wasn’t sent. You can try again with another
+              card or bank.
             </p>
           </>
         )}
@@ -341,18 +309,63 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
           </>
         )}
       </div>
-      {pilotNotice}
-      {notices}
-      <div className="tip-status-actions">
-        {retry && (
+      {paid ? (
+        <Surface
+          material="paper"
+          className="tip-thanks__receipt"
+          role="region"
+          aria-labelledby="receipt-title"
+        >
+          <h2 id="receipt-title">Your receipt</h2>
+          <dl>
+            <dt>Your tip</dt>
+            <dd>{amount}</dd>
+            {tip.reference && (
+              <>
+                <dt>Reference</dt>
+                <dd>{tip.reference}</dd>
+              </>
+            )}
+          </dl>
+          {pilotNotice}
+          {celebration && (
+            <aside className="tip-recognition" aria-label="Your tips">
+              <span aria-hidden="true">✳</span>
+              <p>{celebration}</p>
+            </aside>
+          )}
+          <Button variant="secondary" onClick={() => void copyReceipt()}>
+            {copied ? 'Receipt link copied' : 'Copy receipt link'}
+          </Button>
           <ActionLink variant="continue" href={profile}>
-            Try again
+            Done
           </ActionLink>
-        )}
-        <Button variant="secondary" onClick={() => void copyReceipt()}>
-          {copied ? 'Receipt link copied' : 'Copy receipt link'}
-        </Button>
-      </div>
-    </Card>
+          {celebration && (
+            <Button variant="quiet" onClick={forget}>
+              Forget my tips on this phone
+            </Button>
+          )}
+        </Surface>
+      ) : (
+        pilotNotice
+      )}
+      {notices}
+      {paid ? (
+        <Link className="tip-thanks__own" href="/sign-up">
+          Know someone who deserves thanks too? Get your own TipMe page
+        </Link>
+      ) : (
+        <div className="tip-status-actions">
+          {retry && (
+            <ActionLink variant="continue" href={profile}>
+              Try again
+            </ActionLink>
+          )}
+          <Button variant="secondary" onClick={() => void copyReceipt()}>
+            {copied ? 'Receipt link copied' : 'Copy receipt link'}
+          </Button>
+        </div>
+      )}
+    </Surface>
   );
 }
