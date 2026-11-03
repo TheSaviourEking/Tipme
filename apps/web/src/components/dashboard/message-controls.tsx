@@ -4,7 +4,7 @@ import { Button, Notice } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
 
 /**
- * A recipient's controls for a supporter's message (PR-011, FR-010): hide it from their own
+ * A recipient's controls for a supporter's note (PR-011, FR-010): hide it from their own
  * views, or report it to TipMe (which also hides it). TipMe staff review reports privately.
  */
 export function MessageControls({
@@ -64,9 +64,14 @@ export function MessageControls({
           <p className="tm-hint">
             It disappears from your dashboard, and TipMe reviews it privately.
           </p>
-          <div className="ops-actions">
-            <Button type="submit" disabled={busy} aria-busy={busy}>
-              Report message
+          <div className="note-actions">
+            <Button
+              type="submit"
+              variant="continue"
+              disabled={busy}
+              aria-busy={busy}
+            >
+              Send report
             </Button>
             <Button variant="quiet" onClick={() => setReporting(false)}>
               Cancel
@@ -74,16 +79,16 @@ export function MessageControls({
           </div>
         </form>
       ) : (
-        <div className="ops-actions">
+        <div className="note-actions">
           <Button
-            variant="quiet"
+            variant="secondary"
             disabled={busy}
             onClick={() => void send('hide')}
           >
-            Hide message
+            Hide this note
           </Button>
-          <Button variant="quiet" onClick={() => setReporting(true)}>
-            Report message…
+          <Button variant="secondary" onClick={() => setReporting(true)}>
+            Report this note
           </Button>
         </div>
       )}

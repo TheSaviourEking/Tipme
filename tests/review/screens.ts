@@ -266,4 +266,61 @@ export const SCREENS: ReviewScreen[] = [
         .waitFor();
     },
   },
+  {
+    group: 'Dashboard',
+    name: 'Tips',
+    board: 'ScreenTips',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(3);
+      await page.goto('/dashboard/tips');
+      await page
+        .getByRole('link', { name: /Tip from/ })
+        .first()
+        .waitFor();
+    },
+  },
+  {
+    group: 'Dashboard',
+    name: 'Tip detail',
+    board: 'ScreenTipReport',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(1);
+      await page.goto('/dashboard/tips');
+      await page
+        .getByRole('link', { name: /Tip from/ })
+        .first()
+        .click();
+      await page.locator('.receipt').waitFor();
+    },
+  },
+  {
+    group: 'Dashboard',
+    name: 'Weekly report',
+    board: 'ScreenTipReport',
+    async open(page, ctx) {
+      const { handle } = await ctx.recipientWithTips(2);
+      // The week's report is written by the worker on a Monday; the dev route does it now.
+      const isoWeek = await page.evaluate(() => {
+        const now = new Date(Date.now() + 3600_000);
+        const day = new Date(
+          Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+        );
+        day.setUTCDate(day.getUTCDate() + 4 - (day.getUTCDay() || 7));
+        const week = Math.ceil(
+          ((day.getTime() - Date.UTC(day.getUTCFullYear(), 0, 1)) / 86400000 +
+            1) /
+            7,
+        );
+        return `${day.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+      });
+      await page.request.post(
+        'http://127.0.0.1:4100/v1/dev/jobs/weekly-report',
+        {
+          data: { handle, isoWeek },
+        },
+      );
+      await page.goto(`/dashboard/reports/${isoWeek}`);
+      await page.getByRole('heading', { level: 1 }).waitFor();
+    },
+  },
 ];

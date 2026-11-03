@@ -7693,3 +7693,385 @@ body > .coming-soon-page {
     opacity: 1;
   }
 }
+
+/* Tips, the tip receipt and the weekly report (ScreenTips, ScreenTipReport). */
+.tips-page {
+  max-width: 56rem;
+}
+
+.tips-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.tips-page .tips-status:empty {
+  display: none;
+}
+
+.tips-page .tips-status {
+  margin: calc(var(--space-2) * -1) 0 0;
+}
+
+/* Search and the filters share a row where there is room; the CSV link stays up in the header. */
+.tips-controls {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 52rem) {
+  .tips-controls {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+}
+
+.tips-day {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.tips-day h2 {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font: 700 var(--text-sm) / 1.3 var(--font-interface);
+}
+
+.tips-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 3.5rem;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--edge-hairline);
+  border-radius: 1.25rem;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card-subtle);
+  color: inherit;
+  text-decoration: none;
+}
+
+.tip-row small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.tip-row__who,
+.tip-row__money {
+  min-width: 0;
+}
+
+.tip-row__who strong {
+  overflow-wrap: anywhere;
+}
+
+.tip-row__money {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tip-row__money strong {
+  font-size: var(--text-lg);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.tip-row__state {
+  color: var(--state-warning);
+  font-weight: 600;
+}
+
+.tip-row[data-state='failed'] .tip-row__state,
+.tip-row[data-state='cancelled'] .tip-row__state {
+  color: var(--state-danger);
+}
+
+.tip-row:not([data-state='paid']) .tip-row__money strong {
+  color: var(--text-secondary);
+}
+
+.tip-row:active {
+  transform: translateY(2px);
+}
+
+/* The receipt: paper with a torn bottom edge cut by a mask. Where masks are unsupported the
+   property is ignored and the edge stays straight; the receipt is never hidden. */
+.tip-detail__back {
+  margin: 0;
+  font-weight: 600;
+}
+
+.receipt.tm-surface--paper {
+  position: relative;
+  padding: 1.625rem 1.625rem 2.125rem;
+  border-radius: 0.875rem 0.875rem 0 0;
+  box-shadow: var(--shadow-paper);
+  -webkit-mask: radial-gradient(8px at 12px 100%, transparent 98%, #000) 0 0 /
+    24px 100%;
+  mask: radial-gradient(8px at 12px 100%, transparent 98%, #000) 0 0 / 24px 100%;
+}
+
+.receipt .receipt__title {
+  margin: 0 0 0.25rem;
+  font: 400 clamp(2.25rem, 8vw, 2.75rem) / 1 var(--font-editorial);
+  font-variant-numeric: lining-nums;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.receipt__when {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.receipt__note {
+  margin: 0 0 var(--space-5);
+  font: 400 clamp(1.5rem, 5vw, 1.7rem) / 1.2 var(--font-editorial);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.receipt__hidden {
+  margin: 0 0 var(--space-5);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.receipt__rows {
+  margin: 0;
+}
+
+.receipt .rrow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 0.5625rem 0;
+  border-top: 1px dashed var(--border-material);
+  font-size: var(--text-base);
+}
+
+.receipt .rrow dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.receipt .rrow dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: var(--numeric-variant);
+  text-align: right;
+}
+
+.receipt__fine {
+  margin: var(--space-3) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.tip-detail .note-actions {
+  margin-top: var(--space-2);
+}
+
+.note-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+/* The weekly report: the week on black, then the notes as a stack you press through. */
+.report {
+  max-width: 48rem;
+}
+
+.week-hero {
+  padding: clamp(1.25rem, 4vw, 1.875rem) clamp(1.25rem, 4vw, 2rem);
+  border-radius: var(--radius-card);
+  background: #000;
+  color: #fff;
+}
+
+.report .week-hero__title {
+  margin: 0 0 var(--space-2);
+  font: 600 var(--text-base) / 1.3 var(--font-interface);
+  letter-spacing: 0;
+}
+
+.week-hero__headline {
+  margin: 0 0 var(--space-4);
+  font: 400 clamp(2rem, 7vw, 3.25rem) / 1 var(--font-editorial);
+}
+
+.week-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-6);
+}
+
+.week-hero__stats > div {
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-4);
+  border-top: 1px solid rgb(255 255 255 / 20%);
+  font-size: var(--text-sm);
+}
+
+.week-hero__stats strong {
+  font: 400 1.875rem / 1.1 var(--font-editorial);
+  font-variant-numeric: lining-nums;
+}
+
+.week-stack h2 {
+  margin: 0 0 var(--space-3);
+  font: 700 var(--text-base) / 1.3 var(--font-interface);
+}
+
+.stack {
+  position: relative;
+  margin-bottom: 1.75rem;
+}
+
+.stack__card {
+  box-sizing: border-box;
+  padding: 1.375rem 1.5rem;
+  border: 1px solid var(--border-material);
+  border-radius: 1rem;
+  background:
+    linear-gradient(var(--edge-light), transparent 2px) border-box,
+    var(--surface-raised);
+  box-shadow:
+    0 1px 1px rgb(20 18 16 / 10%),
+    0 10px 20px -10px rgb(20 18 16 / 26%);
+}
+
+.stack > .stack__card {
+  position: absolute;
+  inset: 0;
+}
+
+.stack__card--2 {
+  transform: translateY(10px) rotate(1.4deg) scale(0.98);
+}
+
+.stack__card--3 {
+  transform: translateY(18px) rotate(-1.6deg) scale(0.96);
+}
+
+.stack__live {
+  position: relative;
+}
+
+.stack__card--top {
+  min-height: 13rem;
+  animation: stack-deal 300ms var(--ease-spring) both;
+  transition: transform 180ms;
+}
+
+.stack:has(.stack__press:active) .stack__card--top {
+  transform: translateY(2px);
+}
+
+.stack__note {
+  margin: 0 0 var(--space-3);
+  font: 400 clamp(1.5rem, 5vw, 1.875rem) / 1.15 var(--font-editorial);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.stack__from {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.stack__count {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* A real button laid over the stack, so the whole stack is the target. */
+.stack__press {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: 1rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.stack__press:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 4px;
+}
+
+@keyframes stack-deal {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) rotate(-2deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.week-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) auto;
+  align-items: center;
+  justify-content: start;
+  gap: var(--space-4);
+}
+
+.week-actions a {
+  font-weight: 600;
+}
+
+@media (max-width: 30rem) {
+  .week-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack__card--top {
+    animation: none;
+    transition: none;
+  }
+
+  .tip-row:active {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .stack__card,
+  .tip-row,
+  .receipt.tm-surface--paper {
+    border: 1px solid CanvasText;
+  }
+
+  .week-hero {
+    border: 1px solid CanvasText;
+  }
+
+  .stack__press:focus-visible {
+    outline-color: Highlight;
+  }
+}

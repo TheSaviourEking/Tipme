@@ -20,8 +20,12 @@ export function usePanel<T>(path: string): Panel<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<PanelError>(null);
   const have = useRef(false);
+  // An answer for an older path (a search typed over) never replaces a newer one.
+  const latest = useRef(0);
   const reload = useCallback(async () => {
+    const mine = ++latest.current;
     const result = await apiFetch<T>(path);
+    if (mine !== latest.current) return;
     if (result.ok) {
       have.current = true;
       setData(result.data);

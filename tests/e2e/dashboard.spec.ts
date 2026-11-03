@@ -32,20 +32,18 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
 
   await row.click();
   await expect(
-    page.getByRole('heading', { name: 'Tip from Ada M.' }),
+    page.getByRole('heading', { name: '₦1,800 from Ada M.' }),
   ).toBeVisible();
   await expect(page.getByText('Lovely braids, thank you')).toBeVisible();
-  const breakdown = page.locator('.tip-breakdown');
+  const receipt = page.locator('.receipt');
   await expect(
-    breakdown.locator('div', { hasText: 'They tipped' }),
-  ).toContainText('NGN 2,000.00');
+    receipt.locator('div', { hasText: 'Ada M. tipped' }),
+  ).toContainText('₦2,000');
   await expect(
-    breakdown.locator('div', { hasText: 'You received' }),
-  ).toContainText('NGN 1,800.00');
-  await expect(
-    page.getByText('Confirmed by the payment provider'),
-  ).toBeVisible();
-  await expect(page.getByText(/Reference ending …[0-9a-f-]{6}/)).toBeVisible();
+    receipt.locator('div', { hasText: 'You received' }),
+  ).toContainText('₦1,800');
+  await expect(receipt.getByText('In your balance')).toBeVisible();
+  await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
   await expectAccessible(page);
 
   await page.goto('/dashboard/withdraw');
