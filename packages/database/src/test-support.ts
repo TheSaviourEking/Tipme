@@ -125,14 +125,15 @@ export interface TestDatabase {
 }
 
 /**
- * A migrated test database on the local server. Test-only. Normally the shared `tipme_test`;
+ * A migrated test database on the local server. Test-only. Normally the shared `tipme_test`
+ * (or TIPME_TEST_DATABASE, which e2e lanes set so worktrees don't share one);
  * with TIPME_TEST_TEMPLATE set, this process's own copy of that template.
  */
 export async function openTestDatabase(): Promise<TestDatabase> {
   const template = process.env['TIPME_TEST_TEMPLATE'];
   const name = template
     ? checkedName(`${checkedName(template)}_${process.pid}`)
-    : TEST_DATABASE;
+    : checkedName(process.env['TIPME_TEST_DATABASE'] ?? TEST_DATABASE);
   await asAdmin(async (admin) => {
     const exists = await admin.query(
       'SELECT 1 FROM pg_database WHERE datname = $1',
