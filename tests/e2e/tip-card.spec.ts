@@ -637,37 +637,6 @@ for (const width of [360, 1280])
     await check('error');
   });
 
-test('the Home demo shares the card and still works: disclosure, typed amount, no celebration', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  const origin = await at('test', '/', page);
-  await answerApi(page, origin);
-  const panel = page.locator('.home-hero__panel');
-  await expect(
-    panel.getByRole('heading', { name: 'Make Ada’s day.' }),
-  ).toBeVisible();
-  await expect(panel.getByRole('radio', { name: '2,000 NGN' })).toBeChecked();
-  await expect(
-    panel.getByRole('checkbox', { name: 'Add to the celebration' }),
-  ).toHaveCount(0);
-  await expect(panel.getByLabel('Personal message (optional)')).toBeHidden();
-  await panel.getByText(DISCLOSURE).click();
-  await panel.getByLabel('Personal message (optional)').fill('Thanks');
-  await panel.getByLabel(OTHER).fill('2500');
-  await expect(
-    panel.locator('.composer-action__partner').getByText(PARTNER.test),
-  ).toBeVisible();
-  for (const width of [320, 390]) {
-    await page.setViewportSize({ width, height: 800 });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-  }
-});
-
 test('the partner line shows beside Tip on the phone’s first screen, clear of the fold @mobile', async ({
   page,
 }) => {

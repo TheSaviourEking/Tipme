@@ -166,3 +166,123 @@ test('fix: a page taken offline without a refresh signal still disappears within
     ).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 70_000, intervals: [5000] });
 });
+
+test('the code is one field shown as six cells', async ({ page }, testInfo) => {
+  const { email } = identity(testInfo);
+  await page.goto('/sign-in');
+  await page.getByLabel('Email address').fill(email);
+  await page.getByRole('button', { name: 'Send code' }).click();
+  const field = page.locator('input[autocomplete="one-time-code"]');
+  await expect(field).toHaveCount(1);
+  await expect(field).toHaveAttribute('inputmode', 'numeric');
+  await expect(page.getByLabel('6-digit code')).toBeVisible();
+  const cells = page.locator('.tm-code-cell');
+  await expect(cells).toHaveCount(6);
+
+  await field.pressSequentially('123456');
+  await expect(cells).toHaveText(['1', '2', '3', '4', '5', '6']);
+
+  // Backspace works on the one real field, and a paste (or an autofill) fills every cell at once.
+  await field.press('Backspace');
+  await expect(cells).toHaveText(['1', '2', '3', '4', '5', '']);
+  await field.fill('');
+  await page.keyboard.insertText('123456');
+  await expect(cells).toHaveText(['1', '2', '3', '4', '5', '6']);
+  await expect(field).toHaveValue('123456');
+  // The cells are drawn only: a screen reader meets the one labelled field.
+  await expect(
+    page.locator('.tm-code-cells[aria-hidden="true"] .tm-code-cell'),
+  ).toHaveCount(6);
+});
+
+test('the welcome preview follows what you type @mobile', async ({
+  page,
+}, testInfo) => {
+  const who = identity(testInfo);
+  await signInWithEmail(page, who.email, '/sign-up');
+  // The code was typed into the one field; the handle step has no code cells.
+  await page.getByLabel('Handle').fill(who.handle);
+  await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
+  await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
+  await page.waitForURL(/\/dashboard\/welcome$/);
+  await page.getByRole('button', { name: 'Let’s set up your page' }).click();
+  await page.getByLabel('What you do').fill('Maths tutor');
+  const preview = page.getByRole('complementary', {
+    name: 'Preview of your page',
+  });
+  await expect(preview).toContainText('Maths tutor');
+  await expect(preview).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+test('recovery says what happens next whatever the address @mobile', async ({
+  page,
+}) => {
+  for (const address of ['nobody-at-all@example.com', 'someone@example.org']) {
+    await page.goto('/recover');
+    await page.getByLabel('Your sign-in email').fill(address);
+    await page.getByRole('button', { name: 'Send recovery code' }).click();
+    await expect(
+      page.getByText(
+        'If that email matches an account, the next step is on its way.',
+      ),
+    ).toBeVisible();
+  }
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+/** A real paste: the text goes to the clipboard and Ctrl/Cmd+V pastes it into the focused field. */
+async function pasteInto(
+  page: import('@playwright/test').Page,
+  field: import('@playwright/test').Locator,
+  text: string,
+) {
+  await page.evaluate((value) => navigator.clipboard.writeText(value), text);
+  await field.fill('');
+  await field.focus();
+  await page.keyboard.press('ControlOrMeta+V');
+}
+
+const SIX = ['1', '2', '3', '4', '5', '6'];
+
+test('a code pasted with spaces or dashes still fills all six cells', async ({
+  page,
+  context,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const { email } = identity(testInfo);
+  await page.goto('/sign-in');
+  await page.getByLabel('Email address').fill(email);
+  await page.getByRole('button', { name: 'Send code' }).click();
+  const field = page.getByLabel('6-digit code');
+  await expect(field).toBeVisible();
+  const cells = page.locator('.tm-code-cell');
+  for (const pasted of ['123 456', '123-456', ' 123456 ']) {
+    await pasteInto(page, field, pasted);
+    await expect(field).toHaveValue('123456');
+    await expect(cells).toHaveText(SIX);
+  }
+  // A seventh digit has nowhere to go.
+  await field.fill('');
+  await field.pressSequentially('1234567');
+  await expect(field).toHaveValue('123456');
+  await expect(cells).toHaveText(SIX);
+});
+
+test('a recovery code pasted with spaces or dashes still fills all six cells', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/recover');
+  await page.getByLabel('Your sign-in email').fill('nobody@example.com');
+  await page.getByRole('button', { name: 'Send recovery code' }).click();
+  const field = page.getByLabel('Code sent to your recovery email');
+  await expect(field).toBeVisible();
+  const cells = page.locator('.tm-code-cell');
+  for (const pasted of ['123 456', '123-456', ' 123456 ']) {
+    await pasteInto(page, field, pasted);
+    await expect(field).toHaveValue('123456');
+    await expect(cells).toHaveText(SIX);
+  }
+});

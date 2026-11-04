@@ -3,8 +3,14 @@ import Link from 'next/link';
 import { Button } from '@tipme/ui';
 import { QuietScreen } from '@/components/quiet-screen';
 
-/** Any page that fails unexpectedly: header and footer stay, and the person gets a way back. */
+/**
+ * Any page that fails unexpectedly: header and footer stay, and the person gets a way back. The
+ * reference is the `digest` Next puts on a server failure and writes to the server log with the
+ * error itself, so support can find the failure from it. A failure in the browser has none, so
+ * none is shown: an id that appears in no log is no use to anyone.
+ */
 export default function AppError({
+  error,
   reset,
 }: {
   error: Error & { digest?: string };
@@ -12,10 +18,15 @@ export default function AppError({
 }) {
   return (
     <QuietScreen
-      title="Something went wrong on our side"
-      actions={
+      title="This page didn’t load."
+      action={
+        <Button variant="continue" onClick={reset}>
+          Try again
+        </Button>
+      }
+      foot={
         <>
-          <Button onClick={reset}>Try again</Button>
+          {error.digest && <span>Reference: {error.digest}</span>}
           <Link className="text-link" href="/">
             Go to TipMe
           </Link>
@@ -23,8 +34,9 @@ export default function AppError({
       }
     >
       <p>
-        This page didn’t load. Nothing you did caused it. If you were sending a
-        tip, nothing was charged without your confirmation.
+        It’s a problem on our side and your account is fine. Try again in a
+        moment. If you were sending a tip, nothing was charged without your
+        confirmation.
       </p>
     </QuietScreen>
   );

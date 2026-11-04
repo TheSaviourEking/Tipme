@@ -198,14 +198,14 @@ export function GetPaidCard() {
   if (state.kind === 'loading')
     return (
       <Card id="get-paid" className="settings-section" aria-busy="true">
-        <h2>Get paid</h2>
+        <h3>Get paid</h3>
         <p className="tm-hint">Checking your bank account…</p>
       </Card>
     );
   if (state.kind === 'failed')
     return (
       <Card id="get-paid" className="settings-section">
-        <h2>Get paid</h2>
+        <h3>Get paid</h3>
         <Notice tone="error" title="Couldn’t load your bank account">
           Please try again.
         </Notice>
@@ -222,7 +222,7 @@ export function GetPaidCard() {
 
   return (
     <Card id="get-paid" className="settings-section">
-      <h2>Get paid</h2>
+      <h3>Get paid</h3>
       <p className="tm-hint">The bank account your withdrawals go to.</p>
       {destination && (
         <p role="status">

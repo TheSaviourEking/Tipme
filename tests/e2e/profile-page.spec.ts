@@ -120,7 +120,7 @@ both(
 both(
   'other pages keep the site navigation and footer',
   async ({ page }, info) => {
-    for (const path of ['/', '/how-it-works', '/@not-a-person']) {
+    for (const path of ['/', '/for-creators', '/@not-a-person']) {
       await page.goto(path);
       if (info.project.name === 'mobile')
         await expect(page.getByRole('button', { name: 'Menu' })).toBeVisible();
@@ -251,6 +251,15 @@ test.describe('the page in each payment state', () => {
       await expect(tipButton(page)).toHaveCount(0);
       await expect(page.locator('.composer-action')).toHaveCount(0);
       await expect(page.getByText(TRUST)).toHaveCount(0);
+      // ScreenSmall: it names the page, and the way on is to claim one's own.
+      await expect(
+        page.getByRole('heading', {
+          name: /^Tipping opens soon on .+’s page\.$/,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('link', { name: 'Claim your username' }),
+      ).toHaveAttribute('href', '/sign-up');
       const copy = page.getByRole('button', { name: 'Copy page link' });
       const before = await copy.boundingBox();
       await copy.click();
@@ -798,13 +807,26 @@ test('a Pro page loses "Get your own TipMe page" within seconds of staff changin
   }).toPass({ timeout: 10_000 });
 });
 
-test('home keeps its own form wording', async ({ page }) => {
-  await page.goto('/');
-  await expect(
-    page.getByRole('heading', { name: 'Make Ada’s day.' }),
-  ).toBeVisible();
-  await expect(page.locator('.home-hero__panel .composer-trust')).toHaveCount(
-    0,
+// The owner, 3 Nov 2026: a Pro badge "we'd display on our user's page when they subscribed to pro".
+test('a Pro page wears the Pro badge beside the name, and a Free page none', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const { handle } = await signUpRecipient(page, testInfo);
+  const visitor = await (await browser.newContext()).newPage();
+  const badge = visitor.locator('.profile-identity__name .tm-pro-badge');
+  await visitor.goto(`/@${handle}`);
+  await expect(visitor.locator('#profile-name')).toBeVisible();
+  await expect(badge).toHaveCount(0);
+  await makePagePro(browser, handle, testInfo);
+  await expect(async () => {
+    await visitor.goto(`/@${handle}`);
+    await expect(badge).toHaveText('Pro', { timeout: 500 });
+  }).toPass({ timeout: 10_000 });
+  // Beside the name, not inside the heading: the page is still called by the person's name.
+  await expect(visitor.getByRole('heading', { level: 1 })).not.toContainText(
+    'Pro',
   );
 });
 

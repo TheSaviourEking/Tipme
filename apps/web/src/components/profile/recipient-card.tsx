@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { PublicProfile } from '@tipme/contracts';
+import { ProBadge } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
 import { ShareProfile } from '@/components/share-profile';
 
@@ -149,7 +150,12 @@ export function RecipientIdentity({
           >
             {profile.displayName}
           </h1>
-          <p className="profile-identity__handle">@{profile.handle}</p>
+          <p className="profile-identity__handle">
+            @{profile.handle}
+            {profile.plan === 'pro' && (
+              <ProBadge className="profile-identity__pro" />
+            )}
+          </p>
         </div>
         <ShareProfile handle={profile.handle} />
       </div>

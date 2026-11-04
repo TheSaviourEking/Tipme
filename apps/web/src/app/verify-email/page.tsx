@@ -12,7 +12,7 @@ export default function VerifyEmailPage() {
   return (
     <main id="main" tabIndex={-1} className="auth-page">
       <Container>
-        <Surface material="raised" className="auth-card verify-card">
+        <Surface material="instrument" className="auth-card verify-card">
           <VerifyEmail />
         </Surface>
       </Container>

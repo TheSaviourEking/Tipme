@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tips redesign</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+</style>
+</helmet>
+<div style="width: 1100px; height: 860px; box-sizing: border-box; padding: 36px 40px; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; display: flex; flex-direction: column; gap: 18px">
+  <header style="display: flex; justify-content: space-between; align-items: flex-end; gap: 20px">
+    <div><h1 style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 46px; line-height: 1">Your tips</h1><p style="margin: 8px 0 0; font-size: 15px; color: #5d5a54">₦312,400 from 148 people so far</p></div>
+    <a href="#" style="font-size: 14px; font-weight: 600">Download as CSV</a>
+  </header>
+  <div style="display: flex; gap: 12px; align-items: center">
+    <input type="search" aria-label="Search your tips" placeholder="Search a name, an amount or a reference" style="flex: 1; height: 48px; box-sizing: border-box; padding: 0 16px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 15px Manrope, Arial, sans-serif">
+    <div role="group" aria-label="Show" style="display: flex; padding: 4px; background: #eeede8; border-radius: 12px">
+      <button type="button" aria-pressed="true" style="height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: #fffefa; font: 700 14px Manrope, Arial, sans-serif; box-shadow: 0 1px 2px rgba(20,18,16,.14)">All</button>
+      <button type="button" style="height: 40px; padding: 0 16px; border: 0; background: none; font: 600 14px Manrope, Arial, sans-serif; color: #5d5a54">With a note</button>
+      <button type="button" style="height: 40px; padding: 0 16px; border: 0; background: none; font: 600 14px Manrope, Arial, sans-serif; color: #5d5a54">Being confirmed</button>
+    </div>
+  </div>
+  <section aria-label="Today" style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 6px 0 0; font-size: 14px; font-weight: 700; color: #5d5a54">Today</h2>
+    <article style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; padding: 20px 22px; display: flex; justify-content: space-between; gap: 24px; box-shadow: 0 1px 1px rgba(20,18,16,.08)">
+      <div><p style="margin: 0; font-size: 15px; font-weight: 700">Chidi</p><p style="margin: 6px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 24px; line-height: 1.25">“That tutorial saved my whole week. Thank you.”</p><div style="display: flex; gap: 14px; align-items: center; margin-top: 10px"><span style="font-size: 13px; color: #5d5a54">09:12</span><a href="#" style="font-size: 13.5px; font-weight: 600">Share this note</a></div></div>
+      <div style="text-align: right; white-space: nowrap"><strong style="font-size: 18px">₦4,500</strong><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">from ₦5,000</p></div>
+    </article>
+    <article style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; padding: 16px 22px; display: flex; justify-content: space-between"><div><strong style="font-size: 15px">A guest</strong><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">08:30</p></div><div style="text-align: right"><strong style="font-size: 18px">₦1,800</strong><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">from ₦2,000</p></div></article>
+    <article style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; padding: 16px 22px; display: flex; justify-content: space-between"><div><strong style="font-size: 15px">Amaka</strong><p style="margin: 3px 0 0; font-size: 13px; color: #75500b; font-weight: 600">Being confirmed</p></div><div style="text-align: right"><strong style="font-size: 18px; color: #5d5a54">₦1,800</strong><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">from ₦2,000</p></div></article>
+  </section>
+  <section aria-label="Yesterday" style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 6px 0 0; font-size: 14px; font-weight: 700; color: #5d5a54">Yesterday</h2>
+    <article style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; padding: 16px 22px; display: flex; justify-content: space-between"><div><strong style="font-size: 15px">Tunde</strong><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">19:44</p></div><div style="text-align: right"><strong style="font-size: 18px">₦900</strong><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">from ₦1,000</p></div></article>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

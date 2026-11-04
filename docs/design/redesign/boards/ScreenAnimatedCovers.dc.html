@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animated cover chooser</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+*{-webkit-tap-highlight-color:transparent}
+button{font-family:Manrope,Arial,sans-serif;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32f9;outline-offset:4px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.key{min-height:52px;width:100%;padding:0 4px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);color:#000;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums lining-nums;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1),background-color 150ms}
+.key:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.key.on{position:relative;border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#5d5a54}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1)}
+.go:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3);transition-duration:100ms}
+.soft{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;color:#000;text-decoration:none;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms}
+.soft:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+
+.swatch{position:relative;display:block;height:92px;border-radius:12px;overflow:hidden;box-shadow:inset 0 1px 3px rgba(20,18,16,.3)}
+.opt{display:grid;gap:8px;padding:8px 8px 10px;border:1px solid rgba(20,18,16,.14);border-radius:16px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 6px 14px rgba(20,18,16,.08);font-size:14px;font-weight:700;color:#000;text-align:left;transition:transform 180ms cubic-bezier(.2,.75,.25,1),box-shadow 180ms}
+.opt:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.opt.on{border-color:#6423d8;box-shadow:0 0 0 2px #7a32f9,0 1px 2px rgba(58,17,131,.28)}
+.tag{float:right;font-size:12px;font-weight:700;color:#4d16a8}
+.sh{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px}
+.pv{position:relative;height:170px;overflow:hidden;}
+.fx{position:absolute;width:var(--s);height:var(--s);left:var(--x);bottom:var(--b);animation-delay:var(--d);animation-fill-mode:both;animation-timing-function:cubic-bezier(.4,0,.3,1)}
+.m-drift{animation-name:drift}.m-rise{animation-name:rise}.m-ripple{animation-name:ripple}.m-pulse{animation-name:pulse}.m-night{animation-name:night}.m-sun{animation-name:sun}
+.once{animation-duration:2.8s;animation-iteration-count:1}
+.loop{animation-duration:8s;animation-iteration-count:infinite;animation-direction:alternate}
+.frozen{animation-play-state:paused}
+@keyframes drift{from{transform:translate(-18px,8px)}to{transform:translate(18px,-10px)}}
+@keyframes rise{from{transform:translateY(60px);opacity:.2}to{transform:none;opacity:1}}
+@keyframes ripple{from{transform:scale(.6);opacity:.35}to{transform:scale(1.25);opacity:1}}
+@keyframes pulse{from{transform:scale(.88)}to{transform:scale(1.14)}}
+@keyframes night{from{opacity:.25;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes sun{from{transform:translateY(70px)}to{transform:translateY(-6px)}}
+.lever{position:relative;display:grid;grid-template-columns:1fr 1fr;padding:5px;border-radius:16px;background:#eeede8;border:1px solid rgba(20,18,16,.14);box-shadow:inset 0 1px 3px rgba(20,18,16,.16),inset 0 -1px 0 rgba(255,255,255,.8)}
+.lever button{position:relative;z-index:1;min-height:48px;border:0;background:none;font-size:15px;font-weight:700;color:#000;transition:color 180ms}
+.lever button.on{color:#fff}
+.lever button.off{color:#8b8780;cursor:not-allowed}
+.lever i{position:absolute;top:5px;bottom:5px;left:5px;width:calc(50% - 5px);border-radius:12px;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;border:1px solid #6423d8;box-sizing:border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 2px 4px rgba(58,17,131,.34);transition:transform 240ms cubic-bezier(.22,1,.36,1)}
+.lever i.right{transform:translateX(100%)}
+
+</style>
+</helmet>
+<div style="width: 1300px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; min-height: 900px">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 56px; padding: 52px 64px; box-sizing: border-box; align-items: start">
+<section>
+  <h1 class="serif" style="margin: 0 0 8px; font-size: 56px; line-height: 1">Your cover</h1>
+  <p style="margin: 0 0 22px; font-size: 17px; line-height: 1.5; color: #5d5a54; max-width: 560px">Choose how your page looks. Animated covers stop moving as soon as someone starts tipping.</p>
+  <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 22px"><div class="lever" style="width: 220px" role="group" aria-label="Show this as"><i class="{{planCls}}"></i><button type="button" class="{{freeBtn}}" onClick="{{toFree}}" aria-pressed="{{isFree}}">On Free</button><button type="button" class="{{proBtn}}" onClick="{{toPro}}" aria-pressed="{{isPro}}">On Pro</button></div><span style="font-size: 14px; color: #5d5a54">Flip it to see both.</span></div>
+  <div role="group" aria-label="Animated covers" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px"><sc-for list="{{designs}}" as="d" hint-placeholder-count="6"><button type="button" class="{{d.cls}}" onClick="{{d.pick}}" aria-pressed="{{d.on}}"><span class="swatch" style="{{d.vars}}"><span class="sh"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:100%;height:100%;display:block;fill:currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.500 16.4 12 21 12 21z"></path></svg></span></span><span>{{d.label}}<sc-if value="{{d.locked}}" hint-placeholder-val="{{ false }}"><span class="tag">Pro</span></sc-if></span></button></sc-for></div>
+  <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px"><div class="lever" style="width: 280px" role="group" aria-label="How it plays"><i class="{{playCls}}"></i><button type="button" class="{{onceBtn}}" onClick="{{setOnce}}" aria-pressed="{{isOnce}}">Plays once</button><button type="button" class="{{loopBtn}}" onClick="{{setLoop}}" aria-pressed="{{isLoop}}" aria-disabled="{{isFree}}">Slow loop</button></div></div>
+  <p style="margin: 0 0 22px; font-size: 15px; line-height: 1.5; color: #5d5a54; min-height: 46px" aria-live="polite">{{hint}}</p>
+  <button type="button" class="go" style="width: 220px" onClick="{{save}}">{{saveLabel}}</button>
+</section>
+<section aria-label="Live preview" class="instrument" style="overflow: hidden">
+  <div class="pv" style="{{pvVars}}"><span class="{{fxCls}}" style="--x:6%;--b:20px;--s:46px;--d:0s"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:100%;height:100%;display:block;fill:currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.500 16.4 12 21 12 21z"></path></svg></span><span class="{{fxCls}}" style="--x:30%;--b:70px;--s:30px;--d:0.3s"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:100%;height:100%;display:block;fill:currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.500 16.4 12 21 12 21z"></path></svg></span><span class="{{fxCls}}" style="--x:50%;--b:14px;--s:62px;--d:0.15s"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:100%;height:100%;display:block;fill:currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.500 16.4 12 21 12 21z"></path></svg></span><span class="{{fxCls}}" style="--x:76%;--b:64px;--s:34px;--d:0.45s"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:100%;height:100%;display:block;fill:currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.500 16.4 12 21 12 21z"></path></svg></span><span class="{{fxCls}}" style="--x:88%;--b:10px;--s:44px;--d:0.6s"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:100%;height:100%;display:block;fill:currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.500 16.4 12 21 12 21z"></path></svg></span></div>
+  <div style="padding: 0 24px 24px">
+    <img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="Ada Okafor" style="display: block; position: relative; width: 88px; height: 88px; margin-top: -44px; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 4px solid #fffefa; box-sizing: border-box">
+    <p class="serif" style="margin: 10px 0 2px; font-size: 34px; line-height: 1">Ada Okafor</p>
+    <p style="margin: 0 0 16px; font-size: 14px; font-weight: 600">Content creator/Video editor</p>
+    <button type="button" class="go" onClick="{{tipPress}}">{{tipLabel}}</button>
+    <p style="margin: 12px 0 0; font-size: 14px; line-height: 1.45; color: #5d5a54">{{previewNote}}</p>
+  </div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1300,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const pro = s.plan === 'pro';
+    const all = [["drift", "Drifting", "#204f3b", "#3a7a5e", false], ["rise", "Rising", "#4d16a8", "#7a32f9", false], ["ripple", "Ripple", "#7c2d12", "#b45a2b", false], ["pulse", "Pulse", "#14110f", "#7a32f9", true], ["night", "Night sky", "#101a3a", "#3e5aa8", true], ["sun", "Sunrise", "#8a3b12", "#e39a3b", true]];
+    let id = s.id || 'drift';
+    if (!pro && all.find((d) => d[0] === id)[4]) id = 'drift';
+    const cur = all.find((d) => d[0] === id);
+    const loop = pro && s.play === 'loop';
+    const frozen = Boolean(s.frozen);
+    const run = s.run || 0;
+    return {
+      isFree: !pro, isPro: pro, isOnce: !loop, isLoop: loop,
+      planCls: pro ? 'right' : '', freeBtn: pro ? '' : 'on', proBtn: pro ? 'on' : '',
+      toFree: () => this.setState({ plan: 'free', tried: null, saved: false }),
+      toPro: () => this.setState({ plan: 'pro', tried: null, saved: false }),
+      playCls: loop ? 'right' : '', onceBtn: loop ? '' : 'on', loopBtn: loop ? 'on' : pro ? '' : 'off',
+      setOnce: () => this.setState({ play: 'once', tried: null, frozen: false, saved: false, run: run + 1 }),
+      setLoop: () => (pro ? this.setState({ play: 'loop', frozen: false, saved: false }) : this.setState({ tried: 'loop' })),
+      designs: all.map((d) => {
+        const locked = d[4] && !pro;
+        return {
+          label: d[1], vars: 'background: ' + d[2] + '; color: ' + d[3], locked, on: d[0] === id,
+          cls: d[0] === id ? 'opt on' : 'opt',
+          pick: () => (locked ? this.setState({ tried: d[1] }) : this.setState({ id: d[0], tried: null, frozen: false, saved: false, run: run + 1 })),
+        };
+      }),
+      pvVars: 'background: ' + cur[2] + '; color: ' + cur[3],
+      fxCls: 'fx m-' + id + ' ' + (loop ? 'loop' : 'once') + (frozen ? ' frozen' : ''),
+      hint: s.tried === 'loop' ? 'Slow loop comes with Pro. On Free, animated covers play once when your page opens.' : s.tried ? s.tried + ' comes with Pro. Free includes Drifting, Rising and Ripple.' : pro ? 'You choose. Slow loop keeps moving until someone starts tipping.' : 'On Free, animated covers play once when your page opens.',
+      saveLabel: s.saved ? 'Saved' : 'Save cover',
+      save: () => this.setState({ saved: true }),
+      tipLabel: frozen ? 'Back to the cover' : 'Tip ₦2,000',
+      tipPress: () => this.setState({ frozen: !frozen }),
+      previewNote: frozen ? 'The cover has stopped, so nothing moves while someone pays.' : "Press Tip to see the cover stop. People who've turned off animation see a still cover.",
+    };
+  }
+}
+</script>
+</body>
+</html>

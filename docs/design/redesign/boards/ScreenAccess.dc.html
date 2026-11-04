@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in, recovery and confirmations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+*{-webkit-tap-highlight-color:transparent}
+button{font-family:Manrope,Arial,sans-serif;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32f9;outline-offset:4px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.key{min-height:52px;width:100%;padding:0 4px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);color:#000;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums lining-nums;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1),background-color 150ms}
+.key:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.key.on{position:relative;border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#5d5a54}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1)}
+.go:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3);transition-duration:100ms}
+.soft{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;color:#000;text-decoration:none;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms}
+.soft:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+
+.cells{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.cell{display:flex;align-items:center;justify-content:center;height:56px;border:1px solid rgba(20,18,16,.14);border-radius:10px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.12);font-size:24px;font-weight:700}
+.cell.now{border-color:#7a32f9;box-shadow:0 0 0 2px #7a32f9}
+.pad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.pad .key{min-height:46px}
+.tile{padding:26px;display:grid;gap:14px;align-content:start}
+.h{margin:0;font-size:36px;line-height:1.05}
+.p{margin:0;font-size:15px;line-height:1.5;color:#5d5a54}
+.link{min-height:44px;display:inline-flex;align-items:center;font-size:14px;font-weight:600}
+.cap{margin:0 0 10px;font-size:14px;font-weight:700}
+.fade{animation:fade 240ms cubic-bezier(.2,.75,.25,1) both}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+</style>
+</helmet>
+<div style="width: 1440px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; min-height: 760px">
+<div style="display: grid; grid-template-columns: 420px 400px 420px; gap: 44px; padding: 44px 64px; box-sizing: border-box; align-items: start; justify-content: center">
+  <div><p class="cap">Sign in. Press through it.</p><div class="instrument tile">
+    <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 28px; width: auto">
+    <sc-if value="{{isEmail}}" hint-placeholder-val="{{ true }}"><div class="fade" style="display: grid; gap: 14px"><h1 class="serif h">Welcome back.</h1><p class="p">Enter your email and we'll send you a code.</p><label style="display: grid; gap: 6px; font-size: 14px; font-weight: 700">Email<input type="email" value="ada@example.com" class="well" style="font: 600 16px Manrope, Arial, sans-serif"></label><button type="button" class="go" onClick="{{send}}">Send code</button><a href="#" class="link">Can't get into your email?</a></div></sc-if>
+    <sc-if value="{{isCode}}" hint-placeholder-val="{{ false }}"><div class="fade" style="display: grid; gap: 12px"><h1 class="serif h">Check your email.</h1><p class="p">We sent a 6-digit code to a•••@example.com.</p><div class="cells" role="group" aria-label="Your code" aria-live="polite"><sc-for list="{{cells}}" as="c" hint-placeholder-count="6"><span class="{{c.cls}}">{{c.v}}</span></sc-for></div><div class="pad"><sc-for list="{{pad}}" as="k" hint-placeholder-count="12"><button type="button" class="key" onClick="{{k.press}}" aria-label="{{k.name}}">{{k.label}}</button></sc-for></div></div></sc-if>
+    <sc-if value="{{isIn}}" hint-placeholder-val="{{ false }}"><div class="fade" style="display: grid; gap: 14px"><h1 class="serif h">You're in, Ada.</h1><p class="p">₦6,300 is waiting in your balance.</p><button type="button" class="go" onClick="{{restart}}">Go to your dashboard</button></div></sc-if>
+  </div></div>
+  <div><p class="cap">Recovery</p><div class="instrument tile">
+    <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 28px; width: auto">
+    <h2 class="serif h">Let's get you back in.</h2>
+    <sc-if value="{{recoverAsk}}" hint-placeholder-val="{{ true }}"><div class="fade" style="display: grid; gap: 14px"><p class="p">Enter your recovery email. If it matches an account, we'll send the next step there. Your balance stays safe meanwhile.</p><label style="display: grid; gap: 6px; font-size: 14px; font-weight: 700">Recovery email<input type="email" class="well" style="font: 600 16px Manrope, Arial, sans-serif"></label><button type="button" class="go" onClick="{{recover}}">Send the next step</button></div></sc-if>
+    <sc-if value="{{recoverSent}}" hint-placeholder-val="{{ false }}"><div class="fade" style="display: grid; gap: 14px"><p class="p">If that email matches an account, the next step is on its way. Your balance stays safe meanwhile.</p><button type="button" class="soft" onClick="{{recoverBack}}">Use a different email</button></div></sc-if>
+  </div></div>
+  <div style="display: grid; gap: 18px"><div><p class="cap">Small confirmations</p><div class="instrument tile"><h2 class="serif h" style="font-size: 30px">Your email is verified.</h2><p class="p">You're all set.</p><a class="go" href="#">Go to your dashboard</a></div></div><div class="instrument tile"><h2 class="serif h" style="font-size: 30px">You're unsubscribed.</h2><p class="p">Security emails will still reach you, because they protect your account.</p><a class="soft" href="#" style="text-decoration: none; font-weight: 700">Manage your emails</a></div></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const step = s.step || 'email';
+    const code = s.code || '';
+    const add = (d) => {
+      if (code.length >= 6) return;
+      const next = code + d;
+      this.setState({ code: next });
+      if (next.length === 6) setTimeout(() => this.setState({ step: 'in', code: '' }), 320);
+    };
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'];
+    return {
+      isEmail: step === 'email', isCode: step === 'code', isIn: step === 'in',
+      send: () => this.setState({ step: 'code', code: '' }),
+      restart: () => this.setState({ step: 'email', code: '' }),
+      cells: [0, 1, 2, 3, 4, 5].map((i) => ({ v: code[i] || '', cls: i === code.length ? 'cell now' : 'cell' })),
+      pad: keys.map((k) => ({
+        label: k === 'clear' ? 'Clear' : k === 'back' ? 'Back' : k,
+        name: k === 'clear' ? 'Clear the code' : k === 'back' ? 'Delete the last digit' : k,
+        press: () => (k === 'clear' ? this.setState({ code: '' }) : k === 'back' ? this.setState({ code: code.slice(0, -1) }) : add(k)),
+      })),
+      recoverAsk: !s.sent, recoverSent: Boolean(s.sent),
+      recover: () => this.setState({ sent: true }),
+      recoverBack: () => this.setState({ sent: false }),
+    };
+  }
+}
+</script>
+</body>
+</html>

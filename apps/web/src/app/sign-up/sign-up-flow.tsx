@@ -6,6 +6,7 @@ import { Skeleton } from '@tipme/ui';
 import { AuthProgress } from '@/components/account/auth-stage';
 import { HandleClaim } from '@/components/account/handle-claim';
 import { EmailCodeForm } from '@/components/account/email-code-form';
+import { handleFromSearch } from '@/lib/handle-hint';
 import { apiFetch } from '@/lib/session-client';
 
 const steps = ['Your email', 'The code', 'Your handle'] as const;
@@ -15,6 +16,13 @@ export function SignUpFlow() {
   const router = useRouter();
   const [step, setStep] = useState<'checking' | 'email' | 'handle'>('checking');
   const [codeSent, setCodeSent] = useState(false);
+  // Home's claim field sends the handle in the link. It is read once and kept in state, so it is
+  // still here when the email and code steps are done and the handle step opens.
+  const [hint] = useState(() =>
+    typeof window === 'undefined'
+      ? ''
+      : handleFromSearch(window.location.search),
+  );
 
   useEffect(() => {
     void apiFetch('/v1/me/profile').then((result) => {
@@ -34,7 +42,10 @@ export function SignUpFlow() {
       />
       {step === 'handle' ? (
         // A new page lands on the welcome: greeting first, setup second.
-        <HandleClaim onClaimed={() => router.replace('/dashboard/welcome')} />
+        <HandleClaim
+          initial={hint}
+          onClaimed={() => router.replace('/dashboard/welcome')}
+        />
       ) : (
         <>
           <EmailCodeForm

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How it works</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+*{-webkit-tap-highlight-color:transparent}
+button{font-family:Manrope,Arial,sans-serif;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32f9;outline-offset:4px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.key{min-height:52px;width:100%;padding:0 4px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);color:#000;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums lining-nums;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1),background-color 150ms}
+.key:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.key.on{position:relative;border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#5d5a54}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1)}
+.go:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3);transition-duration:100ms}
+.soft{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;color:#000;text-decoration:none;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms}
+.soft:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+
+.lever{position:relative;display:grid;grid-template-columns:1fr 1fr;width:440px;padding:5px;border-radius:16px;background:#eeede8;border:1px solid rgba(20,18,16,.14);box-shadow:inset 0 1px 3px rgba(20,18,16,.16),inset 0 -1px 0 rgba(255,255,255,.8)}
+.lever button{position:relative;z-index:1;min-height:52px;border:0;background:none;font-size:16px;font-weight:700;color:#000;transition:color 180ms}
+.lever button.on{color:#fff}
+.lever i{position:absolute;top:5px;bottom:5px;left:5px;width:calc(50% - 5px);border-radius:12px;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;border:1px solid #6423d8;box-sizing:border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 2px 4px rgba(58,17,131,.34);transition:transform 240ms cubic-bezier(.22,1,.36,1)}
+.lever i.right{transform:translateX(100%)}
+.step{display:grid;grid-template-columns:44px minmax(0,1fr);gap:16px;align-items:start;width:100%;padding:16px;border:1px solid transparent;border-radius:16px;background:none;text-align:left;color:#000;font-size:15px;line-height:1.45;transition:transform 180ms cubic-bezier(.2,.75,.25,1),background 180ms}
+.step strong{display:block;font-size:19px;margin-bottom:2px}
+.step .num{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;border:1px solid rgba(20,18,16,.14);background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-weight:700}
+.step:active{transform:translateY(2px)}
+.step.on{background:#fffefa;border-color:rgba(20,18,16,.09);box-shadow:0 1px 1px rgba(20,18,16,.08),0 12px 24px -14px rgba(20,18,16,.3)}
+.step.on .num{background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;border-color:#6423d8;color:#fff}
+.vign{height:380px;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:30px;box-sizing:border-box;animation:vign 240ms cubic-bezier(.2,.75,.25,1) both}
+@keyframes vign{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.q{font-size:16px;line-height:1.5;color:#5d5a54}
+.q strong{display:block;color:#000;font-size:18px;margin-bottom:4px}
+
+</style>
+</helmet>
+<div style="width: 1440px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; min-height: 1120px">
+<header style="width: 1200px; margin: 0 auto; height: 80px; display: flex; align-items: center; justify-content: space-between"><img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 32px; width: auto"><nav aria-label="Main" style="display: flex; align-items: center; gap: 24px; font-size: 15px; font-weight: 600"><a href="#" aria-current="page" style="text-decoration: underline; text-underline-offset: 4px; min-height: 44px; display: inline-flex; align-items: center">How it works</a><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">Who it's for</a><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">Pro</a><a href="#" style="text-decoration: none; min-height: 44px; display: inline-flex; align-items: center">Sign in</a></nav></header>
+<section style="width: 1200px; margin: 0 auto; padding: 24px 0 32px; display: flex; align-items: flex-end; justify-content: space-between; gap: 40px">
+  <h1 class="serif" style="margin: 0; font-size: 72px; line-height: 1; max-width: 640px">A thank-you, in a few taps.</h1>
+  <div class="lever" role="group" aria-label="Show the steps for"><i class="{{leverCls}}"></i><button type="button" class="{{getBtn}}" onClick="{{toGet}}" aria-pressed="{{isGet}}">If you get tipped</button><button type="button" class="{{giveBtn}}" onClick="{{toGive}}" aria-pressed="{{isGive}}">If you're tipping</button></div>
+</section>
+<section style="width: 1200px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 56px; align-items: center">
+  <div style="display: grid; gap: 6px"><sc-for list="{{steps}}" as="st" hint-placeholder-count="4"><button type="button" class="{{st.cls}}" onClick="{{st.pick}}" aria-pressed="{{st.on}}"><span class="num">{{st.n}}</span><span><strong>{{st.title}}</strong>{{st.text}}</span></button></sc-for></div>
+  <div class="instrument" aria-live="polite"><sc-if value="{{v0}}" hint-placeholder-val="{{ true }}"><div class="vign"><div style="display:flex;gap:12px;align-items:center"><img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;object-position:50% 12%"><div><p class="serif" style="margin:0;font-size:28px;line-height:1">Ada Okafor</p><p style="margin:3px 0 0;font-size:14px;font-weight:600">usetipme.xyz/@ada</p></div></div><span class="well" style="font-weight:700">Content creator/Video editor</span><span class="go">Claim your username</span></div></sc-if><sc-if value="{{v1}}" hint-placeholder-val="{{ false }}"><div class="vign"><img src="/_blob/1e89ecd39918479f5ecf761cc5c23da5" alt="" style="display:block;width:190px;height:190px;margin:0 auto"><p style="margin:0;text-align:center;font-size:15px;font-weight:700">usetipme.xyz/@ada</p></div></sc-if><sc-if value="{{v2}}" hint-placeholder-val="{{ false }}"><div class="vign"><div class="well" style="display:block;padding:14px;background:#fffefa;box-shadow:0 6px 14px -8px rgba(20,18,16,.3)"><strong>₦1,800</strong> from Bola<br>Your notes helped me pass. Thank you.</div><div class="well" style="display:block;padding:14px;background:#fffefa;box-shadow:0 6px 14px -8px rgba(20,18,16,.3)"><strong>₦4,500</strong> from Chidi<br>You made my week easier.</div></div></sc-if><sc-if value="{{v3}}" hint-placeholder-val="{{ false }}"><div class="vign"><p class="serif" style="margin:0;font-size:46px;line-height:1">₦6,300</p><span class="well" style="font-weight:600">GTBank ending 4471</span><span class="go">Withdraw to your bank</span><p style="margin:0;font-size:14px;color:#5d5a54">You can withdraw from ₦1,000.</p></div></sc-if><sc-if value="{{v4}}" hint-placeholder-val="{{ false }}"><div class="vign"><img src="/_blob/1e89ecd39918479f5ecf761cc5c23da5" alt="" style="display:block;width:190px;height:190px;margin:0 auto"><p style="margin:0;text-align:center;font-size:15px;font-weight:700">No app, no account.</p></div></sc-if><sc-if value="{{v5}}" hint-placeholder-val="{{ false }}"><div class="vign"><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><span class="key" style="display:flex;align-items:center;justify-content:center">₦1,000</span><span class="key on" style="display:flex;align-items:center;justify-content:center">₦2,000</span><span class="key" style="display:flex;align-items:center;justify-content:center">₦5,000</span></div><span class="well" style="color:#5d5a54">Add a note</span><span class="go">Tip ₦2,000</span></div></sc-if><sc-if value="{{v6}}" hint-placeholder-val="{{ false }}"><div class="vign"><p style="margin:0;font-size:15px;font-weight:700">Our partner's page</p><p class="serif" style="margin:0;font-size:50px;line-height:1">₦2,000</p><p style="margin:0;font-size:15px;color:#5d5a54">You pay exactly the amount you chose.</p><span class="go">Pay</span></div></sc-if><sc-if value="{{v7}}" hint-placeholder-val="{{ false }}"><div class="vign"><div style="text-align:center"><img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="" style="width:120px;height:120px;border-radius:50%;object-fit:cover;object-position:50% 12%"><p class="serif" style="margin:12px 0 4px;font-size:32px;line-height:1">Ada got your tip.</p><p style="margin:0;font-size:15px;color:#5d5a54">Your receipt is on the way.</p></div></div></sc-if></div>
+</section>
+<section style="width: 1200px; margin: 0 auto; padding: 56px 0">
+  <h2 class="serif" style="margin: 0 0 22px; font-size: 40px">Good to know</h2>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px"><div class="q"><strong>What does TipMe cost?</strong>It's free to start. TipMe keeps 10% of each tip, and you receive the rest.</div><div class="q"><strong>When can I withdraw?</strong>Once your balance reaches ₦1,000 and your bank account is added.</div><div class="q"><strong>Do tippers need an account?</strong>No. They only need your link or QR code and a way to pay.</div></div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1120}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const give = s.side === 'give';
+    const at = s.at || 0;
+    const lists = {
+      get: [['Claim your username', "Add your photo, what you do and a cover. It's free to start."], ['Share your link or QR code', 'In your bio, on your counter, or on screen while you stream.'], ['Read your thanks', 'See every tip and note as it arrives on your dashboard.'], ['Withdraw to your bank', 'Add your bank account, then withdraw from ₦1,000.']],
+      give: [['Scan or tap', 'Scan their QR code or open their link. No app, no account.'], ['Choose an amount', 'Pick one, or type your own. Add a note if you like.'], ["Pay on our partner's page", 'You pay exactly the amount you chose.'], ["That's it", 'They get your tip and your note, and you get a receipt.']],
+    };
+    const shown = (give ? 4 : 0) + at;
+    const flags = {};
+    for (let i = 0; i < 8; i += 1) flags['v' + i] = i === shown;
+    return {
+      ...flags,
+      isGet: !give, isGive: give,
+      leverCls: give ? 'right' : '', getBtn: give ? '' : 'on', giveBtn: give ? 'on' : '',
+      toGet: () => this.setState({ side: 'get', at: 0 }),
+      toGive: () => this.setState({ side: 'give', at: 0 }),
+      steps: (give ? lists.give : lists.get).map((x, i) => ({ n: i + 1, title: x[0], text: x[1], on: i === at, cls: i === at ? 'step on' : 'step', pick: () => this.setState({ at: i }) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

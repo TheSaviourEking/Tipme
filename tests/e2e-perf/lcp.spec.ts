@@ -27,6 +27,8 @@ async function lcp(page: import('@playwright/test').Page, url: string) {
 }
 
 test('lab LCP sample', async ({ page }) => {
+  // Fifteen throttled page loads, each followed by a pause for late paints.
+  test.setTimeout(180_000);
   const post = async (path: string, body: unknown, headers = {}) =>
     (
       await (
@@ -85,17 +87,20 @@ test('lab LCP sample', async ({ page }) => {
       ),
     },
   });
+  const home: number[] = [];
   const profile: number[] = [];
   const status: number[] = [];
   const dashboard: number[] = [];
   const admin: number[] = [];
   for (let run = 0; run < 3; run += 1) {
+    home.push(await lcp(page, '/'));
     profile.push(await lcp(page, '/@tobi'));
     status.push(await lcp(page, `/tip/${tip.tipId}#t=${tip.statusToken}`));
     dashboard.push(await lcp(page, '/dashboard'));
     admin.push(await lcp(page, '/ops'));
   }
   const results = {
+    '/': home,
     '/@tobi': profile,
     '/tip/<id>': status,
     '/dashboard': dashboard,

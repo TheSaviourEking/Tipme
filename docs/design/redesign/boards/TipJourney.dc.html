@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tipper's journey, touchable</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+*{-webkit-tap-highlight-color:transparent}
+button{font-family:Manrope,Arial,sans-serif;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32f9;outline-offset:4px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.phone{width:390px;height:800px;box-sizing:border-box;border-radius:44px;background:#f3f2ee;overflow:hidden;position:relative;display:flex;flex-direction:column;border:1px solid rgba(20,18,16,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.92),0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.key{min-height:52px;width:100%;padding:0 4px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);color:#000;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums lining-nums;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1),background-color 150ms}
+.key:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12);transition-duration:100ms}
+.key.on{position:relative;border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#5d5a54}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms cubic-bezier(.2,.75,.25,1)}
+.go:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3);transition-duration:100ms}
+.soft{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;color:#000;text-decoration:none;transition:transform 150ms cubic-bezier(.2,.75,.25,1),box-shadow 150ms}
+.soft:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.check{display:flex;gap:10px;align-items:center;min-height:44px;font-size:14px;font-weight:600}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+.dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:busy 1s ease-in-out infinite}
+@keyframes busy{50%{opacity:.3}}
+.pulse{width:14px;height:14px;border-radius:50%;background:#7a32f9;animation:one 1.4s ease-in-out 1}
+@keyframes one{50%{opacity:.25}}
+.rise{animation:rise 240ms cubic-bezier(.2,.75,.25,1) both}
+.rise2{animation:rise 240ms cubic-bezier(.2,.75,.25,1) 760ms both}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.settle{animation:settle 420ms cubic-bezier(.22,1,.36,1) both}
+@keyframes settle{from{transform:scale(.92)}to{transform:none}}
+.heart{position:absolute;left:50%;top:50%;margin:-11px;width:22px;height:22px;fill:#fff;opacity:0;animation:drift 560ms cubic-bezier(.2,.75,.25,1) 200ms both}
+@keyframes drift{0%{opacity:0;transform:translate(0,0) scale(.5)}35%{opacity:.9}100%{opacity:0;transform:translate(var(--x),var(--y)) scale(1)}}
+.lead{position:absolute;right:-8px;top:-8px;width:42px;height:42px;fill:#fff;animation:lead 560ms cubic-bezier(.22,1,.36,1) 200ms both}
+@keyframes lead{from{opacity:0;transform:translate(-50px,50px) scale(.4)}to{opacity:1;transform:none}}
+.demo{min-height:44px;padding:0 14px;border:1px solid rgba(20,18,16,.14);border-radius:10px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:14px;font-weight:700;transition:transform 150ms}
+.demo:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+.rule{margin:0;font-size:16px;line-height:1.5;color:#5d5a54}
+.rule strong{display:block;color:#000;font-size:17px;margin-bottom:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+</style>
+</helmet>
+<div style="width: 1120px; height: 1010px; box-sizing: border-box; padding: 56px; background: #f3f2ee; color: #000; font-family: Manrope, Arial, sans-serif; display: grid; grid-template-columns: 390px minmax(0, 1fr); gap: 72px">
+  <div class="phone">
+    <sc-if value="{{isChoose}}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; height: 100%">
+        <div style="height: 150px; flex: none; background: #204f3b; position: relative; overflow: hidden"><svg viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; right: 26px; top: 26px; width: 122px; height: 122px; fill: #3a7a5e"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.500 16.4 12 21 12 21z"></path></svg></div>
+        <div style="padding: 0 20px; display: flex; gap: 14px; align-items: flex-end; margin-top: -40px; position: relative"><img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="Ada Okafor" style="display: block; width: 92px; height: 92px; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 4px solid #f3f2ee; box-sizing: border-box; box-shadow: 0 2px 3px rgba(20,18,16,.1), 0 18px 42px rgba(20,18,16,.1)"></div>
+        <div style="padding: 10px 20px 14px"><h2 class="serif" style="margin: 0; font-size: 36px; line-height: 1">Ada Okafor</h2><p style="margin: 5px 0 0; font-size: 14px; font-weight: 600">Content creator/Video editor</p></div>
+        <div class="instrument" style="margin: 0 12px; padding: 16px; display: grid; gap: 12px">
+          <div role="group" aria-label="Amount" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px"><sc-for list="{{amounts}}" as="a" hint-placeholder-count="3"><button type="button" class="{{a.cls}}" aria-pressed="{{a.on}}" onClick="{{a.pick}}">{{a.label}}</button></sc-for></div>
+          <div class="well">₦ Other amount</div>
+          <button type="button" class="check" onClick="{{toggleJoin}}" aria-pressed="{{joined}}" style="border: 0; background: none; padding: 0; color: #000; text-align: left"><span class="{{joinCls}}" aria-hidden="true"><sc-if value="{{joined}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 7.500 5.700 10.700 11.500 3.500"></path></svg></sc-if></span>Add to Ada's 10th-tip celebration</button>
+        </div>
+        <div style="margin-top: auto; padding: 14px 16px 22px; display: grid; gap: 8px; background: linear-gradient(rgba(243,242,238,0), #f3f2ee 22%)">
+          <button type="button" class="go" onClick="{{tip}}">{{tipLabel}}<sc-if value="{{busy}}" hint-placeholder-val="{{ false }}"><span class="dot" aria-hidden="true"></span></sc-if></button>
+          <p style="margin: 0; text-align: center; font-size: 13px; line-height: 1.4; color: #5d5a54">You pay exactly this. You'll confirm on our partner's page.</p>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{isWaiting}}" hint-placeholder-val="{{ false }}">
+      <div style="flex: 1; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%; box-sizing: border-box" aria-live="polite">
+        <span class="pulse" aria-hidden="true" style="margin-bottom: 26px"></span>
+        <h2 class="serif" style="margin: 0; font-size: 40px; line-height: 1.05">Checking your payment</h2>
+        <p style="margin: 12px 0 0; font-size: 16px; line-height: 1.5; color: #5d5a54">This usually takes a moment. We'll show you as soon as it's confirmed.</p>
+      </div>
+    </sc-if>
+    <sc-if value="{{isPaid}}" hint-placeholder-val="{{ false }}">
+      <div style="height: 100%; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; padding: 92px 20px 20px; text-align: center; color: #fff; background: linear-gradient(rgba(255,255,255,.1),transparent 30%), #7a32f9">
+        <div class="settle" style="position: relative; width: 148px; height: 148px; margin-bottom: 26px"><img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="Ada Okafor" style="position: relative; z-index: 1; display: block; width: 148px; height: 148px; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 5px solid #fff; box-sizing: border-box; box-shadow: 0 18px 42px -14px rgba(58,17,131,.8)"><svg class="lead" viewBox="0 0 24 24" aria-hidden="true" style="z-index: 2"><use href="#jh"></use></svg><svg class="heart" viewBox="0 0 24 24" style="--x:-104px;--y:-70px" aria-hidden="true"><use href="#jh"></use></svg><svg class="heart" viewBox="0 0 24 24" style="--x:-40px;--y:-118px" aria-hidden="true"><use href="#jh"></use></svg><svg class="heart" viewBox="0 0 24 24" style="--x:50px;--y:-122px" aria-hidden="true"><use href="#jh"></use></svg><svg class="heart" viewBox="0 0 24 24" style="--x:112px;--y:-54px" aria-hidden="true"><use href="#jh"></use></svg></div>
+        <h2 class="serif" style="margin: 0; font-size: 44px; line-height: 1.04">Ada got your thanks</h2>
+        <p style="margin: 10px 0 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums lining-nums">{{amountText}}</p>
+        <div class="instrument rise2" style="margin-top: auto; width: 100%; box-sizing: border-box; padding: 14px; color: #000; display: grid; gap: 10px"><div style="display: flex; justify-content: space-between; padding: 4px 4px 2px; font-size: 14px"><span style="color: #5d5a54">Reference</span><strong>TM-48213</strong></div><button type="button" class="go" onClick="{{again}}">Done</button></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{isFailed}}" hint-placeholder-val="{{ false }}">
+      <div style="height: 100%; box-sizing: border-box; padding: 28px 20px 22px; display: flex; flex-direction: column" aria-live="polite">
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; padding: 0 8px"><h2 class="serif" style="margin: 0; font-size: 40px; line-height: 1.05">This payment didn't go through</h2><p style="margin: 12px 0 0; font-size: 16px; line-height: 1.5; color: #5d5a54">Your tip to Ada wasn't sent. You can try again with another card or bank.</p></div>
+        <div style="display: grid; gap: 10px"><button type="button" class="go" onClick="{{again}}">Try again</button></div>
+      </div>
+    </sc-if>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 22px">
+    <h1 class="serif" style="margin: 0; font-size: 58px; line-height: 1.02">Press it.</h1>
+    <p style="margin: 0; font-size: 19px; line-height: 1.5; color: #5d5a54; max-width: 520px">This phone works. Press Play, then tap the amounts and Tip. Each control is a real object: it sits on the surface, gives way under your finger and comes back.</p>
+    <div style="display: grid; gap: 16px; max-width: 520px">
+      <p class="rule"><strong>Raised keys</strong>A light top edge and a shallow shadow. Pressing moves them 2px down and the shadow shrinks.</p>
+      <p class="rule"><strong>The selected amount</strong>Purple, the only colour on the page, with a dot so it's clear without colour too.</p>
+      <p class="rule"><strong>Recessed fields</strong>Set into the surface, so typing feels different from pressing.</p>
+      <p class="rule"><strong>One black action</strong>The heaviest object on the screen. There's never a doubt what to press.</p>
+      <p class="rule"><strong>Stillness, then joy</strong>Nothing celebrates until payment is confirmed. Then one moment, once.</p>
+    </div>
+    <div style="margin-top: auto">
+      <p style="margin: 0 0 10px; font-size: 14px; font-weight: 700; color: #5d5a54">After tapping Tip, pretend the server said:</p>
+      <div style="display: flex; gap: 10px"><button type="button" class="demo" onClick="{{markPaid}}">Paid</button><button type="button" class="demo" onClick="{{markFailed}}">Didn't go through</button><button type="button" class="demo" onClick="{{again}}">Start over</button></div>
+    </div>
+  </div>
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true"><symbol id="jh" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z"></path></symbol></svg>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1120,"height":1010}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const view = s.view || 'choose';
+    const amount = s.amount || '2,000';
+    const joined = Boolean(s.joined);
+    const busy = Boolean(s.busy);
+    return {
+      isChoose: view === 'choose',
+      isWaiting: view === 'waiting',
+      isPaid: view === 'paid',
+      isFailed: view === 'failed',
+      busy,
+      joined,
+      joinCls: joined ? 'box on' : 'box',
+      amountText: '₦' + amount,
+      tipLabel: 'Tip ₦' + amount,
+      amounts: ['1,000', '2,000', '5,000'].map((value) => ({
+        label: '₦' + value,
+        on: value === amount,
+        cls: value === amount ? 'key on' : 'key',
+        pick: () => this.setState({ amount: value }),
+      })),
+      toggleJoin: () => this.setState({ joined: !joined }),
+      tip: () => {
+        if (busy) return;
+        this.setState({ busy: true });
+        setTimeout(() => this.setState({ busy: false, view: 'waiting' }), 700);
+      },
+      markPaid: () => this.setState({ view: 'paid', busy: false }),
+      markFailed: () => this.setState({ view: 'failed', busy: false }),
+      again: () => this.setState({ view: 'choose', busy: false }),
+    };
+  }
+}
+</script>
+</body>
+</html>

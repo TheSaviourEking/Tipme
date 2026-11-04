@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectAccessible, signUpRecipient, tipAsVisitor } from './helpers';
 import { enrolOwner } from './ops-helpers';
+import { API_ORIGIN } from './stack';
 
 // PR-013: reporting a page, profile photos, tip search, notification preferences and admin
 // search, as people would use them.
@@ -111,4 +112,63 @@ test('a recipient adds a photo, searches their tips and turns off tip emails', a
   await page.getByLabel('Search').fill('nobody-here');
   await expect(page.getByText('No tips match “nobody-here”.')).toBeVisible();
   await expectAccessible(page);
+});
+
+/** A real paste: the text goes to the clipboard and Ctrl/Cmd+V pastes it into the focused field. */
+async function pasteInto(page: Page, field: Locator, text: string) {
+  await page.evaluate((value) => navigator.clipboard.writeText(value), text);
+  await field.fill('');
+  await field.focus();
+  await page.keyboard.press('ControlOrMeta+V');
+}
+
+// A maxlength of 6 cut a pasted "123 456" to "123 45" before the space was stripped.
+test('a code pasted with a space into the recovery email and new email fields keeps all six digits', async ({
+  page,
+  context,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const { handle } = await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings');
+  await page
+    .getByLabel('Recovery email address')
+    .fill(`r@paste-${handle.replace('_', '-')}.example`);
+  await page
+    .getByRole('button', { name: 'Send code to recovery email' })
+    .click();
+  const recovery = page.getByLabel('Code sent to your recovery email');
+  await pasteInto(page, recovery, '123 456');
+  await expect(recovery).toHaveValue('123456');
+
+  await page
+    .getByLabel('New email address')
+    .fill(`k@paste-${handle.replace('_', '-')}.example`);
+  await page.getByRole('button', { name: 'Send code to new address' }).click();
+  const fresh = page.getByLabel('Code sent to the new address');
+  await pasteInto(page, fresh, '123 456');
+  await expect(fresh).toHaveValue('123456');
+});
+
+test('a sign-in code pasted with a space to remove the recovery email keeps all six digits', async ({
+  page,
+  context,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await signUpRecipient(page, testInfo, { live: false });
+  // A confirmed recovery email, and the code to the sign-in email sent: only the field is real.
+  await page.route(`${API_ORIGIN}/v1/me/recovery-email`, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: { data: { confirmed: true, hint: 'r•••@paste.example' } },
+        })
+      : route.fallback(),
+  );
+  await page.route(`${API_ORIGIN}/v1/me/recovery-email/change-code`, (route) =>
+    route.fulfill({ json: { data: {} } }),
+  );
+  await page.goto('/dashboard/settings');
+  await page.getByRole('button', { name: 'Remove recovery email' }).click();
+  const code = page.getByLabel('Code sent to your sign-in email');
+  await pasteInto(page, code, '123 456');
+  await expect(code).toHaveValue('123456');
 });

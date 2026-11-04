@@ -5,9 +5,8 @@ test('marketing is responsive, keyboard accessible and clearly a preview', async
 }, testInfo) => {
   await page.goto('/');
   await expect(page).toHaveTitle('TipMe — A little thanks goes a long way');
-  // The line breaks are <br>, so the accessible name has no space at those joins.
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    /Surprise the\s*people around,\s*by tipping them\./,
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    'Let People Celebrate You for the things you do.',
   );
   await page.keyboard.press('Tab');
   await expect(

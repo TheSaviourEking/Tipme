@@ -11,9 +11,57 @@ import { usePathname } from 'next/navigation';
 const POLL_MS = 10_000;
 
 /**
- * The bell and the "You got a tip" toast. Polls for unread notifications while the page is
- * visible; a notification seen for the first time after the page opened pops up once.
+ * The one loader for the bell's notifications: the unread list, an error and reload(). It polls
+ * while the page is visible (as before); a notification first seen after the page opened is
+ * handed to `onFresh` once. This is the only place a new tip is announced.
  */
+function useNotifications(onFresh: (n: NotificationView) => void) {
+  const [unread, setUnread] = useState<NotificationView[]>([]);
+  const [error, setError] = useState<'load' | 'refresh' | null>(null);
+  const seen = useRef<Set<string> | null>(null);
+  const loaded = useRef(false);
+  const fresh = useRef(onFresh);
+  useEffect(() => {
+    fresh.current = onFresh;
+  });
+
+  const reload = useCallback(async () => {
+    const result = await apiFetch<NotificationView[]>(
+      '/v1/me/notifications?unreadOnly=1',
+    );
+    if (!result.ok) {
+      // A failed refresh keeps the last list; the bell itself stays quiet about it.
+      setError(loaded.current ? 'refresh' : 'load');
+      return;
+    }
+    loaded.current = true;
+    setError(null);
+    setUnread(result.data);
+    if (seen.current === null) {
+      seen.current = new Set(result.data.map((n) => n.id));
+      return;
+    }
+    // A new tip is what the recipient most wants to hear about; then any other news.
+    const unseen = result.data.filter((n) => !seen.current?.has(n.id));
+    const news = unseen.find((n) => n.kind === 'tip') ?? unseen[0];
+    for (const n of result.data) seen.current.add(n.id);
+    if (news) fresh.current(news);
+  }, []);
+
+  useEffect(() => {
+    const first = setTimeout(() => void reload(), 0);
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void reload();
+    }, POLL_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [reload]);
+  return { data: unread, setData: setUnread, error, reload };
+}
+
+/** The bell and the "You got a tip" toast. */
 export function NotificationBell() {
   const pathname = usePathname();
   const [needsRecoveryEmail, setNeedsRecoveryEmail] = useState(false);
@@ -26,40 +74,11 @@ export function NotificationBell() {
     window.addEventListener(RECOVERY_EMAIL_CHANGED, refresh);
     return () => window.removeEventListener(RECOVERY_EMAIL_CHANGED, refresh);
   }, [pathname]);
-  const [unread, setUnread] = useState<NotificationView[]>([]);
   const [all, setAll] = useState<NotificationView[] | null>(null);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<NotificationView | null>(null);
-  const seen = useRef<Set<string> | null>(null);
   const button = useRef<HTMLButtonElement>(null);
-
-  const poll = useCallback(async () => {
-    const result = await apiFetch<NotificationView[]>(
-      '/v1/me/notifications?unreadOnly=1',
-    );
-    if (!result.ok) return;
-    setUnread(result.data);
-    if (seen.current === null) {
-      seen.current = new Set(result.data.map((n) => n.id));
-      return;
-    }
-    // A new tip is what the recipient most wants to hear about; then any other news.
-    const unseen = result.data.filter((n) => !seen.current?.has(n.id));
-    const fresh = unseen.find((n) => n.kind === 'tip') ?? unseen[0];
-    for (const n of result.data) seen.current.add(n.id);
-    if (fresh) setToast(fresh);
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(() => void poll(), 0);
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void poll();
-    }, POLL_MS);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [poll]);
+  const { data: unread, setData: setUnread } = useNotifications(setToast);
 
   useEffect(() => {
     if (!toast) return;

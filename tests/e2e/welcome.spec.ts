@@ -45,7 +45,7 @@ test('a new recipient is welcomed and sets up their page one small step at a tim
   await page.getByLabel('What you do').fill('Hairdresser at Glow Studio');
   // The preview follows what they type before anything is saved.
   await expect(
-    page.getByRole('figure', { name: 'Preview of your page' }),
+    page.getByRole('complementary', { name: 'Preview of your page' }),
   ).toContainText('Kemi Bello');
   await expectAccessible(page);
   await page.screenshot({ path: testInfo.outputPath('welcome-about.png') });
@@ -115,7 +115,11 @@ test('every welcome step can be skipped, and nothing goes live without asking', 
   await expect(
     page.getByRole('heading', { name: 'Get your page ready to share' }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Page settings' })).toBeVisible();
+  // The first-day dashboard reaches page settings from the page card (Task 10's "Edit page").
+  await expect(page.getByRole('link', { name: 'Edit page' })).toHaveAttribute(
+    'href',
+    '/dashboard/settings',
+  );
 });
 
 test(
