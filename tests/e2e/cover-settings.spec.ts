@@ -2,6 +2,8 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
+import { UNBROKEN_NAME } from './profile-fixtures';
+import { API_ORIGIN } from './stack';
 
 // Choosing a cover in Settings (design spec §6, motion §7.6). Reduced motion is on in this suite,
 // so a choice shows at once; the crossfade timings are in the component and the motion document.
@@ -304,4 +306,149 @@ test('removing the page photo keeps focus in the Photo card', async ({
   await page.getByRole('button', { name: 'Remove photo' }).click();
   await expect(page.getByText('Photo removed.')).toBeVisible();
   await expect(page.getByLabel('Choose a photo')).toBeFocused();
+});
+
+// Settings and the page editor (ScreenSettings): six sections on one page, each reached by its
+// link, and a live preview of the page that follows unsaved edits and saves nothing itself.
+const SECTIONS: [string, string][] = [
+  ['My page', 'page'],
+  ['Getting paid', 'paid'],
+  ['Notifications', 'notifications'],
+  ['Sign-in and security', 'security'],
+  ['Plan', 'plan'],
+  ['Your data and page', 'data'],
+];
+const supporterPreview = (page: Page) =>
+  page.getByRole('complementary', { name: 'Live preview of your page' });
+
+/** Each link reaches its section by its hash; arriving with #paid shows the bank card. */
+async function reachEachSection(page: Page) {
+  await page.goto('/dashboard/settings');
+  const nav = page.locator('nav[aria-label="Settings"]');
+  await expect(nav.getByRole('link')).toHaveText(
+    SECTIONS.map(([name]) => name),
+  );
+  for (const [name, id] of SECTIONS) {
+    await nav.getByRole('link', { name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/dashboard/settings#${id}$`));
+    const section = page.locator(`section#${id}`);
+    await expect(
+      section.getByRole('heading', { level: 2, name, exact: true }),
+    ).toBeInViewport();
+  }
+  // Arriving with the hash: the bank card is there, in its section, on screen.
+  await page.goto('/dashboard/settings#paid');
+  await expect(
+    page.locator('section#paid').getByRole('heading', { name: 'Getting paid' }),
+  ).toBeInViewport();
+  await expect(
+    page.locator('section#paid #get-paid').getByRole('heading', {
+      name: 'Get paid',
+    }),
+  ).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+}
+
+test('settings has six sections, each reachable by its link', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await reachEachSection(page);
+});
+
+test('settings has six sections on a phone, each reachable by its link @mobile', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await reachEachSection(page);
+});
+
+test('the preview shows unsaved edits as you type', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  const preview = supporterPreview(page);
+  await expect(preview).toContainText('What supporters see');
+  await page.getByLabel('Display name').fill('Ada Okafor');
+  await page.getByLabel('What you do').fill('Maths tutor');
+  await page
+    .getByLabel('Bio', { exact: true })
+    .fill('I make hard topics feel simple.');
+  // Before Save: the preview already shows it.
+  await expect(preview).toContainText('Ada Okafor');
+  await expect(preview).toContainText('Maths tutor');
+  await expect(preview).toContainText('I make hard topics feel simple.');
+  await expect(preview).toContainText('Tip Ada');
+  // Nothing was saved: after a reload neither the form nor the preview has it.
+  await page.reload();
+  await expect(page.getByLabel('What you do')).toHaveValue('');
+  await expect(supporterPreview(page)).not.toContainText('Maths tutor');
+});
+
+test('the preview offers the page’s real amounts', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  const keys = supporterPreview(page).getByRole('listitem');
+  await expect(keys).toHaveText(['₦2,000', '₦5,000', '₦10,000']);
+  await expect(supporterPreview(page)).not.toContainText('₦1,000');
+  // A Pro page with its own amounts: the preview offers those, as the API sends them.
+  await page.route(`${API_ORIGIN}/v1/me/profile`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        data: {
+          ...body.data,
+          plan: 'pro',
+          tipAmounts: {
+            presetsMinor: ['300000', '750000'],
+            minMinor: '250000',
+          },
+        },
+      },
+    });
+  });
+  await page.reload();
+  await expect(supporterPreview(page).getByRole('listitem')).toHaveText([
+    '₦3,000',
+    '₦7,500',
+  ]);
+});
+
+test('settings fits a long unbroken name at 320px @mobile', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  await page.getByLabel('Display name').fill(UNBROKEN_NAME);
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await page.reload();
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect(supporterPreview(page)).toContainText(UNBROKEN_NAME);
+  expect(await fitsViewport(page), 'page overflows at 320px').toBe(true);
+  const clipped = await page.evaluate(() =>
+    [...document.querySelectorAll('.settings-grid *')]
+      .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
+      .map(
+        (el) =>
+          `${el.closest('section[id]')?.id ?? '?'}/${el.tagName.toLowerCase()}.${el.className}`,
+      ),
+  );
+  expect(clipped, 'clipped at 320px').toEqual([]);
+  // The section links and the Save button stay clear of the phone's tab bar.
+  const save = page.getByRole('button', { name: 'Save changes' });
+  await save.scrollIntoViewIfNeeded();
+  const [saveBox, bar] = await Promise.all([
+    save.boundingBox(),
+    page.locator('nav[aria-label="Dashboard"]').boundingBox(),
+  ]);
+  expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(bar!.y);
+  await expectAccessible(page);
 });

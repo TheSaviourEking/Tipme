@@ -4,7 +4,8 @@ import type { TipAmounts } from '@tipme/contracts';
 // server enforces them on every quote; this only shows them and stops obvious mistakes early.
 // There is no maximum tip: supporters tip what they want.
 
-const STANDARD: TipAmounts = {
+/** The standard amounts a Free page offers, for an API too old to send them. */
+export const STANDARD_TIP_AMOUNTS: TipAmounts = {
   presetsMinor: ['200000', '500000', '1000000'],
   minMinor: '200000',
 };
@@ -73,7 +74,7 @@ const naira = (minor: number) =>
 
 export function amountOptions(amounts: TipAmounts | undefined) {
   // An API older than PR-012 sends none: the standard amounts apply there.
-  const { presetsMinor, minMinor } = amounts ?? STANDARD;
+  const { presetsMinor, minMinor } = amounts ?? STANDARD_TIP_AMOUNTS;
   const min = Number(minMinor);
   return {
     presets: presetsMinor.map((value) => ({

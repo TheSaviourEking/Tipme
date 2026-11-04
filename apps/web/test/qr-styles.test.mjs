@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import jsQR from 'jsqr';
 import {
   contrastRatio,
+  INDIGO_CARD_STYLE,
   isScannableStyle,
   qrMatrix,
   QR_STYLES,
@@ -63,4 +64,14 @@ test('a low-contrast style is rejected before it could ship', () => {
 test('contrast is computed the WCAG way', () => {
   assert.equal(Math.round(contrastRatio('#000000', '#ffffff')), 21);
   assert.equal(contrastRatio('#7a32f9', '#7a32f9'), 1);
+});
+
+test("the Home picture's indigo card style scans, and is not a studio choice", () => {
+  const site = 'https://usetipme.xyz';
+  assert.equal(isScannableStyle(INDIGO_CARD_STYLE), true);
+  assert.ok(!QR_STYLES.some((s) => s.id === INDIGO_CARD_STYLE.id));
+  const { data, width } = renderQrPixels(qrMatrix(site), INDIGO_CARD_STYLE, {
+    scale: 8,
+  });
+  assert.equal(jsQR(data, width, width)?.data, site);
 });

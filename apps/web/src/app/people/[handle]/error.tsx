@@ -12,13 +12,15 @@ export default function ProfileError({
   return (
     <QuietScreen
       title="Let’s try that again"
-      actions={
-        <>
-          <Button onClick={reset}>Try again</Button>
-          <Link className="text-link" href="/">
-            Back to TipMe
-          </Link>
-        </>
+      action={
+        <Button variant="continue" onClick={reset}>
+          Try again
+        </Button>
+      }
+      foot={
+        <Link className="text-link" href="/">
+          Back to TipMe
+        </Link>
       }
     >
       <p>

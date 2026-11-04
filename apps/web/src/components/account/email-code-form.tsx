@@ -3,7 +3,14 @@ import { useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { SignInVerified } from '@tipme/contracts';
 import { Button, InputField } from '@tipme/ui';
+import { CodeField } from '@/components/account/code-field';
 import { apiFetch, deviceLabel } from '@/lib/session-client';
+
+/** a•••@example.com: enough to recognise the address, not to read it over a shoulder. */
+const maskEmail = (email: string) => {
+  const [name = '', domain = ''] = email.trim().split('@');
+  return `${name.slice(0, 1)}•••@${domain}`;
+};
 
 /**
  * Email address, then a 6-digit code sent to it. Used for both signing in and signing up: the
@@ -94,28 +101,26 @@ export function EmailCodeForm({
         error={error || undefined}
         hint="We’ll email you a 6-digit code. Signing in with a phone number is coming soon."
       />
-      <Button type="submit" disabled={busy} aria-busy={busy}>
+      <Button type="submit" variant="continue" disabled={busy} aria-busy={busy}>
         {busy ? 'Sending…' : 'Send code'}
       </Button>
     </form>
   ) : (
     <form className="auth-form" onSubmit={verify} noValidate>
+      <h2 className="auth-step-title">Check your email.</h2>
       <p role="status">
-        We sent a code to {email.trim()}. It expires in 10 minutes. Check your
-        spam folder if it doesn’t arrive.
+        We sent a 6-digit code to {maskEmail(email)}. It expires in 10 minutes.
+        Check your spam folder if it doesn’t arrive.
       </p>
-      <InputField
+      <CodeField
         id={`${id}-code`}
         ref={codeField}
         label="6-digit code"
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        maxLength={6}
         value={code}
-        onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+        onChange={setCode}
         error={error || undefined}
       />
-      <Button type="submit" disabled={busy} aria-busy={busy}>
+      <Button type="submit" variant="continue" disabled={busy} aria-busy={busy}>
         {busy ? 'Checking…' : 'Continue'}
       </Button>
       <div className="auth-form__links">
@@ -130,7 +135,7 @@ export function EmailCodeForm({
             setError('');
           }}
         >
-          Use a different number
+          Use a different email
         </Button>
       </div>
     </form>

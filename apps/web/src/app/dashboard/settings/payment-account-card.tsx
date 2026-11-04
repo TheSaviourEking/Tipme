@@ -122,14 +122,14 @@ export function PaymentAccountCard() {
   if (load.kind === 'loading')
     return (
       <Card id="payments" className="settings-section" aria-busy="true">
-        <h2>{paymentAccountCopy(null).heading}</h2>
+        <h3>{paymentAccountCopy(null).heading}</h3>
         <p className="tm-hint">Checking your payment account…</p>
       </Card>
     );
   if (load.kind === 'failed')
     return (
       <Card id="payments" className="settings-section">
-        <h2>{paymentAccountCopy(null).heading}</h2>
+        <h3>{paymentAccountCopy(null).heading}</h3>
         <Notice tone="error" title="Couldn’t load your payment account">
           Please try again.
         </Notice>
@@ -148,7 +148,7 @@ export function PaymentAccountCard() {
 
   return (
     <Card id="payments" className="settings-section">
-      <h2>{copy.heading}</h2>
+      <h3>{copy.heading}</h3>
       <p className="tm-hint">{copy.intro}</p>
       {active && (
         <p role="status" className="page-state page-state--live">

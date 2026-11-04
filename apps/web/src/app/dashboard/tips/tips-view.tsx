@@ -2,23 +2,58 @@
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { MyTipRow } from '@tipme/contracts';
-import { Button, InputField, Skeleton } from '@tipme/ui';
-import { naira } from '@/lib/money';
+import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
+import { formatNaira } from '@/lib/demo-amount';
 import { useRecipient } from '@/components/account/recipient-context';
+import { usePanel } from '@/components/dashboard/use-panel';
 import { apiDownload, apiFetch } from '@/lib/session-client';
 
 type Filter = 'all' | 'paid' | 'confirming';
+type Page = { items: MyTipRow[]; nextCursor: string | null };
 const filters: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'paid', label: 'Paid' },
-  { value: 'confirming', label: 'Confirming' },
+  { value: 'confirming', label: 'Being confirmed' },
 ];
+// A paid tip says nothing extra; any other state is said in words, never by colour alone.
 const stateText = {
-  paid: 'Paid',
-  confirming: 'Confirming',
+  confirming: 'Being confirmed',
   failed: 'Declined',
   cancelled: 'Expired',
 } as const;
+
+const ZONE = 'Africa/Lagos';
+const dayKey = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-CA', { timeZone: ZONE });
+const timeOf = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: ZONE,
+  });
+function dayTitle(key: string, now: number) {
+  if (key === dayKey(new Date(now).toISOString())) return 'Today';
+  if (key === dayKey(new Date(now - 86_400_000).toISOString()))
+    return 'Yesterday';
+  return new Date(`${key}T12:00:00Z`).toLocaleDateString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** Rows grouped by Lagos day, newest first, keeping the API's order. */
+function byDay(items: MyTipRow[]) {
+  const days: { key: string; rows: MyTipRow[] }[] = [];
+  for (const tip of items) {
+    const key = dayKey(tip.at);
+    const last = days[days.length - 1];
+    if (last?.key === key) last.rows.push(tip);
+    else days.push({ key, rows: [tip] });
+  }
+  return days;
+}
 
 export default function TipsPage() {
   const id = useId();
@@ -29,11 +64,16 @@ export default function TipsPage() {
   const [query, setQuery] = useState('');
   // What was actually searched: typing pauses for a moment before the list is asked again.
   const [searched, setSearched] = useState('');
-  const [items, setItems] = useState<MyTipRow[] | null>(null);
-  const [next, setNext] = useState<string | null>(null);
   const [download, setDownload] = useState('');
+  // Later pages, kept with the list they belong to so a new search drops them.
+  const [more, setMore] = useState<{
+    path: string;
+    items: MyTipRow[];
+    next: string | null;
+  } | null>(null);
+  const [now] = useState(() => Date.now());
 
-  // Typing waits for a pause; an answer for an older search never replaces a newer one.
+  // Typing waits for a pause.
   useEffect(() => {
     const timer = setTimeout(() => setSearched(query.trim()), 300);
     return () => clearTimeout(timer);
@@ -41,72 +81,38 @@ export default function TipsPage() {
 
   const listPath = (cursor?: string) =>
     `/v1/me/tips?status=${filter}${searched ? `&q=${encodeURIComponent(searched)}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+  const path = listPath();
+  // One loader: data, error and reload(). A failed refresh keeps the rows already shown.
+  const { data, error } = usePanel<Page>(path);
 
-  useEffect(() => {
-    let current = true;
-    void apiFetch<{ items: MyTipRow[]; nextCursor: string | null }>(
-      listPath(),
-    ).then((result) => {
-      if (current && result.ok) {
-        setItems(result.data.items);
-        setNext(result.data.nextCursor);
-      }
-    });
-    return () => {
-      current = false;
-    };
-    // listPath only reads filter and searched.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, searched]);
+  const extra = more?.path === path ? more : null;
+  const items = data ? [...data.items, ...(extra?.items ?? [])] : null;
+  const next = extra ? extra.next : (data?.nextCursor ?? null);
 
-  const more = async () => {
+  const showMore = async () => {
     if (!next) return;
-    const result = await apiFetch<{
-      items: MyTipRow[];
-      nextCursor: string | null;
-    }>(listPath(next));
-    if (result.ok) {
-      setItems((current) => [...(current ?? []), ...result.data.items]);
-      setNext(result.data.nextCursor);
-    }
+    const result = await apiFetch<Page>(listPath(next));
+    if (result.ok)
+      setMore({
+        path,
+        items: [...(extra?.items ?? []), ...result.data.items],
+        next: result.data.nextCursor,
+      });
   };
 
+  if (error === 'load' && !data)
+    return (
+      <Notice tone="error" title="We couldn’t load your tips">
+        Please reload the page.
+      </Notice>
+    );
+
   return (
-    <div className="dashboard-section">
-      <h1>Your tips</h1>
-      {canSearch && (
-        <InputField
-          id={`${id}-search`}
-          label="Search"
-          type="search"
-          autoComplete="off"
-          hint="A supporter’s name, an amount like 2,000, or the end of a reference."
-          maxLength={100}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      )}
-      {/* Always present, so screen readers announce a search with no results. */}
-      <p role="status" className="tm-hint">
-        {items && items.length === 0 && searched
-          ? `No tips match “${searched}”.`
-          : ''}
-      </p>
-      <div className="filter-row" role="group" aria-label="Show">
-        {filters.map((option) => (
-          <Button
-            key={option.value}
-            variant={filter === option.value ? 'primary' : 'secondary'}
-            aria-pressed={filter === option.value}
-            onClick={() => setFilter(option.value)}
-          >
-            {option.label}
-          </Button>
-        ))}
-      </div>
-      <div className="tips-tools">
+    <div className="dashboard-section tips-page">
+      <header className="tips-head">
+        <h1>Your tips</h1>
         <Button
-          variant="secondary"
+          variant="quiet"
           onClick={async () => {
             setDownload('Preparing your file…');
             const day = new Date().toISOString().slice(0, 10);
@@ -123,10 +129,43 @@ export default function TipsPage() {
         >
           Download as CSV
         </Button>
-        <p role="status" className="tm-hint">
-          {download}
-        </p>
+      </header>
+      <p role="status" className="tm-hint tips-status">
+        {download}
+      </p>
+      <div className="tips-controls">
+        {canSearch && (
+          <InputField
+            id={`${id}-search`}
+            label="Search"
+            type="search"
+            autoComplete="off"
+            hint="A supporter’s name, an amount like 2,000, or the end of a reference."
+            maxLength={100}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        )}
+        <div className="filter-row" role="group" aria-label="Show">
+          {filters.map((option) => (
+            <Button
+              key={option.value}
+              variant={filter === option.value ? 'primary' : 'secondary'}
+              aria-pressed={filter === option.value}
+              onClick={() => setFilter(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
       </div>
+      {/* Always present, so screen readers announce a search with no results. */}
+      <p role="status" className="tm-hint">
+        {items && items.length === 0 && searched
+          ? `No tips match “${searched}”.`
+          : ''}
+        {error === 'refresh' ? 'Couldn’t refresh' : ''}
+      </p>
       {!items ? (
         <Skeleton label="Loading your tips" />
       ) : items.length === 0 ? (
@@ -134,39 +173,51 @@ export default function TipsPage() {
           <p>No tips here yet.</p>
         )
       ) : (
-        <ul className="activity-list">
-          {items.map((tip) => (
-            <li key={tip.tipId}>
-              <Link
-                href={`/dashboard/tips/${tip.tipId}`}
-                className="activity-list__row"
-              >
-                <span>
-                  Tip from {tip.supporterLabel ?? 'a guest'}
-                  {tip.hasMessage && (
-                    <span className="tm-hint"> · with a note</span>
-                  )}
-                  <small>
-                    {new Date(tip.at).toLocaleString('en-NG', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                      timeZone: 'Africa/Lagos',
-                    })}
-                  </small>
-                </span>
-                <span className="activity-list__amount">
-                  {naira(tip.netMinor)}{' '}
-                  <span className={`status-tag status-tag--${tip.state}`}>
-                    {stateText[tip.state]}
-                  </span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        byDay(items).map((day) => {
+          const title = dayTitle(day.key, now);
+          return (
+            <section key={day.key} aria-label={title} className="tips-day">
+              <h2>{title}</h2>
+              <ul className="tips-list">
+                {day.rows.map((tip) => (
+                  <li key={tip.tipId}>
+                    <Link
+                      href={`/dashboard/tips/${tip.tipId}`}
+                      className="tip-row"
+                      data-state={tip.state}
+                    >
+                      <span className="tip-row__who">
+                        <strong>
+                          <span className="sr-only">Tip from </span>
+                          {tip.supporterLabel ?? 'A guest'}
+                        </strong>
+                        <small>
+                          {timeOf(tip.at)}
+                          {tip.hasMessage && ' · with a note'}
+                          {tip.state !== 'paid' && (
+                            <span className="tip-row__state">
+                              {' · '}
+                              {stateText[tip.state]}
+                            </span>
+                          )}
+                        </small>
+                      </span>
+                      <span className="tip-row__money">
+                        <strong>{formatNaira(Number(tip.netMinor))}</strong>
+                        <small>
+                          from {formatNaira(Number(tip.grossMinor))}
+                        </small>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })
       )}
       {next && (
-        <Button variant="secondary" onClick={() => void more()}>
+        <Button variant="secondary" onClick={() => void showMore()}>
           Show more
         </Button>
       )}

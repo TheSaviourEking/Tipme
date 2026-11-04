@@ -1,11 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { ActionLink, Button, InputField } from '@tipme/ui';
+import { ActionLink, Button, Surface } from '@tipme/ui';
 
 const businessContact = 'usetipme@gmail.com';
 
+/**
+ * Interest is a mailto draft to the owner's inbox, not a server submission (DECISION-LOG,
+ * 2026-10-27): TipMe stores nothing here, and the visitor sends the email themselves.
+ */
 export function BusinessInterestForm() {
   const [email, setEmail] = useState('');
   const [draftUrl, setDraftUrl] = useState('');
@@ -25,36 +30,63 @@ export function BusinessInterestForm() {
   };
 
   return (
-    <div className="business-interest">
-      <h2>Interested in TipMe for your business?</h2>
-      <p>
-        Prepare an email to register your interest. Your email stays in this
-        form until you open and send the draft; TipMe does not store it here.
-      </p>
-      <form className="business-interest__form" onSubmit={prepareEmail}>
-        <InputField
-          id="business-interest-email"
-          label="Your email address"
-          type="email"
-          autoComplete="email"
-          maxLength={254}
-          required
-          value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-            setDraftUrl('');
-          }}
-        />
-        <Button type="submit" variant="secondary">
-          Prepare email
-        </Button>
-      </form>
-      {draftUrl && (
-        <p role="status">
-          Open the draft to {businessContact} and press Send to register your
-          interest. <ActionLink href={draftUrl}>Open email app</ActionLink>
-        </p>
+    <Surface material="instrument" className="business-card">
+      {draftUrl ? (
+        <div
+          className="business-card__done"
+          role="status"
+          data-testid="interest-done"
+        >
+          <p className="business-card__big">Your email is ready to send.</p>
+          <p>
+            Sending it is what registers your interest: open the draft to{' '}
+            {businessContact} and press Send. Once it arrives, we’ll write to
+            you when TipMe for businesses is ready.
+          </p>
+          <ActionLink variant="continue" href={draftUrl}>
+            Open email app
+          </ActionLink>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setDraftUrl('')}
+          >
+            Use a different email
+          </Button>
+        </div>
+      ) : (
+        <form
+          className="business-card__form"
+          aria-label="Register interest"
+          onSubmit={prepareEmail}
+        >
+          <label
+            className="business-card__label"
+            htmlFor="business-interest-email"
+          >
+            Work email
+          </label>
+          <input
+            id="business-interest-email"
+            className="tm-well business-card__input"
+            type="email"
+            autoComplete="email"
+            placeholder="you@yourbusiness.com"
+            maxLength={254}
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <Button type="submit" variant="continue">
+            Tell me when it&apos;s ready
+          </Button>
+        </form>
       )}
-    </div>
+      <p className="business-card__note">
+        If you send it, we’ll use your email only to tell you about TipMe for
+        businesses. Working for yourself?{' '}
+        <Link href="/sign-up">You can start today</Link>.
+      </p>
+    </Surface>
   );
 }

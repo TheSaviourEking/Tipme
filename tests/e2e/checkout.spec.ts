@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { enrolOwner } from './ops-helpers';
 
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 async function expectAccessible(page: Page) {
@@ -53,7 +54,7 @@ async function tip(
   return new URL(page.url()).pathname.split('/')[2] ?? '';
 }
 const paidHeading = (page: Page) =>
-  page.getByRole('heading', { name: /^Paid\. .+ got your thanks\.$/ });
+  page.getByRole('heading', { name: /^.+ got your thanks\.$/ });
 
 test('a supporter can attach a structured purpose to a tip', async ({
   page,
@@ -135,7 +136,7 @@ test('a declined payment says so and links back to try again', async ({
 }) => {
   await tip(page, { outcome: /^Decline/ });
   await expect(
-    page.getByRole('heading', { name: 'The payment was declined' }),
+    page.getByRole('heading', { name: 'This payment didn’t go through' }),
   ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute(
     'href',
@@ -165,12 +166,12 @@ test('a crafted "success" address never changes what the receipt says', async ({
   // the verdict from the API only, so claiming success in the address changes nothing.
   const tipId = await tip(page, { outcome: /^Decline/ });
   await expect(
-    page.getByRole('heading', { name: 'The payment was declined' }),
+    page.getByRole('heading', { name: 'This payment didn’t go through' }),
   ).toBeVisible();
   const crafted = `/tip/${tipId}?status=succeeded&paid=true&outcome=success&state=PAID`;
   await page.goto(crafted);
   await expect(
-    page.getByRole('heading', { name: 'The payment was declined' }),
+    page.getByRole('heading', { name: 'This payment didn’t go through' }),
   ).toBeVisible();
   await expect(paidHeading(page)).toHaveCount(0);
 });
@@ -187,10 +188,221 @@ test('the waiting screen is announced and accessible', async ({ page }) => {
   });
   await tip(page);
   const live = page.getByRole('status').filter({
-    has: page.getByRole('heading', { name: 'Waiting for confirmation…' }),
+    has: page.getByRole('heading', { name: 'Checking your payment' }),
   });
   await expect(live).toBeVisible();
   await expectAccessible(page);
+});
+
+/** Holds the real status response at one state, for this page only. */
+async function holdStatus(page: Page, state: string) {
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { data: { ...body.data, state, completedAt: null } },
+    });
+  });
+}
+
+test('while checking, one quiet pulse and no celebration', async ({ page }) => {
+  await holdStatus(page, 'waiting');
+  await tip(page, { handle: 'ada' });
+  await expect(page.getByText('Checking your payment')).toBeVisible();
+  await expect(page.locator('[data-pulse]')).toHaveCount(1);
+  await expect(page.locator('.tm-celebration')).toHaveCount(0);
+  await expect(paidHeading(page)).toHaveCount(0);
+});
+
+test('once confirmed, one moment and then the receipt', async ({ page }) => {
+  await tip(page, { handle: 'ada' });
+  const live = page.getByRole('status').filter({
+    has: page.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+  });
+  await expect(live).toBeVisible();
+  await expect(page.locator('.tm-celebration')).toHaveCount(1);
+  await expect(page.locator('[data-pulse]')).toHaveCount(0);
+  const receipt = page.getByRole('region', { name: 'Your receipt' });
+  await expect(receipt.getByText('Your tip', { exact: true })).toBeVisible();
+  await expect(receipt.getByText('₦2,000')).toBeVisible();
+  await expect(receipt.getByText(/^[0-9A-Z_-]{6}$/)).toBeVisible();
+  // Supporters see nothing about what the person receives (owner decision, 2 Nov 2026).
+  await expect(receipt.getByText(/receives/i)).toHaveCount(0);
+  await expect(page.getByText(/payment provider/i)).toHaveCount(0);
+  await expectAccessible(page);
+});
+
+test('the whole page name leads the thank-you and the failure, not its first word', async ({
+  page,
+}) => {
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        data: {
+          ...body.data,
+          recipient: { ...body.data.recipient, displayName: 'Lagos Bakery' },
+        },
+      },
+    });
+  });
+  await tip(page, { handle: 'ada' });
+  await expect(
+    page.getByRole('heading', { name: 'Lagos Bakery got your thanks.' }),
+  ).toBeVisible();
+  await page.unroute('**/v1/tips/*/status');
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        data: {
+          ...body.data,
+          state: 'declined',
+          recipient: { ...body.data.recipient, displayName: 'Lagos Bakery' },
+        },
+      },
+    });
+  });
+  await page.reload();
+  await expect(
+    page.getByText('Your tip to Lagos Bakery wasn’t sent.'),
+  ).toBeVisible();
+});
+
+test('one status region stays mounted from checking to confirmed, so the change is announced', async ({
+  page,
+}) => {
+  let calls = 0;
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    calls += 1;
+    await route.fulfill({
+      response,
+      json: {
+        data:
+          calls === 1
+            ? {
+                ...body.data,
+                state: 'waiting',
+                completedAt: null,
+                reference: null,
+              }
+            : body.data,
+      },
+    });
+  });
+  await tip(page, { handle: 'ada' });
+  const live = page.locator('[data-status-live]');
+  await expect(page.getByText('Checking your payment')).toBeVisible();
+  await expect(live).toHaveAttribute('role', 'status');
+  await live.evaluate((el) => {
+    (window as unknown as { __live: Element }).__live = el;
+  });
+  await expect(paidHeading(page)).toBeVisible({ timeout: 15_000 });
+  expect(
+    await page.evaluate(
+      () =>
+        document.querySelector('[data-status-live]') ===
+        (window as unknown as { __live: Element }).__live,
+    ),
+  ).toBe(true);
+  await expect(live).toContainText('got your thanks.');
+});
+
+test('in forced colours the thank-you slab and receipt keep an edge', async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: 'active' });
+  await tip(page, { handle: 'ada' });
+  await expect(paidHeading(page)).toBeVisible();
+  for (const selector of [
+    '.tip-thanks',
+    '.tip-thanks__receipt',
+    '.tip-thanks__initial',
+    '.tip-thanks__tick',
+  ])
+    expect(
+      await page
+        .locator(selector)
+        .evaluate((el) => getComputedStyle(el).borderTopStyle),
+      selector,
+    ).not.toBe('none');
+});
+
+test('the reference on the receipt is what staff search finds the tip by', async ({
+  page,
+  browser,
+}, testInfo) => {
+  await tip(page, { handle: 'ada' });
+  const reference =
+    (await page
+      .getByRole('region', { name: 'Your receipt' })
+      .locator('dd')
+      .last()
+      .textContent()) ?? '';
+  expect(reference).toMatch(/^[0-9A-Z_-]{6}$/);
+  const staff = await (await browser.newContext()).newPage();
+  await enrolOwner(staff, testInfo);
+  await staff.goto('/ops/search');
+  await staff.getByLabel('Search').fill(reference);
+  await staff.getByRole('button', { name: 'Search' }).click();
+  await expect(staff.getByRole('status')).toHaveText('1 result.');
+  await expect(staff.getByRole('heading', { name: 'Tips' })).toBeVisible();
+});
+
+test('with reduced motion the confirmed screen does not animate', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await tip(page, { handle: 'ada' });
+  await expect(paidHeading(page)).toBeVisible();
+  // Reduced motion shortens every animation to a hundredth of a millisecond: one may still be
+  // "running" for the frame it starts in, so what counts is any that is long enough to be seen.
+  const running = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation.playState === 'running' &&
+          Number(animation.effect?.getComputedTiming().duration ?? 0) > 1,
+      )
+      .map((animation) => animation.id || animation.constructor.name),
+  );
+  expect(running).toEqual([]);
+});
+
+test('didn’t go through says nothing was sent and offers one next step', async ({
+  page,
+}) => {
+  await tip(page, { handle: 'ada', outcome: /^Decline/ });
+  await expect(
+    page.getByText('Your tip to Ada Okafor wasn’t sent.', { exact: false }),
+  ).toBeVisible();
+  const again = page.getByRole('link', { name: 'Try again' });
+  await expect(again).toHaveCount(1);
+  await expect(again).toHaveAttribute('href', '/@ada');
+  await expect(page.locator('.tm-celebration')).toHaveCount(0);
+});
+
+test('the thank-you and receipt fit a phone @mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await tip(page, { handle: 'ada' });
+  await expect(
+    page.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Your receipt' }),
+  ).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+  const done = page.getByRole('link', { name: 'Done' });
+  const box = (await done.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(44);
 });
 
 test('a double tap on Tip creates one tip', async ({ page }) => {

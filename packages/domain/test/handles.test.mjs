@@ -27,3 +27,8 @@ test('handles that clash with TipMe pages are reserved', () => {
   assert.equal(isReservedHandle('kemi'), false);
   assert.ok(RESERVED_HANDLES.length >= 20);
 });
+
+// The /pro page claims this address (owner, 3 Nov 2026).
+test('pro is reserved for the Pro page', () => {
+  assert.equal(isReservedHandle('pro'), true);
+});

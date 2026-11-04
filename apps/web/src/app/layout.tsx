@@ -3,6 +3,7 @@ import localFont from 'next/font/local';
 import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
 import { Footer } from '@/components/footer';
+import { UpdateNotice } from '@/components/update-notice';
 import { WebVitalsReporter } from '@/components/web-vitals-reporter';
 import { SITE_DESCRIPTION } from '@/lib/payment-mode-copy';
 import '@tipme/ui/tokens.css';
@@ -49,6 +50,7 @@ export default function RootLayout({
         <Navigation />
         {children}
         <Footer />
+        <UpdateNotice />
         <WebVitalsReporter />
       </body>
     </html>

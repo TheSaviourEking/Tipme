@@ -24,7 +24,6 @@ export type PaymentModeCopy = {
   profileMetaSuffix: string;
   homeRecipientNotice: string | null;
   homeClarity: string;
-  howItWorksPay: string;
   signUpLede: string;
   dashboardBadge: string | null;
   dashboardPaymentStep: string;
@@ -39,11 +38,11 @@ export type PaymentModeCopy = {
 };
 
 const CLOSED_TITLE = 'Tipping opens soon';
-const CLOSED_BODY = 'TipMe isn’t taking tips yet. Please come back soon.';
+const CLOSED_BODY =
+  'Claim your own page while you wait. No bank details needed yet.';
 const SIGN_UP =
   'An email address and a handle is all it takes to start receiving thanks.';
 const CLARITY = 'You pay exactly the amount you choose.';
-const PAY_STEP = 'Choose an amount and pay exactly that.';
 const TRUST = 'No account needed. You pay exactly this amount.';
 const PARTNER = 'Our payment partner handles this. You’ll confirm on its page.';
 const EXAMPLE_TITLE = 'Tip the people you know';
@@ -76,7 +75,6 @@ const TEST: PaymentModeCopy = {
   homeRecipientNotice:
     'Payments are in test mode. Real payments and payout setup are not available until provider and funds-flow approvals are complete.',
   homeClarity: `${CLARITY} Payments are still in test mode; real payments are not available yet.`,
-  howItWorksPay: `${PAY_STEP} Payments are still in test mode; real payments are not available yet.`,
   signUpLede: `${SIGN_UP} Payments are in test mode.`,
   dashboardBadge: 'Test mode',
   dashboardPaymentStep:
@@ -108,7 +106,6 @@ const LIVE: PaymentModeCopy = {
   profileMetaSuffix: '',
   homeRecipientNotice: null,
   homeClarity: CLARITY,
-  howItWorksPay: PAY_STEP,
   signUpLede: SIGN_UP,
   dashboardBadge: null,
   dashboardPaymentStep: 'Supporters can tip you.',
@@ -130,7 +127,6 @@ const CLOSED: PaymentModeCopy = {
   formPartner: null,
   homeRecipientNotice: `${CLOSED_TITLE}. You can create your page now.`,
   homeClarity: `${CLARITY} ${CLOSED_TITLE}.`,
-  howItWorksPay: `${PAY_STEP} ${CLOSED_TITLE}.`,
   signUpLede: `${SIGN_UP} ${CLOSED_TITLE}.`,
   dashboardPaymentStep: `${CLOSED_TITLE}. Set up payments so you’re ready.`,
 };
