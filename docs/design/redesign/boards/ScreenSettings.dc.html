@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page editor redesign</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1000px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; display: grid; grid-template-columns: 232px 520px minmax(0, 1fr)">
+  <nav aria-label="Settings" style="padding: 28px 20px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid rgba(20,18,16,.09)">
+    <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 30px; width: 80px; object-fit: contain; object-position: left; margin: 0 0 26px 10px">
+    <a href="#" aria-current="page" style="height: 44px; padding: 0 12px; display: flex; align-items: center; border-radius: 10px; background: #fffefa; font-weight: 700; font-size: 15px; text-decoration: none; box-shadow: 0 1px 1px rgba(20,18,16,.1), 0 5px 14px rgba(20,18,16,.07)">My page</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">Getting paid</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">Notifications</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">Sign-in and security</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">Plan</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">Your data and page</a>
+  </nav>
+  <section aria-labelledby="pg" style="padding: 32px; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+    <h1 id="pg" style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 46px; line-height: 1">My page</h1>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <button type="button" style="height: 48px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 14px Manrope, Arial, sans-serif">Change photo</button>
+      <button type="button" style="height: 48px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 14px Manrope, Arial, sans-serif">Change cover</button>
+    </div>
+    <label style="display: flex; flex-direction: column; gap: 7px; font-size: 14px; font-weight: 600">Name<input value="Ada Okafor" style="height: 48px; box-sizing: border-box; padding: 0 14px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 16px Manrope, Arial, sans-serif"></label>
+    <label style="display: flex; flex-direction: column; gap: 7px; font-size: 14px; font-weight: 600">What you do<input value="Maths tutor" style="height: 48px; box-sizing: border-box; padding: 0 14px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 16px Manrope, Arial, sans-serif"></label>
+    <label style="display: flex; flex-direction: column; gap: 7px; font-size: 14px; font-weight: 600">Short introduction<textarea rows="3" style="box-sizing: border-box; padding: 12px 14px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 16px Manrope, Arial, sans-serif; resize: none">I make hard topics feel simple, one short lesson at a time.</textarea></label>
+    <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px"><legend style="font-size: 14px; font-weight: 600; margin-bottom: 8px; padding: 0">Your links</legend>
+      <input aria-label="X" value="x.com/adaokafor" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 15px Manrope, Arial, sans-serif">
+      <input aria-label="Instagram" placeholder="Instagram link" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 15px Manrope, Arial, sans-serif">
+    </fieldset>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-top: 1px solid rgba(20,18,16,.1)"><div><p style="margin: 0; font-size: 15px; font-weight: 700">Handle: @ada</p><p style="margin: 3px 0 0; font-size: 13.5px; color: #5d5a54">Handle changes are part of TipMe Pro.</p></div><a href="#" style="font-size: 14px; font-weight: 600">See Pro</a></div>
+    <button type="button" style="height: 54px; border: 0; border-radius: 12px; background: #7a32f9; color: #fff; font: 700 16px Manrope, Arial, sans-serif">Save changes</button>
+  </section>
+  <aside aria-label="Live preview of your page" style="padding: 32px 40px; background: #e9e7e0; display: flex; flex-direction: column; align-items: center; gap: 14px">
+    <p style="margin: 0; font-size: 14px; font-weight: 600; color: #5d5a54">What supporters see</p>
+    <div style="width: 390px; background: #f3f2ee; border-radius: 28px; overflow: hidden; border: 8px solid #000; box-sizing: content-box; height: 780px">
+      <img src="/_blob/aef1b025f8a396e3802ec254cf015be7" alt="" style="display: block; width: 100%; height: 150px; object-fit: cover">
+      <div style="padding: 0 18px">
+        <img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="" style="display: block; width: 96px; height: 96px; margin-top: -48px; position: relative; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 4px solid #f3f2ee; box-sizing: border-box">
+        <h2 style="margin: 12px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 40px; line-height: 1">Ada Okafor</h2>
+        <p style="margin: 6px 0 0; font-size: 14px; color: #5d5a54">@ada</p>
+        <p style="margin: 12px 0 0; font-size: 16px; font-weight: 700">Maths tutor</p>
+        <p style="margin: 5px 0 0; font-size: 15px; line-height: 1.5; color: #5d5a54">I make hard topics feel simple, one short lesson at a time.</p>
+        <div style="margin-top: 16px; background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 22px; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+          <strong style="font-size: 18px">Tip Ada</strong>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px"><span style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #eeede8; font-size: 15px; font-weight: 700">₦1,000</span><span style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #7a32f9; color: #fff; font-size: 15px; font-weight: 700">₦2,000</span><span style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #eeede8; font-size: 15px; font-weight: 700">₦5,000</span></div>
+          <span style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #000; color: #fff; font-size: 16px; font-weight: 700">Tip ₦2,000</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

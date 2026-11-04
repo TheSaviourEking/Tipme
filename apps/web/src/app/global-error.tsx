@@ -33,7 +33,7 @@ export default function GlobalError({
             <div className="quiet-card__actions">
               <button
                 type="button"
-                className="tm-button tm-button--primary"
+                className="tm-button tm-button--continue"
                 onClick={reset}
               >
                 Try again

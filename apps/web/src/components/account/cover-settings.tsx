@@ -27,7 +27,7 @@ import { COVER_SHRINK_MAX, shrinkPhoto } from '@/lib/shrink-photo';
 // until "Save cover". An uploaded photo beats any design, so while one exists the page says so.
 
 /** What the preview shows: the stored or just-chosen photo, or a design drawn from the catalogue. */
-type Layer =
+export type Layer =
   | { key: string; kind: 'photo'; src: string | null }
   | { key: string; kind: 'design'; design: string; cover: ResolvedCover };
 
@@ -35,7 +35,7 @@ const reducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-function LayerView({ layer }: { layer: Layer }) {
+export function LayerView({ layer }: { layer: Layer }) {
   if (layer.kind === 'design') return <ProfileCover cover={layer.cover} />;
   return (
     <div className="profile-cover" data-profile-cover="image">
@@ -128,7 +128,15 @@ function designName(id: string | null) {
   return COVER_DESIGNS.find((d) => d.id === id)?.name ?? '';
 }
 
-export function CoverSettings() {
+/**
+ * `onPreview` hears the look being shown, saved or not, so the page preview beside Settings can
+ * show the same cover. It saves nothing.
+ */
+export function CoverSettings({
+  onPreview,
+}: {
+  onPreview?: (layer: Layer) => void;
+} = {}) {
   const id = useId();
   const { profile, setProfile } = useRecipient();
   const choice = profile.coverChoice;
@@ -170,6 +178,27 @@ export function CoverSettings() {
     : null;
   const stored = useStoredPhoto(photoKey);
   const storedUrl = stored.state === 'ready' ? stored.url : null;
+
+  // What the page shows: the photo if there is one, otherwise the design being looked at.
+  // The stored photo once it has been read; until then the one just chosen, so nothing blanks.
+  const photoSrc = storedUrl ?? pending;
+  const cover = draftPreview(draft, profile.handle);
+  const layer: Layer = hasPhoto
+    ? { key: 'photo', kind: 'photo', src: photoSrc }
+    : {
+        key: `design:${JSON.stringify(cover)}`,
+        kind: 'design',
+        design: cover.kind === 'design' ? cover.design : '',
+        cover,
+      };
+  // The layer is rebuilt each render; its key and photo say when the look really changed.
+  const latest = useRef(layer);
+  useEffect(() => {
+    latest.current = layer;
+  });
+  useEffect(() => {
+    onPreview?.(latest.current);
+  }, [layer.key, photoSrc, onPreview]);
   if (!choice) return null;
 
   const say = (text: string) => {
@@ -246,26 +275,13 @@ export function CoverSettings() {
     } else setError('We couldn’t remove that. Please try again.');
   };
 
-  // What the page shows: the photo if there is one, otherwise the design being looked at.
-  // The stored photo once it has been read; until then the one just chosen, so nothing blanks.
-  const photoSrc = storedUrl ?? pending;
-  const cover = draftPreview(draft, profile.handle);
-  const layer: Layer = hasPhoto
-    ? { key: 'photo', kind: 'photo', src: photoSrc }
-    : {
-        key: `design:${JSON.stringify(cover)}`,
-        kind: 'design',
-        design: cover.kind === 'design' ? cover.design : '',
-        cover,
-      };
-
   const colours = takesColours(draft.design);
   const name = designName(draft.design);
   const unsaved = dirty;
 
   return (
     <Card id="cover" className="settings-section">
-      <h2>Cover</h2>
+      <h3>Cover</h3>
       <p className="tm-hint">
         The wide image at the top of your page. Your own photo works best.
       </p>

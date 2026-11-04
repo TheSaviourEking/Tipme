@@ -57,7 +57,7 @@ test('test copy keeps today’s wording', () => {
 test('supporters are never told about totals or what the person receives, or that there are no fees', () => {
   for (const mode of ['test', 'live', 'closed']) {
     const copy = paymentModeCopy(mode);
-    for (const key of ['formTrust', 'homeClarity', 'howItWorksPay'])
+    for (const key of ['formTrust', 'homeClarity'])
       assert.doesNotMatch(
         copy[key] ?? '',
         /receive|full total|full cost|no fees?|free/i,
@@ -72,7 +72,6 @@ test('closed copy says tipping opens soon where a supporter would pay', () => {
   assert.equal(copy.closedTitle, 'Tipping opens soon');
   assert.equal(copy.formTrust, null);
   assert.match(copy.homeClarity, /Tipping opens soon/);
-  assert.match(copy.howItWorksPay, /Tipping opens soon/);
   assert.equal(copy.formBadge, null);
   assert.equal(copy.dashboardBadge, null);
 });

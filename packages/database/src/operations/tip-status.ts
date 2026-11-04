@@ -1,5 +1,5 @@
 import type { TipStatusState, TipStatusView } from '@tipme/contracts';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { paymentAttempts, profiles, tips } from '../schema.js';
 import { guarded } from './errors.js';
@@ -55,12 +55,30 @@ export function tipStatusView(
           ? 'checking'
           : 'waiting';
     }
+    let reference: string | null = null;
+    if (state === 'paid') {
+      const [paidAttempt] = await db
+        .select({ providerReference: paymentAttempts.providerReference })
+        .from(paymentAttempts)
+        .where(
+          and(
+            eq(paymentAttempts.intentId, tip.intentId),
+            eq(paymentAttempts.status, 'VERIFIED_SUCCEEDED'),
+          ),
+        )
+        .limit(1);
+      // Staff search finds a payment by this ending (ops-search byText).
+      reference = paidAttempt?.providerReference
+        ? paidAttempt.providerReference.slice(-6).toUpperCase()
+        : null;
+    }
     return {
       state,
       recipient: { handle: tip.handle, displayName: tip.displayName },
       amountMinor: tip.grossMinor.toString(),
       currency: tip.currency,
       completedAt: tip.completedAt?.toISOString() ?? null,
+      reference,
     };
   });
 }

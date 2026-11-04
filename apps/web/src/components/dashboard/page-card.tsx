@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import type { MyProfile } from '@tipme/contracts';
-import { Surface } from '@tipme/ui';
+import { ProBadge, Surface } from '@tipme/ui';
 
 const initialsFor = (name: string) =>
   name
@@ -21,7 +21,10 @@ export function PageCard({ profile }: { profile: MyProfile }) {
           {initialsFor(profile.displayName)}
         </span>
         <div>
-          <p className="page-card__name">{profile.displayName}</p>
+          <p className="page-card__name">
+            {profile.displayName}
+            {profile.plan === 'pro' && <ProBadge />}
+          </p>
           <p className="page-card__handle">@{profile.handle}</p>
         </div>
       </div>

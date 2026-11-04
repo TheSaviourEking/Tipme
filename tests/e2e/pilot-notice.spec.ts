@@ -155,7 +155,7 @@ test.describe('live mode', () => {
       },
     );
     await expect(async () => {
-      const response = await fetch(`${origin}/how-it-works`);
+      const response = await fetch(`${origin}/for-creators`);
       expect(response.ok).toBe(true);
     }).toPass({ timeout: 90_000 });
   });
@@ -242,11 +242,14 @@ test.describe('live mode', () => {
     expect(await fitsViewport(live)).toBe(true);
 
     await live.goto(receipt);
-    await expect(live.locator('.tip-status-card')).toContainText(/Paid\./, {
-      timeout: 20_000,
-    });
+    await expect(live.locator('.tip-thanks')).toContainText(
+      /got your thanks\./,
+      {
+        timeout: 20_000,
+      },
+    );
     await expect(
-      live.locator('.tip-status-card').getByTestId('pilot-notice'),
+      live.locator('.tip-thanks').getByTestId('pilot-notice'),
     ).toHaveText(SENTENCE);
     expect(await fitsViewport(live)).toBe(true);
     await expectAccessible(live);
@@ -261,7 +264,10 @@ test.describe('live mode', () => {
     await expectAccessible(live);
 
     await live.goto('/dashboard/withdraw');
-    await expect(live.getByRole('heading', { name: 'Withdraw' })).toBeVisible();
+    // Exact: "Your withdrawals" is a heading on this page too.
+    await expect(
+      live.getByRole('heading', { name: 'Withdraw', exact: true }),
+    ).toBeVisible();
     await expect(live.getByTestId('pilot-notice')).toHaveCount(1);
     expect(await fitsViewport(live)).toBe(true);
     await expectAccessible(live);

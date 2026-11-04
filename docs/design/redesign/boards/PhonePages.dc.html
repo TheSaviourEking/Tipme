@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Public pages on a phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.phone{width:390px;height:1080px;box-sizing:border-box;border-radius:28px;background:#f3f2ee;overflow:hidden;padding:18px;display:flex;flex-direction:column;gap:18px;box-shadow:0 24px 56px -18px rgba(20,18,16,.3)}
+.bar{display:flex;align-items:center;justify-content:space-between;min-height:44px}
+.logo{height:26px;width:auto}
+.menu{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:0;background:none;padding:0}
+.h{margin:0;font-family:'DM Serif Display',Georgia,serif;font-weight:400;line-height:1.02;text-wrap:balance}
+.p{margin:0;font-size:16px;line-height:1.5;color:#5d5a54}
+.btn{display:flex;align-items:center;justify-content:center;height:54px;border-radius:12px;background:#000;color:#fff;font-size:16px;font-weight:700;text-decoration:none}
+.card{background:#fffefa;border-radius:16px;padding:16px}
+.card strong{font-size:16px}
+.card p{margin:4px 0 0;font-size:15px;line-height:1.45;color:#5d5a54}
+.cap{margin:0 0 10px;font-size:17px;font-weight:700}
+.icon{width:24px;height:24px;fill:none;stroke:#000;stroke-width:2}
+
+.phone{border:1px solid rgba(20,18,16,.14)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.92),0 1px 1px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.36)!important}
+.btn{border:1px solid #000!important;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3),0 8px 16px -6px rgba(20,18,16,.4)!important;transition:transform 180ms cubic-bezier(.2,.75,.25,1),box-shadow 180ms;cursor:pointer}
+.btn:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3)!important;transition-duration:100ms}
+.card{border:1px solid rgba(20,18,16,.09)!important;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa!important;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07)!important;transition:transform 180ms cubic-bezier(.2,.75,.25,1),box-shadow 180ms}
+a.card:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)!important;transition-duration:100ms}
+.menu{min-width:44px;min-height:44px;border:1px solid rgba(20,18,16,.14)!important;border-radius:12px!important;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa!important;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);transition:transform 180ms,box-shadow 180ms;cursor:pointer}
+.menu:active{transform:translateY(2px);box-shadow:0 1px 1px rgba(20,18,16,.12)}
+input{box-shadow:inset 0 1px 2px rgba(20,18,16,.11)}
+@media (prefers-reduced-motion:reduce){.btn,.card,.menu{transition-duration:0s}}
+</style>
+</helmet>
+<div style="width: 1820px; height: 1240px; box-sizing: border-box; padding: 48px; background: #fffefa; color: #000; font-family: Manrope, Arial, sans-serif; display: grid; grid-template-columns: repeat(4, 390px); gap: 40px">
+  <div><p class="cap">Home</p><div class="phone">
+    <div class="bar"><img class="logo" src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe"><button class="menu" type="button" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button></div>
+    <h1 class="h" style="font-size: 46px">Let People Celebrate You for the things you do.</h1>
+    <p class="p">Your personalized link and QR code, so people can tip you in a few taps. They don't need an account.</p>
+    <label style="height: 56px; display: flex; align-items: center; padding: 0 14px; border: 1px solid #77736b; border-radius: 14px; background: #eeede8; font-size: 16px; color: #5d5a54">usetipme.xyz/@<input aria-label="Your handle" value="ada" style="flex: 1; min-width: 0; border: 0; background: none; font: 700 16px Manrope, Arial, sans-serif; padding: 0"></label>
+    <a class="btn" href="#">Claim your username</a>
+    <div style="background: #fffefa; border-radius: 22px; overflow: hidden"><img src="/_blob/aef1b025f8a396e3802ec254cf015be7" alt="" style="display: block; width: 100%; height: 100px; object-fit: cover"><div style="padding: 0 18px 18px"><img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="Ada Okafor" style="display: block; width: 80px; height: 80px; margin-top: -40px; position: relative; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 4px solid #fffefa; box-sizing: border-box"><p style="margin: 8px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 30px; line-height: 1">Ada Okafor</p><p style="margin: 4px 0 12px; font-size: 13px; font-weight: 600">Content creator/Video editor</p><span class="btn" style="height: 46px; font-size: 15px">Tip ₦5,000</span></div></div>
+  </div></div>
+  <div><p class="cap">Menu open</p><div class="phone">
+    <div class="bar"><img class="logo" src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe"><button class="menu" type="button" aria-label="Close menu"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"></path></svg></button></div>
+    <a href="#" style="font-size: 18px; font-weight: 700; text-decoration: none; padding: 10px 0">How it works</a>
+    <div style="display: grid; gap: 8px"><p style="margin: 0; font-size: 14px; font-weight: 700; color: #5d5a54">Who it's for</p>
+      <a class="card" href="#" style="text-decoration: none; display: block"><strong>Individuals</strong><p>Creators, streamers, video editors, barbers, drivers: anyone can receive payments.</p></a>
+      <a class="card" href="#" style="text-decoration: none; display: block"><strong>Businesses (coming soon)</strong><p>Tell us you're interested, and we'll let you know.</p></a>
+      <a class="card" href="#" style="text-decoration: none; display: block"><strong>Infrastructure (coming soon)</strong><p>Consume the Tipme APIs.</p></a></div>
+    <a href="#" style="font-size: 18px; font-weight: 700; text-decoration: none; padding: 10px 0">Pro</a>
+    <a href="#" style="font-size: 18px; font-weight: 700; text-decoration: none; padding: 10px 0">Sign in</a>
+    <a class="btn" href="#" style="margin-top: auto">Claim your username</a>
+  </div></div>
+  <div><p class="cap">Individuals</p><div class="phone">
+    <div class="bar"><img class="logo" src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe"><button class="menu" type="button" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button></div>
+    <div style="background: #7a32f9; color: #fff; border-radius: 24px; padding: 24px; display: grid; gap: 14px"><p style="margin: 0; font-size: 14px; font-weight: 700">For creators, streamers, barbers, drivers and anyone people love to thank</p><h1 class="h" style="font-size: 46px">People already want to thank you.</h1><p style="margin: 0; font-size: 16px; line-height: 1.5">Put your link in your bio or your QR code on the counter. People tip in a few taps.</p><a class="btn" href="#" style="background: #fff; color: #000">Claim your username</a></div>
+    <div class="card"><strong>If you work with people</strong><p>Keep a printed QR on your counter, mirror or car seat.</p></div>
+    <div class="card"><strong>If you stream</strong><p>Show your QR on screen and pin your link in chat.</p></div>
+    <div class="card"><strong>If you post</strong><p>One link for your bio and captions.</p></div>
+    <div class="card"><strong>If you hit a milestone</strong><p>Share a moment, and people can add to the celebration.</p></div>
+  </div></div>
+  <div><p class="cap">Pro</p><div class="phone">
+    <div class="bar"><img class="logo" src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe"><button class="menu" type="button" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button></div>
+    <h1 class="h" style="font-size: 46px">Make your page unmistakably yours.</h1>
+    <div style="background: #7a32f9; color: #fff; border-radius: 22px; padding: 22px; display: grid; gap: 10px"><h2 class="h" style="font-size: 34px">Pro</h2><p style="margin: 0; font-size: 18px; font-weight: 700">[PRICE SET BY STAFF]</p><p style="margin: 0; font-size: 15px; line-height: 1.5">Pro QR designs and formats. Change your handle up to 3 times. More animated covers, on a slow loop or once. Your own tip amounts.</p><a class="btn" href="#" style="background: #fff; color: #000">Ask for Pro</a></div>
+    <div style="background: #fffefa; border-radius: 22px; padding: 22px; display: grid; gap: 10px"><h2 class="h" style="font-size: 34px">Free</h2><p style="margin: 0; font-size: 18px; font-weight: 700">₦0</p><p class="p" style="font-size: 15px">Your page, link and standard QR code. Every cover design and colour. 3 animated covers. Tips, notes and withdrawals.</p><a class="btn" href="#" style="background: #eeede8; color: #000">Claim your username</a></div>
+    <p class="p" style="font-size: 14px">TipMe keeps 10% of each tip on both plans.</p>
+  </div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1820,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

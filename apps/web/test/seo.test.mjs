@@ -40,8 +40,8 @@ test('once indexing is on, marketing pages are listed and private areas are alwa
   const urls = sitemapFor({ indexing: true, origin }).map((entry) => entry.url);
   assert.deepEqual(urls, [
     `${origin}/`,
-    `${origin}/how-it-works`,
     `${origin}/for-creators`,
+    `${origin}/pro`,
   ]);
   for (const url of urls)
     assert.equal(

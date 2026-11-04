@@ -19,6 +19,10 @@ export async function startTip(
   if (message)
     await page.getByLabel('Personal message (optional)').fill(message);
   if (name) await page.getByLabel('Your name (optional)').fill(name);
+  // On a phone the Tip bar is hidden while a field has focus, so leave the field first.
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
 }
 

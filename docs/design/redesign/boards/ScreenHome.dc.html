@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home page redesign</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1500px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; overflow: hidden">
+  <header style="width: 1200px; margin: 0 auto; height: 80px; display: flex; align-items: center; justify-content: space-between">
+    <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 32px; width: auto">
+    <nav aria-label="Main" style="display: flex; align-items: center; gap: 24px; font-size: 15px; font-weight: 600"><a href="#" style="text-decoration: none">How it works</a><div style="position: relative"><button type="button" aria-expanded="{{menuOpen}}" aria-controls="who-menu" onClick="{{toggleMenu}}" style="display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 4px; border: 0; background: none; color: #000; font: 600 15px Manrope, Arial, sans-serif; cursor: pointer">Who it's for<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 4.5 6 8.5 10 4.5"></path></svg></button><sc-if value="{{menuOpen}}" hint-placeholder-val="{{ false }}"><div id="who-menu" style="position: absolute; top: 50px; left: -16px; z-index: 20; width: 340px; padding: 10px; display: grid; gap: 2px; background: #fffefa; border-radius: 18px; box-shadow: 0 24px 56px -12px rgba(20,18,16,.32)"><a href="#" style="display: block; padding: 12px 14px; border-radius: 12px; text-decoration: none"><strong style="display: block; font-size: 15px; font-weight: 700">Individuals</strong><span style="display: block; margin-top: 2px; font-size: 14px; font-weight: 500; line-height: 1.4; color: rgb(93, 90, 84)">Creators, streamers, video editors, barbers, drivers: anyone can receive payments.</span></a><a href="#" style="display: block; padding: 12px 14px; border-radius: 12px; text-decoration: none"><strong style="display: block; font-size: 15px; font-weight: 700">Businesses (coming soon)</strong><span style="display: block; margin-top: 2px; font-size: 14px; font-weight: 500; line-height: 1.4; color: #5d5a54">Tell us you're interested, and we'll let you know.</span></a><a href="#" style="display: block; padding: 12px 14px; border-radius: 12px; text-decoration: none"><strong style="display: block; font-size: 15px; font-weight: 700">Infrastructure (coming soon)</strong><span style="display: block; margin-top: 2px; font-size: 14px; font-weight: 500; line-height: 1.4; color: rgb(93, 90, 84)">Consume the Tipme APIs..</span></a></div></sc-if></div><a href="#" style="text-decoration: none">Pro</a><a href="#" style="text-decoration: none">Sign in</a></nav>
+  </header>
+  <section style="width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 560px minmax(0, 1fr); gap: 56px; align-items: center; padding: 28px 0 64px">
+    <div>
+      <h1 style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 68px; line-height: .98; letter-spacing: -0.01em">Let People Celebrate You for the things you do.</h1>
+      <p style="margin: 22px 0 28px; font-size: 18px; line-height: 1.5; color: #5d5a54">Your personalized link and QR code to receive global payments (USD, EUR, GBP, NGN, Stablecoins), so people can tip you in a few taps. They don't need an account.</p>
+      <form style="display: flex; gap: 10px" aria-label="Claim your link">
+        <label style="flex: 1; height: 60px; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font-size: 17px; color: #5d5a54; box-shadow: inset 0 1px 2px rgba(20,18,16,.11)">usetipme.xyz/@<input aria-label="Your handle" value="ada" style="flex: 1; min-width: 0; border: 0; background: none; font: 700 17px Manrope, Arial, sans-serif; outline: none; padding: 0"></label>
+        <button type="button" style="height: 60px; padding: 0 28px; border: 0; border-radius: 12px; background: #000; color: #fff; font: 700 16px Manrope, Arial, sans-serif; white-space: nowrap">Claim your username</button>
+      </form>
+      <p style="margin: 12px 0 0; font-size: 14px; color: #5d5a54">Free to start, and no bank details needed yet. Tipping opens soon.</p>
+    </div>
+    <div aria-hidden="true" style="position: relative; height: 560px">
+      <div style="position: absolute; right: 0; top: 54px; width: 250px; background: #fffefa; border-radius: 24px; overflow: hidden; transform: rotate(5deg); box-shadow: 0 24px 56px -12px rgba(20,18,16,.3)"><div style="height: 100px; background: #1c4e8a; position: relative; overflow: hidden"><svg viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; left: 112px; top: 8px; width: 110px; height: 110px; fill: #3f7cc6"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z"></path></svg></div><div style="padding: 0 18px 22px"><div style="width: 76px; height: 76px; margin-top: -38px; position: relative; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 3px solid #fffefa; box-sizing: border-box; background: #f1e9ff; color: #4d16a8; font-family: 'DM Serif Display', Georgia, serif; font-size: 30px">Z</div><p style="margin: 10px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 30px; line-height: 1">Zainab</p><p style="margin: 4px 0 14px; font-size: 13px; font-weight: 600">Streamer</p><span style="height: 42px; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; border-radius: 10px; font-size: 14px; font-weight: 700">Tip Zainab</span></div></div>
+      <div style="position: absolute; left: 0; top: 70px; width: 280px; background: #fffefa; border-radius: 24px; overflow: hidden; transform: rotate(-5deg); box-shadow: 0 24px 56px -12px rgba(20,18,16,.3)"><img src="/_blob/f3a435f7169c7c96c3eaf2dd53420f2a" alt="" style="display: block; width: 100%; height: 110px; object-fit: cover"><div style="padding: 0 18px 22px"><img src="/_blob/ef4120aa87c1e9ba417b8b8108e14134" alt="" style="display: block; width: 76px; height: 76px; margin-top: -38px; position: relative; border-radius: 50%; object-fit: cover; object-position: 50% 15%; border: 3px solid #fffefa; box-sizing: border-box"><p style="margin: 10px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 30px; line-height: 1">Tobi</p><p style="margin: 4px 0 14px; font-size: 13px; font-weight: 600">DJ and producer</p><span style="height: 42px; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; border-radius: 10px; font-size: 14px; font-weight: 700">Tip Tobi</span></div></div>
+      <div style="position: absolute; left: 132px; top: 0; width: 320px; background: #fffefa; border-radius: 26px; overflow: hidden; z-index: 2; box-shadow: 0 32px 64px -14px rgba(20,18,16,.36)"><img src="/_blob/aef1b025f8a396e3802ec254cf015be7" alt="" style="display: block; width: 100%; height: 124px; object-fit: cover"><div style="padding: 0 20px 24px"><img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="" style="display: block; width: 92px; height: 92px; margin-top: -46px; position: relative; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 4px solid #fffefa; box-sizing: border-box"><p style="margin: 10px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 38px; line-height: 1">Ada Okafor</p><p style="margin: 5px 0 16px; font-size: 14px; font-weight: 600">Content creator/Video editor</p><div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px"><span style="height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgb(238, 237, 232); font-size: 14px; font-weight: 700">₦2,000</span><span style="height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgb(122, 50, 249); color: rgb(255, 255, 255); font-size: 14px; font-weight: 700">₦5,000</span><span style="height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgb(238, 237, 232); font-size: 14px; font-weight: 700">₦10,000</span></div><span style="height: 50px; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; border-radius: 12px; font-size: 15px; font-weight: 700">Tip ₦5,000</span></div></div>
+      <img src="/_blob/0685055936ee82b8a1212e02965fecbc" alt="" style="position: absolute; right: 24px; top: 372px; width: 164px; height: 164px; border-radius: 20px; transform: rotate(-4deg); z-index: 3; box-shadow: 0 24px 56px -12px rgba(20,18,16,.36)">
+    </div>
+  </section>
+  <section aria-labelledby="how" style="width: 1200px; margin: 0 auto; padding: 16px 0 56px">
+    <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px">
+      <h2 id="how" style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 52px; line-height: 1.05">{{howTitle}}</h2>
+      <div role="group" aria-label="See it as" style="display: flex; padding: 4px; background: #eeede8; border-radius: 12px"><button type="button" aria-pressed="{{isTipped}}" onClick="{{showTipped}}" style="{{tippedTab}}">If you get tipped</button><button type="button" aria-pressed="{{isTipping}}" onClick="{{showTipping}}" style="{{tippingTab}}">If you're tipping</button></div>
+    </div>
+    <sc-if value="{{isTipping}}" hint-placeholder-val="{{ false }}">
+    <ol style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+      <li><div style="height: 150px; display: flex; align-items: center; justify-content: center; background: #f1e9ff; border-radius: 18px 18px 0 0"><img src="/_blob/0685055936ee82b8a1212e02965fecbc" alt="" style="display: block; width: 118px; height: 118px; border-radius: 14px"></div><div style="background: #fffefa; border-radius: 0 0 18px 18px; padding: 18px 20px"><strong style="font-size: 18px">1. Scan or tap</strong><p style="margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: #5d5a54">Scan their QR code or open their link. No app, no account.</p></div></li>
+      <li><div style="height: 150px; box-sizing: border-box; padding: 0 22px; display: flex; flex-direction: column; justify-content: center; gap: 8px; background: #eeede8; border-radius: 18px 18px 0 0"><div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px"><span style="height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgb(255, 254, 250); font-size: 14px; font-weight: 700">₦2,000</span><span style="height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgb(122, 50, 249); color: rgb(255, 255, 255); font-size: 14px; font-weight: 700">₦5,000</span><span style="height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: rgb(255, 254, 250); font-size: 14px; font-weight: 700">₦10,000</span></div><span style="height: 44px; display: flex; align-items: center; justify-content: center; background: #000; color: #fff; border-radius: 12px; font-size: 14px; font-weight: 700">Tip ₦10,000</span></div><div style="background: #fffefa; border-radius: 0 0 18px 18px; padding: 18px 20px"><strong style="font-size: 18px">2. Choose an amount</strong><p style="margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: #5d5a54">Add a note if you like. You pay exactly the amount you choose.</p></div></li>
+      <li><div style="height: 150px; display: flex; align-items: center; justify-content: center; background: #7a32f9; border-radius: 18px 18px 0 0"><svg viewBox="0 0 24 24" aria-hidden="true" style="width: 88px; height: 88px; fill: #fff"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z"></path></svg></div><div style="background: #fffefa; border-radius: 0 0 18px 18px; padding: 18px 20px"><strong style="font-size: 18px">3. Say your thanks</strong><p style="margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: #5d5a54">Confirm on our payment partner's page. They get your tip and your note.</p></div></li>
+    </ol>
+    </sc-if>
+    <sc-if value="{{isTipped}}" hint-placeholder-val="{{ true }}">
+    <ol style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+      <li><img src="/_blob/5474a5c9587e8767052fd26018b66eb1" alt="" style="display: block; width: 100%; height: 150px; object-fit: cover; border-radius: 18px 18px 0 0"><div style="background: #fffefa; border-radius: 0 0 18px 18px; padding: 18px 20px"><strong style="font-size: 18px">1. Make it yours</strong><p style="margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: #5d5a54">Claim your link, add your face, choose your cover.</p></div></li>
+      <li><img src="/_blob/d1ebec91c8ce9fdd67a5e2586f2c4220" alt="" style="display: block; width: 100%; height: 150px; object-fit: cover; border-radius: 18px 18px 0 0"><div style="background: #fffefa; border-radius: 0 0 18px 18px; padding: 18px 20px"><strong style="font-size: 18px">2. Share it anywhere</strong><p style="margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: #5d5a54">Put your QR on the counter, or your link in your bio.</p></div></li>
+      <li><img src="/_blob/d88015c2da7d7432caa9a48308f94887" alt="" style="display: block; width: 100%; height: 150px; object-fit: cover; border-radius: 18px 18px 0 0"><div style="background: #fffefa; border-radius: 0 0 18px 18px; padding: 18px 20px"><strong style="font-size: 18px">3. Get your thanks</strong><p style="margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: #5d5a54">See every tip and note, then withdraw to your bank.</p></div></li>
+    </ol>
+    </sc-if>
+  </section>
+  <section style="width: 1200px; margin: 0 auto; background: #000; color: #fff; border-radius: 30px; padding: 36px 44px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center">
+    <div><h2 style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 44px; line-height: 1.05">Appreciation goes a long way.</h2><p style="margin: 10px 0 0; font-size: 16px; line-height: 1.5">TipMe keeps 10% of each tip. You receive the rest, and see every tip and note.</p></div>
+    <button type="button" style="height: 58px; padding: 0 30px; border: 0; border-radius: 12px; background: #fff; color: #000; font: 700 16px Manrope, Arial, sans-serif">Claim your username</button>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const view = (this.state && this.state.view) || 'tipped';
+    const menuOpen = Boolean(this.state && this.state.menuOpen);
+    const on = 'height: 44px; padding: 0 18px; border: 0; border-radius: 9px; background: #fffefa; color: #000; font: 700 15px Manrope, Arial, sans-serif; box-shadow: 0 1px 2px rgba(20,18,16,.14); cursor: pointer';
+    const off = 'height: 44px; padding: 0 18px; border: 0; background: none; color: #5d5a54; font: 600 15px Manrope, Arial, sans-serif; cursor: pointer';
+    return {
+      menuOpen,
+      toggleMenu: () => this.setState({ menuOpen: !menuOpen }),
+      isTipped: view === 'tipped',
+      isTipping: view === 'tipping',
+      howTitle: view === 'tipping' ? 'Tip in three steps.' : 'Tipped in three steps.',
+      tippedTab: view === 'tipped' ? on : off,
+      tippingTab: view === 'tipping' ? on : off,
+      showTipped: () => this.setState({ view: 'tipped' }),
+      showTipping: () => this.setState({ view: 'tipping' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

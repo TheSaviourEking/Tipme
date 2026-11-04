@@ -1,29 +1,33 @@
 import type { ReactNode } from 'react';
 import { Container, Surface } from '@tipme/ui';
+import { Wordmark } from './brand';
 
 /**
- * Every "something's not right" screen (missing page, unavailable profile, failed load): one
- * calm card that says what happened in plain words and offers a way forward.
+ * Every "something's not right" screen (missing page, unavailable profile, failed load), built to
+ * the ScreenSmall board: the wordmark, a serif line saying what happened, one plain sentence, the
+ * one black way on, and a quiet line under it (a second link, or a reference to quote).
  */
 export function QuietScreen({
   title,
   children,
-  actions,
+  action,
+  foot,
 }: {
   title: string;
   children: ReactNode;
-  actions: ReactNode;
+  /** The one black continuation action. */
+  action: ReactNode;
+  foot?: ReactNode;
 }) {
   return (
     <main id="main" tabIndex={-1} className="quiet-page">
       <Container>
-        <Surface material="raised" className="quiet-card">
-          <span className="quiet-card__mark" aria-hidden="true">
-            ✳
-          </span>
+        <Surface material="instrument" className="quiet-card">
+          <Wordmark className="quiet-card__wordmark" />
           <h1>{title}</h1>
           <div className="quiet-card__body">{children}</div>
-          <div className="quiet-card__actions">{actions}</div>
+          <div className="quiet-card__actions">{action}</div>
+          {foot && <div className="quiet-card__foot">{foot}</div>}
         </Surface>
       </Container>
     </main>

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { UNBROKEN_NAME } from './profile-fixtures';
 import {
   expectAccessible,
   fitsViewport,
@@ -31,20 +32,21 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
 
   await row.click();
   await expect(
-    page.getByRole('heading', { name: 'Tip from Ada M.' }),
+    page.getByRole('heading', { name: '₦1,800 from Ada M.' }),
   ).toBeVisible();
   await expect(page.getByText('Lovely braids, thank you')).toBeVisible();
-  const breakdown = page.locator('.tip-breakdown');
+  const receipt = page.locator('.receipt');
   await expect(
-    breakdown.locator('div', { hasText: 'They tipped' }),
-  ).toContainText('NGN 2,000.00');
+    receipt.locator('div', { hasText: 'Ada M. tipped' }),
+  ).toContainText('₦2,000');
   await expect(
-    breakdown.locator('div', { hasText: 'You received' }),
-  ).toContainText('NGN 1,800.00');
+    receipt.locator('div', { hasText: 'You received' }),
+  ).toContainText('₦1,800');
+  await expect(receipt.getByText('In your balance')).toBeVisible();
   await expect(
-    page.getByText('Confirmed by the payment provider'),
+    receipt.getByText(/Confirmed by our payment partner/),
   ).toBeVisible();
-  await expect(page.getByText(/Reference ending …[0-9a-f-]{6}/)).toBeVisible();
+  await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
   await expectAccessible(page);
 
   await page.goto('/dashboard/withdraw');
@@ -74,7 +76,7 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   }
 });
 
-test('a moment of 503 on the dashboard retries quietly; a lasting one shows the error', async ({
+test('a brief 503 retries quietly and a lasting one says so', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo);
@@ -100,4 +102,119 @@ test('a moment of 503 on the dashboard retries quietly; a lasting one shows the 
   await page.route('**/v1/me/dashboard', (route) => route.fulfill(busy));
   await page.reload();
   await expect(page.getByText('We couldn’t load your dashboard')).toBeVisible();
+});
+
+test('the balance comes first, with what is still being confirmed under it', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.route('**/v1/me/dashboard', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        data: {
+          ...body.data,
+          availableMinor: '4860000',
+          confirmingMinor: '180000',
+        },
+      },
+    });
+  });
+  await page.route('**/v1/me/activity', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        data: [
+          {
+            kind: 'tip',
+            id: '11111111-1111-4111-8111-111111111111',
+            at: new Date().toISOString(),
+            amountMinor: '180000',
+            state: 'confirming',
+            supporterLabel: 'Amaka',
+          },
+          ...body.data,
+        ],
+      },
+    });
+  });
+  await page.goto('/dashboard');
+  const main = page.locator('main');
+  await expect(main.getByRole('heading').first()).toHaveText(
+    'Ready to withdraw',
+  );
+  await expect(page.getByTestId('balance')).toHaveText('NGN 48,600.00');
+  await expect(
+    main.getByText('NGN 1,800.00 still being confirmed'),
+  ).toBeVisible();
+  // Pending money is never counted as available.
+  await expect(page.getByTestId('balance')).not.toContainText('50,400');
+  await expectAccessible(page);
+});
+
+test('before the first tip, a checklist instead of empty numbers', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  await expect(
+    page.getByRole('heading', { name: 'Get your page ready to share' }),
+  ).toBeVisible();
+  await expect(page.locator('.recipient-setup__steps > li')).toHaveCount(4);
+  await expect(page.getByText('Today', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('This week', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('still being confirmed')).toHaveCount(0);
+  await expectAccessible(page);
+});
+
+test('on a phone the dashboard has a tab bar of four @mobile', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  const bar = page.getByRole('navigation', { name: 'Dashboard' });
+  await expect(bar).toBeVisible();
+  const links = bar.getByRole('link');
+  await expect(links).toHaveText(['Home', 'Tips', 'My page', /^Settings/]);
+  await expect(links.nth(0)).toHaveAttribute('aria-current', 'page');
+  await expect(bar.locator('[aria-current="page"]')).toHaveCount(1);
+  for (const link of await links.all()) {
+    const box = await link.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+  }
+  // It stays in view while the page scrolls.
+  const viewport = page.viewportSize()!;
+  await page.evaluate(() => {
+    document.body.style.minHeight = '3000px';
+    window.scrollTo(0, 1500);
+  });
+  const box = await bar.boundingBox();
+  expect(box!.y + box!.height).toBeCloseTo(viewport.height, 0);
+  expect(await fitsViewport(page)).toBe(true);
+  await page.goto('/dashboard/tips');
+  await expect(bar.locator('[aria-current="page"]')).toHaveText('Tips');
+  await expect(
+    bar.getByRole('link', { name: 'My page', exact: true }),
+  ).toHaveAttribute('href', /\/@/);
+});
+
+test('a long unbroken name fits at 320px', async ({ page }, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.route('**/v1/me/profile', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { data: { ...body.data, displayName: UNBROKEN_NAME } },
+    });
+  });
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto('/dashboard');
+  await expect(page.getByText(UNBROKEN_NAME).first()).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
 });

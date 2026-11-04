@@ -28,7 +28,7 @@ export function AuthStage({
             </ul>
           )}
         </div>
-        <Surface material="raised" className="auth-card">
+        <Surface material="instrument" className="auth-card">
           {children}
         </Surface>
       </Container>

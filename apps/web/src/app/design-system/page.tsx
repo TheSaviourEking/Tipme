@@ -12,6 +12,7 @@ import {
   TextareaField,
 } from '@tipme/ui';
 import { previewMetadata } from '@/lib/metadata';
+import { LeverSpecimen } from './lever-specimen';
 import {
   MotionSpecimen,
   ResponsiveSpecimen,
@@ -72,9 +73,26 @@ export default function DesignSystem() {
         <h1 className="page-title">Design foundation.</h1>
         <p>
           Tokens and primitives from <code>@tipme/ui</code>. Controls here are
-          static specimens and do nothing.
+          static specimens and do nothing, except the lever.
         </p>
         <div className="specimen-grid">
+          <section
+            data-testid="physical-specimen"
+            aria-labelledby="ds-physical"
+          >
+            <h2 id="ds-physical">Instrument, paper, well and lever</h2>
+            <Button variant="continue">Continue</Button>
+            <Surface material="instrument" className="physical-specimen">
+              <strong>Instrument</strong>
+              <small>The floating card a decision is made on.</small>
+            </Surface>
+            <Surface material="paper" className="physical-specimen">
+              <strong>Paper</strong>
+              <small>A receipt or a note slip, resting on the canvas.</small>
+            </Surface>
+            <div className="tm-well">A recessed read-out</div>
+            <LeverSpecimen />
+          </section>
           <section aria-labelledby="ds-colour">
             <h2 id="ds-colour">Colour</h2>
             <ul className="specimen-row" role="list">

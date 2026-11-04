@@ -8,7 +8,8 @@ export default {
   testDir: __dirname,
   testMatch: 'lcp.spec.ts',
   globalSetup: path.join(root, 'tests/e2e/global-setup.ts'),
-  projects: [base.projects![1]],
+  // The phone-sized project, without its @mobile filter: the lab sample is not tagged.
+  projects: [{ ...base.projects![1], grep: undefined }],
   webServer: (base.webServer as { cwd?: string }[]).map((server) => ({
     ...server,
     cwd: path.join(root, server.cwd ?? '.'),
