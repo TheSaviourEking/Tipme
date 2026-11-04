@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import type { MomentView } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import { track } from '@/lib/analytics';
@@ -10,8 +11,9 @@ const FOURTEEN_DAYS = 14 * 86_400_000;
 /** Recent moments. Each is private until shared; a shared one shows on the page for 14 days. */
 export function Moments() {
   const panel = usePanel<MomentView[]>('/v1/me/moments');
+  // Read once when the panel mounts, not on every render: rendering stays pure.
+  const [now] = useState(Date.now);
   if (!panel.data || panel.data.length === 0) return null;
-  const now = Date.now();
   const moments = panel.data.slice(0, 5).map((moment) => ({
     ...moment,
     onPage:

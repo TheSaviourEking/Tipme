@@ -115,7 +115,11 @@ test('every welcome step can be skipped, and nothing goes live without asking', 
   await expect(
     page.getByRole('heading', { name: 'Get your page ready to share' }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Page settings' })).toBeVisible();
+  // The first-day dashboard reaches page settings from the page card (Task 10's "Edit page").
+  await expect(page.getByRole('link', { name: 'Edit page' })).toHaveAttribute(
+    'href',
+    '/dashboard/settings',
+  );
 });
 
 test(

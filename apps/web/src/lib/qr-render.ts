@@ -49,8 +49,8 @@ export const QR_STYLES: readonly QrStyle[] = [
 ];
 
 /**
- * The navy dot code on the Indigo Grid card (the board's example QR, and the Pro "indigo" art in
- * apps/api/src/qr/render.ts). Not in QR_STYLES: it is for pictures, not a choice in the studio.
+ * The navy dot code on the Indigo Grid card (the board's example QR, and the look of the Pro
+ * "indigo" art the API draws). Not in QR_STYLES: it is for pictures, not a choice in the studio.
  */
 export const INDIGO_CARD_STYLE: QrStyle = {
   id: 'indigo-card',
