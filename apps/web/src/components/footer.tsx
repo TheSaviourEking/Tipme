@@ -7,7 +7,7 @@ const groups = [
   {
     title: 'TipMe',
     links: [
-      { href: '/how-it-works', label: 'How it works' },
+      { href: '/#how-it-works', label: 'How it works' },
       { href: '/for-creators', label: 'For individuals' },
       { href: '/for-businesses', label: 'For Businesses' },
       { href: '/#our-promise', label: 'Our promise' },

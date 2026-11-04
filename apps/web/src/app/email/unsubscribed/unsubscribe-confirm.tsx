@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
-import { Button, Notice } from '@tipme/ui';
+import { ActionLink, Button, Notice } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
 
 // Named as the settings page names them.
@@ -39,12 +39,17 @@ export function UnsubscribeConfirm() {
   );
   if (state === 'done')
     return (
-      <>
-        <Notice tone="success" title="Done">
+      <div className="confirm-body" role="status">
+        <h2 className="confirm-title">You’re unsubscribed.</h2>
+        <p>
           You won’t get {NAMES[type] ?? 'guides and suggestions'} any more.
-        </Notice>
-        {settings}
-      </>
+          Security emails will still reach you, because they protect your
+          account.
+        </p>
+        <ActionLink variant="secondary" href="/dashboard/settings#emails">
+          Manage your emails
+        </ActionLink>
+      </div>
     );
   if (state === 'invalid')
     return (
@@ -62,7 +67,11 @@ export function UnsubscribeConfirm() {
           Please try again.
         </Notice>
       )}
-      <Button onClick={() => void turnOff()} disabled={state === 'busy'}>
+      <Button
+        variant="continue"
+        onClick={() => void turnOff()}
+        disabled={state === 'busy'}
+      >
         Turn off this email
       </Button>
       {settings}

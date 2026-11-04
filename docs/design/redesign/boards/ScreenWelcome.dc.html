@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign up and first steps redesign</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+</style>
+</helmet>
+<div style="width: 1100px; height: 860px; box-sizing: border-box; padding: 28px 48px; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; display: flex; flex-direction: column">
+  <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 30px; width: 80px; object-fit: contain; object-position: left">
+  <main style="flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 56px; align-items: center">
+    <section aria-labelledby="st">
+      <p style="margin: 0; font-size: 14px; font-weight: 700; color: #5d5a54">Step 2 of 3</p>
+      <h1 id="st" style="margin: 8px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 56px; line-height: 1.02">Make it feel like you.</h1>
+      <p style="margin: 12px 0 24px; font-size: 16px; line-height: 1.5; color: #5d5a54">People tip faces they recognise. You can change all of this later.</p>
+      <div style="display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; gap: 12px"><button type="button" style="flex: 1; height: 52px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 15px Manrope, Arial, sans-serif">Add your photo</button><button type="button" style="flex: 1; height: 52px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 15px Manrope, Arial, sans-serif">Choose a cover</button></div>
+        <label style="display: flex; flex-direction: column; gap: 7px; font-size: 14px; font-weight: 600">Your name<input value="Ada Okafor" style="height: 50px; box-sizing: border-box; padding: 0 14px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 16px Manrope, Arial, sans-serif"></label>
+        <label style="display: flex; flex-direction: column; gap: 7px; font-size: 14px; font-weight: 600">What you do<input value="Maths tutor" style="height: 50px; box-sizing: border-box; padding: 0 14px; border-radius: 14px; border: 1px solid #77736b; background: #eeede8; font: 500 16px Manrope, Arial, sans-serif"></label>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px"><a href="#" style="font-size: 15px; font-weight: 600">Skip for now</a><button type="button" style="height: 54px; padding: 0 44px; border: 0; border-radius: 12px; background: #000; color: #fff; font: 700 16px Manrope, Arial, sans-serif">Continue</button></div>
+      </div>
+    </section>
+    <aside aria-label="Preview of your page" style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 26px; overflow: hidden; box-shadow: 0 2px 3px rgba(20,18,16,.1), 0 24px 56px -12px rgba(20,18,16,.22)">
+      <img src="/_blob/5474a5c9587e8767052fd26018b66eb1" alt="" style="display: block; width: 100%; height: 130px; object-fit: cover">
+      <div style="padding: 0 24px 26px">
+        <img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="" style="display: block; width: 96px; height: 96px; margin-top: -48px; position: relative; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 4px solid #fffefa; box-sizing: border-box">
+        <h2 style="margin: 12px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 38px; line-height: 1">Ada Okafor</h2>
+        <p style="margin: 6px 0 0; font-size: 14px; color: #5d5a54">usetipme.xyz/@ada</p>
+        <p style="margin: 12px 0 18px; font-size: 16px; font-weight: 700">Maths tutor</p>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px"><span style="height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #eeede8; font-size: 15px; font-weight: 700">₦1,000</span><span style="height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #eeede8; font-size: 15px; font-weight: 700">₦2,000</span><span style="height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #eeede8; font-size: 15px; font-weight: 700">₦5,000</span></div>
+      </div>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

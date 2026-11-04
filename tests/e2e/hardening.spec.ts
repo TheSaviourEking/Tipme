@@ -18,15 +18,13 @@ test('a recipient reports an abusive message and it disappears from their dashbo
   await page.goto('/dashboard/tips');
   await page.getByRole('link', { name: /Tip from Spammy S\./ }).click();
   await expect(page.getByText('Buy followers cheap')).toBeVisible();
-  await page.getByRole('button', { name: 'Report message…' }).click();
+  await page.getByRole('button', { name: 'Report this note' }).click();
   await page.getByLabel('What’s wrong with it?').selectOption('spam');
   await expectAccessible(page);
-  await page
-    .getByRole('button', { name: 'Report message', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Send report' }).click();
   await expect(
     page.getByText(
-      'You reported this message. It is hidden, and TipMe is reviewing it.',
+      'You reported this note. It is hidden, and TipMe is reviewing it.',
     ),
   ).toBeVisible();
   await expect(page.getByText('Buy followers cheap')).toHaveCount(0);

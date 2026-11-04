@@ -72,4 +72,9 @@ export interface TipStatusView {
   amountMinor: string;
   currency: string;
   completedAt: string | null;
+  /**
+   * What the supporter can quote to staff: the last 6 characters of the paid payment's reference,
+   * uppercased. Null until the tip is paid. Never the whole reference.
+   */
+  reference: string | null;
 }

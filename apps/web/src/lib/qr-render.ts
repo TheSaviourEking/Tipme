@@ -48,6 +48,20 @@ export const QR_STYLES: readonly QrStyle[] = [
   },
 ];
 
+/**
+ * The navy dot code on the Indigo Grid card (the board's example QR, and the look of the Pro
+ * "indigo" art the API draws). Not in QR_STYLES: it is for pictures, not a choice in the studio.
+ */
+export const INDIGO_CARD_STYLE: QrStyle = {
+  id: 'indigo-card',
+  name: 'Indigo card',
+  dark: '#1b2a63',
+  light: '#ffffff',
+  frame: { kind: 'solid', color: '#1b2a63' },
+  frameText: '#ffffff',
+  shape: 'dot',
+};
+
 export const styleById = (id: string): QrStyle =>
   QR_STYLES.find((style) => style.id === id) ?? (QR_STYLES[0] as QrStyle);
 

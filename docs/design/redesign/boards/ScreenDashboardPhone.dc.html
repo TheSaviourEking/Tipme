@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dashboard redesign, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+</style>
+</helmet>
+<div style="width: 390px; height: 1400px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; position: relative; overflow: hidden">
+  <header style="height: 60px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between">
+    <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 24px; width: auto">
+    <button type="button" aria-label="Notifications, 2 unread" style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid rgba(20,18,16,.14); background: #fffefa"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 6 2.500 7 2.500 7h-17S6 16 6 10Z"></path><path d="M10 20.500a2.300 2.300 0 0 0 4 0"></path></svg><span aria-hidden="true" style="position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: #7a32f9"></span></button>
+  </header>
+  <main style="padding: 0 16px; display: flex; flex-direction: column; gap: 16px">
+    <div role="status" style="padding: 14px 16px; background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 14px"><p style="margin: 0; font-size: 14px; line-height: 1.4"><strong>Add a recovery email</strong> so you can get back in if you lose access.</p><a href="#" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 700">Add it</a></div>
+    <section aria-labelledby="bal2" style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 26px; padding: 22px; box-shadow: 0 2px 3px rgba(20,18,16,.1), 0 18px 42px rgba(20,18,16,.08)">
+      <h1 id="bal2" style="margin: 0; font-size: 14px; font-weight: 600; color: #5d5a54">Ready to withdraw</h1>
+      <p style="margin: 4px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 60px; line-height: 1">₦48,600</p>
+      <p style="margin: 8px 0 18px; font-size: 13.5px; color: #5d5a54">₦1,800 still being confirmed</p>
+      <a href="#" style="height: 54px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #000; color: #fff; font-weight: 700; font-size: 16px; text-decoration: none">Withdraw</a>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px">
+        <button type="button" style="height: 46px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 15px Manrope, Arial, sans-serif">Share link</button>
+        <button type="button" style="height: 46px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 15px Manrope, Arial, sans-serif">Show QR</button>
+      </div>
+    </section>
+    <section aria-label="Your numbers" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <div style="background: #eeede8; border-radius: 16px; padding: 14px"><p style="margin: 0; font-size: 13px; color: #5d5a54; font-weight: 600">Today</p><p style="margin: 4px 0 2px; font-size: 22px; font-weight: 700">₦6,300</p><p style="margin: 0; font-size: 12.5px; color: #23623b; font-weight: 600">Up from ₦3,600</p></div>
+      <div style="background: #eeede8; border-radius: 16px; padding: 14px"><p style="margin: 0; font-size: 13px; color: #5d5a54; font-weight: 600">This week</p><p style="margin: 4px 0 2px; font-size: 22px; font-weight: 700">₦27,900</p><p style="margin: 0; font-size: 12.5px; color: #23623b; font-weight: 600">Up from ₦19,800</p></div>
+    </section>
+    <section aria-labelledby="rec2">
+      <h2 id="rec2" style="margin: 4px 0 10px; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 28px">Your thanks</h2>
+      <ul style="list-style: none; margin: 0; padding: 0; background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 20px; overflow: hidden">
+        <li style="padding: 16px; border-bottom: 1px solid rgba(20,18,16,.08)"><div style="display: flex; justify-content: space-between"><strong style="font-size: 15px">Chidi</strong><strong style="font-size: 16px">₦4,500</strong></div><p style="margin: 6px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 20px; line-height: 1.25">“That tutorial saved my whole week. Thank you.”</p><p style="margin: 6px 0 0; font-size: 13px; color: #5d5a54">12 minutes ago</p></li>
+        <li style="padding: 14px 16px; border-bottom: 1px solid rgba(20,18,16,.08); display: flex; justify-content: space-between"><div><strong style="font-size: 15px">A guest</strong><p style="margin: 2px 0 0; font-size: 13px; color: #5d5a54">1 hour ago</p></div><strong style="font-size: 16px">₦1,800</strong></li>
+        <li style="padding: 14px 16px; display: flex; justify-content: space-between"><div><strong style="font-size: 15px">Amaka</strong><p style="margin: 2px 0 0; font-size: 13px; color: #5d5a54">Being confirmed</p></div><strong style="font-size: 16px; color: #5d5a54">₦1,800</strong></li>
+      </ul>
+    </section>
+    <a href="#" style="display: block; padding: 16px; background: #eeede8; border-radius: 18px; text-decoration: none"><strong style="display: block; font-size: 15px">Your week</strong><span style="display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 14px; color: #5d5a54"><span>₦27,900 from 14 tips</span><span style="font-weight: 700; color: #000">See your week</span></span></a>
+    <section aria-labelledby="moments2" style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 18px; padding: 16px">
+      <h2 id="moments2" style="margin: 0 0 8px; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 26px">Moments</h2>
+      <p style="margin: 0; font-size: 15px; font-weight: 600">You've been thanked 100 times</p>
+      <button type="button" style="width: 100%; height: 46px; margin: 10px 0 12px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 14px Manrope, Arial, sans-serif">Share on my page</button>
+      <p style="margin: 0; padding-top: 12px; border-top: 1px solid rgba(20,18,16,.08); font-size: 15px; font-weight: 600">Your best week so far</p>
+      <p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">Shared on your page</p>
+    </section>
+  </main>
+  <nav aria-label="Dashboard" style="position: absolute; left: 0; right: 0; bottom: 0; height: 68px; background: #fffefa; border-top: 1px solid rgba(20,18,16,.1); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+    <a href="#" aria-current="page" style="display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 2px; text-decoration-color: #7a32f9">Home</a>
+    <a href="#" style="display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #5d5a54; text-decoration: none">Tips</a>
+    <a href="#" style="display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #5d5a54; text-decoration: none">My page</a>
+    <a href="#" style="display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #5d5a54; text-decoration: none">Settings</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

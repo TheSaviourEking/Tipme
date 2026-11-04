@@ -20,3 +20,6 @@ test-results/
 # Local staging proof (PR-010): generated secrets and backups
 deploy/local/*.env
 deploy/local/data/
+
+# The owner's local screen review (pnpm review:screens)
+review-screens/

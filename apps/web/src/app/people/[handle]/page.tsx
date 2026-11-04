@@ -97,7 +97,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             data-tip-panel
           >
             {opensSoon ? (
-              <TippingOpensSoon handle={profile.handle} />
+              <TippingOpensSoon handle={profile.handle} name={firstName} />
             ) : profile.acceptingTips === false ? (
               <TipsNotReady recipient={firstName} />
             ) : (

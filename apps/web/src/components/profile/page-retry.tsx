@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ActionLink } from '@tipme/ui';
 import { QuietScreen } from '@/components/quiet-screen';
 
 /**
@@ -9,15 +10,15 @@ export function PageRetry({ href }: { href: string }) {
   return (
     <QuietScreen
       title="Let’s try that again"
-      actions={
-        <>
-          <a className="tm-button tm-button--primary" href={href}>
-            Try again
-          </a>
-          <Link className="text-link" href="/">
-            Back to TipMe
-          </Link>
-        </>
+      action={
+        <ActionLink variant="continue" href={href}>
+          Try again
+        </ActionLink>
+      }
+      foot={
+        <Link className="text-link" href="/">
+          Back to TipMe
+        </Link>
       }
     >
       <p>

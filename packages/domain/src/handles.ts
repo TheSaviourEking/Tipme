@@ -52,6 +52,7 @@ export const RESERVED_HANDLES = [
   'preview_states',
   'pricing',
   'privacy',
+  'pro',
   'profile',
   'qr',
   'recover',

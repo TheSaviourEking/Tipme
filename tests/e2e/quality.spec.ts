@@ -9,9 +9,9 @@ const routes = [
   '/design-system',
   '/preview-states',
   '/@not-a-person',
-  '/how-it-works',
   '/for-creators',
   '/for-businesses',
+  '/pro',
   '/legal/privacy',
   '/legal/terms',
 ];
@@ -65,39 +65,29 @@ test('homepage makes creating a recipient page a clear next step', async ({
   page,
 }) => {
   await page.goto('/');
+  // The claim field starts sign-up with the handle; the closing band is a plain link to it.
   await expect(
-    page
-      .getByRole('main')
-      .getByRole('link', { name: /Create your page/ })
-      .first(),
+    page.getByRole('form', { name: 'Claim your link' }),
+  ).toHaveAttribute('action', '/sign-up');
+  await expect(
+    page.getByRole('main').getByRole('link', { name: 'Claim your username' }),
   ).toHaveAttribute('href', '/sign-up');
-  await expect(page.getByText('Want to receive tips?')).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Your page. Your link. Your thanks.' }),
-  ).toBeVisible();
   await expect(
     page.getByText(/Payments are in test mode/).last(),
   ).toBeVisible();
-  await expect(page.locator('.home-hero__portrait figcaption')).toContainText(
-    'fictional demo recipient',
-  );
+  // The owner, 3 Nov 2026: "We need this off 'Examples, not real people.' the website."
+  await expect(page.getByText(/examples, not real people/i)).toHaveCount(0);
 });
 
-test('business page clearly says accounts are not open yet', async ({
+test('business page registers interest and sends nothing until the visitor does', async ({
   page,
 }) => {
   await page.goto('/for-businesses');
   await expect(
-    page.getByRole('heading', { name: 'Business pages are not open yet.' }),
+    page.getByRole('heading', { name: 'TipMe for businesses is on its way.' }),
   ).toBeVisible();
-  await expect(
-    page.getByText(/have not announced a launch date/),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('link', { name: /Create an individual page/ }),
-  ).toHaveAttribute('href', '/sign-up');
-  await page.getByLabel('Your email address').fill('business@example.com');
-  await page.getByRole('button', { name: 'Prepare email' }).click();
+  await page.getByLabel('Work email').fill('business@example.com');
+  await page.getByRole('button', { name: "Tell me when it's ready" }).click();
   const emailLink = page.getByRole('link', { name: 'Open email app' });
   const href = await emailLink.getAttribute('href');
   if (!href) throw new Error('The business interest email link has no URL.');
@@ -105,9 +95,7 @@ test('business page clearly says accounts are not open yet', async ({
   expect(decodeURIComponent(href.replaceAll('+', ' '))).toContain(
     'business@example.com',
   );
-  await expect(page.getByRole('status')).toContainText(
-    'press Send to register your interest',
-  );
+  await expect(page.getByRole('status')).toContainText('press Send');
 });
 
 test('arrowing through amounts never pulls focus out of the radio group', async ({
@@ -165,7 +153,7 @@ test(
     const toggle = page.getByRole('button', { name: 'Menu' });
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await toggle.click();
-    // The accessible name stays constant; only aria-expanded conveys state.
+    // "Menu" matches both names (Open menu, Close menu); aria-expanded conveys the state.
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const firstLink = page
       .getByRole('navigation', { name: 'Main navigation' })
@@ -312,28 +300,22 @@ test('short /handle links permanently redirect to /@handle without shadowing pag
     );
 });
 
-test('how it works and creator pages exist as PRD marketing routes', async ({
+// The owner, 3 Nov 2026: How it works lives on Home; "we don't need a seperate page".
+test('the old How it works address lands on the steps on Home', async ({
   page,
 }) => {
   await page.goto('/how-it-works');
-  await expect(page).toHaveTitle(/How it works/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'How TipMe works',
-  );
-  await expect(page.locator('main ol.steps > li')).toHaveCount(3);
+  await expect(page).toHaveURL(/\/#how-it-works$/);
+  await expect(
+    page.getByRole('heading', { name: /in three steps\./ }),
+  ).toBeInViewport();
+});
+
+test('the creator page exists as a PRD marketing route', async ({ page }) => {
   await page.goto('/for-creators');
   await expect(page).toHaveTitle(/For individuals/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'For the generous minds',
-  );
-  await page
-    .getByRole('main')
-    .getByRole('link', { name: /Meet a demo creator/ })
-    .click();
-  await expect(page).toHaveURL(/\/@ada$/);
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
-    'href',
-    /\/@ada$/,
+    'People already want to thank you.',
   );
 });
 
@@ -346,12 +328,135 @@ test('main navigation points to the marketing pages', async ({
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await expect(nav.getByRole('link', { name: 'How it works' })).toHaveAttribute(
     'href',
-    '/how-it-works',
+    '/#how-it-works',
   );
   await expect(
-    nav.getByRole('link', { name: 'For individuals' }),
-  ).toHaveAttribute('href', '/for-creators');
-  await expect(
-    nav.getByRole('link', { name: 'For Businesses' }),
-  ).toHaveAttribute('href', '/for-businesses');
+    nav.getByRole('link', { name: 'Pro', exact: true }),
+  ).toHaveAttribute('href', '/pro');
+  // The two pages sit under "Who it's for" now (tests/e2e/navigation.spec.ts opens that menu).
+  if (testInfo.project.name !== 'mobile')
+    await nav.getByRole('button', { name: "Who it's for" }).click();
+  await expect(nav.getByRole('link', { name: /^Individuals/ })).toHaveAttribute(
+    'href',
+    '/for-creators',
+  );
+  await expect(nav.getByRole('link', { name: /^Businesses/ })).toHaveAttribute(
+    'href',
+    '/for-businesses',
+  );
 });
+
+test('How it works in the header glides down Home to the steps', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/');
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: 'Menu' }).click();
+  // Every frame's scroll position from the press on: a jump has one step, a glide many.
+  await page.evaluate(() => {
+    const seen: number[] = [];
+    (window as unknown as { seen: number[] }).seen = seen;
+    const frame = () => {
+      seen.push(window.scrollY);
+      if (seen.length < 120) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+  await page
+    .getByRole('navigation', { name: 'Main navigation' })
+    .getByRole('link', { name: 'How it works' })
+    .click();
+  await expect(page).toHaveURL(/\/#how-it-works$/);
+  await expect(
+    page.getByRole('heading', { name: /in three steps\./ }),
+  ).toBeInViewport();
+  await page.waitForTimeout(2200);
+  const seen = await page.evaluate(
+    () => (window as unknown as { seen: number[] }).seen,
+  );
+  const end = Math.max(...seen);
+  const between = new Set(seen.filter((y) => y > 0 && y < end));
+  expect(between.size).toBeGreaterThanOrEqual(3);
+});
+
+// The ScreenSmall board. A path under a handle matches no page, so it reaches the site's own
+// "not found" screen. (/@handle itself shows the one "isn't available" screen for every page that
+// cannot be shown, so it never says whether a handle exists.)
+test(
+  'a missing page names the handle and offers a way on',
+  { tag: '@mobile' },
+  async ({ page }) => {
+    await page.goto('/@tobi_s/tips');
+    await expect(
+      page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
+    ).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(
+      main.getByRole('link', { name: 'Go to TipMe' }),
+    ).toHaveAttribute('href', '/');
+    await expect(
+      main.getByRole('link', { name: 'Get your own page' }),
+    ).toHaveAttribute('href', '/sign-up');
+    expect(await fitsViewport(page)).toBe(true);
+    await expectAccessible(page);
+  },
+);
+
+test('a missing page normalises the handle, and never echoes anything else', async ({
+  page,
+}) => {
+  await page.goto('/@Tobi_S/tips');
+  await expect(
+    page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
+  ).toBeVisible();
+  for (const odd of [
+    '/@%3Cscript%3Ealert(1)%3C%2Fscript%3E/tips',
+    `/@${'a'.repeat(60)}/tips`,
+    '/@ab/tips',
+    '/nothing-here/at-all',
+  ]) {
+    await page.goto(odd);
+    await expect(
+      page.getByRole('heading', { name: /^We can.t find that page\.$/ }),
+    ).toBeVisible();
+    await expect(page.locator('main')).not.toContainText('script');
+    await expect(page.locator('main')).not.toContainText('aaaaaaaa');
+  }
+});
+
+test('an error says it is on our side and gives a reference', async ({
+  page,
+}) => {
+  // /dev/crash throws on the server when the test inbox is on, and is a 404 otherwise.
+  await page.goto('/dev/crash');
+  await expect(
+    page.getByRole('heading', { name: /^This page didn.t load\.$/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/It.s a problem on our side and your account is fine\./),
+  ).toBeVisible();
+  // The digest Next logs on the server for this failure.
+  await expect(page.getByText(/^Reference: [0-9a-z]{6,}$/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await expectAccessible(page);
+});
+
+test(
+  'legal pages keep a readable width',
+  { tag: '@mobile' },
+  async ({ page }) => {
+    for (const route of ['/legal/privacy', '/legal/terms']) {
+      await page.goto(route);
+      const column = page.locator('main .legal-page__column');
+      await expect(column.getByRole('heading', { level: 1 })).toBeVisible();
+      const box = await column.boundingBox();
+      const rem = await page.evaluate(() =>
+        parseFloat(getComputedStyle(document.documentElement).fontSize),
+      );
+      expect(box?.width ?? Infinity, route).toBeLessThanOrEqual(48 * rem);
+      expect(await fitsViewport(page)).toBe(true);
+      await expectAccessible(page);
+    }
+  },
+);

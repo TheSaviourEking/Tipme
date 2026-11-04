@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dashboard redesign</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}a:hover{color:#4d16a8}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1000px; box-sizing: border-box; background: #f3f2ee; font-family: Manrope, Arial, sans-serif; color: #000; display: grid; grid-template-columns: 232px minmax(0, 1fr)">
+  <nav aria-label="Dashboard" style="padding: 28px 20px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid rgba(20,18,16,.09)">
+    <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height: 30px; width: 80px; object-fit: contain; object-position: left; margin: 0 0 26px 10px">
+    <a href="#" aria-current="page" style="height: 44px; padding: 0 12px; display: flex; align-items: center; border-radius: 10px; background: #fffefa; font-weight: 700; font-size: 15px; text-decoration: none; box-shadow: 0 1px 1px rgba(20,18,16,.1), 0 5px 14px rgba(20,18,16,.07)">Home</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">Tips</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">My page</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">My QR</a>
+    <a href="#" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 15px; color: #5d5a54; text-decoration: none">Settings<span style="width: 7px; height: 7px; margin-left: 8px; border-radius: 50%; background: #7a32f9"></span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)"> (needs your attention)</span></a>
+    <a href="#" style="height: 44px; padding: 0 12px; margin-top: auto; display: flex; align-items: center; font-weight: 600; font-size: 14px; color: #5d5a54; text-decoration: none">Sign out</a>
+  </nav>
+  <main style="padding: 32px 40px; display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 28px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; align-items: center; justify-content: space-between"><p style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 34px; line-height: 1">Hello, Ada.</p><button type="button" aria-label="Notifications, 2 unread" style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 6 2.500 7 2.500 7h-17S6 16 6 10Z"></path><path d="M10 20.500a2.300 2.300 0 0 0 4 0"></path></svg><span aria-hidden="true" style="position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: #7a32f9"></span></button></div>
+      <div role="status" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 14px"><p style="margin: 0; font-size: 14.5px; line-height: 1.4"><strong>Add a recovery email</strong> so you can get back in if you lose access.</p><a href="#" style="font-size: 14px; font-weight: 700; white-space: nowrap">Add it</a></div>
+      <section aria-labelledby="bal" style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 26px; padding: 30px 32px; box-shadow: 0 2px 3px rgba(20,18,16,.1), 0 18px 42px rgba(20,18,16,.08); display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+        <div>
+          <h1 id="bal" style="margin: 0; font-size: 15px; font-weight: 600; color: #5d5a54">Ready to withdraw</h1>
+          <p style="margin: 6px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 76px; line-height: 1; font-variant-numeric: lining-nums tabular-nums">₦48,600</p>
+          <p style="margin: 10px 0 0; font-size: 14px; color: #5d5a54">₦1,800 still being confirmed</p>
+        </div>
+        <a href="#" style="height: 56px; padding: 0 34px; display: flex; align-items: center; border-radius: 12px; background: #000; color: #fff; font-weight: 700; font-size: 16px; text-decoration: none">Withdraw</a>
+      </section>
+      <section aria-label="Your numbers" style="display: grid; grid-template-columns: 180px 180px minmax(0, 1fr); gap: 14px">
+        <div style="background: #eeede8; border-radius: 16px; padding: 18px; box-shadow: inset 0 1px 2px rgba(20,18,16,.08)"><p style="margin: 0; font-size: 14px; color: #5d5a54; font-weight: 600">Today</p><p style="margin: 6px 0 2px; font-size: 26px; font-weight: 700">₦6,300</p><p style="margin: 0; font-size: 13px; color: #23623b; font-weight: 600">Up from ₦3,600</p></div>
+        <div style="background: #eeede8; border-radius: 16px; padding: 18px; box-shadow: inset 0 1px 2px rgba(20,18,16,.08)"><p style="margin: 0; font-size: 14px; color: #5d5a54; font-weight: 600">This week</p><p style="margin: 6px 0 2px; font-size: 26px; font-weight: 700">₦27,900</p><p style="margin: 0; font-size: 13px; color: #23623b; font-weight: 600">Up from ₦19,800</p></div>
+        <div style="background: #eeede8; border-radius: 16px; padding: 18px; display: flex; align-items: flex-end; gap: 10px; height: 76px; box-shadow: inset 0 1px 2px rgba(20,18,16,.08)" role="img" aria-label="Tips over the last seven days, highest today">
+          <span style="flex: 1; height: 34%; background: #b8b5ab; border-radius: 4px"></span><span style="flex: 1; height: 52%; background: #b8b5ab; border-radius: 4px"></span><span style="flex: 1; height: 28%; background: #b8b5ab; border-radius: 4px"></span><span style="flex: 1; height: 70%; background: #b8b5ab; border-radius: 4px"></span><span style="flex: 1; height: 44%; background: #b8b5ab; border-radius: 4px"></span><span style="flex: 1; height: 58%; background: #b8b5ab; border-radius: 4px"></span><span style="flex: 1; height: 100%; background: #7a32f9; border-radius: 4px"></span>
+        </div>
+      </section>
+      <section aria-labelledby="rec">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px"><h2 id="rec" style="margin: 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 30px">Your thanks</h2><a href="#" style="font-size: 14px; font-weight: 600">See all tips</a></div>
+        <ul style="list-style: none; margin: 0; padding: 0; background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 22px; overflow: hidden">
+          <li style="padding: 18px 22px; border-bottom: 1px solid rgba(20,18,16,.08); display: flex; justify-content: space-between; gap: 18px"><div><p style="margin: 0; font-size: 15px; font-weight: 700">Chidi</p><p style="margin: 5px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-size: 21px; line-height: 1.25">“That tutorial saved my whole week. Thank you.”</p><p style="margin: 6px 0 0; font-size: 13px; color: #5d5a54">12 minutes ago</p></div><p style="margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap">₦4,500</p></li>
+          <li style="padding: 16px 22px; border-bottom: 1px solid rgba(20,18,16,.08); display: flex; justify-content: space-between; gap: 18px"><div><p style="margin: 0; font-size: 15px; font-weight: 700">A guest</p><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">1 hour ago</p></div><p style="margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap">₦1,800</p></li>
+          <li style="padding: 16px 22px; display: flex; justify-content: space-between; gap: 18px"><div><p style="margin: 0; font-size: 15px; font-weight: 700">Amaka</p><p style="margin: 3px 0 0; font-size: 13px; color: #5d5a54">Being confirmed</p></div><p style="margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; color: #5d5a54">₦1,800</p></li>
+        </ul>
+      </section>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 16px">
+    <aside aria-label="Your page" style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 26px; overflow: hidden; box-shadow: 0 1px 1px rgba(20,18,16,.1), 0 5px 14px rgba(20,18,16,.07)">
+      <img src="/_blob/aef1b025f8a396e3802ec254cf015be7" alt="" style="display: block; width: 100%; height: 124px; object-fit: cover">
+      <div style="padding: 0 24px 24px">
+        <img src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt="" style="display: block; width: 88px; height: 88px; margin-top: -44px; position: relative; border-radius: 50%; object-fit: cover; object-position: 50% 12%; border: 4px solid #fffefa; box-sizing: border-box">
+        <h2 style="margin: 12px 0 0; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 34px; line-height: 1">Ada Okafor</h2>
+        <p style="margin: 6px 0 0; font-size: 14px; color: #5d5a54">usetipme.xyz/@ada</p>
+        <p style="margin: 12px 0 0; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #23623b"></span>Your page is live</p>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px">
+          <button type="button" style="height: 48px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 15px Manrope, Arial, sans-serif; cursor: pointer">Share link</button>
+          <button type="button" style="height: 48px; border-radius: 12px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 15px Manrope, Arial, sans-serif; cursor: pointer">Show QR</button>
+        </div>
+        <a href="#" style="display: block; margin-top: 16px; text-align: center; font-size: 14px; font-weight: 600">Edit my page</a>
+      </div>
+    </aside>
+    <a href="#" style="display: block; padding: 16px 20px; background: #eeede8; border-radius: 18px; text-decoration: none"><strong style="display: block; font-size: 15px">Your week</strong><span style="display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 14px; color: #5d5a54"><span>₦27,900 from 14 tips</span><span style="font-weight: 700; color: #000">See your week</span></span></a>
+    <section aria-labelledby="moments" style="background: #fffefa; border: 1px solid rgba(20,18,16,.09); border-radius: 18px; padding: 16px 20px">
+      <h2 id="moments" style="margin: 0 0 10px; font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 24px">Moments</h2>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 10px; border-bottom: 1px solid rgba(20,18,16,.08)"><p style="margin: 0; font-size: 14.5px; font-weight: 600">You've been thanked 100 times</p><button type="button" style="height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(20,18,16,.14); background: #fffefa; font: 700 13px Manrope, Arial, sans-serif; white-space: nowrap">Share on my page</button></div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0 6px"><p style="margin: 0; font-size: 14.5px; font-weight: 600">Your best week so far</p><span style="font-size: 13px; color: #5d5a54">Shared on your page</span></div>
+      <p style="margin: 6px 0 0; font-size: 12.5px; line-height: 1.4; color: #5d5a54">Sharing shows the moment on your page, never what you were given.</p>
+    </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

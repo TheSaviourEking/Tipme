@@ -494,7 +494,10 @@ export function AppreciationForm({
   );
   if (closed || !copy.payable)
     return (
-      <TippingOpensSoon announce={closed} {...(onProfile ? { handle } : {})} />
+      <TippingOpensSoon
+        announce={closed}
+        {...(onProfile ? { handle, name: recipient } : {})}
+      />
     );
   return (
     <Card
