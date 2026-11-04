@@ -210,6 +210,52 @@ test('responses carry baseline security headers', async ({ request }) => {
   }
 });
 
+test('the terms set out the 10% fee and the NGN 2,000 minimums', async ({
+  page,
+}) => {
+  await page.goto('/legal/terms');
+  const fees = page.getByRole('region', { name: 'Fees' });
+  await expect(fees).toContainText('you pay exactly the amount you choose');
+  await expect(fees).toContainText('TipMe keeps 10% of each tip');
+  await expect(fees).toContainText('you receive ₦4,500');
+  await expect(fees).toContainText('The smallest tip is ₦2,000');
+  await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
+});
+
+// The owner, 3 Nov 2026: TipMe can take a username back, with notice, days before.
+test('the terms say TipMe can take back a username, with 7 days of notice', async ({
+  page,
+}) => {
+  await page.goto('/legal/terms');
+  const usernames = page.getByRole('region', { name: 'Your username' });
+  await expect(usernames).toContainText('at least 7 days before we take it');
+  await expect(usernames).toContainText('by email or on your dashboard');
+  await expect(usernames).toContainText(
+    'If we cannot reach you either way within 14 days, we go ahead',
+  );
+  await expect(usernames).toContainText('ask you to choose a new username');
+  await expect(usernames).toContainText(
+    'Your page, your tips and your balance stay yours',
+  );
+  await expect(usernames).toContainText(
+    'Links and QR codes that use your old username will stop working',
+  );
+  await expect(usernames).toContainText(
+    'impersonates someone, infringes a trademark, or the law requires it',
+  );
+});
+
+test('no legal page promises to publish before real payments, which are live', async ({
+  page,
+}) => {
+  for (const path of ['/legal/privacy', '/legal/terms']) {
+    await page.goto(path);
+    await expect(
+      page.getByText(/before TipMe takes real payments/),
+    ).toHaveCount(0);
+  }
+});
+
 test('legal pages say they are coming soon, linked from every page', async ({
   page,
 }) => {
