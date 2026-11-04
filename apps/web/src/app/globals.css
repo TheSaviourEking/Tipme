@@ -5329,6 +5329,11 @@ html:has(.confirm-dialog[open]) {
     padding-bottom: var(--dashboard-tab-bar);
   }
 
+  /* Anything scrolled or focused into view stops above the bar, as the profile does for its Tip bar. */
+  html:has(.dashboard-page .dashboard-nav[aria-label='Dashboard']) {
+    scroll-padding-bottom: calc(var(--dashboard-tab-bar) + 0.5rem);
+  }
+
   html:has(.dashboard-page .dashboard-nav[aria-label='Dashboard'])
     .update-notice {
     bottom: calc(var(--dashboard-tab-bar) + var(--space-3));

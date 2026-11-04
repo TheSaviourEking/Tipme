@@ -277,12 +277,20 @@ test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
   await page.getByRole('button', { name: 'Everything' }).click();
   expect(await fitsViewport(page)).toBe(true);
   const button = page.getByRole('button', { name: /^Withdraw NGN/ });
-  await button.scrollIntoViewIfNeeded();
+  const nav = page.locator('nav[aria-label="Dashboard"]');
+  const start = (await button.boundingBox())!;
+  expect(start.height).toBeGreaterThanOrEqual(44);
+  // A screen just tall enough that the button is on it but its lower half sits under the fixed
+  // tab bar, whatever the fonts: the case CI met. A keyboard user tabbing to it gets it in view.
+  const barHeight = (await nav.boundingBox())!.height;
+  await page.setViewportSize({
+    width: 390,
+    height: Math.ceil(start.y + start.height / 2 + barHeight),
+  });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await button.focus();
   const box = (await button.boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(44);
-  const bar = (await page
-    .locator('nav[aria-label="Dashboard"]')
-    .boundingBox())!;
+  const bar = (await nav.boundingBox())!;
   expect(box.y + box.height).toBeLessThanOrEqual(bar.y);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   const end = (await button.boundingBox())!;
