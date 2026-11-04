@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { laneConfig } from '../tests/lane.mjs';
+import {
+  LANE_STAMP,
+  assertBuildMatchesLane,
+  laneConfig,
+  writeLaneStamp,
+} from '../tests/lane.mjs';
 
 test('lane 0 and unset are the original single-run stack', () => {
   for (const value of [undefined, '', '0', 0]) {
@@ -37,11 +42,46 @@ test('a bad lane is refused', () => {
   }
 });
 
-test('the TypeScript and script helpers agree', async () => {
-  const ts = await import('../tests/lane.ts').catch(() => null);
-  if (!ts) return; // this Node cannot load .ts; the CI Node can
+test("a reused build must be the current lane's", () => {
+  const files = new Map();
+  const write = (path, text) => files.set(path, text);
+  const read = (path) => files.get(path);
+  assert.throws(
+    () => assertBuildMatchesLane(read, laneConfig(0)),
+    /no lane stamp/,
+  );
+  writeLaneStamp(write, laneConfig(1));
+  assert.equal(LANE_STAMP, 'apps/web/.next/lane.json');
+  assertBuildMatchesLane(read, laneConfig(1));
+  assert.throws(
+    () => assertBuildMatchesLane(read, laneConfig(2)),
+    /was built for lane 1; E2E_LANE is 2\. Rebuild \(drop --no-build\)\./,
+  );
+  files.set(LANE_STAMP, 'not json');
+  assert.throws(() => assertBuildMatchesLane(read, laneConfig(0)), /unknown/);
+  writeLaneStamp(write, laneConfig(0));
+  assertBuildMatchesLane(read, laneConfig(0));
+});
+
+test('the TypeScript and script helpers agree', async (t) => {
+  let ts;
+  try {
+    ts = await import('../tests/lane.ts');
+  } catch (error) {
+    if (error.code !== 'ERR_UNKNOWN_FILE_EXTENSION') throw error;
+    t.skip('this Node cannot load .ts files');
+    return;
+  }
   for (const n of [0, 1, 2, 9])
     assert.deepEqual(ts.laneConfig(n), laneConfig(n));
+  for (const bad of ['x', '-1', '1.5', '10']) {
+    let fromMjs;
+    assert.throws(
+      () => laneConfig(bad),
+      (e) => ((fromMjs = e.message), true),
+    );
+    assert.throws(() => ts.laneConfig(bad), { message: fromMjs });
+  }
   assert.equal(
     ts.withDatabaseName('postgres://u:p@h:5447/tipme_local?x=1', 'a_b'),
     'postgres://u:p@h:5447/a_b?x=1',

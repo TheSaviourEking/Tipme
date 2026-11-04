@@ -20,3 +20,36 @@ export function laneConfig(value = process.env.E2E_LANE) {
     outputDir: lane === 0 ? 'test-results' : `test-results/lane${lane}`,
   };
 }
+
+/** Where a build records which lane's API origin it baked in. */
+export const LANE_STAMP = 'apps/web/.next/lane.json';
+
+/** Written after a successful build, so a reused build can be checked against the current lane. */
+export function writeLaneStamp(write, config = laneConfig()) {
+  write(
+    LANE_STAMP,
+    JSON.stringify({ lane: config.lane, apiOrigin: config.apiOrigin }),
+  );
+}
+
+/**
+ * Refuses a reused build made for another lane (it would call that lane's API port). `read` returns
+ * the stamp's text or undefined when there is none.
+ */
+export function assertBuildMatchesLane(read, config = laneConfig()) {
+  const text = read(LANE_STAMP);
+  if (text === undefined)
+    throw new Error(
+      `apps/web/.next has no lane stamp (${LANE_STAMP}), so its lane is unknown; E2E_LANE is ${config.lane}. Rebuild (drop --no-build).`,
+    );
+  let built;
+  try {
+    built = JSON.parse(text);
+  } catch {
+    built = {};
+  }
+  if (built.lane !== config.lane || built.apiOrigin !== config.apiOrigin)
+    throw new Error(
+      `apps/web/.next was built for lane ${built.lane ?? 'unknown'}; E2E_LANE is ${config.lane}. Rebuild (drop --no-build).`,
+    );
+}

@@ -14,10 +14,15 @@ E2E_LANE=1 pnpm test:e2e -- tests/e2e/quality.spec.ts --project=desktop
 E2E_LANE=2 pnpm review:screens
 ```
 
-- Give each concurrent worktree its own lane. Two runs on the same lane still collide.
+- Always set a lane in a worktree that runs alongside others. Two runs on the same lane, including two
+  that leave it unset, still collide.
 - The database is the one in `DATABASE_URL` with only its name changed; `prepare-e2e-database` creates it
   and the run resets it. Lane databases are never dropped; drop them by hand when done.
-- The build bakes the lane's API origin (`NEXT_PUBLIC_API_ORIGIN`) into the web app, so each worktree's
-  `.next` matches its lane. Do not reuse a `.next` built for another lane.
+- The build bakes the lane's API origin (`NEXT_PUBLIC_API_ORIGIN`) into the web app and records the lane in
+  `apps/web/.next/lane.json`. Starting servers on a reused build (`review:screens --no-build`,
+  `review:serve --no-build`) for a different lane stops with "apps/web/.next was built for lane X; E2E_LANE
+  is Y. Rebuild (drop --no-build)." A reused build with no stamp is refused too.
+- `TIPME_TEST_DATABASE`, which the lane sets, must be `tipme_test` or `tipme_test_laneN`; anything else is
+  refused, because a run truncates every table in it.
 - Playwright output goes to `test-results/lane<n>` for lanes above 0.
 - CI does not set `E2E_LANE`, so it runs lane 0 exactly as before.
