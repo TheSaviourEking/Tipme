@@ -208,7 +208,7 @@
 .tm-pro-badge__spark {
   width: 0.9em;
   height: 0.9em;
-  fill: #ffd56b;
+  fill: var(--pro-spark);
 }
 
 .tm-pro-badge::after {

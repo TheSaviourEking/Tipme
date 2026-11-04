@@ -6,6 +6,8 @@
   --brand-ink: #4d16a8;
   --brand-soft: #f1e9ff;
   --brand-mid: #d9c3ff;
+  /* The gold spark on the Pro badge, the one warm accent beside the signature purple. */
+  --pro-spark: #ffd56b;
   /* Physical materials */
   --canvas: #f3f2ee;
   --surface-base: #ffffff;
