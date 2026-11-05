@@ -1,3 +1,9 @@
+# Current task — bank picker (5 November 2026)
+
+- Branch/worktree: `feat/bank-picker` / `.worktrees/bank-picker`, from `origin/dev`, test lane 3. Not pushed. No API, contract or migration change.
+- Building: the Get paid card's search-your-bank combobox (A) and the name check on its own (C). Plan: `docs/superpowers/plans/2026-11-05-bank-picker.md`.
+- Next: Tasks 2 to 10 of the plan, test-first.
+
 # Current task — dashboard data (5 November 2026)
 
 - Branch/worktree: `feat/dashboard-data` / `.worktrees/dashboard-data`, from `origin/dev` with `feat/e2e-lanes` merged. Not pushed. Migration 0071 (one index).
