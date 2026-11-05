@@ -4,9 +4,24 @@ import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { seedDemoProfiles } from '../../packages/database/dist/index.js';
+import {
+  createPaymentIntent,
+  createQuote,
+  createSession,
+  markAttemptInitiated,
+  seedDemoProfiles,
+} from '../../packages/database/dist/index.js';
+import {
+  createMockProvider,
+  planScenario,
+  runScenario,
+} from '../../packages/payments/dist/index.js';
+import { randomUUID } from 'node:crypto';
 import { ReadinessService } from '../../apps/api/dist/health/readiness.service.js';
 import {
+  REDIS_URL,
+  Redis,
+  WEBHOOK_SECRET,
   WEB,
   browserHeaders,
   openEventStream,
@@ -171,6 +186,90 @@ test('the ninth stream for one user gets 429 LIVE_LIMIT', async () => {
   assert.equal(again.status, 200);
   again.close();
   for (const stream of open) stream.close();
+});
+
+/** A session cookie for a demo page's owner, made directly (demo owners have no sign-in number). */
+async function ownerCookie(handle) {
+  const { rows } = await database.pool.query(
+    'SELECT user_id FROM profiles WHERE handle = $1',
+    [handle],
+  );
+  const { token } = await createSession(database.db, {
+    userId: rows[0].user_id,
+    deviceLabel: 'Integration test',
+  });
+  return `tipme_session=${token}`;
+}
+
+test('a pretend tip produces tips.changed and then notifications.changed on the recipient\u2019s stream and nothing on a second user\u2019s', async (t) => {
+  const redis = new Redis(REDIS_URL);
+  t.after(() => redis.quit());
+  const mock = createMockProvider({
+    redis,
+    secret: WEBHOOK_SECRET,
+    prefix: stack.prefix,
+  });
+  const ada = await events(await ownerCookie('ada'));
+  const tobi = await events(await ownerCookie('tobi'));
+  await ada.waitFor(READY);
+  await tobi.waitFor(READY);
+  const { quoteId } = await createQuote(database.db, {
+    handle: 'ada',
+    tipMinor: 200000n,
+    currency: 'NGN',
+  });
+  const { attemptId } = await createPaymentIntent(database.db, {
+    quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  const { providerReference } = await mock.initializePayment({
+    attemptId,
+    amountMinor: 200000n,
+    currency: 'NGN',
+    scenario: 'succeed',
+  });
+  await markAttemptInitiated(database.db, {
+    attemptId,
+    provider: 'mock',
+    providerReference,
+  });
+  assert.deepEqual(
+    await runScenario({
+      plan: planScenario('succeed', {
+        reference: providerReference,
+        attemptId,
+        amountMinor: 200000n,
+        currency: 'NGN',
+        feeMinor: 1500n,
+      }),
+      webhookUrl: `${stack.api}/v1/webhooks/mock`,
+      secret: WEBHOOK_SECRET,
+    }),
+    [200, 200],
+  );
+  await ada.waitFor(/^data: \{"type":"tips.changed"\}$/);
+  await ada.waitFor(/^data: \{"type":"notifications.changed"\}$/, 10_000);
+  const signals = ada.frames.filter(
+    (f) => f.startsWith('data: ') && !READY.test(f),
+  );
+  assert.ok(
+    signals.indexOf('data: {"type":"tips.changed"}') <
+      signals.indexOf('data: {"type":"notifications.changed"}'),
+    JSON.stringify(signals),
+  );
+  assert.ok(
+    signals.includes('data: {"type":"moments.changed"}'),
+    JSON.stringify(signals),
+  );
+  // Only types reach the browser: no ids, amounts or names.
+  for (const frame of signals)
+    assert.deepEqual(Object.keys(JSON.parse(frame.slice(6))), ['type']);
+  assert.deepEqual(
+    tobi.frames.filter((f) => f.startsWith('data: ') && !READY.test(f)),
+    [],
+  );
+  ada.close();
+  tobi.close();
 });
 
 test('draining refuses new streams with 503 and closes open ones with a retry line', async () => {
