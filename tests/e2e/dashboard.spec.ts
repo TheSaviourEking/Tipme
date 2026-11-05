@@ -7,7 +7,7 @@ import {
   tipAsVisitor,
 } from './helpers';
 
-test('a new recipient sees the first-day screen, then their tip, its proof and a withdrawal', async ({
+test('a new recipient sees the first-day screen, then their tip and its proof', async ({
   page,
   browser,
 }, testInfo) => {
@@ -48,6 +48,18 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   ).toBeVisible();
   await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
   await expectAccessible(page);
+});
+
+test('a recipient withdraws a tip and sees it sent, and the dashboard fits a narrow phone', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.' });
+  await page.goto('/dashboard');
+  await expect(page.getByTestId('balance')).toHaveText('NGN 1,800.00', {
+    timeout: 15_000,
+  });
 
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
@@ -88,9 +100,6 @@ test('a brief 503 retries quietly and a lasting one says so', async ({
     }),
   };
   let asked = 0;
-  // No live stream here: its connect resyncs every panel once, which would be a third read and
-  // isn't what this test counts (tests/e2e/live-updates.spec.ts covers the stream).
-  await page.route('**/v1/me/events', (route) => route.abort());
   await page.route('**/v1/me/dashboard', (route) =>
     ++asked === 1 ? route.fulfill(busy) : route.continue(),
   );

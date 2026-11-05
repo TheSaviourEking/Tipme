@@ -31,6 +31,9 @@ import {
   startStack,
 } from './helpers.mjs';
 
+// It resets its database (and reseeds) in before(): on a shared database, such as an e2e lane's,
+// run integration files one at a time (--test-concurrency=1). `pnpm test:integration` gives each
+// file its own copy.
 // The live stream (spec §2): signals only, authenticated on every connect, and never held past its
 // session. Written before the route: "a stream outlives requestTimeout" decides whether it works at all.
 startTelemetry({

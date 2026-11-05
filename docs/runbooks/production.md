@@ -191,6 +191,8 @@ Live updates (spec `docs/superpowers/specs/2026-11-03-live-updates-design.md`) s
 
 4. **Watch a week** of `tipme.live.*` on staging (`tipme.live.subscriber` stays 1; `tipme.live.connects{outcome}` shows few `limit_*` or `rate_limited`), then set `LIVE_UPDATES_ENABLED=true` in `production.env` and recreate the API colour.
 
+**The new-tip sound on Safari and iPhone.** WebKit unlocks page audio per media element, through a click or key press on that element's play. The sound is created at the first tip, in a hidden tab, away from any gesture, so on Safari (macOS and every iPhone browser) it will mostly not play. It fails silently, as the owner accepted (DECISION-LOG, 3 Nov 2026). If it is wanted there, the fix is to create the audio element inside the first click or key press and prime it (muted play, then pause).
+
 **To turn it off:** set `LIVE_UPDATES_ENABLED=false` in `production.env` and recreate the API colour. No web deploy is needed: the web app sees 204 and stops trying for that page load.
 
 ## Staff access

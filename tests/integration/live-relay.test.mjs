@@ -6,6 +6,9 @@ import { startOutboxRelay } from '../../apps/worker/dist/outbox-relay-loop.js';
 import { enqueueOutbox } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 
+// It resets its database and runs a relay that claims every unpublished row: never run it beside
+// other files on one shared database. `pnpm test:integration` gives each file its own copy; on a
+// lane database run files one at a time (--test-concurrency=1).
 // The relay's live signals against a real database, with no stack: nothing else claims the rows.
 // (A relay running beside this one would; that is why these are not in outbox-delivery.test.mjs.)
 
