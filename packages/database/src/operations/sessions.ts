@@ -47,7 +47,7 @@ export function resolveSession(
   db: Database,
   token: string,
   now: Date,
-): Promise<{ sessionId: string; userId: string } | null> {
+): Promise<{ sessionId: string; userId: string; expiresAt: Date } | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return Promise.resolve(null);
   return guarded(async () => {
     const [row] = await db
@@ -60,7 +60,12 @@ export function resolveSession(
           gt(sessions.expiresAt, now),
         ),
       )
-      .returning({ sessionId: sessions.id, userId: sessions.userId });
+      .returning({
+        sessionId: sessions.id,
+        userId: sessions.userId,
+        // A live stream closes at this instant (additive; no extra query).
+        expiresAt: sessions.expiresAt,
+      });
     if (!row) return null;
     const [user] = await db
       .select({ deletedAt: users.deletedAt })

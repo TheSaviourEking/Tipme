@@ -27,6 +27,7 @@ import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
@@ -39,6 +40,7 @@ export class OpsAccountRecoveryController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
   ) {}
 
   @Post(':userId/email-recovery')
@@ -88,6 +90,7 @@ export class OpsAccountRecoveryController {
     if (outcome === 'not_found') throw new CodedHttpException(404, 'NOT_FOUND');
     if (outcome === 'staff_account')
       throw new CodedHttpException(409, 'FORBIDDEN');
+    void this.publishLive({ to: { user: userId }, type: 'sessions.changed' });
     return { data: { outcome } };
   }
 }

@@ -43,6 +43,7 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import {
   clearSessionCookie,
   DEVICE_COOKIE,
@@ -65,6 +66,7 @@ export class AuthController {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
   ) {
     this.sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
   }
@@ -150,8 +152,13 @@ export class AuthController {
     const old = previous
       ? await resolveSession(db, previous, new Date())
       : null;
-    if (old)
+    if (old) {
       await revokeSession(db, { userId: old.userId, sessionId: old.sessionId });
+      void this.publishLive({
+        to: { user: old.userId },
+        type: 'sessions.changed',
+      });
+    }
     const session = await createSession(db, {
       userId: result.userId,
       deviceLabel: body.deviceLabel ?? 'Browser',
@@ -177,6 +184,11 @@ export class AuthController {
   ): Promise<void> {
     await revokeSession(this.database.db, auth);
     clearSessionCookie(response, this.config);
+    // After the revoke commits: that user's open streams re-check their own sessions.
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'sessions.changed',
+    });
   }
 
   @Get('me/sessions')
@@ -208,6 +220,10 @@ export class AuthController {
       userId: auth.userId,
       sessionId: id,
     });
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'sessions.changed',
+    });
   }
 
   @Post('me/sessions/sign-out-others')
@@ -217,6 +233,10 @@ export class AuthController {
     await revokeAllSessions(this.database.db, {
       userId: auth.userId,
       exceptSessionId: auth.sessionId,
+    });
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'sessions.changed',
     });
   }
 }

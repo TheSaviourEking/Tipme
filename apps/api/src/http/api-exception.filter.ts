@@ -135,6 +135,9 @@ const messages: Record<ApiErrorCode, string> = {
   PREVIEW_REQUIRED:
     'This is a private preview. Please sign in with the preview password.',
   RATE_LIMITED: 'Too many requests. Please wait and retry.',
+  LIVE_LIMIT:
+    'Too many live connections are open. This page will refresh on its own.',
+  LIVE_UNAVAILABLE: 'Live updates are busy. This page will refresh on its own.',
   DEPENDENCY_UNAVAILABLE:
     'A required service is temporarily unavailable. Please retry.',
   EMAIL_VERIFICATION_REQUIRED:
@@ -391,7 +394,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
     else if (fields) body.error.fields = fields;
     if (exception instanceof CodedHttpException && exception.reason)
       body.error.reason = exception.reason;
-    if (exception instanceof RateLimitedException)
+    if (
+      exception instanceof RateLimitedException ||
+      (exception instanceof CodedHttpException && exception.retryAfterSeconds)
+    )
       response.setHeader('Retry-After', String(exception.retryAfterSeconds));
     response.status(status).json(body);
   }

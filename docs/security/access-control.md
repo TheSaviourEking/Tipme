@@ -161,6 +161,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
 | POST | `/v1/me/email/code` | yes | `auth_code` | – |
 | POST | `/v1/me/email/confirm` | yes | `auth_verify` | – |
+| GET | `/v1/me/events` | n/a (read) | `live_connect` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
 | GET | `/v1/me/moments` | n/a (read) | – | – |

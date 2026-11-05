@@ -100,6 +100,8 @@ export const apiConfigSchema = z
       .min(1)
       .default(30),
     RATE_LIMIT_BANK_READ_PER_MIN: z.coerce.number().int().min(1).default(30),
+    // Live stream connects per address per minute, counted before the session check. Tests raise it.
+    RATE_LIMIT_LIVE_CONNECT_PER_MIN: z.coerce.number().int().min(1).default(60),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z

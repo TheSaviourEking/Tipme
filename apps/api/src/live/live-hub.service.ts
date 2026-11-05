@@ -7,6 +7,7 @@ import {
 import { liveChannel, type LiveMessage } from '@tipme/contracts';
 import type { Logger } from '@tipme/observability';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { ReadinessService } from '../health/readiness.service.js';
 import { LOGGER } from '../tokens.js';
 import { createLiveMetrics, type LiveMetrics } from './live-metrics.js';
 import {
@@ -109,6 +110,7 @@ export class LiveHubService implements OnModuleInit, OnApplicationShutdown {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(LOGGER) logger: Logger,
+    @Inject(ReadinessService) readiness: ReadinessService,
   ) {
     let hub: LiveHub | null = null;
     this.metrics = createLiveMetrics({
@@ -123,6 +125,8 @@ export class LiveHubService implements OnModuleInit, OnApplicationShutdown {
       metrics: this.metrics,
     });
     this.hub = hub;
+    // Without this, closeIdleConnections never closes a stream and every stop waits out its deadline.
+    readiness.onDrain(() => hub.drain());
   }
 
   onModuleInit(): void {

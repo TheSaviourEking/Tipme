@@ -50,6 +50,7 @@ import {
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { ServerEvents } from '../analytics/server-events.js';
 import type { PhotoStore } from '@tipme/database';
 import { PHOTO_STORE } from './photo-store.provider.js';
@@ -68,6 +69,7 @@ export class MeProfileController {
     private readonly revalidator: ProfileRevalidator,
     @Inject(ServerEvents) private readonly events: ServerEvents,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
@@ -200,5 +202,10 @@ export class MeProfileController {
     });
     this.revalidator.revalidate(handle);
     clearSessionCookie(response, this.config);
+    // Its sessions are gone with the account: every open stream closes.
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'sessions.changed',
+    });
   }
 }

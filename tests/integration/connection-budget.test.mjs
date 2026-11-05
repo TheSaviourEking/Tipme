@@ -19,8 +19,11 @@ import {
   Redis,
   WEBHOOK_SECRET,
   bullmq,
+  openEventStream,
+  signIn,
   startStack,
 } from './helpers.mjs';
+import { PG_POOL } from '../../apps/api/dist/infra/infra.module.js';
 
 // The whole stack at production's default sizes (one connection per API process, two per worker),
 // with short waits so the waiting tests stay quick. Behind a door that can answer as a full server.
@@ -49,6 +52,7 @@ before(async () => {
       DATABASE_POOL_CONNECT_TIMEOUT_MS: '500',
       RATE_LIMIT_QUOTES_PER_MIN: generous,
       RATE_LIMIT_INTENTS_PER_MIN: generous,
+      LIVE_UPDATES_ENABLED: 'true',
     },
     workerEnv: {
       DATABASE_URL: workerGate.url,
@@ -341,4 +345,27 @@ test('the API alone never opens more than its pool', () => {
   // Every other test in this file has run against this door, the API's only way in.
   assert.equal(apiGate.peak, 1);
   assert.ok(workerGate.peak <= 2, `worker peak ${workerGate.peak}`);
+});
+
+test('an open stream holds no pool connection', async () => {
+  const { cookie } = await signIn(stack.api, '+2348033300001');
+  const pool = stack.app.get(PG_POOL);
+  const idleBefore = await until(() => pool.idleCount >= 1 && pool.idleCount);
+  const stream = await openEventStream(`${stack.api}/v1/me/events`, {
+    cookie,
+    origin: 'http://localhost:3000',
+  });
+  await stream.waitFor(/^data: \{"type":"ready"\}$/);
+  try {
+    // The connect's two queries are done and their connection is back, while the stream stays open.
+    assert.equal(await until(() => pool.idleCount === idleBefore), true);
+    // With one connection in the whole pool, an ordinary read still gets it.
+    const sessions = await fetch(`${stack.api}/v1/me/sessions`, {
+      headers: { cookie },
+    });
+    assert.equal(sessions.status, 200);
+    assert.equal(stream.frames.includes('data: {"type":"ready"}'), true);
+  } finally {
+    stream.close();
+  }
 });

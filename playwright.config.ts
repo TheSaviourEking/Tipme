@@ -108,6 +108,8 @@ export default defineConfig({
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
         LIVE_UPDATES_ENABLED: 'true',
+        // Every page opens a stream from 127.0.0.1.
+        RATE_LIMIT_LIVE_CONNECT_PER_MIN: '10000',
       }),
     },
     {
