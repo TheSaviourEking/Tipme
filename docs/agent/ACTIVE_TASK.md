@@ -1,3 +1,35 @@
+# Verified state (5 November 2026, dev at `f85ec4d`)
+
+Every "Current task" entry below for these branches is **merged into dev**; read them as history.
+
+| PR   | What                                                                                               | Migration  |
+| ---- | -------------------------------------------------------------------------------------------------- | ---------- |
+| #112 | Dashboard data: withdrawals list, report totals, notes filter, payout's own bank                   | 0071       |
+| #113 | CI: six browser-test shards                                                                        |            |
+| #114 | Redesign polish: review fixes, sticky marketing header, reserved example handles, one money format |            |
+| #115 | Username reservation, PR 1: staff reserve and release names                                        | 0072, 0073 |
+| #116 | Bank picker: search your bank, automatic name check                                                |            |
+| #117 | Social links: catalogue, Free/Pro limits, `ADULT_PLATFORM_LINKS`                                   | 0074       |
+| #118 | Partner quote cache (`PARTNER_QUOTE_CACHE_SECONDS`)                                                |            |
+| #119 | Live updates, PR 1 (`LIVE_UPDATES_ENABLED`, off by default)                                        | 0075       |
+| #120 | CI: no Next.js compile-cache restore (it served a stale stylesheet)                                |            |
+
+Migrations on dev run 0070 to 0075 in order. A branch that adds a migration regenerates it with drizzle-kit against current dev before its PR, after rebuilding `@tipme/contracts`: a stale build once dropped `usernames.manage` from a generated check. Never rename a migration.
+
+**Not on dev yet:**
+
+- `feat/make-it-yours`: the note consent tick box and the thank-you line. Built and reviewed; waiting to be pushed.
+- `feat/states`: PR A, the state primitives. Built and reviewed; waiting to be pushed.
+- `feat/animated-covers`: rebase on dev, review items I2 and I3, and regenerate its migration as the next number.
+
+**Owner steps before production:**
+
+- The reserved-handles query (`docs/runbooks/production.md`).
+- Live updates: the Caddyfile and `LIVE_UPDATES_ENABLED` (same runbook, §10).
+- Adult-platform links: the payment partner's written position and an acceptable-use section in the Terms.
+
+The backlog is in `docs/agent/BACKLOG.md`.
+
 # Current task — live updates PR 1 (5 November 2026)
 
 - Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, with `origin/dev` at `527bce9` merged. Pushed; PR to dev open after the review rounds (`c-review.md`, `c-rereview.md`). Plan: `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 1-12 (PR 1).
