@@ -61,6 +61,54 @@ export interface ActivityRow {
   amountMinor: string;
   state: string;
   supporterLabel: string | null;
+  /** The bank a withdrawal went to, as recorded when it was requested. Null for tips. */
+  bank: WithdrawalBank | null;
+}
+
+/** The bank a withdrawal was sent to, as recorded when it was requested. Never the current bank. */
+export interface WithdrawalBank {
+  bankName: string;
+  last4: string;
+}
+
+export type WithdrawalState =
+  'requested' | 'processing' | 'in_review' | 'sent' | 'failed' | 'reversed';
+
+export interface WithdrawalRow {
+  payoutId: string;
+  /** When it was requested (the list's order and cursor). */
+  requestedAt: string;
+  /** When it was paid, if it was. */
+  paidAt: string | null;
+  currency: string;
+  amountMinor: string;
+  state: WithdrawalState;
+  /** Null for a payout recorded without a destination (before banks were kept, or pretend). */
+  bank: WithdrawalBank | null;
+}
+
+export interface WithdrawalsPage {
+  items: WithdrawalRow[];
+  nextCursor: string | null;
+}
+
+export const myWithdrawalsQuerySchema = z
+  .object({
+    cursor: z.string().max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+
+/** Only tips with a note the recipient can read. */
+export const myTipsNoteSchema = z.enum(['with']);
+
+/** Every tip ever paid to the recipient. Tips still being confirmed are not counted. */
+export interface TipTotals {
+  currency: string;
+  /** Sum of what the recipient received (net of TipMe's 10%) from paid tips. */
+  receivedNetMinor: string;
+  /** Number of paid tips. TipMe keeps no supporter identity, so this is not a count of people. */
+  paidTipCount: number;
 }
 
 export const withdrawalRequestSchema = z

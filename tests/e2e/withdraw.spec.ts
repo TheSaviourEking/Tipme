@@ -5,7 +5,12 @@ import {
   signUpRecipient,
   tipAsVisitor,
 } from './helpers';
-import { enrolOwner, noOtherStaff, withDatabase } from './ops-helpers';
+import {
+  enrolOwner,
+  noOtherStaff,
+  saveBank,
+  withDatabase,
+} from './ops-helpers';
 
 // The pretend provider has no connected accounts and never fails a read, so it can only reach
 // `ready` and (through a real hold) `paused`. The states it can't produce are answered here at the
@@ -152,10 +157,12 @@ test('an idempotency conflict never says to simply try again', async ({
   const { handle } = await signUpRecipient(page, testInfo);
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.route('**/v1/me/withdrawals', (route) =>
-    route.fulfill({
-      status: 409,
-      json: { error: { code: 'IDEMPOTENCY_CONFLICT', message: 'x' } },
-    }),
+    route.request().method() === 'POST'
+      ? route.fulfill({
+          status: 409,
+          json: { error: { code: 'IDEMPOTENCY_CONFLICT', message: 'x' } },
+        })
+      : route.continue(),
   );
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
@@ -235,39 +242,51 @@ test('the summary says where it goes, what arrives and what is left', async ({
   await expectAccessible(page);
 });
 
+const withdrawal = (over: Record<string, unknown>) => ({
+  payoutId: 'w',
+  requestedAt: '2026-10-24T09:00:00.000000Z',
+  paidAt: null,
+  currency: 'NGN',
+  amountMinor: '1000000',
+  state: 'requested',
+  bank: null,
+  ...over,
+});
+
 test('progress follows the real state only', async ({ page }, testInfo) => {
   await signUpRecipient(page, testInfo);
-  await page.route('**/v1/me/activity', (route) =>
-    route.fulfill({
-      json: {
-        data: [
-          {
-            kind: 'withdrawal',
-            id: 'w1',
-            at: new Date().toISOString(),
-            amountMinor: '2000000',
-            state: 'processing',
-            supporterLabel: null,
+  await page.route('**/v1/me/withdrawals*', (route) =>
+    route.request().method() !== 'GET'
+      ? route.continue()
+      : route.fulfill({
+          json: {
+            data: {
+              nextCursor: null,
+              items: [
+                withdrawal({
+                  payoutId: 'w1',
+                  requestedAt: new Date().toISOString(),
+                  amountMinor: '2000000',
+                  state: 'processing',
+                }),
+                withdrawal({
+                  payoutId: 'w2',
+                  requestedAt: '2026-10-24T08:00:00.000000Z',
+                  paidAt: '2026-10-24T09:00:00.000000Z',
+                  amountMinor: '3500000',
+                  state: 'sent',
+                  bank: { bankName: 'GTBank', last4: '6789' },
+                }),
+                withdrawal({
+                  payoutId: 'w3',
+                  requestedAt: '2026-10-17T09:00:00.000000Z',
+                  amountMinor: '1250000',
+                  state: 'failed',
+                }),
+              ],
+            },
           },
-          {
-            kind: 'withdrawal',
-            id: 'w2',
-            at: '2026-10-24T09:00:00.000Z',
-            amountMinor: '3500000',
-            state: 'sent',
-            supporterLabel: null,
-          },
-          {
-            kind: 'withdrawal',
-            id: 'w3',
-            at: '2026-10-17T09:00:00.000Z',
-            amountMinor: '1250000',
-            state: 'failed',
-            supporterLabel: null,
-          },
-        ],
-      },
-    }),
+        }),
   );
   await page.goto('/dashboard/withdraw');
   const history = page.getByRole('region', { name: 'Your withdrawals' });
@@ -277,13 +296,115 @@ test('progress follows the real state only', async ({ page }, testInfo) => {
   await expect(steps.getByRole('listitem')).toHaveCount(3);
   await expect(steps.locator('[data-filled="true"]')).toHaveCount(2);
   // Paid only because the API says sent; a failed one says the money is back.
-  await expect(
-    history.getByRole('listitem').filter({ hasText: '₦35,000' }),
-  ).toContainText('Paid');
+  const paid = history.getByRole('listitem').filter({ hasText: '₦35,000' });
+  await expect(paid).toContainText('Paid');
+  // The bank is the one recorded on the withdrawal; a row without one says nothing of a bank.
+  await expect(paid).toContainText('to GTBank ••6789');
+  await expect(moving).not.toContainText('••');
   await expect(
     history.getByRole('listitem').filter({ hasText: '₦12,500' }),
   ).toContainText('the money is back in your balance');
+  await expect(
+    history.getByRole('listitem').filter({ hasText: '••' }),
+  ).toHaveCount(1);
   await expectAccessible(page);
+});
+
+test('an older withdrawal stays listed after many tips', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const { handle } = await signUpRecipient(page, testInfo);
+  await saveBank(handle, 'GTBank', '6789');
+  await tipAsVisitor(browser, handle, { name: 'Ada M.' });
+  await page.goto('/dashboard/withdraw');
+  await page.getByLabel('Amount (NGN)').fill('1800');
+  await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
+  await expect(page.getByText('Withdrawal requested')).toBeVisible();
+  // More tips than the mixed activity feed holds.
+  for (let batch = 0; batch < 3; batch += 1)
+    await Promise.all(
+      [0, 1, 2, 3].map(() => tipAsVisitor(browser, handle, { name: 'Tobi' })),
+    );
+  await page.goto('/dashboard/withdraw');
+  const history = page.getByRole('region', { name: 'Your withdrawals' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,800' });
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText(/Requested|On its way|Paid/);
+  await expect(row).toContainText('to GTBank ••6789');
+});
+
+test('a past withdrawal keeps its bank after the bank changes', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await saveBank(handle, 'GTBank', '6789');
+  await tipAsVisitor(browser, handle, { name: 'Ada M.' });
+  await page.goto('/dashboard/withdraw');
+  await page.getByLabel('Amount (NGN)').fill('1800');
+  await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
+  await expect(page.getByText('Withdrawal requested')).toBeVisible();
+  await saveBank(handle, 'Kuda', '9876');
+  await page.reload();
+  const history = page.getByRole('region', { name: 'Your withdrawals' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,800' });
+  await expect(row).toContainText('to GTBank ••6789');
+  await expect(row).not.toContainText('9876');
+  await expect(row).not.toContainText('Kuda');
+});
+
+test('more withdrawals load on request', async ({ page }, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.route('**/v1/me/withdrawals*', (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const second =
+      new URL(route.request().url()).searchParams.get('cursor') === 'c1';
+    return route.fulfill({
+      json: {
+        data: second
+          ? {
+              nextCursor: null,
+              items: [
+                withdrawal({
+                  payoutId: 'w3',
+                  amountMinor: '3000000',
+                  state: 'sent',
+                }),
+                withdrawal({
+                  payoutId: 'w4',
+                  amountMinor: '4000000',
+                  state: 'failed',
+                }),
+              ],
+            }
+          : {
+              nextCursor: 'c1',
+              items: [
+                withdrawal({ payoutId: 'w1', amountMinor: '1000000' }),
+                withdrawal({ payoutId: 'w2', amountMinor: '2000000' }),
+              ],
+            },
+      },
+    });
+  });
+  await page.goto('/dashboard/withdraw');
+  const history = page.getByRole('region', { name: 'Your withdrawals' });
+  await expect(
+    history.getByRole('listitem').filter({ hasText: '₦10,000' }),
+  ).toHaveCount(1);
+  await history.getByRole('button', { name: 'Show more' }).click();
+  await expect(
+    history.getByRole('listitem').filter({ hasText: '₦40,000' }),
+  ).toHaveCount(1);
+  for (const amount of ['₦10,000', '₦20,000', '₦30,000', '₦40,000'])
+    await expect(
+      history.getByRole('listitem').filter({ hasText: amount }),
+    ).toHaveCount(1);
+  await expect(history.getByRole('button', { name: 'Show more' })).toHaveCount(
+    0,
+  );
 });
 
 test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
@@ -322,6 +443,7 @@ test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
 async function failingRequests(page: Page) {
   const keys: string[] = [];
   await page.route('**/v1/me/withdrawals', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
     keys.push(route.request().headers()['idempotency-key'] ?? '');
     return route.fulfill({
       status: 503,

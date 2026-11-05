@@ -3,9 +3,10 @@ import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type {
-  ActivityRow,
   DashboardSummary,
   WithdrawalQuoteResponse,
+  WithdrawalRow,
+  WithdrawalsPage,
 } from '@tipme/contracts';
 import { FEE_POLICY_V1 } from '@tipme/domain';
 import { Button, InputField, Notice, Skeleton, Surface } from '@tipme/ui';
@@ -16,6 +17,7 @@ import { formatNaira } from '@/lib/demo-amount';
 import { dateOf, dayKey, timeOf } from '@/lib/lagos-time';
 import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
+import { bankLine } from '@/lib/withdrawal-bank';
 import { withdrawableNow, withdrawState } from '@/lib/withdraw-state';
 
 /** Quick amounts, offered only when the balance can cover them with something left over. */
@@ -30,44 +32,49 @@ const requested = (iso: string) =>
  * What a withdrawal row says, only from the state the API reports. `steps` is how many of the
  * three are filled: requested, sent to our payment partner, paid.
  */
-function describe(row: ActivityRow) {
+function describe(row: WithdrawalRow) {
   switch (row.state) {
     case 'sent':
-      return { label: 'Paid', tone: 'ok', steps: 3, note: dateOf(row.at) };
+      return {
+        label: 'Paid',
+        tone: 'ok',
+        steps: 3,
+        note: dateOf(row.paidAt ?? row.requestedAt),
+      };
     case 'failed':
       return {
         label: 'Failed',
         tone: 'bad',
         steps: 0,
-        note: `${dateOf(row.at)}. It didn’t go through, so the money is back in your balance.`,
+        note: `${dateOf(row.requestedAt)}. It didn’t go through, so the money is back in your balance.`,
       };
     case 'reversed':
       return {
         label: 'Reversed',
         tone: 'bad',
         steps: 0,
-        note: `${dateOf(row.at)}. The payment was reversed. Your balance shows where the money is.`,
+        note: `${dateOf(row.requestedAt)}. The payment was reversed. Your balance shows where the money is.`,
       };
     case 'in_review':
       return {
         label: 'Being checked',
         tone: 'wait',
         steps: 2,
-        note: `${requested(row.at)} Our payment partner is checking it.`,
+        note: `${requested(row.requestedAt)} Our payment partner is checking it.`,
       };
     case 'processing':
       return {
         label: 'On its way',
         tone: 'wait',
         steps: 2,
-        note: `${requested(row.at)} Sent to our payment partner.`,
+        note: `${requested(row.requestedAt)} Sent to our payment partner.`,
       };
     default:
       return {
         label: 'Requested',
         tone: 'wait',
         steps: 1,
-        note: `${requested(row.at)} Waiting to be sent.`,
+        note: `${requested(row.requestedAt)} Waiting to be sent.`,
       };
   }
 }
@@ -75,9 +82,15 @@ function describe(row: ActivityRow) {
 function History({
   rows,
   failed,
+  refreshFailed,
+  next,
+  onMore,
 }: {
-  rows: ActivityRow[] | null;
+  rows: WithdrawalRow[] | null;
   failed: boolean;
+  refreshFailed: boolean;
+  next: string | null;
+  onMore: () => void;
 }) {
   return (
     <section className="withdraw__history" aria-labelledby="withdraw-history">
@@ -94,7 +107,7 @@ function History({
             const view = describe(row);
             const open = view.steps > 0 && view.steps < 3;
             return (
-              <li key={row.id} className="withdraw__row" data-open={open}>
+              <li key={row.payoutId} className="withdraw__row" data-open={open}>
                 <div className="withdraw__row-head">
                   <strong>{formatNaira(row.amountMinor)}</strong>
                   <span
@@ -116,10 +129,23 @@ function History({
                   </ol>
                 )}
                 <p>{view.note}</p>
+                {bankLine(row.bank) && (
+                  <p className="tm-hint">{bankLine(row.bank)}</p>
+                )}
               </li>
             );
           })}
         </ol>
+      )}
+      {rows !== null && refreshFailed && (
+        <p role="status" className="tm-hint">
+          We couldn’t refresh this list. What you see may be out of date.
+        </p>
+      )}
+      {next && (
+        <Button variant="secondary" onClick={onMore}>
+          Show more
+        </Button>
       )}
     </section>
   );
@@ -135,7 +161,14 @@ export default function WithdrawPage({
   const copy = paymentModeCopy(usePaymentMode());
   const balance = usePanel<DashboardSummary>('/v1/me/dashboard');
   const latest = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote');
-  const activity = usePanel<ActivityRow[]>('/v1/me/activity');
+  const firstPath = '/v1/me/withdrawals';
+  const withdrawalsPanel = usePanel<WithdrawalsPage>(firstPath);
+  // Later pages, kept with the list they belong to: a reload starts from the first page again.
+  const [more, setMore] = useState<{
+    source: WithdrawalsPage;
+    items: WithdrawalRow[];
+    next: string | null;
+  } | null>(null);
   const [raw, setRaw] = useState('');
   const [error, setError] = useState('');
   const [done, setDone] = useState<string | null>(null);
@@ -143,7 +176,11 @@ export default function WithdrawPage({
   // One key per request, so a double tap never withdraws twice.
   const key = useRef<string | null>(null);
   const reloadAll = () =>
-    void Promise.all([balance.reload(), latest.reload(), activity.reload()]);
+    void Promise.all([
+      balance.reload(),
+      latest.reload(),
+      withdrawalsPanel.reload(),
+    ]);
 
   const amount = parseNaira(raw.replace(/^₦\s*/, '').trim());
   const submit = async (event: FormEvent) => {
@@ -228,8 +265,27 @@ export default function WithdrawPage({
     key.current = null;
   };
   const shortcuts = SHORTCUTS_MINOR.filter((minor) => minor < withdrawable);
-  const withdrawals =
-    activity.data?.filter((row) => row.kind === 'withdrawal') ?? null;
+  // The extra pages belong to the first page they followed; a fresh first page drops them.
+  const extra = more && more.source === withdrawalsPanel.data ? more : null;
+  const withdrawals = withdrawalsPanel.data
+    ? [...withdrawalsPanel.data.items, ...(extra?.items ?? [])]
+    : null;
+  const nextWithdrawals = extra
+    ? extra.next
+    : (withdrawalsPanel.data?.nextCursor ?? null);
+  const showMoreWithdrawals = async () => {
+    const source = withdrawalsPanel.data;
+    if (!source || !nextWithdrawals) return;
+    const result = await apiFetch<WithdrawalsPage>(
+      `${firstPath}?cursor=${encodeURIComponent(nextWithdrawals)}`,
+    );
+    if (result.ok)
+      setMore({
+        source,
+        items: [...(extra?.items ?? []), ...result.data.items],
+        next: result.data.nextCursor,
+      });
+  };
   const smallest = formatNaira(FEE_POLICY_V1.minWithdrawalMinor);
   // Only an amount the server would accept gets figures: within what can be withdrawn, and at
   // least the minimum unless it is all of it.
@@ -349,7 +405,13 @@ export default function WithdrawPage({
             </form>
           </Surface>
         )}
-        <History rows={withdrawals} failed={activity.error === 'load'} />
+        <History
+          rows={withdrawals}
+          failed={withdrawalsPanel.error === 'load'}
+          refreshFailed={withdrawalsPanel.error === 'refresh'}
+          next={nextWithdrawals}
+          onMore={() => void showMoreWithdrawals()}
+        />
       </div>
     </div>
   );
