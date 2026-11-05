@@ -376,9 +376,9 @@ test('hidden pauses polling at once and closes the stream after 5 minutes; visib
   assert.equal(h.sources.length, 1, 'no reconnect while hidden');
   h.setVisible(true);
   assert.equal(h.sources.length, 2);
+  // Not part of a herd: the tab came back by itself, so it re-reads at once, whatever random() says.
+  h.setRandom(0.9);
   await h.ready();
-  // A reconnect's ready re-reads after a random 0–5 s (random() is 0 here: at once).
-  await h.timers.advance(0);
   assert.equal(h.resyncs.length, 1);
 });
 
@@ -428,10 +428,9 @@ test('online reconnects', async () => {
   h.client.online();
   assert.equal(h.sources.length, 2);
   assert.equal(h.sources[0].closed, true);
+  // The network came back: no herd, so the re-read is at once.
+  h.setRandom(0.9);
   await h.ready();
-  // Not at once: a reconnect's re-read waits a random 0–5 s.
-  assert.equal(h.resyncs.length, 1);
-  await h.timers.advance(LIVE_TIMING.resyncJitterMs);
   assert.equal(h.resyncs.length, 2);
 });
 

@@ -118,8 +118,14 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
   /** The stream was closed because the tab was hidden; reopen when it is visible. */
   let sleeping = false;
   let ready = false;
-  /** The page has had a ready: every later one is a reconnect, part of a herd. */
+  /** The page has had a ready. */
   let everReady = false;
+  /**
+   * The coming ready follows a server close (a drain or the 30-minute close): every tab of that
+   * copy reconnects at once, so its re-read waits 0–5 s. A tab coming back by itself (visible
+   * again after a long hide, the network back) re-reads at once.
+   */
+  let herd = false;
 
   const later = (name: TimerName, fn: () => void, ms: number) => {
     clear(name);
@@ -276,6 +282,7 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
   const closedByServer = () => {
     closeSource();
     failures = 0;
+    herd = true;
     statusNow();
     later(
       'reconnect',
@@ -319,16 +326,19 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
         stopPolling();
         statusNow();
         armSafety();
-        if (!everReady) {
+        if (!everReady || !herd) {
           everReady = true;
+          herd = false;
           resync(true);
-        } else
-          // A reconnect: the whole herd gets ready at about the same moment. Spread the re-reads.
+        } else {
+          // After a server close the whole herd gets ready at about the same moment: spread them.
+          herd = false;
           later(
             'resync',
             () => resync(),
             deps.random() * LIVE_TIMING.resyncJitterMs,
           );
+        }
         return;
       case 'resync':
         // Every tab heard the same "back" at once: spread the refetches.
@@ -447,7 +457,8 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
       }
       clear('hidden');
       if (sleeping) {
-        // The stream was closed for being hidden: reconnecting resyncs on ready.
+        // The stream was closed for being hidden: reconnecting resyncs on ready, at once.
+        herd = false;
         connect();
         schedulePoll();
         return;
@@ -464,6 +475,7 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
     online() {
       if (!running) return;
       failures = 0;
+      herd = false;
       connect();
       if (polling) resync();
     },
