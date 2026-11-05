@@ -13,10 +13,18 @@ export function HeaderClaimGate() {
     const form = document.querySelector('.home-claim');
     if (!form || typeof IntersectionObserver === 'undefined') return;
     const root = document.documentElement;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry?.isIntersecting) root.dataset.heroClaim = 'in';
-      else delete root.dataset.heroClaim;
-    });
+    // The sticky header covers the top of the screen: a form scrolled up under it is out of sight,
+    // so it counts as gone and the button shows (never both hidden).
+    const header = Number.parseFloat(
+      getComputedStyle(root).getPropertyValue('--nav-height'),
+    );
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) root.dataset.heroClaim = 'in';
+        else delete root.dataset.heroClaim;
+      },
+      { rootMargin: `-${Number.isFinite(header) ? header : 76}px 0px 0px 0px` },
+    );
     observer.observe(form);
     return () => {
       observer.disconnect();

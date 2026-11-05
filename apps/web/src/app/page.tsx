@@ -24,7 +24,7 @@ export const metadata = marketingMetadata(
 // server HTML: the headline is the largest paint, so it never waits for client JavaScript.
 export default function Home() {
   return (
-    <main id="main" tabIndex={-1} className="home-page">
+    <main id="main" tabIndex={-1} className="home-page marketing-page">
       <ViewTracker name="landing_viewed" />
       <HeaderClaimGate />
       <Container>

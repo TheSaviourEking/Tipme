@@ -77,14 +77,136 @@ test('an in-page jump to How it works lands below the header', async ({
   page,
 }) => {
   await page.goto('/#how-it-works');
-  // The jump may glide: wait for it to stop, then the section must start below the header.
+  // The jump may glide: wait until the scroll has moved and then stopped, then check the landing.
+  let last = -1;
   await expect
     .poll(async () => {
-      const header = await page.locator('.site-header').boundingBox();
-      const target = await page.locator('#how-it-works').boundingBox();
-      return (target?.y ?? 0) - ((header?.y ?? 0) + (header?.height ?? 0));
+      const now = await page.evaluate(() => window.scrollY);
+      const settled = now > 0 && now === last;
+      last = now;
+      return settled;
     })
-    .toBeGreaterThanOrEqual(-1);
+    .toBe(true);
+  const header = await page.locator('.site-header').boundingBox();
+  const target = await page.locator('#how-it-works').boundingBox();
+  expect(
+    (target?.y ?? 0) - ((header?.y ?? 0) + (header?.height ?? 0)),
+  ).toBeGreaterThanOrEqual(-1);
+});
+
+test('a focused header button stays shown and focused when the hero form returns', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(() =>
+    window.scrollTo({ top: 1400, behavior: 'instant' }),
+  );
+  await expect(claim(page)).toBeVisible();
+  await claim(page).focus();
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await expect(page.locator('html')).toHaveAttribute('data-hero-claim', 'in');
+  await expect(claim(page)).toBeFocused();
+  await expect(claim(page)).toBeVisible();
+  // Once focus leaves it, it steps aside as usual.
+  await page.locator('.home-claim input').focus();
+  await expect(claim(page)).toBeHidden();
+});
+
+test('a form scrolled up under the sticky header does not hide the button as well', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const hidden = await page.evaluate(() => {
+    const form = document.querySelector('.home-claim')!.getBoundingClientRect();
+    window.scrollTo({
+      top: window.scrollY + form.bottom - 40,
+      behavior: 'instant',
+    });
+  });
+  void hidden;
+  await expect(claim(page)).toBeVisible();
+});
+
+test.describe('with motion allowed', () => {
+  test.use({ reducedMotion: 'no-preference' });
+  test('the button slides in and ends up shown', async ({ page }) => {
+    await page.goto('/');
+    expect(
+      await claim(page).evaluate((n) => getComputedStyle(n).transitionDuration),
+    ).not.toBe('0s');
+    await page.evaluate(() =>
+      window.scrollTo({ top: 1400, behavior: 'instant' }),
+    );
+    await expect(claim(page)).toBeVisible();
+    await expect
+      .poll(() => claim(page).evaluate((n) => getComputedStyle(n).opacity))
+      .toBe('1');
+  });
+});
+
+test('with reduced motion the button has no transition', async ({ page }) => {
+  await page.goto('/');
+  // Effectively none: the global reduced-motion rule leaves 0.01ms.
+  const seconds = await claim(page).evaluate((n) =>
+    Number.parseFloat(getComputedStyle(n).transitionDuration),
+  );
+  expect(seconds).toBeLessThan(0.001);
+});
+
+test('the Who it’s for popover opens over the page while the header is stuck', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(() =>
+    window.scrollTo({ top: 1400, behavior: 'instant' }),
+  );
+  await page.getByRole('button', { name: /Who it.s for/ }).click();
+  const menu = page.locator('.who__menu');
+  await expect(menu).toBeVisible();
+  const onTop = await menu.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      box.x + box.width / 2,
+      box.y + box.height / 2,
+    );
+    return Boolean(hit && node.contains(hit));
+  });
+  expect(onTop).toBe(true);
+});
+
+test('the header is sticky on the marketing pages only', async ({ page }) => {
+  const position = () =>
+    page.locator('.site-header').evaluate((n) => getComputedStyle(n).position);
+  for (const path of [
+    '/pro',
+    '/for-creators',
+    '/for-businesses',
+    '/legal/terms',
+    '/legal/privacy',
+  ]) {
+    await page.goto(path);
+    expect(await position(), path).toBe('sticky');
+  }
+  for (const path of ['/@ada', '/sign-in', '/sign-up', '/recover']) {
+    await page.goto(path);
+    expect(await position(), path).not.toBe('sticky');
+  }
+});
+
+test('the public tip page header is not sticky at a phone width', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto('/@ada');
+  expect(
+    await page
+      .locator('.site-header')
+      .evaluate((n) => getComputedStyle(n).position),
+  ).not.toBe('sticky');
+  await page.evaluate(() => window.scrollTo({ top: 600, behavior: 'instant' }));
+  expect(
+    (await page.locator('.site-header').boundingBox())?.y ?? 0,
+  ).toBeLessThan(0);
 });
 
 test('@mobile on a phone the closed header has no claim button; the open menu has it', async ({

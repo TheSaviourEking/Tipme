@@ -177,10 +177,11 @@ legend {
   background: var(--canvas);
 }
 
-/* Marketing pages: the header stays at the top of the screen, on the page background, above the
-   content. The dashboard and the staff console keep their own, unsticky header. In-page jumps
-   stop below it (html scroll-padding-top). */
-body:not(:has(.dashboard-page)) .site-header {
+/* Marketing pages only (their <main> carries .marketing-page): the header stays at the top of the
+   screen, on the page background, above the content. The tip page, receipts, sign-in, the
+   dashboard and the staff console keep an ordinary header. In-page jumps stop below it (html
+   scroll-padding-top). */
+body:has(.marketing-page) .site-header {
   position: sticky;
   top: 0;
 }
@@ -197,7 +198,8 @@ body:not(:has(.dashboard-page)) .site-header {
       visibility 0s;
   }
 
-  html[data-hero-claim='in'] .site-header .nav-claim {
+  /* Never while it has focus: a focused control must not vanish under the keyboard. */
+  html[data-hero-claim='in'] .site-header .nav-claim:not(:focus) {
     visibility: hidden;
     opacity: 0;
     transform: translateX(0.5rem) scale(0.96);
@@ -209,7 +211,7 @@ body:not(:has(.dashboard-page)) .site-header {
 
   @media (prefers-reduced-motion: reduce) {
     .site-nav .nav-claim,
-    html[data-hero-claim='in'] .site-header .nav-claim {
+    html[data-hero-claim='in'] .site-header .nav-claim:not(:focus) {
       transition: none;
     }
   }
@@ -2162,6 +2164,11 @@ body:has(.profile-page) .brand__mark {
   position: relative;
 }
 
+.share-profile--icon {
+  grid-area: share;
+  margin-top: var(--space-2);
+}
+
 .share-profile__icon.tm-button {
   width: 44px;
   min-width: 44px;
@@ -2171,6 +2178,27 @@ body:has(.profile-page) .brand__mark {
 }
 
 /* Over the page rather than in it, so copying moves nothing. */
+.share-profile--icon .share-profile__status:not(:empty) {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  width: max-content;
+  max-width: min(16rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--text-primary);
+  color: var(--surface-base);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.share-profile--icon .share-profile__status:empty {
+  display: block;
+  position: absolute;
+  margin: 0;
+}
 
 .share-profile--text .tm-button {
   width: 100%;
@@ -2429,6 +2457,10 @@ body:has(.profile-page) .brand__mark {
     width: 6.5rem;
     height: 6.5rem;
     font-size: 2.5rem;
+  }
+
+  .share-profile--icon {
+    margin: 0 0 var(--space-3);
   }
 
   .profile-identity h1 {
