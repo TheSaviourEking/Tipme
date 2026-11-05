@@ -100,9 +100,12 @@ test('a bank code pasted with a space or a dash still fills all six cells', asyn
   await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard/settings#get-paid');
   const card = page.locator('#get-paid');
-  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('0123456789');
-  await card.getByRole('button', { name: 'Check account' }).click();
+  // The name check runs on its own once a bank and 10 digits are in.
+  await expect(card.getByLabel('Name on the account')).toHaveValue(
+    'PRETEND ACCOUNT HOLDER',
+  );
   await card.getByRole('button', { name: 'Email me a code' }).click();
   const field = card.getByLabel('6-digit code');
   await expect(field).toBeVisible();
