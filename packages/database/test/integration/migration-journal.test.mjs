@@ -18,12 +18,15 @@ test('migration journal timestamps strictly increase', () => {
 });
 
 test('the journal lists each migration once, in order, with its file', () => {
+  // File numbers rise with the journal. A gap is allowed: a branch may take a number ahead of
+  // migrations still to merge (animated covers is 0074 while 0071 to 0073 are other branches').
+  let last = -1;
   entries.forEach((entry, i) => {
     assert.equal(entry.idx, i);
-    assert.ok(
-      entry.tag.startsWith(`${String(i).padStart(4, '0')}_`),
-      entry.tag,
-    );
+    const number = Number(/^(\d{4})_/.exec(entry.tag)?.[1]);
+    assert.ok(number > last, entry.tag);
+    assert.ok(number >= i, entry.tag);
+    last = number;
     assert.ok(existsSync(new URL(`${entry.tag}.sql`, drizzle)), entry.tag);
   });
 });
