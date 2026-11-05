@@ -24,7 +24,7 @@ import {
 import { PayoutIssueTools } from '@/components/ops/payout-issue-tools';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { ResolveMoneyIssue } from '@/components/ops/resolve-money-issue';
-import { naira } from '@/lib/money';
+import { nairaCode as naira } from '@/lib/money';
 import {
   can,
   ISSUE_KIND_LABELS,

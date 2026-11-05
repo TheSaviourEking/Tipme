@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { formatDemoAmount } from '../src/lib/demo-amount.ts';
+import { formatDemoAmount, formatNaira } from '../src/lib/demo-amount.ts';
 import { amountOptions } from '../src/lib/tip-amounts.ts';
 
 test('typed amounts use exact minor units and reject ambiguous input', () => {
@@ -30,4 +30,22 @@ test('typed amounts use exact minor units and reject ambiguous input', () => {
   }
   assert.equal(formatDemoAmount(123450), 'NGN 1,234.50');
   assert.equal(formatDemoAmount(101), 'NGN 1.01');
+});
+
+// One money format on every recipient and supporter screen: ₦1,800, with kobo only when there are some.
+test('formatNaira takes a decimal string, a number or a bigint', () => {
+  assert.equal(formatNaira('180000'), '₦1,800');
+  assert.equal(formatNaira(180000), '₦1,800');
+  assert.equal(formatNaira(BigInt(180000)), '₦1,800');
+  assert.equal(formatNaira('180050'), '₦1,800.50');
+  assert.equal(formatNaira('180005'), '₦1,800.05');
+  assert.equal(formatNaira('5'), '₦0.05');
+  assert.equal(formatNaira('0'), '₦0');
+});
+
+test('formatNaira keeps every digit of a balance too large for a double', () => {
+  assert.equal(
+    formatNaira('123456789012345678901234'),
+    '₦1,234,567,890,123,456,789,012.34',
+  );
 });

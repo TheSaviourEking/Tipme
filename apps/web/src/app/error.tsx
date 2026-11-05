@@ -34,9 +34,8 @@ export default function AppError({
       }
     >
       <p>
-        It’s a problem on our side and your account is fine. Try again in a
-        moment. If you were sending a tip, nothing was charged without your
-        confirmation.
+        It’s a problem on our side. Try again in a moment. If you were sending a
+        tip, nothing was charged without your confirmation.
       </p>
     </QuietScreen>
   );

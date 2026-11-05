@@ -8,7 +8,7 @@ import {
 } from '@/lib/production-launch';
 
 /**
- * Short links (/ada → /@ada) are a real 308 before anything else. Then, on staging/preview only:
+ * Short links (/kemi → /@kemi; the example people are reserved, so they have none) are a real 308 before anything else. Then, on staging/preview only:
  * when PREVIEW_PASSWORD is set, every page needs the preview ticket. Without it the visitor is
  * sent to the password page (and back afterwards).
  */

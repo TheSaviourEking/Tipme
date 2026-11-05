@@ -417,7 +417,7 @@ export function CoverSettings({
 
       {!saved.design && (
         <p className="tm-hint">
-          {"If you don't choose, we'll pick one for your page."}
+          If you don’t choose, we’ll pick one for your page.
         </p>
       )}
       <div className="cover-save">

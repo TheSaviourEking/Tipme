@@ -16,8 +16,9 @@ export const CodeField = forwardRef<
     value: string;
     onChange: (digits: string) => void;
     error?: string;
+    disabled?: boolean;
   }
->(function CodeField({ id, label, value, onChange, error }, ref) {
+>(function CodeField({ id, label, value, onChange, error, disabled }, ref) {
   const now = Math.min(value.length, CELLS - 1);
   return (
     <div className="tm-field tm-code-field">
@@ -45,6 +46,7 @@ export const CodeField = forwardRef<
           pattern="[0-9]*"
           spellCheck={false}
           value={value}
+          disabled={disabled}
           onChange={(event) =>
             onChange(event.target.value.replace(/\D/g, '').slice(0, CELLS))
           }
