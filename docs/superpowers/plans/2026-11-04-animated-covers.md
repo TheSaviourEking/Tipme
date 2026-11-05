@@ -79,6 +79,7 @@
   | Slow loop  | 8000ms   | infinite, `alternate` (slow) | `--ease-physical` | 0–600ms delay |
 
   These are part of the exception to §3's "at most 4 items, 420ms total".
+
 - **Only `/@handle` and the Settings live preview animate.** `ProfileCover` takes `animate` (default `false`). Choice thumbnails, the Home postcard stamp, dashboard cards and staff screens show the still frame.
 
 ### Freeze rules
@@ -166,6 +167,7 @@ The cover's animations get `animation-play-state: paused`:
   - LCP under 2000ms in `pnpm perf:lab`.
 
   Quote the owner's ruling and say it is not a regulatory approval.
+
 - [ ] **Step 4: Run the check again, and the formatter.**
 
   ```bash
@@ -173,6 +175,7 @@ The cover's animations get `animation-play-state: paused`:
   ```
 
   Expected: PASS.
+
 - [ ] **Step 5: Commit.** `docs: record animated covers as the owner's motion exception`
 
 ### Task 2: Contracts — catalogue, choice and resolution
@@ -188,19 +191,37 @@ The cover's animations get `animation-play-state: paused`:
 **Interfaces (produces):**
 
 ```ts
-export interface CoverAnimation { id: string; name: string; pro: boolean; base: string; tone: string }
+export interface CoverAnimation {
+  id: string;
+  name: string;
+  pro: boolean;
+  base: string;
+  tone: string;
+}
 export const COVER_ANIMATIONS: readonly CoverAnimation[]; // drift, rise, ripple (Free); pulse, night, sun (Pro)
 export type CoverMotion = 'once' | 'loop';
 export type CoverPlay = CoverMotion | 'still';
 export const isProAnimation: (id: string) => boolean;
 export function coverChoiceNeedsPro(c: CoverDesignChoice): boolean;
-export function coverPlay(p: { animation: string; colour: string | null; motion: CoverMotion | null; plan: PagePlan | undefined }): CoverPlay;
+export function coverPlay(p: {
+  animation: string;
+  colour: string | null;
+  motion: CoverMotion | null;
+  plan: PagePlan | undefined;
+}): CoverPlay;
 export type ResolvedCover =
   | { kind: 'photo'; path: string }
   | { kind: 'design'; design: string; colour?: string }
   | { kind: 'animated'; animation: string; colour?: string; play: CoverPlay };
-export function resolveCover(p: { handle: string; coverPath: string | null; coverDesign: string | null; coverColour: string | null;
-  coverAnimation?: string | null; coverMotion?: string | null; plan?: string }): ResolvedCover;
+export function resolveCover(p: {
+  handle: string;
+  coverPath: string | null;
+  coverDesign: string | null;
+  coverColour: string | null;
+  coverAnimation?: string | null;
+  coverMotion?: string | null;
+  plan?: string;
+}): ResolvedCover;
 // coverDesignChoiceSchema: + animation?: string | null (max 40), motion?: 'once' | 'loop'
 ```
 
@@ -235,6 +256,7 @@ export function resolveCover(p: { handle: string; coverPath: string | null; cove
   ```
 
   Expected: FAIL (`COVER_ANIMATIONS` is not exported).
+
 - [ ] **Step 3: Implement** in `covers.ts`. Keep existing results for every input without `coverAnimation`; the existing pinned tests must still pass. Add the error code.
 - [ ] **Step 4: Run, expecting PASS.**
 
@@ -287,6 +309,7 @@ export function resolveCover(p: { handle: string; coverPath: string | null; cove
   ```
 
   Expected: FAIL (the column does not exist).
+
 - [ ] **Step 3: Implement.** Add the schema and run `pnpm --filter @tipme/database generate`. Then write `setCoverDesign`:
   - pre-check the plan;
   - `UPDATE ... WHERE id AND (plan = 'pro' if needed) AND (any of the four IS DISTINCT FROM)`;
@@ -337,6 +360,7 @@ export function resolveCover(p: { handle: string; coverPath: string | null; cove
   ```
 
   Expected: FAIL (the new tests get a 500 for the unmapped error, or the wrong `cover`).
+
 - [ ] **Step 3: Implement** the filter entries, then regenerate the OpenAPI.
 - [ ] **Step 4: Run, expecting PASS.**
 
@@ -460,6 +484,7 @@ export function resolveCover(p: { handle: string; coverPath: string | null; cove
   ```
 
   Run on desktop and mobile projects.
+
 - [ ] **Step 5: Commit.** `feat(web): freeze animated covers on tipping and off screen`
 
 ### Task 7: Web — the cover chooser in Settings
@@ -540,7 +565,9 @@ export function resolveCover(p: { handle: string; coverPath: string | null; cove
 - [ ] **Step 1: Write the failing assertion.**
 
   ```ts
-  expect(await page.locator('.profile-cover').getAttribute('data-cover-play')).toBe('loop');
+  expect(
+    await page.locator('.profile-cover').getAttribute('data-cover-play'),
+  ).toBe('loop');
   for (const ms of profile) expect(ms, `/@tobi LCP ${ms}ms`).toBeLessThan(2000);
   ```
 
@@ -561,6 +588,7 @@ export function resolveCover(p: { handle: string; coverPath: string | null; cove
   ```
 
   Copy the `LCP_RESULTS` line into `HANDOFF.md`.
+
 - [ ] **Step 5: Commit.** `test(perf): hold profile LCP under 2000ms with a looping cover`
 
 ### Pull request

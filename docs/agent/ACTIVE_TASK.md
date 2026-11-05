@@ -1,3 +1,9 @@
+# Current task — animated covers (5 November 2026)
+
+- Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, with `origin/dev` and `feat/e2e-lanes` merged, not pushed. Built on test lane 2.
+- Done: Tasks 1 to 8 of `docs/superpowers/plans/2026-11-04-animated-covers.md`. Migration is `0074_cover_animation` (idx 71): the owner's controller took 0071 to 0073 for other lanes, so whoever merges later renumbers on top of dev. The journal test now allows a gap in file numbers.
+- Next: owner reviews; renumber the migration if another lane merges first; open the PR into dev.
+
 # Current task — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration.

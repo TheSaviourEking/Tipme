@@ -1,3 +1,10 @@
+# Current handoff — animated covers (5 November 2026)
+
+- Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, committed, not pushed. Additive migration `0074_cover_animation` (two nullable columns and a check, no backfill). Web deploys before API.
+- Free: Drifting, Rising, Ripple, played once. Pro: all six, any colour, "Plays once" or "Slow loop". The server refuses Pro-only choices (`COVER_DESIGN_PRO_REQUIRED`); a page leaving Pro shows the still frame and keeps its choice.
+- Perf (lane 2, throttled phone, Tobi on Pro with Night sky on a loop): `LCP_RESULTS {"/":[680,296,356],"/@tobi":[316,324,320],"/tip/<id>":[892,996,812],"/dashboard":[1324,1308,1028],"/ops":[568,604,624]}`
+- Evidence: `.superpowers/program/e-build-report.md`.
+
 # Current handoff — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration. Nothing ran against staging or production.

@@ -35,8 +35,9 @@ export function ProPlan() {
         <li>No “Get your own TipMe page” link at the foot of your page</li>
       </ul>
       <p className="tm-hint">
-        Covers are free on every plan, so choosing one under My page costs
-        nothing.
+        Photos and designs are free on every plan, and Free includes three
+        animated covers that play once. Pro adds every animated cover in any
+        colour, with a slow loop.
       </p>
       {!pro && (
         <>

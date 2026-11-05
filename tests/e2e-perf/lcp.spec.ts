@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { API_ORIGIN, E2E_DATABASE_URL, WEB_ORIGIN } from '../e2e/stack';
 
 // Lab only: simulated mid-range phone (4x CPU slowdown) on a "Fast 3G"-like link.
@@ -25,6 +25,10 @@ async function lcp(page: import('@playwright/test').Page, url: string) {
       }),
   );
 }
+
+// The suite defaults to reduced motion; the sample must run the cover's animation (owner's
+// exception, EXPERIENCE-AND-MOTION 7.11): the profile's LCP stays under 2000ms with it.
+test.use({ reducedMotion: 'no-preference' });
 
 test('lab LCP sample', async ({ page }) => {
   // Fifteen throttled page loads, each followed by a pause for late paints.
@@ -65,6 +69,18 @@ test('lab LCP sample', async ({ page }) => {
     headers,
     data: { phone: '+2348000000002', code },
   });
+  // Tobi is on Pro with Night sky on a slow loop, the heaviest animated cover, so /@tobi is sampled
+  // with it playing. The plan is set in the test database only.
+  const pro = await import('../../packages/database/dist/index.js');
+  const proDb = pro.createDatabase(E2E_DATABASE_URL, { max: 1 });
+  await proDb.pool
+    .query("UPDATE profiles SET plan = 'pro' WHERE handle_lower = 'tobi'")
+    .finally(() => proDb.close());
+  const chosen = await page.request.put(`${API_ORIGIN}/v1/me/cover-design`, {
+    headers,
+    data: { design: null, animation: 'night', motion: 'loop' },
+  });
+  expect(chosen.status()).toBe(200);
   // Tobi is also made Owner (test database only) and opens an admin grant, to sample /ops.
   const ops = await import('../../packages/database/dist/index.js');
   const db = ops.createDatabase(E2E_DATABASE_URL, { max: 1 });
@@ -87,6 +103,13 @@ test('lab LCP sample', async ({ page }) => {
       ),
     },
   });
+  // The page is already showing the loop before anything is sampled.
+  await expect(async () => {
+    await page.goto('/@tobi');
+    expect(
+      await page.locator('.profile-cover').getAttribute('data-cover-play'),
+    ).toBe('loop');
+  }).toPass({ timeout: 15_000 });
   const home: number[] = [];
   const profile: number[] = [];
   const status: number[] = [];
@@ -99,6 +122,7 @@ test('lab LCP sample', async ({ page }) => {
     dashboard.push(await lcp(page, '/dashboard'));
     admin.push(await lcp(page, '/ops'));
   }
+  for (const ms of profile) expect(ms, `/@tobi LCP ${ms}ms`).toBeLessThan(2000);
   const results = {
     '/': home,
     '/@tobi': profile,
