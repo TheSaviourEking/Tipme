@@ -141,6 +141,32 @@ export const SCREENS: ReviewScreen[] = [
     board: 'TipJourney',
     open: visit('/design-system'),
   },
+  // The states specimen alone (StatesConcepts, FeedbackMoments), with the field made invalid and
+  // the save key split by a failed save, so every pattern shows in one shot.
+  {
+    group: 'Foundations',
+    name: 'States',
+    board: 'StatesConcepts',
+    async open(page) {
+      await page.goto('/design-system');
+      const states = page.getByTestId('states-specimen');
+      await states.getByRole('button', { name: 'Check', exact: true }).click();
+      await states
+        .getByRole('button', { name: 'Make the next save fail' })
+        .click();
+      await states.getByRole('button', { name: 'Save notifications' }).click();
+      await states.locator('.tm-key-result__again').waitFor();
+      await page.evaluate(() => {
+        const specimen = document.querySelector(
+          '[data-testid="states-specimen"]',
+        );
+        const container = specimen?.parentElement;
+        if (!specimen || !container) return;
+        for (const child of Array.from(container.children))
+          if (child !== specimen) child.remove();
+      });
+    },
+  },
   // No board shows this notice; TipJourney shows the materials it uses (a raised card, one black
   // action). The server is made to answer with a newer build and the tab to come back.
   {
