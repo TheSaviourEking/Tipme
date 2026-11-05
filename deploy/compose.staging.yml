@@ -45,6 +45,8 @@ services:
       API_METRICS_PORT: ${API_METRICS_PORT:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-false}
+      # Live updates over text/event-stream. Off: the stream routes answer 204 (production runbook).
+      LIVE_UPDATES_ENABLED: ${LIVE_UPDATES_ENABLED:-false}
       # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}

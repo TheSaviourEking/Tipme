@@ -173,6 +173,12 @@ export const apiConfigSchema = z
       .optional(),
     // Proxies in front of the API whose X-Forwarded-For is trusted for the client IP (0: none).
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Live updates (signals over text/event-stream). Off: both stream routes answer 204.
+    LIVE_UPDATES_ENABLED: flag,
+    // Open streams per API process; beyond it a connect gets 503 and the page polls.
+    LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
+    // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.
+    LIVE_HEARTBEAT_MS: z.coerce.number().int().min(1000).default(20000),
     // On SIGTERM, how long readiness answers 503 before the server closes, so the load balancer
     // (health checks every 2 s) stops routing here first. Keep above two check intervals.
     SHUTDOWN_DRAIN_MS: z.coerce.number().int().min(0).max(30000).default(5000),
