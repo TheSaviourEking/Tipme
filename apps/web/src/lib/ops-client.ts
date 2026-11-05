@@ -69,6 +69,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   staff_acted_alone: 'Serious action without a second person',
   staff_approval_pending: 'Serious action waiting for approval',
   staff_last_approver_removed: 'Last second person removed',
+  username_take_back_unnoticed: 'Take-back notice not reached',
+  username_take_back_overdue: 'Take-back past its deadline',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',

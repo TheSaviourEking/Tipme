@@ -244,6 +244,8 @@ export const ISSUE_KINDS = [
   'staff_acted_alone',
   'staff_approval_pending',
   'staff_last_approver_removed',
+  'username_take_back_unnoticed',
+  'username_take_back_overdue',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

@@ -95,6 +95,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   staff_acted_alone: 'account',
   staff_approval_pending: 'info',
   staff_last_approver_removed: 'account',
+  username_take_back_unnoticed: 'account',
+  username_take_back_overdue: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -153,6 +155,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return 'A serious action is waiting for a second person. Decide it under Approvals.';
     case 'staff_last_approver_removed':
       return 'A staff change left nobody else to act as second person, so one person can now take serious actions alone.';
+    case 'username_take_back_unnoticed':
+      return `A username take-back for ${page} was approved 24 hours ago, but the notice hasn't reached them by email or on their dashboard. It goes ahead after 14 days if it never does. Cancel it under Usernames if needed.`;
+    case 'username_take_back_overdue':
+      return `A username take-back for ${page} is more than an hour past its deadline and hasn't completed. The worker retries every minute.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }

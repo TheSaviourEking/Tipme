@@ -52,3 +52,42 @@ export interface OpsUsernamesList {
   /** TipMe's own list, in code; never released from /ops. */
   builtIn: readonly string[];
 }
+
+/* Take-backs (username reservation spec, sections 3.3 and 12) */
+
+export const TAKE_BACK_CATEGORIES = [
+  'ordinary',
+  'impersonation',
+  'trademark',
+  'legal',
+] as const;
+export type TakeBackCategory = (typeof TAKE_BACK_CATEGORIES)[number];
+export type TakeBackKind = 'current' | 'old';
+export type TakeBackState =
+  'approved' | 'noticed' | 'due' | 'done' | 'cancelled';
+export type TakeBackOutcome =
+  'user_chose' | 'assigned' | 'page_deleted' | 'old_removed';
+export type TakeBackNoticedVia = 'email' | 'banner' | 'unreached';
+
+/** The fixed "why" per category (owner answer 3). Shown to the user verbatim; never staff text. */
+export const TAKE_BACK_WHY: Record<TakeBackCategory, string> = {
+  ordinary:
+    'We need it to protect a brand, a public figure or one of our own names.',
+  impersonation: 'The username impersonates someone.',
+  trademark: 'The username infringes a trademark.',
+  legal: 'The law requires us to change it.',
+};
+
+export const TAKE_BACK_CATEGORY_WORDS: Record<TakeBackCategory, string> = {
+  ordinary: 'Ordinary',
+  impersonation: 'Impersonation',
+  trademark: 'Trademark',
+  legal: 'Required by law',
+};
+
+/** With neither a sent email nor a seen banner, the take-back goes ahead after this (owner answer 2). */
+export const TAKE_BACK_NEVER_REACHED_MS = 14 * 86_400_000;
+/** One free change of an assigned username, within this long (owner answer 4). */
+export const TAKE_BACK_FREE_CHANGE_MS = 30 * 86_400_000;
+/** The reminder goes this long before the deadline, only when notice_days >= 4. */
+export const TAKE_BACK_REMINDER_MS = 2 * 86_400_000;

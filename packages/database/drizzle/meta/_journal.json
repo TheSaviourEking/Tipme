@@ -547,6 +547,13 @@
       "when": 1793888404420,
       "tag": "0077_cover_animation",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793893012077,
+      "tag": "0078_handle_take_backs",
+      "breakpoints": true
     }
   ]
 }
