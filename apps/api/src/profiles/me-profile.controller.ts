@@ -16,12 +16,14 @@ import {
 import {
   claimHandleSchema,
   deleteAccountSchema,
+  myLinksSchema,
   pageStateSchema,
   profilePatchSchema,
   notificationPrefsSchema,
   renameHandleSchema,
   tipAmountsSchema,
   type ApiDataResponse,
+  type MyLinksRequest,
   type MyProfile,
   type NotificationPrefs,
   type ProfilePatch,
@@ -34,6 +36,7 @@ import {
   getNotificationPrefs,
   setNotificationPrefs,
   renameHandle,
+  setMyLinks,
   setTipAmounts,
   setPageState,
   updateMyProfile,
@@ -109,6 +112,20 @@ export class MeProfileController {
     @Body(new ZodValidationPipe(profilePatchSchema)) body: ProfilePatch,
   ): Promise<ApiDataResponse<MyProfile>> {
     const updated = await updateMyProfile(this.database.db, auth.userId, body);
+    this.revalidator.revalidate(updated.handle);
+    return { data: updated };
+  }
+
+  /**
+   * The page's links, whole and in order (SocialLinks board). Free: 3 from Free sites, in catalogue
+   * order; more, Pro sites, a featured link or another order are refused (SOCIAL_LINKS_PRO_REQUIRED).
+   */
+  @Put('links')
+  async links(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(myLinksSchema)) body: MyLinksRequest,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const updated = await setMyLinks(this.database.db, auth.userId, body);
     this.revalidator.revalidate(updated.handle);
     return { data: updated };
   }

@@ -1987,6 +1987,113 @@
         ]
       }
     },
+    "/v1/me/links": {
+      "put": {
+        "operationId": "MeProfile.links",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "links": {
+                    "maxItems": 11,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "platform": {
+                          "type": "string",
+                          "enum": [
+                            "tiktok",
+                            "facebook",
+                            "instagram",
+                            "youtube",
+                            "x",
+                            "snapchat",
+                            "whatsapp",
+                            "twitch",
+                            "kick",
+                            "audiomack",
+                            "boomplay",
+                            "spotify",
+                            "applemusic",
+                            "soundcloud",
+                            "website",
+                            "telegram",
+                            "linkedin",
+                            "threads",
+                            "patreon",
+                            "selar",
+                            "substack",
+                            "onlyfans",
+                            "fansly"
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "featured": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "platform",
+                        "url"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "show": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "links",
+                  "show"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/moments": {
       "get": {
         "operationId": "Moments.list",
@@ -2882,24 +2989,6 @@
                         "type": "null"
                       }
                     ]
-                  },
-                  "socials": {
-                    "type": "object",
-                    "properties": {
-                      "facebook": {
-                        "type": "string",
-                        "maxLength": 200
-                      },
-                      "instagram": {
-                        "type": "string",
-                        "maxLength": 200
-                      },
-                      "x": {
-                        "type": "string",
-                        "maxLength": 200
-                      }
-                    },
-                    "additionalProperties": false
                   },
                   "bioPublic": {
                     "type": "boolean"
@@ -10077,6 +10166,7 @@
                   "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "QR_DESIGN_PRO_REQUIRED",
+                  "SOCIAL_LINKS_PRO_REQUIRED",
                   "QR_ART_PHOTO_REQUIRED",
                   "QR_ART_PHOTO_TOO_LARGE",
                   "INVALID_IMAGE",

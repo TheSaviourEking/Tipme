@@ -80,12 +80,18 @@ test('sign up, claim a handle, go live, and the web is told to refresh', async (
     revalidations.map((r) => [r.handle, r.secret]),
     [['kemi_api', 'integration-revalidate-secret-32-characters']],
   );
+  // Links have their own route now; the About form can't carry them.
   const patched = await call('PATCH', '/v1/me/profile', cookie, {
     displayName: 'Kemi',
-    socials: { instagram: 'https://evil.example/x' },
+    socials: { instagram: 'https://instagram.com/kemi' },
   });
   assert.equal(patched.status, 400);
-  assert.deepEqual((await patched.json()).error.fields, ['socials.instagram']);
+  const links = await call('PUT', '/v1/me/links', cookie, {
+    links: [{ platform: 'instagram', url: 'https://evil.example/x' }],
+    show: true,
+  });
+  assert.equal(links.status, 400);
+  assert.deepEqual((await links.json()).error.fields, ['links.0.url']);
 });
 
 test('one recipient can never read or change another', async () => {
