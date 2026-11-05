@@ -1,14 +1,8 @@
-# Current task — Make it yours, PR A: the chapter and the thank-you line (5 November 2026)
+# Current task — Make it yours: the note consent tick box and the thank-you line (5 November 2026)
 
-- Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2, not pushed. PR C's three commits come first on the branch; PR A follows. Migration 0077 (`profiles.thanks_line`, `thanks_style`, `thanks_signed`).
-- Built: `PUT /v1/me/thanks`; a paid receipt shows the recipient's current line as a slip (Paper on Free; Paper, Violet or Night and a first-name signature on Pro); Settings > "Make it yours" (after My page) with "Your thank-you" and "Covers that move, QR codes that are yours"; the Plan list names card styles and the signature.
-- Next: PR B (starting amount) and PR D (pinned note, accent, the supporter's withdrawal). Owner answers Q1-Q5 are recorded in `docs/00-DECISIONS.md`. Build report: `.superpowers/program/miy-build-report.md`.
-
-# Current task — Make it yours, PR C: the note consent tick box (5 November 2026)
-
-- Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2, not pushed. The C commits come first, so they can be split onto `feat/make-it-yours-consent`. Migration 0076 (`tip_messages.may_show`, default false).
-- Built: `noteMayShow` (only `true`, or absent) on `POST /v1/tip-intents`; stored with the note, ignored without one; the fingerprint is unchanged without consent; a paid receipt says `noteMayShow: true` and never the note. The tip form shows "{name} may show this note on their page" only while there is a note, off by default.
-- Next: PR A (the "Make it yours" chapter and the thank-you line), then B and D. Plan: `docs/superpowers/plans/2026-11-05-make-it-yours.md`.
+- Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2. One PR into `dev` (ruling: C and A ship together). Migrations 0072 (`tip_messages.may_show`) and 0073 (`profiles.thanks_line`, `thanks_style`, `thanks_signed`), regenerated after merging `origin/dev` at d9de485.
+- Built: the consent tick box ("{first name} may show this note on their page") and `noteMayShow`; `PUT /v1/me/thanks`; the receipt slip (Paper on Free; Paper, Violet or Night and a first-name signature on Pro; nothing while the page is suspended); Settings > "Make it yours" with "Your thank-you" and "Covers and QR codes that are yours"; the Plan list line. Review fixes I1, I2 and M1-M7 are in (`.superpowers/program/miy-review.md`).
+- Next: owner review of the PR; then PR B (starting amount) and PR D (pinned note, accent, the supporter's withdrawal). Rename the "already yours" card to "Covers that move, QR codes that are yours" once animated covers merge.
 
 # Current task — dashboard data (5 November 2026)
 

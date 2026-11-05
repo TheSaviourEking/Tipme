@@ -1,15 +1,12 @@
-# Current handoff — Make it yours, PR A: the chapter and the thank-you line (5 November 2026)
+# Current handoff — Make it yours: consent and the thank-you line (5 November 2026)
 
-- Branch `feat/make-it-yours`, test lane 2, not pushed. Migrations 0076 (C) and 0077 (A) leave a gap after dev's 0071, so `migration-journal.test` fails on the gap until merge order settles it; it was not relaxed.
-- The thank-you field has no native `maxLength`: the browser counts UTF-16 units, so 140 would stop an emoji line at 70. The count, the check and the server all use code points.
-- The bio still has no link check (reported by the plan, not fixed here).
-- Verified (commands and counts in `.superpowers/program/miy-build-report.md`): format:check, lint, typecheck, unit tests, scripts tests, the touched integration files on `tipme_test_lane2`, and the touched e2e specs plus profile-page and checkout on lane 2, and review:screens.
-
-# Current handoff — Make it yours, PR C: the note consent tick box (5 November 2026)
-
-- Branch `feat/make-it-yours`, test lane 2, not pushed. Migration 0076 leaves a gap after dev's 0071 (0072-0075 are held by other branches), so `migration-journal.test` fails on the gap until merge order settles it; it was not relaxed.
-- Consent never makes a note public by itself: nothing reads `may_show` yet except the receipt flag. Pinning and the supporter's withdrawal are PR D.
-- Verified: contracts tests; `intents`, `tip-status` and `checkout-api` integration files on `tipme_test_lane2`; `note-consent`, `checkout` and `tip-card` e2e on lane 2 (66 passed).
+- Branch `feat/make-it-yours`, test lane 2, one PR into `dev`. Migrations 0072 and 0073, regenerated with drizzle-kit against the merged schema; `migration-journal.test` passes. Other branches that hold 0072-0075 regenerate after this merges.
+- Consent never makes a note public by itself: only the receipt flag reads `may_show` until PR D.
+- Rollback: the intent request is `.strict()`. After a rollback to a version without `noteMayShow`, a tab already showing the new form gets a 400 when the supporter ticks the box (untick and retry works). Blue/green moves web and API together, so only a rollback hits it.
+- The thank-you field has no native `maxLength`: the browser counts UTF-16 units, so 140 would stop an emoji line at 70. The counter (on the cleaned line), the check and the server all use code points.
+- Invisible format characters are removed from the line, keeping a zero-width joiner only inside joined emoji; tag characters go too, so a subdivision flag (Scotland) shows as a plain black flag.
+- Not done, for the owner: staff have no route to clear an abusive line (a suspended page's line is hidden from receipts); the bio still has no link check; the receipt slip has no entrance animation (the receipt rises in, the slip is there at once).
+- Verified: commands and counts in `.superpowers/program/miy-build-report.md` and the PR body.
 
 # Current handoff — dashboard data (5 November 2026)
 
