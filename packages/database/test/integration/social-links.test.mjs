@@ -8,6 +8,7 @@ import {
   publicProfile,
   requestSignInCode,
   setMyLinks,
+  setPagePlan,
   setPageState,
   updateMyProfile,
   verifySignInCode,
@@ -140,6 +141,40 @@ const legacyOf = (links) =>
       .filter((l) => ['facebook', 'instagram', 'x'].includes(l.platform))
       .map((l) => [l.platform, l.url]),
   );
+
+test('a staff plan change rewrites the old links column from what now shows', async (t) => {
+  const { database, signUp, plan } = await setUp(t);
+  const ada = await signUp('+2348031240014', 'ada_links');
+  await plan('ada_links', 'pro');
+  // Instagram is the 4th Free-site link: shown on Pro, hidden on Free.
+  await setMyLinks(database.db, ada, {
+    links: [tt, yt, tw, ig],
+    show: true,
+  });
+  assert.deepEqual(await oldColumn(database, 'ada_links'), {
+    instagram: ig.url,
+  });
+  const { rows } = await database.pool.query(
+    `SELECT id FROM profiles WHERE handle_lower = 'ada_links'`,
+  );
+  const move = (to) =>
+    setPagePlan(database.db, {
+      staffUserId: ada,
+      profileId: rows[0].id,
+      plan: to,
+      reason: 'Pro subscription ended',
+    });
+  await move('free');
+  assert.deepEqual(
+    await oldColumn(database, 'ada_links'),
+    {},
+    'a rollback now would not show the hidden Instagram link',
+  );
+  await move('pro');
+  assert.deepEqual(await oldColumn(database, 'ada_links'), {
+    instagram: ig.url,
+  });
+});
 
 test('a Free page can delete links kept from Pro, but never add or show them', async (t) => {
   const { database, signUp, plan } = await setUp(t);

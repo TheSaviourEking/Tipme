@@ -344,7 +344,12 @@ export function setPagePlan(
         };
       const [row] = await tx
         .update(profiles)
-        .set({ plan: input.plan })
+        .set({
+          plan: input.plan,
+          // What shows changes with the plan, so the old links column follows it (see setMyLinks).
+          // TODO(social-links): stop writing it in the release that drops the column.
+          socials: legacySocials(visibleLinks(current.links, input.plan)),
+        })
         .where(eq(profiles.id, input.profileId))
         .returning();
       await recordAudit(tx, {
