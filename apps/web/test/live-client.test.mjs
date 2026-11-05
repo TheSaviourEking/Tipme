@@ -569,3 +569,9 @@ test('a deploy’s herd is spread: reconnects over 1–10 s and refetches over a
     `refetches spread over ${spread(refetchAt)} ms`,
   );
 });
+
+test('the client waits within the same range the draining hub sends (one shared constant)', async () => {
+  const { LIVE_DRAIN_RETRY_MS } = await import('@tipme/contracts');
+  assert.equal(LIVE_TIMING.closedRetryMinMs, LIVE_DRAIN_RETRY_MS.min);
+  assert.equal(LIVE_TIMING.closedRetryMaxMs, LIVE_DRAIN_RETRY_MS.max);
+});

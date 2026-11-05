@@ -1,4 +1,5 @@
 import {
+  LIVE_DRAIN_RETRY_MS,
   LIVE_RECIPIENT_TYPES,
   LIVE_STAFF_TYPES,
   type LiveEventType,
@@ -71,8 +72,8 @@ export const LIVE_TIMING = {
   backoffCapMs: 60_000,
   resyncJitterMs: 5_000,
   /** After the server ends a healthy stream (a drain, the 30-minute close): its retry range. */
-  closedRetryMinMs: 1_000,
-  closedRetryMaxMs: 10_000,
+  closedRetryMinMs: LIVE_DRAIN_RETRY_MS.min,
+  closedRetryMaxMs: LIVE_DRAIN_RETRY_MS.max,
 } as const;
 
 const CLOSED = 2;

@@ -86,6 +86,13 @@ export const sessionsChanged = (userId: string): LiveMessage => ({
   type: 'sessions.changed',
 });
 
+/**
+ * How long a browser waits before reconnecting after a copy drains its streams (a deploy). The hub
+ * sends each stream a random `retry:` in this range; EventSource hides that value from the page, so
+ * the browser's own client uses the same range. One constant, so the two can't drift apart.
+ */
+export const LIVE_DRAIN_RETRY_MS = { min: 1000, max: 10_000 } as const;
+
 export const liveChannel = (queuePrefix: string): string =>
   `${queuePrefix}:live:v1`;
 

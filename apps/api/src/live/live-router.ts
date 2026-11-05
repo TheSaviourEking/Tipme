@@ -1,7 +1,8 @@
-import type {
-  LiveBrowserMessage,
-  LiveEventType,
-  LiveMessage,
+import {
+  LIVE_DRAIN_RETRY_MS,
+  type LiveBrowserMessage,
+  type LiveEventType,
+  type LiveMessage,
 } from '@tipme/contracts';
 
 /**
@@ -56,8 +57,8 @@ export const sseFrame = (m: LiveBrowserMessage): string =>
   `data: ${JSON.stringify({ type: m.type })}\n\n`;
 export const sseRetry = (ms: number): string => `retry: ${ms}\n\n`;
 
-const DRAIN_RETRY_MIN_MS = 1000;
-const DRAIN_RETRY_MAX_MS = 10_000;
+const DRAIN_RETRY_MIN_MS = LIVE_DRAIN_RETRY_MS.min;
+const DRAIN_RETRY_MAX_MS = LIVE_DRAIN_RETRY_MS.max;
 
 interface Window {
   timer: unknown;

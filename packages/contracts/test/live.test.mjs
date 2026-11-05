@@ -55,3 +55,8 @@ test('control types are disjoint from event types', () => {
     assert.equal(events.has(control), false, control);
   }
 });
+
+test('the drain retry range is 1 to 10 s, shared by the hub and the browser', async () => {
+  const { LIVE_DRAIN_RETRY_MS } = await import('../dist/index.js');
+  assert.deepEqual(LIVE_DRAIN_RETRY_MS, { min: 1000, max: 10_000 });
+});

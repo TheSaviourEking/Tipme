@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { LIVE_DRAIN_RETRY_MS } from '@tipme/contracts';
 import { createLiveRouter, sseFrame } from '../dist/live/live-router.js';
 
 const A_USER = '11111111-1111-4111-8111-111111111111';
@@ -340,7 +341,10 @@ test('drain writes a retry between 1000 and 10000 to every stream and closes it'
     const match = /^retry: (\d+)\n\n$/.exec(last);
     assert.ok(match, `expected a retry line, got ${JSON.stringify(last)}`);
     const ms = Number(match[1]);
-    assert.ok(ms >= 1000 && ms <= 10000, `retry ${ms} out of range`);
+    assert.ok(
+      ms >= LIVE_DRAIN_RETRY_MS.min && ms <= LIVE_DRAIN_RETRY_MS.max,
+      `retry ${ms} out of the shared range`,
+    );
     retries.add(ms);
     assert.equal(s.closed, 'draining');
   }
