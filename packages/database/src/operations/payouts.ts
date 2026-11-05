@@ -826,6 +826,8 @@ async function payoutRoute(
   accountReference: string | null;
   /** The provider will no longer pay this account out by itself. */
   manualPayouts: boolean;
+  /** When TipMe last recorded a change to the account, as an ISO string; null without one. */
+  accountChangedAt: string | null;
   destination: {
     id: string;
     bankName: string;
@@ -843,6 +845,7 @@ async function payoutRoute(
           .select({
             reference: paymentAccounts.providerAccountReference,
             manualPayoutsAt: paymentAccounts.manualPayoutsAt,
+            updatedAt: paymentAccounts.updatedAt,
           })
           .from(paymentAccounts)
           .where(
@@ -871,6 +874,7 @@ async function payoutRoute(
     accountless,
     accountReference: account?.reference ?? null,
     manualPayouts: Boolean(account?.manualPayoutsAt),
+    accountChangedAt: account?.updatedAt.toISOString() ?? null,
     destination: destination ?? null,
   };
 }
@@ -901,6 +905,155 @@ function routeBlock(
 export type ProviderReadFailureLog = (
   failure: ReturnType<typeof safeError>,
 ) => void;
+
+/**
+ * A short-lived store, shared by every API copy, for what the provider last said about one payment
+ * account (named by provider and profile). Only a quote reads it, to show the figure; a withdrawal
+ * always asks the provider. A miss or any store failure is null, so a broken store only means
+ * asking the provider. Implementations keep every entry briefly (seconds, not minutes).
+ */
+export interface PartnerQuoteCache {
+  /** The account's entries as of now (the current version), or null when the store is unusable. */
+  open(scope: {
+    provider: string;
+    profileId: string;
+  }): Promise<PartnerQuoteEntries | null>;
+}
+
+export interface PartnerQuoteEntries {
+  get(part: string): Promise<string | null>;
+  set(part: string, value: string): Promise<void>;
+}
+
+/**
+ * The cache never decides alone: every key carries this stamp of what TipMe has recorded about
+ * the account (route, every payout's status, the ledger). Any recorded change to the provider's
+ * side (a payout requested, started, paid, failed or reversed, a bank or account change, a new
+ * tip) changes the key, whichever process recorded it, so a lost invalidation can't serve a stale
+ * figure. Read before the provider is, so an answer in flight is stored under the old stamp.
+ */
+async function partnerStamp(
+  db: Pick<Database, 'execute'>,
+  input: {
+    profileId: string;
+    route: Awaited<ReturnType<typeof payoutRoute>>;
+    ledgerMinor: bigint;
+  },
+): Promise<string> {
+  const result = await db.execute<{ digest: string | null }>(sql`
+    SELECT string_agg(
+             ${payouts.id} || ':' || ${payouts.status} || ':' || COALESCE(${payouts.providerReference}, ''),
+             ',' ORDER BY ${payouts.id}) AS digest
+      FROM ${payouts} WHERE ${payouts.profileId} = ${input.profileId}`);
+  const { route } = input;
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        route.accountReference,
+        route.manualPayouts,
+        route.accountChangedAt,
+        route.destination?.id ?? null,
+        route.destination?.status ?? null,
+        result.rows[0]?.digest ?? '',
+        input.ledgerMinor.toString(),
+      ]),
+    )
+    .digest('hex')
+    .slice(0, 32);
+}
+
+type CachedBase = {
+  status: 'active' | 'restricted' | 'missing';
+  requirementsDue: string[];
+  availableMinor?: string;
+};
+
+function parseBase(text: string | null): CachedBase | null {
+  if (!text) return null;
+  try {
+    const value = JSON.parse(text) as Partial<CachedBase>;
+    if (
+      (value.status === 'active' ||
+        value.status === 'restricted' ||
+        value.status === 'missing') &&
+      Array.isArray(value.requirementsDue) &&
+      value.requirementsDue.every((item) => typeof item === 'string') &&
+      (value.status !== 'active' ||
+        (typeof value.availableMinor === 'string' &&
+          /^\d+$/.test(value.availableMinor)))
+    )
+      return value as CachedBase;
+  } catch {
+    // Unreadable is a miss.
+  }
+  return null;
+}
+
+function parseFee(text: string | null): bigint | null {
+  return text && /^\d+$/.test(text) ? BigInt(text) : null;
+}
+
+/** The store's answer, or null on any failure: a store problem is never the quote's problem. */
+async function safely<T>(run: () => Promise<T>): Promise<T | null> {
+  try {
+    return await run();
+  } catch {
+    return null;
+  }
+}
+
+/** The provider, read through the quote's cache. Only successful answers are stored. */
+function cachedReader(
+  provider: PayoutReader,
+  entries: PartnerQuoteEntries,
+  stamp: string,
+): PayoutReader {
+  let base: CachedBase | null = null;
+  const loadBase = async (accountRef: string): Promise<CachedBase> => {
+    if (base) return base;
+    const cached = parseBase(await safely(() => entries.get(`base:${stamp}`)));
+    if (cached) return (base = cached);
+    const capability = await provider.payoutCapability(accountRef);
+    const fresh: CachedBase =
+      capability.status === 'active'
+        ? {
+            ...capability,
+            availableMinor: (
+              await provider.payoutBalance(accountRef, 'NGN')
+            ).availableMinor.toString(),
+          }
+        : capability;
+    await safely(() => entries.set(`base:${stamp}`, JSON.stringify(fresh)));
+    return (base = fresh);
+  };
+  return {
+    name: provider.name,
+    ...(provider.capabilities ? { capabilities: provider.capabilities } : {}),
+    async payoutCapability(accountRef) {
+      const { status, requirementsDue } = await loadBase(accountRef);
+      return { status, requirementsDue };
+    },
+    async payoutBalance(accountRef) {
+      return {
+        availableMinor: BigInt(
+          (await loadBase(accountRef)).availableMinor ?? 0,
+        ),
+      };
+    },
+    async quotePayoutFee(accountRef, amountMinor, currency) {
+      const part = `fee:${stamp}:${amountMinor}`;
+      const cached = parseFee(await safely(() => entries.get(part)));
+      if (cached !== null) return { feeMinor: cached, exact: false };
+      const fee = await provider.quotePayoutFee(
+        accountRef,
+        amountMinor,
+        currency,
+      );
+      await safely(() => entries.set(part, fee.feeMinor.toString()));
+      return fee;
+    },
+  };
+}
 
 /**
  * Everything the provider must confirm for a payout. Any failed read is 'unavailable': a withdrawal
@@ -1012,6 +1165,8 @@ export async function withdrawalQuote(
     profileId: string;
     provider: PayoutReader;
     onReadFailure?: ProviderReadFailureLog;
+    /** Only for showing the quote; `requestWithdrawal` takes none and always asks the provider. */
+    cache?: PartnerQuoteCache;
   },
 ): Promise<WithdrawalQuoteResult> {
   if (await withdrawalsSwitchedOff(db))
@@ -1034,8 +1189,26 @@ export async function withdrawalQuote(
     ledgerMinor: (await balanceIn(db, input.profileId)).availableMinor,
     queuedMinor: await queuedNotStarted(db, input.profileId),
   }));
+  const { cache } = input;
+  const entries = cache
+    ? await safely(() =>
+        cache.open({
+          provider: input.provider.name,
+          profileId: input.profileId,
+        }),
+      )
+    : null;
+  const reader = entries
+    ? cachedReader(
+        input.provider,
+        entries,
+        await guarded(() =>
+          partnerStamp(db, { profileId: input.profileId, route, ledgerMinor }),
+        ),
+      )
+    : input.provider;
   const read = await readProvider(
-    input.provider,
+    reader,
     route.accountReference ?? input.profileId,
     (available) => notNegative(lower(ledgerMinor, available - queuedMinor)),
     input.onReadFailure,
