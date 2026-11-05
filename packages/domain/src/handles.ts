@@ -68,6 +68,7 @@ export const RESERVED_HANDLES = [
   'signin',
   'signup',
   'sitemap',
+  'sounds',
   'staff',
   'status',
   'support',
