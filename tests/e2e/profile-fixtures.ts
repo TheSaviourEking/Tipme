@@ -25,11 +25,11 @@ export const page = (
   displayName: 'Kemi Bello',
   role: 'Barber',
   bio: 'Fades, line-ups and good conversation.',
-  socials: {
-    x: 'https://x.com/kemi',
-    instagram: 'https://instagram.com/kemi',
-    facebook: 'https://facebook.com/kemi',
-  },
+  links: [
+    { platform: 'facebook', url: 'https://facebook.com/kemi' },
+    { platform: 'instagram', url: 'https://instagram.com/kemi' },
+    { platform: 'x', url: 'https://x.com/kemi' },
+  ],
   phone: '+2348000000000',
   email: 'kemi@example.com',
   acceptingTips: true,
@@ -61,6 +61,23 @@ export const PAGES: PublicProfile[] = [
     cover: { kind: 'design', design: 'large', colour: 'neutral' },
   }),
   page('propage', { plan: 'pro' }),
+  // An API older than `links` sends the three fixed fields.
+  page('oldlinks', {
+    links: undefined,
+    socials: {
+      x: 'https://x.com/kemi',
+      instagram: 'https://instagram.com/kemi',
+    },
+  }),
+  // A Pro page with a featured link and its own website.
+  page('prolinks', {
+    plan: 'pro',
+    links: [
+      { platform: 'twitch', url: 'https://twitch.tv/kemi', featured: true },
+      { platform: 'tiktok', url: 'https://tiktok.com/@kemi.cuts' },
+      { platform: 'website', url: 'https://kemicuts.com' },
+    ],
+  }),
   page('waiting', { acceptingTips: false }),
   page('longname', {
     displayName: LONG_NAME,
