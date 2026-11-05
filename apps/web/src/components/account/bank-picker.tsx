@@ -10,6 +10,7 @@ import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
 import type { PayoutBank } from '@tipme/contracts';
 import {
   arrangeBanks,
+  bankOptionId,
   type BankBadge,
   type DirectoryBank,
 } from '@/lib/bank-directory';
@@ -127,7 +128,7 @@ export function BankPicker({
 
   const sections: Section[] = useMemo(() => {
     const bankOption = (bank: DirectoryBank, popular = false): Option => ({
-      id: `${id}-bank-${popular ? 'popular-' : ''}${bank.code}`,
+      id: bankOptionId(`${id}-bank${popular ? '-popular' : ''}`, bank.code),
       kind: 'bank',
       bank,
     });
@@ -260,7 +261,8 @@ export function BankPicker({
       role="combobox"
       aria-label={isPhone ? 'Search your bank' : undefined}
       aria-autocomplete="list"
-      aria-expanded={open}
+      // Expanded only while a list shows: a no-match query shows a sentence, not the listbox.
+      aria-expanded={open && !noMatch}
       aria-controls={listId}
       aria-activedescendant={activeOption?.id}
       aria-invalid={!isPhone && Boolean(error)}

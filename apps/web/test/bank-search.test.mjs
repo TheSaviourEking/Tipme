@@ -92,3 +92,22 @@ test('the live count reads naturally', () => {
     'No bank matches "gtbnk zz". Check the spelling, or try the bank’s full name.',
   );
 });
+
+test('a highlight covers letters and digits only, never a bracket or a space', () => {
+  const [opay] = searchBanks(dir, 'opay');
+  // "Paycom (OPay)": O-P-a-y is [8, 12); the ")" after it is not underlined.
+  assert.deepEqual(opay.marks, [[8, 12]]);
+  const amp = arrangeBanks([{ code: '1', name: 'Eko & Sons Bank' }]);
+  // "&" reads as "and"; the space after it is not underlined.
+  assert.deepEqual(searchBanks(amp, 'and')[0].marks, [[4, 5]]);
+});
+
+test('combining accents belong to their letter, as normalizeBankText reads them', () => {
+  // Ẹ̀kọ́ written with combining marks: E, U+0323, U+0300, k, o, U+0323, U+0301.
+  const name = 'E\u0323\u0300ko\u0323\u0301 Bank';
+  const eko = arrangeBanks([{ code: '1', name }]);
+  const [match] = searchBanks(eko, 'eko');
+  assert.equal(match.bank.name, name);
+  // The underline runs over the whole word, marks included, and stops before the space.
+  assert.deepEqual(match.marks, [[0, 7]]);
+});

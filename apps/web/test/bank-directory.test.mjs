@@ -4,6 +4,7 @@ import {
   POPULAR_BANKS,
   arrangeBanks,
   bankKind,
+  bankOptionId,
   contrastRatio,
   initialsFor,
 } from '../src/lib/bank-directory.ts';
@@ -124,4 +125,12 @@ test('every popular badge reads at 4.5:1 or better', () => {
 test('no code belongs to two popular banks', () => {
   const codes = POPULAR_BANKS.flatMap((bank) => bank.codes);
   assert.equal(new Set(codes).size, codes.length);
+});
+
+test('an option id is one token whatever the bank code holds, and codes never collide', () => {
+  const codes = ['058', 'A B', 'a_20b', 'a%20b', 'x\ty', '<b>"', 'é'];
+  const ids = codes.map((code) => bankOptionId('r1-bank', code));
+  for (const id of ids) assert.match(id, /^[A-Za-z0-9_.!~*'()-]+$/, id);
+  assert.equal(new Set(ids).size, codes.length);
+  assert.equal(bankOptionId('r1-bank', '058'), 'r1-bank-058');
 });

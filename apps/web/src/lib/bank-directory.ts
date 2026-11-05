@@ -172,3 +172,13 @@ export function arrangeBanks(banks: readonly PayoutBank[]): BankDirectory {
     more: more.sort(byName),
   };
 }
+
+/**
+ * The element id of a bank's option. A partner code may hold spaces or other characters an id
+ * can't carry as one IDREF (aria-activedescendant), so it is percent-encoded with "_" for "%";
+ * "_" itself is encoded first, so two codes never share an id.
+ */
+export function bankOptionId(prefix: string, code: string): string {
+  const safe = encodeURIComponent(code).replace(/_/g, '%5F').replace(/%/g, '_');
+  return `${prefix}-${safe}`;
+}

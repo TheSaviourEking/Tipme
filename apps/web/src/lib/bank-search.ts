@@ -11,63 +11,62 @@ export type BankMatch = { bank: DirectoryBank; marks: [number, number][] };
 type Mark = [number, number];
 
 /**
- * The name as `normalizeBankText` would give it, with the index in the original name that each
- * character came from, so marks found on the normalized text land on the right letters.
+ * The name as `normalizeBankText` would give it, with the range of the original name each
+ * character came from, so marks found on the normalized text land on the right letters and only
+ * on them: a space or bracket next to a word is never underlined.
  */
-function normalizedWithMap(name: string): { text: string; from: number[] } {
+function normalizedWithMap(name: string): {
+  text: string;
+  from: number[];
+  to: number[];
+} {
   let text = '';
   const from: number[] = [];
-  const push = (chars: string, index: number) => {
+  const to: number[] = [];
+  const push = (chars: string, start: number, end: number) => {
     for (const char of chars) {
       if (char === ' ' && (text === '' || text.endsWith(' '))) continue;
       text += char;
-      from.push(index);
+      from.push(start);
+      to.push(end);
     }
   };
   for (let i = 0; i < name.length;) {
     const char = String.fromCodePoint(name.codePointAt(i)!);
-    if (char === '&') push(' and ', i);
+    const end = i + char.length;
+    if (/\p{M}/u.test(char)) {
+      // A combining accent belongs to the letter before it, as in normalizeBankText.
+      if (text && !text.endsWith(' ')) to[to.length - 1] = end;
+    } else if (char === '&') push(' and ', i, end);
     else if (/[\p{L}\p{N}]/u.test(char))
-      push(char.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase(), i);
-    else push(' ', i);
-    i += char.length;
+      push(char.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase(), i, end);
+    else push(' ', i, end);
+    i = end;
   }
   if (text.endsWith(' ')) {
     text = text.slice(0, -1);
     from.pop();
+    to.pop();
   }
-  // The original length, so a mark can end after the last character.
-  from.push(name.length);
-  return { text, from };
+  return { text, from, to };
 }
 
 type Indexed = {
   text: string;
   from: number[];
+  to: number[];
   words: { word: string; start: number }[];
 };
 
 function indexName(name: string): Indexed {
-  const { text, from } = normalizedWithMap(name);
+  const { text, from, to } = normalizedWithMap(name);
   const words: { word: string; start: number }[] = [];
   let start = 0;
   for (const word of text.split(' ')) {
     if (word) words.push({ word, start });
     start += word.length + 1;
   }
-  return { text, from, words };
-}
-
-/**
- * A range of the normalized text, as a range of the original name. The end is the next original
- * character after the one the last normalized character came from (`from` ends with the name's
- * length, so there always is one).
- */
-function toOriginal(from: number[], start: number, end: number): Mark {
-  const last = from[end - 1]!;
-  let after = end;
-  while (from[after]! <= last) after++;
-  return [from[start]!, from[after]!];
+  return { text, from, to, words };
 }
 
 /** Initials for scoring: the generic words are skipped, except "bank", so "gtb" spells GT Bank. */
@@ -81,9 +80,12 @@ type Rule = { score: number; marks: Mark[] };
 
 function textRules(query: string, name: Indexed): Rule[] {
   const rules: Rule[] = [];
-  const { text, from, words } = name;
-  const range = (start: number, length: number) =>
-    toOriginal(from, start, start + length);
+  const { text, from, to, words } = name;
+  // A range of the normalized text as a range of the original name.
+  const range = (start: number, length: number): Mark => [
+    from[start]!,
+    to[start + length - 1]!,
+  ];
   if (text.startsWith(query))
     rules.push({ score: 80, marks: [range(0, query.length)] });
   const word = words.find(({ word }) => word.startsWith(query));
