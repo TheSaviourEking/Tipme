@@ -10,6 +10,7 @@ import {
   signUpRecipient,
   tipAsVisitor,
 } from './helpers';
+import { API_ORIGIN } from './stack';
 
 /** Runs the weekly-report job for this week, as the worker would on a Monday. */
 async function runWeeklyReport(
@@ -17,28 +18,25 @@ async function runWeeklyReport(
   request: APIRequestContext,
   handle: string,
 ) {
-  const run = await request.post(
-    'http://127.0.0.1:4100/v1/dev/jobs/weekly-report',
-    {
-      data: {
-        handle,
-        isoWeek: await page.evaluate(() => {
-          const now = new Date(Date.now() + 3600_000);
-          const day = new Date(
-            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-          );
-          const weekday = day.getUTCDay() || 7;
-          day.setUTCDate(day.getUTCDate() + 4 - weekday);
-          const week = Math.ceil(
-            ((day.getTime() - Date.UTC(day.getUTCFullYear(), 0, 1)) / 86400000 +
-              1) /
-              7,
-          );
-          return `${day.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-        }),
-      },
+  const run = await request.post(`${API_ORIGIN}/v1/dev/jobs/weekly-report`, {
+    data: {
+      handle,
+      isoWeek: await page.evaluate(() => {
+        const now = new Date(Date.now() + 3600_000);
+        const day = new Date(
+          Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+        );
+        const weekday = day.getUTCDay() || 7;
+        day.setUTCDate(day.getUTCDate() + 4 - weekday);
+        const week = Math.ceil(
+          ((day.getTime() - Date.UTC(day.getUTCFullYear(), 0, 1)) / 86400000 +
+            1) /
+            7,
+        );
+        return `${day.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+      }),
     },
-  );
+  });
   expect(run.ok()).toBe(true);
 }
 
