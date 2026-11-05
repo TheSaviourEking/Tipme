@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ActivityRow } from '@tipme/contracts';
 import { naira } from '@/lib/money';
+import { bankLine } from '@/lib/withdrawal-bank';
 
 const stateText: Record<string, string> = {
   paid: 'Paid',
@@ -32,6 +33,9 @@ export function ActivityList({ rows }: { rows: ActivityRow[] }) {
               <small>
                 {row.state === 'confirming' ? 'Being confirmed' : when(row.at)}
               </small>
+              {row.kind === 'withdrawal' && bankLine(row.bank) && (
+                <small>{bankLine(row.bank)}</small>
+              )}
             </span>
             <span
               className={`activity-list__amount${row.state === 'confirming' ? ' activity-list__amount--pending' : ''}`}

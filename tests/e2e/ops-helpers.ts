@@ -175,6 +175,33 @@ export async function emailedEnrolmentCode(email: string): Promise<string> {
   ).code;
 }
 
+/**
+ * The recipient saves a payout bank. The pretend provider needs none, and a withdrawal records a
+ * bank only if one was saved, so the tests that read it back save one first.
+ */
+export async function saveBank(
+  handle: string,
+  bankName: string,
+  last4: string,
+) {
+  await withDatabase(async (db, ops) => {
+    const [row] = await sql<{ id: string }>(
+      'SELECT id FROM profiles WHERE handle = $1',
+      [handle],
+    );
+    await ops.setPayoutDestination(db, {
+      profileId: row?.id,
+      provider: 'mock',
+      destinationRef: `dest_${handle}_${last4}`,
+      bankCode: '058',
+      bankName,
+      last4,
+      status: 'usable',
+      sealing: ops.mailSealing(Buffer.from(E2E_MAIL_SEAL_KEY, 'base64')),
+    });
+  });
+}
+
 /** Staff make the recipient's page Pro from the admin area, in their own browser context. */
 export async function makePagePro(
   browser: Browser,

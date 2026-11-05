@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { UNBROKEN_NAME } from './profile-fixtures';
+import { saveBank } from './ops-helpers';
 import {
   expectAccessible,
   fitsViewport,
@@ -49,6 +50,8 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
   await expectAccessible(page);
 
+  // A withdrawal records the bank it went to, if one was saved.
+  await saveBank(handle, 'GTBank', '6789');
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
   await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
@@ -62,6 +65,9 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
       timeout: 1000,
     });
   }).toPass({ timeout: 15_000 });
+  await expect(
+    page.locator('.activity-list__row').filter({ hasText: 'Withdrawal' }),
+  ).toContainText(/to GTBank ••\d{4}/);
 
   await page.goto('/dashboard/tips');
   await expect(
