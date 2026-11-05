@@ -164,6 +164,9 @@ export const SCREENS: ReviewScreen[] = [
         if (!specimen || !container) return;
         for (const child of Array.from(container.children))
           if (child !== specimen) child.remove();
+        // The clicks scrolled the page; a full-page shot draws fixed parts (the hidden skip link)
+        // at that offset, so start from the top.
+        window.scrollTo(0, 0);
       });
     },
   },
