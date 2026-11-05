@@ -138,3 +138,47 @@ export function withdrawState(input: {
     }
   }
 }
+
+/** Refused before anything was recorded; the page's own state says why, so no message is added. */
+const SHOWN_BY_PAGE: ReadonlySet<string> = new Set([
+  'WITHDRAWALS_PAUSED',
+  'WITHDRAWALS_SWITCHED_OFF',
+  'PAYOUT_SETUP_NEEDED',
+  'PAYOUT_DESTINATION_NEEDED',
+  'PAYOUT_PROVIDER_UNAVAILABLE',
+  'WITHDRAWAL_UNAVAILABLE',
+]);
+
+/**
+ * What the Withdraw page does with a refused request. The amount on screen can be a few seconds
+ * old, because the partner's figures behind a quote are cached briefly; the withdrawal itself is
+ * checked fresh. So a refusal about the amount reloads the figures, and the message stays beside
+ * the new amount instead of a stale one.
+ */
+export function withdrawRefusal(code: string | undefined): {
+  message: string | null;
+  reload: boolean;
+} {
+  if (code !== undefined && SHOWN_BY_PAGE.has(code))
+    return { message: null, reload: true };
+  if (code === 'INSUFFICIENT_BALANCE')
+    return {
+      message: 'That is more than your available balance.',
+      reload: true,
+    };
+  if (code === 'WITHDRAWAL_TOO_SMALL')
+    return { message: 'The smallest withdrawal is NGN 2,000.', reload: true };
+  if (code === 'IDEMPOTENCY_CONFLICT')
+    return {
+      message:
+        'This withdrawal may already be on its way. Check your dashboard before asking again.',
+      reload: false,
+    };
+  // Any other failure may have followed a request that arrived. The key stays, so the same amount
+  // again can't withdraw twice, but it must not read as nothing happened.
+  return {
+    message:
+      'We couldn’t confirm your withdrawal. Check your dashboard before trying again.',
+    reload: false,
+  };
+}

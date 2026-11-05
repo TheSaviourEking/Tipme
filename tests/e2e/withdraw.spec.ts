@@ -175,6 +175,53 @@ test('an idempotency conflict never says to simply try again', async ({
   await expect(page.getByText(/please try again/i)).toHaveCount(0);
 });
 
+// The quote's partner figures are cached for a few seconds; the withdrawal is checked fresh. A
+// refusal over the amount must reload the figures, so the message never sits beside a stale amount.
+for (const [code, message] of [
+  ['INSUFFICIENT_BALANCE', 'That is more than your available balance.'],
+  ['WITHDRAWAL_TOO_SMALL', 'The smallest withdrawal is NGN 2,000.'],
+] as const) {
+  test(`a refusal with ${code} reloads the amount and keeps its message`, async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const { handle } = await signUpRecipient(page, testInfo);
+    await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
+    await page.goto('/dashboard/withdraw');
+    await expect(page.getByText(/You can withdraw ₦1,800 to /)).toBeVisible();
+    // What a fresh quote says by the time the request is refused.
+    await fakeQuote(page, {
+      state: 'ready',
+      withdrawableMinor: '100000',
+      ledgerMinor: '180000',
+      providerMinor: '100000',
+      feeMinor: '5000',
+      destination: { bankName: 'GTBank', last4: '1234' },
+    });
+    await page.route('**/v1/me/withdrawals', (route) =>
+      route.request().method() === 'POST'
+        ? route.fulfill({
+            status: 409,
+            json: { error: { code, message: 'x' } },
+          })
+        : route.continue(),
+    );
+    const reloaded = page.waitForRequest(
+      (request) =>
+        request.url().endsWith('/v1/me/withdrawal-quote') &&
+        request.method() === 'GET',
+    );
+    await page.getByLabel('Amount (NGN)').fill('1800');
+    await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
+    await reloaded;
+    await expect(page.getByText(message)).toBeVisible();
+    await expect(
+      page.getByText(/You can withdraw ₦1,000 to GTBank ••1234/),
+    ).toBeVisible();
+    await expect(page.getByText(/You can withdraw ₦1,800/)).toHaveCount(0);
+  });
+}
+
 test('Everything fills the whole balance, and under ₦2,000 it is the only way', async ({
   page,
   browser,
