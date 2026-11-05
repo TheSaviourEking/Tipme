@@ -193,29 +193,47 @@ test('both hosts route to their own project', { skip }, async () => {
   assert.match((await get(PRODUCTION_HOST)).body, /^blue-[123]$/);
 });
 
-/** The first chunk of a response that may never end, with its headers; then the request is dropped. */
-function firstChunk(host, path, headers = {}) {
+/**
+ * The first `count` chunks of a response that may never end, each with its arrival time, and the
+ * headers; then the request is dropped.
+ */
+function firstChunks(host, path, headers = {}, count = 1) {
   return new Promise((resolveFirst, reject) => {
     const started = Date.now();
+    const chunks = [];
     const req = request(
       { host: '127.0.0.1', port, path, headers: { Host: host, ...headers } },
       (res) => {
-        res.once('data', (chunk) => {
+        res.on('data', (chunk) => {
+          chunks.push({
+            text: chunk.toString('latin1'),
+            ms: Date.now() - started,
+          });
+          if (chunks.length < count) return;
           resolveFirst({
             status: res.statusCode,
             headers: res.headers,
-            chunk: chunk.toString('latin1'),
-            ms: Date.now() - started,
+            chunks,
           });
           req.destroy();
         });
       },
     );
     req.on('error', reject);
-    req.setTimeout(5000, () => req.destroy(new Error('no first chunk in 5 s')));
+    req.setTimeout(5000, () =>
+      req.destroy(new Error(`fewer than ${count} chunks in 5 s`)),
+    );
     req.end();
   });
 }
+const firstChunk = async (host, path, headers) => {
+  const {
+    status,
+    headers: h,
+    chunks,
+  } = await firstChunks(host, path, headers, 1);
+  return { status, headers: h, chunk: chunks[0].text, ms: chunks[0].ms };
+};
 
 for (const host of [STAGING_HOST, PRODUCTION_HOST]) {
   test(
@@ -230,6 +248,27 @@ for (const host of [STAGING_HOST, PRODUCTION_HOST]) {
       assert.match(first.headers['content-type'], /^text\/event-stream/);
       assert.match(first.chunk, /^: p+/);
       assert.ok(first.ms < 2000, `first heartbeat after ${first.ms} ms`);
+    },
+  );
+
+  test(
+    `a small heartbeat after it flushes through at once too (${host})`,
+    { skip },
+    async () => {
+      // Production writes small frames (`retry: 5000`, a 6-byte `: hb`): each must pass the edge
+      // when written, not when a buffer fills. The stand-in writes one every 500 ms.
+      const { chunks, headers } = await firstChunks(
+        host,
+        '/v1/me/events',
+        { 'Accept-Encoding': 'gzip, zstd' },
+        2,
+      );
+      assert.equal(headers['content-encoding'], undefined);
+      assert.match(chunks[1].text, /^: hb/);
+      assert.ok(
+        chunks[1].ms - chunks[0].ms < 1000,
+        `the heartbeat came ${chunks[1].ms - chunks[0].ms} ms after the first chunk`,
+      );
     },
   );
 
