@@ -94,25 +94,48 @@ Branch `feat/live-updates` (worktree `.worktrees/live-updates`). Open each PR to
 **Interfaces:**
 
 ```ts
-export const LIVE_RECIPIENT_TYPES = ['tips.changed', 'notifications.changed', 'moments.changed',
-  'withdrawals.changed', 'payments.changed', 'profile.changed', 'reports.changed',
-  'account.changed'] as const;
-export const LIVE_STAFF_TYPES = ['ops.approvals.changed', 'ops.issues.changed'] as const;
+export const LIVE_RECIPIENT_TYPES = [
+  'tips.changed',
+  'notifications.changed',
+  'moments.changed',
+  'withdrawals.changed',
+  'payments.changed',
+  'profile.changed',
+  'reports.changed',
+  'account.changed',
+] as const;
+export const LIVE_STAFF_TYPES = [
+  'ops.approvals.changed',
+  'ops.issues.changed',
+] as const;
 /** Handled by the hub, never forwarded. */
 export const LIVE_SERVER_TYPES = ['sessions.changed', 'staff.changed'] as const;
-export const LIVE_CONTROL_TYPES = ['ready', 'resync', 'poll', 'session.ended'] as const;
+export const LIVE_CONTROL_TYPES = [
+  'ready',
+  'resync',
+  'poll',
+  'session.ended',
+] as const;
 export type LiveRecipientType = (typeof LIVE_RECIPIENT_TYPES)[number];
 export type LiveStaffType = (typeof LIVE_STAFF_TYPES)[number];
 export type LiveEventType = LiveRecipientType | LiveStaffType;
 export type LiveControlType = (typeof LIVE_CONTROL_TYPES)[number];
 export type LiveTarget =
-  | { user: string } | { profile: string } | { all: true }
+  | { user: string }
+  | { profile: string }
+  | { all: true }
   | { staff: 'any' | 'issues.view' };
 export const liveMessageSchema: z.ZodType<LiveMessage>; // .strict(), uuid ids, type enum of all three lists
-export interface LiveMessage { to: LiveTarget; type: LiveEventType | (typeof LIVE_SERVER_TYPES)[number] }
+export interface LiveMessage {
+  to: LiveTarget;
+  type: LiveEventType | (typeof LIVE_SERVER_TYPES)[number];
+}
 /** The only shape a browser ever receives. */
-export interface LiveBrowserMessage { type: LiveEventType | LiveControlType }
-export const liveChannel = (queuePrefix: string): string => `${queuePrefix}:live:v1`;
+export interface LiveBrowserMessage {
+  type: LiveEventType | LiveControlType;
+}
+export const liveChannel = (queuePrefix: string): string =>
+  `${queuePrefix}:live:v1`;
 export function parseLiveMessage(raw: string): LiveMessage | null; // never throws
 ```
 
@@ -139,18 +162,28 @@ export function parseLiveMessage(raw: string): LiveMessage | null; // never thro
 **Interfaces:**
 
 ```ts
-export type LiveCloseReason = 'client' | 'lifetime' | 'session_ended' | 'draining' | 'error';
+export type LiveCloseReason =
+  'client' | 'lifetime' | 'session_ended' | 'draining' | 'error';
 export interface LiveSink {
-  id: string; kind: 'me' | 'ops'; userId: string; profileId: string | null;
-  permissions: ReadonlySet<string> | null;      // ops streams only
-  write(frame: string): void;                    // already-framed SSE text
+  id: string;
+  kind: 'me' | 'ops';
+  userId: string;
+  profileId: string | null;
+  permissions: ReadonlySet<string> | null; // ops streams only
+  write(frame: string): void; // already-framed SSE text
   close(reason: LiveCloseReason): void;
-  recheck(): Promise<boolean>;                   // false: session or grant gone
+  recheck(): Promise<boolean>; // false: session or grant gone
 }
-export type RegisterResult = { ok: true } | { ok: false; reason: 'limit_user' | 'limit_process' | 'draining' };
+export type RegisterResult =
+  | { ok: true }
+  | { ok: false; reason: 'limit_user' | 'limit_process' | 'draining' };
 export interface LiveRouterOptions {
-  maxPerUser: number; maxStreams: number; coalesceMs: number;
-  random: () => number; setTimer: (fn: () => void, ms: number) => unknown; clearTimer: (t: unknown) => void;
+  maxPerUser: number;
+  maxStreams: number;
+  coalesceMs: number;
+  random: () => number;
+  setTimer: (fn: () => void, ms: number) => unknown;
+  clearTimer: (t: unknown) => void;
   onDelivered?: (type: string) => void;
 }
 export function createLiveRouter(o: LiveRouterOptions): {
@@ -158,11 +191,12 @@ export function createLiveRouter(o: LiveRouterOptions): {
   unregister(id: string): void;
   dispatch(message: LiveMessage): void;
   broadcastControl(type: 'resync' | 'poll'): void;
-  drain(): void;                                  // jittered retry then close every stream
+  drain(): void; // jittered retry then close every stream
   readonly draining: boolean;
   counts(): { me: number; ops: number };
 };
-export const sseFrame = (m: LiveBrowserMessage): string => `data: ${JSON.stringify({ type: m.type })}\n\n`;
+export const sseFrame = (m: LiveBrowserMessage): string =>
+  `data: ${JSON.stringify({ type: m.type })}\n\n`;
 export const sseRetry = (ms: number): string => `retry: ${ms}\n\n`;
 ```
 
@@ -208,14 +242,30 @@ export const sseRetry = (ms: number): string => `retry: ${ms}\n\n`;
 // live-publisher.ts (API)
 export const LIVE_PUBLISHER = Symbol('LIVE_PUBLISHER');
 export type PublishLive = (message: LiveMessage) => Promise<void>; // resolves always
-export function createLivePublisher(deps: { redis: Pick<Redis, 'publish'>; channel: string;
-  logger: Logger; counter: (type: string, outcome: 'ok' | 'failed') => void }): PublishLive;
+export function createLivePublisher(deps: {
+  redis: Pick<Redis, 'publish'>;
+  channel: string;
+  logger: Logger;
+  counter: (type: string, outcome: 'ok' | 'failed') => void;
+}): PublishLive;
 // live-subscriber.ts
-export function startLiveSubscriber(o: { url: string; channel: string; logger: Logger;
-  onMessage(m: LiveMessage): void; onDown(): void; onUp(): void; onInvalid(): void;
+export function startLiveSubscriber(o: {
+  url: string;
+  channel: string;
+  logger: Logger;
+  onMessage(m: LiveMessage): void;
+  onDown(): void;
+  onUp(): void;
+  onInvalid(): void;
 }): { readonly up: boolean; stop(): Promise<void> };
 // live-hub.service.ts: Nest wrapper over createLiveRouter + subscriber; OnModuleInit / OnApplicationShutdown
-@Injectable() export class LiveHubService { register; unregister; drain; get subscriberUp(): boolean }
+@Injectable()
+export class LiveHubService {
+  register;
+  unregister;
+  drain;
+  get subscriberUp(): boolean;
+}
 ```
 
 The metrics are `tipme.live.streams` (gauge, `stream`), `tipme.live.connects` (`outcome`), `tipme.live.closes` (`reason`), `tipme.live.signals_published` (`type`, `outcome`), `tipme.live.signals_delivered` (`type`) and `tipme.live.subscriber` (gauge). They are registered with `getMeter(SERVICE_NAME)` as in `apps/worker/src/job-worker.ts`. This is the API's first meter.
@@ -337,12 +387,27 @@ The connect makes `resolveSession` and `myProfileId` and holds no pool connectio
 
 ```ts
 /** Outbox event → signals. Pure; unknown or malformed payloads give []. */
-export function liveSignalFor(eventType: string, payload: unknown): LiveMessage[];
+export function liveSignalFor(
+  eventType: string,
+  payload: unknown,
+): LiveMessage[];
 /** After a job handler returned. */
-export function jobSignalsFor(jobName: string, outcome: string, data: unknown,
-  result?: { profileIds?: string[]; issuesOpened?: number; issuesResolved?: number }): LiveMessage[];
-export function createWorkerLivePublisher(deps: { redis: Pick<Redis, 'publish'>; channel: string;
-  logger: Logger; counter: Counter }): (messages: LiveMessage[]) => Promise<void>; // never throws
+export function jobSignalsFor(
+  jobName: string,
+  outcome: string,
+  data: unknown,
+  result?: {
+    profileIds?: string[];
+    issuesOpened?: number;
+    issuesResolved?: number;
+  },
+): LiveMessage[];
+export function createWorkerLivePublisher(deps: {
+  redis: Pick<Redis, 'publish'>;
+  channel: string;
+  logger: Logger;
+  counter: Counter;
+}): (messages: LiveMessage[]) => Promise<void>; // never throws
 ```
 
 PR 1 mapping:
@@ -404,8 +469,9 @@ Nothing else changes: no `flush_interval` (Caddy flushes `text/event-stream` at 
   2. on staging, set `LIVE_UPDATES_ENABLED=true` and recreate the API;
   3. run `curl -N -H 'Cookie: tipme_session=…' https://$STAGING_API_HOST/v1/me/events`, which must print `retry: 5000`, then `data: {"type":"ready"}`, then `: hb` within 21 s;
   4. watch `tipme.live.*` for a week, then turn on production.
-  
+
   To turn it off: set `LIVE_UPDATES_ENABLED=false` in `production.env` and recreate the API colour. No web deploy is needed.
+
 - [ ] **Step 4: Run** `node --test scripts/edge-caddy.test.mjs`. Expected: PASS (with Docker).
 - [ ] **Step 5: Commit** `chore(edge): keep the live stream paths out of encode, and the runbook step to turn live updates on`.
 
@@ -422,30 +488,46 @@ Nothing else changes: no `flush_interval` (Caddy flushes `text/event-stream` at 
 **Interfaces:**
 
 ```ts
-export type LiveStatus = 'idle' | 'connecting' | 'connected' | 'polling' | 'disabled';
+export type LiveStatus =
+  'idle' | 'connecting' | 'connected' | 'polling' | 'disabled';
 export interface LiveClientDeps {
   url: string;
-  EventSource: new (url: string, init: { withCredentials: boolean }) => EventSourceLike;
-  now(): number;                          // performance.now()
-  setTimeout(fn: () => void, ms: number): unknown; clearTimeout(t: unknown): void;
+  EventSource: new (
+    url: string,
+    init: { withCredentials: boolean },
+  ) => EventSourceLike;
+  now(): number; // performance.now()
+  setTimeout(fn: () => void, ms: number): unknown;
+  clearTimeout(t: unknown): void;
   random(): number;
   visible(): boolean;
   probe(): Promise<'ok' | 'unauthenticated' | 'refused' | 'error'>; // apiFetch('/v1/me/profile') or ops equivalent
-  keepOpenWhenHidden(): boolean;          // the armed tip sound (plan note 3)
+  keepOpenWhenHidden(): boolean; // the armed tip sound (plan note 3)
 }
 export interface LiveClient {
-  start(): void; stop(): void;
+  start(): void;
+  stop(): void;
   on(type: LiveEventType, fn: () => void): () => void;
-  onResync(fn: () => void): () => void;   // ready, resync (after 0–5 s), poll ticks, safety, visible, online
+  onResync(fn: () => void): () => void; // ready, resync (after 0–5 s), poll ticks, safety, visible, online
   onStatus(fn: (s: LiveStatus) => void): () => void;
   onSignedOut(fn: () => void): () => void;
-  visibilityChanged(): void; online(): void;
+  visibilityChanged(): void;
+  online(): void;
   readonly status: LiveStatus;
 }
 export function createLiveClient(deps: LiveClientDeps): LiveClient;
-export const LIVE_TIMING = { watchdogMs: 50_000, readyTimeoutMs: 10_000, bufferedRetryMs: 300_000,
-  pollMs: 20_000, pollJitterMs: 2_000, streamRetryWhilePollingMs: 60_000, hiddenCloseMs: 300_000,
-  safetyMs: 300_000, backoffCapMs: 60_000, resyncJitterMs: 5_000 } as const;
+export const LIVE_TIMING = {
+  watchdogMs: 50_000,
+  readyTimeoutMs: 10_000,
+  bufferedRetryMs: 300_000,
+  pollMs: 20_000,
+  pollJitterMs: 2_000,
+  streamRetryWhilePollingMs: 60_000,
+  hiddenCloseMs: 300_000,
+  safetyMs: 300_000,
+  backoffCapMs: 60_000,
+  resyncJitterMs: 5_000,
+} as const;
 ```
 
 A 204 is detected as an `error` before any `open` with `readyState === CLOSED`, and the probe answers `ok`. That gives `disabled`. EventSource exposes no status, so the probe decides.
@@ -489,21 +571,40 @@ A 204 is detected as an `error` before any `open` with `readyState === CLOSED`, 
 
 ```ts
 // live-refetch.ts: the debounce and single-flight scheduler, pure
-export function createRefetchScheduler(o: { debounceMs: number /* 300 */;
-  setTimeout; clearTimeout }): {
-  register(types: readonly LiveEventType[], refetch: () => Promise<void>): () => void;
-  signal(type: LiveEventType): void;   // debounced per registration
-  resyncAll(): void;                   // every registration, debounced
+export function createRefetchScheduler(o: {
+  debounceMs: number /* 300 */;
+  setTimeout;
+  clearTimeout;
+}): {
+  register(
+    types: readonly LiveEventType[],
+    refetch: () => Promise<void>,
+  ): () => void;
+  signal(type: LiveEventType): void; // debounced per registration
+  resyncAll(): void; // every registration, debounced
 };
 // live-provider.tsx
-export function LiveProvider(props: { stream: 'me' | 'ops'; children: ReactNode;
-  keepOpenWhenHidden?: () => boolean }): JSX.Element;
-export function useLiveEvents(types: readonly LiveEventType[], refetch: () => Promise<void>): void; // no-op outside a provider
-export function useLiveStatus(): LiveStatus;                                                     // 'idle' outside a provider
+export function LiveProvider(props: {
+  stream: 'me' | 'ops';
+  children: ReactNode;
+  keepOpenWhenHidden?: () => boolean;
+}): JSX.Element;
+export function useLiveEvents(
+  types: readonly LiveEventType[],
+  refetch: () => Promise<void>,
+): void; // no-op outside a provider
+export function useLiveStatus(): LiveStatus; // 'idle' outside a provider
 // use-panel.ts
-export interface Panel<T> { data: T | null; error: PanelError; reload: () => Promise<void>;
-  /** Browser clock at the last successful read; null before the first. */ updatedAt: Date | null }
-export function usePanel<T>(path: string, options?: { live?: readonly LiveEventType[] }): Panel<T>;
+export interface Panel<T> {
+  data: T | null;
+  error: PanelError;
+  reload: () => Promise<void>;
+  /** Browser clock at the last successful read; null before the first. */ updatedAt: Date | null;
+}
+export function usePanel<T>(
+  path: string,
+  options?: { live?: readonly LiveEventType[] },
+): Panel<T>;
 ```
 
 `usePanel` calls `useLiveEvents(options?.live ?? NONE, reload)` with a stable `NONE` array. The existing `latest` counter still drops older answers.
@@ -546,14 +647,26 @@ export function usePanel<T>(path: string, options?: { live?: readonly LiveEventT
 
 ```ts
 /** Ids of paid tip rows not in `before`; empty on the first load (before === null). */
-export function arrivals(before: ReadonlySet<string> | null, rows: readonly ActivityRow[]): Set<string>;
+export function arrivals(
+  before: ReadonlySet<string> | null,
+  rows: readonly ActivityRow[],
+): Set<string>;
 /** Rows that were confirming and are now paid: same id, highlight, no motion. */
-export function newlyConfirmed(before: ReadonlyMap<string, string> | null, rows: readonly ActivityRow[]): Set<string>;
+export function newlyConfirmed(
+  before: ReadonlyMap<string, string> | null,
+  rows: readonly ActivityRow[],
+): Set<string>;
 /** True only when availableMinor rose (BigInt compare); a fall or first load is false. */
-export function balanceRose(before: DashboardSummary | null, after: DashboardSummary): boolean;
+export function balanceRose(
+  before: DashboardSummary | null,
+  after: DashboardSummary,
+): boolean;
 export function updatedLabel(at: Date): string; // "Updated 14:02", Africa/Lagos, 24 h
 /** Tips page: may the first page be replaced in place? */
-export function canInsertInPlace(o: { searched: string; extraPages: number }): boolean;
+export function canInsertInPlace(o: {
+  searched: string;
+  extraPages: number;
+}): boolean;
 ```
 
 - [ ] **Step 1: Write the failing tests** (`live-merge.test.mjs`):
@@ -596,13 +709,18 @@ export function canInsertInPlace(o: { searched: string; extraPages: number }): b
 
 ```ts
 // contracts: input stays strict, and the new keys are optional so an older client's PUT still validates
-export const notificationPrefsSchema = z.object({
-  tipEmails: z.boolean(), weeklyReports: z.boolean(), milestones: z.boolean(), guideEmails: z.boolean(),
-  /** "Hide who tipped and how much in pop-ups". Off by default. */
-  hideTipDetailsInPopups: z.boolean().optional(),
-  /** "Sound for new tips". On by default. */
-  tipSound: z.boolean().optional(),
-}).strict();
+export const notificationPrefsSchema = z
+  .object({
+    tipEmails: z.boolean(),
+    weeklyReports: z.boolean(),
+    milestones: z.boolean(),
+    guideEmails: z.boolean(),
+    /** "Hide who tipped and how much in pop-ups". Off by default. */
+    hideTipDetailsInPopups: z.boolean().optional(),
+    /** "Sound for new tips". On by default. */
+    tipSound: z.boolean().optional(),
+  })
+  .strict();
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
 /** What GET and PUT return: always complete. */
 export type NotificationPrefsView = Required<NotificationPrefs>;
@@ -620,8 +738,9 @@ export const NOTIFICATION_PREFS_CHANGED = 'tipme:notification-prefs-changed'; //
   - `pnpm --filter @tipme/database generate` (the migration must contain only the two `ADD COLUMN` lines);
   - the integration command for `notification-prefs`;
   - `pnpm test:e2e -- tests/e2e/notifications.spec.ts`.
-  
+
   Expected: FAIL.
+
 - [ ] **Step 3: Implement.**
   - The card is its own `<form>` with two checkbox switches. Labels match §14 exactly.
   - The hint reads: "For shared screens and shop counters. Your tips list still shows the details." The sound hint reads: "Plays once for a new paid tip while TipMe is in a background tab."
@@ -655,17 +774,28 @@ export const NOTIFICATION_PREFS_CHANGED = 'tipme:notification-prefs-changed'; //
 
 ```ts
 // tip-announcement.ts: the once-a-minute polite announcer
-export interface AnnouncerState { lastAt: number | null; heldCount: number }
-export function announce(state: AnnouncerState, fresh: readonly NotificationView[], now: number,
-  o: { hideDetails: boolean }): { text: string | null; state: AnnouncerState };
+export interface AnnouncerState {
+  lastAt: number | null;
+  heldCount: number;
+}
+export function announce(
+  state: AnnouncerState,
+  fresh: readonly NotificationView[],
+  now: number,
+  o: { hideDetails: boolean },
+): { text: string | null; state: AnnouncerState };
 // a tip, details shown:  `${title} · ${body}`  e.g. "You got a tip · NGN 1,800.00 from Chidi"
 // a tip, details hidden: "You got a new tip"
 // more within the minute: held; the next announcement is "3 new tips"
 // never includes a note or message; non-tip news keeps today's title · body
 // tip-sound.ts
-export function createTipSound(o: { src: '/sounds/new-tip.wav'; volume: 0.35;
-  Audio: typeof Audio; document: Pick<Document, 'visibilityState' | 'addEventListener'> }): {
-  readonly armed: boolean;                 // the page has had a pointerdown or keydown
+export function createTipSound(o: {
+  src: '/sounds/new-tip.wav';
+  volume: 0.35;
+  Audio: typeof Audio;
+  document: Pick<Document, 'visibilityState' | 'addEventListener'>;
+}): {
+  readonly armed: boolean; // the page has had a pointerdown or keydown
   play(o: { enabled: boolean; isPaidTip: boolean }): void; // hidden tab only; failures are silent
 };
 // make-tip-sound.mjs
@@ -696,8 +826,9 @@ export function wav(samples: Int16Array, rate: number): Buffer;
   - `node --test scripts/make-tip-sound.test.mjs`;
   - `pnpm --filter @tipme/web exec node --test test/tip-announcement.test.mjs test/tip-sound.test.mjs`;
   - `pnpm test:e2e -- tests/e2e/notifications.spec.ts`.
-  
+
   Expected: FAIL.
+
 - [ ] **Step 3: Implement.**
   - `node scripts/make-tip-sound.mjs` writes the WAV (about 22 KB). It is self-hosted, licence-free and authored by us, so no third-party register entry is needed. `media-src 'self'` in `apps/web/next.config.ts` already allows it.
   - In `useNotifications`, register `useLiveEvents(['notifications.changed'], reload)`. Run the 10 s `setInterval` only when `useLiveStatus()` is `'idle'` (no provider) or `'disabled'`. While polling, the provider's 20 s poll calls `reload`.
@@ -753,8 +884,9 @@ export function wav(samples: Int16Array, rate: number): Buffer;
   - `apps/api/src/ops/actions.controller.ts`: `pages/:profileId/suspend` and `unsuspend`
   - `apps/api/src/profiles/me-profile.controller.ts`: `PATCH profile`, `PUT handle`, `PUT tip-amounts`, `PUT page/state`
   - the cover and photo routes in `apps/api/src/profiles/`
-  
+
   Each resolves the user from the profile with a cheap lookup only where the route lacks it (`userIdOfProfile(db, profileId)`, additive).
+
 - Modify (web):
   - `apps/web/src/app/dashboard/dashboard-shell.tsx`: `useLiveEvents(['profile.changed'], reloadProfile)`, which calls `setProfile`
   - `apps/web/src/app/dashboard/settings/sections/my-page.tsx`, `plan.tsx`
@@ -771,7 +903,11 @@ export function wav(samples: Int16Array, rate: number): Buffer;
 ```ts
 /** Keeps what the person is editing; reports that the saved value changed elsewhere. */
 export function mergeServerIntoForm<T extends Record<string, unknown>>(o: {
-  server: T; previousServer: T; local: T; dirty: ReadonlySet<keyof T> }): { next: T; changedElsewhere: boolean };
+  server: T;
+  previousServer: T;
+  local: T;
+  dirty: ReadonlySet<keyof T>;
+}): { next: T; changedElsewhere: boolean };
 ```
 
 - [ ] **Step 1: Write the failing tests:**
@@ -894,8 +1030,9 @@ export function mergeServerIntoForm<T extends Record<string, unknown>>(o: {
   - the integration command for `ops-approvals` and `live-events`;
   - `node --test scripts/generate-docs.test.mjs`;
   - `E2E_ALONE=1 pnpm test:e2e -- tests/e2e/ops-alone.spec.ts` (`@alone` tests run on their own).
-  
+
   Expected: FAIL.
+
 - [ ] **Step 3: Implement.** Admin stays nearly still (EXPERIENCE §7.10): no arrival motion on ops lists, rows keyed by id, no announcement.
 - [ ] **Step 4: Run** the same commands, then `pnpm api:openapi && pnpm docs:generate`, then the full pre-PR list. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(ops): a staff signal stream; approvals and issues update without a reload`.

@@ -193,12 +193,12 @@ Without this, `closeIdleConnections` never closes a stream, and every stop waits
 
 ### 3.2 Connection limits
 
-| Limit | Value | When exceeded |
-|---|---|---|
-| Streams per user per API process | 8 | 429 `LIVE_LIMIT`; that tab falls back to polling |
-| Streams per API process | 2,000 (`LIVE_MAX_STREAMS`) | 503 with `Retry-After: 30`; the client polls |
-| Connects per user per minute | 30, fixed window in Redis, via the existing `RateLimitGuard` per-user subject (like the bank routes) | 429; the client backs off |
-| Unauthenticated connects per IP per minute | 60 | 429 |
+| Limit                                      | Value                                                                                                | When exceeded                                    |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Streams per user per API process           | 8                                                                                                    | 429 `LIVE_LIMIT`; that tab falls back to polling |
+| Streams per API process                    | 2,000 (`LIVE_MAX_STREAMS`)                                                                           | 503 with `Retry-After: 30`; the client polls     |
+| Connects per user per minute               | 30, fixed window in Redis, via the existing `RateLimitGuard` per-user subject (like the bank routes) | 429; the client backs off                        |
+| Unauthenticated connects per IP per minute | 60                                                                                                   | 429                                              |
 
 The rate limiter fails open when Redis errors, as it already does (threat model X5). A process holding 2,000 idle streams uses tens of megabytes. Each stream is a socket, a timer slot and a map entry.
 
@@ -312,12 +312,12 @@ When staff change (`ops.staff_changed`, `ops.last_approver_removed`) or `revokeO
 
 ### 4.3 Control messages (server to browser)
 
-| Message | Meaning |
-|---|---|
-| `ready` | The stream is subscribed: resync now. |
-| `resync` | This API copy's subscriber was down and is back: resync, after a random 0–5 s wait. |
-| `poll` | This copy can't hear signals (Redis down): use the fallback poll until `resync`. |
-| `session.ended` | The session is gone: the stream closes. |
+| Message         | Meaning                                                                             |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `ready`         | The stream is subscribed: resync now.                                               |
+| `resync`        | This API copy's subscriber was down and is back: resync, after a random 0–5 s wait. |
+| `poll`          | This copy can't hear signals (Redis down): use the fallback poll until `resync`.    |
+| `session.ended` | The session is gone: the stream closes.                                             |
 
 ## 5. Places, verified against the code
 
@@ -418,16 +418,16 @@ When staff change (`ops.staff_changed`, `ops.last_approver_removed`) or `revokeO
 
 ## 8. Failure modes
 
-| Failure | What happens | What the person sees |
-|---|---|---|
-| **Redis down** | Publishes fail, logged and counted, and the money path carries on. Each API copy's subscriber drops, and it sends `poll` to its streams. When the subscriber comes back, it sends `resync`. New connects get `ready` then `poll`. | Updates within about 20 s through polling. Nothing wrong is shown. |
-| **API restart or deploy** | The draining copy refuses new streams and closes open ones with a jittered `retry`. Clients reconnect to a ready copy and resync. | Nothing, beyond a resync. |
-| **A user with many tabs** | One stream per tab, up to 8 per user per copy. Beyond that the tab polls at 20 s. Hidden tabs close their streams after 5 minutes. | Every tab stays correct. Extra tabs are up to 20 s slower. |
-| **A sleeping laptop** | Timers stall, and the socket is often dead without an error. On wake, the watchdog (50 s without a message), `visibilitychange` or `online` reconnects, and the client resyncs. | Fresh figures within seconds of waking. |
-| **A proxy that buffers** | `ready` never arrives within 10 s, so the client polls and tries the stream again in 5 minutes. | Updates within about 20 s. |
-| **A dropped signal** (a publish failed, or a subscriber blinked between messages) | It is caught by the next resync, the 5-minute safety refresh while connected, the refresh when the tab becomes visible, or the 20 s poll while degraded. | At worst a few minutes late. Never wrong: the figures are the API's. |
-| **Clock skew** | Signals carry no timestamps, and the client never compares its clock with the server's. Stream lifetime and session expiry are judged on the server's clock. The watchdog uses `performance.now()`. "Updated 14:02" is the browser's own clock at its last read. | Nothing. |
-| **The API copy is at its stream cap** | 503 with `Retry-After`, then polling. | Updates within about 20 s. |
+| Failure                                                                           | What happens                                                                                                                                                                                                                                                     | What the person sees                                                 |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Redis down**                                                                    | Publishes fail, logged and counted, and the money path carries on. Each API copy's subscriber drops, and it sends `poll` to its streams. When the subscriber comes back, it sends `resync`. New connects get `ready` then `poll`.                                | Updates within about 20 s through polling. Nothing wrong is shown.   |
+| **API restart or deploy**                                                         | The draining copy refuses new streams and closes open ones with a jittered `retry`. Clients reconnect to a ready copy and resync.                                                                                                                                | Nothing, beyond a resync.                                            |
+| **A user with many tabs**                                                         | One stream per tab, up to 8 per user per copy. Beyond that the tab polls at 20 s. Hidden tabs close their streams after 5 minutes.                                                                                                                               | Every tab stays correct. Extra tabs are up to 20 s slower.           |
+| **A sleeping laptop**                                                             | Timers stall, and the socket is often dead without an error. On wake, the watchdog (50 s without a message), `visibilitychange` or `online` reconnects, and the client resyncs.                                                                                  | Fresh figures within seconds of waking.                              |
+| **A proxy that buffers**                                                          | `ready` never arrives within 10 s, so the client polls and tries the stream again in 5 minutes.                                                                                                                                                                  | Updates within about 20 s.                                           |
+| **A dropped signal** (a publish failed, or a subscriber blinked between messages) | It is caught by the next resync, the 5-minute safety refresh while connected, the refresh when the tab becomes visible, or the 20 s poll while degraded.                                                                                                         | At worst a few minutes late. Never wrong: the figures are the API's. |
+| **Clock skew**                                                                    | Signals carry no timestamps, and the client never compares its clock with the server's. Stream lifetime and session expiry are judged on the server's clock. The watchdog uses `performance.now()`. "Updated 14:02" is the browser's own clock at its last read. | Nothing.                                                             |
+| **The API copy is at its stream cap**                                             | 503 with `Retry-After`, then polling.                                                                                                                                                                                                                            | Updates within about 20 s.                                           |
 
 ## 9. Security
 
