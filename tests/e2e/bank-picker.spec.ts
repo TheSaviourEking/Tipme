@@ -180,6 +180,8 @@ test('on a phone, Bank opens a full-screen sheet with the search ready @mobile',
 }, testInfo) => {
   const card = await openCard(page, testInfo);
   const trigger = card.getByRole('button', { name: 'Bank' });
+  // Nothing chosen yet: the trigger's "Search your bank" is real text and must read clearly.
+  await expectAccessible(page);
   await trigger.click();
   const sheet = page.getByRole('dialog', { name: 'Choose your bank' });
   await expect(sheet).toBeVisible();

@@ -4558,8 +4558,9 @@ body:has(.profile-page) .brand__mark {
   pointer-events: none;
 }
 
+/* Real text in a button, not a native placeholder, so it must meet 4.5:1 on the well. */
 .bank-picker__placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .bank-picker__value {
