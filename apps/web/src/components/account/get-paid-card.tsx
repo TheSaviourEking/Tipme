@@ -40,6 +40,16 @@ function messageFor(code: string): string {
   }
 }
 
+/**
+ * A failed name check. The limit (10 a day per person) gets its own words: another try can't work
+ * until tomorrow, so the card offers none. Proposed copy, awaiting the owner.
+ */
+function checkMessageFor(code: string): string {
+  return code === 'RATE_LIMITED'
+    ? 'You’ve used today’s account checks. Try again tomorrow.'
+    : messageFor(code);
+}
+
 type Step = 'details' | 'code';
 
 /** The bank account withdrawals go to. Adding or changing one takes a code from the owner's email. */
@@ -346,18 +356,20 @@ export function GetPaidCard() {
               {nameCheck.kind === 'failed' && (
                 <>
                   <Notice tone="error" title="Not saved">
-                    {messageFor(nameCheck.code)}
+                    {checkMessageFor(nameCheck.code)}
                   </Notice>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      if (checks.retry(key))
-                        void run(key, bankCode, accountNumber);
-                    }}
-                  >
-                    Check again
-                  </Button>
+                  {nameCheck.code !== 'RATE_LIMITED' && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        if (checks.retry(key))
+                          void run(key, bankCode, accountNumber);
+                      }}
+                    >
+                      Check again
+                    </Button>
+                  )}
                 </>
               )}
               {(nameCheck.kind === 'found' ||

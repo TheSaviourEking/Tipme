@@ -133,7 +133,8 @@ test('a misspelling says so, and suggests the full name', async ({
   page,
 }, testInfo) => {
   const card = await openCard(page, testInfo);
-  await card.getByRole('combobox', { name: 'Bank' }).fill('gtbnk zz');
+  const bank = card.getByRole('combobox', { name: 'Bank' });
+  await bank.fill('gtbnk zz');
   await expect(
     card
       .getByText(
@@ -142,6 +143,10 @@ test('a misspelling says so, and suggests the full name', async ({
       .first(),
   ).toBeVisible();
   await expect(card.getByRole('option')).toHaveCount(0);
+  // No list is showing, so the combobox doesn't say it is expanded.
+  await expect(bank).toHaveAttribute('aria-expanded', 'false');
+  await bank.fill('gtb');
+  await expect(bank).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('microfinance banks are found by search even while folded away', async ({
@@ -422,19 +427,27 @@ test('a failed check shows today’s message and Check again, which checks once 
   expect(checks()).toBe(2);
 });
 
-test('today’s 10 checks used up: the same message as today', async ({
+test('today’s checks used up: it says so, and offers no Check again', async ({
   page,
 }, testInfo) => {
   const card = await openCard(page, testInfo, { standIn: false });
-  await watchChecks(page, (route) =>
+  const checks = await watchChecks(page, (route) =>
     route.fulfill({ status: 429, json: { error: { code: 'RATE_LIMITED' } } }),
   );
   await chooseByKey(card, 'GTBank');
   await card.getByLabel('Account number').fill('0123456789');
   await expect(
-    card.getByText('Too many tries. Please wait a while and try again.'),
+    card.getByText('You’ve used today’s account checks. Try again tomorrow.'),
   ).toBeVisible();
-  await expect(card.getByRole('button', { name: 'Check again' })).toBeVisible();
+  await expect(card.getByText('Too many tries.')).toHaveCount(0);
+  // Another try can't work until tomorrow, so there is nothing to press.
+  await expect(card.getByRole('button', { name: 'Check again' })).toHaveCount(
+    0,
+  );
+  await expect(
+    card.getByRole('button', { name: 'Email me a code' }),
+  ).toHaveCount(0);
+  expect(checks()).toBe(1);
 });
 
 test('a late answer never shows against a newer number', async ({
