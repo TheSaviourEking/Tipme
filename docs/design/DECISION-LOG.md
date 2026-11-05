@@ -254,3 +254,12 @@ The owner: "add an update on the UI so the current user knows that there has bee
 
 - **Owner decision, 3 Nov 2026: the 10% fee is stated in the terms.** The terms page was a placeholder with no fee disclosure. It now has a Fees section: a supporter pays exactly the tip, with nothing added; TipMe keeps 10% of each tip unless a different fee has been agreed with the recipient (a staff-set share, ADR-0014), and processing is paid from that share, so a ₦5,000 tip leaves ₦4,500; the smallest tip and the smallest withdrawal are ₦2,000, unless the whole balance is withdrawn; withdrawing is free, because a payout's provider fee is TipMe's cost (`packages/domain/src/ledger.ts`). Every figure follows `FEE_POLICY_V1` and must change with it.
 - **This is disclosure, not approval.** It states the flat 10% that D-05 already decided. Refunds and chargebacks are still OPEN under D-05, so the terms say nothing about them. Entity, jurisdiction and the rest of the terms still wait on D-02 and D-07, and the page still says the full terms are being finalised. It no longer says they will come "before TipMe takes real payments", because real payments are live. The full terms need a lawyer.
+
+## 2026-11-04 — Animated covers
+
+- **Owner decision, 2 Nov 2026, confirmed 4 Nov 2026.** A page's cover can be animated. A product and visual decision, not a regulatory approval; no D-item is affected and nothing about payments changes.
+- **Free and Pro.** Free: Drifting, Rising and Ripple, which play once. Pro: all six (adding Pulse, Night sky and Sunrise), in every cover colour, with "Plays once" or "Slow loop". Automatic covers never animate.
+- **Timings.** Plays once 2800ms; Slow loop 8000ms, infinite alternate; both `--ease-physical` with a 0 to 600ms stagger. These are an exception to the stagger limit in EXPERIENCE-AND-MOTION §3.
+- **Freeze rules.** The cover pauses on the first use of the tip form and stays paused for that view; it also pauses off screen. Reduced motion, forced colours and print show the still frame.
+- **Lock.** The server refuses Pro-only choices from Free pages. A page that leaves Pro shows the still frame and keeps its choice.
+- **Performance.** Transform and opacity only; profile LCP stays under 2000ms in `pnpm perf:lab`.
