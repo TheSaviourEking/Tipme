@@ -239,6 +239,10 @@ test('with an older API (no links yet) the editor saves Facebook, Instagram and 
   // Every route that answers with the profile (the profile itself, going live, saving).
   await page.route('**/v1/me/**', async (route) => {
     const request = route.request();
+    // An older API has no live stream; re-fetching the never-ending stream would also outlive
+    // the page ("Test ended"). 204 is the API's "live updates off".
+    if (new URL(request.url()).pathname === '/v1/me/events')
+      return route.fulfill({ status: 204 });
     const isProfilePatch =
       request.method() === 'PATCH' && request.url().endsWith('/v1/me/profile');
     if (isProfilePatch && request.postData()?.includes('socials'))
