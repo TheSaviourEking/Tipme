@@ -9,7 +9,7 @@ export default async function globalSetup() {
   const database = await openTestDatabase();
   try {
     if (database.url !== E2E_DATABASE_URL)
-      throw new Error('e2e must use the tipme_test database');
+      throw new Error('e2e must use its lane database (tests/lane.ts)');
     // The worker is already running, and its first sweep can deadlock with the reset's TRUNCATE.
     for (let tries = 3; ; tries -= 1) {
       try {

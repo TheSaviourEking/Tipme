@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { WEB_ORIGIN } from './stack';
+import { LANE, WEB_ORIGIN } from './stack';
 
 const launchAt = process.env.E2E_PRODUCTION_LAUNCH_AT;
 if (!launchAt)
@@ -21,8 +21,8 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'pnpm --filter @tipme/web start --port 3100',
-    port: 3100,
+    command: `pnpm --filter @tipme/web start --port ${LANE.webPort}`,
+    port: LANE.webPort,
     stdout: 'pipe',
     timeout: 120_000,
     reuseExistingServer: false,

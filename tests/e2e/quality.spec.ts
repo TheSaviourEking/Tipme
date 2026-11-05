@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { WEB_ORIGIN } from './stack';
 
 const routes = [
   '/',
@@ -179,7 +180,7 @@ test('share card is a prerendered PNG advertised on profiles', async ({
     'TipMe. A little thanks goes a long way.',
   );
   const response = await request.get(
-    new URL(ogImage ?? '', 'http://127.0.0.1:3100').pathname,
+    new URL(ogImage ?? '', WEB_ORIGIN).pathname,
   );
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type']).toBe('image/png');

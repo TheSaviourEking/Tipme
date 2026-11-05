@@ -14,6 +14,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { readStamp, stampToCarry } from './review-stamp.mjs';
+import {
+  assertBuildMatchesLane,
+  laneConfig,
+  writeLaneStamp,
+} from '../tests/lane.mjs';
 import { spawnSync } from 'node:child_process';
 
 // Written by the build step below; a build made any other way has none, and the header says unknown.
@@ -44,10 +49,21 @@ if (!process.argv.includes('--no-build')) {
   const stamp = readStamp();
   rmSync(BUILD_STAMP, { force: true });
   run('pnpm', ['build'], {
-    NEXT_PUBLIC_API_ORIGIN: 'http://127.0.0.1:4100',
+    NEXT_PUBLIC_API_ORIGIN: laneConfig().apiOrigin,
     NEXT_PUBLIC_PRETEND_DELIVERY: 'on',
   });
   writeFileSync(BUILD_STAMP, JSON.stringify(stamp));
+  writeLaneStamp(writeFileSync);
+} else {
+  // A reused build has its API origin baked in; it must be this lane's.
+  try {
+    assertBuildMatchesLane((path) =>
+      existsSync(path) ? readFileSync(path, 'utf8') : undefined,
+    );
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }
 run('node', ['scripts/prepare-e2e-database.mjs']);
 
