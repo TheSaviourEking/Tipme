@@ -22,7 +22,7 @@ import {
   createRefetchScheduler,
   type RefetchScheduler,
 } from '@/lib/live-refetch';
-import type { FirstReadPhase } from '@/lib/first-read';
+import { firstReadPhase, type FirstReadPhase } from '@/lib/first-read';
 import { apiUrl } from '@/lib/session-client';
 
 interface LiveContextValue {
@@ -62,18 +62,6 @@ async function probe(url: string): Promise<LiveProbe> {
   } finally {
     window.clearTimeout(timer);
   }
-}
-
-/** A stream that will connect (or is connecting) holds panels' first reads; see first-read.ts. */
-function firstReadPhase(enabled: boolean, status: LiveStatus): FirstReadPhase {
-  if (
-    !enabled ||
-    typeof window === 'undefined' ||
-    typeof window.EventSource !== 'function'
-  )
-    return 'free';
-  if (status === 'idle' || status === 'connecting') return 'hold';
-  return status === 'connected' ? 'connected' : 'free';
 }
 
 /**
@@ -159,7 +147,13 @@ export function LiveProvider({
         scheduler,
         status,
         keepers,
-        phase: firstReadPhase(enabled, status),
+        phase: firstReadPhase({
+          enabled,
+          supported:
+            typeof window !== 'undefined' &&
+            typeof window.EventSource === 'function',
+          status,
+        }),
       }}
     >
       <div data-live={status} style={{ display: 'contents' }}>

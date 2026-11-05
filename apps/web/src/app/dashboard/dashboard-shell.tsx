@@ -11,6 +11,7 @@ import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
 import { LiveProvider } from '@/components/live/live-provider';
+import { liveProviderEnabled } from '@/lib/live-enabled';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
@@ -107,7 +108,7 @@ export function DashboardShell({
       {/* Around the bar too: the bell is live. It connects once the profile has loaded. */}
       <LiveProvider
         stream="me"
-        enabled={profile !== null && liveUpdates}
+        enabled={liveProviderEnabled({ profile, liveUpdates })}
         onSignedOut={signedOutElsewhere}
       >
         <Container>

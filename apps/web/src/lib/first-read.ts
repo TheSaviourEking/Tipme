@@ -64,3 +64,18 @@ export function createFirstRead(o: {
     },
   };
 }
+
+/**
+ * Which phase panels are in. With live updates off, or no EventSource, there is nothing to wait for:
+ * every panel reads at once, as before the feature. Otherwise a stream that is starting or
+ * connecting holds first reads for its ready.
+ */
+export function firstReadPhase(o: {
+  enabled: boolean;
+  supported: boolean;
+  status: 'idle' | 'connecting' | 'connected' | 'polling' | 'disabled';
+}): FirstReadPhase {
+  if (!o.enabled || !o.supported) return 'free';
+  if (o.status === 'idle' || o.status === 'connecting') return 'hold';
+  return o.status === 'connected' ? 'connected' : 'free';
+}
