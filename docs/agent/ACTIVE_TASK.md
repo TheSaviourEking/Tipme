@@ -1,9 +1,15 @@
 # Current task — live updates PR 1 (5 November 2026)
 
-- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, with `origin/feat/e2e-lanes` and `origin/dev` merged. Committed, not pushed, no PR. Plan: `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 1-12 (PR 1).
-- Done: the live contract, the API hub and `GET /v1/me/events` (flag `LIVE_UPDATES_ENABLED`, off by default), worker signals after the relay and the tip handler, the Caddyfile change (owner's deploy step: runbook `production.md` §10), the browser client and provider, dashboard home, tips, tip detail and moments refresh on signals, the bell folded in, the two Settings switches (migration `0072_live_popup_prefs.sql`, numbered past dev's 0071) and the background-tab sound.
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, with `origin/feat/e2e-lanes` and `origin/dev` merged. Pushed; PR to dev open after the review rounds (`c-review.md`, `c-rereview.md`). Plan: `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 1-12 (PR 1).
+- Done: the live contract, the API hub and `GET /v1/me/events` (flag `LIVE_UPDATES_ENABLED`, off by default), worker signals after the relay and the tip handler, the Caddyfile change (owner's deploy step: runbook `production.md` §10), the browser client and provider, dashboard home, tips, tip detail and moments refresh on signals, the bell folded in, the two Settings switches (migration 0072, regenerated with drizzle-kit after merging dev's 0071) and the background-tab sound.
 - Report with rulings and evidence: `.superpowers/program/c-build-report.md`.
-- Next exact step: owner review of PR 1; at merge, regenerate the migration with drizzle-kit against dev (the strict journal test fails on this branch alone because 0071 is missing). Then PR 2 (Tasks 13-15).
+- Next exact step: owner review of the PR, then the owner's deploy steps (Caddyfile, `LIVE_UPDATES_ENABLED`). Then PR 2 (Tasks 13-15); the shared partner-balance cache is its own PR (`fix/partner-quote-cache`).
+
+# Current task — dashboard data (5 November 2026)
+
+- Branch/worktree: `feat/dashboard-data` / `.worktrees/dashboard-data`, from `origin/dev` with `feat/e2e-lanes` merged. Not pushed. Migration 0071 (one index).
+- Built: `GET /v1/me/withdrawals` (paged, with the bank each went to), `GET /v1/me/tip-totals`, `note=with` on `/v1/me/tips`, `bank` on activity rows; the Withdraw, Home, Tips and weekly-report screens use them. The tips list cursor now keeps microseconds.
+- Next: owner says to push, then one PR to `dev`. Plan: `docs/superpowers/plans/2026-11-04-dashboard-data.md`.
 
 # Current task — database connection budget (2 November 2026)
 

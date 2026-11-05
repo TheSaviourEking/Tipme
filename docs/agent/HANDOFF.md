@@ -1,9 +1,17 @@
 # Current handoff — live updates PR 1 (5 November 2026)
 
-- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, committed, not pushed. Nothing ran against staging or production; the Caddyfile and flag are the owner's deploy steps (`docs/runbooks/production.md` §10). No regulatory decision is implied (D-03, D-08, D-11 stay open).
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, pushed with a PR to dev. Nothing ran against staging or production; the Caddyfile and flag are the owner's deploy steps (`docs/runbooks/production.md` §10). No regulatory decision is implied (D-03, D-08, D-11 stay open).
 - Signals only: the browser receives `{type}` and re-reads its existing endpoints. The heartbeat is a `: hb` comment plus a named `hb` event, because EventSource never shows comments to the page.
-- Known failing locally: `packages/database/test/integration/migration-journal.test.mjs` ("lists each migration once, in order"), because this branch has 0072 without 0071. Do not relax it; regenerate the migration at merge.
+- Migration 0072 was regenerated against dev's 0071; the strict journal test passes.
 - Verified results and untested areas: `.superpowers/program/c-build-report.md`.
+
+# Current handoff — dashboard data (5 November 2026)
+
+- Branch `feat/dashboard-data`, test lane 1, not pushed. Migration 0071 is `CREATE INDEX payouts_profile_created` only.
+- A withdrawal records a bank only if the recipient had saved one when asking. The pretend provider needs none, so a pretend payout with no saved bank shows no bank line, while the withdraw form still says "Pretend bank ••0000". That is the rule "never the current bank", not a bug.
+- Totals are lifetime and paid-only; "tips", not "people" (no supporter identity is kept).
+- Verified (commands in the build report `.superpowers/program/d-build-report.md`): format:check, lint, typecheck, unit tests, the four changed integration files, and the withdraw, dashboard, reports, gaps and tips-list e2e specs. See the report for pass counts.
+- Follow-ups: a stored running total if the totals p95 grows; the board's "people" copy; the tips list `at` is still shown to the millisecond (only the cursor keeps microseconds).
 
 # Current handoff — database connection budget (2 November 2026)
 
