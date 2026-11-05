@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Small things that say we see you</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:56px 56px 64px}
+.h1{margin:0;font:400 64px/1 'DM Serif Display',Georgia,serif}
+.lede{margin:14px 0 0;max-width:900px;font-size:18px;line-height:1.5;color:#3b3934}
+.h2{margin:56px 0 6px;font:400 38px/1.05 'DM Serif Display',Georgia,serif}
+.sub{margin:0 0 22px;max-width:980px;font-size:15px;line-height:1.5;color:#5d5a54}
+.paper{background:#fffefa;border-radius:24px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.45)}
+.well{background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1);border-radius:14px}
+.key{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 16px;border-radius:12px;background:#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.1),0 3px 0 rgba(20,18,16,.12);font-weight:700;font-size:14px}
+.key.on{background:#7a32f9;color:#fff;border-color:#4d16a8;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 3px 0 #4d16a8}
+.go{display:flex;align-items:center;justify-content:center;height:52px;border-radius:14px;background:#000;color:#fff;font-weight:700;font-size:15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.01em;white-space:nowrap}
+.t-ex{background:#141210;color:#fff}
+.t-pr{background:#fffefa;color:#4d16a8;box-shadow:inset 0 0 0 1.5px #7a32f9}
+.t-de{background:#f1e9ff;color:#2d0b66}
+.t-no{background:#f3e3e0;color:#7a2a1d}
+.src{font-size:12px;color:#5d5a54;font-weight:600}
+.muted{color:#5d5a54}
+.lever{display:inline-flex;align-items:center;width:52px;height:30px;border-radius:999px;background:#eceae4;box-shadow:inset 0 2px 3px rgba(20,18,16,.15);padding:3px;box-sizing:border-box}
+.lever i{width:24px;height:24px;border-radius:50%;background:#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.2),0 2px 0 rgba(20,18,16,.12);display:block}
+.lever.on{background:#7a32f9;justify-content:flex-end}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:28px}
+.fr{padding:20px 20px 22px;display:flex;flex-direction:column}
+.fr .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.fr .who{font-size:12.5px;font-weight:800;color:#5d5a54}
+.fr h3{margin:12px 0 0;font:400 24px/1.1 'DM Serif Display',Georgia,serif}
+.fr .say{margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#3b3934}
+.stage{margin-top:14px;border-radius:18px;background:#f3f2ee;border:1px solid rgba(20,18,16,.08);padding:16px;height:330px;box-sizing:border-box;position:relative;overflow:hidden}
+.src2{margin-top:12px;font-size:12px;line-height:1.45;color:#5d5a54;font-weight:600}
+.keep{height:100%;border-radius:16px;background:#7a32f9;color:#fff;padding:18px;box-sizing:border-box;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 16px 26px -18px rgba(77,22,168,.7)}
+.keep .big{font:400 30px/1.05 'DM Serif Display',Georgia,serif}
+.keep .amt{margin-top:10px;font:400 40px/1 'DM Serif Display',Georgia,serif}
+.keep small{display:block;margin-top:8px;font-size:12.5px;color:#efe6ff;font-weight:600}
+.keep .stamp{position:absolute;right:14px;bottom:14px;padding:6px 10px;border-radius:999px;background:#fffefa;color:#4d16a8;font-size:11.5px;font-weight:800}
+.mile{display:flex;flex-direction:column;gap:10px}
+.mrow2{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:#fffefa;border:1px solid rgba(20,18,16,.1)}
+.mrow2 .n{width:42px;height:42px;border-radius:12px;background:#eceae4;box-shadow:inset 0 2px 3px rgba(20,18,16,.1);display:flex;align-items:center;justify-content:center;font:400 20px 'DM Serif Display',Georgia,serif}
+.mrow2.done .n{background:#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 2px 0 #4d16a8}
+.mrow2 b{font-size:13.5px;display:block}
+.mrow2 small{font-size:12px;color:#5d5a54;font-weight:600}
+.rcpt{background:#fffefa;border-radius:16px;padding:16px;border:1px solid rgba(20,18,16,.1);height:100%;box-sizing:border-box}
+.rcpt h4{margin:0;font:400 24px/1.05 'DM Serif Display',Georgia,serif}
+.rcpt .rec{margin-top:10px;padding:10px 12px;border-radius:12px;background:#f1e9ff;color:#2d0b66;font-size:13px;line-height:1.45;font-weight:700}
+.slip2{margin-top:10px;padding:12px 14px;border-radius:12px;background:#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 10px 18px -14px rgba(20,18,16,.45)}
+.slip2 q{display:block;quotes:none;font:400 16px/1.3 'DM Serif Display',Georgia,serif}
+.slip2 q:before{content:'\201C';display:block;height:14px;font-size:34px;line-height:.75;color:#7a32f9}
+.slip2 p{margin:6px 0 0;font-size:12px;font-weight:700}
+.note-stack{position:relative;height:100%}
+.note-stack .slip2{position:absolute;left:10px;right:10px}
+.dash{background:#fffefa;border-radius:16px;padding:14px;border:1px solid rgba(20,18,16,.1)}
+.dash .bal{font:400 34px/1 'DM Serif Display',Georgia,serif}
+.nudge{margin-top:12px;padding:12px 14px;border-radius:14px;background:#141210;color:#fff;font-size:13px;line-height:1.45}
+.nudge b{display:block;font-size:13.5px}
+.nudge .acts{display:flex;gap:8px;margin-top:10px}
+.nudge .acts span{height:32px;padding:0 12px;border-radius:9px;display:flex;align-items:center;font-size:12px;font-weight:700}
+.privacy{margin-top:30px;display:grid;grid-template-columns:1.3fr 1fr;gap:24px}
+.privacy .paper{padding:24px 28px}
+.privacy h3{margin:0 0 10px;font:400 26px 'DM Serif Display',Georgia,serif}
+.privacy ul{margin:0;padding-left:20px;font-size:14.5px;line-height:1.6}
+.privacy li{margin:4px 0}
+
+.legend{display:flex;gap:18px;align-items:center;margin:0 0 14px;font-size:13px;color:#5d5a54;font-weight:600}
+.legend span{display:inline-flex;gap:8px;align-items:center}
+.map{padding:8px 0}
+.mrow{display:grid;grid-template-columns:420px 190px 300px 170px 1fr;gap:18px;align-items:center;padding:12px 26px;border-top:1px solid rgba(20,18,16,.08);font-size:14.5px;line-height:1.4}
+.mrow:first-child{border-top:0}
+.mhead{font-size:12.5px;font-weight:800;color:#5d5a54;padding-top:16px;padding-bottom:10px}
+.mwhat{font-weight:700}
+.mfree,.mpro{font-weight:600}
+</style>
+</helmet>
+<div class="board" style="width:1840px;height:1800px">
+
+<h1 class="h1">Small things that say “we see you”</h1>
+<p class="lede">Moments for the person tipped and for the supporter. Each frame says whether it exists on dev today or is new. Big celebrations stay rare; most of these are quiet. Names, dates, amounts and notes are samples.</p>
+<div class="legend" style="display:flex;gap:18px;margin-top:22px;font-size:13px;color:#5d5a54;font-weight:600"><span style="display:inline-flex;gap:8px;align-items:center"><span class="tag t-ex">Exists</span> on dev now, shown improved</span><span style="display:inline-flex;gap:8px;align-items:center"><span class="tag t-de">Decided, not built</span> approved, not built</span><span style="display:inline-flex;gap:8px;align-items:center"><span class="tag t-pr">Proposed</span> new, needs your yes</span></div>
+<div class="grid"><section class="paper fr"><div class="top"><span class="who">For the person tipped</span><span class="tag t-pr">Proposed</span></div><h3>Your first tip, kept</h3><p class="say">The first tip becomes a keepsake card they can save or share, not just a row in a list.</p><div class="stage"><div class="keep"><div class="big">Your first tip.</div><div class="amt">₦5,000</div><small>From Chidi · 5 November 2026</small><small>“Your edits saved my channel.”</small><span class="stamp">No. 1</span><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" style="flex:none;position:absolute;right:18px;top:18px;opacity:.9"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fffefa"/></svg></div></div><p class="src2">The 1st-tip moment exists (rewards.ts:17; moments.tsx:11-42). New: the keepsake card, save as image and share.</p></section><section class="paper fr"><div class="top"><span class="who">For the person tipped</span><span class="tag t-ex">Exists</span></div><h3>Milestones on the way</h3><p class="say">They can see what is next, and what they have reached. Celebrations only: no rewards are granted automatically.</p><div class="stage"><div class="mile"><div class="mrow2 done"><span class="n">1</span><span><b>First tip</b><small>Reached 2 Oct</small></span></div><div class="mrow2 done"><span class="n">10</span><span><b>Ten tips</b><small>Reached 28 Oct · shared on your page</small></span></div><div class="mrow2"><span class="n">50</span><span><b>Fifty tips</b><small>32 to go</small></span></div><div class="mrow2"><span class="n">100</span><span><b>A hundred tips</b><small>82 to go</small></span></div></div></div><p class="src2">Counts 1, 10, 50, 100 and best week or month exist (rewards.ts:16-27; ADR-0014: celebrations only). New: the “to go” progress and this ladder.</p></section><section class="paper fr"><div class="top"><span class="who">For the person tipped</span><span class="tag t-pr">Proposed</span></div><h3>One year of your page</h3><p class="say">On the page’s first birthday: how many people thanked them, and the note they kept most.</p><div class="stage"><div class="keep" style="background:#141210;box-shadow:none"><div class="big">One year on TipMe.</div><div class="amt" style="font-size:34px">48 people</div><small>thanked you since 5 November 2026.</small><small style="margin-top:14px">Your most-read note: “For the extra session before my exam.”</small><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true" style="flex:none;position:absolute;right:18px;top:18px"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"/></svg></div></div><p class="src2">Possible: pages keep their created date (schema.ts, profiles.createdAt). New: the card and the email.</p></section><section class="paper fr"><div class="top"><span class="who">For the supporter</span><span class="tag t-ex">Exists</span></div><h3>We see you, again</h3><p class="say">A returning supporter is celebrated on their own receipt, on their own phone. The person tipped is never told who came back.</p><div class="stage"><div class="rcpt"><h4>Ada got your thanks.</h4><p class="rec">That’s your 3rd tip. You’ve made 2 people’s day. We see you.</p><div class="slip2"><q>Thank you for backing my channel.</q><p>Ada</p></div></div></div><p class="src2">Exists: recognition.ts:143-156, kept only in that browser when the supporter ticks “Remember my tips on this phone”, no amounts or notes (appreciation-form.tsx:452-466). The slip below it is the proposed thank-you line.</p></section><section class="paper fr"><div class="top"><span class="who">For the supporter</span><span class="tag t-pr">Proposed</span></div><h3>Thanked by name</h3><p class="say">If the supporter gave a name, the receipt thanks them by it, then shows the thank-you line in the recipient’s words.</p><div class="stage"><div class="rcpt"><p class="src" style="margin:0">Receipt heading, when a name was given</p><h4 style="margin-top:6px">Thank you, Chidi.</h4><p style="margin:6px 0 0;font-size:14px;font-weight:700">Ada got your ₦5,000 tip.</p><div class="slip2"><q>Every tip goes into better gear for the next video.</q><p>Ada</p></div></div></div><p class="src2">Names are optional, up to 60 characters (schema.ts:889, 901). Today the heading is “{name} got your thanks.” (status-view.tsx:289). New: the name line and the thank-you slip.</p></section><section class="paper fr"><div class="top"><span class="who">For the person tipped</span><span class="tag t-ex">Exists</span></div><h3>The note of the week</h3><p class="say">The weekly report already lets them press through the notes. New: one note is lifted out as the highlight.</p><div class="stage"><div class="note-stack"><div class="slip2" style="top:0;transform:rotate(-3deg)"><q>Best haircut I’ve had.</q><p>Tunde</p></div><div class="slip2" style="top:16px;transform:rotate(2deg)"><q>Thanks for the ride home.</q><p>A guest</p></div><div class="slip2" style="top:84px;box-shadow:0 14px 24px -14px rgba(20,18,16,.55)"><p style="margin:0 0 6px;color:#7a32f9">Note of the week</p><q>For the extra session before my exam. Thank you.</q><p>Dayo</p></div></div></div><p class="src2">Exists: “Notes from this week. Press to read the next one.” (reports/[week]/report-view.tsx:29) and the “My week on TipMe” image (:84). New: the highlighted note.</p></section><section class="paper fr"><div class="top"><span class="who">For the person tipped</span><span class="tag t-de">Decided, not built</span></div><h3>A tip, as it happens</h3><p class="say">With live updates: the balance moves, a name and amount appear, and their chosen sound and celebration play.</p><div class="stage"><div class="dash"><p class="src" style="margin:0">Ready to withdraw</p><div class="bal">₦17,500</div><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="flex:none;position:absolute;left:150px;top:30px"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"/></svg><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true" style="flex:none;position:absolute;left:176px;top:22px"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#b38cff"/></svg></div><div class="nudge" style="background:#fffefa;color:#000;border:1px solid rgba(20,18,16,.12)"><b>Chidi tipped you ₦5,000</b>“Your edits saved my channel.”</div></div><p class="src2">Approved 5 Nov (live updates, not built). Today: the bell checks every 10 s and pops up a new tip (notification-bell.tsx:11, 44-48); the balance changes only when the page loads again.</p></section><section class="paper fr"><div class="top"><span class="who">For the person tipped</span><span class="tag t-pr">Proposed</span></div><h3>A gentle nudge to share</h3><p class="say">If they choose it: once a week, when no tips came in, a quiet reminder with their link ready to copy.</p><div class="stage"><div class="dash"><p class="src" style="margin:0">This week</p><div class="bal" style="font-size:26px">No tips yet this week</div></div><div class="nudge"><b>People can’t tip what they can’t find.</b>Put your link in your bio this week?<div class="acts"><span style="background:#7a32f9">Copy my link</span><span style="background:#2a2826">Not this week</span></div></div></div><p class="src2">Off by default. Based on tips received, which TipMe has; TipMe does not know where a link was shared. The closest today is the “guides and suggestions” email choice (notifications.tsx:15). Never sent to anyone who turned it off.</p></section></div>
+<div class="privacy">
+  <div class="paper">
+    <h3>What we will not do, on purpose</h3>
+    <ul>
+      <li><b>Tell the person tipped that someone came back.</b> Tips keep only an optional display name, up to 60 characters (schema.ts:889); there is no supporter account or email to match. Matching on names would be wrong often and would expose people who chose to stay unnamed.</li>
+      <li><b>Thank supporters later by email.</b> TipMe keeps no supporter email, so the thank-you has to be on the receipt, at the moment of paying.</li>
+      <li><b>Compare supporters.</b> The supporter’s recognition celebrates and never compares (recognition.ts:142).</li>
+      <li><b>Show a note publicly without its writer’s yes.</b> See the pinned note on “Make it yours”.</li>
+    </ul>
+  </div>
+  <div class="paper">
+    <h3>Needs your decision</h3>
+    <ul>
+      <li>The first-tip keepsake and the one-year card: dashboard only, or also an email?</li>
+      <li>“Thank you, Chidi.” as the receipt heading when a name is given, instead of today’s “Ada got your thanks.”</li>
+      <li>The weekly share nudge: on the dashboard only, or email too (opt-in either way)?</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
