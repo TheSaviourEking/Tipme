@@ -28,6 +28,7 @@ import {
   emailTokens,
   handleAliases,
   handleHolds,
+  handleReservations,
   profileAvatars,
   profileCovers,
   emailRecoveries,
@@ -94,9 +95,31 @@ export function checkHandle(
   const handle = normaliseHandle(raw);
   if (!handle) return Promise.resolve('invalid');
   if (isReservedHandle(handle)) return Promise.resolve('reserved');
-  return guarded(async () =>
-    (await isTaken(db, handle, now)) ? 'taken' : 'available',
-  );
+  return guarded(async () => {
+    // A staff reservation answers exactly like a built-in word: the public never learns which list.
+    if (await activeReservation(db, handle)) return 'reserved';
+    return (await isTaken(db, handle, now)) ? 'taken' : 'available';
+  });
+}
+
+/**
+ * The active staff reservation of a name, if any. `key` is the reservationKey; a stored handle is
+ * already one (handles never contain '-'), so a handle can be passed as it is.
+ */
+export async function activeReservation(
+  db: Database | Tx,
+  key: string,
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .select({ id: handleReservations.id })
+    .from(handleReservations)
+    .where(
+      and(
+        eq(handleReservations.handleLower, key),
+        isNull(handleReservations.releasedAt),
+      ),
+    );
+  return row ?? null;
 }
 
 async function isTaken(
@@ -120,7 +143,8 @@ async function isTaken(
     .where(
       and(eq(handleHolds.handleLower, handle), gt(handleHolds.until, now)),
     );
-  return hold !== undefined;
+  if (hold) return true;
+  return (await activeReservation(db, handle)) !== null;
 }
 
 /** Claims a handle for the user's one page. The page starts not live, named after the handle. */

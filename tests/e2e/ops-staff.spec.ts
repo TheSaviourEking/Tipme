@@ -921,3 +921,34 @@ test('a finance role with fees.manage only can find a page and change its fee', 
   await expect(page.getByLabel('New TipMe fee (%)')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Make Pro…' })).toHaveCount(0);
 });
+
+test('someone without usernames.manage sees no Usernames link', async ({
+  page,
+}, testInfo) => {
+  const person = await enrolOwner(page, testInfo);
+  // The Owner holds it.
+  await expect(
+    nav(page).getByRole('link', { name: 'Usernames' }),
+  ).toBeVisible();
+  const [role] = await sql<{ id: string }>(
+    `INSERT INTO roles (id, name, description) VALUES ($1, $1, '') RETURNING id`,
+    [`r-${randomUUID().slice(0, 8)}`],
+  );
+  await sql(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'pages.plan'), ($1, 'search.view')`,
+    [role!.id],
+  );
+  await sql(
+    `UPDATE staff SET role_id = $2 WHERE user_id = (SELECT id FROM users WHERE lower(email) = lower($1))`,
+    [person.email, role!.id],
+  );
+  await page.goto('/ops');
+  await expect(nav(page).getByRole('link', { name: 'Pages' })).toBeVisible();
+  await expect(nav(page).getByRole('link', { name: 'Usernames' })).toHaveCount(
+    0,
+  );
+  // Going there directly shows no controls; the server refuses every call anyway.
+  await page.goto('/ops/usernames');
+  await expect(page.getByText('Not part of your role')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Check' })).toHaveCount(0);
+});

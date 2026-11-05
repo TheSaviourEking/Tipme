@@ -97,6 +97,15 @@ export function normaliseHandle(raw: string): string | null {
   return HANDLE.test(handle) ? handle : null;
 }
 
+/**
+ * The key a staff reservation is stored and compared by: trimmed, lower-cased, `-` read as `_`,
+ * the same folding isReservedHandle applies to the built-in list. So `MTN`, `mtn` and `Mtn` are
+ * one reservation, and `how-it-works` is `how_it_works`. Null when the result can't be a handle.
+ */
+export function reservationKey(raw: string): string | null {
+  return normaliseHandle(raw.trim().toLowerCase().replaceAll('-', '_'));
+}
+
 export function isReservedHandle(handle: string): boolean {
   return reserved.has(handle.toLowerCase().replaceAll('-', '_'));
 }

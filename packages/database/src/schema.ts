@@ -811,6 +811,43 @@ export const handleAliases = pgTable(
   (table) => [index('handle_aliases_profile').on(table.profileId)],
 );
 
+/**
+ * Usernames staff have reserved, on top of the built-in list in @tipme/domain (which stays in code
+ * because the router depends on it). `handle_lower` is the reservationKey. Released rows stay as
+ * history; at most one row per name is active. Triggers (migration 0072) keep a page or an old
+ * username off an active reservation, and a reservation off a name a page holds.
+ */
+export const handleReservations = pgTable(
+  'handle_reservations',
+  {
+    id: uuid('id').primaryKey(),
+    handleLower: text('handle_lower').notNull(),
+    source: text('source').notNull(),
+    // The take-back this came from (PR 2 adds that table and the foreign key).
+    takeBackId: uuid('take_back_id'),
+    reason: text('reason').notNull(),
+    // Null only when the system completed a take-back.
+    reservedBy: uuid('reserved_by').references(() => users.id),
+    reservedAt: timestamp('reserved_at', { withTimezone: true }).notNull(),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    releasedBy: uuid('released_by').references(() => users.id),
+    releaseReason: text('release_reason'),
+  },
+  (table) => [
+    uniqueIndex('handle_reservations_active')
+      .on(table.handleLower)
+      .where(sql`released_at IS NULL`),
+    check(
+      'handle_reservations_source',
+      sql`${table.source} IN ('staff', 'take_back')`,
+    ),
+    check(
+      'handle_reservations_released',
+      sql`${table.releasedAt} IS NULL OR (${table.releasedBy} IS NOT NULL AND ${table.releaseReason} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export const tipQuotes = pgTable(
   'tip_quotes',
   {

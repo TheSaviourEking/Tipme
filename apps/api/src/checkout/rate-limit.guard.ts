@@ -30,6 +30,7 @@ type RateLimitedRoute =
   | 'avatars'
   | 'ops_code'
   | 'ops_request'
+  | 'ops_read'
   | 'cover_designs'
   | 'qr_art'
   | 'qr_thumb'
@@ -155,6 +156,12 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
         windowMs: 3_600_000,
       },
+      // Per person, apart from ops_request: a session of reads (each a few queries) must never use
+      // up the asks the same person needs. High enough for any person; it still stops a script.
+      ops_read: {
+        limit: this.config.RATE_LIMIT_OPS_READ_PER_HOUR,
+        windowMs: 3_600_000,
+      },
       // Each change writes and asks the web app to refresh the page. Generous and per address:
       // mobile carriers share addresses, and saving is a deliberate step, not browsing.
       cover_designs: {
@@ -182,10 +189,11 @@ export class RateLimitGuard implements CanActivate {
         windowMs: 3_600_000,
       },
     }[route];
-    // Counted per signed-in person: see ops_code, ops_request and qr_thumb above.
+    // Counted per signed-in person: see ops_code, ops_request, ops_read and qr_thumb above.
     const subject =
       (route === 'ops_code' ||
         route === 'ops_request' ||
+        route === 'ops_read' ||
         route === 'qr_thumb') &&
       request.auth
         ? `user:${request.auth.userId}`
