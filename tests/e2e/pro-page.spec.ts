@@ -63,11 +63,10 @@ test('the Pro page does not sell animated covers, which are not built yet', asyn
     // The sample cover is a still picture: nothing on it moves.
     const animated = await page
       .locator('.pro-cover *')
-      .evaluateAll(
-        (nodes) =>
-          nodes
-            .map((node) => getComputedStyle(node).animationName)
-            .filter((animation) => animation !== 'none'),
+      .evaluateAll((nodes) =>
+        nodes
+          .map((node) => getComputedStyle(node).animationName)
+          .filter((animation) => animation !== 'none'),
       );
     expect(animated).toEqual([]);
   }

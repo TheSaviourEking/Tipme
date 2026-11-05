@@ -18,7 +18,7 @@ const WHO = [
   {
     title: 'Businesses (coming soon)',
     href: '/for-businesses',
-    text: "Tell us you're interested, and we'll let you know.",
+    text: 'Tell us you’re interested, and we’ll let you know.',
   },
   {
     title: 'Infrastructure (coming soon)',

@@ -1,13 +1,13 @@
 'use client';
 import Image from 'next/image';
 import { useState } from 'react';
-import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
+import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { ActionLink, Lever, ProBadge, Surface } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
+import { TIPME_SHARE_PERCENT } from '@/lib/fee-share';
 
 type Plan = 'free' | 'pro';
 
-const TIPME_SHARE_PERCENT = Number(FEE_POLICY_V1.tipmeShareBps) / 100;
 // Ada's handle on Free, then the three changes Pro allows. The sample never touches a real page.
 const HANDLES = ['ada', 'adacuts', 'adaedits', 'adaokafor'] as const;
 const MAX_CHANGES = HANDLES.length - 1;

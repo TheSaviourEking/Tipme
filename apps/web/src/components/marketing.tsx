@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { Button } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
+import { TIPME_SHARE_PERCENT } from '@/lib/fee-share';
 import { DemoStack, PersonCard } from './demo-cards';
 import { IndigoQr } from './marketing/indigo-qr';
 
@@ -12,7 +13,7 @@ import { IndigoQr } from './marketing/indigo-qr';
    (how-lever.tsx), so the headline and the claim field never wait for client JavaScript. */
 
 /** TipMe's share as a whole percentage, from the fee policy. */
-export const TIPME_SHARE_PERCENT = Number(FEE_POLICY_V1.tipmeShareBps) / 100;
+export { TIPME_SHARE_PERCENT };
 const naira = (minor: bigint) => formatNaira(Number(minor));
 // The three standard amounts; the middle one is shown chosen in the pictures.
 const [SMALL_TIP, DEFAULT_TIP, LARGE_TIP] = STANDARD_TIP_PRESETS_MINOR;
@@ -326,7 +327,7 @@ export function TippedSteps() {
 /** What a supporter does, in three steps. */
 export function TippingSteps() {
   return (
-    <ol className="home-steps" aria-label="Steps if you're tipping">
+    <ol className="home-steps" aria-label="Steps if you’re tipping">
       <Step title="Scan or tap" tone="soft" media={<ScannedQr />}>
         Scan their QR code or open their link. No app, no account.
       </Step>

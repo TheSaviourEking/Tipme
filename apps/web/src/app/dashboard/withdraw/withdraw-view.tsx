@@ -13,6 +13,7 @@ import { usePanel } from '@/components/dashboard/use-panel';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { formatNaira } from '@/lib/demo-amount';
+import { dateOf, dayKey, timeOf } from '@/lib/lagos-time';
 import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 import { withdrawableNow, withdrawState } from '@/lib/withdraw-state';
@@ -20,21 +21,6 @@ import { withdrawableNow, withdrawState } from '@/lib/withdraw-state';
 /** Quick amounts, offered only when the balance can cover them with something left over. */
 const SHORTCUTS_MINOR = [BigInt(500_000), BigInt(2_000_000)];
 
-const ZONE = 'Africa/Lagos';
-const dayKey = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-CA', { timeZone: ZONE });
-const timeOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: ZONE,
-  });
-const dateOf = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: ZONE,
-  });
 const requested = (iso: string) =>
   dayKey(iso) === dayKey(new Date().toISOString())
     ? `Requested today at ${timeOf(iso)}.`
@@ -232,8 +218,9 @@ export default function WithdrawPage({
     quote,
   });
   const chosen = amount === null ? null : BigInt(amount);
-  // Tapping the amount already chosen changes nothing: the request key and any warning stay, as
-  // they do when typing the same text. Only a different amount starts a new request.
+  // Tapping the amount already chosen changes nothing: the request key and any warning stay.
+  // Only a different amount starts a new request. (Typing is different: onChange starts a new
+  // request on any change of the text, even to the same amount.)
   const choose = (minor: bigint) => {
     setRaw(formatNaira(minor));
     if (chosen === minor) return;

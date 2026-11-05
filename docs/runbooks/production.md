@@ -169,6 +169,10 @@ The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xy
 - **Check after step 5:** open `/@<a real handle>` (the line sits under the Tip button), a receipt and `/dashboard`; each shows it with a `mailto:support@usetipme.xyz` link. A brief API outage makes the web treat the copy as closed for a few seconds, and the line disappears with it.
 - Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.
 
+### Never set the pretend-delivery switch in production
+
+`NEXT_PUBLIC_PRETEND_DELIVERY` belongs to test copies only (the e2e stack, `review:screens`, local staging). In a production build it opens `/dev/inbox` (every sign-in code, readable by anyone) and `/dev/crash`. Production web must not set it; check the Vercel production environment before launch.
+
 ## Staff access
 
 Add and remove staff in the dashboard: `docs/runbooks/admin-roles.md`. `pnpm ops:grant-owner` on the server is only for when every owner is locked out, and it is logged. Server access and GitHub deploy rights go around every role and approval, so keep them with very few people.

@@ -546,34 +546,11 @@ body:has(.dashboard-page) .site-nav .nav-guest {
 
 /* Public pages: editorial serif titles and physical surfaces on the warm canvas. */
 .page-title,
-.prose-page h1,
-.section-heading h2 {
+.prose-page h1 {
   font-family: var(--font-editorial);
   font-weight: 400;
   letter-spacing: -0.02em;
   text-wrap: balance;
-}
-
-.section-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: var(--space-8);
-  margin-bottom: var(--space-12);
-}
-
-.section-heading h2 {
-  max-width: none;
-  margin: 0;
-  font-size: clamp(2.25rem, 4.5vw, 3.75rem);
-  line-height: 1.02;
-}
-
-.section-heading > p {
-  max-width: 22rem;
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.6;
 }
 
 /* Home (the ScreenHome board). The headline, claim field and cards are server HTML. */
@@ -1704,66 +1681,6 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   }
 }
 
-.person-card__photo {
-  aspect-ratio: 4 / 3.4;
-  overflow: hidden;
-  border-radius: var(--radius-card);
-  outline: 1px solid var(--edge-hairline);
-  outline-offset: -1px;
-  background: var(--surface-recessed);
-  box-shadow: var(--shadow-frame);
-}
-
-.person-card__photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 22%;
-}
-
-.person-card__sheet {
-  position: relative;
-  margin: -4rem var(--space-6) 0;
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--edge-hairline);
-  border-radius: 1.25rem;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-card-subtle);
-}
-
-.person-card__kicker {
-  margin: 0 0 var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: 700;
-}
-
-.person-card__sheet h3 {
-  margin: 0 0 var(--space-2);
-  font: 400 1.75rem / 1.1 var(--font-editorial);
-  letter-spacing: -0.015em;
-}
-
-.person-card__sheet p {
-  margin: 0 0 var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
-@media (max-width: 860px) {
-  .section-heading {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-@media (max-width: 30rem) {
-  .person-card__sheet {
-    margin-inline: var(--space-3);
-  }
-}
-
 .profile-cover {
   /* The mockup's frame: 300px tall at 1120 wide, 168px on a phone. Images use object-fit cover
      and the hearts use a slice, so a phone shows the middle of the same artwork. */
@@ -2245,11 +2162,6 @@ body:has(.profile-page) .brand__mark {
   position: relative;
 }
 
-.share-profile--icon {
-  grid-area: share;
-  margin-top: var(--space-2);
-}
-
 .share-profile__icon.tm-button {
   width: 44px;
   min-width: 44px;
@@ -2259,27 +2171,6 @@ body:has(.profile-page) .brand__mark {
 }
 
 /* Over the page rather than in it, so copying moves nothing. */
-.share-profile--icon .share-profile__status:not(:empty) {
-  position: absolute;
-  z-index: 4;
-  top: calc(100% + var(--space-1));
-  right: 0;
-  width: max-content;
-  max-width: min(16rem, calc(100vw - 2rem));
-  margin: 0;
-  padding: 0.375rem 0.625rem;
-  border-radius: 0.5rem;
-  background: var(--text-primary);
-  color: var(--surface-base);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-}
-
-.share-profile--icon .share-profile__status:empty {
-  display: block;
-  position: absolute;
-  margin: 0;
-}
 
 .share-profile--text .tm-button {
   width: 100%;
@@ -2540,10 +2431,6 @@ body:has(.profile-page) .brand__mark {
     font-size: 2.5rem;
   }
 
-  .share-profile--icon {
-    margin: 0 0 var(--space-3);
-  }
-
   .profile-identity h1 {
     font-size: 2.875rem;
   }
@@ -2685,35 +2572,6 @@ body:has(.profile-page) .brand__mark {
   }
 }
 
-.review-panel {
-  display: grid;
-  gap: 1rem;
-}
-
-.review-panel > p {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-
-.review-panel > .review-amount {
-  font-size: 2rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.05em;
-}
-
-.message-preview {
-  margin: 0;
-  padding: 1rem;
-  font-family: var(--font-editorial);
-  font-style: italic;
-  background: var(--surface-subtle);
-  border-radius: var(--radius-sm);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
 .prose-page {
   max-width: 48rem;
   padding-block: 5rem;
@@ -2757,21 +2615,6 @@ body:has(.profile-page) .brand__mark {
   color: var(--brand-ink);
   text-decoration: underline;
   text-underline-offset: 0.2em;
-}
-
-.lead-copy {
-  max-width: 38rem;
-  font-size: var(--text-lg);
-  color: var(--text-secondary);
-  margin-bottom: var(--space-12);
-}
-
-.page-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-6);
-  margin-top: var(--space-12);
 }
 
 .page-title {
@@ -3592,15 +3435,6 @@ body:has(.profile-page) .brand__mark {
 .auth-page,
 .dashboard-page {
   padding: var(--space-12) 0 var(--space-16);
-}
-
-.auth-shell {
-  max-width: 30rem;
-}
-
-.auth-shell h1 {
-  font-size: clamp(1.8rem, 5vw, 2.5rem);
-  letter-spacing: -0.04em;
 }
 
 .auth-lede {
@@ -4632,11 +4466,6 @@ html:has(.confirm-dialog[open]) {
   margin-top: 0;
 }
 
-.proof__ok {
-  color: var(--state-success);
-  font-weight: 700;
-}
-
 /* Dashboard: the recipient's home as physical objects on the canvas. */
 .dashboard-bar {
   display: flex;
@@ -5373,7 +5202,9 @@ html:has(.confirm-dialog[open]) {
   }
 
   html:has(.dashboard-page .dashboard-nav[aria-label='Dashboard'])
-    .update-notice {
+    .update-notice,
+  html:has(.dashboard-page .dashboard-nav[aria-label='Dashboard'])
+    .toast-region {
     bottom: calc(var(--dashboard-tab-bar) + var(--space-3));
   }
 }
@@ -6383,18 +6214,6 @@ html:has(.confirm-dialog[open]) {
 /* Reporting a page (PR-013): quiet, below the preview note, never a primary action. */
 .report-page {
   margin-top: var(--space-2);
-}
-
-.tips-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-4);
-}
-
-.tips-tools .tm-hint {
-  margin: 0;
 }
 
 /* Production launch holding page: one editorial message, expressed as tactile instruments. */
@@ -7892,14 +7711,6 @@ body > .coming-soon-page {
   -webkit-mask: radial-gradient(8px at 12px 100%, transparent 98%, #000) 0 0 /
     24px 100%;
   mask: radial-gradient(8px at 12px 100%, transparent 98%, #000) 0 0 / 24px 100%;
-}
-
-.receipt .receipt__title {
-  margin: 0 0 0.25rem;
-  font: 400 clamp(2.25rem, 8vw, 2.75rem) / 1 var(--font-editorial);
-  font-variant-numeric: lining-nums;
-  letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
 }
 
 .receipt__when {

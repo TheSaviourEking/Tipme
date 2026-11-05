@@ -435,7 +435,7 @@ test('an error says it is on our side and gives a reference', async ({
     page.getByRole('heading', { name: /^This page didn.t load\.$/ }),
   ).toBeVisible();
   await expect(
-    page.getByText(/It.s a problem on our side and your account is fine\./),
+    page.getByText(/It.s a problem on our side\. Try again in a moment\./),
   ).toBeVisible();
   // The digest Next logs on the server for this failure.
   await expect(page.getByText(/^Reference: [0-9a-z]{6,}$/i)).toBeVisible();

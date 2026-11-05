@@ -12,7 +12,8 @@ export const instant = false;
 
 /**
  * Test copies only: fails on the server so the error screen and its reference can be tested in a
- * production build. Same gate as /dev/inbox: a 404 everywhere else.
+ * production build. Same gate as /dev/inbox: a 404 in a production build unless NEXT_PUBLIC_PRETEND_DELIVERY=on
+ * (production must never set it), and open under `next dev`.
  */
 export default async function CrashPage() {
   if (
