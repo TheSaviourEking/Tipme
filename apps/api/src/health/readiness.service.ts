@@ -34,10 +34,18 @@ export class ReadinessService {
   }
 
   private draining = false;
+  private readonly drainListeners: (() => void)[] = [];
+
+  /** Runs once, when draining starts (the live hub closes its streams). */
+  onDrain(listener: () => void): void {
+    this.drainListeners.push(listener);
+  }
 
   /** One-way: once shutdown begins this instance must never report ready again. */
   startDraining(): void {
+    if (this.draining) return;
     this.draining = true;
+    for (const listener of this.drainListeners.splice(0)) listener();
   }
 
   async check(): Promise<ReadinessResponse> {

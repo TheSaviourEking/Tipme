@@ -111,11 +111,14 @@ test('preferences default to on, and only true/false for the four known ones are
   const prefs = await (
     await call('GET', '/v1/me/notification-preferences', cookie)
   ).json();
+  // The pop-up and sound switches (live updates): details shown, sound on, by default.
   assert.deepEqual(prefs.data, {
     tipEmails: true,
     weeklyReports: true,
     milestones: true,
     guideEmails: true,
+    hideTipDetailsInPopups: false,
+    tipSound: true,
   });
   for (const body of [
     {
@@ -141,6 +144,78 @@ test('preferences default to on, and only true/false for the four known ones are
     );
 });
 
+const FOUR = {
+  tipEmails: true,
+  weeklyReports: true,
+  milestones: true,
+  guideEmails: true,
+};
+const readPrefs = async (cookie) =>
+  (await (await call('GET', '/v1/me/notification-preferences', cookie)).json())
+    .data;
+
+test('new accounts read hideTipDetailsInPopups false and tipSound true', async () => {
+  const { cookie } = await recipient('+2348031290011', 'prefs_new');
+  const prefs = await readPrefs(cookie);
+  assert.equal(prefs.hideTipDetailsInPopups, false);
+  assert.equal(prefs.tipSound, true);
+});
+
+test('a PUT with both switches stores them', async () => {
+  const { cookie } = await recipient('+2348031290012', 'prefs_both');
+  const put = await call('PUT', '/v1/me/notification-preferences', cookie, {
+    ...FOUR,
+    hideTipDetailsInPopups: true,
+    tipSound: false,
+  });
+  assert.equal(put.status, 200);
+  assert.deepEqual((await put.json()).data, {
+    ...FOUR,
+    hideTipDetailsInPopups: true,
+    tipSound: false,
+  });
+  assert.deepEqual(await readPrefs(cookie), {
+    ...FOUR,
+    hideTipDetailsInPopups: true,
+    tipSound: false,
+  });
+});
+
+test('a PUT without the new keys (an older client) leaves them unchanged', async () => {
+  const { cookie } = await recipient('+2348031290013', 'prefs_old');
+  await call('PUT', '/v1/me/notification-preferences', cookie, {
+    ...FOUR,
+    hideTipDetailsInPopups: true,
+    tipSound: false,
+  });
+  const put = await call('PUT', '/v1/me/notification-preferences', cookie, {
+    ...FOUR,
+    milestones: false,
+  });
+  assert.equal(put.status, 200);
+  assert.deepEqual(await readPrefs(cookie), {
+    ...FOUR,
+    milestones: false,
+    hideTipDetailsInPopups: true,
+    tipSound: false,
+  });
+});
+
+test('an unknown key is still refused 400', async () => {
+  const { cookie } = await recipient('+2348031290014', 'prefs_unknown');
+  for (const body of [
+    { ...FOUR, tipSoundChoice: 'chime' },
+    { ...FOUR, tipSound: 'yes' },
+    { ...FOUR, hideTipDetailsInPopups: 1 },
+  ])
+    assert.equal(
+      (await call('PUT', '/v1/me/notification-preferences', cookie, body))
+        .status,
+      400,
+      JSON.stringify(body),
+    );
+});
+
 test('turned off: no tip email, no milestone notice, no weekly-report notice or email; the in-app tip notice and the report itself stay', async () => {
   const quiet = await recipient('+2348031290002', 'prefs_quiet');
   const loud = await recipient('+2348031290003', 'prefs_loud');
@@ -156,11 +231,14 @@ test('turned off: no tip email, no milestone notice, no weekly-report notice or 
     },
   );
   assert.equal(saved.status, 200);
+  // The response is always complete: the two pop-up switches keep their defaults.
   assert.deepEqual((await saved.json()).data, {
     tipEmails: false,
     weeklyReports: false,
     milestones: false,
     guideEmails: false,
+    hideTipDetailsInPopups: false,
+    tipSound: true,
   });
 
   await tip('prefs_quiet');

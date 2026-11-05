@@ -35,11 +35,15 @@ type RateLimitedRoute =
   | 'qr_art'
   | 'qr_thumb'
   | 'bank_resolve'
-  | 'bank_read';
+  | 'bank_read'
+  | 'live_connect'
+  | 'live_connect_user';
 
 // Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
 const BANK_RESOLVES_PER_USER_PER_DAY = 10;
 const DAY_MS = 86_400_000;
+// Live stream connects per signed-in person per minute: a tab reconnecting with backoff uses few.
+const LIVE_CONNECTS_PER_USER_PER_MIN = 30;
 
 type LimitedRequest = Request & { auth?: { userId: string } };
 
@@ -102,6 +106,11 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_BANK_READ_PER_MIN,
         windowMs: 60_000,
       });
+    if (route === 'live_connect_user')
+      return this.count(route, `user:${userId}`, {
+        limit: LIVE_CONNECTS_PER_USER_PER_MIN,
+        windowMs: 60_000,
+      });
     if (route === 'bank_resolve') {
       await this.count(route, ip, {
         limit: this.config.RATE_LIMIT_BANK_RESOLVE_PER_HOUR,
@@ -128,6 +137,12 @@ export class RateLimitGuard implements CanActivate {
       },
       analytics: {
         limit: this.config.RATE_LIMIT_ANALYTICS_PER_MIN,
+        windowMs: 60_000,
+      },
+      // Live stream connects, per address and before the session check, so unauthenticated
+      // connects count too. The per-person limit is consumeForPerson('live_connect_user').
+      live_connect: {
+        limit: this.config.RATE_LIMIT_LIVE_CONNECT_PER_MIN,
         windowMs: 60_000,
       },
       // Reporting a page (PR-013): a few an hour from one address is plenty for a real visitor.
@@ -201,12 +216,24 @@ export class RateLimitGuard implements CanActivate {
     return this.count(route, subject, window);
   }
 
-  /** For a route where only some requests count: the limit `ops_request` sets, per person. */
-  async consumeForPerson(route: 'ops_request', userId: string): Promise<void> {
-    await this.count(route, `user:${userId}`, {
-      limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
-      windowMs: 3_600_000,
-    });
+  /**
+   * For a route where only some requests count, or that counts per person only once signed in:
+   * `ops_request` (per hour) and `live_connect_user` (per minute). Both fail open, as count() does.
+   */
+  async consumeForPerson(
+    route: 'ops_request' | 'live_connect_user',
+    userId: string,
+  ): Promise<void> {
+    await this.count(
+      route,
+      `user:${userId}`,
+      route === 'ops_request'
+        ? {
+            limit: this.config.RATE_LIMIT_OPS_REQUEST_PER_HOUR,
+            windowMs: 3_600_000,
+          }
+        : { limit: LIVE_CONNECTS_PER_USER_PER_MIN, windowMs: 60_000 },
+    );
   }
 
   private async count(

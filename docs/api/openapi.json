@@ -1893,6 +1893,43 @@
         ]
       }
     },
+    "/v1/me/events": {
+      "get": {
+        "operationId": "Live.me",
+        "tags": [
+          "Live"
+        ],
+        "responses": {
+          "200": {
+            "description": "A text/event-stream of change signals for the signed-in recipient: `retry: 5000`, then `data: {\"type\":\"ready\"}`, then `data: {\"type\":\"<signal>\"}` lines and a heartbeat (a `: hb` comment and an `hb` event) every 20 s. Signals carry only a type, never data; on one, re-read the matching endpoints. 204 while live updates are off. 429 LIVE_LIMIT past 8 streams for one person; 503 LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "live_connect",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/exports/tips.csv": {
       "get": {
         "operationId": "Dashboard.exportTips",
@@ -2235,6 +2272,12 @@
                     "type": "boolean"
                   },
                   "guideEmails": {
+                    "type": "boolean"
+                  },
+                  "hideTipDetailsInPopups": {
+                    "type": "boolean"
+                  },
+                  "tipSound": {
                     "type": "boolean"
                   }
                 },
@@ -10546,6 +10589,8 @@
                   "PREVIEW_REQUIRED",
                   "PROFILE_NOT_FOUND",
                   "RATE_LIMITED",
+                  "LIVE_LIMIT",
+                  "LIVE_UNAVAILABLE",
                   "DEPENDENCY_UNAVAILABLE",
                   "EMAIL_VERIFICATION_REQUIRED",
                   "PAYMENT_ACCOUNT_REQUIRED",

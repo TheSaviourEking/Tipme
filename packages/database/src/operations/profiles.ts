@@ -8,6 +8,7 @@ import {
   type HandleStatus,
   type MyProfile,
   type NotificationPrefs,
+  type NotificationPrefsView,
   type OpsPage,
   type PagePlan,
   type ProfilePatch,
@@ -1093,7 +1094,7 @@ export function setPageSuspension(
 export function getNotificationPrefs(
   db: Database,
   userId: string,
-): Promise<NotificationPrefs> {
+): Promise<NotificationPrefsView> {
   return guarded(async () =>
     prefsOf((await myRow(db, userId)).profile, await guidesOn(db, userId)),
   );
@@ -1103,7 +1104,7 @@ export function setNotificationPrefs(
   db: Database,
   userId: string,
   prefs: NotificationPrefs,
-): Promise<NotificationPrefs> {
+): Promise<NotificationPrefsView> {
   return guarded(async () => {
     const row = await myRow(db, userId);
     const [updated] = await db
@@ -1112,6 +1113,11 @@ export function setNotificationPrefs(
         notifyTipEmails: prefs.tipEmails,
         notifyWeeklyReports: prefs.weeklyReports,
         notifyMilestones: prefs.milestones,
+        // Set only when sent: an older client that doesn't know them leaves them as they are.
+        ...(prefs.hideTipDetailsInPopups === undefined
+          ? {}
+          : { popupHideTipDetails: prefs.hideTipDetailsInPopups }),
+        ...(prefs.tipSound === undefined ? {} : { tipSound: prefs.tipSound }),
       })
       .where(eq(profiles.id, row.profile.id))
       .returning();
@@ -1139,11 +1145,15 @@ const prefsOf = (
     notifyTipEmails: boolean;
     notifyWeeklyReports: boolean;
     notifyMilestones: boolean;
+    popupHideTipDetails: boolean;
+    tipSound: boolean;
   },
   guideEmails: boolean,
-): NotificationPrefs => ({
+): NotificationPrefsView => ({
   tipEmails: profile.notifyTipEmails,
   weeklyReports: profile.notifyWeeklyReports,
   milestones: profile.notifyMilestones,
   guideEmails,
+  hideTipDetailsInPopups: profile.popupHideTipDetails,
+  tipSound: profile.tipSound,
 });

@@ -11,7 +11,7 @@ import {
   recordProviderEvent,
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
-import { startStack } from './helpers.mjs';
+import { REDIS_URL, Redis, startStack } from './helpers.mjs';
 
 startTelemetry({
   serviceName: 'tipme-integration',
@@ -88,4 +88,50 @@ test('a paid tip reaches the worker through the outbox, carrying its trace, exac
   );
   await sleep(2500);
   assert.equal(received().length, 1);
+});
+
+test('the relay publishes tips.changed only after the claim commits', async (t) => {
+  const subscriber = new Redis(REDIS_URL);
+  t.after(() => subscriber.quit());
+  const seen = [];
+  subscriber.on('message', (_channel, raw) => {
+    const message = JSON.parse(raw);
+    // Read published_at the moment the signal arrives.
+    seen.push(
+      database.pool
+        .query(
+          `SELECT published_at FROM outbox_events
+            WHERE event_type = 'tip.succeeded' AND payload->>'profileId' = $1
+            ORDER BY created_at DESC LIMIT 1`,
+          [message.to.profile],
+        )
+        .then(({ rows }) => ({ message, publishedAt: rows[0]?.published_at })),
+    );
+  });
+  await subscriber.subscribe(`${stack.prefix}:live:v1`);
+  const { quoteId } = await createQuote(database.db, {
+    handle: 'ada',
+    tipMinor: 200000n,
+    currency: 'NGN',
+  });
+  const { attemptId } = await createPaymentIntent(database.db, {
+    quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  await recordProviderEvent(database.db, {
+    provider: 'mock',
+    providerEventId: randomUUID(),
+    eventType: 'payment.succeeded',
+    attemptId,
+    providerReference: `ref-${attemptId}`,
+    amountMinor: 200000n,
+    currency: 'NGN',
+    providerFeeMinor: 1500n,
+    signatureVerified: true,
+    payload: {},
+  });
+  await waitFor(() => seen.length > 0);
+  const [first] = await Promise.all(seen);
+  assert.equal(first.message.type, 'tips.changed');
+  assert.ok(first.publishedAt, 'published_at was set before the signal');
 });

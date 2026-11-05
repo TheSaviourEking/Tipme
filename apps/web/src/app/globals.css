@@ -9264,3 +9264,51 @@ body > .coming-soon-page {
     color: HighlightText;
   }
 }
+
+/* Live updates (EXPERIENCE §7.4). The balance itself never moves: the soft highlight sits on its
+   wrapper for 1 s. A new paid tip row comes down 8px in 240ms with transform only; a newly
+   confirmed row gets the same highlight in place. Reduced motion: no movement, a static highlight. */
+.balance-card__figure {
+  justify-self: start;
+  border-radius: 0.75rem;
+  transition: background-color 150ms ease-out;
+}
+
+.balance-card__figure--rose,
+.activity-list__row--highlighted {
+  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+}
+
+.activity-list__row--arriving,
+.activity-list__row--following {
+  animation: activity-arrive 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes activity-arrive {
+  from {
+    transform: translateY(-8px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-list__row--arriving,
+  .activity-list__row--following {
+    animation: none;
+  }
+
+  .balance-card__figure {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .balance-card__figure--rose,
+  .activity-list__row--highlighted {
+    background: none;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

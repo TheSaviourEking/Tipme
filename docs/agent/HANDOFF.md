@@ -1,6 +1,13 @@
+# Current handoff — live updates PR 1 (5 November 2026)
+
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, merged with `origin/dev` at `527bce9` and pushed with a PR to dev. Nothing ran against staging or production; the Caddyfile and flag are the owner's deploy steps (`docs/runbooks/production.md` §10). No regulatory decision is implied (D-03, D-08, D-11 stay open).
+- Signals only: the browser receives `{type}` and re-reads its existing endpoints. The heartbeat is a `: hb` comment plus a named `hb` event, because EventSource never shows comments to the page.
+- Migration 0075 was regenerated against dev; the strict journal test passes.
+- Verified results and untested areas: `.superpowers/program/c-build-report.md`.
+
 # Current handoff — partner quote cache (5 November 2026)
 
-- Branch `fix/partner-quote-cache`, lane 3. Review: `.superpowers/program/quote-cache-review.md`; build report: `.superpowers/program/quote-cache-report.md`.
+- Branch `fix/partner-quote-cache`, lane 3, merged into dev as PR #118. Review: `.superpowers/program/quote-cache-review.md`; build report: `.superpowers/program/quote-cache-report.md`.
 - The ledger, holds, the switch and the route are read fresh on every quote; only the partner's answer is cached. A failed invalidation can't serve stale data, because the stamp covers every recorded change. A Redis outage means a direct partner call. The Withdraw page reloads its figures after `INSUFFICIENT_BALANCE` or `WITHDRAWAL_TOO_SMALL`.
 - CI follow-up: `e2e (4)` failed its recovery-page axe audit on a social-link chip narrower than the 44px touch target. `apps/web/src/app/globals.css` now sets both minimum dimensions to 44px; the focused desktop recovery test passed on E2E lane 1.
 - Open: changes the partner makes that TipMe hasn't recorded last up to 30 s (the withdrawal still checks fresh). No operation sets `REVERSED` yet (TODO in the test). Use a version counter if a recipient's payout count grows large.

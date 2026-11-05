@@ -14,6 +14,8 @@ import { Moments } from '@/components/dashboard/moments';
 import { PageCard } from '@/components/dashboard/page-card';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
+import { useArrivals, useBalanceRose } from '@/components/live/use-live-merge';
+import { updatedLabel } from '@/lib/live-merge';
 import { change, naira } from '@/lib/money';
 import { recipientReturned, track } from '@/lib/analytics';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -51,15 +53,27 @@ function Tile({
 export default function DashboardHome() {
   const { profile, attention, paymentsNeedSetup } = useRecipient();
   const copy = paymentModeCopy(usePaymentMode());
-  // One loader per panel: each returns its data, an error and reload(), so a later live stream
-  // can call reload() without reworking this page.
-  const balance = usePanel<DashboardSummary>('/v1/me/dashboard');
-  const quote = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote');
-  const recent = usePanel<ActivityRow[]>('/v1/me/activity');
-  const week =
-    usePanel<{ week: string; data: WeeklyReportData }[]>('/v1/me/reports');
+  // One loader per panel, each re-read on its live signals (and every resync or fallback poll).
+  const balance = usePanel<DashboardSummary>('/v1/me/dashboard', {
+    live: ['tips.changed', 'withdrawals.changed'],
+  });
+  // The quote asks the payment partner: re-read on a withdrawal change only, never on every
+  // resync or tab focus (the same rule as the Withdraw page's panels).
+  const quote = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote', {
+    live: ['withdrawals.changed'],
+    resync: false,
+  });
+  const recent = usePanel<ActivityRow[]>('/v1/me/activity', {
+    live: ['tips.changed', 'withdrawals.changed'],
+  });
+  const week = usePanel<{ week: string; data: WeeklyReportData }[]>(
+    '/v1/me/reports',
+    { live: ['reports.changed'] },
+  );
   const summary = balance.data;
   const activity = recent.data;
+  const { arriving, highlighted } = useArrivals(activity);
+  const balanceRose = useBalanceRose(summary);
   const latestWeek = week.data?.[0] ?? null;
   const [shared, setShared] = useState('');
   const firstName = profile.displayName.split(/\s+/)[0];
@@ -99,8 +113,11 @@ export default function DashboardHome() {
   const pageReady =
     profileDetailsComplete && profile.pageState === 'live' && !paymentTodo;
   const live = profile.pageState === 'live';
-  const refreshFailed =
-    balance.error === 'refresh' || recent.error === 'refresh';
+  // When the figures on screen were last read: the older of the two that failed to refresh.
+  const lastRead = [balance, recent]
+    .filter((panel) => panel.error === 'refresh' && panel.updatedAt)
+    .map((panel) => panel.updatedAt as Date)
+    .sort((a, b) => a.getTime() - b.getTime())[0];
   // Pending money is named only when the API reports some, and is never counted as available.
   const pending = summary.confirmingMinor !== '0';
   // "Ready to withdraw" is only what the withdrawal quote allows now (the rule Withdraw uses). The
@@ -120,8 +137,8 @@ export default function DashboardHome() {
       {shared}
     </p>
   );
-  const refreshNote = refreshFailed && (
-    <p className="tm-hint dashboard-refresh-note">Couldn’t refresh</p>
+  const refreshNote = lastRead && (
+    <p className="tm-hint dashboard-refresh-note">{updatedLabel(lastRead)}</p>
   );
 
   return (
@@ -236,10 +253,15 @@ export default function DashboardHome() {
                 <h1 id="balance-label" className="balance-card__label">
                   Your balance
                 </h1>
-                {/* One element, never animated: a refetch must not imply money that is not confirmed. */}
-                <strong data-testid="balance">
-                  {naira(summary.availableMinor)}
-                </strong>
+                {/* One element, never animated: a refetch must not imply money that is not confirmed.
+                    A rise gets a 1 s highlight on the wrapper, never on the number. */}
+                <span
+                  className={`balance-card__figure${balanceRose ? ' balance-card__figure--rose' : ''}`}
+                >
+                  <strong data-testid="balance">
+                    {naira(summary.availableMinor)}
+                  </strong>
+                </span>
                 {withdrawable > BigInt(0) && (
                   <span className="balance-card__note" data-testid="ready">
                     Ready to withdraw {naira(withdrawable.toString())}
@@ -302,7 +324,11 @@ export default function DashboardHome() {
                 <h2 id="recent-title">Your thanks</h2>
                 <Link href="/dashboard/tips">See all tips</Link>
               </div>
-              <ActivityList rows={activity} />
+              <ActivityList
+                rows={activity}
+                arriving={arriving}
+                highlighted={highlighted}
+              />
             </section>
           </>
         )}

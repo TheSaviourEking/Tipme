@@ -26,6 +26,7 @@ import {
   type MyLinksRequest,
   type MyProfile,
   type NotificationPrefs,
+  type NotificationPrefsView,
   type ProfilePatch,
   type TipAmountsRequest,
 } from '@tipme/contracts';
@@ -53,6 +54,8 @@ import {
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { sessionsChanged } from '@tipme/contracts';
 import { ServerEvents } from '../analytics/server-events.js';
 import type { PhotoStore } from '@tipme/database';
 import { PHOTO_STORE } from './photo-store.provider.js';
@@ -71,6 +74,7 @@ export class MeProfileController {
     private readonly revalidator: ProfileRevalidator,
     @Inject(ServerEvents) private readonly events: ServerEvents,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
@@ -111,7 +115,10 @@ export class MeProfileController {
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<MyProfile>> {
     return {
-      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+      data: {
+        ...this.mine(await getMyProfile(this.database.db, auth.userId)),
+        liveUpdates: this.config.LIVE_UPDATES_ENABLED,
+      },
     };
   }
 
@@ -178,7 +185,7 @@ export class MeProfileController {
   @Get('notification-preferences')
   async preferences(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<NotificationPrefs>> {
+  ): Promise<ApiDataResponse<NotificationPrefsView>> {
     return { data: await getNotificationPrefs(this.database.db, auth.userId) };
   }
 
@@ -187,7 +194,7 @@ export class MeProfileController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(notificationPrefsSchema))
     body: NotificationPrefs,
-  ): Promise<ApiDataResponse<NotificationPrefs>> {
+  ): Promise<ApiDataResponse<NotificationPrefsView>> {
     return {
       data: await setNotificationPrefs(this.database.db, auth.userId, body),
     };
@@ -232,5 +239,7 @@ export class MeProfileController {
     });
     this.revalidator.revalidate(handle);
     clearSessionCookie(response, this.config);
+    // Its sessions are gone with the account: every open stream closes.
+    void this.publishLive(sessionsChanged(auth.userId));
   }
 }

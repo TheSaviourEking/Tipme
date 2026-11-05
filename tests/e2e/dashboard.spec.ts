@@ -8,7 +8,7 @@ import {
   tipAsVisitor,
 } from './helpers';
 
-test('a new recipient sees the first-day screen, then their tip, its proof and a withdrawal', async ({
+test('a new recipient sees the first-day screen, then their tip and its proof', async ({
   page,
   browser,
 }, testInfo) => {
@@ -49,6 +49,18 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
   ).toBeVisible();
   await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
   await expectAccessible(page);
+});
+
+test('a recipient withdraws a tip and sees it sent, and the dashboard fits a narrow phone', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.' });
+  await page.goto('/dashboard');
+  await expect(page.getByTestId('balance')).toHaveText('₦1,800', {
+    timeout: 15_000,
+  });
 
   // A withdrawal records the bank it went to, if one was saved.
   await saveBank(handle, 'GTBank', '6789');

@@ -24,6 +24,9 @@ import {
   withdrawState,
 } from '@/lib/withdraw-state';
 
+/** Read once per visit (review I5): see the panels below. */
+const ONCE = { resync: false } as const;
+
 /** Quick amounts, offered only when the balance can cover them with something left over. */
 const SHORTCUTS_MINOR = [BigInt(500_000), BigInt(2_000_000)];
 
@@ -163,10 +166,16 @@ export default function WithdrawPage({
 }) {
   const id = useId();
   const copy = paymentModeCopy(usePaymentMode());
-  const balance = usePanel<DashboardSummary>('/v1/me/dashboard');
-  const latest = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote');
+  // Read once per visit, as before live updates (review I5): the quote asks the payment partner
+  // for its balance, so no resync, safety refresh or fallback poll may repeat it. PR 2 (Task 14)
+  // decides which signals re-read these, behind a shared server cache of that balance.
+  const balance = usePanel<DashboardSummary>('/v1/me/dashboard', ONCE);
+  const latest = usePanel<WithdrawalQuoteResponse>(
+    '/v1/me/withdrawal-quote',
+    ONCE,
+  );
   const firstPath = '/v1/me/withdrawals';
-  const withdrawalsPanel = usePanel<WithdrawalsPage>(firstPath);
+  const withdrawalsPanel = usePanel<WithdrawalsPage>(firstPath, ONCE);
   // Later pages, kept with the list they belong to: a reload starts from the first page again.
   const [more, setMore] = useState<{
     source: WithdrawalsPage;

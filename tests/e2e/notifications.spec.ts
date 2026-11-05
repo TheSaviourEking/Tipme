@@ -159,3 +159,111 @@ test('the settings email section lists security and account mail as always sent'
       .getByLabel('Send me guides and suggestions for getting started'),
   ).not.toBeChecked();
 });
+
+test('Settings shows "Hide who tipped and how much in pop-ups" off and "Sound for new tips" on, and saving keeps them after a reload', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#popups');
+  const card = page.locator('#popups');
+  await expect(
+    card.getByRole('heading', { name: 'Pop-ups and sound' }),
+  ).toBeVisible();
+  const hide = card.getByLabel('Hide who tipped and how much in pop-ups');
+  const sound = card.getByLabel('Sound for new tips');
+  await expect(hide).not.toBeChecked();
+  await expect(sound).toBeChecked();
+  await expect(
+    card.getByText(
+      'For shared screens and shop counters. Your tips list still shows the details.',
+    ),
+  ).toBeVisible();
+  await expect(
+    card.getByText(
+      'Plays once for a new paid tip while TipMe is in a background tab.',
+    ),
+  ).toBeVisible();
+  await expectAccessible(page);
+  await hide.check();
+  await sound.uncheck();
+  await card.getByRole('button', { name: 'Save pop-ups and sound' }).click();
+  await expect(card.getByRole('status')).toHaveText('Saved.');
+  await page.reload();
+  const again = page.locator('#popups');
+  await expect(
+    again.getByLabel('Hide who tipped and how much in pop-ups'),
+  ).toBeChecked();
+  await expect(again.getByLabel('Sound for new tips')).not.toBeChecked();
+  // The emails card saving later keeps these two as they are.
+  await page
+    .locator('#emails')
+    .getByLabel('Tell me about milestones and rewards')
+    .uncheck();
+  await page
+    .locator('#emails')
+    .getByRole('button', { name: 'Save notifications' })
+    .click();
+  await expect(page.locator('#emails').getByRole('status')).toHaveText(
+    'Saved.',
+  );
+  await page.reload();
+  await expect(
+    page
+      .locator('#popups')
+      .getByLabel('Hide who tipped and how much in pop-ups'),
+  ).toBeChecked();
+});
+
+test('while the stream is connected the bell does not poll', async ({
+  page,
+}, testInfo) => {
+  // It watches for 25 s on purpose.
+  test.setTimeout(75_000);
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  // The connect's own resync (debounced 300 ms) has had time to read once.
+  await page.waitForTimeout(1500);
+  let reads = 0;
+  page.on('request', (request) => {
+    if (request.url().includes('/v1/me/notifications?unreadOnly=1')) reads += 1;
+  });
+  // The old 10 s poll would read twice in this time; the 5-minute safety refresh can't come.
+  await page.waitForTimeout(25_000);
+  expect(reads).toBe(0);
+  await expect(page.locator('[data-live="connected"]')).toBeAttached();
+});
+
+test('with "Hide who tipped and how much in pop-ups" on, the toast reads "You got a new tip"', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings#popups');
+  await page
+    .locator('#popups')
+    .getByLabel('Hide who tipped and how much in pop-ups')
+    .check();
+  await page
+    .locator('#popups')
+    .getByRole('button', { name: 'Save pop-ups and sound' })
+    .click();
+  await expect(page.locator('#popups').getByRole('status')).toHaveText(
+    'Saved.',
+  );
+  await page.goto('/dashboard');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByRole('button', { name: /^Notifications,/ }),
+  ).toBeVisible();
+  await tipAsVisitor(browser, handle, { name: 'Bola' });
+  const toast = page.locator('.toast');
+  await expect(toast).toHaveText('You got a new tip', { timeout: 15_000 });
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Bola' }),
+  ).toHaveCount(0);
+});

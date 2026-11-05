@@ -169,6 +169,32 @@ The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xy
 - **Check after step 5:** open `/@<a real handle>` (the line sits under the Tip button), a receipt and `/dashboard`; each shows it with a `mailto:support@usetipme.xyz` link. A brief API outage makes the web treat the copy as closed for a few seconds, and the line disappears with it.
 - Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.
 
+## 10. Live updates: the edge and the flag (owner)
+
+Live updates (spec `docs/superpowers/specs/2026-11-03-live-updates-design.md`) send signed-in dashboards a change signal over `GET /v1/me/events` (`text/event-stream`). They are off until `LIVE_UPDATES_ENABLED=true`; while off, the route answers 204 and pages behave as before.
+
+1. **The edge.** The Caddyfile keeps `/v1/me/events` and `/v1/ops/events` out of `encode` (a compressed stream is held back until a buffer fills). The next production ship validates and reloads it (§3). To apply it before then, as `tipme-prod`:
+
+   ```sh
+   cp deploy/edge/Caddyfile /srv/tipme-edge/Caddyfile
+   docker compose -f deploy/edge/compose.edge.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
+   ```
+
+2. **Staging first.** Set `LIVE_UPDATES_ENABLED=true` in `/srv/tipme/staging.env` and recreate the API.
+3. **Prove the stream through the edge** with a signed-in session cookie from staging (never paste it anywhere else):
+
+   ```sh
+   curl -N -H 'Cookie: tipme_session=…' https://$STAGING_API_HOST/v1/me/events
+   ```
+
+   It must print `retry: 5000`, then `data: {"type":"ready"}`, then `: hb` within 21 s, with no `Content-Encoding` header (`curl -N -D - …` shows the headers).
+
+4. **Watch a week** of `tipme.live.*` on staging (`tipme.live.subscriber` stays 1; `tipme.live.connects{outcome}` shows few `limit_*` or `rate_limited`), then set `LIVE_UPDATES_ENABLED=true` in `production.env` and recreate the API colour.
+
+**The new-tip sound on Safari and iPhone.** WebKit unlocks page audio per media element, through a click or key press on that element's play. The sound is created at the first tip, in a hidden tab, away from any gesture, so on Safari (macOS and every iPhone browser) it will mostly not play. It fails silently, as the owner accepted (DECISION-LOG, 3 Nov 2026). If it is wanted there, the fix is to create the audio element inside the first click or key press and prime it (muted play, then pause).
+
+**To turn it off:** set `LIVE_UPDATES_ENABLED=false` in `production.env` and recreate the API colour. No web deploy is needed: the web app sees 204 and stops trying for that page load.
+
 ### Before deploying the reserved example handles
 
 TipMe's own pages show six example handles, and they are reserved (`RESERVED_HANDLES`). If a real person already owns one, Home advertises that stranger's page. Run this on production before the deploy:

@@ -526,6 +526,13 @@
       "when": 1793865205363,
       "tag": "0074_social_links",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793871494302,
+      "tag": "0075_live_popup_prefs",
+      "breakpoints": true
     }
   ]
 }
