@@ -122,6 +122,10 @@ async function allowApiCalls(context: BrowserContext, webOrigin: string) {
     };
     if (request.method() === 'OPTIONS')
       return route.fulfill({ status: 204, headers: cors });
+    // The live stream never ends, so re-fetching it outlives the page ("Request context
+    // disposed"). 204 is the API's "live updates off": the page carries on without them.
+    if (new URL(request.url()).pathname === '/v1/me/events')
+      return route.fulfill({ status: 204, headers: cors });
     const response = await route.fetch();
     await route.fulfill({
       response,
