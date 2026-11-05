@@ -1,21 +1,35 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { NotificationView } from '@tipme/contracts';
+import {
+  NOTIFICATION_PREFS_CHANGED,
+  type NotificationPrefsView,
+  type NotificationView,
+} from '@tipme/contracts';
 import { Button } from '@tipme/ui';
+import {
+  useKeepStreamOpenWhenHidden,
+  useLiveEvents,
+  useLiveStatus,
+} from '@/components/live/live-provider';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { announce, type AnnouncerState } from '@/lib/tip-announcement';
+import { createTipSound, type TipSound } from '@/lib/tip-sound';
 import type { RecoveryEmailStatus } from '@tipme/contracts';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const POLL_MS = 10_000;
+const TOAST_MS = 8000;
+const MINUTE_MS = 60_000;
 
 /**
- * The one loader for the bell's notifications: the unread list, an error and reload(). It polls
- * while the page is visible (as before); a notification first seen after the page opened is
- * handed to `onFresh` once. This is the only place a new tip is announced.
+ * The one loader for the bell's notifications: the unread list, an error and reload(). It reads
+ * again on `notifications.changed` (and every live resync or fallback poll); its own 10 s poll runs
+ * only where there is no live stream (turned off, or no provider). Notifications first seen after
+ * the page opened are handed to `onFresh` once. This is the only place a new tip is announced.
  */
-function useNotifications(onFresh: (n: NotificationView) => void) {
+function useNotifications(onFresh: (fresh: NotificationView[]) => void) {
   const [unread, setUnread] = useState<NotificationView[]>([]);
   const [error, setError] = useState<'load' | 'refresh' | null>(null);
   const seen = useRef<Set<string> | null>(null);
@@ -41,24 +55,56 @@ function useNotifications(onFresh: (n: NotificationView) => void) {
       seen.current = new Set(result.data.map((n) => n.id));
       return;
     }
-    // A new tip is what the recipient most wants to hear about; then any other news.
     const unseen = result.data.filter((n) => !seen.current?.has(n.id));
-    const news = unseen.find((n) => n.kind === 'tip') ?? unseen[0];
     for (const n of result.data) seen.current.add(n.id);
-    if (news) fresh.current(news);
+    if (unseen.length > 0) fresh.current(unseen);
   }, []);
 
+  useLiveEvents(NOTIFICATIONS_CHANGED, reload);
+  const status = useLiveStatus();
+  const ownPoll = status === 'idle' || status === 'disabled';
   useEffect(() => {
     const first = setTimeout(() => void reload(), 0);
+    return () => clearTimeout(first);
+  }, [reload]);
+  useEffect(() => {
+    if (!ownPoll) return;
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') void reload();
     }, POLL_MS);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
-  }, [reload]);
+    return () => clearInterval(timer);
+  }, [reload, ownPoll]);
   return { data: unread, setData: setUnread, error, reload };
+}
+
+const NOTIFICATIONS_CHANGED = ['notifications.changed'] as const;
+
+/** The pop-up switches, read on mount and whenever Settings saves them (same tab). */
+function usePopupPrefs(): Pick<
+  NotificationPrefsView,
+  'hideTipDetailsInPopups' | 'tipSound'
+> {
+  const [prefs, setPrefs] = useState({
+    hideTipDetailsInPopups: false,
+    tipSound: true,
+  });
+  useEffect(() => {
+    const read = () =>
+      void apiFetch<NotificationPrefsView>(
+        '/v1/me/notification-preferences',
+      ).then((result) => {
+        if (result.ok)
+          setPrefs({
+            // An API without the switches (older copy) answers without them: the defaults.
+            hideTipDetailsInPopups: result.data.hideTipDetailsInPopups ?? false,
+            tipSound: result.data.tipSound ?? true,
+          });
+      });
+    read();
+    window.addEventListener(NOTIFICATION_PREFS_CHANGED, read);
+    return () => window.removeEventListener(NOTIFICATION_PREFS_CHANGED, read);
+  }, []);
+  return prefs;
 }
 
 /** The bell and the "You got a tip" toast. */
@@ -76,13 +122,69 @@ export function NotificationBell() {
   }, [pathname]);
   const [all, setAll] = useState<NotificationView[] | null>(null);
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState<NotificationView | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const { data: unread, setData: setUnread } = useNotifications(setToast);
+  const prefs = usePopupPrefs();
+  const prefsNow = useRef(prefs);
+  useEffect(() => {
+    prefsNow.current = prefs;
+  });
+  const announcer = useRef<AnnouncerState>({ lastAt: null, heldCount: 0 });
+  // Made once the page is in a browser; it arms itself on the first click or key press.
+  const sound = useRef<TipSound | null>(null);
+  useEffect(() => {
+    if (typeof Audio === 'function')
+      sound.current ??= createTipSound({
+        src: '/sounds/new-tip.wav',
+        volume: 0.35,
+        Audio,
+        document,
+      });
+  }, []);
+  // A hidden tab keeps its stream while the sound could play (plan note 3).
+  useKeepStreamOpenWhenHidden(
+    () => Boolean(sound.current?.armed) && prefsNow.current.tipSound,
+  );
+  const [flushAt, setFlushAt] = useState<number | null>(null);
+  const speak = useCallback((fresh: NotificationView[]) => {
+    const result = announce(announcer.current, fresh, Date.now(), {
+      hideDetails: prefsNow.current.hideTipDetailsInPopups,
+    });
+    announcer.current = result.state;
+    if (result.text) setToast(result.text);
+    // Tips held inside the minute are counted out when it ends.
+    setFlushAt(
+      result.state.heldCount > 0 && result.state.lastAt !== null
+        ? result.state.lastAt + MINUTE_MS
+        : null,
+    );
+  }, []);
+  const onFresh = useCallback(
+    (fresh: NotificationView[]) => {
+      speak(fresh);
+      // Tip notifications are written only for paid tips (notifyTipSucceeded): once per arrival.
+      if (fresh.some((n) => n.kind === 'tip'))
+        sound.current?.play({
+          enabled: prefsNow.current.tipSound,
+          isPaidTip: true,
+        });
+    },
+    [speak],
+  );
+  const { data: unread, setData: setUnread } = useNotifications(onFresh);
+
+  useEffect(() => {
+    if (flushAt === null) return;
+    const timer = setTimeout(
+      () => speak([]),
+      Math.max(0, flushAt - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [flushAt, speak]);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 8000);
+    const timer = setTimeout(() => setToast(null), TOAST_MS);
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -167,11 +269,7 @@ export function NotificationBell() {
         </div>
       )}
       <div role="status" className="toast-region">
-        {toast && (
-          <div className="toast">
-            <strong>{toast.title}</strong> · {toast.body}
-          </div>
-        )}
+        {toast && <div className="toast">{toast}</div>}
       </div>
     </div>
   );

@@ -27,6 +27,8 @@ import { apiUrl } from '@/lib/session-client';
 interface LiveContextValue {
   scheduler: RefetchScheduler;
   status: LiveStatus;
+  /** Reasons a hidden tab keeps its stream (the armed tip sound). */
+  keepers: Set<() => boolean>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -86,6 +88,7 @@ export function LiveProvider({
     }),
   );
   const [status, setStatus] = useState<LiveStatus>('idle');
+  const [keepers] = useState(() => new Set<() => boolean>());
   const keepOpen = useRef(keepOpenWhenHidden);
   const signedOut = useRef(onSignedOut);
   useEffect(() => {
@@ -109,7 +112,8 @@ export function LiveProvider({
       random: Math.random,
       visible: () => document.visibilityState === 'visible',
       probe: () => probe(url),
-      keepOpenWhenHidden: () => keepOpen.current?.() ?? false,
+      keepOpenWhenHidden: () =>
+        (keepOpen.current?.() ?? false) || [...keepers].some((keep) => keep()),
     });
     const offs = [
       ...[...LIVE_RECIPIENT_TYPES, ...LIVE_STAFF_TYPES].map((type) =>
@@ -130,10 +134,10 @@ export function LiveProvider({
       for (const off of offs) off();
       client.stop();
     };
-  }, [stream, scheduler, enabled]);
+  }, [stream, scheduler, enabled, keepers]);
 
   return (
-    <LiveContext.Provider value={{ scheduler, status }}>
+    <LiveContext.Provider value={{ scheduler, status, keepers }}>
       <div data-live={status} style={{ display: 'contents' }}>
         {children}
       </div>
@@ -170,4 +174,21 @@ export function useLiveEvents(
 /** 'idle' outside a provider. */
 export function useLiveStatus(): LiveStatus {
   return useContext(LiveContext)?.status ?? 'idle';
+}
+
+/** While `keep()` is true, a hidden tab keeps its stream open past 5 minutes. */
+export function useKeepStreamOpenWhenHidden(keep: () => boolean): void {
+  const keepers = useContext(LiveContext)?.keepers;
+  const latest = useRef(keep);
+  useEffect(() => {
+    latest.current = keep;
+  });
+  useEffect(() => {
+    if (!keepers) return;
+    const entry = () => latest.current();
+    keepers.add(entry);
+    return () => {
+      keepers.delete(entry);
+    };
+  }, [keepers]);
 }

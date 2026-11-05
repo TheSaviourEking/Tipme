@@ -213,3 +213,57 @@ test('Settings shows "Hide who tipped and how much in pop-ups" off and "Sound fo
       .getByLabel('Hide who tipped and how much in pop-ups'),
   ).toBeChecked();
 });
+
+test('while the stream is connected the bell does not poll', async ({
+  page,
+}, testInfo) => {
+  // It watches for 25 s on purpose.
+  test.setTimeout(75_000);
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  // The connect's own resync (debounced 300 ms) has had time to read once.
+  await page.waitForTimeout(1500);
+  let reads = 0;
+  page.on('request', (request) => {
+    if (request.url().includes('/v1/me/notifications?unreadOnly=1')) reads += 1;
+  });
+  // The old 10 s poll would read twice in this time; the 5-minute safety refresh can't come.
+  await page.waitForTimeout(25_000);
+  expect(reads).toBe(0);
+  await expect(page.locator('[data-live="connected"]')).toBeAttached();
+});
+
+test('with "Hide who tipped and how much in pop-ups" on, the toast reads "You got a new tip"', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings#popups');
+  await page
+    .locator('#popups')
+    .getByLabel('Hide who tipped and how much in pop-ups')
+    .check();
+  await page
+    .locator('#popups')
+    .getByRole('button', { name: 'Save pop-ups and sound' })
+    .click();
+  await expect(page.locator('#popups').getByRole('status')).toHaveText(
+    'Saved.',
+  );
+  await page.goto('/dashboard');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByRole('button', { name: /^Notifications,/ }),
+  ).toBeVisible();
+  await tipAsVisitor(browser, handle, { name: 'Bola' });
+  const toast = page.locator('.toast');
+  await expect(toast).toHaveText('You got a new tip', { timeout: 15_000 });
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Bola' }),
+  ).toHaveCount(0);
+});
