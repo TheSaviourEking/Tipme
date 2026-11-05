@@ -5298,6 +5298,25 @@ html:has(.confirm-dialog[open]) {
   margin-right: auto;
 }
 
+/* The admin menu has many links: one row that scrolls sideways (the open page's link is scrolled
+   into view by the shell), never a lone link wrapped onto a second line. */
+.dashboard-nav[aria-label='Admin'] {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.dashboard-nav[aria-label='Admin']::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-nav[aria-label='Admin'] a {
+  flex: none;
+  white-space: nowrap;
+}
+
 .dashboard-nav a,
 .filter-row .tm-button {
   display: inline-flex;

@@ -203,6 +203,39 @@ test('holding only providers.manage or email.read opens those screens', async ({
   }
 });
 
+// The admin menu has many links: it stays one row and scrolls sideways, never wrapping a lone link
+// onto a second line, and the open page's link is always in view.
+for (const [label, width] of [
+  ['desktop', 1280],
+  ['phone', 360],
+] as const)
+  test(`the admin menu is one row on a ${label}, and every link can be reached`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 });
+    await enrolOwner(page, testInfo);
+    await page.goto('/ops');
+    const nav = page.getByRole('navigation', { name: 'Admin' });
+    const links = nav.getByRole('link');
+    // The menu appears once the admin area has loaded.
+    await expect(links.last()).toBeAttached();
+    expect(await links.count()).toBeGreaterThan(5);
+    const tops = await links.evaluateAll((all) =>
+      all.map((link) => Math.round(link.getBoundingClientRect().top)),
+    );
+    expect(new Set(tops).size).toBe(1);
+    // The last link opens its page, and that page's link is scrolled into view.
+    await links.last().click();
+    await expect(
+      page.locator('nav[aria-label="Admin"] [aria-current="page"]'),
+    ).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+
 test('a report after the takeover closed: the card stops pointing at the closed issue, and leads to the new one', async ({
   page,
   browser,
