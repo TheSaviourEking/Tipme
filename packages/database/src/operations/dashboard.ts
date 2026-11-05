@@ -5,6 +5,9 @@ import type {
   MyTipRow,
   TipPurpose,
   TipState,
+  WithdrawalRow,
+  WithdrawalState,
+  WithdrawalsPage,
 } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
@@ -280,6 +283,80 @@ export function myTipDetail(
   });
 }
 
+/** A payout's status as the recipient reads it. */
+const payoutStateSql = sql`CASE p.status WHEN 'PAID' THEN 'sent' WHEN 'FAILED' THEN 'failed'
+                 WHEN 'PROCESSING' THEN
+                   CASE WHEN p.provider_review_at IS NULL THEN 'processing' ELSE 'in_review' END
+                 WHEN 'REVERSED' THEN 'reversed' ELSE 'requested' END`;
+
+/**
+ * The bank a payout recorded when it was requested. A destination row is never edited in place,
+ * so this is never the current bank. The profile check keeps a stray id from showing another
+ * person's bank.
+ */
+const payoutBankJoin = sql`LEFT JOIN payout_destinations d
+                 ON d.id = p.destination_id AND d.profile_id = p.profile_id`;
+
+/** Microseconds kept: a millisecond cursor would skip rows created in the same millisecond. */
+const microsSql = (column: ReturnType<typeof sql.raw>) =>
+  sql`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+const bankOf = (
+  bankName: string | null,
+  last4: string | null,
+): { bankName: string; last4: string } | null =>
+  bankName && last4 ? { bankName, last4 } : null;
+
+/** The recipient's withdrawals, newest request first, each with the bank it went to. */
+export function listMyWithdrawals(
+  db: Database,
+  profileId: string,
+  input: { cursor?: string; limit?: number },
+): Promise<WithdrawalsPage> {
+  const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
+  const after = decodeCursor(input.cursor);
+  return guarded(async () => {
+    const rows = await db.execute<{
+      id: string;
+      requested_at: string;
+      paid_at: string | null;
+      currency: string;
+      amount: string;
+      state: WithdrawalState;
+      bank_name: string | null;
+      last4: string | null;
+    }>(sql`
+      SELECT p.id, ${microsSql(sql.raw('p.created_at'))} AS requested_at,
+             ${microsSql(sql.raw('p.paid_at'))} AS paid_at,
+             p.currency, p.amount_minor::text AS amount, ${payoutStateSql} AS state,
+             d.bank_name, d.account_last4 AS last4
+        FROM payouts p
+        ${payoutBankJoin}
+       WHERE p.profile_id = ${profileId}
+         ${after ? sql`AND (p.created_at, p.id) < (${after.at}::timestamptz, ${after.id}::uuid)` : sql``}
+       -- NULLS LAST spells the index's order (drizzle writes it); both columns are NOT NULL.
+       ORDER BY p.created_at DESC NULLS LAST, p.id DESC NULLS LAST
+       LIMIT ${limit + 1}`);
+    const items: WithdrawalRow[] = rows.rows.slice(0, limit).map((row) => ({
+      payoutId: row.id,
+      requestedAt: row.requested_at,
+      paidAt: row.paid_at,
+      currency: row.currency,
+      amountMinor: row.amount,
+      state: row.state,
+      bank: bankOf(row.bank_name, row.last4),
+    }));
+    const last = items[items.length - 1];
+    return {
+      items,
+      nextCursor:
+        rows.rows.length > limit && last
+          ? encodeCursor(last.requestedAt, last.payoutId)
+          : null,
+    };
+  });
+}
+
 /** Tips and withdrawals together, newest first. */
 export function recentActivity(
   db: Database,
@@ -294,11 +371,14 @@ export function recentActivity(
       amount: string;
       state: string;
       label: string | null;
+      bank_name: string | null;
+      last4: string | null;
     }>(sql`
       SELECT * FROM (
         SELECT 'tip' AS kind, t.id, COALESCE(t.completed_at, t.created_at) AS sort_at,
                to_char(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
-               q.recipient_net_minor::text AS amount, ${stateSql} AS state, t.payer_display_label AS label
+               q.recipient_net_minor::text AS amount, ${stateSql} AS state, t.payer_display_label AS label,
+               NULL::text AS bank_name, NULL::text AS last4
           FROM tips t
           JOIN payment_intents i ON i.id = t.intent_id
           JOIN tip_quotes q ON q.id = i.quote_id
@@ -307,12 +387,11 @@ export function recentActivity(
         SELECT 'withdrawal', p.id, COALESCE(p.paid_at, p.created_at),
                to_char(COALESCE(p.paid_at, p.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
                p.amount_minor::text,
-               CASE p.status WHEN 'PAID' THEN 'sent' WHEN 'FAILED' THEN 'failed'
-                 WHEN 'PROCESSING' THEN
-                   CASE WHEN p.provider_review_at IS NULL THEN 'processing' ELSE 'in_review' END
-                 WHEN 'REVERSED' THEN 'reversed' ELSE 'requested' END,
-               NULL
-          FROM payouts p WHERE p.profile_id = ${profileId}
+               ${payoutStateSql},
+               NULL, d.bank_name, d.account_last4
+          FROM payouts p
+          ${payoutBankJoin}
+         WHERE p.profile_id = ${profileId}
       ) activity
       ORDER BY sort_at DESC LIMIT ${Math.min(Math.max(limit, 1), 50)}`);
     return rows.rows.map((row) => ({
@@ -322,6 +401,7 @@ export function recentActivity(
       amountMinor: row.amount,
       state: row.state,
       supporterLabel: row.label,
+      bank: row.kind === 'withdrawal' ? bankOf(row.bank_name, row.last4) : null,
     }));
   });
 }

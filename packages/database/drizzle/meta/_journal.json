@@ -498,6 +498,13 @@
       "when": 1793579044023,
       "tag": "0070_roles_updated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793839479669,
+      "tag": "0071_payouts_profile_created",
+      "breakpoints": true
     }
   ]
 }
