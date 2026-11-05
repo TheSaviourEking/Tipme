@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { chooseBank } from './bank-fixtures';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 
 const hintOf = (email: string) => {
@@ -41,9 +42,13 @@ test('adding a bank: pick a bank, enter a number, see the name, enter the code, 
     card.getByRole('heading', { name: 'Get paid' }),
   ).toBeInViewport();
 
-  await card.getByLabel('Bank').selectOption({ index: 1 });
+  // The pretend list has 058, so GTBank's key shows, and no other popular key.
+  await card.getByRole('combobox', { name: 'Bank' }).focus();
+  const keys = card.getByRole('group', { name: 'Popular' }).getByRole('option');
+  await expect(keys).toHaveCount(1);
+  await expect(keys).toHaveAccessibleName('GTBank');
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('0123456789');
-  await card.getByRole('button', { name: 'Check account' }).click();
 
   const name = card.getByLabel('Name on the account');
   await expect(name).toHaveValue('PRETEND ACCOUNT HOLDER');
@@ -79,13 +84,50 @@ test('a number the bank does not know: the name is typed instead', async ({
   await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard/settings#get-paid');
   const card = page.locator('#get-paid');
-  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('1234560000');
-  await card.getByRole('button', { name: 'Check account' }).click();
   const name = card.getByLabel('Name on the account');
   await expect(name).toBeEditable();
   await card.getByRole('button', { name: 'Email me a code' }).click();
   await expect(card.getByText('Enter the name on the account.')).toBeVisible();
+});
+
+test('a bank code pasted with a space or a dash still fills all six cells', async ({
+  page,
+  context,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#get-paid');
+  const card = page.locator('#get-paid');
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
+  await card.getByLabel('Account number').fill('0123456789');
+  // The name check runs on its own once a bank and 10 digits are in.
+  await expect(card.getByLabel('Name on the account')).toHaveValue(
+    'PRETEND ACCOUNT HOLDER',
+  );
+  await card.getByRole('button', { name: 'Email me a code' }).click();
+  const field = card.getByLabel('6-digit code');
+  await expect(field).toBeVisible();
+  // A real paste: the browser must not cut "123 456" to "123 45" before the space is stripped.
+  for (const pasted of ['123 456', '123-456', ' 123456 ']) {
+    await page.evaluate(
+      (value) => navigator.clipboard.writeText(value),
+      pasted,
+    );
+    await field.fill('');
+    await field.focus();
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect(field).toHaveValue('123456');
+    await expect(card.locator('.tm-code-cell')).toHaveText([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+    ]);
+  }
 });
 
 test('the code step offers a new code and a way out', async ({
@@ -94,9 +136,8 @@ test('the code step offers a new code and a way out', async ({
   const { email } = await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard/settings#get-paid');
   const card = page.locator('#get-paid');
-  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('0123456789');
-  await card.getByRole('button', { name: 'Check account' }).click();
   await card.getByRole('button', { name: 'Email me a code' }).click();
   await expect(card.getByLabel('6-digit code')).toBeVisible();
   await bankCode(page, email, 0);
@@ -129,6 +170,8 @@ test('after an email change the card says when, and offers no form', async ({
     }),
   );
   await page.goto('/dashboard/settings#get-paid');
+  // Sign-up ends on this page, so the goto above only moved to the anchor: load the stub.
+  await page.reload();
   const card = page.locator('#get-paid');
   await expect(card.getByText(/until .*2030/)).toBeVisible();
   await expect(card.getByText(/keep going to/)).toBeVisible();
@@ -136,5 +179,38 @@ test('after an email change the card says when, and offers no form', async ({
   await expect(
     card.getByRole('button', { name: 'Change bank account' }),
   ).toBeHidden();
+  // No form, so no bank picker either way.
+  await expect(card.getByRole('combobox', { name: 'Bank' })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Bank' })).toHaveCount(0);
   await expectAccessible(page);
+});
+
+test('a rejected bank account says our payment partner can’t pay to it', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.route('**/v1/me/payout-destination', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          destination: {
+            status: 'rejected',
+            bankName: 'Pretend Bank',
+            last4: '6789',
+          },
+          bankChangesFrom: null,
+        },
+      },
+    }),
+  );
+  await page.goto('/dashboard/settings#get-paid');
+  await page.reload();
+  const card = page.locator('#get-paid');
+  await expect(
+    card.getByText(
+      'Our payment partner can’t pay to this account. Please add another.',
+    ),
+  ).toBeVisible();
+  await expect(card).not.toContainText('payment provider can’t pay');
+  await expect(page.locator('body')).not.toContainText(/bachs/i);
 });

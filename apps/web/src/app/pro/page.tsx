@@ -4,7 +4,7 @@ import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
   'Pro',
-  'TipMe Pro: more QR designs, three handle changes, your own tip amounts and no TipMe link on your page. Ask us for Pro.',
+  'TipMe Pro: more QR designs, three handle changes, your own tip amounts, up to 8 links with one featured, and no TipMe link on your page. Ask us for Pro.',
   '/pro',
 );
 
@@ -14,7 +14,7 @@ export const metadata = marketingMetadata(
  */
 export default function ProPage() {
   return (
-    <main id="main" tabIndex={-1} className="pro-page">
+    <main id="main" tabIndex={-1} className="pro-page marketing-page">
       <Container>
         <PlanPreview />
       </Container>

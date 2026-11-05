@@ -1,4 +1,5 @@
 import { ActionLink, Container } from '@tipme/ui';
+import { HeaderClaimGate } from '@/components/header-claim-gate';
 import { HowLever } from '@/components/how-lever';
 import {
   HomeClaim,
@@ -23,8 +24,9 @@ export const metadata = marketingMetadata(
 // server HTML: the headline is the largest paint, so it never waits for client JavaScript.
 export default function Home() {
   return (
-    <main id="main" tabIndex={-1} className="home-page">
+    <main id="main" tabIndex={-1} className="home-page marketing-page">
       <ViewTracker name="landing_viewed" />
+      <HeaderClaimGate />
       <Container>
         <section className="home-hero" aria-labelledby="hero-title">
           <div className="home-hero__copy">

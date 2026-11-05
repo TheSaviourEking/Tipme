@@ -54,6 +54,12 @@ const messages: Record<ApiErrorCode, string> = {
     'You already have this same request waiting. Cancel it first, then you can act.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
+  USERNAME_BUILT_IN:
+    'TipMe’s own list already reserves this username. It can’t be reserved or released here.',
+  USERNAME_RESERVED: 'This username is already reserved.',
+  USERNAME_HELD_BY_PAGE:
+    'A page has this username, now or as an old one. To take it, ask to take it back.',
+  USERNAME_NOT_RESERVED: 'This username isn’t reserved.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
   ROLE_PROTECTED: 'This built-in role can’t be changed.',
   STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
@@ -111,6 +117,10 @@ const messages: Record<ApiErrorCode, string> = {
     'Your sign-in email changed recently, so your bank account can’t be added or changed yet.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   QR_DESIGN_PRO_REQUIRED: 'Saving a Pro QR design is part of TipMe Pro.',
+  SOCIAL_LINK_UNAVAILABLE:
+    'OnlyFans and Fansly links can’t be added right now.',
+  SOCIAL_LINKS_PRO_REQUIRED:
+    'More than 3 links, Pro sites, a featured link and your own order are part of TipMe Pro.',
   QR_ART_PHOTO_REQUIRED:
     'The photo mosaic is made from your page photo. Add a photo to your page first.',
   QR_ART_PHOTO_TOO_LARGE:
@@ -216,6 +226,11 @@ const operationErrors: Partial<
   },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   QR_DESIGN_PRO_REQUIRED: { status: 403, code: 'QR_DESIGN_PRO_REQUIRED' },
+  SOCIAL_LINK_UNAVAILABLE: { status: 409, code: 'SOCIAL_LINK_UNAVAILABLE' },
+  SOCIAL_LINKS_PRO_REQUIRED: {
+    status: 403,
+    code: 'SOCIAL_LINKS_PRO_REQUIRED',
+  },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },
   ENROLMENT_INVALID: { status: 400, code: 'ENROLMENT_INVALID' },
@@ -248,6 +263,10 @@ const operationErrors: Partial<
   SELF_ACCESS_CHANGE: { status: 403, code: 'SELF_ACCESS_CHANGE' },
   ROLE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   ROLE_NAME_TAKEN: { status: 409, code: 'ROLE_NAME_TAKEN' },
+  USERNAME_BUILT_IN: { status: 409, code: 'USERNAME_BUILT_IN' },
+  USERNAME_RESERVED: { status: 409, code: 'USERNAME_RESERVED' },
+  USERNAME_HELD_BY_PAGE: { status: 409, code: 'USERNAME_HELD_BY_PAGE' },
+  USERNAME_NOT_RESERVED: { status: 404, code: 'USERNAME_NOT_RESERVED' },
   ROLE_IN_USE: { status: 409, code: 'ROLE_IN_USE' },
   ROLE_PROTECTED: { status: 409, code: 'ROLE_PROTECTED' },
   STAFF_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },

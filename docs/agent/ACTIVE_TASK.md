@@ -4,6 +4,19 @@
 - Built: the withdrawal quote's partner read (capability, balance, fee) is cached in Redis for `PARTNER_QUOTE_CACHE_SECONDS` (default 30, 0 = off). Every key carries a stamp of TipMe's records. A withdrawal always asks fresh. Review fixes (I-1, M-1 to M-9) are done.
 - Next: PR to `dev`, review and merge. Plan: `docs/superpowers/plans/2026-11-05-partner-quote-cache.md`.
 
+# Current task — social links (5 November 2026)
+
+- Branch/worktree: `feat/social-links` / `.worktrees/social-links`, from `origin/dev` d0325dd. Migration regenerated after merging dev (see the PR).
+- Done: the link catalogue (14 Free sites, 9 Pro, link pages refused); Free and Pro limits enforced on the server, under a row lock; lapsed Pro hides extras and keeps them; Your links editor; the public link row and featured key; the dated decision in `docs/00-DECISIONS.md`. Plan: `docs/superpowers/plans/2026-11-05-social-links.md`.
+- Not done: press counts per link (needs D-07). Report: `.superpowers/program/social-build-report.md`.
+- Next exact step: review, then the PR to dev.
+
+# Current task — bank picker (5 November 2026)
+
+- Branch/worktree: `feat/bank-picker` / `.worktrees/bank-picker`, from `origin/dev` (merged at `e0535cb`), test lane 3. Not pushed. No API, contract, database or migration change.
+- Built: the Get paid card's search-your-bank combobox (A) with popular keys by code, A to Z and More banks, a full-screen sheet on phones, and the name check on its own (C), once per bank and number, with Check again only after a failure. The card's three "payment provider" messages say "our payment partner". Plan: `docs/superpowers/plans/2026-11-05-bank-picker.md`.
+- Next: the owner reviews the `Get paid` group in `review-screens/index.html`, then push and open one PR to `dev`. Build report: `.superpowers/program/bank-build-report.md`.
+
 # Current task — dashboard data (5 November 2026)
 
 - Branch/worktree: `feat/dashboard-data` / `.worktrees/dashboard-data`, from `origin/dev` with `feat/e2e-lanes` merged. Not pushed. Migration 0071 (one index).

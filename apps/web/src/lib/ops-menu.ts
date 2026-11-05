@@ -16,6 +16,7 @@ const LINKS: { href: string; label: string; needs: string[] | null }[] = [
   { href: '/ops/visibility', label: 'Visibility', needs: ['analytics.view'] },
   { href: '/ops/market', label: 'Market', needs: ['analytics.view'] },
   { href: '/ops/pages', label: 'Pages', needs: [...PAGE_CARDS] },
+  { href: '/ops/usernames', label: 'Usernames', needs: ['usernames.manage'] },
   { href: '/ops/search', label: 'Search', needs: ['search.view'] },
   {
     href: '/ops/providers',

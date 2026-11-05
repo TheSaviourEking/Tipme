@@ -5,7 +5,11 @@ import { AvatarImage } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
 import { formatNaira } from '@/lib/demo-amount';
 import { amountOptions } from '@/lib/tip-amounts';
+import { shownLinks } from '@/lib/link-editor';
+import { LinkBadge } from '@/components/profile/link-badge';
+import { SOCIAL_PLATFORMS, linkHandle } from '@tipme/contracts';
 import type { AboutForm } from './my-page';
+import type { LinksDraft } from './your-links';
 
 /**
  * "What supporters see" (ScreenSettings): the page as a phone shows it, drawn from what is typed
@@ -15,12 +19,17 @@ import type { AboutForm } from './my-page';
 export function PagePreview({
   profile,
   about,
+  links,
   cover,
 }: {
   profile: MyProfile;
   about: AboutForm;
+  links: LinksDraft;
   cover: Layer | null;
 }) {
+  const shown = links.show
+    ? shownLinks(links.rows, profile.plan ?? 'free')
+    : [];
   const name = about.displayName.trim() || profile.handle;
   const firstName = name.split(/\s+/)[0] ?? name;
   const options = amountOptions(profile.tipAmounts);
@@ -56,6 +65,19 @@ export function PagePreview({
           )}
           {about.bioPublic && about.bio.trim() && (
             <p className="settings-preview__bio">{about.bio}</p>
+          )}
+          {shown.length > 0 && (
+            <ul className="settings-preview__links">
+              {shown.map((link) => (
+                <li key={link.url} data-featured={link.featured || undefined}>
+                  <LinkBadge platform={link.platform} small />
+                  {link.featured
+                    ? SOCIAL_PLATFORMS[link.platform].featured
+                    : (linkHandle(link) ??
+                      SOCIAL_PLATFORMS[link.platform].label)}
+                </li>
+              ))}
+            </ul>
           )}
           <div className="settings-preview__tip">
             <p className="settings-preview__tip-title">Tip {firstName}</p>
