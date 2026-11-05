@@ -1,4 +1,6 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
+import { FEE_POLICY_V1 } from '@tipme/domain';
+import { formatNaira } from './demo-amount.ts';
 
 const SETTINGS = '/dashboard/settings';
 
@@ -16,14 +18,6 @@ export interface WithdrawState {
   };
   /** The provider itself is checking a withdrawal already under way. */
   review: string | null;
-}
-
-/** ₦1,800 or ₦1,800.50, from the API's decimal string of minor units. */
-export function nairaSign(minor: string): string {
-  const digits = minor.padStart(3, '0');
-  const kobo = digits.slice(-2);
-  const whole = new Intl.NumberFormat('en').format(BigInt(digits.slice(0, -2)));
-  return kobo === '00' ? `₦${whole}` : `₦${whole}.${kobo}`;
 }
 
 const unavailable = {
@@ -123,7 +117,7 @@ export function withdrawState(input: {
       const fee =
         quote.feeMinor === '0'
           ? ''
-          : ` TipMe pays the ${nairaSign(quote.feeMinor)} transfer fee.`;
+          : ` TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee.`;
       return {
         kind: 'ready',
         canWithdraw: true,
@@ -131,10 +125,75 @@ export function withdrawState(input: {
         review,
         notice: {
           title: 'Ready to withdraw',
-          body: `You can withdraw ${nairaSign(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.${fee}`,
+          body: `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.${fee}`,
           tone: 'neutral',
         },
       };
     }
   }
+}
+
+/** Refused before anything was recorded; the page's own state says why, so no message is added. */
+const SHOWN_BY_PAGE: ReadonlySet<string> = new Set([
+  'WITHDRAWALS_PAUSED',
+  'WITHDRAWALS_SWITCHED_OFF',
+  'PAYOUT_SETUP_NEEDED',
+  'PAYOUT_DESTINATION_NEEDED',
+  'PAYOUT_PROVIDER_UNAVAILABLE',
+  'WITHDRAWAL_UNAVAILABLE',
+]);
+
+/**
+ * What the Withdraw page does with a refused request. The amount on screen can be a few seconds
+ * old, because the partner's figures behind a quote are cached briefly; the withdrawal itself is
+ * checked fresh. So a refusal about the amount reloads the figures, and the message stays beside
+ * the new amount instead of a stale one.
+ */
+export function withdrawRefusal(code: string | undefined): {
+  message: string | null;
+  reload: boolean;
+} {
+  if (code !== undefined && SHOWN_BY_PAGE.has(code))
+    return { message: null, reload: true };
+  if (code === 'INSUFFICIENT_BALANCE')
+    return {
+      message: 'That is more than your available balance.',
+      reload: true,
+    };
+  if (code === 'WITHDRAWAL_TOO_SMALL')
+    return {
+      message: `The smallest withdrawal is ${formatNaira(FEE_POLICY_V1.minWithdrawalMinor)}.`,
+      reload: true,
+    };
+  if (code === 'IDEMPOTENCY_CONFLICT')
+    return {
+      message:
+        'This withdrawal may already be on its way. Check your dashboard before asking again.',
+      reload: false,
+    };
+  // Any other failure may have followed a request that arrived. The key stays, so the same amount
+  // again can't withdraw twice, but it must not read as nothing happened.
+  return {
+    message:
+      'We couldn’t confirm your withdrawal. Check your dashboard before trying again.',
+    reload: false,
+  };
+}
+
+/**
+ * The most that can be withdrawn right now: the ledger balance, and no more than the quote allows.
+ * Zero whenever the quote refuses (paused, setup needed, tips still settling, no quote at all).
+ * Withdraw and the dashboard both use this, so neither shows more as ready than the quote allows.
+ */
+export function withdrawableNow(input: {
+  availableMinor: string;
+  withdrawalsAvailable: boolean;
+  quote: WithdrawalQuoteResponse | null;
+}): bigint {
+  const state = withdrawState(input);
+  const { quote } = input;
+  if (!state.canWithdraw || quote?.state !== 'ready') return BigInt(0);
+  const available = BigInt(input.availableMinor);
+  const allowed = BigInt(quote.withdrawableMinor);
+  return allowed < available ? allowed : available;
 }

@@ -10,8 +10,6 @@ test('the Pro page flips a sample page between Free and Pro', async ({
   const plan = page.getByRole('radiogroup', { name: 'Plan' });
   await expect(plan.getByRole('radio', { name: 'Free' })).toBeChecked();
   const main = page.locator('main');
-  const slowLoop = main.getByRole('button', { name: 'Slow loop' });
-  await expect(slowLoop).toHaveAttribute('aria-disabled', 'true');
   await expect(main.getByText('Stays as you claimed it.')).toBeVisible();
   await expect(
     main.getByText('usetipme.xyz/@ada', { exact: true }),
@@ -19,7 +17,6 @@ test('the Pro page flips a sample page between Free and Pro', async ({
 
   await plan.getByRole('radio', { name: 'Pro' }).click();
   await expect(plan.getByRole('radio', { name: 'Pro' })).toBeChecked();
-  await expect(slowLoop).not.toHaveAttribute('aria-disabled', 'true');
   await expect(main.getByText('Changed 0 of 3 times.')).toBeVisible();
   const change = main.getByRole('button', { name: 'Change it' });
   const handles = ['adacuts', 'adaedits', 'adaokafor'];
@@ -113,18 +110,55 @@ test('the Pro page says what animated covers do on each plan', async ({
   await page.goto('/pro');
   const main = page.locator('main');
   const plan = page.getByRole('radiogroup', { name: 'Plan' });
+  const once = main.getByRole('button', { name: 'Plays once' });
+  const loop = main.getByRole('button', { name: 'Slow loop' });
+  // Free: three covers that play once; the loop is shown and cannot be used.
   await expect(
     main.getByText('3 animated covers that play once.'),
   ).toBeVisible();
-  await expect(main.getByRole('button', { name: 'Slow loop' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
+  await expect(once).toHaveAttribute('aria-pressed', 'true');
+  await expect(loop).toHaveAttribute('aria-disabled', 'true');
+  await loop.click({ force: true });
+  await expect(loop).toHaveAttribute('aria-pressed', 'false');
+
   await plan.getByRole('radio', { name: 'Pro' }).click();
   await expect(
     main.getByText('Every design in every colour. Slow loop or Plays once.'),
   ).toBeVisible();
-  await expect(
-    main.getByRole('button', { name: 'Slow loop' }),
-  ).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(loop).not.toHaveAttribute('aria-disabled', 'true');
+  await loop.click();
+  await expect(loop).toHaveAttribute('aria-pressed', 'true');
+  // The sample is the real cover, not a drawing of one.
+  await expect(main.locator('.pro-cover .profile-cover')).toHaveAttribute(
+    'data-cover-play',
+    'loop',
+  );
+});
+
+test('the Pro page sample cover moves only when motion is allowed', async ({
+  page,
+}) => {
+  const running = () =>
+    page
+      .locator('.pro-cover *')
+      .evaluateAll(
+        (nodes) =>
+          nodes.filter((node) =>
+            node
+              .getAnimations()
+              .some((animation) => animation.playState === 'running'),
+          ).length,
+      );
+  const plan = page.getByRole('radiogroup', { name: 'Plan' });
+  // The suite defaults to reduced motion: the sample is a still picture on both plans.
+  await page.goto('/pro');
+  await expect(page.locator('.pro-cover .cover-fx').first()).toBeAttached();
+  for (const name of ['Free', 'Pro']) {
+    await plan.getByRole('radio', { name }).click();
+    expect(await running(), name).toBe(0);
+  }
+  // With motion allowed, the same cover plays.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/pro');
+  await expect.poll(running).toBeGreaterThan(0);
 });

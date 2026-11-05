@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SHARDS = 3;
+const SHARDS = 6;
 
 /** Playwright's own --list, one "[project] › file › title" per test. */
 function listed(args, env = {}) {
@@ -31,9 +31,11 @@ test('CI shards split the suite: each test once, and none far from a fair share'
   assert.deepEqual([...together].sort(), [...whole].sort());
   for (const shard of shards)
     assert.ok(
-      // Serial files stay together, so a share is near even, not exact.
+      // Serial files stay together, so a share is near even, not exact. With six shards a share is
+      // about 64 tests and one serial file (ops-staff, 19 tests) moves a whole block, so the margin
+      // is 20%: about 13 tests, still tighter than the 19 that 15% allowed with three shards.
       Math.abs(shard.length - whole.length / SHARDS) <=
-        (whole.length / SHARDS) * 0.15,
+        (whole.length / SHARDS) * 0.2,
       `${shard.length} of ${whole.length}`,
     );
 });
@@ -51,7 +53,7 @@ test('CI gives @alone its own job in the matrix, not behind a shard', () => {
     new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z-]+:\\n)`).exec(
       ci,
     )?.[1] ?? '';
-  assert.match(job('e2e'), /shard: \[1, 2, 3, alone\]/);
+  assert.match(job('e2e'), /shard: \[1, 2, 3, 4, 5, 6, alone\]/);
   // scripts/test-integration.mjs only takes numbered shards.
   assert.match(job('integration'), /shard: \[1, 2, 3\]/);
   assert.match(ci, /fail-fast: false/);

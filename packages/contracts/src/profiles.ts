@@ -1,41 +1,14 @@
 import { z } from 'zod';
 import type { ResolvedCover } from './covers.js';
 import { qrStyleSchema } from './qr.js';
+import type { ThanksChoice } from './thanks.js';
+import type { SocialLink } from './social-links.js';
 
-/** Social links accepted on a recipient page: https only, on the named site. */
-export const SOCIAL_HOSTS = {
-  facebook: ['facebook.com', 'www.facebook.com'],
-  instagram: ['instagram.com', 'www.instagram.com'],
-  x: ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'],
-} as const;
-export type SocialKind = keyof typeof SOCIAL_HOSTS;
-
-const socialUrl = (kind: SocialKind) =>
-  z
-    .string()
-    .max(200)
-    .refine((value) => {
-      try {
-        const url = new URL(value);
-        return (
-          url.protocol === 'https:' &&
-          !url.username &&
-          !url.password &&
-          (SOCIAL_HOSTS[kind] as readonly string[]).includes(url.hostname)
-        );
-      } catch {
-        return false;
-      }
-    });
-
-export const socialsSchema = z
-  .object({
-    facebook: socialUrl('facebook').optional(),
-    instagram: socialUrl('instagram').optional(),
-    x: socialUrl('x').optional(),
-  })
-  .strict();
-export type Socials = z.infer<typeof socialsSchema>;
+/**
+ * The three fixed links pages had before the catalogue (5 Nov 2026). Kept as a type only: APIs
+ * older than `links` send it, and stale tabs read it from `MyProfile`.
+ */
+export type Socials = Partial<Record<'facebook' | 'instagram' | 'x', string>>;
 
 const optionalText = (max: number) => z.string().trim().max(max).nullable();
 
@@ -45,7 +18,19 @@ export const profilePatchSchema = z
     displayName: z.string().trim().min(1).max(60),
     role: optionalText(60),
     bio: optionalText(280),
-    socials: socialsSchema,
+    /**
+     * Accepted and ignored: Settings tabs opened before social links (5 Nov 2026) still send the
+     * old three links with every About save. Links are saved through PUT /v1/me/links now.
+     * TODO(social-links): remove in the release that drops the `profiles.socials` column.
+     */
+    socials: z
+      .object({
+        facebook: z.string().max(200),
+        instagram: z.string().max(200),
+        x: z.string().max(200),
+      })
+      .partial()
+      .strict(),
     bioPublic: z.boolean(),
     socialsPublic: z.boolean(),
     phonePublic: z.boolean(),
@@ -77,6 +62,12 @@ export interface HandleChanges {
 export interface MyProfile {
   handle: string;
   /**
+   * Whether this API copy serves live updates (LIVE_UPDATES_ENABLED). Only GET /v1/me/profile sets
+   * it; the dashboard opens no stream unless it is true, so with the flag off a page behaves as it
+   * did before the feature. Optional: an older API has no live updates.
+   */
+  liveUpdates?: boolean;
+  /**
    * Old handles that still lead to this page (PR-011), oldest first. Optional until the release
    * after PR-011: the web app deploys before the API, so it may talk to an API without it.
    */
@@ -84,7 +75,18 @@ export interface MyProfile {
   displayName: string;
   role: string | null;
   bio: string | null;
+  /** Deprecated: the first Facebook, Instagram and X links, for tabs opened before `links`. */
   socials: Socials;
+  /**
+   * Every stored link in order, hidden ones included (a lapsed Pro page keeps them). Optional
+   * until the release after this one: the web app deploys before the API.
+   */
+  links?: SocialLink[];
+  /**
+   * False while this copy has OnlyFans and Fansly links switched off (ADULT_PLATFORM_LINKS):
+   * they can't be added and don't show. Absent means allowed.
+   */
+  adultLinks?: boolean;
   bioPublic: boolean;
   socialsPublic: boolean;
   phonePublic: boolean;
@@ -119,6 +121,11 @@ export interface MyProfile {
     motion?: 'once' | 'loop' | null;
     hasPhoto: boolean;
   };
+  /**
+   * The thank-you line and its card, as stored: Pro parts are kept (and sent) after a page leaves
+   * Pro, so Settings can say they are kept. Optional: an older API sends none.
+   */
+  thanks?: ThanksChoice;
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
@@ -130,7 +137,10 @@ export interface PublicProfile {
   note?: string;
   avatarPath?: string;
   bio?: string;
+  /** Sent by APIs older than `links` only. */
   socials?: Socials;
+  /** The links this page's plan shows, in order (see `visibleLinks`). */
+  links?: SocialLink[];
   phone?: string;
   email?: string;
   /** A moment the recipient chose to share, for 14 days ("add to the celebration"). */
@@ -195,6 +205,20 @@ export const notificationPrefsSchema = z
     milestones: z.boolean(),
     /** Guides and suggestions (engagement mail without a switch of its own). */
     guideEmails: z.boolean(),
+    /**
+     * "Hide who tipped and how much in pop-ups". Off by default. Optional, so an older client's PUT
+     * still validates and leaves it as it was.
+     */
+    hideTipDetailsInPopups: z.boolean().optional(),
+    /**
+     * "Sound for new tips". On by default. A boolean for now; a choice of sounds was shown to the
+     * owner but is not approved, and would arrive as a separate optional field.
+     */
+    tipSound: z.boolean().optional(),
   })
   .strict();
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
+/** What GET and PUT return: always complete. */
+export type NotificationPrefsView = Required<NotificationPrefs>;
+/** A window event (same tab): the notification preferences were just saved. */
+export const NOTIFICATION_PREFS_CHANGED = 'tipme:notification-prefs-changed';

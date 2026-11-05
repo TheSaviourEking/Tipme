@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { Button } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
+import { TIPME_SHARE_PERCENT } from '@/lib/fee-share';
 import { DemoStack, PersonCard } from './demo-cards';
 import { IndigoQr } from './marketing/indigo-qr';
 
@@ -12,7 +13,7 @@ import { IndigoQr } from './marketing/indigo-qr';
    (how-lever.tsx), so the headline and the claim field never wait for client JavaScript. */
 
 /** TipMe's share as a whole percentage, from the fee policy. */
-export const TIPME_SHARE_PERCENT = Number(FEE_POLICY_V1.tipmeShareBps) / 100;
+export { TIPME_SHARE_PERCENT };
 const naira = (minor: bigint) => formatNaira(Number(minor));
 // The three standard amounts; the middle one is shown chosen in the pictures.
 const [SMALL_TIP, DEFAULT_TIP, LARGE_TIP] = STANDARD_TIP_PRESETS_MINOR;
@@ -86,6 +87,11 @@ const ZAINAB_AMOUNTS = [
   { key: '₦1M', full: '₦1,000,000' },
 ];
 
+// Zainab's card is the one on screen first, so its images load eagerly. No fetchPriority: the lab
+// harness shows no gain (the LCP element is the headline) and a high-priority image can compete with
+// the CSS and font the headline needs on a slow link.
+const ABOVE_THE_FOLD = { loading: 'eager' as const };
+
 /**
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
  * technology and holds nothing focusable.
@@ -117,6 +123,7 @@ export function HomeDemo() {
               alt=""
               fill
               sizes="(max-width: 75rem) 90vw, 320px"
+              {...ABOVE_THE_FOLD}
               className="home-demo__img"
             />
           }
@@ -127,6 +134,7 @@ export function HomeDemo() {
               width={92}
               height={92}
               sizes="92px"
+              {...ABOVE_THE_FOLD}
               className="home-demo__img"
             />
           }
@@ -318,7 +326,7 @@ export function TippedSteps() {
 /** What a supporter does, in three steps. */
 export function TippingSteps() {
   return (
-    <ol className="home-steps" aria-label="Steps if you're tipping">
+    <ol className="home-steps" aria-label="Steps if you’re tipping">
       <Step title="Scan or tap" tone="soft" media={<ScannedQr />}>
         Scan their QR code or open their link. No app, no account.
       </Step>

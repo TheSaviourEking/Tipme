@@ -14,6 +14,8 @@ import { readCookie, SESSION_COOKIE } from './cookies.js';
 export interface AuthContext {
   userId: string;
   sessionId: string;
+  /** When the session ends; a live stream never outlives it. */
+  expiresAt?: Date;
 }
 type AuthedRequest = Request & { auth?: AuthContext };
 

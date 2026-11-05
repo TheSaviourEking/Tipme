@@ -44,16 +44,16 @@ Use the existing tokens. Don't add a duration without a decision-log entry.
 
 ## 4. Touch and press
 
-| Element                     | Behaviour                                                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Raised button or key        | Press moves it 1–2px toward the canvas and reduces its shadow in 100ms. Release takes 150ms.                          |
-| Amount key selected         | Purple fill arrives in 150ms and the dot appears at the same moment. The total updates at once, with no fade.         |
-| Busy button                 | The label stays and a quiet indicator appears after 300ms, so fast actions never flicker. The button keeps its width. |
-| Field error                 | Text appears in 240ms with a colour change. No shaking. Focus moves to the field.                                     |
-| Switch or segmented control | The thumb or pill slides in 150ms, with the text changing immediately.                                                |
-| Copy link                   | The label changes to "Link copied." for 2 seconds. The button keeps its width.                                        |
-| Vibration                   | One 10ms tick on confirmed thanks only, where the device supports it. Never for errors or routine taps.               |
-| Sound                       | None.                                                                                                                 |
+| Element                     | Behaviour                                                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Raised button or key        | Press moves it 1–2px toward the canvas and reduces its shadow in 100ms. Release takes 150ms.                               |
+| Amount key selected         | Purple fill arrives in 150ms and the dot appears at the same moment. The total updates at once, with no fade.              |
+| Busy button                 | The label stays and a quiet indicator appears after 300ms, so fast actions never flicker. The button keeps its width.      |
+| Field error                 | Text appears in 240ms with a colour change. No shaking. Focus moves to the field.                                          |
+| Switch or segmented control | The thumb or pill slides in 150ms, with the text changing immediately.                                                     |
+| Copy link                   | The label changes to "Link copied." for 2 seconds. The button keeps its width.                                             |
+| Vibration                   | One 10ms tick on confirmed thanks only, where the device supports it. Never for errors or routine taps.                    |
+| Sound                       | One soft sound for a new paid tip in a background tab, if the recipient's 'Sound for new tips' switch is on. Nothing else. |
 
 Hover effects are subtle and never carry information. Everything must also work by touch and keyboard.
 

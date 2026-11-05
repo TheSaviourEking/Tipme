@@ -1,5 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Browser, type Page } from '@playwright/test';
+import {
+  expect,
+  type Browser,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import { tipFromProfile } from '../shared/tip-flow';
 
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -137,3 +142,19 @@ export async function tipAsVisitor(
   });
   await context.close();
 }
+
+/**
+ * How an error reads (states plan, PR A review I2). Beside an invalid field the line is black and
+ * the field carries the red edge; a line with no field edge beside it keeps the red.
+ */
+export const DANGER_TEXT = 'rgb(155, 40, 32)';
+export const PLAIN_TEXT = 'rgb(0, 0, 0)';
+export const errorColour = (line: Locator) =>
+  line.evaluate((el) => getComputedStyle(el).color);
+/** True when the field shows B's red edge: the inset lamp-red line on its left. */
+export const hasRedEdge = (field: Locator) =>
+  field.evaluate((el) =>
+    /rgb\(194, 56, 44\) 3px 0px 0px 0px inset|inset 3px 0px 0px 0px rgb\(194, 56, 44\)/.test(
+      getComputedStyle(el).boxShadow,
+    ),
+  );

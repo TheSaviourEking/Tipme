@@ -1,7 +1,13 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
+import {
+  DANGER_TEXT,
+  errorColour,
+  expectAccessible,
+  fitsViewport,
+  signUpRecipient,
+} from './helpers';
 import { sql } from './ops-helpers';
 import { UNBROKEN_NAME } from './profile-fixtures';
 import { API_ORIGIN } from './stack';
@@ -35,7 +41,7 @@ const coverPhoto = () =>
 const preview = (page: Page) => page.getByTestId('cover-preview');
 const shown = (page: Page) => preview(page).locator('[data-profile-cover]');
 const AUTOMATIC = /^(scattered|large|rising)$/;
-const HINT = "If you don't choose, we'll pick one for your page.";
+const HINT = 'If you don’t choose, we’ll pick one for your page.';
 
 /** The public page, seen by a visitor, once it has caught up with the owner's change. */
 async function publicCover(browser: Browser, handle: string, want: string) {
@@ -190,6 +196,14 @@ test('a bad file shows the same plain errors as photos', async ({
       hasText: 'Please choose a JPEG, PNG or WebP photo.',
     }),
   ).toBeVisible();
+  // An upload has no field edge, so its line keeps the red (PR A review I2).
+  expect(
+    await errorColour(
+      page.getByRole('alert').filter({
+        hasText: 'Please choose a JPEG, PNG or WebP photo.',
+      }),
+    ),
+  ).toBe(DANGER_TEXT);
 
   await upload.setInputFiles({
     name: 'huge.jpg',
@@ -283,6 +297,40 @@ test('a saved design can be given up for the automatic cover', async ({
   await expectAccessible(page);
 });
 
+test('a photo that fails to save keeps its error line red', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  await page.route('**/v1/me/avatar', (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({
+          status: 503,
+          json: { error: { code: 'SERVICE_UNAVAILABLE', message: 'x' } },
+        })
+      : route.fallback(),
+  );
+  const photo = await sharp({
+    create: {
+      width: 400,
+      height: 400,
+      channels: 3,
+      background: { r: 122, g: 50, b: 249 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
+  await page.getByLabel('Choose a photo').setInputFiles({
+    name: 'me.jpg',
+    mimeType: 'image/jpeg',
+    buffer: photo,
+  });
+  const line = page.locator('#photo .tm-field-error');
+  await expect(line).toBeVisible();
+  // No field edge beside it, so it keeps the red until the settings batch (PR A review I2).
+  expect(await errorColour(line)).toBe(DANGER_TEXT);
+});
+
 test('removing the page photo keeps focus in the Photo card', async ({
   page,
 }, testInfo) => {
@@ -309,10 +357,11 @@ test('removing the page photo keeps focus in the Photo card', async ({
   await expect(page.getByLabel('Choose a photo')).toBeFocused();
 });
 
-// Settings and the page editor (ScreenSettings): six sections on one page, each reached by its
+// Settings and the page editor (ScreenSettings): seven sections on one page, each reached by its
 // link, and a live preview of the page that follows unsaved edits and saves nothing itself.
 const SECTIONS: [string, string][] = [
   ['My page', 'page'],
+  ['Make it yours', 'yours'],
   ['Getting paid', 'paid'],
   ['Notifications', 'notifications'],
   ['Sign-in and security', 'security'],
@@ -351,14 +400,14 @@ async function reachEachSection(page: Page) {
   await expectAccessible(page);
 }
 
-test('settings has six sections, each reachable by its link', async ({
+test('settings has seven sections, each reachable by its link', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo);
   await reachEachSection(page);
 });
 
-test('settings has six sections on a phone, each reachable by its link @mobile', async ({
+test('settings has seven sections on a phone, each reachable by its link @mobile', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo);

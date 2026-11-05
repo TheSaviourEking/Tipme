@@ -336,3 +336,15 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   ).toBeVisible();
   await expect(heading).toBeFocused();
 });
+
+test('the Plan section lists card styles and a signature among Pro features', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#plan');
+  const pro = page.locator('#pro');
+  await expect(pro.getByRole('listitem')).toContainText([
+    'Card styles and your signature on your thank-you',
+  ]);
+  await expect(pro).not.toContainText('₦');
+});

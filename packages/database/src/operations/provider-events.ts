@@ -46,6 +46,8 @@ export interface EventResult {
   outcome: EventOutcome;
   tipStatus: string;
   attemptStatus: string;
+  /** The tip's page, so a caller can signal it after the commit (additive). */
+  profileId: string;
 }
 
 interface Locked {
@@ -203,6 +205,7 @@ export async function recordProviderEvent(
           outcome: changed ? ('conflict' as const) : ('duplicate' as const),
           tipStatus: state.tip.status,
           attemptStatus: state.attempt.status,
+          profileId: state.tip.profileId,
         };
       }
 
@@ -219,6 +222,7 @@ export async function recordProviderEvent(
         outcome,
         tipStatus: after?.tip.status ?? state.tip.status,
         attemptStatus: after?.attempt.status ?? state.attempt.status,
+        profileId: state.tip.profileId,
       };
     }),
   );

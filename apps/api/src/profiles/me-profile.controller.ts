@@ -16,15 +16,20 @@ import {
 import {
   claimHandleSchema,
   deleteAccountSchema,
+  myLinksSchema,
   pageStateSchema,
   profilePatchSchema,
   notificationPrefsSchema,
   renameHandleSchema,
+  thanksPatchSchema,
   tipAmountsSchema,
   type ApiDataResponse,
+  type MyLinksRequest,
   type MyProfile,
   type NotificationPrefs,
+  type NotificationPrefsView,
   type ProfilePatch,
+  type ThanksPatch,
   type TipAmountsRequest,
 } from '@tipme/contracts';
 import {
@@ -34,8 +39,10 @@ import {
   getNotificationPrefs,
   setNotificationPrefs,
   renameHandle,
+  setMyLinks,
   setTipAmounts,
   setPageState,
+  setThanks,
   updateMyProfile,
 } from '@tipme/database';
 import type { Response } from 'express';
@@ -50,6 +57,8 @@ import {
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { sessionsChanged } from '@tipme/contracts';
 import { ServerEvents } from '../analytics/server-events.js';
 import type { PhotoStore } from '@tipme/database';
 import { PHOTO_STORE } from './photo-store.provider.js';
@@ -68,10 +77,16 @@ export class MeProfileController {
     private readonly revalidator: ProfileRevalidator,
     @Inject(ServerEvents) private readonly events: ServerEvents,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
   ) {}
+
+  /** The editor needs to know whether OnlyFans and Fansly links can be added on this copy. */
+  private mine(profile: MyProfile): MyProfile {
+    return { ...profile, adultLinks: this.config.ADULT_PLATFORM_LINKS };
+  }
 
   @Post('page')
   async claim(
@@ -93,14 +108,21 @@ export class MeProfileController {
       `profile_created.${profileId}`,
       profileId,
     );
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
   }
 
   @Get('profile')
   async profile(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<MyProfile>> {
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: {
+        ...this.mine(await getMyProfile(this.database.db, auth.userId)),
+        liveUpdates: this.config.LIVE_UPDATES_ENABLED,
+      },
+    };
   }
 
   @Patch('profile')
@@ -110,7 +132,23 @@ export class MeProfileController {
   ): Promise<ApiDataResponse<MyProfile>> {
     const updated = await updateMyProfile(this.database.db, auth.userId, body);
     this.revalidator.revalidate(updated.handle);
-    return { data: updated };
+    return { data: this.mine(updated) };
+  }
+
+  /**
+   * The page's links, whole and in order (SocialLinks board). Free: 3 from Free sites, in catalogue
+   * order; more, Pro sites, a featured link or another order are refused (SOCIAL_LINKS_PRO_REQUIRED).
+   */
+  @Put('links')
+  async links(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(myLinksSchema)) body: MyLinksRequest,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const updated = await setMyLinks(this.database.db, auth.userId, body, {
+      adultLinks: this.config.ADULT_PLATFORM_LINKS,
+    });
+    this.revalidator.revalidate(updated.handle);
+    return { data: this.mine(updated) };
   }
 
   /** Changes the handle; the old one keeps leading here (PR-011). Both cached pages refresh. */
@@ -128,7 +166,9 @@ export class MeProfileController {
       this.revalidator.revalidateGone(previous);
       this.revalidator.revalidate(handle);
     }
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
   }
 
   /** A Pro page's own preset amounts and minimum (PR-012); refused on Free (PRO_REQUIRED). */
@@ -142,13 +182,28 @@ export class MeProfileController {
       minTipMinor: BigInt(body.minMinor),
     });
     this.revalidator.revalidate(updated.handle);
+    return { data: this.mine(updated) };
+  }
+
+  /**
+   * The thank-you line on the supporter's receipt ("Make it yours"). Any plan saves the line; a
+   * card style or signature on Free is THANKS_PRO_REQUIRED.
+   */
+  @Put('thanks')
+  async thanks(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(thanksPatchSchema)) body: ThanksPatch,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const updated = await setThanks(this.database.db, auth.userId, body);
+    // The public page does not show the line; kept so live updates' profile.changed has one place.
+    this.revalidator.revalidate(updated.handle);
     return { data: updated };
   }
 
   @Get('notification-preferences')
   async preferences(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<NotificationPrefs>> {
+  ): Promise<ApiDataResponse<NotificationPrefsView>> {
     return { data: await getNotificationPrefs(this.database.db, auth.userId) };
   }
 
@@ -157,7 +212,7 @@ export class MeProfileController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(notificationPrefsSchema))
     body: NotificationPrefs,
-  ): Promise<ApiDataResponse<NotificationPrefs>> {
+  ): Promise<ApiDataResponse<NotificationPrefsView>> {
     return {
       data: await setNotificationPrefs(this.database.db, auth.userId, body),
     };
@@ -182,7 +237,9 @@ export class MeProfileController {
         `profile_published.${profileId}`,
         profileId,
       );
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
   }
 
   @Delete('account')
@@ -200,5 +257,7 @@ export class MeProfileController {
     });
     this.revalidator.revalidate(handle);
     clearSessionCookie(response, this.config);
+    // Its sessions are gone with the account: every open stream closes.
+    void this.publishLive(sessionsChanged(auth.userId));
   }
 }

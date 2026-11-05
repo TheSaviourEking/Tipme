@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { FreshCodePrompt } from '@/components/ops/fresh-code';
@@ -94,6 +94,15 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
   const mode = usePaymentMode();
   const pathname = usePathname();
   const [state, setState] = useState<State>({ step: 'loading' });
+  const menu = useRef<HTMLElement>(null);
+  const granted = state.step === 'granted';
+  // The admin menu scrolls sideways: keep the open page's link in view.
+  useEffect(() => {
+    if (!granted) return;
+    menu.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [granted, pathname]);
 
   const apply = useCallback(
     (next: State | 'signed_out') => {
@@ -154,7 +163,7 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
         {state.step === 'granted' && (
           <>
             <div className="dashboard-bar">
-              <nav aria-label="Admin" className="dashboard-nav">
+              <nav aria-label="Admin" className="dashboard-nav" ref={menu}>
                 {opsMenu(state.access.permissions).map((link) => (
                   <Link
                     key={link.href}

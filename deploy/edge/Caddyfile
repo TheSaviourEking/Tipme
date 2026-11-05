@@ -12,7 +12,9 @@
 }
 
 {$STAGING_API_HOST} {
-	encode zstd gzip
+	# A compressed event stream is held back until a buffer fills; the stream paths stay plain.
+	@compressible not path /v1/me/events /v1/ops/events
+	encode @compressible zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
@@ -29,7 +31,9 @@
 # Caddy's active health checks do not cover dynamic upstreams, and a copy that is not ready
 # (starting, draining) must get no traffic. Adding a copy means adding a line here.
 {$PRODUCTION_API_HOST} {
-	encode zstd gzip
+	# A compressed event stream is held back until a buffer fills; the stream paths stay plain.
+	@compressible not path /v1/me/events /v1/ops/events
+	encode @compressible zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff

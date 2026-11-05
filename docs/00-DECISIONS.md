@@ -128,6 +128,33 @@
 
 > **Withdrawals switch: the owner's decision, 1 Nov 2026 ("we should be able to switch of withdrawals toooo").** Staff with `payouts.resolve` can stop all withdrawals from the Overview with a written reason, audited and alerted, on every copy at once, with no deploy. It is independent of `PAYMENTS_LIVE_ENABLED`. While off, requests are refused and queued payouts wait, reserved; payouts already with the provider can't be recalled and keep settling. The same D-06 limit applies: this doesn't approve holds.
 
+> **Social links: the owner's product decision, 5 Nov 2026.** The owner approved the SocialLinks board (design artifact 8D6hJZsqMkLSGh8KUUBmmh, version 97) as designed. This is a product decision. It is not legal advice, and it is not a regulatory or payment-partner approval.
+> - **Free:** up to 3 links, from TikTok, Facebook, Instagram, YouTube, X, Snapchat, WhatsApp channel, Twitch, Kick, Audiomack, Boomplay, Spotify, Apple Music and SoundCloud.
+> - **Pro:** also own website, Telegram, LinkedIn, Threads, Patreon, Selar and Substack. Up to 8 links, a featured link, and the page's own order.
+> - **Adult platforms:** OnlyFans and Fansly links are allowed **for Pro only**. This is the owner's product decision, not legal or regulatory approval.
+> - **Never allowed:** Linktree and other link-list pages, and URL shorteners, as any site or as a website.
+> - **When Pro lapses:** the extra links are hidden, not deleted. The page shows the first 3 Free-site links in the saved order, without the featured styling.
+>   - **Removing them (review ruling, 5 Nov 2026):** the Free editor lists the hidden links, each with Remove. A Free page may delete them, but may never add them or make them show.
+>   - **Removing a shown link:** a hidden Free-site link may then move up to fill the slot. The editor says so before the save.
+>   - **Pro sites on Free:** they never show on a Free page, including OnlyFans and Fansly.
+> - **Adult-platform switch:** `ADULT_PLATFORM_LINKS` (`on` by default, an API setting). When `off`, OnlyFans and Fansly links are hidden from public pages and can't be added, and nothing is deleted. This is the lever for when the payment partner answers (`docs/runbooks/adult-platform-links.md`).
+> - **Still open:**
+>   - our payment partner's written position on pages that link to adult platforms;
+>   - the acceptable-use section of the Terms, which is still only a heading (`apps/web/src/app/legal/terms/page.tsx`).
+> - **Builder's calls (PROPOSED):**
+>   - **Accepted addresses:** each site's own https addresses, as listed in `packages/contracts/src/social-links.ts`, with the sources in the build report.
+>   - **WhatsApp:** channel links only.
+>   - **Telegram:** public usernames only, not invite links.
+>   - **Order on Free:** the catalogue order.
+>   - **Featured key:** fixed wording for each site, with no free text.
+>   - **Letter badges** in place of brand logos.
+>   - **A Free save on a lapsed Pro page:** it keeps the hidden links. The page then stores at most 11.
+> - **Shipped without press counts per link:**
+>   - **Why:** they wait on the owner's D-07 decision on anonymous collection in production, which is already in front of the owner on the ProAdditions board. Analytics is staff-only today, and a count per link shown to recipients would be a new use of visitor data.
+>   - **Follow-up:** add the counts once D-07 is decided.
+> - **Order on Free:** existing pages showed X first (the database's own key order, which no one chose). They now show Facebook, Instagram, X, the order the old editor listed them in. Say so in the release notes.
+> - **Release compatibility (one release):** links saves also write the old `socials` column from what shows, so a rollback stays truthful. The profile form takes and ignores the old links, so tabs opened before the release still save. Both are marked TODO, to remove with the column.
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 
@@ -140,3 +167,11 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 > - **QR designs are Pro; Free gets a marked preview.** Builder's call. A Pro code printed earlier keeps working after Pro ends.
 > - **Privacy line, and the 500-cover R2 threshold** (turn R2 on before many covers are uploaded, because Postgres dumps grow): builder's calls. The Privacy page wording is not changed and stays for the owner's approval.
 > - **Still open (owner):** the final list of designs; whether staff may remove an uploaded image, and the wording of the email the owner receives; the Pro price, billing and how someone buys Pro (until then staff switch Pro on, and no screen names a price); the Privacy page wording; approval of the payment wording.
+
+> **Make it yours (owner's request, 5 Nov 2026: "work on what can be customized").** A product and visual decision, not a legal, regulatory or provider approval. No D-item changes, and nothing about fees, the minimum, checkout, money or the ledger changes. Plan: `docs/superpowers/plans/2026-11-05-make-it-yours.md`; boards in `docs/design/redesign/boards/` (`ProCustomise`, `ProStartAmount`, `AppreciationDetails`).
+> - **A thank-you line on the supporter's receipt.** Free: the line, up to 140 characters, no links. Pro: also one of three card styles (Paper, Violet, Night) and a signature (the first word of the display name, read at view time). The receipt shows the line as it is now, not frozen per tip.
+> - **Accent colour (Pro).** Follows the cover colour; a photo or colourless cover uses TipMe purple, and nothing new is stored. Only the selected amount key and the pinned note's marks are tinted; the Tip button stays black.
+> - **One pinned note (Pro).** Only a paid note whose writer ticked "{name} may show this note on their page" on the tip form, and never a hidden or reported one. Consent is off by default and lives on the note. A supporter may stop their note being shown from their receipt. Notes written before the tick box shipped can never be pinned, so the tick box ships first.
+> - **The amount a page starts on (Pro),** chosen from the page's own amounts.
+> - **Leaving Pro hides, never deletes:** every saved choice is kept and shows again on return to Pro; a Free page shows the Free version.
+> - **Answers to the plan's questions (5 Nov 2026, final):** Q1, the accent follows the cover colour, and photo and automatic covers use TipMe purple. Q2, a supporter may stop their note being shown, from their receipt. Q3, the consent says "on their page": TipMe never infers pronouns. Q4, the tick box ships first; earlier notes can never be pinned. Q5, the receipt shows the current thank-you line.

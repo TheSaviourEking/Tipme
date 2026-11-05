@@ -504,6 +504,10 @@ export function completeDueRecoveries(
   db: Database,
   sealing: MailSealing,
   now: Date,
+  options: {
+    /** Called after each recovery commits, with the account whose sessions it ended. */
+    onSessionsEnded?: (userId: string) => void;
+  } = {},
 ): Promise<number> {
   return guarded(async () => {
     const due = await db
@@ -531,13 +535,13 @@ export function completeDueRecoveries(
             ),
           )
           .for('update');
-        if (!row) return false;
+        if (!row) return null;
         if (await addressInUse(tx, row.newEmail, row.userId)) {
           await tx
             .update(emailRecoveries)
             .set({ cancelledAt: now })
             .where(eq(emailRecoveries.id, id));
-          return false;
+          return null;
         }
         // Staff accounts are never recovered by email (ADR-0010), even if they became staff during
         // the hold: an owner's reset is emailed to this address.
@@ -566,7 +570,7 @@ export function completeDueRecoveries(
             newEmail: row.newEmail,
             now,
           });
-          return false;
+          return null;
         }
         const [me] = await tx
           .select({ email: users.email, recovery: users.recoveryEmail })
@@ -614,9 +618,12 @@ export function completeDueRecoveries(
             dedupeKey: `recovery_completed_notice.old.${id}`,
             now,
           });
-        return true;
+        return row.userId;
       });
-      if (moved) completed += 1;
+      if (moved) {
+        completed += 1;
+        options.onSessionsEnded?.(moved);
+      }
     }
     return completed;
   });

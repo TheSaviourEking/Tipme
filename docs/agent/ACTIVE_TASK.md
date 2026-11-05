@@ -4,6 +4,83 @@
 - Done: Tasks 1 to 8 of `docs/superpowers/plans/2026-11-04-animated-covers.md`. Migration is `0074_cover_animation` (idx 71): the owner's controller took 0071 to 0073 for other lanes, so whoever merges later renumbers on top of dev. The journal test now allows a gap in file numbers.
 - Next: owner reviews; renumber the migration if another lane merges first; open the PR into dev.
 
+# Current task — Make it yours: the note consent tick box and the thank-you line (5 November 2026)
+
+- Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2. One PR into `dev` (ruling: C and A ship together). One migration, 0076 (`tip_messages.may_show`; `profiles.thanks_line`, `thanks_style`, `thanks_signed`), regenerated after merging `origin/dev` (#112–#124).
+- Built: the consent tick box ("{first name} may show this note on their page") and `noteMayShow`; `PUT /v1/me/thanks`; the receipt slip (Paper on Free; Paper, Violet or Night and a first-name signature on Pro; nothing while the page is suspended); Settings > "Make it yours" with "Your thank-you" and "Covers and QR codes that are yours"; the Plan list line. Review fixes I1, I2 and M1-M7 are in (`.superpowers/program/miy-review.md`).
+- Next: owner review of the PR; then PR B (starting amount) and PR D (pinned note, accent, the supporter's withdrawal). Rename the "already yours" card to "Covers that move, QR codes that are yours" once animated covers merge.
+
+# Previous task — states and feedback, PR A primitives (5 November 2026): merged into dev in #124
+
+- Branch/worktree: `feat/states` / `.worktrees/states`, test lane 1. Merged in #124.
+- Plan: `docs/superpowers/plans/2026-11-05-states.md`. PR A (Tasks 1–8) built: `Lamp`, `Slip`, `StandingWarning`, `ResultKey`/`StateLine`/`useKeyResult`, field red edge/flag/shake, `EmptySlip`/`EmptyWell`, `Steps`, the design-system States specimen and the internal 6 places.
+- Next: PR B (Task 9). Task 9's money-safety-lines test must exempt `app/design-system/states-specimen.tsx`, which shows the proven lines as specimens. Task 17 (connection copy) still waits for the owner's yes.
+
+# Verified state (5 November 2026, dev at `f85ec4d`)
+
+Every "Current task" entry below for these branches is **merged into dev**; read them as history.
+
+| PR   | What                                                                                               | Migration  |
+| ---- | -------------------------------------------------------------------------------------------------- | ---------- |
+| #112 | Dashboard data: withdrawals list, report totals, notes filter, payout's own bank                   | 0071       |
+| #113 | CI: six browser-test shards                                                                        |            |
+| #114 | Redesign polish: review fixes, sticky marketing header, reserved example handles, one money format |            |
+| #115 | Username reservation, PR 1: staff reserve and release names                                        | 0072, 0073 |
+| #116 | Bank picker: search your bank, automatic name check                                                |            |
+| #117 | Social links: catalogue, Free/Pro limits, `ADULT_PLATFORM_LINKS`                                   | 0074       |
+| #118 | Partner quote cache (`PARTNER_QUOTE_CACHE_SECONDS`)                                                |            |
+| #119 | Live updates, PR 1 (`LIVE_UPDATES_ENABLED`, off by default)                                        | 0075       |
+| #120 | CI: no Next.js compile-cache restore (it served a stale stylesheet)                                |            |
+
+Migrations on dev run 0070 to 0075 in order. A branch that adds a migration regenerates it with drizzle-kit against current dev before its PR, after rebuilding `@tipme/contracts`: a stale build once dropped `usernames.manage` from a generated check. Never rename a migration.
+
+**Not on dev yet:**
+
+- `feat/make-it-yours`: the note consent tick box and the thank-you line. Built and reviewed; waiting to be pushed.
+- `feat/states`: PR A, the state primitives. Built and reviewed; waiting to be pushed.
+- `feat/animated-covers`: rebase on dev, review items I2 and I3, and regenerate its migration as the next number.
+
+**Owner steps before production:**
+
+- The reserved-handles query (`docs/runbooks/production.md`).
+- Live updates: the Caddyfile and `LIVE_UPDATES_ENABLED` (same runbook, §10).
+- Adult-platform links: the payment partner's written position and an acceptable-use section in the Terms.
+
+The backlog is in `docs/agent/BACKLOG.md`.
+
+# Current task — live updates PR 1 (5 November 2026)
+
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, with `origin/dev` at `527bce9` merged. Pushed; PR to dev open after the review rounds (`c-review.md`, `c-rereview.md`). Plan: `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 1-12 (PR 1).
+- Done: the live contract, the API hub and `GET /v1/me/events` (flag `LIVE_UPDATES_ENABLED`, off by default), worker signals after the relay and the tip handler, the Caddyfile change (owner's deploy step: runbook `production.md` §10), the browser client and provider, dashboard home, tips, tip detail and moments refresh on signals, the bell folded in, the two Settings switches (migration 0075, regenerated with drizzle-kit after merging dev) and the background-tab sound.
+- Report with rulings and evidence: `.superpowers/program/c-build-report.md`.
+- Next exact step: owner review of the PR, then the owner's deploy steps (Caddyfile, `LIVE_UPDATES_ENABLED`). Then PR 2 (Tasks 13-15); the shared partner-balance cache landed in dev as PR #118.
+
+# Completed task — partner quote cache (5 November 2026)
+
+- Branch/worktree: `fix/partner-quote-cache` / `.worktrees/quote-cache`, from `origin/dev` d9de485, test lane 3. Merged into dev as PR #118. No migration.
+- Built: the withdrawal quote's partner read (capability, balance, fee) is cached in Redis for `PARTNER_QUOTE_CACHE_SECONDS` (default 30, 0 = off). Every key carries a stamp of TipMe's records. A withdrawal always asks fresh. Review fixes (I-1, M-1 to M-9) are done.
+- CI follow-up: job `e2e (4)` found one undersized social-link chip in the recovery test's accessibility audit. Its 44px minimum width is fixed in `globals.css`; the focused recovery E2E passes on lane 1.
+- Plan: `docs/superpowers/plans/2026-11-05-partner-quote-cache.md`.
+
+# Current task — social links (5 November 2026)
+
+- Branch/worktree: `feat/social-links` / `.worktrees/social-links`, from `origin/dev` d0325dd. Migration regenerated after merging dev (see the PR).
+- Done: the link catalogue (14 Free sites, 9 Pro, link pages refused); Free and Pro limits enforced on the server, under a row lock; lapsed Pro hides extras and keeps them; Your links editor; the public link row and featured key; the dated decision in `docs/00-DECISIONS.md`. Plan: `docs/superpowers/plans/2026-11-05-social-links.md`.
+- Not done: press counts per link (needs D-07). Report: `.superpowers/program/social-build-report.md`.
+- Next exact step: review, then the PR to dev.
+
+# Current task — bank picker (5 November 2026)
+
+- Branch/worktree: `feat/bank-picker` / `.worktrees/bank-picker`, from `origin/dev` (merged at `e0535cb`), test lane 3. Not pushed. No API, contract, database or migration change.
+- Built: the Get paid card's search-your-bank combobox (A) with popular keys by code, A to Z and More banks, a full-screen sheet on phones, and the name check on its own (C), once per bank and number, with Check again only after a failure. The card's three "payment provider" messages say "our payment partner". Plan: `docs/superpowers/plans/2026-11-05-bank-picker.md`.
+- Next: the owner reviews the `Get paid` group in `review-screens/index.html`, then push and open one PR to `dev`. Build report: `.superpowers/program/bank-build-report.md`.
+
+# Current task — dashboard data (5 November 2026)
+
+- Branch/worktree: `feat/dashboard-data` / `.worktrees/dashboard-data`, from `origin/dev` with `feat/e2e-lanes` merged. Not pushed. Migration 0071 (one index).
+- Built: `GET /v1/me/withdrawals` (paged, with the bank each went to), `GET /v1/me/tip-totals`, `note=with` on `/v1/me/tips`, `bank` on activity rows; the Withdraw, Home, Tips and weekly-report screens use them. The tips list cursor now keeps microseconds.
+- Next: owner says to push, then one PR to `dev`. Plan: `docs/superpowers/plans/2026-11-04-dashboard-data.md`.
+
 # Current task — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration.

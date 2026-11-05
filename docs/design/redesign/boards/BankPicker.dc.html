@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Choosing your bank: three options</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+.board{width:1840px;height:3300px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+h1{margin:0;font:400 44px/1.05 'DM Serif Display',Georgia,serif}
+.lede{margin:10px 0 0;font-size:16px;line-height:1.55;max-width:1100px;color:#3b3934}
+.sec{margin-top:44px}
+.sec h2{margin:0;font:400 32px/1.1 'DM Serif Display',Georgia,serif}
+.sec .sub{margin:8px 0 18px;font-size:14.5px;line-height:1.55;color:#5d5a54;max-width:1180px}
+.row{display:flex;gap:36px;align-items:flex-start}
+.label{margin:0 0 10px;font-size:13px;font-weight:700;color:#5d5a54}
+.tag{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:800;vertical-align:middle;margin-left:8px}
+.tag.now{background:#141210;color:#fff}
+.tag.prop{background:#f1e9ff;color:#4d16a8}
+.tag.later{background:#fff3cf;color:#6b4a00}
+.today{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:22px}
+.fact{background:#fffefa;border:1px solid rgba(20,18,16,.1);border-radius:16px;padding:14px 16px;font-size:13.5px;line-height:1.5}
+.fact b{display:block;font-size:14px;margin-bottom:4px}
+.fact code{font-size:12px;color:#5d5a54}
+.card{width:620px;box-sizing:border-box;background:#fffefa;border-radius:24px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.45);padding:24px 26px 26px;position:relative}
+.card h3{margin:0;font:400 26px 'DM Serif Display',Georgia,serif}
+.hint{margin:6px 0 0;font-size:13.5px;color:#5d5a54}
+.field{margin-top:16px}
+.field label{display:block;font-size:13.5px;font-weight:700;margin-bottom:6px}
+.well{height:48px;border-radius:12px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1);display:flex;align-items:center;gap:10px;padding:0 14px;font-size:15px;box-sizing:border-box}
+.well.focus{outline:2.5px solid #7a32f9;outline-offset:2px}
+.well .ph{color:#8a867e}
+.well .caret{margin-left:auto;color:#5d5a54;font-size:13px}
+.well.ro{background:#f5f3ee;box-shadow:none}
+.badge{flex:none;width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff}
+.pop{position:absolute;left:26px;right:26px;background:#fffefa;border-radius:18px;box-shadow:0 24px 56px -12px rgba(20,18,16,.34),0 0 0 1px rgba(20,18,16,.08);padding:12px;z-index:3}
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding:4px 4px 10px}
+.chip{display:flex;align-items:center;gap:7px;height:38px;padding:0 12px 0 5px;border-radius:11px;background:#fffefa;font-size:13.5px;font-weight:700;box-shadow:0 1px 1px rgba(20,18,16,.12),0 2px 0 rgba(20,18,16,.14);border:1px solid rgba(20,18,16,.08)}
+.chip .badge{width:28px;height:28px;font-size:10px}
+.grp{margin:8px 6px 4px;font-size:12px;font-weight:800;color:#5d5a54}
+.opt{display:flex;align-items:center;gap:10px;height:44px;padding:0 8px;border-radius:10px;font-size:14.5px}
+.opt.on{background:#f1e9ff;color:#2d0b66;font-weight:700}
+.opt mark{background:none;color:inherit;font-weight:800;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
+.more{display:flex;align-items:center;justify-content:space-between;height:42px;padding:0 10px;border-radius:10px;background:#eceae4;font-size:13.5px;font-weight:700}
+.go{display:flex;align-items:center;justify-content:center;height:50px;border-radius:13px;background:#000;color:#fff;font-weight:700;font-size:15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826;margin-top:16px}
+.soft{display:flex;align-items:center;justify-content:center;height:46px;border-radius:13px;background:#fffefa;font-weight:700;font-size:14.5px;box-shadow:0 1px 1px rgba(20,18,16,.12),0 2px 0 rgba(20,18,16,.14);margin-top:10px}
+.phone{flex:none;width:340px;height:700px;border-radius:40px;border:10px solid #141210;background:#f3f2ee;box-sizing:border-box;overflow:hidden;position:relative}
+.sheet{position:absolute;inset:0;background:#fffefa;padding:18px 14px}
+.sheet .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sheet .top b{font:400 22px 'DM Serif Display',Georgia,serif}
+.x{width:38px;height:38px;border-radius:10px;background:#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.12),0 2px 0 rgba(20,18,16,.14);display:flex;align-items:center;justify-content:center;font-size:16px}
+.kbd{position:absolute;left:0;right:0;bottom:0;height:200px;background:#d3d0c8;display:grid;grid-template-columns:repeat(10,1fr);gap:5px;padding:10px 6px;box-sizing:border-box;align-content:start}
+.kbd i{height:38px;border-radius:6px;background:#fffefa;display:block}
+.notes{width:520px;flex:none;font-size:14px;line-height:1.55}
+.notes ul{margin:0;padding-left:18px}
+.notes li{margin:5px 0}
+.notes .q{margin-top:12px;padding:12px 14px;border-radius:14px;background:#fff3cf;color:#4a3300;font-size:13.5px}
+.steps{display:flex;flex-direction:column;gap:16px}
+.mini{width:420px;box-sizing:border-box;background:#fffefa;border-radius:20px;border:1px solid rgba(20,18,16,.1);padding:16px 18px 18px;box-shadow:0 14px 26px -20px rgba(20,18,16,.45)}
+.mini .cap{font-size:12.5px;font-weight:800;color:#5d5a54;margin-bottom:6px}
+.spin{width:16px;height:16px;border-radius:50%;border:2.5px solid #d8d1f0;border-top-color:#7a32f9;flex:none}
+.check{flex:none;width:22px;height:22px;border-radius:50%;background:#7a32f9;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:800}
+.math{background:#141210;color:#fff;border-radius:18px;padding:18px 20px;font-size:13.5px;line-height:1.6}
+.math code{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#e8dcff}
+table{border-collapse:collapse;width:100%;font-size:14px;background:#fffefa;border-radius:16px;overflow:hidden}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid rgba(20,18,16,.08);vertical-align:top;line-height:1.45}
+th{font-size:12.5px;color:#5d5a54;background:#f5f3ee}
+.keep{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+.src{margin-top:26px;font-size:12px;line-height:1.6;color:#5d5a54}
+</style>
+</helmet>
+<div class="board">
+  <h1>Choosing your bank</h1>
+  <p class="lede">Three ways to make adding a bank account comfortable. Today it is a long native drop-down with no search, in whatever order our payment partner sends the list, and a separate "Check account" button. Nothing here is built. Wording in quotes is today's unless marked "Proposed copy".</p>
+
+  <div class="today">
+    <div class="fact"><b>A bank is only a code and a name</b>Each bank in the list is <code>{ code, name }</code>, nothing else: no logo, no type, no popularity. <code>packages/contracts/src/payment-accounts.ts:60</code></div>
+    <div class="fact"><b>The list comes as the partner sends it</b>Unsorted, cached a day on our server. Staging includes microfinance and mortgage banks and wallets. <code>payout-destination.controller.ts:248</code></div>
+    <div class="fact"><b>Name checks are limited</b>10 name checks per person per day, plus a limit per network, so strangers' accounts can't be mapped to names. <code>rate-limit.guard.ts:40, 104</code></div>
+    <div class="fact"><b>Rules every option keeps</b>An emailed 6-digit code to save. Bank changes pause after a sign-in email change. Only the bank name and last 4 digits are ever shown. <code>get-paid-card.tsx:137-200, 231</code></div>
+  </div>
+
+  <!-- ===================== A ===================== -->
+  <div class="sec">
+    <h2>A. Search your bank <span class="tag prop">Proposed</span></h2>
+    <p class="sub">The field becomes a search box. Popular banks sit on top as keys you can tap. Typing filters the list, and short names and nicknames work: "gtb", "gtco" and "guaranty" all find Guaranty Trust Bank; "fbn" and "first" find First Bank. Everything else is A to Z, with microfinance and mortgage banks folded under "More banks". A popular key only shows if that bank is in our partner's list.</p>
+    <div class="row">
+      <div>
+        <p class="label">Desktop: open, nothing typed yet</p>
+        <div class="card" style="height:640px">
+          <h3>Get paid</h3>
+          <p class="hint">The bank account your withdrawals go to.</p>
+          <div class="field"><label>Bank</label><div class="well focus"><span class="ph">Search your bank</span><span class="caret">⌄</span></div></div>
+          <div class="pop" style="top:178px">
+            <div class="grp" style="margin-top:2px">Popular</div>
+            <div class="chips">
+              <span class="chip"><span class="badge" style="background:#dd4f05">GT</span>GTBank</span>
+              <span class="chip"><span class="badge" style="background:#e0761c">AC</span>Access</span>
+              <span class="chip"><span class="badge" style="background:#d1122a">ZB</span>Zenith</span>
+              <span class="chip"><span class="badge" style="background:#c8102e">UB</span>UBA</span>
+              <span class="chip"><span class="badge" style="background:#003b65">FB</span>First Bank</span>
+              <span class="chip"><span class="badge" style="background:#1dcf9f">OP</span>OPay</span>
+              <span class="chip"><span class="badge" style="background:#0357ee">MP</span>Moniepoint</span>
+              <span class="chip"><span class="badge" style="background:#6b2ff5">PP</span>PalmPay</span>
+              <span class="chip"><span class="badge" style="background:#40196d">KU</span>Kuda</span>
+            </div>
+            <div class="grp">All banks, A to Z</div>
+            <div class="opt"><span class="badge" style="background:#8a867e">AC</span>Access Bank</div>
+            <div class="opt"><span class="badge" style="background:#8a867e">CI</span>Citibank Nigeria</div>
+            <div class="opt"><span class="badge" style="background:#8a867e">EC</span>Ecobank Nigeria</div>
+            <div class="opt"><span class="badge" style="background:#8a867e">FI</span>Fidelity Bank</div>
+            <div class="more" style="margin-top:6px">More banks: microfinance and mortgage <span>⌄</span></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="label">Desktop: typed "gtb"</p>
+        <div class="card" style="height:420px;width:520px">
+          <h3>Get paid</h3>
+          <div class="field"><label>Bank</label><div class="well focus">gtb<span class="caret">⌄</span></div></div>
+          <div class="pop" style="top:146px">
+            <div class="opt on"><span class="badge" style="background:#dd4f05">GT</span><span><mark>G</mark>uaranty <mark>T</mark>rust <mark>B</mark>ank</span></div>
+            <p class="hint" style="margin:10px 8px 4px">↑ ↓ to move, Enter to choose, Esc to close.</p>
+          </div>
+        </div>
+        <p class="label" style="margin-top:22px">Typed something with no match <span class="tag prop">Proposed copy</span></p>
+        <div class="card" style="width:520px;padding:18px 22px">
+          <div class="well focus">gtbnk zz<span class="caret">⌄</span></div>
+          <p style="margin:12px 2px 0;font-size:14px">No bank matches "gtbnk zz". Check the spelling, or try the bank's full name.</p>
+        </div>
+      </div>
+      <div>
+        <p class="label">Phone: a full-screen sheet, search ready</p>
+        <div class="phone">
+          <div class="sheet">
+            <div class="top"><b>Choose your bank</b><span class="x">✕</span></div>
+            <div class="well focus">fir<span class="caret"></span></div>
+            <div class="opt on" style="margin-top:10px"><span class="badge" style="background:#003b65">FB</span><span><mark>Fir</mark>st Bank of Nigeria</span></div>
+            <div class="opt"><span class="badge" style="background:#8a867e">FC</span><span><mark>Fir</mark>st City Monument Bank</span></div>
+            <div class="opt"><span class="badge" style="background:#8a867e">FI</span><span>Fidelity Bank</span></div>
+            <div class="kbd"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" style="width:auto;margin-top:18px;max-width:1700px">
+      <ul>
+        <li><b>For keyboards and screen readers:</b> the WAI-ARIA combobox pattern. The input has role combobox with aria-expanded, and the list is a listbox. The highlighted bank is announced, along with "4 banks match" as you type. Esc closes the list without changing anything.</li>
+        <li><b>Search runs in the browser</b> on the list we already load, with no extra calls. Nicknames come from a short list we keep, for example gtb/gtco → Guaranty Trust; fbn → First Bank; uba → United Bank for Africa; fcmb → First City Monument; stanbic → Stanbic IBTC; opay → OPay (Paycom); moniepoint; palmpay; kuda.</li>
+        <li><b>Popular keys</b> follow what people use most: OPay is on 69% of Nigerian smartphones, then PalmPay at 29% and Moniepoint at 14% (Orange/KPMG smartphone study, 2025). Moniepoint leads by transaction value. The big banks are added by name. We match each key to the partner's list by code, so a missing bank is never offered.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================== C ===================== -->
+  <div class="sec">
+    <h2>C. A, plus the name check on its own <span class="tag prop">Proposed</span></h2>
+    <p class="sub">No "Check account" button. Once a bank is chosen and the 10th digit is typed, we check the name once and show it. Changing either one checks again. Because of the 10-a-day limit, the same bank and number are never checked twice, and nothing is checked before all 10 digits are in.</p>
+    <div class="row">
+      <div class="steps">
+        <div class="mini"><div class="cap">1. Bank chosen, typing the number</div>
+          <div class="well"><span class="badge" style="background:#dd4f05">GT</span>Guaranty Trust Bank</div>
+          <div class="field"><label>Account number</label><div class="well focus">012345678<span class="caret" style="font-size:12px">9 of 10</span></div></div>
+        </div>
+        <div class="mini"><div class="cap">2. The 10th digit: checking</div>
+          <div class="field" style="margin-top:0"><label>Account number</label><div class="well">0123456789</div></div>
+          <p style="display:flex;align-items:center;gap:10px;margin:12px 2px 0;font-size:14px"><span class="spin"></span>Checking the name at your bank… <span class="tag prop" style="margin-left:0">Proposed copy</span></p>
+        </div>
+      </div>
+      <div class="steps">
+        <div class="mini"><div class="cap">3. Found: confirm it's yours</div>
+          <div class="field" style="margin-top:0"><label>Name on the account</label><div class="well ro"><span class="check">✓</span>ADA OKAFOR</div></div>
+          <div class="go">Email me a code</div>
+        </div>
+        <div class="mini"><div class="cap">4. Not found: today's fallback, unchanged</div>
+          <div class="field" style="margin-top:0"><label>Name on the account</label><div class="well focus"><span class="ph">As your bank shows it</span></div>
+          <p class="hint">We couldn’t find this name at the bank. Enter it as your bank shows it.</p></div>
+          <div class="go">Email me a code</div>
+        </div>
+      </div>
+      <div>
+        <p class="label">Phone, after the name is found</p>
+        <div class="phone" style="height:620px">
+          <div class="sheet" style="background:#f3f2ee">
+            <div class="top"><b>Get paid</b></div>
+            <div class="field" style="margin-top:4px"><label>Bank</label><div class="well"><span class="badge" style="background:#1dcf9f">OP</span>OPay<span class="caret">⌄</span></div></div>
+            <div class="field"><label>Account number</label><div class="well">8031234567</div></div>
+            <div class="field"><label>Name on the account</label><div class="well ro"><span class="check">✓</span>ADA OKAFOR</div></div>
+            <div class="go">Email me a code</div>
+            <div class="soft">Keep my current account</div>
+          </div>
+        </div>
+      </div>
+      <div class="notes" style="width:420px">
+        <ul>
+          <li><b>When the check fails</b> (network, the partner, or today's 10 used up), we show today's message for that error, and a small "Check again" key appears. It is the only time a button shows.</li>
+          <li><b>The rest stays the same:</b> "Email me a code", the 6-digit code, "Save bank account", and "Keep my current account".</li>
+          <li><b>One less tap</b> for everyone. Nobody wonders whether they need to press "Check account" first.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== B ===================== -->
+  <div class="sec">
+    <h2>B. Account number first <span class="tag later">Later: needs a check first</span></h2>
+    <p class="sub">The person types their 10 digits first. Nigerian account numbers carry a check digit worked out from the bank's code, so the browser can tell, with no calls, which banks the number could belong to. Those banks go to the top, usually only a few. We never check names across several banks; the name is only checked after the person picks one.</p>
+    <div class="row">
+      <div class="card" style="width:600px">
+        <h3>Get paid</h3>
+        <div class="field"><label>Account number</label><div class="well">0123456789</div></div>
+        <div class="field"><label>Bank</label>
+          <div class="grp" style="margin:2px 0 6px">This number fits these banks <span class="tag prop" style="margin-left:4px">Proposed copy</span></div>
+          <div class="chips" style="padding:0">
+            <span class="chip"><span class="badge" style="background:#dd4f05">GT</span>GTBank</span>
+            <span class="chip"><span class="badge" style="background:#003b65">FB</span>First Bank</span>
+            <span class="chip"><span class="badge" style="background:#8a867e">ST</span>Sterling</span>
+          </div>
+          <div class="well" style="margin-top:10px"><span class="ph">Not here? Search all banks</span><span class="caret">⌄</span></div>
+        </div>
+        <p class="hint" style="margin-top:12px">Picking one runs the name check, as in C.</p>
+      </div>
+      <div class="math" style="width:520px">
+        <b style="font-size:15px">How the check digit works (CBN NUBAN)</b><br>
+        A 10-digit number is a 9-digit serial plus 1 check digit. Put the bank's 3-digit CBN code in front of the serial, so you have 12 digits. Multiply them in turn by <code>3, 7, 3, 3, 7, 3, 3, 7, 3, 3, 7, 3</code> and add the results. Then the check digit is <code>10 − (sum mod 10)</code>, and a 10 becomes 0.<br><br>
+        Run that for every bank code in the list, and keep those whose result matches the number's last digit. On average about 1 in 10 codes passes by chance, so the shortlist is small but can hold a wrong bank or two. That's why the person still picks, and the name check confirms.
+      </div>
+      <div class="notes" style="width:520px">
+        <b>Check before building B; we can't confirm these from our code:</b>
+        <ul>
+          <li><b>Are the partner's codes CBN codes?</b> Our test samples use 058 (GTBank), 101 (Providus) and 232 (Sterling), which look like CBN codes. But that comes from our tests, not from the partner's live list. <code style="font-size:12px">packages/payments/test/bachs-payouts.test.mjs:521-528</code></li>
+          <li><b>Fintechs and microfinance banks</b> such as OPay, PalmPay, Moniepoint and Kuda use longer institution codes under the newer CBN standards, and outside sources disagree on how their check digit works. If B can't place them, it must still show them under "Search all banks", never hide them.</li>
+          <li><b>A wrong shortlist must never block anyone:</b> "Search all banks" is always there.</li>
+        </ul>
+        <div class="q">Needed from our partner: confirmation of which code standard their bank list uses. With that, B is about a day's work on top of A.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== Recommendation ===================== -->
+  <div class="sec">
+    <h2>Recommendation: A + C now, B once the codes are confirmed</h2>
+    <table style="margin-top:16px">
+      <tr><th style="width:180px">Option</th><th>What changes for the person</th><th style="width:260px">Effort</th><th style="width:300px">Risks</th></tr>
+      <tr><td><b>A. Search your bank</b></td><td>Finds their bank in a few letters, with popular banks one tap away. On a phone, a full-screen search instead of a long wheel.</td><td>About 1–2 days: a combobox in the web app, the nickname list, the popular keys, and tests (keyboard, screen reader, phone).</td><td>Low. The list and the codes don't change, only how the list is shown.</td></tr>
+      <tr><td><b>C. Name check on its own</b></td><td>No "Check account" step. The name appears once the number is complete.</td><td>About half a day on top of A: the same lookup call, fired once per bank and number.</td><td>Must respect the 10-a-day limit; never check on partial numbers.</td></tr>
+      <tr><td><b>B. Number first</b></td><td>The right bank is usually in the top 3 after typing the number.</td><td>About 1 day on top of A, once the partner confirms its codes.</td><td>A shortlist can include a wrong bank, and newer 6-digit codes may not fit. "Search all banks" stays the safety net.</td></tr>
+    </table>
+    <div class="keep">
+      <div class="fact"><b>Kept as is</b>The email code, "Bank changes are paused for now" after an email change, and the not-found fallback with the name typed as the bank shows it.</div>
+      <div class="fact"><b>Privacy kept</b>The full number goes to the partner only. We show the bank name and last 4 digits. No name check across several banks.</div>
+      <div class="fact"><b>Never named</b>Users never see our payment partner's name. The card's "The payment provider can’t pay to this account." stays generic.</div>
+    </div>
+    <p class="src">Sources: CBN, "NUBAN proposals" (2010–2011) and "Revised standards on NUBAN" (2020), cbn.gov.ng. Orange Group and KPMG Nigeria Smartphone Study 2025, reported by BrandSpur Nigeria (26 Sep 2026). TechCabal on mobile money (25 Aug 2025). Code references are to origin/dev 607db5b/d0325dd.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3300}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

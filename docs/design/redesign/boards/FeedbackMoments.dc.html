@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feedback moments</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+
+.lamp{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.lamp.red{background:#c2382c;box-shadow:0 0 0 3px rgba(194,56,44,.16)}
+.lamp.purple{background:#7a32f9;box-shadow:0 0 0 3px rgba(122,50,249,.18)}
+.lamp.amber{background:#d08a16;box-shadow:0 0 0 3px rgba(208,138,22,.18)}
+.lamp.off{background:#cfcbc2}
+body{margin:0}
+.board{box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:56px 64px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.intro h1{margin:0;font:400 54px/1.02 'DM Serif Display',Georgia,serif;max-width:1100px}
+.intro p{margin:14px 0 0;font-size:17px;line-height:1.55;max-width:1000px;color:#2f2d29}
+.src{font:600 11.5px/1.4 Manrope,Arial,sans-serif;color:#7a766d}
+.prop{display:inline-block;padding:3px 9px;border-radius:999px;background:#f1e9ff;color:#4d16a8;font-size:11.5px;font-weight:800}
+.real{display:inline-block;padding:3px 9px;border-radius:999px;background:#e4e1d8;color:#3b3934;font-size:11.5px;font-weight:800}
+.paper{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 30px 56px -30px rgba(20,18,16,.32)}
+.key{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:14px;font-weight:700;box-sizing:border-box;white-space:nowrap}
+.key.on{border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28)}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:15px;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);box-sizing:border-box}
+.well{display:flex;align-items:center;min-height:48px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#3b3934}
+
+.board{width:1840px;min-height:2500px}
+
+.reading{margin-top:22px;display:inline-block;padding:12px 16px;border-radius:14px;background:#f1e9ff;color:#2d0b66;font-size:15px;font-weight:600;max-width:1100px;line-height:1.5}
+.frames{margin-top:34px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.frame{background:#f3f2ee;border-radius:24px;padding:18px;box-sizing:border-box;min-height:430px;position:relative}
+.frame h3{margin:0;font:400 22px/1.1 'DM Serif Display',Georgia,serif}
+.frame .src{margin-top:6px}
+.phone{margin:14px auto 0;width:236px;height:300px;border-radius:30px;border:7px solid #141210;background:#fffefa;overflow:hidden;position:relative;box-sizing:border-box}
+.sense{margin-top:12px;display:grid;gap:6px;font-size:12.5px;line-height:1.4}
+.sense div{display:flex;gap:8px}
+.sense b{min-width:64px}
+table.fb{margin-top:34px;width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;background:#fffefa;border-radius:20px;overflow:hidden;border:1px solid rgba(20,18,16,.1)}
+.fb th{text-align:left;padding:12px 10px;background:#141210;color:#fff;font-weight:700;font-size:12.5px}
+.fb td{padding:10px;border-top:1px solid rgba(20,18,16,.08);vertical-align:top;line-height:1.4}
+.fb td:first-child{font-weight:800;width:150px}
+.fb .src{display:block;margin-top:4px}
+.big{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;background:#7a32f9;color:#fff;font-size:11px;font-weight:800}
+.rules{margin-top:34px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.rules .paper{padding:22px 26px}
+.rules h3{margin:0 0 10px;font:400 26px 'DM Serif Display',Georgia,serif}
+.rules ul{margin:0;padding-left:18px;font-size:14px;line-height:1.6}
+.wave{display:flex;gap:3px;align-items:center;height:18px}.wave i{display:block;width:3px;border-radius:2px;background:#7a32f9}
+.buzz{display:flex;gap:4px;align-items:center}.buzz i{display:block;height:8px;border-radius:2px;background:#141210}
+
+</style>
+</helmet>
+<div class="board">
+<div class="intro"><p class="src">Feedback moments · origin/dev 607db5b · for your approval</p>
+<h1>Every action answers back, in proportion</h1>
+<p>A map of what each action gives the person: what they see, the motion, the sound, the vibration, and what a screen reader hears. Grey tags mark what exists today, with its file and line. Everything else is proposed.</p>
+<p class="reading">Our reading of your note: “confetti” means a celebration for big moments, and “phones on certain actions” means sound and phone vibration (haptics). Tell us if you meant something else.</p></div>
+<div class="frames">
+<div class="frame"><h3>A tip lands</h3><p class="src">Recipient, dashboard open on a phone · sample name and amount</p>
+<div class="phone"><div style="padding:14px"><p style="margin:0;font-weight:800;font-size:13px">tipme</p>
+<div class="paper" style="margin-top:16px;padding:12px;border-radius:16px;display:flex;gap:10px;align-items:center"><span style="width:34px;height:34px;border-radius:50%;background:#7a32f9;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fff"/></svg></span><div><p style="margin:0;font-weight:800;font-size:13px">Chidi tipped you ₦4,500</p><p style="margin:2px 0 0;font-size:11.5px;color:#5d5a54">Just now · Hide</p></div></div>
+</div></div>
+<div class="sense"><div><b>See</b>Toast slides down, stays 8s. <span class="real" style="background:#e7dcff;color:#3a118a">Owner decided 5 Nov</span></div><div><b>Sound</b><span class="wave"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:10px"></i><i style="height:6px"></i></span> only in a background tab, mutable. <span class="real" style="background:#e7dcff;color:#3a118a">Owner decided 5 Nov</span></div><div><b>Vibrate</b><span class="buzz"><i style="width:18px"></i><i style="width:18px"></i></span> two short. <span class="prop">Proposed</span></div></div></div>
+<div class="frame"><h3>The first tip</h3><p class="src">Recipient · rare, so it gets the big moment</p>
+<div class="phone" style="background:#7a32f9"><div style="padding:18px;color:#fff;text-align:center">
+<div style="position:relative;height:120px"><span style="position:absolute;left:40px;top:70px;opacity:0.5"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fff"/></svg></span><span style="position:absolute;left:150px;top:40px;opacity:0.8"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fff"/></svg></span><span style="position:absolute;left:90px;top:18px;opacity:0.6"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fff"/></svg></span><span style="position:absolute;left:170px;top:90px;opacity:0.5"><svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fff"/></svg></span><span style="position:absolute;left:20px;top:30px;opacity:0.4"><svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fff"/></svg></span><span style="position:absolute;left:110px;top:60px;opacity:1"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#fff"/></svg></span></div>
+<p class="serif" style="margin:0;font-size:24px;line-height:1.05">Your first tip! Someone noticed your work.</p></div></div>
+<div class="sense"><div><b>See</b>Hearts rise once, then still. <span class="prop">Proposed</span></div><div><b>Sound</b><span class="wave"><i style="height:4px"></i><i style="height:10px"></i><i style="height:18px"></i><i style="height:10px"></i><i style="height:4px"></i></span> chime if on.</div><div><b>Vibrate</b><span class="buzz"><i style="width:14px"></i><i style="width:26px"></i><i style="width:14px"></i></span> 30/60/30ms. <span class="prop">Proposed</span></div></div></div>
+<div class="frame"><h3>Withdrawal requested</h3><p class="src">Recipient · routine money, calm</p>
+<div class="phone"><div style="padding:14px"><p class="serif" style="margin:0;font-size:22px">₦15,000</p>
+<div style="display:grid;gap:6px;margin-top:12px"><div class="well" style="min-height:36px;font-size:12px;gap:8px"><span class="lamp purple"></span>Requested</div><div class="well" style="min-height:36px;font-size:12px;gap:8px"><span class="lamp off"></span>Sent to our payment partner</div><div class="well" style="min-height:36px;font-size:12px;gap:8px"><span class="lamp off"></span>Paid</div></div>
+<p style="margin:10px 0 0;font-size:12px;font-weight:700">Withdrawal requested</p></div></div>
+<div class="sense"><div><b>See</b>First lamp lights. <span class="prop">Proposed</span></div><div><b>Sound</b>None.</div><div><b>Vibrate</b><span class="buzz"><i style="width:18px"></i></span> once. <span class="prop">Proposed</span></div></div></div>
+<div class="frame"><h3>A wrong code</h3><p class="src">Sign in · an error, kept small · email-code-form.tsx:110, :118</p>
+<div class="phone"><div style="padding:14px"><p class="serif" style="margin:0;font-size:20px">Check your email.</p><p style="margin:6px 0 0;font-size:11.5px;font-weight:700">6-digit code</p>
+<div style="display:flex;gap:5px;margin-top:14px"><span class="well" style="flex:1;min-height:40px;padding:0;justify-content:center;font-weight:800;border-color:rgba(194,56,44,.5)">4</span><span class="well" style="flex:1;min-height:40px;padding:0;justify-content:center;font-weight:800;border-color:rgba(194,56,44,.5)">8</span><span class="well" style="flex:1;min-height:40px;padding:0;justify-content:center;font-weight:800;border-color:rgba(194,56,44,.5)">2</span><span class="well" style="flex:1;min-height:40px;padding:0;justify-content:center;font-weight:800;border-color:rgba(194,56,44,.5)">9</span><span class="well" style="flex:1;min-height:40px;padding:0;justify-content:center;font-weight:800;border-color:rgba(194,56,44,.5)">1</span><span class="well" style="flex:1;min-height:40px;padding:0;justify-content:center;font-weight:800;border-color:rgba(194,56,44,.5)">1</span></div>
+<p style="margin:10px 0 0;font-size:12px;line-height:1.4;font-weight:600">That code isn’t right or has expired. Check it, or send a new one.</p></div></div>
+<div class="sense"><div><b>See</b>Cells shake once (not with reduced motion). <span class="prop">Proposed</span></div><div><b>Sound</b>Never.</div><div><b>Vibrate</b><span class="buzz"><i style="width:22px"></i></span> first time only. <span class="prop">Proposed</span></div></div></div>
+</div>
+<table class="fb"><tr><th>Action</th><th>What the person sees (press, progress, result)</th><th>Motion</th><th>Sound</th><th>Vibration</th><th>Screen readers hear</th></tr><tr><td>Pressing any key</td><td><span class="real">Exists</span> The key sinks 2px and springs back.<span class="src">packages/ui/src/components.css:144; tokens.css:104 (150ms)</span></td><td>Press, 100–150ms</td><td>None</td><td>None. Plain keys stay silent. <span class="prop">Proposed</span></td><td>The button’s name, as today</td></tr><tr><td>Choosing an amount</td><td><span class="real">Exists</span> The amount key turns purple with a white dot; the Tip key reads “Tip ₦5,000”.<span class="src">appreciation-form.tsx:668–672</span></td><td>Key settles</td><td>None</td><td>One 10ms tick. <span class="prop">Proposed</span></td><td>Radio “₦5,000, selected”, as today</td></tr><tr><td>Tip pressed → waiting → paid (tipper)</td><td><span class="real">Exists</span> “Starting your tip…”, then our partner’s page. Back on TipMe: one pulse while checking, then the thank-you settles and the receipt rises.<span class="src">appreciation-form.tsx:669; globals.css:3265–3276 (one pulse), :3322 (settle 420ms), :3375 (receipt at 760ms)</span></td><td>One pulse; settle; rise (exists). Hearts drifting once on paid are on the TipJourney board, not built: <span class="prop">Proposed</span></td><td>Off. <span class="prop">Proposed</span>: an optional soft chime on paid, muted by default</td><td>One short pulse (30ms) on paid. <span class="prop">Proposed</span></td><td>Live region stays mounted and changes words: status-view.tsx:228–230</td></tr><tr><td>A tip arrives (recipient)</td><td><span class="real">Exists</span> Bell checks every 10s while the tab is visible; a toast shows for 8s.<span class="src">notification-bell.tsx:11, :79–87, :169–172</span> <span class="real" style="background:#e7dcff;color:#3a118a">Owner decided 5 Nov</span> name-and-amount toast with a hide switch; a soft sound in a background tab with a mute switch (live updates, lane C, not built).</td><td>Toast slides in; bell swings once <span class="prop">Proposed</span></td><td><span class="real" style="background:#e7dcff;color:#3a118a">Owner decided 5 Nov</span> soft sound in a background tab only, with a mute switch</td><td>Two short pulses when the page is open on a phone. <span class="prop">Proposed</span></td><td>Toast is role status, as today</td></tr><tr><td>The first tip ever</td><td><span class="real">Exists</span> A moment: “Your first tip! Someone noticed your work.” in Moments.<span class="src">packages/database/src/operations/moments.ts:236; dashboard/moments.tsx</span> <span class="prop">Proposed</span> the big celebration.<br><span class="big">Big celebration</span></td><td>Hearts rise from the avatar, once; about 1.2s <span class="prop">Proposed</span></td><td>Same chime as a tip, if sound is on <span class="prop">Proposed</span></td><td>A longer pattern: 30, 60, 30ms. <span class="prop">Proposed</span></td><td>“Your first tip! Someone noticed your work.”</td></tr><tr><td>Milestones (10, 50, 100 tips)</td><td><span class="real">Exists</span> Milestones at 1, 10, 50 and 100 paid tips; copy “{count} tips! People keep coming back to thank you.”<span class="src">packages/domain/src/rewards.ts:17–20; moments.ts:243</span></td><td>Medium: the moment card settles in with a single heart <span class="prop">Proposed</span></td><td>Chime if on <span class="prop">Proposed</span></td><td>One 30ms pulse. <span class="prop">Proposed</span></td><td>The moment’s title</td></tr><tr><td>Withdrawal requested → sent → failed</td><td><span class="real">Exists</span> “Withdrawal requested” success; history rows Paid / Failed (“…the money is back in your balance.”).<span class="src">withdraw-view.tsx:279, :47–55</span></td><td>Step lamps fill one by one: requested, sent, paid <span class="prop">Proposed</span></td><td>None</td><td>One pulse when requested. None on failure. <span class="prop">Proposed</span></td><td>Success is status; Failed row is read with its note</td></tr><tr><td>A code: right or wrong</td><td><span class="real">Exists</span> Wrong: “That code isn’t right or has expired. Check it, or send a new one.” Too many: “Too many wrong codes…”<span class="src">email-code-form.tsx:83–85; get-paid-card.tsx:22–24</span> No moment for a right code found.</td><td>Right: the six cells settle purple together. Wrong: one small shake, once (none with reduced motion). <span class="prop">Proposed</span></td><td>None</td><td>Wrong: one 40ms pulse, first time only, never on repeat. <span class="prop">Proposed</span></td><td>The error is role alert</td></tr><tr><td>A save in Settings</td><td><span class="real">Exists</span> “Saved.” as plain text.<span class="src">settings/sections/notifications.tsx:79–81; my-page.tsx:304–308</span></td><td>The key settles and its lamp lights purple, about 2s. <span class="prop">Proposed</span></td><td>None</td><td>None</td><td>“Saved.” (status), as today</td></tr><tr><td>Handle claimed at sign-up</td><td><span class="real">Exists</span> Goes straight to the welcome page; no moment found.<span class="src">sign-up/sign-up-flow.tsx:47</span> <span class="prop">Proposed</span> a celebration.<br><span class="big">Big celebration</span></td><td>Your @handle is stamped onto a card, once <span class="prop">Proposed</span></td><td>Chime if on <span class="prop">Proposed</span></td><td>One 30ms pulse <span class="prop">Proposed</span></td><td>“@ada is yours.” <span class="prop">Proposed</span> copy</td></tr><tr><td>Copy link and share</td><td><span class="real">Exists</span> “Link copied.”<span class="src">share-profile.tsx:5; welcome-view.tsx:165; home-view.tsx:75</span></td><td>Key settles with a purple lamp <span class="prop">Proposed</span></td><td>None</td><td>One 10ms tick. <span class="prop">Proposed</span></td><td>“Link copied.”</td></tr><tr><td>QR download</td><td><span class="real">Exists</span> “Download image” or “Share image”; no confirmation found.<span class="src">dashboard/qr/qr-studio.tsx:404</span></td><td>Key settles <span class="prop">Proposed</span>. We don’t claim it was saved: the browser handles the file.</td><td>None</td><td>None</td><td>The button’s name</td></tr><tr><td>Going Pro</td><td><span class="real">Exists</span> Only staff can switch it today: “Plan changed”, “@ada is now Pro…”.<span class="src">ops/pages/page.tsx:363, :393</span> Buying Pro is lane F, not built. <span class="prop">Proposed</span> celebration for the person.<br><span class="big">Big celebration</span></td><td>The plan lever flips to Pro and a gold spark settles <span class="prop">Proposed</span></td><td>Chime if on <span class="prop">Proposed</span></td><td>One 30ms pulse <span class="prop">Proposed</span></td><td>“You’re on Pro.” <span class="prop">Proposed</span> copy</td></tr><tr><td>Errors</td><td><span class="real">Exists</span> Notice role alert, tinted box.<span class="src">packages/ui/src/components.tsx:209–230</span> Redesign: see the States boards.</td><td>The slip or the key’s lamp; one small shake only at a field</td><td>Never</td><td>One 40ms pulse on the first error only; never on a repeat</td><td>role alert, as today</td></tr></table>
+<div class="rules"><div class="paper"><h3>Rules</h3><ul>
+<li><b>Big celebrations only for rare, meaningful moments:</b> the first tip, a tip landing, the handle claimed, going Pro. Never on routine saves.</li>
+<li><b>Routine actions</b> (save, copy, download) get a quiet press and a settle, nothing more.</li>
+<li><b>Sound is off by default</b>, except what you decided on 5 Nov: a soft sound for a tip arriving in a background tab, with a mute switch.</li>
+<li><b>Vibration</b> only on phones that support it, always short (10–60ms), and never for an error that repeats.</li>
+<li><b>Reduced motion</b> turns every shake, rise and drift into a plain change. 18 reduced-motion rules already exist in the CSS; the new ones follow them.</li>
+<li><b>One mute setting</b> turns off sound and vibration together. <span class="prop">Proposed</span></li></ul></div>
+<div class="paper"><h3>What exists today</h3><ul>
+<li>Key press: sinks 2px, 150ms (components.css:144).</li>
+<li>Tipper paid: one pulse while checking, then a settle and the receipt rising (globals.css:3265–3375; status-view.tsx).</li>
+<li>Recipient: the bell checks every 10s and shows a toast for 8s (notification-bell.tsx).</li>
+<li>Milestones at 1, 10, 50 and 100 tips, shown in Moments (rewards.ts:17–20; moments.ts:236–243).</li>
+<li><b>No sound and no vibration anywhere</b> in the web app today: a search for vibrate, Audio and play() on origin/dev finds none.</li></ul></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":2500}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

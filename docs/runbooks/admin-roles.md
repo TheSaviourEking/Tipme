@@ -29,6 +29,7 @@ The menu only offers what someone can use. The server checks every call whatever
 | `private.view`      | people   | yes       | Reveal private details, with a reason                                                                                       |
 | `recoveries.cancel` | people   | no        | Cancel a pending phone recovery                                                                                             |
 | `recoveries.manage` | people   | yes       | Start and manage account recoveries for a person                                                                            |
+| `usernames.manage`  | people   | yes       | Reserve and release usernames, and ask to take one back from a page                                                         |
 | `email.export`      | content  | yes       | Download the email log as a spreadsheet                                                                                     |
 | `email.read`        | content  | yes       | Open a sent email: its delivery timeline and its content                                                                    |
 | `issues.resolve`    | content  | no        | Resolve issues                                                                                                              |

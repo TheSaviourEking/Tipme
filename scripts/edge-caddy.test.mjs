@@ -40,6 +40,21 @@ http.createServer((req, res) => {
     res.writeHead(notReady ? 503 : 200);
     return res.end(notReady ? 'notready' : 'ready');
   }
+  // The live stream: event-stream headers, a heartbeat every 500 ms, and it never ends. No
+  // Cache-Control: no-transform here (the real API sends it, and Caddy honours it), so this tests
+  // the Caddyfile's own path matcher.
+  if (req.url === '/v1/me/events') {
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' });
+    // A first frame past the encoder's 512-byte minimum: without the matcher it would be compressed.
+    res.write(': ' + 'p'.repeat(600) + '\\n\\n');
+    const beat = setInterval(() => res.write(': hb\\n\\n'), 500);
+    return req.on('close', () => clearInterval(beat));
+  }
+  // Big enough for Caddy's encoder (its minimum is 512 bytes).
+  if (req.url === '/big') {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    return res.end(name.repeat(400));
+  }
   res.writeHead(200);
   res.end(req.url === '/who' ? name : 'ok');
 }).listen(4000);
@@ -177,6 +192,93 @@ test('both hosts route to their own project', { skip }, async () => {
   assert.equal((await get(STAGING_HOST)).body, 'staging');
   assert.match((await get(PRODUCTION_HOST)).body, /^blue-[123]$/);
 });
+
+/**
+ * The first `count` chunks of a response that may never end, each with its arrival time, and the
+ * headers; then the request is dropped.
+ */
+function firstChunks(host, path, headers = {}, count = 1) {
+  return new Promise((resolveFirst, reject) => {
+    const started = Date.now();
+    const chunks = [];
+    const req = request(
+      { host: '127.0.0.1', port, path, headers: { Host: host, ...headers } },
+      (res) => {
+        res.on('data', (chunk) => {
+          chunks.push({
+            text: chunk.toString('latin1'),
+            ms: Date.now() - started,
+          });
+          if (chunks.length < count) return;
+          resolveFirst({
+            status: res.statusCode,
+            headers: res.headers,
+            chunks,
+          });
+          req.destroy();
+        });
+      },
+    );
+    req.on('error', reject);
+    req.setTimeout(5000, () =>
+      req.destroy(new Error(`fewer than ${count} chunks in 5 s`)),
+    );
+    req.end();
+  });
+}
+const firstChunk = async (host, path, headers) => {
+  const {
+    status,
+    headers: h,
+    chunks,
+  } = await firstChunks(host, path, headers, 1);
+  return { status, headers: h, chunk: chunks[0].text, ms: chunks[0].ms };
+};
+
+for (const host of [STAGING_HOST, PRODUCTION_HOST]) {
+  test(
+    `the stream paths are not compressed and flush at once (${host})`,
+    { skip },
+    async () => {
+      const first = await firstChunk(host, '/v1/me/events', {
+        'Accept-Encoding': 'gzip, zstd',
+      });
+      assert.equal(first.status, 200);
+      assert.equal(first.headers['content-encoding'], undefined);
+      assert.match(first.headers['content-type'], /^text\/event-stream/);
+      assert.match(first.chunk, /^: p+/);
+      assert.ok(first.ms < 2000, `first heartbeat after ${first.ms} ms`);
+    },
+  );
+
+  test(
+    `a small heartbeat after it flushes through at once too (${host})`,
+    { skip },
+    async () => {
+      // Production writes small frames (`retry: 5000`, a 6-byte `: hb`): each must pass the edge
+      // when written, not when a buffer fills. The stand-in writes one every 500 ms.
+      const { chunks, headers } = await firstChunks(
+        host,
+        '/v1/me/events',
+        { 'Accept-Encoding': 'gzip, zstd' },
+        2,
+      );
+      assert.equal(headers['content-encoding'], undefined);
+      assert.match(chunks[1].text, /^: hb/);
+      assert.ok(
+        chunks[1].ms - chunks[0].ms < 1000,
+        `the heartbeat came ${chunks[1].ms - chunks[0].ms} ms after the first chunk`,
+      );
+    },
+  );
+
+  test(`other paths are still compressed (${host})`, { skip }, async () => {
+    const first = await firstChunk(host, '/big', {
+      'Accept-Encoding': 'gzip, zstd',
+    });
+    assert.match(first.headers['content-encoding'] ?? '', /^(zstd|gzip)$/);
+  });
+}
 
 test(
   'production spreads requests over every ready copy',

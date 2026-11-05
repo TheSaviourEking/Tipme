@@ -3,7 +3,49 @@ import { expect, test } from '@playwright/test';
 import { API_ORIGIN, E2E_DATABASE_URL, WEB_ORIGIN } from '../e2e/stack';
 
 // Lab only: simulated mid-range phone (4x CPU slowdown) on a "Fast 3G"-like link.
-async function lcp(page: import('@playwright/test').Page, url: string) {
+// Each sample gets a fresh browser context (empty HTTP cache, same sign-in), so a cold and a warm
+// load are never mixed. Logs the LCP element so the number can be tied to a picture or a heading.
+type Sample = { ms: number; element: string };
+// The suite defaults to reduced motion; the sample runs the cover's animation (see test.use below).
+const SAMPLE_MOTION = 'no-preference' as const;
+const elements: Record<string, string[]> = {};
+
+async function lcp(
+  browser: import('@playwright/test').Browser,
+  storageState: Awaited<
+    ReturnType<import('@playwright/test').BrowserContext['storageState']>
+  >,
+  url: string,
+): Promise<number> {
+  const use = test.info().project.use;
+  const context = await browser.newContext({
+    baseURL: use.baseURL,
+    viewport: use.viewport,
+    userAgent: use.userAgent,
+    deviceScaleFactor: use.deviceScaleFactor,
+    isMobile: use.isMobile,
+    hasTouch: use.hasTouch,
+    locale: use.locale,
+    timezoneId: use.timezoneId,
+    colorScheme: use.colorScheme,
+    // test.use() overrides are not in project.use, so the sample's motion is passed explicitly.
+    reducedMotion: SAMPLE_MOTION,
+    storageState,
+  });
+  try {
+    const page = await context.newPage();
+    const sample = await measure(page, url);
+    (elements[url] ??= []).push(sample.element);
+    return sample.ms;
+  } finally {
+    await context.close();
+  }
+}
+
+async function measure(
+  page: import('@playwright/test').Page,
+  url: string,
+): Promise<Sample> {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.emulateNetworkConditions', {
@@ -17,10 +59,20 @@ async function lcp(page: import('@playwright/test').Page, url: string) {
   await page.waitForTimeout(1500);
   return page.evaluate(
     () =>
-      new Promise<number>((resolve) => {
+      new Promise<Sample>((resolve) => {
         new PerformanceObserver((list) => {
-          const entries = list.getEntries();
-          resolve(entries[entries.length - 1]?.startTime ?? -1);
+          const entries = list.getEntries() as (PerformanceEntry & {
+            element?: Element | null;
+            url?: string;
+          })[];
+          const last = entries[entries.length - 1];
+          const el = last?.element;
+          resolve({
+            ms: last?.startTime ?? -1,
+            element: el
+              ? `${el.tagName.toLowerCase()}${el.className ? `.${String(el.className).split(' ')[0]}` : ''}${last?.url ? ` ${last.url.slice(0, 80)}` : ''}`
+              : 'none',
+          });
         }).observe({ type: 'largest-contentful-paint', buffered: true });
       }),
   );
@@ -28,10 +80,10 @@ async function lcp(page: import('@playwright/test').Page, url: string) {
 
 // The suite defaults to reduced motion; the sample must run the cover's animation (owner's
 // exception, EXPERIENCE-AND-MOTION 7.11): the profile's LCP stays under 2000ms with it.
-test.use({ reducedMotion: 'no-preference' });
+test.use({ reducedMotion: SAMPLE_MOTION });
 
-test('lab LCP sample', async ({ page }) => {
-  // Fifteen throttled page loads, each followed by a pause for late paints.
+test('lab LCP sample', async ({ page, browser }) => {
+  // Fifteen throttled page loads, each in a fresh context, each followed by a pause for late paints.
   test.setTimeout(180_000);
   const post = async (path: string, body: unknown, headers = {}) =>
     (
@@ -103,24 +155,28 @@ test('lab LCP sample', async ({ page }) => {
       ),
     },
   });
-  // The page is already showing the loop before anything is sampled.
+  // The page is already showing the loop before anything is sampled. This warms only the
+  // server; every sample below runs in a fresh browser context with an empty cache.
   await expect(async () => {
     await page.goto('/@tobi');
     expect(
       await page.locator('.profile-cover').getAttribute('data-cover-play'),
     ).toBe('loop');
   }).toPass({ timeout: 15_000 });
+  const state = await page.context().storageState();
   const home: number[] = [];
   const profile: number[] = [];
   const status: number[] = [];
   const dashboard: number[] = [];
   const admin: number[] = [];
   for (let run = 0; run < 3; run += 1) {
-    home.push(await lcp(page, '/'));
-    profile.push(await lcp(page, '/@tobi'));
-    status.push(await lcp(page, `/tip/${tip.tipId}#t=${tip.statusToken}`));
-    dashboard.push(await lcp(page, '/dashboard'));
-    admin.push(await lcp(page, '/ops'));
+    home.push(await lcp(browser, state, '/'));
+    profile.push(await lcp(browser, state, '/@tobi'));
+    status.push(
+      await lcp(browser, state, `/tip/${tip.tipId}#t=${tip.statusToken}`),
+    );
+    dashboard.push(await lcp(browser, state, '/dashboard'));
+    admin.push(await lcp(browser, state, '/ops'));
   }
   for (const ms of profile) expect(ms, `/@tobi LCP ${ms}ms`).toBeLessThan(2000);
   const results = {
@@ -130,5 +186,6 @@ test('lab LCP sample', async ({ page }) => {
     '/dashboard': dashboard,
     '/ops': admin,
   };
+  console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
   console.log(`LCP_RESULTS ${JSON.stringify(results)}`);
 });

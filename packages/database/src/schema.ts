@@ -9,6 +9,7 @@ import {
 } from '@tipme/contracts';
 import { ATTEMPT_STATUSES, PAYOUT_STATUSES, TIP_STATUSES } from '@tipme/domain';
 import { MAIL_CATEGORIES } from '@tipme/mail';
+import type { SocialLink } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -504,10 +505,15 @@ export const profiles = pgTable(
     craft: text('craft'),
     note: text('note'),
     avatarPath: text('avatar_path'),
+    // The three fixed links of before 5 Nov 2026. No longer read or written: `links` replaced it
+    // (migration 0072 copied it across); kept until a later release drops it.
     socials: jsonb('socials')
       .$type<{ facebook?: string; instagram?: string; x?: string }>()
       .notNull()
       .default({}),
+    // Every link the owner saved, in their order (@tipme/contracts socialLinksSchema). What shows
+    // depends on the plan (visibleLinks): a lapsed Pro page keeps its extras here, hidden.
+    links: jsonb('links').$type<SocialLink[]>().notNull().default([]),
     bioPublic: boolean('bio_public').notNull().default(true),
     socialsPublic: boolean('socials_public').notNull().default(true),
     phonePublic: boolean('phone_public').notNull().default(false),
@@ -535,6 +541,12 @@ export const profiles = pgTable(
       .notNull()
       .default(true),
     notifyMilestones: boolean('notify_milestones').notNull().default(true),
+    // Live updates (owner's ruling, 3 Nov 2026): "Hide who tipped and how much in pop-ups" (shared
+    // screens, shop counters), and "Sound for new tips" in a background tab. Per account.
+    popupHideTipDetails: boolean('popup_hide_tip_details')
+      .notNull()
+      .default(false),
+    tipSound: boolean('tip_sound').notNull().default(true),
     // Free or Pro (PR-012). Staff set it; there is no billing while money is pretend.
     plan: text('plan').notNull().default('free'),
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
@@ -546,6 +558,11 @@ export const profiles = pgTable(
     // standard allowance, at most MAX_HANDLE_CHANGE_EXTRA. Only Pro pages can make one.
     handleChangesUsed: integer('handle_changes_used').notNull().default(0),
     handleChangesExtra: integer('handle_changes_extra').notNull().default(0),
+    // The thank-you line on the supporter's receipt ("Make it yours"), up to 140 characters. The
+    // card style (NULL reads as paper) and the signature are Pro; a page that leaves Pro keeps them.
+    thanksLine: text('thanks_line'),
+    thanksStyle: text('thanks_style'),
+    thanksSigned: boolean('thanks_signed').notNull().default(false),
     createdAt: createdAt(),
   },
   (table) => [
@@ -585,6 +602,15 @@ export const profiles = pgTable(
     check(
       'profiles_tip_presets_range',
       sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
+    ),
+    // char_length counts code points, as THANKS_LINE_LIMIT does, so an emoji counts once.
+    check(
+      'profiles_thanks_line_length',
+      sql`thanks_line IS NULL OR char_length(thanks_line) BETWEEN 1 AND 140`,
+    ),
+    check(
+      'profiles_thanks_style',
+      sql`thanks_style IS NULL OR thanks_style IN ('paper', 'violet', 'night')`,
     ),
   ],
 );
@@ -816,6 +842,43 @@ export const handleAliases = pgTable(
   (table) => [index('handle_aliases_profile').on(table.profileId)],
 );
 
+/**
+ * Usernames staff have reserved, on top of the built-in list in @tipme/domain (which stays in code
+ * because the router depends on it). `handle_lower` is the reservationKey. Released rows stay as
+ * history; at most one row per name is active. Triggers (migration 0072) keep a page or an old
+ * username off an active reservation, and a reservation off a name a page holds.
+ */
+export const handleReservations = pgTable(
+  'handle_reservations',
+  {
+    id: uuid('id').primaryKey(),
+    handleLower: text('handle_lower').notNull(),
+    source: text('source').notNull(),
+    // The take-back this came from (PR 2 adds that table and the foreign key).
+    takeBackId: uuid('take_back_id'),
+    reason: text('reason').notNull(),
+    // Null only when the system completed a take-back.
+    reservedBy: uuid('reserved_by').references(() => users.id),
+    reservedAt: timestamp('reserved_at', { withTimezone: true }).notNull(),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    releasedBy: uuid('released_by').references(() => users.id),
+    releaseReason: text('release_reason'),
+  },
+  (table) => [
+    uniqueIndex('handle_reservations_active')
+      .on(table.handleLower)
+      .where(sql`released_at IS NULL`),
+    check(
+      'handle_reservations_source',
+      sql`${table.source} IN ('staff', 'take_back')`,
+    ),
+    check(
+      'handle_reservations_released',
+      sql`${table.releasedAt} IS NULL OR (${table.releasedBy} IS NOT NULL AND ${table.releaseReason} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export const tipQuotes = pgTable(
   'tip_quotes',
   {
@@ -921,6 +984,9 @@ export const tipMessages = pgTable(
       .primaryKey()
       .references(() => tips.id),
     body: text('body').notNull(),
+    // The supporter ticked "may show this note on their page". Consent belongs to the note; only
+    // notes written after this column existed can ever be true.
+    mayShow: boolean('may_show').notNull().default(false),
     createdAt: createdAt(),
   },
   () => [
@@ -1019,6 +1085,12 @@ export const payouts = pgTable(
     index('payouts_reference').on(table.providerReference),
     index('payouts_reference_end').on(
       sql`lower(right(${table.providerReference}, 6))`,
+    ),
+    // A recipient's withdrawals, newest request first (the dashboard's list and its cursor).
+    index('payouts_profile_created').on(
+      table.profileId,
+      table.createdAt.desc(),
+      table.id.desc(),
     ),
   ],
 );

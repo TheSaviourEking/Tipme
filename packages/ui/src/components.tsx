@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { ComponentPropsWithRef, HTMLAttributes, ReactNode } from 'react';
 
 /** `continue` is the black continuation action: the one step forward on a screen. */
@@ -7,6 +8,23 @@ export type Material =
   'canvas' | 'raised' | 'recessed' | 'signature' | 'instrument' | 'paper';
 const classes = (...values: (string | undefined)[]) =>
   values.filter(Boolean).join(' ');
+
+/** A small lit mark that carries a state beside its words. Decoration: the words say it. */
+export type LampTone = 'red' | 'amber' | 'purple' | 'off';
+export function Lamp({
+  tone,
+  className,
+}: {
+  tone: LampTone;
+  className?: string;
+}) {
+  return (
+    <span
+      className={classes('tm-lamp', `tm-lamp--${tone}`, className)}
+      aria-hidden="true"
+    />
+  );
+}
 
 export function Button({
   variant = 'primary',
@@ -102,12 +120,45 @@ type FieldDetails = {
   label: string;
   hint?: string;
   error?: string;
+  /**
+   * A few words beside the value, inside the well, with a red lamp ("below ₦2,000"). Shown only
+   * with an error, but passing it keeps the field in a wrap all the time.
+   */
+  flag?: string;
 };
+/**
+ * A field given a flag always sits in the same wrap, so the control never remounts as the error
+ * comes and goes (focus, the phone keyboard and the value survive). Only the flag text follows the
+ * error. It is hidden from screen readers: the linked error line already says it in full.
+ */
+function Flagged({
+  error,
+  flag,
+  children,
+}: {
+  error?: string;
+  flag?: string;
+  children: ReactNode;
+}) {
+  if (flag === undefined) return children;
+  return (
+    <div className="tm-input-wrap">
+      {children}
+      {error && flag && (
+        <span className="tm-field-flag" aria-hidden="true">
+          <Lamp tone="red" />
+          {flag}
+        </span>
+      )}
+    </div>
+  );
+}
 export function InputField({
   id,
   label,
   hint,
   error,
+  flag,
   className,
   ...props
 }: ComponentPropsWithRef<'input'> & FieldDetails) {
@@ -119,21 +170,23 @@ export function InputField({
           {hint}
         </p>
       )}
-      <input
-        {...props}
-        id={id}
-        className={classes('tm-input', className)}
-        aria-invalid={Boolean(error)}
-        aria-describedby={
-          [
-            hint && `${id}-hint`,
-            error && `${id}-error`,
-            props['aria-describedby'],
-          ]
-            .filter(Boolean)
-            .join(' ') || undefined
-        }
-      />
+      <Flagged error={error} flag={flag}>
+        <input
+          {...props}
+          id={id}
+          className={classes('tm-input', className)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={
+            [
+              hint && `${id}-hint`,
+              error && `${id}-error`,
+              props['aria-describedby'],
+            ]
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
+        />
+      </Flagged>
       {error && (
         <p className="tm-field-error" id={`${id}-error`} role="alert">
           {error}
@@ -147,6 +200,7 @@ export function TextareaField({
   label,
   hint,
   error,
+  flag,
   className,
   ...props
 }: ComponentPropsWithRef<'textarea'> & FieldDetails) {
@@ -158,22 +212,24 @@ export function TextareaField({
           {hint}
         </p>
       )}
-      <textarea
-        rows={3}
-        {...props}
-        id={id}
-        className={classes('tm-input', className)}
-        aria-invalid={Boolean(error)}
-        aria-describedby={
-          [
-            hint && `${id}-hint`,
-            error && `${id}-error`,
-            props['aria-describedby'],
-          ]
-            .filter(Boolean)
-            .join(' ') || undefined
-        }
-      />
+      <Flagged error={error} flag={flag}>
+        <textarea
+          rows={3}
+          {...props}
+          id={id}
+          className={classes('tm-input', className)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={
+            [
+              hint && `${id}-hint`,
+              error && `${id}-error`,
+              props['aria-describedby'],
+            ]
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
+        />
+      </Flagged>
       {error && (
         <p className="tm-field-error" id={`${id}-error`} role="alert">
           {error}
@@ -206,6 +262,188 @@ export function AmountChoice(
     />
   );
 }
+export type SlipTone = 'error' | 'unsure' | 'waiting' | 'done' | 'neutral';
+const stampColour: Record<SlipTone, 'red' | 'ink' | 'purple'> = {
+  error: 'red',
+  unsure: 'ink',
+  waiting: 'ink',
+  neutral: 'ink',
+  done: 'purple',
+};
+/** Something present beside a value: false, null, undefined and '' are not. */
+const given = (node: ReactNode) =>
+  node !== undefined && node !== null && node !== false && node !== '';
+
+/**
+ * Concept A, the slip: a paper slip for a state that needs explaining (money, account safety,
+ * staff actions). Errors and unsure outcomes are alerts; everything else is a polite status.
+ */
+export function Slip({
+  tone = 'neutral',
+  title,
+  stamp,
+  safe,
+  actions,
+  dense = false,
+  live,
+  children,
+  className,
+  id,
+  'data-testid': testId,
+}: {
+  tone?: SlipTone;
+  /** Some titles come from the server, so any node is allowed. */
+  title: ReactNode;
+  /** The ink stamp's words. Decoration: the title carries the meaning, so it is aria-hidden. */
+  stamp?: string;
+  /**
+   * The reassuring line. Only where the code proves it (states plan, Money-safety proofs): the slip
+   * never writes one of its own.
+   */
+  safe?: ReactNode;
+  /** Keys on the slip: the way out. */
+  actions?: ReactNode;
+  /** Staff screens: tighter padding, smaller stamp. */
+  dense?: boolean;
+  /**
+   * The role, when the tone's default is wrong: 'none' inside a live region that already speaks
+   * (a nested region announces twice). Errors default to alert, everything else to status.
+   */
+  live?: 'alert' | 'status' | 'none';
+  children?: ReactNode;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <div
+      id={id}
+      data-testid={testId}
+      className={classes(
+        'tm-slip',
+        `tm-slip--${tone}`,
+        dense ? 'tm-slip--dense' : undefined,
+        stamp ? 'tm-slip--stamped' : undefined,
+        className,
+      )}
+      role={
+        live === 'none'
+          ? undefined
+          : (live ??
+            (tone === 'error' || tone === 'unsure' ? 'alert' : 'status'))
+      }
+    >
+      {stamp && (
+        <span
+          className={`tm-slip__stamp tm-slip__stamp--${stampColour[tone]}`}
+          aria-hidden="true"
+        >
+          {stamp.split('\n').map((line, index) => (
+            <Fragment key={index}>
+              {index > 0 && <br />}
+              {line}
+            </Fragment>
+          ))}
+        </span>
+      )}
+      <strong className="tm-slip__title">{title}</strong>
+      {given(children) && <div className="tm-slip__body">{children}</div>}
+      {given(safe) && (
+        <div className="tm-slip__safe">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path
+              d="M8 1.5 2.75 3.5v4c0 3.2 2.2 5.9 5.25 7 3.05-1.1 5.25-3.8 5.25-7v-4L8 1.5Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+            <path
+              d="m5.5 8 1.75 1.75L10.75 6.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span>{safe}</span>
+        </div>
+      )}
+      {given(actions) && <div className="tm-slip__actions">{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * A condition people must know about that isn't a failed action (StatesMap legend). It is usually
+ * on the page from the start, where an alert is noise, so it is a polite status with an amber lamp.
+ */
+export function StandingWarning({
+  title,
+  children,
+  actions,
+  dense = false,
+  className,
+  id,
+  'data-testid': testId,
+}: {
+  title: ReactNode;
+  children?: ReactNode;
+  actions?: ReactNode;
+  dense?: boolean;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <div
+      className={classes(
+        'tm-warning',
+        dense ? 'tm-warning--dense' : undefined,
+        className,
+      )}
+      role="status"
+      id={id}
+      data-testid={testId}
+    >
+      <strong className="tm-warning__title">
+        <Lamp tone="amber" />
+        {title}
+      </strong>
+      {given(children) && <div className="tm-warning__body">{children}</div>}
+      {given(actions) && <div className="tm-warning__actions">{actions}</div>}
+    </div>
+  );
+}
+
+/** The one plain line under a key, with no box. Always mounted, so a screen reader hears the change. */
+export function StateLine({
+  tone,
+  children,
+  id,
+  visuallyHidden = false,
+}: {
+  tone: 'error' | 'status';
+  children?: ReactNode;
+  id?: string;
+  /** The key face already shows it ("Saved."); the words stay for screen readers. */
+  visuallyHidden?: boolean;
+}) {
+  return (
+    <p
+      className={classes(
+        'tm-state-line',
+        visuallyHidden ? 'sr-only' : undefined,
+      )}
+      role={tone === 'error' ? 'alert' : 'status'}
+      id={id}
+    >
+      {children}
+    </p>
+  );
+}
+
 export function Notice({
   tone = 'neutral',
   title,
@@ -248,6 +486,130 @@ export function EmptyState({
     </div>
   );
 }
+/** Public and recipient pages: a blank slip waiting to be written on, with one key to fill it. */
+export function EmptySlip({
+  title,
+  caption,
+  children,
+  action,
+  headingLevel = 2,
+  className,
+  id,
+  'data-testid': testId,
+}: {
+  title: ReactNode;
+  /** Decoration on the blank slip: hidden from screen readers. Put real explanation in children. */
+  caption?: string;
+  children?: ReactNode;
+  action?: ReactNode;
+  headingLevel?: 2 | 3;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
+}) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h2';
+  return (
+    <div
+      className={classes('tm-empty-slip', className)}
+      id={id}
+      data-testid={testId}
+    >
+      <div className="tm-empty-slip__blank" aria-hidden="true">
+        <p className="tm-empty-slip__quote">“ … ”</p>
+        {caption && <p className="tm-empty-slip__caption">{caption}</p>}
+      </div>
+      <Heading className="tm-empty-slip__title">{title}</Heading>
+      {given(children) && <div className="tm-empty-slip__body">{children}</div>}
+      {given(action) && <div className="tm-empty-slip__action">{action}</div>}
+    </div>
+  );
+}
+
+/** The admin area: an unlit well, on and ready, with nothing in it yet. */
+export function EmptyWell({
+  title,
+  children,
+  action,
+  headingLevel = 2,
+  className,
+  id,
+  'data-testid': testId,
+}: {
+  title: ReactNode;
+  children?: ReactNode;
+  action?: ReactNode;
+  headingLevel?: 2 | 3;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
+}) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h2';
+  return (
+    <div
+      className={classes('tm-empty-well', className)}
+      id={id}
+      data-testid={testId}
+    >
+      <div className="tm-empty-well__well">
+        <Lamp tone="off" />
+        <Heading className="tm-empty-well__title">{title}</Heading>
+      </div>
+      {given(children) && <div className="tm-empty-well__body">{children}</div>}
+      {given(action) && <div className="tm-empty-well__action">{action}</div>}
+    </div>
+  );
+}
+
+/**
+ * Progress as lamps in wells (FeedbackMoments "Withdrawal requested"): lamps fill one by one, from
+ * the API's state only. A failure lights the first lamp red and leaves the others dark.
+ */
+export function Steps({
+  labels,
+  filled,
+  failed = false,
+  label = 'Progress',
+  className,
+  id,
+  'data-testid': testId,
+}: {
+  labels: readonly string[];
+  /** How many are done, from the API's state only. */
+  filled: number;
+  failed?: boolean;
+  label?: string;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <ol
+      className={classes('tm-steps', className)}
+      aria-label={label}
+      id={id}
+      data-testid={testId}
+    >
+      {labels.map((step, index) => {
+        const done = !failed && index < filled;
+        const broke = failed && index === 0;
+        return (
+          <li
+            key={step}
+            className="tm-steps__step"
+            data-filled={done ? 'true' : 'false'}
+          >
+            <Lamp tone={broke ? 'red' : done ? 'purple' : 'off'} />
+            <span>{step}</span>
+            <span className="sr-only">
+              {broke ? ', didn’t go through' : done ? ', done' : ', not yet'}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function Skeleton({ label = 'Loading content' }: { label?: string }) {
   return (
     <div className="tm-skeleton" role="status">

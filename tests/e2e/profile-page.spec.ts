@@ -182,19 +182,27 @@ test.describe('the page in each payment state', () => {
     async ({ page }, info) => {
       await at('live', '/@kemi', page);
       const identity = page.locator('[data-profile-card]');
+      // Each link shows its handle and is named for its site.
       const list = identity.getByRole('list', { name: 'Find Kemi elsewhere' });
-      for (const name of [
-        'X',
-        'Instagram',
-        'Facebook',
-        '+2348000000000',
-        'kemi@example.com',
-      ])
+      for (const site of ['Facebook', 'Instagram', 'X'])
         await expect(
-          list.getByRole('link', { name, exact: true }),
+          list.getByRole('link', {
+            name: `${site}: @kemi (opens in a new tab)`,
+            exact: true,
+          }),
         ).toBeVisible();
-      await expect(list.locator('svg')).toHaveCount(5);
-      const links = await list
+      await expect(list.getByRole('link').first()).toHaveAttribute(
+        'target',
+        '_blank',
+      );
+      await expect(list.locator('.link-badge')).toHaveText(['f', 'IG', 'X']);
+      const contact = identity.getByRole('list', { name: 'Contact Kemi' });
+      for (const name of ['+2348000000000', 'kemi@example.com'])
+        await expect(
+          contact.getByRole('link', { name, exact: true }),
+        ).toBeVisible();
+      await expect(contact.locator('svg')).toHaveCount(2);
+      const links = await identity
         .getByRole('link')
         .evaluateAll((all) => all.map((a) => a.getBoundingClientRect().height));
       for (const height of links) expect(height).toBeGreaterThanOrEqual(44);
@@ -440,6 +448,54 @@ test.describe('the page in each payment state', () => {
         await page.waitForTimeout(350);
         await expectAccessible(page, `${mode} ${path}`);
       }
+    },
+  );
+
+  both(
+    'links: a Pro page’s featured key leads the row; an older API’s links still show',
+    async ({ page }) => {
+      await at('live', '/@prolinks', page);
+      const identity = page.locator('[data-profile-card]');
+      const featured = identity.getByRole('link', {
+        name: 'Watch me live on Twitch @kemi (opens in a new tab)',
+        exact: true,
+      });
+      await expect(featured).toHaveAttribute('href', 'https://twitch.tv/kemi');
+      const list = identity.getByRole('list', { name: 'Find Kemi elsewhere' });
+      const named = async (
+        links: ReturnType<Page['getByRole']>,
+        names: string[],
+      ) => {
+        await expect(links).toHaveCount(names.length);
+        for (const [i, name] of names.entries())
+          await expect(links.nth(i)).toHaveAccessibleName(name);
+      };
+      await named(list.getByRole('link'), [
+        'TikTok: @kemi.cuts (opens in a new tab)',
+        'Website: kemicuts.com (opens in a new tab)',
+      ]);
+      await expect(list.locator('.link-badge')).toHaveText(['TT', 'www']);
+      await expect(list.getByRole('link').last()).toHaveAttribute(
+        'rel',
+        'noopener noreferrer nofollow ugc',
+      );
+      const key = await featured.boundingBox();
+      const row = await list.boundingBox();
+      expect(key!.y + key!.height).toBeLessThanOrEqual(row!.y);
+      expect(key!.height).toBeGreaterThanOrEqual(44);
+      expect(await overflowing(page)).toEqual([]);
+      await expectAccessible(page, 'prolinks');
+
+      await at('live', '/@oldlinks', page);
+      await named(
+        page
+          .getByRole('list', { name: 'Find Kemi elsewhere' })
+          .getByRole('link'),
+        [
+          'Instagram: @kemi (opens in a new tab)',
+          'X: @kemi (opens in a new tab)',
+        ],
+      );
     },
   );
 

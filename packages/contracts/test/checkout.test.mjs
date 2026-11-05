@@ -72,3 +72,20 @@ test('intent requests are strict and bounded', () => {
     false,
   );
 });
+
+test('noteMayShow is only ever true, or absent', () => {
+  const base = { quoteId: randomUUID(), message: 'x' };
+  assert.equal(
+    tipIntentRequestSchema.safeParse({ ...base, noteMayShow: true }).success,
+    true,
+  );
+  assert.equal(tipIntentRequestSchema.safeParse(base).success, true);
+  assert.equal(
+    tipIntentRequestSchema.safeParse({ ...base, noteMayShow: false }).success,
+    false,
+  );
+  assert.equal(
+    tipIntentRequestSchema.safeParse({ ...base, noteMayShow: 'yes' }).success,
+    false,
+  );
+});

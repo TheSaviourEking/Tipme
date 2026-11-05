@@ -3,18 +3,21 @@ import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { HandleStatus, MyProfile } from '@tipme/contracts';
+import { FEE_POLICY_V1 } from '@tipme/domain';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { CoverSettings, type Layer } from '@/components/account/cover-settings';
 import { Avatar } from '@/components/avatar';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { hasAvatar } from '@/lib/avatar-source';
+import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
 import { STANDARD_TIP_AMOUNTS } from '@/lib/tip-amounts';
 import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 import { PagePreview } from './page-preview';
+import { YourLinks, linksDraftFrom } from './your-links';
 import { SettingsChapter } from './section';
 
 // My page (ScreenSettings): whether the page is live, its photo, handle, amounts and words.
@@ -433,13 +436,13 @@ export function TipAmountsSettings() {
   const [busy, setBusy] = useState(false);
   if (!pro)
     return (
-      <Card className="settings-section">
+      <Card id="tip-amounts" className="settings-section">
         <h3>Tip amounts</h3>
         <p className="tm-hint">
-          Your page offers NGN {amounts.presetsMinor.map(nairaText).join(', ')},
-          and supporters can tip any amount from NGN{' '}
-          {nairaText(amounts.minMinor)}. Choosing your own amounts and minimum
-          is part of TipMe Pro.
+          Your page offers{' '}
+          {amounts.presetsMinor.map((minor) => formatNaira(minor)).join(', ')},
+          and supporters can tip any amount from {formatNaira(amounts.minMinor)}
+          . Choosing your own amounts and minimum is part of TipMe Pro.
         </p>
       </Card>
     );
@@ -483,7 +486,7 @@ export function TipAmountsSettings() {
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
-        text: 'The smallest tip must be at least NGN 2,000, in whole naira.',
+        text: `The smallest tip must be at least ${formatNaira(FEE_POLICY_V1.minTipMinor)}, in whole naira.`,
       });
     else
       setError({
@@ -492,7 +495,7 @@ export function TipAmountsSettings() {
       });
   };
   return (
-    <Card className="settings-section">
+    <Card id="tip-amounts" className="settings-section">
       <h3>Tip amounts (Pro)</h3>
       <p className="tm-hint">
         Choose the amounts on your page and the smallest tip you accept.
@@ -526,7 +529,7 @@ export function TipAmountsSettings() {
           label="Smallest tip (NGN)"
           inputMode="numeric"
           autoComplete="off"
-          hint="At least NGN 2,000."
+          hint={`At least ${formatNaira(FEE_POLICY_V1.minTipMinor)}.`}
           value={minimum}
           onChange={(e) => {
             setMinimum(e.target.value);
@@ -551,9 +554,6 @@ const fieldLabels: Record<string, string> = {
   displayName: 'Display name',
   role: 'What you do',
   bio: 'Bio',
-  'socials.facebook': 'Facebook link',
-  'socials.instagram': 'Instagram link',
-  'socials.x': 'X (Twitter) link',
 };
 
 export /** What About you edits, before it is saved. */
@@ -561,11 +561,7 @@ const aboutFrom = (profile: MyProfile) => ({
   displayName: profile.displayName,
   role: profile.role ?? '',
   bio: profile.bio ?? '',
-  facebook: profile.socials.facebook ?? '',
-  instagram: profile.socials.instagram ?? '',
-  x: profile.socials.x ?? '',
   bioPublic: profile.bioPublic,
-  socialsPublic: profile.socialsPublic,
   phonePublic: profile.phonePublic,
 });
 export type AboutForm = ReturnType<typeof aboutFrom>;
@@ -592,20 +588,13 @@ export function AboutYou({
     event.preventDefault();
     setBusy(true);
     setErrors({});
-    const socials = Object.fromEntries(
-      (['facebook', 'instagram', 'x'] as const)
-        .map((kind) => [kind, form[kind].trim()])
-        .filter(([, url]) => url),
-    );
     const result = await apiFetch<MyProfile>('/v1/me/profile', {
       method: 'PATCH',
       body: {
         displayName: form.displayName,
         role: form.role,
         bio: form.bio,
-        socials,
         bioPublic: form.bioPublic,
-        socialsPublic: form.socialsPublic,
         phonePublic: form.phonePublic,
       },
     });
@@ -620,9 +609,7 @@ export function AboutYou({
       Object.fromEntries(
         fields.map((field) => [
           field,
-          field.startsWith('socials.')
-            ? 'Use a full https:// link on that site.'
-            : `Check the ${fieldLabels[field]?.toLowerCase() ?? 'value'}.`,
+          `Check the ${fieldLabels[field]?.toLowerCase() ?? 'value'}.`,
         ]),
       ),
     );
@@ -630,10 +617,7 @@ export function AboutYou({
       setErrors({ form: 'We couldn’t save. Please try again.' });
   };
 
-  const check = (
-    key: 'bioPublic' | 'socialsPublic' | 'phonePublic',
-    label: string,
-  ) => (
+  const check = (key: 'bioPublic' | 'phonePublic', label: string) => (
     <label className="tip-remember" htmlFor={`${id}-${key}`}>
       <input
         id={`${id}-${key}`}
@@ -679,37 +663,6 @@ export function AboutYou({
           error={errors.bio}
         />
         {check('bioPublic', 'Show my bio on my page')}
-        <InputField
-          id={`${id}-fb`}
-          label="Facebook link"
-          type="url"
-          inputMode="url"
-          placeholder="https://facebook.com/you"
-          value={form.facebook}
-          onChange={(e) => set('facebook')(e.target.value)}
-          error={errors['socials.facebook']}
-        />
-        <InputField
-          id={`${id}-ig`}
-          label="Instagram link"
-          type="url"
-          inputMode="url"
-          placeholder="https://instagram.com/you"
-          value={form.instagram}
-          onChange={(e) => set('instagram')(e.target.value)}
-          error={errors['socials.instagram']}
-        />
-        <InputField
-          id={`${id}-x`}
-          label="X (Twitter) link"
-          type="url"
-          inputMode="url"
-          placeholder="https://x.com/you"
-          value={form.x}
-          onChange={(e) => set('x')(e.target.value)}
-          error={errors['socials.x']}
-        />
-        {check('socialsPublic', 'Show my social links on my page')}
         {profile.phone && (
           <>
             <p className="tm-hint">Your phone number: {profile.phone}</p>
@@ -739,6 +692,7 @@ export function AboutYou({
 export function MyPageSection() {
   const { profile } = useRecipient();
   const [about, setAbout] = useState(() => aboutFrom(profile));
+  const [links, setLinks] = useState(() => linksDraftFrom(profile));
   const [cover, setCover] = useState<Layer | null>(null);
   return (
     <SettingsChapter id="page" className="settings-chapter--editor">
@@ -746,11 +700,17 @@ export function MyPageSection() {
         <PageState />
         <PhotoSettings />
         <AboutYou form={about} setForm={setAbout} />
+        <YourLinks draft={links} setDraft={setLinks} />
         <HandleChange />
         <TipAmountsSettings />
         <CoverSettings onPreview={setCover} />
       </div>
-      <PagePreview profile={profile} about={about} cover={cover} />
+      <PagePreview
+        profile={profile}
+        about={about}
+        links={links}
+        cover={cover}
+      />
     </SettingsChapter>
   );
 }

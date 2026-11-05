@@ -1,18 +1,30 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
-import type { MyTipRow } from '@tipme/contracts';
+import type { LiveEventType, MyTipRow, TipTotals } from '@tipme/contracts';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
+import { dayKey, timeOf } from '@/lib/lagos-time';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
+import { useLiveEvents } from '@/components/live/live-provider';
+import { canInsertInPlace } from '@/lib/live-merge';
+
+const TIPS_CHANGED: readonly LiveEventType[] = ['tips.changed'];
+const NO_SIGNALS: readonly LiveEventType[] = [];
 import { apiDownload, apiFetch } from '@/lib/session-client';
 
-type Filter = 'all' | 'paid' | 'confirming';
+type Filter = 'all' | 'notes' | 'confirming';
+// "With a note" asks only for paid tips: a note's words reach the recipient with a paid tip.
+const filterQuery: Record<Filter, string> = {
+  all: 'status=all',
+  notes: 'status=paid&note=with',
+  confirming: 'status=confirming',
+};
 type Page = { items: MyTipRow[]; nextCursor: string | null };
 const filters: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All' },
-  { value: 'paid', label: 'Paid' },
+  { value: 'notes', label: 'With a note' },
   { value: 'confirming', label: 'Being confirmed' },
 ];
 // A paid tip says nothing extra; any other state is said in words, never by colour alone.
@@ -22,15 +34,6 @@ const stateText = {
   cancelled: 'Expired',
 } as const;
 
-const ZONE = 'Africa/Lagos';
-const dayKey = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-CA', { timeZone: ZONE });
-const timeOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: ZONE,
-  });
 function dayTitle(key: string, now: number) {
   if (key === dayKey(new Date(now).toISOString())) return 'Today';
   if (key === dayKey(new Date(now - 86_400_000).toISOString()))
@@ -80,12 +83,37 @@ export default function TipsPage() {
   }, [query]);
 
   const listPath = (cursor?: string) =>
-    `/v1/me/tips?status=${filter}${searched ? `&q=${encodeURIComponent(searched)}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    `/v1/me/tips?${filterQuery[filter]}${searched ? `&q=${encodeURIComponent(searched)}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
   const path = listPath();
-  // One loader: data, error and reload(). A failed refresh keeps the rows already shown.
-  const { data, error } = usePanel<Page>(path);
-
   const extra = more?.path === path ? more : null;
+  // Only the first page refreshes in place. Someone searching or further down the list gets a
+  // "New tips: show" button instead of rows inserted under them.
+  const inPlace = canInsertInPlace({ searched, extraPages: extra ? 1 : 0 });
+  // One loader: data, error and reload(). A failed refresh keeps the rows already shown.
+  const { data, error, reload } = usePanel<Page>(path, {
+    live: inPlace ? TIPS_CHANGED : NO_SIGNALS,
+    resync: inPlace,
+  });
+  // What was received in all, from the API. Hidden until it is known; a failed refresh keeps it.
+  // A new paid tip changes it, wherever the reader is in the list.
+  const totals = usePanel<TipTotals>('/v1/me/tip-totals', {
+    live: TIPS_CHANGED,
+  });
+  const [newTips, setNewTips] = useState(false);
+  useLiveEvents(
+    inPlace ? NO_SIGNALS : TIPS_CHANGED,
+    async () => setNewTips(true),
+    { resync: false },
+  );
+  const showNewTips = () => {
+    setNewTips(false);
+    setMore(null);
+    setQuery('');
+    setSearched('');
+    // Clearing a search changes the path, and the panel reads the new one itself; only a deeper
+    // list of the same path needs asking again (a read of the old path would be thrown away).
+    if (!searched) void reload();
+  };
   const items = data ? [...data.items, ...(extra?.items ?? [])] : null;
   const next = extra ? extra.next : (data?.nextCursor ?? null);
 
@@ -110,7 +138,16 @@ export default function TipsPage() {
   return (
     <div className="dashboard-section tips-page">
       <header className="tips-head">
-        <h1>Your tips</h1>
+        <div>
+          <h1>Your tips</h1>
+          {totals.data && totals.data.paidTipCount > 0 && (
+            <p className="tm-hint">
+              {formatNaira(totals.data.receivedNetMinor)} from{' '}
+              {totals.data.paidTipCount}{' '}
+              {totals.data.paidTipCount === 1 ? 'tip' : 'tips'} so far
+            </p>
+          )}
+        </div>
         <Button
           variant="quiet"
           onClick={async () => {
@@ -122,7 +159,7 @@ export default function TipsPage() {
             );
             setDownload(
               result.ok
-                ? 'Downloaded. Amounts and status only; messages stay private.'
+                ? 'Downloaded. It has the date, supporter name, amounts, status and the last 6 characters of each reference. Messages stay private.'
                 : 'We couldn’t prepare the file. Please try again.',
             );
           }}
@@ -152,7 +189,11 @@ export default function TipsPage() {
               key={option.value}
               variant={filter === option.value ? 'primary' : 'secondary'}
               aria-pressed={filter === option.value}
-              onClick={() => setFilter(option.value)}
+              onClick={() => {
+                setFilter(option.value);
+                // New tips may have arrived since the header was read.
+                void totals.reload();
+              }}
             >
               {option.label}
             </Button>
@@ -166,6 +207,13 @@ export default function TipsPage() {
           : ''}
         {error === 'refresh' ? 'Couldn’t refresh' : ''}
       </p>
+      {newTips && !inPlace && (
+        <p className="tips-new">
+          <Button variant="secondary" onClick={showNewTips}>
+            New tips: show
+          </Button>
+        </p>
+      )}
       {!items ? (
         <Skeleton label="Loading your tips" />
       ) : items.length === 0 ? (

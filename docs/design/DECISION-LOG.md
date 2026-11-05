@@ -1,5 +1,36 @@
 # Design decision log
 
+## 2026-11-05 — Bank picker: search your bank (A) and the name check on its own (C)
+
+The owner approved sections A and C of the `BankPicker` board
+(`docs/design/redesign/boards/BankPicker.dc.html`) for the Get paid card:
+
+1. Popular banks show as keys only when their code is in the partner's list.
+2. Forgiving aliases. The alias list lives in code and is unit-tested.
+3. Popular keys first, then A to Z. Microfinance and mortgage banks are grouped
+   under "More banks", classified from their names.
+4. Phones get a full-screen sheet with the search field focused.
+5. The WAI-ARIA combobox and listbox pattern.
+6. The name check fires once a bank is chosen and 10 digits are typed. It never
+   fires again for the same bank-and-number pair. "Check again" shows only after
+   an error.
+7. All existing copy is kept, except "The payment provider can’t pay to this
+   account. Please add another.", which becomes "Our payment partner can’t pay
+   to this account. Please add another." By the owner's later ruling (5 Nov
+   2026), the card's two other "payment provider" messages also say "our
+   payment partner".
+8. Users never see the provider's name.
+
+Rulings on the plan's open questions (5 Nov 2026): popular keys stay code-only,
+because the partner's live list could not be checked (staging is behind a
+preview password that is not to be used), so a key whose code is missing simply
+hides; badge colours are the board's, with initials only and no logos.
+
+B (account number first) deferred until the payment partner confirms its codes
+are CBN codes. Presentation only: the bank list, codes, name-check limit, email
+code and bank-change pause are unchanged. No regulatory or partner approval is
+implied (`docs/00-DECISIONS.md`).
+
 ## 2026-10-27 — Payer-total-only tip summary
 
 At the product owner's direction, the public tip quote displays only the exact
@@ -254,6 +285,36 @@ The owner: "add an update on the UI so the current user knows that there has bee
 
 - **Owner decision, 3 Nov 2026: the 10% fee is stated in the terms.** The terms page was a placeholder with no fee disclosure. It now has a Fees section: a supporter pays exactly the tip, with nothing added; TipMe keeps 10% of each tip unless a different fee has been agreed with the recipient (a staff-set share, ADR-0014), and processing is paid from that share, so a ₦5,000 tip leaves ₦4,500; the smallest tip and the smallest withdrawal are ₦2,000, unless the whole balance is withdrawn; withdrawing is free, because a payout's provider fee is TipMe's cost (`packages/domain/src/ledger.ts`). Every figure follows `FEE_POLICY_V1` and must change with it.
 - **This is disclosure, not approval.** It states the flat 10% that D-05 already decided. Refunds and chargebacks are still OPEN under D-05, so the terms say nothing about them. Entity, jurisdiction and the rest of the terms still wait on D-02 and D-07, and the page still says the full terms are being finalised. It no longer says they will come "before TipMe takes real payments", because real payments are live. The full terms need a lawyer.
+
+## 2026-11-05 — Make it yours: a Pro accent, and the thank-you slip
+
+- **Owner's request, 5 Nov 2026.** A product and visual decision, not a regulatory approval; see `docs/00-DECISIONS.md` ("Make it yours"). Boards: `docs/design/redesign/boards/ProCustomise.dc.html`, `ProStartAmount.dc.html` and `AppreciationDetails.dc.html`.
+- **The accent exception.** On a Pro page whose cover has a colour, only the selected amount key (and its corner dot) and the pinned note's quote mark and "Pinned by" tag take that colour. The Tip button stays black, and the wordmark, focus rings, links and the Pro badge stay brand, so purple remains the signature material and paying always looks the same. A photo or colourless cover, and every Free page, keep TipMe purple. Text on the tinted key switches to black where white would fall under 4.5:1, and the key keeps an edge of at least 3:1 against the tip panel.
+- **The thank-you slip.** The receipt keeps its heading ("{name} got your thanks.") and adds the recipient's line under it as a quoted slip: Paper on Free; Paper, Violet (TipMe purple, white text) or Night (`#141210`, white text) on Pro, with an optional first-name signature. The quote mark is decorative. In forced colours the slip keeps a 1px edge.
+
+## 2026-11-03 — Live updates: the tip pop-up, a background-tab sound, public pages stay as they are
+
+The owner's answers to the live-updates design
+(`docs/superpowers/specs/2026-11-03-live-updates-design.md` §14):
+
+1. **The pop-up names the supporter and the amount** ("You got a tip · NGN 1,800.00 from Chidi"),
+   from the notification's own title and body, once, through the bell's one polite announcer (at
+   most one a minute; more become a count, "3 new tips"). A Settings switch, "Hide who tipped and
+   how much in pop-ups", is for shared screens and shop counters: on, the pop-up says only "You got a
+   new tip", and the tips list still shows the details. Off by default, per account.
+2. **A new paid tip in a background tab plays one soft sound.** Never for anything else, with no
+   browser notification and no permission prompt. It plays only while the tab is hidden, only after
+   the person has clicked or typed on the page once (browsers block audio before that; it then
+   fails silently), and only for a tip the API reports as paid. "Sound for new tips" in Settings
+   mutes it; it is on by default, per account. Reduced motion has no bearing on sound. The file is
+   ours (`scripts/make-tip-sound.mjs` writes `apps/web/public/sounds/new-tip.wav`: two quiet sine
+   notes, half a second). The switch is on/off only: a choice of sounds was shown on the design
+   canvas but is not approved.
+3. **Public pages are not live.** An open public page refreshes on its next load; checkout re-checks
+   on the server and refuses safely if something changed.
+
+EXPERIENCE-AND-MOTION §4's Sound row changes accordingly; §7.2 (no sound with reduced motion, for
+the appreciation moment) is unchanged.
 
 ## 2026-11-04 — Animated covers
 

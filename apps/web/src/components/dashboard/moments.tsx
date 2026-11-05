@@ -10,7 +10,9 @@ const FOURTEEN_DAYS = 14 * 86_400_000;
 
 /** Recent moments. Each is private until shared; a shared one shows on the page for 14 days. */
 export function Moments() {
-  const panel = usePanel<MomentView[]>('/v1/me/moments');
+  const panel = usePanel<MomentView[]>('/v1/me/moments', {
+    live: ['moments.changed'],
+  });
   // Read once when the panel mounts, not on every render: rendering stays pure.
   const [now] = useState(Date.now);
   if (!panel.data || panel.data.length === 0) return null;
