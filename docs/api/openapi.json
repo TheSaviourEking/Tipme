@@ -2158,6 +2158,12 @@
                   },
                   "guideEmails": {
                     "type": "boolean"
+                  },
+                  "hideTipDetailsInPopups": {
+                    "type": "boolean"
+                  },
+                  "tipSound": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
