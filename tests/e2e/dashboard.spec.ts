@@ -104,6 +104,15 @@ test('a brief 503 retries quietly and a lasting one says so', async ({
   await expect(page.getByText('We couldn’t load your dashboard')).toBeVisible();
 });
 
+// The reply has arrived; give React one frame to paint it before asserting something is absent.
+const rendered = (page: import('@playwright/test').Page) =>
+  page.evaluate(
+    () =>
+      new Promise<void>((done) =>
+        requestAnimationFrame(() => setTimeout(done, 0)),
+      ),
+  );
+
 test('the balance comes first, with what is still being confirmed under it', async ({
   page,
 }, testInfo) => {
@@ -142,7 +151,10 @@ test('the balance comes first, with what is still being confirmed under it', asy
       },
     });
   });
+  const quoted0 = page.waitForResponse('**/v1/me/withdrawal-quote');
   await page.goto('/dashboard');
+  await quoted0;
+  await rendered(page);
   const main = page.locator('main');
   await expect(main.getByRole('heading', { level: 1 })).toHaveText(
     'Your balance',
@@ -196,7 +208,10 @@ test('Ready to withdraw is only what the withdrawal quote allows', async ({
       json: { data: { ...quote, state: 'ready', withdrawableMinor: '0' } },
     }),
   );
+  const quoted1 = page.waitForResponse('**/v1/me/withdrawal-quote');
   await page.reload();
+  await quoted1;
+  await rendered(page);
   await expect(page.getByTestId('balance')).toHaveText('₦10,000');
   await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
   await page.unroute('**/v1/me/withdrawal-quote');
@@ -207,7 +222,10 @@ test('Ready to withdraw is only what the withdrawal quote allows', async ({
       },
     }),
   );
+  const quoted2 = page.waitForResponse('**/v1/me/withdrawal-quote');
   await page.reload();
+  await quoted2;
+  await rendered(page);
   await expect(page.getByTestId('balance')).toHaveText('₦10,000');
   await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
 });
