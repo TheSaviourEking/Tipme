@@ -269,7 +269,7 @@ test('stream 2001 is refused limit_process', () => {
   });
 });
 
-test('repeats of one type to one stream within 250 ms coalesce into one frame', () => {
+test('repeats of one type within 250 ms coalesce: one frame at once, one more at the window\u2019s end', () => {
   const { hub, clock } = router();
   const a = sink();
   hub.register(a);
@@ -277,13 +277,34 @@ test('repeats of one type to one stream within 250 ms coalesce into one frame', 
   hub.dispatch(m);
   clock.advance(100);
   hub.dispatch(m);
-  clock.advance(100);
-  hub.dispatch(m);
-  assert.equal(a.writes.length, 1);
   clock.advance(50);
+  hub.dispatch(m);
+  assert.equal(a.writes.length, 1, 'the first at once');
+  clock.advance(99);
   assert.equal(a.writes.length, 1);
+  // A repeat is never lost: something committed inside the window gets its own frame after it.
+  clock.advance(1);
+  assert.equal(a.writes.length, 2);
+  assert.equal(a.writes[1], 'data: {"type":"tips.changed"}\n\n');
+  // That flush opens the next window: at most one frame per type per 250 ms.
   hub.dispatch(m);
   assert.equal(a.writes.length, 2);
+  clock.advance(250);
+  assert.equal(a.writes.length, 3);
+  // A quiet window closes: the next signal goes at once again.
+  clock.advance(250);
+  hub.dispatch(m);
+  assert.equal(a.writes.length, 4);
+});
+
+test('a single signal is written once, with no flush after it', () => {
+  const { hub, clock } = router();
+  const a = sink();
+  hub.register(a);
+  hub.dispatch({ to: { profile: A_PROFILE }, type: 'tips.changed' });
+  clock.advance(1000);
+  assert.equal(a.writes.length, 1);
+  assert.equal(clock.pending, 0);
 });
 
 test('a different type within the window is flushed once at its end', () => {

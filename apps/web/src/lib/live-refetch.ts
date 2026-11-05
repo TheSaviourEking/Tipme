@@ -4,8 +4,8 @@ import type { LiveEventType } from '@tipme/contracts';
  * Debounced, single-flight refetches for live signals (spec §6.1). Pure, with injected timers.
  * A registration's refetch runs once for every signal burst inside `debounceMs`, measured from the
  * first signal: never two at once, and a signal during a run gives exactly one more after it. The
- * hub drops repeats inside 250 ms on the server; this window is longer, so a read started here still
- * sees anything committed before the hub's last dropped repeat.
+ * hub never drops a signal: repeats inside its 250 ms window get one frame at the window's end, so
+ * a read that began before a change is always followed by one after it.
  */
 export interface RefetchScheduler {
   /** `resync: false`: only its signals run it (a "New tips" button, not a re-read). */
@@ -16,8 +16,11 @@ export interface RefetchScheduler {
   ): () => void;
   /** Debounced per registration. */
   signal(type: LiveEventType): void;
-  /** Every registration, debounced (ready, resync, poll ticks, safety, visible). */
-  resyncAll(): void;
+  /**
+   * Every registration, debounced (ready, resync, poll ticks, safety, visible). `delayMs` replaces
+   * the debounce: 0 for the page's first ready, which is its panels' first read.
+   */
+  resyncAll(o?: { delayMs?: number }): void;
 }
 
 interface Registration {
@@ -56,12 +59,12 @@ export function createRefetchScheduler(o: {
       });
   };
 
-  const schedule = (r: Registration): void => {
+  const schedule = (r: Registration, delayMs = o.debounceMs): void => {
     if (r.gone || r.timer !== undefined) return;
     r.timer = o.setTimeout(() => {
       r.timer = undefined;
       run(r);
-    }, o.debounceMs);
+    }, delayMs);
   };
 
   return {
@@ -86,8 +89,9 @@ export function createRefetchScheduler(o: {
     signal(type) {
       for (const r of registrations) if (r.types.has(type)) schedule(r);
     },
-    resyncAll() {
-      for (const r of registrations) if (r.resync) schedule(r);
+    resyncAll(options) {
+      for (const r of registrations)
+        if (r.resync) schedule(r, options?.delayMs);
     },
   };
 }

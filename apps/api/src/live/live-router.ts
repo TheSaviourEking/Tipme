@@ -61,9 +61,7 @@ const DRAIN_RETRY_MAX_MS = 10_000;
 
 interface Window {
   timer: unknown;
-  /** Types already written in this window: a repeat is dropped. */
-  sent: Set<LiveEventType>;
-  /** Other types that arrived in the window: written once at its end. */
+  /** Types that arrived in the window, repeats included: written once at its end. */
   pending: Set<LiveEventType>;
 }
 
@@ -114,29 +112,31 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
   }
 
   /*
-   * The first signal writes at once and opens a window. A repeat of a type already written in the
-   * window is dropped: the browser debounces its refetch by 300 ms (longer than this window), so a
-   * read it starts after that frame still sees anything committed in the window. Other types in the
-   * window are written once at its end.
+   * The first signal writes at once and opens a 250 ms window. Anything that arrives in the window,
+   * a repeat included, is written once at its end: a repeat is never dropped, because the browser
+   * may already have a read under way that started before the change it announces. A flush opens
+   * the next window, so a stream gets at most one frame per type per window.
    */
+  function openWindow(s: LiveSink): void {
+    const w: Window = { pending: new Set(), timer: undefined };
+    w.timer = o.setTimer(() => {
+      windows.delete(s.id);
+      if (!byId.has(s.id) || w.pending.size === 0) return;
+      const flushed = [...w.pending];
+      for (const t of flushed) deliver(s, t);
+      openWindow(s);
+    }, o.coalesceMs);
+    windows.set(s.id, w);
+  }
+
   function send(s: LiveSink, type: LiveEventType): void {
     const open = windows.get(s.id);
     if (open) {
-      if (!open.sent.has(type)) open.pending.add(type);
+      open.pending.add(type);
       return;
     }
     deliver(s, type);
-    const w: Window = {
-      sent: new Set([type]),
-      pending: new Set(),
-      timer: undefined,
-    };
-    w.timer = o.setTimer(() => {
-      windows.delete(s.id);
-      if (!byId.has(s.id)) return;
-      for (const t of w.pending) deliver(s, t);
-    }, o.coalesceMs);
-    windows.set(s.id, w);
+    openWindow(s);
   }
 
   function end(s: LiveSink): void {
