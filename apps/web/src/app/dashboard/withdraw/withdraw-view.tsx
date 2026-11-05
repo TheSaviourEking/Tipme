@@ -13,29 +13,23 @@ import { Button, InputField, Notice, Skeleton, Surface } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { naira, parseNaira } from '@/lib/money';
+import { formatNaira } from '@/lib/demo-amount';
+import { dateOf, dayKey, timeOf } from '@/lib/lagos-time';
+import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 import { bankLine } from '@/lib/withdrawal-bank';
-import { nairaSign, withdrawState } from '@/lib/withdraw-state';
+import {
+  withdrawableNow,
+  withdrawRefusal,
+  withdrawState,
+} from '@/lib/withdraw-state';
+
+/** Read once per visit (review I5): see the panels below. */
+const ONCE = { resync: false } as const;
 
 /** Quick amounts, offered only when the balance can cover them with something left over. */
 const SHORTCUTS_MINOR = [BigInt(500_000), BigInt(2_000_000)];
 
-const ZONE = 'Africa/Lagos';
-const dayKey = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-CA', { timeZone: ZONE });
-const timeOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: ZONE,
-  });
-const dateOf = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: ZONE,
-  });
 const requested = (iso: string) =>
   dayKey(iso) === dayKey(new Date().toISOString())
     ? `Requested today at ${timeOf(iso)}.`
@@ -122,7 +116,7 @@ function History({
             return (
               <li key={row.payoutId} className="withdraw__row" data-open={open}>
                 <div className="withdraw__row-head">
-                  <strong>{nairaSign(row.amountMinor)}</strong>
+                  <strong>{formatNaira(row.amountMinor)}</strong>
                   <span
                     className={`withdraw__state withdraw__state--${view.tone}`}
                   >
@@ -172,10 +166,16 @@ export default function WithdrawPage({
 }) {
   const id = useId();
   const copy = paymentModeCopy(usePaymentMode());
-  const balance = usePanel<DashboardSummary>('/v1/me/dashboard');
-  const latest = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote');
+  // Read once per visit, as before live updates (review I5): the quote asks the payment partner
+  // for its balance, so no resync, safety refresh or fallback poll may repeat it. PR 2 (Task 14)
+  // decides which signals re-read these, behind a shared server cache of that balance.
+  const balance = usePanel<DashboardSummary>('/v1/me/dashboard', ONCE);
+  const latest = usePanel<WithdrawalQuoteResponse>(
+    '/v1/me/withdrawal-quote',
+    ONCE,
+  );
   const firstPath = '/v1/me/withdrawals';
-  const withdrawalsPanel = usePanel<WithdrawalsPage>(firstPath);
+  const withdrawalsPanel = usePanel<WithdrawalsPage>(firstPath, ONCE);
   // Later pages, kept with the list they belong to: a reload starts from the first page again.
   const [more, setMore] = useState<{
     source: WithdrawalsPage;
@@ -212,36 +212,17 @@ export default function WithdrawPage({
     });
     setBusy(false);
     if (result.ok) {
-      setDone(naira(amount));
+      setDone(formatNaira(amount));
       setRaw('');
       key.current = null;
       reloadAll();
       return;
     }
-    if (
-      result.code === 'WITHDRAWALS_PAUSED' ||
-      result.code === 'WITHDRAWALS_SWITCHED_OFF' ||
-      result.code === 'PAYOUT_SETUP_NEEDED' ||
-      result.code === 'PAYOUT_DESTINATION_NEEDED' ||
-      result.code === 'PAYOUT_PROVIDER_UNAVAILABLE' ||
-      result.code === 'WITHDRAWAL_UNAVAILABLE'
-    ) {
-      // Refused before anything was recorded, and the page now shows why.
-      key.current = null;
-      void Promise.all([balance.reload(), latest.reload()]);
-      return;
-    }
-    setError(
-      result.code === 'INSUFFICIENT_BALANCE'
-        ? 'That is more than your available balance.'
-        : result.code === 'WITHDRAWAL_TOO_SMALL'
-          ? 'The smallest withdrawal is NGN 2,000.'
-          : result.code === 'IDEMPOTENCY_CONFLICT'
-            ? 'This withdrawal may already be on its way. Check your dashboard before asking again.'
-            : // Any other failure may have followed a request that arrived. The key stays, so the
-              // same amount again can't withdraw twice, but it must not read as nothing happened.
-              'We couldn’t confirm your withdrawal. Check your dashboard before trying again.',
-    );
+    const refusal = withdrawRefusal(result.code);
+    // Refused before anything was recorded, so a new key is safe.
+    if (refusal.message === null) key.current = null;
+    if (refusal.reload) void Promise.all([balance.reload(), latest.reload()]);
+    if (refusal.message) setError(refusal.message);
   };
 
   const summary = balance.data;
@@ -262,17 +243,17 @@ export default function WithdrawPage({
   const ready = quote?.state === 'ready' ? quote : null;
   const available = BigInt(summary.availableMinor);
   // The most that can go now: the balance, and no more than the quote allows. Never pending money.
-  const withdrawable =
-    ready && state.canWithdraw
-      ? BigInt(ready.withdrawableMinor) < available
-        ? BigInt(ready.withdrawableMinor)
-        : available
-      : BigInt(0);
+  const withdrawable = withdrawableNow({
+    availableMinor: summary.availableMinor,
+    withdrawalsAvailable: summary.withdrawalsAvailable,
+    quote,
+  });
   const chosen = amount === null ? null : BigInt(amount);
-  // Tapping the amount already chosen changes nothing: the request key and any warning stay, as
-  // they do when typing the same text. Only a different amount starts a new request.
+  // Tapping the amount already chosen changes nothing: the request key and any warning stay.
+  // Only a different amount starts a new request. (Typing is different: onChange starts a new
+  // request on any change of the text, even to the same amount.)
   const choose = (minor: bigint) => {
-    setRaw(nairaSign(minor.toString()));
+    setRaw(formatNaira(minor));
     if (chosen === minor) return;
     setError('');
     key.current = null;
@@ -299,7 +280,7 @@ export default function WithdrawPage({
         next: result.data.nextCursor,
       });
   };
-  const smallest = nairaSign(String(FEE_POLICY_V1.minWithdrawalMinor));
+  const smallest = formatNaira(FEE_POLICY_V1.minWithdrawalMinor);
   // Only an amount the server would accept gets figures: within what can be withdrawn, and at
   // least the minimum unless it is all of it.
   const sendable =
@@ -314,7 +295,7 @@ export default function WithdrawPage({
     <div className="dashboard-section withdraw">
       <h1>Withdraw</h1>
       <p>
-        Available: <strong>{naira(summary.availableMinor)}</strong>
+        Available: <strong>{formatNaira(summary.availableMinor)}</strong>
       </p>
       {pilotNotice}
       {state.kind !== 'collected_elsewhere' && copy.withdrawNotice && (
@@ -369,7 +350,7 @@ export default function WithdrawPage({
                       aria-pressed={chosen === minor}
                       onClick={() => choose(minor)}
                     >
-                      {nairaSign(minor.toString())}
+                      {formatNaira(minor)}
                     </button>
                   ))}
                   <button
@@ -392,13 +373,11 @@ export default function WithdrawPage({
                     </dd>
                     <dt>You receive</dt>
                     <dd data-testid="you-receive">
-                      {covered ? nairaSign(String(chosen)) : '—'}
+                      {covered ? formatNaira(chosen) : '—'}
                     </dd>
                     <dt>Balance afterwards</dt>
                     <dd data-testid="balance-afterwards">
-                      {covered
-                        ? nairaSign((available - chosen).toString())
-                        : '—'}
+                      {covered ? formatNaira(available - chosen) : '—'}
                     </dd>
                   </dl>
                 </section>
@@ -411,7 +390,7 @@ export default function WithdrawPage({
                 }
                 aria-busy={busy}
               >
-                {amount ? `Withdraw ${naira(amount)}` : 'Withdraw'}
+                {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
               </Button>
               <p className="tm-hint">
                 Once sent, a withdrawal can’t be cancelled. The smallest

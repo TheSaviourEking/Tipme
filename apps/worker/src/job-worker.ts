@@ -6,6 +6,7 @@ import {
   PLATFORM_REFUSAL_EVENT,
   WITHDRAWAL_FREEZE_OPENED_EVENT,
   WITHDRAWALS_SWITCH_EVENT,
+  liveChannel,
   traceCarrierSchema,
 } from '@tipme/contracts';
 import {
@@ -69,6 +70,8 @@ import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
+import { createWorkerLivePublisher } from './live-publisher.js';
+import { jobSignalsFor } from './live-signals.js';
 import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
 import { databaseFailureFields, jobFailure } from './job-retry.js';
 import { runUnlessRunning } from './run-lock.js';
@@ -196,6 +199,16 @@ export async function startJobWorker(
     enableOfflineQueue: false,
   });
   markers.on('error', () => undefined);
+  // Live signals over the fail-fast client: while Redis is down a publish fails at once.
+  const publishLive = createWorkerLivePublisher({
+    redis: markers,
+    channel: liveChannel(config.QUEUE_PREFIX),
+    logger,
+    counter: getMeter(SERVICE_NAME).createCounter(
+      'tipme.live.signals_published',
+      { description: 'Live signals published, by type and outcome' },
+    ),
+  });
   const queue = new Queue(JOB_QUEUE, {
     connection: markers,
     prefix: config.QUEUE_PREFIX,
@@ -590,6 +603,9 @@ export async function startJobWorker(
                 log: (entry) => logger.warn({ ...entry, ...fields }),
               }),
             });
+            // After the handler's own writes committed (notifications, moments). Not awaited
+            // and never thrown: a lost signal is caught by the page's next refresh.
+            void publishLive(jobSignalsFor(job.name, outcome, job.data));
             processed.add(1, { outcome });
             return outcome;
           }
@@ -652,7 +668,12 @@ export async function startJobWorker(
   worker.on('error', (error) =>
     logger.warn({ event: 'worker.error', error: error.name }),
   );
-  const relay = startOutboxRelay({ db: database.db, queue, logger });
+  const relay = startOutboxRelay({
+    db: database.db,
+    queue,
+    logger,
+    publishLive,
+  });
   // Configured providers; the pretend one "delivers" to the development-only pretend inbox.
   const mailProviders = configuredMailProviders(
     config,
@@ -702,6 +723,7 @@ export async function startJobWorker(
       pretendDomains: config.MAIL_PRETEND_DOMAINS,
     },
     logger,
+    publishLive,
   });
 
   return {

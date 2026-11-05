@@ -40,7 +40,7 @@ const coverPhoto = () =>
 const preview = (page: Page) => page.getByTestId('cover-preview');
 const shown = (page: Page) => preview(page).locator('[data-profile-cover]');
 const AUTOMATIC = /^(scattered|large|rising)$/;
-const HINT = "If you don't choose, we'll pick one for your page.";
+const HINT = 'If you don’t choose, we’ll pick one for your page.';
 
 /** The public page, seen by a visitor, once it has caught up with the owner's change. */
 async function publicCover(browser: Browser, handle: string, want: string) {

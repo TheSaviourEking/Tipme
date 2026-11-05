@@ -167,3 +167,15 @@ test('a failure while closing still flushes telemetry once and is reported by st
   await assert.rejects(stop(), /close failed/);
   assert.equal(flushes, 1);
 });
+
+test('startDraining calls onDrain listeners once', () => {
+  const pool = { on: () => undefined };
+  const logger = { warn: () => undefined };
+  const readiness = new ReadinessService(pool, {}, logger);
+  let calls = 0;
+  readiness.onDrain(() => (calls += 1));
+  readiness.onDrain(() => (calls += 10));
+  readiness.startDraining();
+  readiness.startDraining();
+  assert.equal(calls, 11);
+});

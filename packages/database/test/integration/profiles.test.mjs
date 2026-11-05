@@ -13,10 +13,12 @@ import {
   publicProfile,
   requestSignInCode,
   resolveSession,
+  setMyLinks,
   setPageState,
   updateMyProfile,
   verifySignInCode,
 } from '../../dist/index.js';
+import { RESERVED_HANDLES, normaliseHandle } from '@tipme/domain';
 import { useDatabase } from './helpers.mjs';
 
 const secret = 'test-auth-code-secret-at-least-32-chars!';
@@ -94,7 +96,10 @@ test('profiles, handles and page states', async (t) => {
         displayName: 'Kemi Bello',
         role: 'Hairdresser at Glow Studio',
         bio: 'Braids and kindness.',
-        socials: { instagram: 'https://instagram.com/kemi' },
+      });
+      await setMyLinks(database.db, kemi, {
+        links: [{ platform: 'instagram', url: 'https://instagram.com/kemi' }],
+        show: true,
       });
       let page = await publicProfile(database.db, 'KEMI');
       assert.deepEqual(
@@ -103,14 +108,14 @@ test('profiles, handles and page states', async (t) => {
           displayName: page.displayName,
           role: page.role,
           bio: page.bio,
-          socials: page.socials,
+          links: page.links,
         },
         {
           handle: 'kemi',
           displayName: 'Kemi Bello',
           role: 'Hairdresser at Glow Studio',
           bio: 'Braids and kindness.',
-          socials: { instagram: 'https://instagram.com/kemi' },
+          links: [{ platform: 'instagram', url: 'https://instagram.com/kemi' }],
         },
       );
       assert.equal('phone' in page, false);
@@ -137,27 +142,22 @@ test('profiles, handles and page states', async (t) => {
     await database.fresh();
     const kemi = await signUp('+2348031230001');
     await claimHandle(database.db, { userId: kemi, handle: 'kemi', now });
+    const save = (platform, url) =>
+      setMyLinks(database.db, kemi, { links: [{ platform, url }], show: true });
     assert.equal(
-      await errorCode(
-        updateMyProfile(database.db, kemi, {
-          socials: { instagram: 'https://evil.example/kemi' },
-        }),
-      ),
+      await errorCode(save('instagram', 'https://evil.example/kemi')),
       'INVALID_INPUT',
     );
     assert.equal(
-      await errorCode(
-        updateMyProfile(database.db, kemi, {
-          socials: { x: 'http://x.com/kemi' },
-        }),
-      ),
+      await errorCode(save('x', 'http://x.com/kemi')),
       'INVALID_INPUT',
     );
-    await updateMyProfile(database.db, kemi, {
-      socials: {
-        x: 'https://twitter.com/kemi',
-        facebook: 'https://www.facebook.com/kemi',
-      },
+    await setMyLinks(database.db, kemi, {
+      links: [
+        { platform: 'facebook', url: 'https://www.facebook.com/kemi' },
+        { platform: 'x', url: 'https://twitter.com/kemi' },
+      ],
+      show: true,
     });
   });
 
@@ -200,6 +200,10 @@ test('profiles, handles and page states', async (t) => {
       const kemi = await signUp('+2348031230001');
       await claimHandle(database.db, { userId: kemi, handle: 'kemi', now });
       await setPageState(database.db, kemi, 'live');
+      await setMyLinks(database.db, kemi, {
+        links: [{ platform: 'tiktok', url: 'https://tiktok.com/@kemi' }],
+        show: true,
+      });
       const { token } = await createSession(database.db, {
         userId: kemi,
         deviceLabel: 'Phone',
@@ -218,13 +222,14 @@ test('profiles, handles and page states', async (t) => {
       assert.ok(user.deleted_at);
       const [profile] = (
         await database.pool.query(
-          'SELECT display_name, bio, socials, page_state FROM profiles WHERE user_id = $1',
+          'SELECT display_name, bio, socials, links, page_state FROM profiles WHERE user_id = $1',
           [kemi],
         )
       ).rows;
       assert.equal(profile.page_state, 'deleted');
       assert.equal(profile.bio, null);
       assert.deepEqual(profile.socials, {});
+      assert.deepEqual(profile.links, []);
       assert.equal(
         await checkHandle(
           database.db,
@@ -285,4 +290,46 @@ test('profiles, handles and page states', async (t) => {
       );
     },
   );
+});
+
+// Two lists answer "reserved": the built-in words in code (RESERVED_HANDLES, which also holds the
+// example people the site prints) and the staff reservations table. The public can't tell which.
+test('checkHandle says reserved for a staff reservation, as for a built-in word', async (t) => {
+  const database = await useDatabase(t);
+  const now = new Date('2026-11-05T10:00:00Z');
+  await database.fresh();
+  // Two-letter words (me, qr) are on the list for the router but can never be handles at all.
+  for (const word of RESERVED_HANDLES)
+    assert.equal(
+      await checkHandle(database.db, word, now),
+      normaliseHandle(word) ? 'reserved' : 'invalid',
+      word,
+    );
+  assert.equal(await checkHandle(database.db, 'mtn', now), 'available');
+  const id = randomUUID();
+  await database.pool.query(
+    `INSERT INTO handle_reservations (id, handle_lower, source, reason, reserved_at)
+     VALUES ($1, 'mtn', 'staff', 'brand name', now())`,
+    [id],
+  );
+  assert.equal(await checkHandle(database.db, 'MTN', now), 'reserved');
+  assert.equal(await checkHandle(database.db, 'mtn', now), 'reserved');
+  // A staff reservation is refused at claim like a taken name, never created around the check.
+  const userId = randomUUID();
+  await database.pool.query(`INSERT INTO users (id) VALUES ($1)`, [userId]);
+  await assert.rejects(
+    claimHandle(database.db, { userId, handle: 'Mtn', now }),
+    { code: 'HANDLE_TAKEN' },
+  );
+  await assert.rejects(
+    claimHandle(database.db, { userId, handle: 'admin', now }),
+    { code: 'HANDLE_TAKEN' },
+  );
+  await database.pool.query(
+    `UPDATE handle_reservations
+        SET released_at = now(), released_by = $2, release_reason = 'not needed'
+      WHERE id = $1`,
+    [id, userId],
+  );
+  assert.equal(await checkHandle(database.db, 'mtn', now), 'available');
 });

@@ -67,6 +67,8 @@ test(
       'MAIL_PRETEND_DOMAINS',
       'RELEASE_CHECK_TOKEN',
       'TRACE_PROBE_TEST_DELAY_MS',
+      // The live stream's heartbeat: tests shorten it; production keeps the 20 s default.
+      'LIVE_HEARTBEAT_MS',
       // The mock provider's secret: production never runs the mock provider.
       'MOCK_PROVIDER_WEBHOOK_SECRET',
     ]);

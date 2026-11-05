@@ -50,9 +50,15 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   await page.getByLabel('Display name').fill('Kemi Bello');
   await page.getByLabel('What you do').fill('Hairdresser at Glow Studio');
   await page.getByLabel('Bio', { exact: true }).fill('Braids and kindness.');
-  await page.getByLabel('Instagram link').fill('https://instagram.com/kemi');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
+  const links = page.locator('.settings-section', {
+    has: page.getByRole('heading', { name: 'Your links' }),
+  });
+  await links.getByLabel('Add a link').fill('https://instagram.com/kemi');
+  await links.getByRole('button', { name: 'Add', exact: true }).click();
+  await links.getByRole('button', { name: 'Save links' }).click();
+  await expect(links.getByRole('status')).toHaveText('Saved');
   await expect(async () => {
     await visitor.reload();
     await expect(visitor.getByRole('heading', { level: 1 })).toHaveText(

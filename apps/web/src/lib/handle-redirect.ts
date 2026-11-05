@@ -10,7 +10,7 @@ export function movedProfilePath(
 }
 
 /**
- * Short links: /ada (any case) leads to the canonical /@ada. Only a single path segment that is a
+ * Short links: /kemi (any case) leads to the canonical /@kemi. Only a single path segment that is a
  * valid, unreserved handle qualifies; every single-word TipMe page is a reserved handle
  * (test/short-links.test.mjs), so this never shadows a real page.
  */

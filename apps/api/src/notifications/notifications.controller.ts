@@ -55,6 +55,8 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { sessionsChanged } from '@tipme/contracts';
 
 const idsSchema = z.object({ ids: z.array(z.uuid()).max(100) }).strict();
 const emailSchema = z.object({ email: z.string().min(3).max(254) }).strict();
@@ -84,6 +86,7 @@ export class NotificationsController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
   ) {
     this.sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
   }
@@ -174,6 +177,8 @@ export class NotificationsController {
       throw new CodedHttpException(409, 'EMAIL_TAKEN');
     if (result.status !== 'ok')
       throw new CodedHttpException(400, 'CODE_INVALID');
+    // The change ended every other session: their open streams close too.
+    void this.publishLive(sessionsChanged(auth.userId));
     if (result.handle) this.revalidator.revalidate(result.handle);
     return { data: { email: result.email } };
   }
@@ -252,6 +257,8 @@ export class NotificationsController {
       keepSessionId: auth.sessionId,
       requirePage: true,
     });
+    // The change ended every other session: their open streams close too.
+    void this.publishLive(sessionsChanged(auth.userId));
     const profile = await getMyProfile(this.database.db, auth.userId);
     // A public phone number must change on the page at once.
     this.revalidator.revalidate(profile.handle);

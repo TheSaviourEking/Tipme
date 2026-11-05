@@ -505,6 +505,34 @@
       "when": 1793839479669,
       "tag": "0071_payouts_profile_created",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793850998259,
+      "tag": "0072_handle_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793851001386,
+      "tag": "0073_usernames_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793865205363,
+      "tag": "0074_social_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793871494302,
+      "tag": "0075_live_popup_prefs",
+      "breakpoints": true
     }
   ]
 }

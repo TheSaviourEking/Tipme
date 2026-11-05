@@ -39,3 +39,4 @@ Where a board and a newer owner decision disagree, the decision wins:
 | `StatesConcepts`            | States: the slip (A) and the key tells you (B), with the rules for both |
 | `StatesMap`                 | States: every message on every screen and the pattern it becomes        |
 | `FeedbackMoments`           | Feedback: press, settle, shake and the withdrawal's step lamps           |
+| `SocialLinks`               | Social links: the editor in Settings and the public row (version 97, approved by the owner 5 Nov 2026) |
