@@ -1,3 +1,10 @@
+# Current task — live updates PR 1 (5 November 2026)
+
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, with `origin/feat/e2e-lanes` and `origin/dev` merged. Committed, not pushed, no PR. Plan: `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 1-12 (PR 1).
+- Done: the live contract, the API hub and `GET /v1/me/events` (flag `LIVE_UPDATES_ENABLED`, off by default), worker signals after the relay and the tip handler, the Caddyfile change (owner's deploy step: runbook `production.md` §10), the browser client and provider, dashboard home, tips, tip detail and moments refresh on signals, the bell folded in, the two Settings switches (migration `0072_live_popup_prefs.sql`, numbered past dev's 0071) and the background-tab sound.
+- Report with rulings and evidence: `.superpowers/program/c-build-report.md`.
+- Next exact step: owner review of PR 1; at merge, regenerate the migration with drizzle-kit against dev (the strict journal test fails on this branch alone because 0071 is missing). Then PR 2 (Tasks 13-15).
+
 # Current task — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration.

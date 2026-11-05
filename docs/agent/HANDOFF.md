@@ -1,3 +1,10 @@
+# Current handoff — live updates PR 1 (5 November 2026)
+
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, committed, not pushed. Nothing ran against staging or production; the Caddyfile and flag are the owner's deploy steps (`docs/runbooks/production.md` §10). No regulatory decision is implied (D-03, D-08, D-11 stay open).
+- Signals only: the browser receives `{type}` and re-reads its existing endpoints. The heartbeat is a `: hb` comment plus a named `hb` event, because EventSource never shows comments to the page.
+- Known failing locally: `packages/database/test/integration/migration-journal.test.mjs` ("lists each migration once, in order"), because this branch has 0072 without 0071. Do not relax it; regenerate the migration at merge.
+- Verified results and untested areas: `.superpowers/program/c-build-report.md`.
+
 # Current handoff — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration. Nothing ran against staging or production.
