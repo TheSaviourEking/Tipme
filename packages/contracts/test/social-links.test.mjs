@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  ADULT_PLATFORMS,
   FREE_LINK_LIMIT,
   PRO_LINK_LIMIT,
   SOCIAL_PLATFORMS,
@@ -8,6 +9,7 @@ import {
   linkHandle,
   linksNeedPro,
   mergeFreeSave,
+  profilePatchSchema,
   socialLinkProblem,
   socialLinksSchema,
   visibleLinks,
@@ -291,4 +293,98 @@ test('when Pro lapses: the first 3 Free-site links show, unfeatured, and nothing
       link('twitch', 'https://twitch.tv/a'),
     ],
   );
+});
+
+test('links are stored normalised, and repeats are found on the normalised form', () => {
+  const parsed = socialLinksSchema.safeParse([
+    link('instagram', '  https://Instagram.com/ada  '),
+  ]);
+  assert.equal(parsed.success, true);
+  assert.equal(parsed.data[0].url, 'https://instagram.com/ada');
+  for (const url of [
+    'https://insta\ngram.com/ada',
+    'https:\\\\instagram.com\\ada',
+    'https://instagram.com/a da',
+  ])
+    assert.equal(socialLinkProblem('instagram', url), 'invalid', url);
+  for (const pair of [
+    ['https://x.com/a', 'https://x.com/a/'],
+    ['https://x.com/a', 'https://X.com/a'],
+  ])
+    assert.equal(
+      socialLinksSchema.safeParse(pair.map((url) => link('x', url))).success,
+      false,
+      pair.join(' '),
+    );
+});
+
+test('redirect pages on listed sites are refused like link pages', () => {
+  assert.equal(
+    socialLinkProblem(
+      'facebook',
+      'https://facebook.com/l.php?u=https%3A%2F%2Flinktr.ee%2Fx',
+    ),
+    'link_page',
+  );
+  assert.equal(
+    socialLinkProblem(
+      'youtube',
+      'https://www.youtube.com/redirect?q=https://a.b',
+    ),
+    'link_page',
+  );
+  for (const url of [
+    'https://l.instagram.com/?u=x',
+    'https://l.facebook.com/l.php',
+  ])
+    assert.equal(socialLinkProblem('website', url), 'link_page', url);
+  for (const url of [
+    'https://linktree.co/ada',
+    'https://stan.store/ada',
+    'https://taplink.cc/ada',
+    'https://ada.carrd.co',
+  ])
+    assert.equal(socialLinkProblem('website', url), 'link_page', url);
+});
+
+test('a Free save keeps only the hidden links the owner still lists', () => {
+  const stored = [
+    link('tiktok', 'https://tiktok.com/@a'),
+    link('telegram', 'https://t.me/adaedits'),
+    link('onlyfans', 'https://onlyfans.com/ada'),
+  ];
+  assert.deepEqual(
+    mergeFreeSave(
+      stored,
+      [link('tiktok', 'https://tiktok.com/@a')],
+      ['https://t.me/adaedits'],
+    ),
+    [
+      link('tiktok', 'https://tiktok.com/@a'),
+      link('telegram', 'https://t.me/adaedits'),
+    ],
+  );
+  // A hidden link can't be brought in by naming it: only stored ones are kept.
+  assert.deepEqual(mergeFreeSave(stored, [], ['https://kick.com/new']), []);
+});
+
+test('adult platforms can be switched off: hidden from the page, never deleted', () => {
+  const stored = [
+    link('onlyfans', 'https://onlyfans.com/ada'),
+    link('tiktok', 'https://tiktok.com/@a'),
+  ];
+  assert.deepEqual(visibleLinks(stored, 'pro', { adult: false }), [
+    link('tiktok', 'https://tiktok.com/@a'),
+  ]);
+  assert.deepEqual(visibleLinks(stored, 'pro'), stored);
+  assert.deepEqual([...ADULT_PLATFORMS], ['onlyfans', 'fansly']);
+});
+
+test('the profile form still takes, and ignores, the old three links for one release', () => {
+  const parsed = profilePatchSchema.safeParse({
+    displayName: 'Ada',
+    socials: { instagram: 'https://instagram.com/ada' },
+    socialsPublic: true,
+  });
+  assert.equal(parsed.success, true);
 });

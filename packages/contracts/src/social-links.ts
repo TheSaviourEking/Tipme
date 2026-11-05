@@ -20,6 +20,8 @@ interface PlatformSpec {
   subdomainsOf?: readonly string[];
   /** What the path must look like (default: anything but the bare site). */
   path?: RegExp;
+  /** The site's own redirect pages, which can send a visitor anywhere: refused as link pages. */
+  redirect?: RegExp;
   /** Reads the handle shown on the page from the path: group 1, shown after `prefix`. */
   handle?: RegExp;
   prefix?: string;
@@ -51,6 +53,7 @@ export const SOCIAL_PLATFORMS = {
       'm.facebook.com',
       'web.facebook.com',
     ],
+    redirect: /^\/(?:l\.php|flx\/)/,
     handle:
       /^\/(?!profile\.php|people\/|pages\/|groups\/|share\/|watch|events\/)([A-Za-z0-9.]{1,60})\/?$/,
     featured: 'Follow me on Facebook',
@@ -69,6 +72,7 @@ export const SOCIAL_PLATFORMS = {
     badge: 'YT',
     tier: 'free',
     hosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com'],
+    redirect: /^\/redirect(?:\/|$)/,
     handle: /^\/@([A-Za-z0-9._-]{1,60})(?:\/|$)/,
     featured: 'Watch me on YouTube',
   },
@@ -251,11 +255,17 @@ export const SOCIAL_URL_MAX = 200;
 
 /**
  * Never allowed, as any site or as a website: pages of links (a page of links inside a page of
- * links hides where people end up) and URL shorteners, which hide it too. Subdomains included.
+ * links hides where people end up), music smart-link pages and URL shorteners, which hide it too.
+ * Subdomains included. Best effort: new link-in-bio services appear all the time. The list follows
+ * the services named in 2026 round-ups (influencermarketinghub.com/linktree-alternatives,
+ * replug.io/blog/best-bio-link-tools, limey.io/blog/best-linktree-alternatives) plus the common
+ * shorteners.
  */
 export const LINK_PAGE_HOSTS = [
+  // Link-in-bio pages
   'linktr.ee',
   'linktree.com',
+  'linktree.co',
   'beacons.ai',
   'beacons.page',
   'lnk.bio',
@@ -264,7 +274,10 @@ export const LINK_PAGE_HOSTS = [
   'campsite.bio',
   'solo.to',
   'tap.bio',
+  'taplink.cc',
+  'taplink.at',
   'msha.ke',
+  'milkshake.app',
   'allmylinks.com',
   'linkin.bio',
   'snipfeed.co',
@@ -274,6 +287,22 @@ export const LINK_PAGE_HOSTS = [
   'flow.page',
   'linkpop.com',
   'many.link',
+  'stan.store',
+  'carrd.co',
+  'linkr.bio',
+  'linkfly.to',
+  'heylink.me',
+  'linkme.bio',
+  'biolinky.co',
+  'shor.by',
+  'direct.me',
+  'contactinbio.com',
+  'url.bio',
+  'lynk.id',
+  'linkbio.co',
+  'own.page',
+  'unil.ink',
+  // Music smart links
   'lnk.to',
   'ffm.to',
   'fanlink.to',
@@ -283,6 +312,7 @@ export const LINK_PAGE_HOSTS = [
   'album.link',
   'odesli.co',
   'linkfire.com',
+  // Shorteners
   'bit.ly',
   'tinyurl.com',
   't.co',
@@ -294,13 +324,21 @@ export const LINK_PAGE_HOSTS = [
   'rebrand.ly',
   'shorturl.at',
   'tiny.cc',
+  's.ee',
 ] as const;
+
+/** Adult platforms, which the ADULT_PLATFORM_LINKS switch can hide everywhere at once. */
+export const ADULT_PLATFORMS = ['onlyfans', 'fansly'] as const;
+export const isAdultPlatform = (platform: SocialPlatform) =>
+  (ADULT_PLATFORMS as readonly string[]).includes(platform);
 
 const within = (host: string, domains: readonly string[]) =>
   domains.some((domain) => host === domain || host.endsWith(`.${domain}`));
 
-function parseHttps(value: string): URL | null {
-  if (value.length > SOCIAL_URL_MAX) return null;
+function parseHttps(raw: string): URL | null {
+  const value = raw.trim();
+  // Whitespace or backslashes inside a link are read differently by browsers, mail and crawlers.
+  if (value.length > SOCIAL_URL_MAX || /[\s\\]/.test(value)) return null;
   let url: URL;
   try {
     url = new URL(value);
@@ -311,6 +349,15 @@ function parseHttps(value: string): URL | null {
     return null;
   return url;
 }
+
+/** The form a link is stored in: trimmed, parsed and written back out (lower-case host). */
+export function normaliseSocialUrl(value: string): string {
+  return parseHttps(value)?.href ?? value;
+}
+
+/** Two links are the same link when they differ only by a trailing slash once normalised. */
+export const linkKey = (value: string) =>
+  normaliseSocialUrl(value).replace(/\/(?=$|[?#])/, '');
 
 function siteOf(url: URL): SocialPlatform | null {
   for (const platform of SOCIAL_PLATFORM_KEYS) {
@@ -341,12 +388,15 @@ export function socialLinkProblem(
       host.endsWith('.')
     )
       return 'invalid';
-    if (within(host, LINK_PAGE_HOSTS)) return 'link_page';
+    // l.instagram.com, l.facebook.com and the like are the sites' own outbound redirects.
+    if (within(host, LINK_PAGE_HOSTS) || /^lm?\./.test(host))
+      return 'link_page';
     if (siteOf(url)) return 'listed_site';
     return null;
   }
   if (siteOf(url) !== platform) return 'invalid';
-  const { path, subdomainsOf } = spec(platform);
+  const { path, subdomainsOf, redirect } = spec(platform);
+  if (redirect?.test(url.pathname)) return 'link_page';
   // A publication on its own subdomain is the page itself; elsewhere the bare site is not a page.
   const ownSubdomain =
     subdomainsOf !== undefined &&
@@ -405,7 +455,8 @@ export const socialLinkSchema = z
     const problem = socialLinkProblem(link.platform, link.url);
     if (problem)
       ctx.addIssue({ code: 'custom', message: problem, path: ['url'] });
-  });
+  })
+  .transform((link) => ({ ...link, url: normaliseSocialUrl(link.url) }));
 
 /** Shape and sites only. The plan's limits are checked on the server, against the page's plan. */
 export const socialLinksSchema = z
@@ -421,13 +472,14 @@ export const socialLinksSchema = z
           message: 'one_featured',
           path: [index, 'featured'],
         });
-      if (seen.has(link.url))
+      const key = linkKey(link.url);
+      if (seen.has(key))
         ctx.addIssue({
           code: 'custom',
           message: 'repeated',
           path: [index, 'url'],
         });
-      seen.add(link.url);
+      seen.add(key);
     });
   });
 
@@ -436,6 +488,14 @@ export const myLinksSchema = z
   .object({
     links: socialLinksSchema,
     show: z.boolean(),
+    /**
+     * Free only: the hidden links (kept from Pro) to keep, by URL; any other hidden link is
+     * deleted. Omitted, all are kept. Ignored on Pro, which sends its whole list in `links`.
+     */
+    hidden: z
+      .array(z.string().max(SOCIAL_URL_MAX))
+      .max(STORED_LINK_LIMIT)
+      .optional(),
   })
   .strict();
 export type MyLinksRequest = z.infer<typeof myLinksSchema>;
@@ -487,25 +547,43 @@ function freeIndexes(links: readonly SocialLink[]): Set<number> {
 export function visibleLinks(
   links: readonly SocialLink[],
   plan: SocialTier,
+  /** `adult: false` while ADULT_PLATFORM_LINKS is off: OnlyFans and Fansly don't show. */
+  { adult = true }: { adult?: boolean } = {},
 ): SocialLink[] {
-  if (plan === 'pro') return links.slice(0, PRO_LINK_LIMIT);
-  const shown = freeIndexes(links);
-  return links.filter((_, index) => shown.has(index)).map(unfeatured);
+  const allowed = adult
+    ? links
+    : links.filter((link) => !isAdultPlatform(link.platform));
+  if (plan === 'pro') return allowed.slice(0, PRO_LINK_LIMIT);
+  const shown = freeIndexes(allowed);
+  return allowed.filter((_, index) => shown.has(index)).map(unfeatured);
+}
+
+/** The stored links a Free page doesn't show: Pro sites, and Free sites past the first 3. */
+export function hiddenOnFree(stored: readonly SocialLink[]): SocialLink[] {
+  const shown = freeIndexes(stored);
+  return stored.filter((_, index) => !shown.has(index));
 }
 
 /**
  * A Free save replaces the links that show on Free; the hidden ones (kept from Pro) follow it,
- * so they are back if Pro returns. A link saved again isn't kept twice.
+ * so they are back if Pro returns. `keep` lists the hidden links the owner still wants (by URL):
+ * a hidden link left out is deleted. Only stored links can be kept, so a Free page can't add one
+ * this way. Omitted, every hidden link is kept. A link saved again isn't kept twice.
  */
 export function mergeFreeSave(
   stored: readonly SocialLink[],
   submitted: readonly SocialLink[],
+  keep?: readonly string[],
 ): SocialLink[] {
-  const shown = freeIndexes(stored);
-  const urls = new Set(submitted.map((link) => link.url));
+  const wanted = keep && new Set(keep.map(linkKey));
+  const saved = new Set(submitted.map((link) => linkKey(link.url)));
   return [
     ...submitted,
-    ...stored.filter((link, index) => !shown.has(index) && !urls.has(link.url)),
+    ...hiddenOnFree(stored).filter(
+      (link) =>
+        !saved.has(linkKey(link.url)) &&
+        (!wanted || wanted.has(linkKey(link.url))),
+    ),
   ];
 }
 

@@ -17,6 +17,19 @@ export const profilePatchSchema = z
     displayName: z.string().trim().min(1).max(60),
     role: optionalText(60),
     bio: optionalText(280),
+    /**
+     * Accepted and ignored: Settings tabs opened before social links (5 Nov 2026) still send the
+     * old three links with every About save. Links are saved through PUT /v1/me/links now.
+     * TODO(social-links): remove in the release that drops the `profiles.socials` column.
+     */
+    socials: z
+      .object({
+        facebook: z.string().max(200),
+        instagram: z.string().max(200),
+        x: z.string().max(200),
+      })
+      .partial()
+      .strict(),
     bioPublic: z.boolean(),
     socialsPublic: z.boolean(),
     phonePublic: z.boolean(),
