@@ -1,9 +1,12 @@
 import {
   automaticColour,
   automaticCover,
+  COVER_ANIMATIONS,
   COVER_COLOURS,
   COVER_DESIGNS,
   resolveCover,
+  type CoverMotion,
+  type PagePlan,
   type CoverDesignChoice,
   type MyProfile,
   type ResolvedCover,
@@ -17,6 +20,14 @@ export interface CoverDraft {
   /** The chosen design, or null when nothing has been chosen (TipMe picks one). */
   design: string | null;
   colour: string;
+  /**
+   * An animated cover (owner's decision, 2 Nov 2026), which replaces `design`. The three fields
+   * are present only while one is chosen. `animationColour` is null for the animation's own
+   * palette; only Pro pages can pick another.
+   */
+  animation?: string | null;
+  motion?: CoverMotion;
+  animationColour?: string | null;
 }
 
 const NEUTRAL = 'neutral';
@@ -25,7 +36,22 @@ export const takesColours = (design: string | null): boolean =>
   COVER_DESIGNS.some((d) => d.id === design && d.colours);
 
 /** The draft a saved choice opens as. Unknown designs and colours fall back quietly. */
-export function draftFromChoice(choice: MyProfile['coverChoice']): CoverDraft {
+export function draftFromChoice(
+  choice: MyProfile['coverChoice'],
+  pro = true,
+): CoverDraft {
+  if (COVER_ANIMATIONS.some((a) => a.id === choice?.animation)) {
+    const known = COVER_COLOURS.some((c) => c.id === choice?.colour);
+    return {
+      design: null,
+      colour: NEUTRAL,
+      animation: choice?.animation ?? null,
+      // A page that left Pro still holds its loop and colour, but shows the still frame; its draft
+      // opens without them, so saving again strips what Free cannot keep.
+      motion: pro && choice?.motion === 'loop' ? 'loop' : 'once',
+      animationColour: pro && known && choice?.colour ? choice.colour : null,
+    };
+  }
   const design = COVER_DESIGNS.some((d) => d.id === choice?.design)
     ? (choice?.design ?? null)
     : null;
@@ -39,8 +65,20 @@ export function draftFromChoice(choice: MyProfile['coverChoice']): CoverDraft {
   };
 }
 
-/** The request body that saves a draft. No design saves `design: null`: TipMe picks one again. */
-export function choiceBody(draft: CoverDraft): CoverDesignChoice {
+/**
+ * The request body that saves a draft. No design saves `design: null`: TipMe picks one again. An
+ * animation sends its motion and colour only for a Pro page; the server refuses them from Free.
+ */
+export function choiceBody(draft: CoverDraft, pro = false): CoverDesignChoice {
+  if (draft.animation)
+    return {
+      design: null,
+      animation: draft.animation,
+      ...(pro && draft.motion ? { motion: draft.motion } : {}),
+      ...(pro && draft.animationColour
+        ? { colour: draft.animationColour }
+        : {}),
+    };
   if (!draft.design) return { design: null };
   return takesColours(draft.design)
     ? { design: draft.design, colour: draft.colour }
@@ -48,18 +86,29 @@ export function choiceBody(draft: CoverDraft): CoverDesignChoice {
 }
 
 /** What the page would show for the draft when no photo is uploaded. */
-export function draftPreview(draft: CoverDraft, handle: string): ResolvedCover {
+export function draftPreview(
+  draft: CoverDraft,
+  handle: string,
+  plan?: PagePlan,
+): ResolvedCover {
   return resolveCover({
     handle,
     coverPath: null,
     coverDesign: draft.design,
-    coverColour: takesColours(draft.design) ? draft.colour : null,
+    coverColour: draft.animation
+      ? (draft.animationColour ?? null)
+      : takesColours(draft.design)
+        ? draft.colour
+        : null,
+    coverAnimation: draft.animation ?? null,
+    coverMotion: draft.animation ? (draft.motion ?? null) : null,
+    ...(plan ? { plan } : {}),
   });
 }
 
 /** Two drafts are the same when they would save the same thing. */
 export const sameDraft = (a: CoverDraft, b: CoverDraft): boolean =>
-  JSON.stringify(choiceBody(a)) === JSON.stringify(choiceBody(b));
+  JSON.stringify(choiceBody(a, true)) === JSON.stringify(choiceBody(b, true));
 
 /** The automatic pick in words ("Rising hearts in Violet"), so the chooser never relies on colour alone. */
 export function automaticLabel(handle: string): string {
@@ -69,3 +118,22 @@ export function automaticLabel(handle: string): string {
     .filter(Boolean)
     .join(' ');
 }
+
+/** The body as stored: 'once' is the same as no setting, so it is left out. */
+function storedBody(draft: CoverDraft, pro: boolean): CoverDesignChoice {
+  const { motion, ...rest } = choiceBody(draft, pro);
+  return motion === 'once' ? rest : { ...rest, ...(motion ? { motion } : {}) };
+}
+
+/**
+ * Whether saving the draft would change what is stored. `stored` is the saved choice as the
+ * server holds it (`draftFromChoice(choice, true)`), so a page that left Pro, still holding a
+ * loop or a colour, differs from its Free draft and can save to clear them.
+ */
+export const differsFromSaved = (
+  draft: CoverDraft,
+  stored: CoverDraft,
+  pro: boolean,
+): boolean =>
+  JSON.stringify(storedBody(draft, pro)) !==
+  JSON.stringify(storedBody(stored, true));

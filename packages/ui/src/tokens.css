@@ -115,6 +115,9 @@
   --duration-component: 240ms;
   --duration-spatial: 420ms;
   --duration-appreciation: 760ms;
+  /* Animated covers (owner's exception, EXPERIENCE-AND-MOTION 7.11) */
+  --duration-cover-once: 2800ms;
+  --duration-cover-loop: 8000ms;
   --duration-fast: var(--duration-tactile);
   --duration-normal: var(--duration-component);
   --duration-enter: var(--duration-spatial);

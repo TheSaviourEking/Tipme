@@ -1,3 +1,11 @@
+# Current handoff — animated covers (5 November 2026)
+
+- Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.
+- Free: Drifting, Rising, Ripple, played once. Pro: all six, any colour, "Plays once" or "Slow loop". The server refuses Pro-only choices (`COVER_DESIGN_PRO_REQUIRED`); a page leaving Pro shows the still frame and keeps its choice.
+- The Pro page's sample is the real `ProfileCover` (Drifting on Free, Night sky on Pro), so it follows the reduced-motion and forced-colours rules.
+- Perf, cold (fresh context per sample, lane 3, throttled phone, Tobi on Pro with Night sky on a loop, motion allowed): `/@tobi` 1112, 1088, 1092 ms; LCP element `p.profile-bio`. Not a field measurement.
+- Evidence: `.superpowers/program/e-merge-report.md` (main checkout).
+
 # Current handoff — Make it yours: consent and the thank-you line (5 November 2026)
 
 - Branch `feat/make-it-yours`, test lane 2, one PR into `dev`. One migration, 0076, regenerated with drizzle-kit against the merged schema; `migration-journal.test` passes. Animated covers regenerates as 0077 after this merges.

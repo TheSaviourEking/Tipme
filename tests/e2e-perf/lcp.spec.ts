@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { API_ORIGIN, E2E_DATABASE_URL, WEB_ORIGIN } from '../e2e/stack';
 
 // Lab only: simulated mid-range phone (4x CPU slowdown) on a "Fast 3G"-like link.
 // Each sample gets a fresh browser context (empty HTTP cache, same sign-in), so a cold and a warm
 // load are never mixed. Logs the LCP element so the number can be tied to a picture or a heading.
 type Sample = { ms: number; element: string };
+// The suite defaults to reduced motion; the sample runs the cover's animation (see test.use below).
+const SAMPLE_MOTION = 'no-preference' as const;
 const elements: Record<string, string[]> = {};
 
 async function lcp(
@@ -26,7 +28,8 @@ async function lcp(
     locale: use.locale,
     timezoneId: use.timezoneId,
     colorScheme: use.colorScheme,
-    reducedMotion: use.reducedMotion,
+    // test.use() overrides are not in project.use, so the sample's motion is passed explicitly.
+    reducedMotion: SAMPLE_MOTION,
     storageState,
   });
   try {
@@ -75,6 +78,10 @@ async function measure(
   );
 }
 
+// The suite defaults to reduced motion; the sample must run the cover's animation (owner's
+// exception, EXPERIENCE-AND-MOTION 7.11): the profile's LCP stays under 2000ms with it.
+test.use({ reducedMotion: SAMPLE_MOTION });
+
 test('lab LCP sample', async ({ page, browser }) => {
   // Fifteen throttled page loads, each in a fresh context, each followed by a pause for late paints.
   test.setTimeout(180_000);
@@ -114,6 +121,18 @@ test('lab LCP sample', async ({ page, browser }) => {
     headers,
     data: { phone: '+2348000000002', code },
   });
+  // Tobi is on Pro with Night sky on a slow loop, the heaviest animated cover, so /@tobi is sampled
+  // with it playing. The plan is set in the test database only.
+  const pro = await import('../../packages/database/dist/index.js');
+  const proDb = pro.createDatabase(E2E_DATABASE_URL, { max: 1 });
+  await proDb.pool
+    .query("UPDATE profiles SET plan = 'pro' WHERE handle_lower = 'tobi'")
+    .finally(() => proDb.close());
+  const chosen = await page.request.put(`${API_ORIGIN}/v1/me/cover-design`, {
+    headers,
+    data: { design: null, animation: 'night', motion: 'loop' },
+  });
+  expect(chosen.status()).toBe(200);
   // Tobi is also made Owner (test database only) and opens an admin grant, to sample /ops.
   const ops = await import('../../packages/database/dist/index.js');
   const db = ops.createDatabase(E2E_DATABASE_URL, { max: 1 });
@@ -136,6 +155,14 @@ test('lab LCP sample', async ({ page, browser }) => {
       ),
     },
   });
+  // The page is already showing the loop before anything is sampled. This warms only the
+  // server; every sample below runs in a fresh browser context with an empty cache.
+  await expect(async () => {
+    await page.goto('/@tobi');
+    expect(
+      await page.locator('.profile-cover').getAttribute('data-cover-play'),
+    ).toBe('loop');
+  }).toPass({ timeout: 15_000 });
   const state = await page.context().storageState();
   const home: number[] = [];
   const profile: number[] = [];
@@ -151,6 +178,7 @@ test('lab LCP sample', async ({ page, browser }) => {
     dashboard.push(await lcp(browser, state, '/dashboard'));
     admin.push(await lcp(browser, state, '/ops'));
   }
+  for (const ms of profile) expect(ms, `/@tobi LCP ${ms}ms`).toBeLessThan(2000);
   const results = {
     '/': home,
     '/@tobi': profile,

@@ -12,6 +12,7 @@ import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import { PageRetry } from '@/components/profile/page-retry';
 import { ProfileCover } from '@/components/profile/cover';
+import { CoverFreeze } from '@/components/profile/cover-freeze';
 import { RecipientIdentity } from '@/components/profile/recipient-card';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ReportPage } from '@/components/report-page';
@@ -65,23 +66,23 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   // Closed checkout outranks the owner's own setup: nobody can tip yet.
   const opensSoon = !copy.payable || profileTippingClosed(mode, profile);
   const takesTips = !opensSoon && profile.acceptingTips !== false;
+  // An API older than the covers sends none: work out the same automatic one here.
+  const cover =
+    profile.cover ??
+    resolveCover({
+      handle: profile.handle,
+      coverPath: null,
+      coverDesign: null,
+      coverColour: null,
+    });
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
       <div className="profile-sheet">
-        <ProfileCover
-          // An API older than the covers sends none: work out the same automatic one here.
-          cover={
-            profile.cover ??
-            resolveCover({
-              handle: profile.handle,
-              coverPath: null,
-              coverDesign: null,
-              coverColour: null,
-            })
-          }
-          priority
-        />
+        <ProfileCover cover={cover} priority animate />
+        {cover.kind === 'animated' && cover.play !== 'still' ? (
+          <CoverFreeze />
+        ) : null}
         <div className="profile-columns">
           <RecipientIdentity
             profile={profile}

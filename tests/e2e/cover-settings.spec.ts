@@ -8,6 +8,7 @@ import {
   fitsViewport,
   signUpRecipient,
 } from './helpers';
+import { sql } from './ops-helpers';
 import { UNBROKEN_NAME } from './profile-fixtures';
 import { API_ORIGIN } from './stack';
 
@@ -500,4 +501,223 @@ test('settings fits a long unbroken name at 320px @mobile', async ({
   ]);
   expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(bar!.y);
   await expectAccessible(page);
+});
+
+// Animated covers (owner's decision, 2 Nov 2026): three on Free that play once; on Pro, all six in
+// any colour, played once or on a slow loop. The server holds the lock; this is the chooser.
+const animated = (page: Page) =>
+  page.getByRole('radiogroup', { name: 'Animated covers' });
+const playing = (page: Page) =>
+  page.getByRole('radiogroup', { name: 'How it plays' });
+const setPlan = (handle: string, plan: 'free' | 'pro') =>
+  sql('UPDATE profiles SET plan = $2 WHERE handle_lower = $1', [
+    handle.toLowerCase(),
+    plan,
+  ]);
+async function publicPlay(browser: Browser, handle: string, want: string) {
+  const visitor = await (await browser.newContext()).newPage();
+  await expect(async () => {
+    await visitor.goto(`/@${handle}`);
+    await expect(visitor.locator('[data-profile-cover]')).toHaveAttribute(
+      'data-cover-play',
+      want,
+      { timeout: 1000 },
+    );
+  }).toPass({ timeout: 15_000 });
+  await visitor.context().close();
+}
+
+test('Free sees Drifting, Rising and Ripple, and Pro designs marked "Pro"', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  const group = animated(page);
+  for (const name of ['Drifting', 'Rising', 'Ripple'])
+    await expect(group.getByRole('radio', { name })).not.toContainText('Pro');
+  for (const name of ['Pulse', 'Night sky', 'Sunrise']) {
+    const choice = group.locator('label', { hasText: name });
+    await expect(choice.getByText('Pro', { exact: true })).toBeVisible();
+  }
+  await group.locator('label', { hasText: 'Pulse' }).click();
+  await expect(
+    page.getByText(
+      'Pulse comes with Pro. Free includes Drifting, Rising and Ripple.',
+    ),
+  ).toBeVisible();
+  for (const radio of await group.getByRole('radio').all())
+    await expect(radio).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Save cover' })).toBeDisabled();
+});
+
+test('Free: Slow loop is aria-disabled and explains itself', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Drifting' }).check();
+  const loop = playing(page).getByRole('radio', { name: 'Slow loop' });
+  await expect(loop).toHaveAttribute('aria-disabled', 'true');
+  // aria-disabled, not disabled: it stays focusable, so it can explain itself.
+  expect(await loop.evaluate((el) => (el as HTMLInputElement).disabled)).toBe(
+    false,
+  );
+  await loop.focus();
+  await expect(loop).toBeFocused();
+  await loop.click({ force: true });
+  await expect(
+    page.getByText(
+      'Slow loop comes with Pro. On Free, animated covers play once when your page opens.',
+    ),
+  ).toBeVisible();
+  await expect(
+    playing(page).getByRole('radio', { name: 'Plays once' }),
+  ).toBeChecked();
+});
+
+test('Free saves Drifting; the public page plays it once', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Drifting' }).check();
+  await expect(shown(page)).toHaveAttribute(
+    'data-profile-cover',
+    'animated:drift',
+  );
+  await expect(page.getByRole('radiogroup', { name: 'Colour' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await publicPlay(browser, handle, 'once');
+  await page.reload();
+  await expect(
+    animated(page).getByRole('radio', { name: 'Drifting' }),
+  ).toBeChecked();
+});
+
+test('Pro chooses Night sky, Ocean and Slow loop; the public page loops', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await setPlan(handle, 'pro');
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Night sky' }).check();
+  await page
+    .getByRole('radiogroup', { name: 'Colour' })
+    .getByRole('radio', { name: 'Ocean' })
+    .check();
+  await playing(page).getByRole('radio', { name: 'Slow loop' }).check();
+  await expect(shown(page)).toHaveCSS('background-color', 'rgb(29, 78, 137)');
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await publicPlay(browser, handle, 'loop');
+  await page.reload();
+  await expect(
+    playing(page).getByRole('radio', { name: 'Slow loop' }),
+  ).toBeChecked();
+});
+
+test('a refused save (the plan dropped) says so and keeps the saved cover', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await setPlan(handle, 'pro');
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Drifting' }).check();
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await setPlan(handle, 'free');
+  await animated(page).getByRole('radio', { name: 'Night sky' }).check();
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(
+    page.getByText('This cover choice is part of TipMe Pro.'),
+  ).toBeVisible();
+  await publicCover(browser, handle, 'animated:drift');
+  await expect(
+    animated(page).getByRole('radio', { name: 'Drifting' }),
+  ).toBeChecked();
+});
+
+test('the chooser fits 320px and 360px with no overflow, and every control is at least 44px @mobile', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await setPlan(handle, 'pro');
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Night sky' }).check();
+  for (const width of [320, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await fitsViewport(page), `${width}px`).toBe(true);
+    const small = await page
+      .locator(
+        '#cover label.cover-choice, #cover label.cover-colour, #cover label.cover-motion',
+      )
+      .evaluateAll((labels) =>
+        labels
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.height < 44 || r.width < 44)
+          .map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`),
+      );
+    expect(small, `${width}px`).toEqual([]);
+  }
+});
+
+test('a page that left Pro opens as plays once, and saving again clears the Pro settings', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await setPlan(handle, 'pro');
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Drifting' }).check();
+  await page
+    .getByRole('radiogroup', { name: 'Colour' })
+    .getByRole('radio', { name: 'Ocean' })
+    .check();
+  await playing(page).getByRole('radio', { name: 'Slow loop' }).check();
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+
+  await setPlan(handle, 'free');
+  await page.reload();
+  await expect(
+    playing(page).getByRole('radio', { name: 'Plays once' }),
+  ).toBeChecked();
+  await expect(
+    playing(page).getByRole('radio', { name: 'Slow loop' }),
+  ).not.toBeChecked();
+  // It still holds the loop and colour, so saving is offered, and it clears them.
+  const save = page.getByRole('button', { name: 'Save cover' });
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  const [row] = await sql<{
+    cover_motion: string | null;
+    cover_colour: string | null;
+  }>(
+    'SELECT cover_motion, cover_colour FROM profiles WHERE handle_lower = $1',
+    [handle.toLowerCase()],
+  );
+  expect(row).toEqual({ cover_motion: null, cover_colour: null });
+  await expect(save).toBeDisabled();
+});
+
+test('a Pro animation on a page that left Pro says it shows as a still picture', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await setPlan(handle, 'pro');
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Night sky' }).check();
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await setPlan(handle, 'free');
+  await page.reload();
+  await expect(
+    page.getByText(
+      'Your page is on Free, so Night sky shows as a still picture. Choose Drifting, Rising or Ripple to play it.',
+    ),
+  ).toBeVisible();
 });

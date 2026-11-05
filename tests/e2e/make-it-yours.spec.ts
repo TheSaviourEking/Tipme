@@ -118,9 +118,12 @@ test('Make it yours: the "already yours" card links to the cover, QR and tip amo
   await page.goto('/dashboard/settings#yours');
   const card = chapter(page).locator('.settings-section', {
     has: page.getByRole('heading', {
-      name: 'Covers and QR codes that are yours',
+      name: 'Covers that move, QR codes that are yours',
     }),
   });
+  await expect(card).toContainText(
+    'Free has three animated covers that play once',
+  );
   await expect(card.getByRole('button')).toHaveCount(0);
   await expect(card).not.toContainText('₦');
 

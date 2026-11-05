@@ -315,3 +315,12 @@ The owner's answers to the live-updates design
 
 EXPERIENCE-AND-MOTION §4's Sound row changes accordingly; §7.2 (no sound with reduced motion, for
 the appreciation moment) is unchanged.
+
+## 2026-11-04 — Animated covers
+
+- **Owner decision, 2 Nov 2026, confirmed 4 Nov 2026.** A page's cover can be animated. A product and visual decision, not a regulatory approval; no D-item is affected and nothing about payments changes.
+- **Free and Pro.** Free: Drifting, Rising and Ripple, which play once. Pro: all six (adding Pulse, Night sky and Sunrise), in every cover colour, with "Plays once" or "Slow loop". Automatic covers never animate.
+- **Timings.** Plays once 2800ms; Slow loop 8000ms, infinite alternate; both `--ease-physical` with a 0 to 600ms stagger. These are an exception to the stagger limit in EXPERIENCE-AND-MOTION §3.
+- **Freeze rules.** The cover pauses on the first use of the tip form and stays paused for that view; it also pauses off screen. Reduced motion, forced colours and print show the still frame.
+- **Lock.** The server refuses Pro-only choices from Free pages. A page that leaves Pro shows the still frame and keeps its choice.
+- **Performance.** Transform and opacity only; profile LCP stays under 2000ms in `pnpm perf:lab`.

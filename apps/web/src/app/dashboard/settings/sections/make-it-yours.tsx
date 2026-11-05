@@ -222,8 +222,9 @@ export function AlreadyYours({ title }: { title: string }) {
       <h3>{title}</h3>
       <ul className="settings-list">
         <li>
-          <Link href="#cover">Your cover</Link>: a design in your colour, or
-          your own photo. Free on every plan.
+          <Link href="#cover">Your cover</Link>: a design in your colour, your
+          own photo, or a cover that moves. Free has three animated covers that
+          play once; Pro adds every one, in any colour, with a slow loop.
         </li>
         <li>
           <Link href="/dashboard/qr">QR designs and print formats</Link>: the
@@ -254,14 +255,13 @@ type Part = {
  *   there (the card links to it) or moves here, so it never appears twice. The picker needs
  *   profiles.tip_sound_choice text NULL, and celebrations profiles.tip_celebration text NULL; a
  *   Pro-only choice reads as the Free default on Free.
- * - The animated cover joins AlreadyYours once feat/animated-covers is in; then rename 'more'
- *   to "Covers that move, QR codes that are yours" (the board's title).
+ * - The animated cover is in AlreadyYours, so 'more' has the board's title.
  */
 export const MAKE_IT_YOURS_PARTS: readonly Part[] = [
   { id: 'thanks', title: 'Your thank-you', Card: ThanksSettings },
   {
     id: 'more',
-    title: 'Covers and QR codes that are yours',
+    title: 'Covers that move, QR codes that are yours',
     Card: AlreadyYours,
   },
 ];

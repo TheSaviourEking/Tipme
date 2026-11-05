@@ -75,7 +75,7 @@ Hover effects are subtle and never carry information. Everything must also work 
 - **Native scrolling everywhere.**
 - **Public profile, phone:** the Tip button stays in a bar fixed to the bottom while the form is usable. It sits above the on-screen keyboard's area, or hides while a field is focused if there's no room. It must never cover a field, an error or the footer's Report link.
 - **Public profile, desktop:** the tipping panel stays in view while the left column scrolls, if the page is taller than the window. It stops at the footer.
-- **Cover:** no parallax. It scrolls with the page, because parallax costs performance and adds nothing to tipping.
+- **Cover:** no parallax. It scrolls with the page, because parallax costs performance and adds nothing to tipping. An animated cover is the owner's exception: see §7.11.
 - **Anchors** (such as `#get-paid`) land below any fixed header, and wait for late-loading content before scrolling. The card briefly gets a 2px outline for 1 second to show where you landed.
 - **Home page only:** sections may rise 12px and fade in once, as they enter view, using CSS scroll-driven animation where supported. Elsewhere they simply appear. Content is never hidden if scripts or the feature fail.
 - **Long lists:** "Show more" appends without moving what's on screen. Focus goes to the first new item.
@@ -142,6 +142,20 @@ With reduced motion, the final composition appears at once. No looping and no so
 - Colour changes crossfade in 150ms.
 - An uploading image shows its real preview at once, with a quiet busy state until saved. On failure it returns to the previous cover.
 - Save shows "Saved" in place for 2 seconds. The page doesn't scroll.
+
+### 7.11 Animated covers (owner's decision, 2 Nov 2026, confirmed 4 Nov 2026)
+
+The owner decided that a page's cover can be animated. This is a product and visual decision, not a regulatory approval; no D-item in `docs/00-DECISIONS.md` is affected and nothing about payments changes.
+
+- **An exception.** It is an exception to "motion is allowed for four reasons only", to the stagger limit (§3: at most 4 items, 420ms total), and to "no looping" outside the acknowledgement.
+- **Free and Pro.** Free gets three animated covers (Drifting, Rising, Ripple) that play once. Pro gets all six, in every cover colour, and chooses "Slow loop" or "Plays once". Automatic covers stay still.
+- **Timings.** Plays once: 2800ms, one iteration, `--ease-physical`, 0 to 600ms stagger. Slow loop: 8000ms, infinite and alternating, `--ease-physical`, 0 to 600ms stagger.
+- **Properties.** Transform and opacity only. No `will-change` is left on.
+- **Where.** Only `/@handle` and the live preview in Settings animate. Thumbnails, the Home stamp, dashboard cards and staff screens show the still frame.
+- **Freezing.** The cover freezes on the first use of the tip form (focus, press, typing, or submitting) and stays frozen for that page view. It also pauses while off screen, and a loop resumes when it returns unless frozen.
+- **Reduced motion and forced colours** give the still frame, which is the animation's settled final frame. Forced colours keep a plain edge. Print is still.
+- **The lock and the fallback.** The server refuses Pro-only choices from Free pages (`COVER_DESIGN_PRO_REQUIRED`). A page that leaves Pro shows the still frame, keeps its choice, and gets its loop back on return.
+- **Performance.** `/@tobi` LCP stays under 2000ms in `pnpm perf:lab` with a looping cover.
 
 ### 7.7 QR studio
 

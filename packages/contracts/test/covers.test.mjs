@@ -8,7 +8,11 @@ import {
   AUTOMATIC_DESIGNS,
   automaticColour,
   automaticCover,
+  COVER_ANIMATIONS,
+  coverChoiceNeedsPro,
   coverDesignChoiceSchema,
+  coverPlay,
+  isProAnimation,
   resolveCover,
 } from '../dist/index.js';
 
@@ -333,4 +337,165 @@ test('removing an automatic colour moves only the pages that had it, and never o
           assert.equal(colour, before.get(handle), handle);
       }
     });
+});
+
+const base = {
+  handle: 'ada',
+  coverPath: null,
+  coverDesign: null,
+  coverColour: null,
+};
+
+test('six animations: drift, rise and ripple are Free; pulse, night and sun are Pro', () => {
+  assert.deepEqual(
+    COVER_ANIMATIONS.map((a) => [a.id, a.pro]),
+    [
+      ['drift', false],
+      ['rise', false],
+      ['ripple', false],
+      ['pulse', true],
+      ['night', true],
+      ['sun', true],
+    ],
+  );
+  assert.equal(new Set(COVER_ANIMATIONS.map((a) => a.name)).size, 6);
+  assert.equal(isProAnimation('night'), true);
+  assert.equal(isProAnimation('drift'), false);
+});
+
+test('automatic covers never animate', () => {
+  for (let i = 0; i < 2400; i += 1) {
+    const cover = resolveCover({ ...base, handle: `user${i}`, plan: 'pro' });
+    assert.notEqual(cover.kind, 'animated');
+  }
+});
+
+test('photo beats animation beats design', () => {
+  assert.equal(
+    resolveCover({ ...base, coverPath: 'a/b.webp', coverAnimation: 'drift' })
+      .kind,
+    'photo',
+  );
+  assert.deepEqual(
+    resolveCover({ ...base, coverAnimation: 'drift', coverDesign: 'dark' }),
+    { kind: 'animated', animation: 'drift', play: 'once' },
+  );
+});
+
+test('a Free animation on a Free page plays once, even with a saved loop', () => {
+  const cover = resolveCover({
+    ...base,
+    coverAnimation: 'drift',
+    coverMotion: 'loop',
+    plan: 'free',
+  });
+  assert.equal(cover.play, 'once');
+});
+
+test('a Pro page plays its saved motion, and once with no setting', () => {
+  assert.equal(
+    resolveCover({
+      ...base,
+      coverAnimation: 'night',
+      coverMotion: 'loop',
+      plan: 'pro',
+    }).play,
+    'loop',
+  );
+  assert.equal(
+    resolveCover({
+      ...base,
+      coverAnimation: 'night',
+      coverMotion: null,
+      plan: 'pro',
+    }).play,
+    'once',
+  );
+});
+
+test('leaving Pro shows the still frame and keeps the choice', () => {
+  assert.deepEqual(
+    resolveCover({
+      ...base,
+      coverAnimation: 'night',
+      coverMotion: 'loop',
+      plan: 'free',
+    }),
+    { kind: 'animated', animation: 'night', play: 'still' },
+  );
+  assert.deepEqual(
+    resolveCover({
+      ...base,
+      coverAnimation: 'drift',
+      coverColour: 'ocean',
+      plan: 'free',
+    }),
+    { kind: 'animated', animation: 'drift', colour: 'ocean', play: 'still' },
+  );
+  assert.equal(
+    resolveCover({ ...base, coverAnimation: 'night' }).play,
+    'still',
+  );
+  assert.equal(
+    coverPlay({
+      animation: 'night',
+      colour: null,
+      motion: 'loop',
+      plan: undefined,
+    }),
+    'still',
+  );
+});
+
+test('an animation the catalogue no longer holds falls back to the design, then automatic', () => {
+  assert.deepEqual(
+    resolveCover({ ...base, coverAnimation: 'gone', coverDesign: 'dark' }),
+    { kind: 'design', design: 'dark' },
+  );
+  assert.equal(
+    resolveCover({ ...base, coverAnimation: 'gone' }).kind,
+    'design',
+  );
+});
+
+test('coverChoiceNeedsPro: Pro animation, loop, or a colour on an animation', () => {
+  assert.equal(
+    coverChoiceNeedsPro({ design: null, animation: 'drift' }),
+    false,
+  );
+  assert.equal(
+    coverChoiceNeedsPro({ design: null, animation: 'drift', motion: 'once' }),
+    false,
+  );
+  assert.equal(coverChoiceNeedsPro({ design: null, animation: 'pulse' }), true);
+  assert.equal(
+    coverChoiceNeedsPro({ design: null, animation: 'drift', motion: 'loop' }),
+    true,
+  );
+  assert.equal(
+    coverChoiceNeedsPro({ design: null, animation: 'drift', colour: 'violet' }),
+    true,
+  );
+  assert.equal(
+    coverChoiceNeedsPro({ design: 'scattered', colour: 'violet' }),
+    false,
+  );
+});
+
+test('the choice schema refuses a design and an animation together, a motion without an animation, and unknown ids', () => {
+  const ok = (v) => coverDesignChoiceSchema.safeParse(v).success;
+  assert.equal(
+    ok({ design: null, animation: 'night', motion: 'loop', colour: 'ocean' }),
+    true,
+  );
+  assert.equal(ok({ design: 'dark', animation: 'drift' }), false);
+  assert.equal(ok({ design: null, motion: 'loop' }), false);
+  assert.equal(ok({ design: 'dark', motion: 'once' }), false);
+  assert.equal(ok({ design: null, animation: 'nope' }), false);
+  assert.equal(
+    ok({ design: null, animation: 'drift', motion: 'bounce' }),
+    false,
+  );
+  assert.equal(ok({ design: null, animation: 'drift', colour: 'nope' }), false);
+  assert.equal(ok({ design: null, animation: null }), true);
 });

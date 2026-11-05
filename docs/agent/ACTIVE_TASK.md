@@ -1,3 +1,9 @@
+# Current task — animated covers (5 November 2026)
+
+- Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.
+- Done: Tasks 1 to 8 of `docs/superpowers/plans/2026-11-04-animated-covers.md`; review items I1 (migration regenerated with drizzle-kit as `0077_cover_animation`, journal idx 77, strict journal test unchanged), I2 (the Pro page row re-added on dev's page, drawn with the real `ProfileCover`), I3 (cold-context LCP), M1, M2. The Make it yours card is now "Covers that move, QR codes that are yours".
+- Next: owner review; push and open the PR into dev. Evidence: `.superpowers/program/e-merge-report.md`.
+
 # Current task — Make it yours: the note consent tick box and the thank-you line (5 November 2026)
 
 - Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2. One PR into `dev` (ruling: C and A ship together). One migration, 0076 (`tip_messages.may_show`; `profiles.thanks_line`, `thanks_style`, `thanks_signed`), regenerated after merging `origin/dev` (#112–#124).

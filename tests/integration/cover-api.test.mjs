@@ -198,6 +198,8 @@ test('automatic cover is stable, one of the twelve designs and colours, and chan
   assert.deepEqual(mine.coverChoice, {
     design: null,
     colour: null,
+    animation: null,
+    motion: null,
     hasPhoto: false,
   });
   const { rows } = await database.pool.query(
@@ -221,6 +223,8 @@ test('photo beats design beats automatic', async () => {
   assert.deepEqual((await chosen.json()).data.coverChoice, {
     design: 'ripple',
     colour: 'rose',
+    animation: null,
+    motion: null,
     hasPhoto: false,
   });
   assert.deepEqual((await publicPage('cover_order')).cover, {
@@ -365,6 +369,8 @@ test('an unknown design or a colour on a design without colours is refused', asy
   assert.deepEqual((await myPage(cookie)).coverChoice, {
     design: null,
     colour: null,
+    animation: null,
+    motion: null,
     hasPhoto: false,
   });
 });
@@ -847,4 +853,108 @@ test('nothing changed: no write and no page refresh', async () => {
   await chooseDesign(cookie, { design: 'ripple', colour: 'sun' });
   await new Promise((resolve) => setTimeout(resolve, 200));
   assert.deepEqual(revalidations, ['cover_same']);
+});
+
+// Animated covers (owner's decision, 2 Nov 2026): the Pro lock and the still fallback.
+const setPlan = async (profileId, plan) => {
+  await database.pool.query('UPDATE profiles SET plan = $2 WHERE id = $1', [
+    profileId,
+    plan,
+  ]);
+};
+const settle = () => new Promise((resolve) => setTimeout(resolve, 200));
+
+test('a Free page cannot save a Pro animation, a slow loop or an animated colour (403 COVER_DESIGN_PRO_REQUIRED)', async () => {
+  const cookie = await livePage('+2348031290031', 'anim_free');
+  for (const body of [
+    { design: null, animation: 'night' },
+    { design: null, animation: 'drift', motion: 'loop' },
+    { design: null, animation: 'drift', colour: 'ocean' },
+  ]) {
+    const refused = await chooseDesign(cookie, body);
+    assert.equal(refused.status, 403, JSON.stringify(body));
+    const error = (await refused.json()).error;
+    assert.equal(error.code, 'COVER_DESIGN_PRO_REQUIRED');
+    assert.equal(error.message, 'This cover choice is part of TipMe Pro.');
+  }
+  assert.equal((await publicPage('anim_free')).cover.kind, 'design');
+});
+
+test('a Free page saves Drifting and its public cover plays once', async () => {
+  const cookie = await livePage('+2348031290032', 'anim_drift');
+  const saved = await chooseDesign(cookie, {
+    design: null,
+    animation: 'drift',
+  });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await publicPage('anim_drift')).cover, {
+    kind: 'animated',
+    animation: 'drift',
+    play: 'once',
+  });
+});
+
+test('a Pro page saves Night sky on a slow loop in Ocean', async () => {
+  const cookie = await livePage('+2348031290033', 'anim_pro');
+  const { profileId } = await userAndPage('anim_pro');
+  await setPlan(profileId, 'pro');
+  const saved = await chooseDesign(cookie, {
+    design: null,
+    animation: 'night',
+    colour: 'ocean',
+    motion: 'loop',
+  });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await publicPage('anim_pro')).cover, {
+    kind: 'animated',
+    animation: 'night',
+    colour: 'ocean',
+    play: 'loop',
+  });
+  assert.equal((await myPage(cookie)).coverChoice.motion, 'loop');
+});
+
+test('leaving Pro shows the still frame; returning restores the loop', async () => {
+  const cookie = await livePage('+2348031290034', 'anim_leave');
+  const { profileId } = await userAndPage('anim_leave');
+  await setPlan(profileId, 'pro');
+  await chooseDesign(cookie, {
+    design: null,
+    animation: 'night',
+    motion: 'loop',
+  });
+  const columns = async () =>
+    (
+      await database.pool.query(
+        'SELECT cover_animation, cover_motion, cover_colour FROM profiles WHERE id = $1',
+        [profileId],
+      )
+    ).rows[0];
+  const saved = await columns();
+  await setPlan(profileId, 'free');
+  assert.equal((await publicPage('anim_leave')).cover.play, 'still');
+  assert.deepEqual(await columns(), saved);
+  await setPlan(profileId, 'pro');
+  assert.equal((await publicPage('anim_leave')).cover.play, 'loop');
+  assert.deepEqual(await columns(), saved);
+});
+
+test('an animated choice refreshes the public page; a refused one does not', async () => {
+  const cookie = await livePage('+2348031290035', 'anim_fresh');
+  await settle();
+  revalidations = [];
+  await chooseDesign(cookie, { design: null, animation: 'night' });
+  await settle();
+  assert.deepEqual(revalidations, []);
+  await chooseDesign(cookie, { design: null, animation: 'rise' });
+  await settle();
+  assert.deepEqual(revalidations, ['anim_fresh']);
+});
+
+test('an automatic cover is never animated', async () => {
+  await livePage('+2348031290036', 'anim_auto');
+  assert.equal((await publicPage('anim_auto')).cover.kind, 'design');
+  const { profileId } = await userAndPage('anim_auto');
+  await setPlan(profileId, 'pro');
+  assert.equal((await publicPage('anim_auto')).cover.kind, 'design');
 });

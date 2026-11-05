@@ -484,6 +484,8 @@ const toMine = async (
   coverChoice: {
     design: row.profile.coverDesign,
     colour: row.profile.coverColour,
+    animation: row.profile.coverAnimation,
+    motion: row.profile.coverMotion as 'once' | 'loop' | null,
     hasPhoto: row.profile.coverPath !== null,
   },
   handleChanges: handleChangesOf(row.profile),
@@ -978,6 +980,8 @@ export function deleteAccount(
             avatarPath: null,
             coverDesign: null,
             coverColour: null,
+            coverAnimation: null,
+            coverMotion: null,
             coverPath: null,
             socials: {},
             links: [],

@@ -527,6 +527,10 @@ export const profiles = pgTable(
     // photo, which wins over them. `coverVersion` only ever goes up, like `avatarVersion`.
     coverDesign: text('cover_design'),
     coverColour: text('cover_colour'),
+    // An animated cover (owner's decision, 2 Nov 2026): an id from COVER_ANIMATIONS, held as text
+    // like `coverDesign`. It wins over `coverDesign`; null `coverMotion` means it plays once.
+    coverAnimation: text('cover_animation'),
+    coverMotion: text('cover_motion'),
     coverPath: text('cover_path'),
     coverVersion: integer('cover_version').notNull().default(0),
     // When the page first went live (PR-013): `profile_published` is recorded once, ever.
@@ -567,6 +571,7 @@ export const profiles = pgTable(
       sql`page_state IN ('live', 'not_live', 'deleted')`,
     ),
     check('profiles_plan', sql`plan IN ('free', 'pro')`),
+    check('profiles_cover_motion', sql`cover_motion IN ('once', 'loop')`),
     check(
       'profiles_handle_changes',
       sql`handle_changes_used >= 0 AND handle_changes_extra BETWEEN 0 AND 20`,

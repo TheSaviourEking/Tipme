@@ -44,34 +44,6 @@ test('the Pro page flips a sample page between Free and Pro', async ({
   ).toBeVisible();
 });
 
-test('the Pro page does not sell animated covers, which are not built yet', async ({
-  page,
-}) => {
-  // The suite defaults to reduced motion; here motion is allowed, so a moving cover would show.
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.goto('/pro');
-  const plan = page.getByRole('radiogroup', { name: 'Plan' });
-  const main = page.locator('main');
-  for (const name of ['Free', 'Pro']) {
-    await plan.getByRole('radio', { name }).click();
-    await expect(main).not.toContainText(
-      /animated|play once|slow loop|play\b/i,
-    );
-    await expect(
-      main.getByRole('button', { name: /play once|slow loop/i }),
-    ).toHaveCount(0);
-    // The sample cover is a still picture: nothing on it moves.
-    const animated = await page
-      .locator('.pro-cover *')
-      .evaluateAll((nodes) =>
-        nodes
-          .map((node) => getComputedStyle(node).animationName)
-          .filter((animation) => animation !== 'none'),
-      );
-    expect(animated).toEqual([]);
-  }
-});
-
 test('Pro shows no price until staff set one', async ({ page }) => {
   await page.goto('/pro');
   const plan = page.getByRole('radiogroup', { name: 'Plan' });
@@ -130,4 +102,63 @@ test('the sample QR codes on the Pro page scan to Ada’s page', async ({
     }, `/pro/${file}.png`);
     expect(decoded, file).toBe('https://usetipme.xyz/@ada');
   }
+});
+
+test('the Pro page says what animated covers do on each plan', async ({
+  page,
+}) => {
+  await page.goto('/pro');
+  const main = page.locator('main');
+  const plan = page.getByRole('radiogroup', { name: 'Plan' });
+  const once = main.getByRole('button', { name: 'Plays once' });
+  const loop = main.getByRole('button', { name: 'Slow loop' });
+  // Free: three covers that play once; the loop is shown and cannot be used.
+  await expect(
+    main.getByText('3 animated covers that play once.'),
+  ).toBeVisible();
+  await expect(once).toHaveAttribute('aria-pressed', 'true');
+  await expect(loop).toHaveAttribute('aria-disabled', 'true');
+  await loop.click({ force: true });
+  await expect(loop).toHaveAttribute('aria-pressed', 'false');
+
+  await plan.getByRole('radio', { name: 'Pro' }).click();
+  await expect(
+    main.getByText('Every design in every colour. Slow loop or Plays once.'),
+  ).toBeVisible();
+  await expect(loop).not.toHaveAttribute('aria-disabled', 'true');
+  await loop.click();
+  await expect(loop).toHaveAttribute('aria-pressed', 'true');
+  // The sample is the real cover, not a drawing of one.
+  await expect(main.locator('.pro-cover .profile-cover')).toHaveAttribute(
+    'data-cover-play',
+    'loop',
+  );
+});
+
+test('the Pro page sample cover moves only when motion is allowed', async ({
+  page,
+}) => {
+  const running = () =>
+    page
+      .locator('.pro-cover *')
+      .evaluateAll(
+        (nodes) =>
+          nodes.filter((node) =>
+            node
+              .getAnimations()
+              .some((animation) => animation.playState === 'running'),
+          ).length,
+      );
+  const plan = page.getByRole('radiogroup', { name: 'Plan' });
+  // The suite defaults to reduced motion: the sample is a still picture on both plans.
+  await page.goto('/pro');
+  await expect(page.locator('.pro-cover .cover-fx').first()).toBeAttached();
+  for (const name of ['Free', 'Pro']) {
+    await plan.getByRole('radio', { name }).click();
+    expect(await running(), name).toBe(0);
+  }
+  // With motion allowed, the same cover plays.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/pro');
+  await expect.poll(running).toBeGreaterThan(0);
 });
