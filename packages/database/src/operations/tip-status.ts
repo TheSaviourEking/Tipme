@@ -1,7 +1,7 @@
 import type { TipStatusState, TipStatusView } from '@tipme/contracts';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { paymentAttempts, profiles, tips } from '../schema.js';
+import { paymentAttempts, profiles, tipMessages, tips } from '../schema.js';
 import { guarded } from './errors.js';
 
 /** After this long without an answer the supporter is told we are still checking. */
@@ -72,6 +72,15 @@ export function tipStatusView(
         ? paidAttempt.providerReference.slice(-6).toUpperCase()
         : null;
     }
+    // Only whether consent was given; the note's text is never read here.
+    let noteMayShow = false;
+    if (state === 'paid') {
+      const [note] = await db
+        .select({ mayShow: tipMessages.mayShow })
+        .from(tipMessages)
+        .where(eq(tipMessages.tipId, tipId));
+      noteMayShow = note?.mayShow === true;
+    }
     return {
       state,
       recipient: { handle: tip.handle, displayName: tip.displayName },
@@ -79,6 +88,7 @@ export function tipStatusView(
       currency: tip.currency,
       completedAt: tip.completedAt?.toISOString() ?? null,
       reference,
+      ...(noteMayShow ? { noteMayShow: true as const } : {}),
     };
   });
 }

@@ -916,6 +916,9 @@ export const tipMessages = pgTable(
       .primaryKey()
       .references(() => tips.id),
     body: text('body').notNull(),
+    // The supporter ticked "may show this note on their page". Consent belongs to the note; only
+    // notes written after this column existed can ever be true.
+    mayShow: boolean('may_show').notNull().default(false),
     createdAt: createdAt(),
   },
   () => [

@@ -44,6 +44,8 @@ export interface CreatePaymentIntentInput {
   /** A shared moment of this recipient the supporter is adding to ("add to the celebration"). */
   celebrationMomentId?: string;
   message?: string;
+  /** The supporter agreed the recipient may show their note. Ignored when there is no message. */
+  noteMayShow?: true;
   traceId?: string | null;
   now?: Date;
   /** Test-only: throw after the named step to prove the transaction rolls back. Ignored unless NODE_ENV=test. */
@@ -85,6 +87,8 @@ export async function createPaymentIntent(
   // Validated here, not by the database CHECK: a database error would echo the text upward.
   if (message !== null && (message.length === 0 || message.length > 280))
     throw new OperationError('INVALID_INPUT');
+  // Consent only counts with a note to consent for; without one it is stored nowhere.
+  const mayShow = message !== null && input.noteMayShow === true;
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify([
@@ -92,6 +96,9 @@ export async function createPaymentIntent(
         label,
         message,
         input.celebrationMomentId ?? null,
+        // Appended only with consent, so every fingerprint made without it (in-flight replays
+        // included) stays byte-identical, and adding consent to a replayed key is a conflict.
+        ...(mayShow ? [true] : []),
       ]),
     )
     .digest('hex');
@@ -203,7 +210,7 @@ export async function createPaymentIntent(
       if (input.__testFailAfter === 'tip' && process.env['NODE_ENV'] === 'test')
         throw new Error('test failure');
       if (message !== null)
-        await tx.insert(tipMessages).values({ tipId, body: message });
+        await tx.insert(tipMessages).values({ tipId, body: message, mayShow });
 
       const attemptId = newId();
       await tx.insert(paymentAttempts).values({

@@ -102,4 +102,35 @@ test('tip status view', async (t) => {
       null,
     );
   });
+  await t.test(
+    'the paid receipt says the note may be shown, and never carries the note',
+    async () => {
+      const { quoteId } = await createQuote(database.db, {
+        handle: 'ada',
+        tipMinor: 200000n,
+        currency: 'NGN',
+      });
+      const agreed = await createPaymentIntent(database.db, {
+        quoteId,
+        idempotencyKey: randomUUID(),
+        message: 'private words',
+        noteMayShow: true,
+      });
+      const waiting = await tipStatusView(
+        database.db,
+        agreed.tipId,
+        new Date(),
+      );
+      assert.equal('noteMayShow' in waiting, false);
+      await place('tips', agreed.tipId, 'SUCCEEDED', ', completed_at = now()');
+      const view = await tipStatusView(database.db, agreed.tipId, new Date());
+      assert.equal(view.noteMayShow, true);
+      assert.doesNotMatch(JSON.stringify(view), /private words/);
+
+      const kept = await newTip();
+      await place('tips', kept.tipId, 'SUCCEEDED', ', completed_at = now()');
+      const keptView = await tipStatusView(database.db, kept.tipId, new Date());
+      assert.equal('noteMayShow' in keptView, false);
+    },
+  );
 });

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { createPaymentIntent, createQuote } from '../../dist/index.js';
 import { useDatabase } from './helpers.mjs';
@@ -265,4 +265,110 @@ test('payment intents', async (t) => {
       assert.equal(await database.count(table), 0, table);
     }
   });
+  await t.test(
+    'a tip with a note and consent stores may_show; without consent it is false',
+    async () => {
+      await database.fresh();
+      const agreed = await createPaymentIntent(database.db, {
+        quoteId: (await quote()).quoteId,
+        idempotencyKey: randomUUID(),
+        message: 'Show this',
+        noteMayShow: true,
+      });
+      const kept = await createPaymentIntent(database.db, {
+        quoteId: (await quote()).quoteId,
+        idempotencyKey: randomUUID(),
+        message: 'Keep this private',
+      });
+      const mayShow = async (tipId) =>
+        (
+          await database.pool.query(
+            'SELECT may_show FROM tip_messages WHERE tip_id = $1',
+            [tipId],
+          )
+        ).rows[0].may_show;
+      assert.equal(await mayShow(agreed.tipId), true);
+      assert.equal(await mayShow(kept.tipId), false);
+    },
+  );
+
+  await t.test(
+    'consent without a note stores nothing and does not fail',
+    async () => {
+      await database.fresh();
+      const result = await createPaymentIntent(database.db, {
+        quoteId: (await quote()).quoteId,
+        idempotencyKey: randomUUID(),
+        noteMayShow: true,
+      });
+      assert.equal(await database.count('tips'), 1);
+      assert.equal(await database.count('tip_messages'), 0);
+      assert.equal(result.replayed, false);
+    },
+  );
+
+  await t.test(
+    'the fingerprint of a tip without consent is unchanged',
+    async () => {
+      await database.fresh();
+      const { quoteId } = await quote();
+      const { intentId } = await createPaymentIntent(database.db, {
+        quoteId,
+        idempotencyKey: randomUUID(),
+        payerDisplayLabel: 'Chidi',
+        message: 'Thank you',
+      });
+      // The fingerprint as it was before consent existed: quote, label, message, moment.
+      const before = createHash('sha256')
+        .update(JSON.stringify([quoteId, 'Chidi', 'Thank you', null]))
+        .digest('hex');
+      const stored = (
+        await database.pool.query(
+          'SELECT request_fingerprint FROM payment_intents WHERE id = $1',
+          [intentId],
+        )
+      ).rows[0].request_fingerprint;
+      assert.equal(stored, before);
+    },
+  );
+
+  await t.test(
+    'replaying a key with consent added is IDEMPOTENCY_CONFLICT',
+    async () => {
+      await database.fresh();
+      const { quoteId } = await quote();
+      const key = randomUUID();
+      await createPaymentIntent(database.db, {
+        quoteId,
+        idempotencyKey: key,
+        message: 'Thank you',
+      });
+      await assert.rejects(
+        createPaymentIntent(database.db, {
+          quoteId,
+          idempotencyKey: key,
+          message: 'Thank you',
+          noteMayShow: true,
+        }),
+        { code: 'IDEMPOTENCY_CONFLICT' },
+      );
+      // The same request with consent replays as itself.
+      const other = await quote();
+      const consentKey = randomUUID();
+      const first = await createPaymentIntent(database.db, {
+        quoteId: other.quoteId,
+        idempotencyKey: consentKey,
+        message: 'Thank you',
+        noteMayShow: true,
+      });
+      const again = await createPaymentIntent(database.db, {
+        quoteId: other.quoteId,
+        idempotencyKey: consentKey,
+        message: 'Thank you',
+        noteMayShow: true,
+      });
+      assert.equal(again.replayed, true);
+      assert.equal(again.tipId, first.tipId);
+    },
+  );
 });

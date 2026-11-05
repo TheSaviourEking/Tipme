@@ -1,0 +1,1 @@
+ALTER TABLE "tip_messages" ADD COLUMN "may_show" boolean DEFAULT false NOT NULL;
