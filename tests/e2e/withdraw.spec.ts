@@ -320,7 +320,7 @@ test('an older withdrawal stays listed after many tips', async ({
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
-  await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
+  await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   // More tips than the mixed activity feed holds.
   for (let batch = 0; batch < 3; batch += 1)
@@ -344,7 +344,7 @@ test('a past withdrawal keeps its bank after the bank changes', async ({
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
-  await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
+  await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   await saveBank(handle, 'Kuda', '9876');
   await page.reload();
