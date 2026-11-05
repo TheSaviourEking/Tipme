@@ -4,6 +4,12 @@
 - Plan: `docs/superpowers/plans/2026-11-05-states.md` (18 tasks, PRs A to I). Task 17 (connection copy) waits for the owner's yes on the questions in the plan header.
 - Next exact step: Task 1, after the owner answers or waives the open questions.
 
+# Current task — dashboard data (5 November 2026)
+
+- Branch/worktree: `feat/dashboard-data` / `.worktrees/dashboard-data`, from `origin/dev` with `feat/e2e-lanes` merged. Not pushed. Migration 0071 (one index).
+- Built: `GET /v1/me/withdrawals` (paged, with the bank each went to), `GET /v1/me/tip-totals`, `note=with` on `/v1/me/tips`, `bank` on activity rows; the Withdraw, Home, Tips and weekly-report screens use them. The tips list cursor now keeps microseconds.
+- Next: owner says to push, then one PR to `dev`. Plan: `docs/superpowers/plans/2026-11-04-dashboard-data.md`.
+
 # Current task — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration.
