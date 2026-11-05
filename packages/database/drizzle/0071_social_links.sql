@@ -9,5 +9,8 @@ UPDATE "profiles" SET "links" = (
   FROM (VALUES ('facebook', 1), ('instagram', 2), ('x', 3)) AS v(platform, position)
   WHERE jsonb_typeof("profiles"."socials" -> v.platform) = 'string'
     AND "profiles"."socials" ->> v.platform <> ''
+    -- A bare site (the old rules allowed https://instagram.com/) is no one's page: left behind,
+    -- still in "socials".
+    AND NOT ("profiles"."socials" ->> v.platform ~ '^https://[^/?#]+/?([?#].*)?$')
 )
 WHERE "links" = '[]'::jsonb AND "socials" <> '{}'::jsonb;

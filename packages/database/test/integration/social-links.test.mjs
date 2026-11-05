@@ -29,7 +29,8 @@ const ig = link('instagram', 'https://instagram.com/ada.edits');
 const yt = link('youtube', 'https://youtube.com/@adaedits');
 const fb = link('facebook', 'https://facebook.com/ada');
 const tw = link('twitch', 'https://twitch.tv/adaedits');
-const site = link('website', 'https://adaedits.com');
+// Stored as the URL parser writes it, with the slash a bare address gets.
+const site = link('website', 'https://adaedits.com/');
 const tg = link('telegram', 'https://t.me/adaedits');
 
 const errorCode = async (promise) => {
@@ -88,6 +89,118 @@ test('a Free page saves up to 3 Free-site links in catalogue order, and shows th
     false,
   );
   assert.deepEqual((await getMyProfile(database.db, ada)).links, [tt, ig, yt]);
+});
+
+/** The old column, as an API from before social links (or a rollback) reads it. */
+const oldColumn = async (database, handle) =>
+  (
+    await database.pool.query(
+      'SELECT socials FROM profiles WHERE handle_lower = $1',
+      [handle],
+    )
+  ).rows[0].socials;
+
+test('every save also writes the old three links, from what shows, so a rollback stays truthful', async (t) => {
+  const { database, signUp, plan } = await setUp(t);
+  const ada = await signUp('+2348031240011', 'ada_links');
+  await setMyLinks(database.db, ada, { links: [tt, ig, yt], show: true });
+  assert.deepEqual(await oldColumn(database, 'ada_links'), {
+    instagram: ig.url,
+  });
+  await setMyLinks(database.db, ada, { links: [tt], show: true });
+  assert.deepEqual(
+    await oldColumn(database, 'ada_links'),
+    {},
+    'a removed link is gone from the old column too',
+  );
+  await plan('ada_links', 'pro');
+  const x = link('x', 'https://x.com/ada');
+  await setMyLinks(database.db, ada, {
+    links: [tg, fb, x, ig],
+    show: true,
+  });
+  assert.deepEqual(await oldColumn(database, 'ada_links'), {
+    facebook: fb.url,
+    x: x.url,
+    instagram: ig.url,
+  });
+  // What a Free page would show is what the old column holds after a Free save.
+  await plan('ada_links', 'free');
+  await setMyLinks(database.db, ada, { links: [fb], show: true });
+  const free = await oldColumn(database, 'ada_links');
+  assert.deepEqual(
+    free,
+    legacyOf((await publicProfile(database.db, 'ada_links')).links),
+  );
+});
+
+const legacyOf = (links) =>
+  Object.fromEntries(
+    links
+      .filter((l) => ['facebook', 'instagram', 'x'].includes(l.platform))
+      .map((l) => [l.platform, l.url]),
+  );
+
+test('a Free page can delete links kept from Pro, but never add or show them', async (t) => {
+  const { database, signUp, plan } = await setUp(t);
+  const ada = await signUp('+2348031240012', 'ada_links');
+  await plan('ada_links', 'pro');
+  const of = link('onlyfans', 'https://onlyfans.com/ada');
+  await setMyLinks(database.db, ada, { links: [tw, tg, of, tt], show: true });
+  await plan('ada_links', 'free');
+  // Keep Telegram, delete OnlyFans.
+  await setMyLinks(database.db, ada, {
+    links: [tt, tw],
+    show: true,
+    hidden: [tg.url],
+  });
+  assert.deepEqual((await getMyProfile(database.db, ada)).links, [tt, tw, tg]);
+  // Naming a link that isn't stored adds nothing.
+  await setMyLinks(database.db, ada, {
+    links: [tt, tw],
+    show: true,
+    hidden: [tg.url, 'https://t.me/someoneelse'],
+  });
+  assert.deepEqual((await getMyProfile(database.db, ada)).links, [tt, tw, tg]);
+  // Pro sites never show on Free.
+  assert.deepEqual((await publicProfile(database.db, 'ada_links')).links, [
+    tt,
+    tw,
+  ]);
+});
+
+test('with adult-platform links switched off they leave the page and can’t be added, and are kept', async (t) => {
+  const { database, signUp, plan } = await setUp(t);
+  const ada = await signUp('+2348031240013', 'ada_links');
+  await plan('ada_links', 'pro');
+  const of = link('onlyfans', 'https://onlyfans.com/ada');
+  await setMyLinks(database.db, ada, { links: [of, tt], show: true });
+  const off = { adultLinks: false };
+  assert.deepEqual((await publicProfile(database.db, 'ada_links', off)).links, [
+    tt,
+  ]);
+  // Saving with the stored link still in the list works and keeps it.
+  await setMyLinks(database.db, ada, { links: [of, tt, ig], show: true }, off);
+  assert.deepEqual((await getMyProfile(database.db, ada)).links, [of, tt, ig]);
+  assert.equal(
+    await errorCode(
+      setMyLinks(
+        database.db,
+        ada,
+        {
+          links: [of, tt, link('fansly', 'https://fansly.com/ada')],
+          show: true,
+        },
+        off,
+      ),
+    ),
+    'SOCIAL_LINK_UNAVAILABLE',
+  );
+  assert.deepEqual((await publicProfile(database.db, 'ada_links')).links, [
+    of,
+    tt,
+    ig,
+  ]);
 });
 
 test('a Free page cannot save what is part of Pro', async (t) => {
@@ -208,21 +321,26 @@ test('a Pro save waits for a plan change in progress, and is refused once the pa
   assert.deepEqual((await getMyProfile(database.db, ada)).links, []);
 });
 
-test('the About form no longer carries links', async (t) => {
+test('the About form takes and ignores the old three links, so tabs opened before the release still save', async (t) => {
   const { database, signUp } = await setUp(t);
   const ada = await signUp('+2348031240005', 'ada_links');
-  assert.equal(
-    await errorCode(
-      updateMyProfile(database.db, ada, { socials: { instagram: ig.url } }),
-    ),
-    'INVALID_INPUT',
-  );
+  await setMyLinks(database.db, ada, { links: [tt], show: true });
+  // What a Settings tab from before the release sends with every About save.
+  const mine = await updateMyProfile(database.db, ada, {
+    displayName: 'Ada Okafor',
+    socials: { instagram: ig.url },
+    socialsPublic: true,
+  });
+  assert.equal(mine.displayName, 'Ada Okafor');
+  assert.deepEqual(mine.links, [tt], 'the old links are not applied');
 });
 
-test('the migration moves Facebook, Instagram and X into the new list, losing nothing', async (t) => {
+test('the migration moves Facebook, Instagram and X into the new list, skipping bare sites and losing nothing', async (t) => {
   const { database, signUp } = await setUp(t);
-  const ada = await signUp('+2348031240006', 'ada_links');
-  const tobi = await signUp('+2348031240007', 'tobi_links');
+  const handles = ['mig_a', 'mig_b', 'mig_c', 'mig_d'];
+  const users = [];
+  for (const [i, handle] of handles.entries())
+    users.push(await signUp(`+234803124002${i}`, handle));
   const drizzle = new URL('../../drizzle/', import.meta.url);
   const file = readdirSync(drizzle).find((name) =>
     name.endsWith('_social_links.sql'),
@@ -231,30 +349,49 @@ test('the migration moves Facebook, Instagram and X into the new list, losing no
     .split('--> statement-breakpoint')
     .find((statement) => statement.includes('UPDATE "profiles"'));
   assert.ok(backfill, 'the migration has its backfill');
-  await database.pool.query(
-    `UPDATE profiles SET links = '[]'::jsonb, socials = $2::jsonb WHERE handle_lower = $1`,
-    [
-      'ada_links',
-      JSON.stringify({
-        x: 'https://twitter.com/ada',
-        instagram: 'https://instagram.com/ada',
-        facebook: 'https://www.facebook.com/ada',
-      }),
-    ],
-  );
-  await database.pool.query(
-    `UPDATE profiles SET links = '[]'::jsonb, socials = '{}'::jsonb WHERE handle_lower = 'tobi_links'`,
-  );
+  const old = {
+    // All three, in jsonb's own key order.
+    mig_a: {
+      x: 'https://twitter.com/ada',
+      instagram: 'https://instagram.com/ada',
+      facebook: 'https://www.facebook.com/ada',
+    },
+    // Nothing.
+    mig_b: {},
+    // Bare sites (the old rules allowed them) and an empty string are skipped.
+    mig_c: {
+      instagram: 'https://instagram.com/',
+      facebook: 'https://facebook.com/?hl=en',
+      x: '',
+    },
+    // A value that isn't a string is skipped; the good one still moves.
+    mig_d: { facebook: 42, x: 'https://x.com/ada' },
+  };
+  for (const [handle, socials] of Object.entries(old))
+    await database.pool.query(
+      `UPDATE profiles SET links = '[]'::jsonb, socials = $2::jsonb WHERE handle_lower = $1`,
+      [handle, JSON.stringify(socials)],
+    );
   await database.pool.query(backfill);
-  assert.deepEqual((await getMyProfile(database.db, ada)).links, [
-    link('facebook', 'https://www.facebook.com/ada'),
-    link('instagram', 'https://instagram.com/ada'),
-    link('x', 'https://twitter.com/ada'),
-  ]);
-  assert.deepEqual((await getMyProfile(database.db, tobi)).links, []);
-  // The old column is left as it was.
-  const { rows } = await database.pool.query(
-    `SELECT socials FROM profiles WHERE handle_lower = 'ada_links'`,
-  );
-  assert.equal(rows[0].socials.x, 'https://twitter.com/ada');
+  const after = async () =>
+    Promise.all(
+      users.map(async (user) => (await getMyProfile(database.db, user)).links),
+    );
+  const expected = [
+    [
+      link('facebook', 'https://www.facebook.com/ada'),
+      link('instagram', 'https://instagram.com/ada'),
+      link('x', 'https://twitter.com/ada'),
+    ],
+    [],
+    [],
+    [link('x', 'https://x.com/ada')],
+  ];
+  assert.deepEqual(await after(), expected);
+  // Running it again changes nothing.
+  await database.pool.query(backfill);
+  assert.deepEqual(await after(), expected);
+  // The old column is left as it was, bare sites included.
+  assert.deepEqual(await oldColumn(database, 'mig_a'), old.mig_a);
+  assert.deepEqual(await oldColumn(database, 'mig_c'), old.mig_c);
 });

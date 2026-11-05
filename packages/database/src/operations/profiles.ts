@@ -18,6 +18,8 @@ import {
   PRO_LINK_LIMIT,
   linksNeedPro,
   mergeFreeSave,
+  isAdultPlatform,
+  linkKey,
   myLinksSchema,
   visibleLinks,
   type MyLinksRequest,
@@ -488,11 +490,13 @@ export function setMyLinks(
   db: Database,
   userId: string,
   input: MyLinksRequest,
+  /** `adultLinks: false` while ADULT_PLATFORM_LINKS is off: no new OnlyFans or Fansly links. */
+  { adultLinks = true }: { adultLinks?: boolean } = {},
 ): Promise<MyProfile> {
   return guarded(async () => {
     const parsed = myLinksSchema.safeParse(input);
     if (!parsed.success) throw new OperationError('INVALID_INPUT');
-    const { links, show } = parsed.data;
+    const { links, show, hidden } = parsed.data;
     const { profile } = await myRow(db, userId);
     await db.transaction(async (tx) => {
       const [current] = await tx
@@ -506,10 +510,31 @@ export function setMyLinks(
         throw new OperationError('SOCIAL_LINKS_PRO_REQUIRED');
       if (pro && links.length > PRO_LINK_LIMIT)
         throw new OperationError('INVALID_INPUT');
+      // Switched off, adult-platform links already stored may stay (they don't show); new ones
+      // can't be added.
+      if (!adultLinks) {
+        const stored = new Set(current.links.map((link) => linkKey(link.url)));
+        if (
+          links.some(
+            (link) =>
+              isAdultPlatform(link.platform) && !stored.has(linkKey(link.url)),
+          )
+        )
+          throw new OperationError('SOCIAL_LINK_UNAVAILABLE');
+      }
+      const saved = pro ? links : mergeFreeSave(current.links, links, hidden);
       await tx
         .update(profiles)
         .set({
-          links: pro ? links : mergeFreeSave(current.links, links),
+          links: saved,
+          // The old column follows what shows, so an API from before social links (a rollback,
+          // or the old colour during a deploy) shows the truth and never a hidden link.
+          // TODO(social-links): stop writing it in the release that drops the column.
+          socials: legacySocials(
+            visibleLinks(saved, current.plan as PagePlan, {
+              adult: adultLinks,
+            }),
+          ),
           socialsPublic: show,
         })
         .where(
@@ -711,6 +736,8 @@ export function publicProfile(
       provider: string;
       environment: PaymentAccountEnvironment;
     };
+    /** False while ADULT_PLATFORM_LINKS is off: OnlyFans and Fansly links don't show. */
+    adultLinks?: boolean;
   } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
@@ -734,7 +761,9 @@ export function publicProfile(
       );
     if (!row) return null;
     const { profile } = row;
-    const links = visibleLinks(profile.links, profile.plan as PagePlan);
+    const links = visibleLinks(profile.links, profile.plan as PagePlan, {
+      adult: options.adultLinks ?? true,
+    });
     const celebration = await publicCelebration(db, profile.id);
     const acceptingTips = options.requiredAccount
       ? (await getReadyPaymentAccount(db, {
