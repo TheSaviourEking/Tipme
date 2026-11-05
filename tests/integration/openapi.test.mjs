@@ -102,6 +102,16 @@ test('every operation says who may call it, whether it needs CSRF, and its rate 
   ]);
   assert.deepEqual(access('put', '/v1/me/handle'), ['recipient', true, null]);
   assert.deepEqual(access('get', '/v1/me/tips'), ['recipient', false, null]);
+  assert.deepEqual(access('get', '/v1/me/withdrawals'), [
+    'recipient',
+    false,
+    null,
+  ]);
+  assert.deepEqual(access('get', '/v1/me/tip-totals'), [
+    'recipient',
+    false,
+    null,
+  ]);
   assert.deepEqual(access('get', '/v1/ops/issues'), [
     'staff-grant',
     false,

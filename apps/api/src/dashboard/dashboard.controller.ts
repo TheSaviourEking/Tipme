@@ -17,24 +17,30 @@ import type { Logger } from '@tipme/observability';
 import type { Response } from 'express';
 import {
   messageReportSchema,
+  myTipsNoteSchema,
+  myWithdrawalsQuerySchema,
   withdrawalRequestSchema,
   type ActivityRow,
   ApiDataResponse,
   type DashboardSummary,
   type MyTipDetail,
   type MyTipRow,
+  type TipTotals,
   type WeeklyReportData,
   type WithdrawalQuoteResponse,
+  type WithdrawalsPage,
 } from '@tipme/contracts';
 import {
   dashboardSummary,
   exportMyTipsCsv,
   getWeeklyReport,
   listMyTips,
+  listMyWithdrawals,
   listWeeklyReports,
   myProfileId,
   hideMessage,
   myTipDetail,
+  myTipTotals,
   recentActivity,
   reportMessage,
   requestWithdrawal,
@@ -110,10 +116,16 @@ export class DashboardController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
     @Query('q') q?: string,
+    @Query('note') note?: string,
   ): Promise<
     ApiDataResponse<{ items: MyTipRow[]; nextCursor: string | null }>
   > {
     if (q !== undefined && (typeof q !== 'string' || q.length > 100))
+      throw new CodedHttpException(400, 'VALIDATION_FAILED');
+    // Absent means no filter; anything but "with" is refused rather than ignored.
+    const noteFilter =
+      note === undefined ? undefined : myTipsNoteSchema.safeParse(note);
+    if (noteFilter && !noteFilter.success)
       throw new CodedHttpException(400, 'VALIDATION_FAILED');
     return {
       data: await listMyTips(this.database.db, await this.profile(auth), {
@@ -121,7 +133,19 @@ export class DashboardController {
         ...(cursor ? { cursor: cursor.slice(0, 200) } : {}),
         limit: Number.parseInt(limit ?? '20', 10) || 20,
         ...(q ? { q } : {}),
+        ...(noteFilter?.success ? { note: noteFilter.data } : {}),
       }),
+    };
+  }
+
+  /** What the recipient has received from paid tips. Tips still being confirmed are not counted. */
+  @Get('tip-totals')
+  @Header('Cache-Control', 'private, no-store')
+  async tipTotals(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<TipTotals>> {
+    return {
+      data: await myTipTotals(this.database.db, await this.profile(auth)),
     };
   }
 
@@ -233,6 +257,23 @@ export class DashboardController {
               feeMinor: quote.feeMinor.toString(),
             }
           : { ...quote, inReview },
+    };
+  }
+
+  /** The recipient's withdrawals, newest request first, each with the bank it went to. */
+  @Get('withdrawals')
+  @Header('Cache-Control', 'private, no-store')
+  async withdrawals(
+    @CurrentUser() auth: AuthContext,
+    @Query(new ZodValidationPipe(myWithdrawalsQuerySchema))
+    query: z.infer<typeof myWithdrawalsQuerySchema>,
+  ): Promise<ApiDataResponse<WithdrawalsPage>> {
+    return {
+      data: await listMyWithdrawals(
+        this.database.db,
+        await this.profile(auth),
+        query,
+      ),
     };
   }
 
