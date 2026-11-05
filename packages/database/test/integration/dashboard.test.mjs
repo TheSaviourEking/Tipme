@@ -6,11 +6,13 @@ import {
   createPayout,
   createQuote,
   dashboardSummary,
+  hideMessage,
   DEMO_PROFILES,
   listMyTips,
   listMyWithdrawals,
   markAttemptInitiated,
   myTipDetail,
+  myTipTotals,
   recentActivity,
   recordProviderEvent,
   setPayoutDestination,
@@ -456,4 +458,152 @@ test('tip rows in activity have no bank', async (t) => {
   const tips = activity.filter((row) => row.kind === 'tip');
   assert.ok(tips.length > 0);
   assert.ok(tips.every((row) => row.bank === null));
+});
+
+test('tip totals count only paid tips, at what the recipient received', async (t) => {
+  const database = await useDatabase(t);
+  await database.fresh();
+  const { db } = database;
+  const paidTip = makePaidTip(db);
+  const at = (minutes) => new Date(Date.now() - minutes * 60_000);
+  const empty = await myTipTotals(db, TOBI.id);
+  assert.deepEqual(empty, {
+    currency: 'NGN',
+    receivedNetMinor: '0',
+    paidTipCount: 0,
+  });
+  const a = await paidTip('tobi', 400000n, at(30));
+  const b = await paidTip('tobi', 200000n, at(20));
+  await paidTip('tobi', 200000n, at(10), { pendingOnly: true });
+  const failed = await paidTip('tobi', 300000n, at(5), {
+    pendingOnly: true,
+  });
+  await database.pool.query("UPDATE tips SET status = 'FAILED' WHERE id = $1", [
+    failed.tipId,
+  ]);
+  await paidTip('ada', 1000000n, at(5));
+  const totals = await myTipTotals(db, TOBI.id);
+  assert.deepEqual(totals, {
+    currency: 'NGN',
+    receivedNetMinor: (a.net + b.net).toString(),
+    paidTipCount: 2,
+  });
+  assert.equal(totals.receivedNetMinor, '540000');
+  assert.equal((await myTipTotals(db, ADA.id)).paidTipCount, 1);
+});
+
+test('two tips under one name are two tips', async (t) => {
+  const database = await useDatabase(t);
+  await database.fresh();
+  const { db } = database;
+  const paidTip = makePaidTip(db);
+  await paidTip('tobi', 200000n, new Date(Date.now() - 120_000), {
+    label: 'Ada M.',
+  });
+  await paidTip('tobi', 200000n, new Date(Date.now() - 60_000), {
+    label: 'Ada M.',
+  });
+  assert.equal((await myTipTotals(db, TOBI.id)).paidTipCount, 2);
+});
+
+test('the note filter lists only tips whose note the recipient can read', async (t) => {
+  const database = await useDatabase(t);
+  await database.fresh();
+  const { db } = database;
+  const paidTip = makePaidTip(db);
+  const at = (minutes) => new Date(Date.now() - minutes * 60_000);
+  const withNote = await paidTip('tobi', 200000n, at(50), {
+    message: 'Great work',
+    label: 'Ada M.',
+  });
+  await paidTip('tobi', 200000n, at(40));
+  const hidden = await paidTip('tobi', 200000n, at(30), {
+    message: 'Secret words',
+  });
+  await hideMessage(db, { profileId: TOBI.id, tipId: hidden.tipId });
+  await paidTip('tobi', 200000n, at(20), {
+    message: 'Not yet',
+    pendingOnly: true,
+  });
+  const noted = await listMyTips(db, TOBI.id, {
+    status: 'paid',
+    note: 'with',
+    limit: 50,
+  });
+  assert.deepEqual(
+    noted.items.map((item) => item.tipId),
+    [withNote.tipId],
+  );
+  const searched = await listMyTips(db, TOBI.id, {
+    status: 'paid',
+    note: 'with',
+    q: 'ada',
+  });
+  assert.equal(searched.items.length, 1);
+  const none = await listMyTips(db, TOBI.id, {
+    status: 'paid',
+    note: 'with',
+    q: 'nobody',
+  });
+  assert.equal(none.items.length, 0);
+  // Paging with the cursor, one at a time.
+  const second = await paidTip('tobi', 200000n, at(10), { message: 'Again' });
+  const first = await listMyTips(db, TOBI.id, {
+    status: 'paid',
+    note: 'with',
+    limit: 1,
+  });
+  assert.deepEqual(
+    first.items.map((item) => item.tipId),
+    [second.tipId],
+  );
+  const next = await listMyTips(db, TOBI.id, {
+    status: 'paid',
+    note: 'with',
+    limit: 1,
+    cursor: first.nextCursor,
+  });
+  assert.deepEqual(
+    next.items.map((item) => item.tipId),
+    [withNote.tipId],
+  );
+  assert.equal(next.nextCursor, null);
+});
+
+test('fix: tips paged by cursor lose none when they were paid within one second', async (t) => {
+  const database = await useDatabase(t);
+  await database.fresh();
+  const { db } = database;
+  const paidTip = makePaidTip(db);
+  const base = Date.now() - 3_600_000;
+  const tips = [];
+  for (let i = 0; i < 4; i += 1)
+    tips.push(await paidTip('tobi', 200000n, new Date(base + i * 1000)));
+  // Two share a millisecond and two share a second: only microseconds tell them apart.
+  const stamps = [
+    '2026-10-14T10:00:05.000100Z',
+    '2026-10-14T10:00:05.000400Z',
+    '2026-10-14T10:00:05.700000Z',
+    '2026-10-14T10:00:05.700900Z',
+  ];
+  for (const [i, tip] of tips.entries())
+    await database.pool.query(
+      'UPDATE tips SET completed_at = $2::timestamptz WHERE id = $1',
+      [tip.tipId, stamps[i]],
+    );
+  const expected = [...tips].reverse().map((tip) => tip.tipId);
+  for (const limit of [1, 2, 3]) {
+    const seen = [];
+    let cursor;
+    do {
+      const page = await listMyTips(db, TOBI.id, {
+        status: 'paid',
+        limit,
+        cursor,
+      });
+      seen.push(...page.items.map((item) => item.tipId));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    assert.deepEqual(seen, expected, `limit ${limit}`);
+  }
 });

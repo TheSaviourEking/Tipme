@@ -5,6 +5,7 @@ import type {
   MyTipRow,
   TipPurpose,
   TipState,
+  TipTotals,
   WithdrawalRow,
   WithdrawalState,
   WithdrawalsPage,
@@ -148,6 +149,34 @@ function searchSql(raw: string | undefined) {
     ${q.length >= 4 && q.length <= 6 ? sql`OR EXISTS (SELECT 1 FROM payment_attempts a WHERE a.intent_id = t.intent_id AND right(a.provider_reference, 6) ILIKE ${`%${text}`} ESCAPE '\\')` : sql``})`;
 }
 
+/** A tip has a note the recipient can read: a message that is neither hidden nor reported. */
+const hasNoteSql = sql`EXISTS (SELECT 1 FROM tip_messages m WHERE m.tip_id = t.id
+                      AND NOT EXISTS (SELECT 1 FROM message_flags f WHERE f.tip_id = t.id))`;
+
+/**
+ * What the recipient has received in all: paid tips only, at the net of each tip's quote. Tips
+ * still being confirmed are not here, so this is never mistaken for money available to withdraw.
+ */
+export function myTipTotals(
+  db: Database,
+  profileId: string,
+): Promise<TipTotals> {
+  return guarded(async () => {
+    const rows = await db.execute<{ net: string; count: number }>(sql`
+      SELECT COALESCE(SUM(q.recipient_net_minor), 0)::text AS net, COUNT(*)::int AS count
+        FROM tips t
+        JOIN payment_intents i ON i.id = t.intent_id
+        JOIN tip_quotes q ON q.id = i.quote_id
+       WHERE t.profile_id = ${profileId} AND t.status = 'SUCCEEDED'`);
+    const row = rows.rows[0];
+    return {
+      currency: 'NGN',
+      receivedNetMinor: row?.net ?? '0',
+      paidTipCount: row?.count ?? 0,
+    };
+  });
+}
+
 /** The recipient's tips, newest first (by confirmation, or creation while unconfirmed). */
 export function listMyTips(
   db: Database,
@@ -158,6 +187,8 @@ export function listMyTips(
     limit?: number;
     /** Search (PR-013): supporter name, an amount ("2,000"), or the end of the reference. */
     q?: string;
+    /** Only tips with a note the recipient can read. */
+    note?: 'with';
   },
 ): Promise<{ items: MyTipRow[]; nextCursor: string | null }> {
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
@@ -168,6 +199,7 @@ export function listMyTips(
     const rows = await db.execute<{
       tip_id: string;
       at: string;
+      cursor_at: string;
       label: string | null;
       has_message: boolean;
       gross: string;
@@ -175,9 +207,9 @@ export function listMyTips(
       state: TipState;
     }>(sql`
       SELECT t.id AS tip_id, to_char(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
+             ${microsSql(sql.raw('COALESCE(t.completed_at, t.created_at)'))} AS cursor_at,
              t.payer_display_label AS label,
-             EXISTS (SELECT 1 FROM tip_messages m WHERE m.tip_id = t.id
-                      AND NOT EXISTS (SELECT 1 FROM message_flags f WHERE f.tip_id = t.id)) AS has_message,
+             ${hasNoteSql} AS has_message,
              t.gross_minor::text AS gross, q.recipient_net_minor::text AS net, ${stateSql} AS state
         FROM tips t
         JOIN payment_intents i ON i.id = t.intent_id
@@ -186,10 +218,12 @@ export function listMyTips(
          AND ${visibleTip}
          ${status === 'paid' ? sql`AND t.status = 'SUCCEEDED'` : status === 'confirming' ? sql`AND t.status <> 'SUCCEEDED'` : sql``}
          ${search}
+         ${input.note === 'with' ? sql`AND ${hasNoteSql}` : sql``}
          ${after ? sql`AND (COALESCE(t.completed_at, t.created_at), t.id) < (${after.at}::timestamptz, ${after.id}::uuid)` : sql``}
        ORDER BY COALESCE(t.completed_at, t.created_at) DESC, t.id DESC
        LIMIT ${limit + 1}`);
-    const items = rows.rows.slice(0, limit).map((row) => ({
+    const page = rows.rows.slice(0, limit);
+    const items = page.map((row) => ({
       tipId: row.tip_id,
       at: row.at,
       supporterLabel: row.label,
@@ -198,12 +232,13 @@ export function listMyTips(
       netMinor: row.net,
       state: row.state,
     }));
-    const last = items[items.length - 1];
+    // The cursor keeps microseconds; `at` stays in milliseconds for display.
+    const last = page[page.length - 1];
     return {
       items,
       nextCursor:
         rows.rows.length > limit && last
-          ? encodeCursor(last.at, last.tipId)
+          ? encodeCursor(last.cursor_at, last.tip_id)
           : null,
     };
   });
