@@ -32,3 +32,25 @@ test('handles that clash with TipMe pages are reserved', () => {
 test('pro is reserved for the Pro page', () => {
   assert.equal(isReservedHandle('pro'), true);
 });
+
+// The handles TipMe's own pages show as examples (Home, Pro, the postcards) are reserved, so a
+// visitor who types a printed address never lands on a stranger's live page (owner, 5 Nov 2026).
+// The seeded demo pages (ada, tobi) are inserted directly and keep working at /@handle.
+test('every example handle shown on the site is reserved', () => {
+  for (const example of [
+    'ada',
+    'adacuts',
+    'adaedits',
+    'adaokafor',
+    'tobi',
+    'zainab',
+  ])
+    assert.equal(isReservedHandle(example), true, example);
+  assert.equal(isReservedHandle('Zainab'), true);
+});
+
+test('the reserved list stays alphabetical, so a duplicate or a misfile is easy to see', () => {
+  const sorted = [...RESERVED_HANDLES].sort();
+  assert.deepEqual([...RESERVED_HANDLES], sorted);
+  assert.equal(new Set(RESERVED_HANDLES).size, RESERVED_HANDLES.length);
+});
