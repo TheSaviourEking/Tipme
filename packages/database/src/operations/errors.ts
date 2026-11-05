@@ -74,7 +74,11 @@ export type OperationErrorCode =
   | 'STAFF_EMAIL_LOCKED'
   | 'STAFF_PHONE_LOCKED'
   | 'STAFF_CANNOT_DELETE'
-  | 'STAFF_ALREADY_ENROLLED';
+  | 'STAFF_ALREADY_ENROLLED'
+  | 'USERNAME_BUILT_IN'
+  | 'USERNAME_RESERVED'
+  | 'USERNAME_HELD_BY_PAGE'
+  | 'USERNAME_NOT_RESERVED';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is

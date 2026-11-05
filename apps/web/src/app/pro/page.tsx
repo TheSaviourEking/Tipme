@@ -14,7 +14,7 @@ export const metadata = marketingMetadata(
  */
 export default function ProPage() {
   return (
-    <main id="main" tabIndex={-1} className="pro-page">
+    <main id="main" tabIndex={-1} className="pro-page marketing-page">
       <Container>
         <PlanPreview />
       </Container>

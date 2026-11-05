@@ -20,7 +20,7 @@ function TipsExport() {
     );
     setNote(
       result.ok
-        ? 'Downloaded. Amounts and status only; messages stay private.'
+        ? 'Downloaded. It has the date, supporter name, amounts, status and the last 6 characters of each reference. Messages stay private.'
         : 'We couldn’t prepare the file. Please try again.',
     );
   };
@@ -28,8 +28,10 @@ function TipsExport() {
     <Card className="settings-section">
       <h3>Your tips</h3>
       <p className="tm-hint">
-        A file of your paid and confirming tips, with the date, amount and
-        status of each. Messages stay private and are left out.
+        A file of your paid and confirming tips: the date, the supporter’s name,
+        what they tipped, TipMe’s fee, what you received, the status, and the
+        last 6 characters of the reference. Messages stay private and are left
+        out.
       </p>
       <Button variant="secondary" onClick={() => void download()}>
         Download as CSV

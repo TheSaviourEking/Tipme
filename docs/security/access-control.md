@@ -75,6 +75,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
 | `search.view` | GET `/v1/ops/search` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
+| `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>GET `/v1/ops/usernames/check/{name}` |
 
 <!-- /generated:permissions -->
 <!-- prettier-ignore-end -->
@@ -288,6 +289,10 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | PATCH | `/v1/ops/staff/roles/{roleId}` | `staff.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/staff/roles/{roleId}/delete` | `staff.manage` | yes | – | – |
 | POST | `/v1/ops/staff/roles/{roleId}/impact` | `staff.manage` | yes | – | – |
+| GET | `/v1/ops/usernames` | `usernames.manage` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/usernames` | `usernames.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/usernames/{name}/release` | `usernames.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/usernames/check/{name}` | `usernames.manage` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
 | GET | `/v1/ops/withdrawals-switch` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/withdrawals-switch` | `payouts.resolve` | yes | – | – |

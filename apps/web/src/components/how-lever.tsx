@@ -6,7 +6,7 @@ type View = 'tipped' | 'tipping';
 
 const options: { value: View; label: string }[] = [
   { value: 'tipped', label: 'If you get tipped' },
-  { value: 'tipping', label: "If you're tipping" },
+  { value: 'tipping', label: 'If you’re tipping' },
 ];
 
 /**

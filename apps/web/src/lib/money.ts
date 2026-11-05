@@ -1,7 +1,10 @@
-import { formatDemoAmount } from './demo-amount';
+import { formatDemoAmount, formatNaira } from './demo-amount';
 
-/** NGN amounts from the API's decimal strings of minor units. */
-export const naira = (minor: string | number) =>
+/** Naira from the API's decimal strings of minor units: ₦1,800. The one format recipients see. */
+export const naira = formatNaira;
+
+/** The same with the ISO code, NGN 1,800.00: the staff console, where the code is wanted. */
+export const nairaCode = (minor: string | number) =>
   formatDemoAmount(Number(minor));
 
 /** "▲ 25%", "▼ 8%", "New" (nothing before) or "—" (nothing either time). Never a comparison with others. */

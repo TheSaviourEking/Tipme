@@ -167,3 +167,33 @@ test('ticks become a person’s additions and removals against their role', () =
     removals: [],
   });
 });
+
+test('each username refusal has plain words, with no em dash', () => {
+  const words = (code, context) =>
+    refusalWords(
+      { status: code === 'USERNAME_NOT_RESERVED' ? 404 : 409, code },
+      context,
+    );
+  assert.equal(
+    words('USERNAME_BUILT_IN'),
+    'TipMe’s own list already reserves this',
+  );
+  assert.equal(words('USERNAME_RESERVED'), 'This username is already reserved');
+  assert.equal(
+    words('USERNAME_HELD_BY_PAGE', { handle: 'kemi' }),
+    'This is @kemi’s username. To take it, ask to take it back.',
+  );
+  assert.equal(words('USERNAME_NOT_RESERVED'), 'This username isn’t reserved');
+  for (const code of [
+    'USERNAME_BUILT_IN',
+    'USERNAME_RESERVED',
+    'USERNAME_HELD_BY_PAGE',
+    'USERNAME_NOT_RESERVED',
+  ]) {
+    const text = words(code);
+    assert.ok(!text.includes('—'), code);
+    assert.ok(!text.includes('refused, and we don’t have words'), code);
+  }
+  // Without the page's handle it still says what to do, never "@undefined".
+  assert.ok(!words('USERNAME_HELD_BY_PAGE').includes('@'));
+});

@@ -3,12 +3,14 @@ import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { HandleStatus, MyProfile } from '@tipme/contracts';
+import { FEE_POLICY_V1 } from '@tipme/domain';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { CoverSettings, type Layer } from '@/components/account/cover-settings';
 import { Avatar } from '@/components/avatar';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { hasAvatar } from '@/lib/avatar-source';
+import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
 import { STANDARD_TIP_AMOUNTS } from '@/lib/tip-amounts';
 import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
@@ -437,10 +439,10 @@ export function TipAmountsSettings() {
       <Card className="settings-section">
         <h3>Tip amounts</h3>
         <p className="tm-hint">
-          Your page offers NGN {amounts.presetsMinor.map(nairaText).join(', ')},
-          and supporters can tip any amount from NGN{' '}
-          {nairaText(amounts.minMinor)}. Choosing your own amounts and minimum
-          is part of TipMe Pro.
+          Your page offers{' '}
+          {amounts.presetsMinor.map((minor) => formatNaira(minor)).join(', ')},
+          and supporters can tip any amount from {formatNaira(amounts.minMinor)}
+          . Choosing your own amounts and minimum is part of TipMe Pro.
         </p>
       </Card>
     );
@@ -484,7 +486,7 @@ export function TipAmountsSettings() {
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
-        text: 'The smallest tip must be at least NGN 2,000, in whole naira.',
+        text: `The smallest tip must be at least ${formatNaira(FEE_POLICY_V1.minTipMinor)}, in whole naira.`,
       });
     else
       setError({
@@ -527,7 +529,7 @@ export function TipAmountsSettings() {
           label="Smallest tip (NGN)"
           inputMode="numeric"
           autoComplete="off"
-          hint="At least NGN 2,000."
+          hint={`At least ${formatNaira(FEE_POLICY_V1.minTipMinor)}.`}
           value={minimum}
           onChange={(e) => {
             setMinimum(e.target.value);

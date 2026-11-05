@@ -18,6 +18,7 @@ import {
   updateMyProfile,
   verifySignInCode,
 } from '../../dist/index.js';
+import { RESERVED_HANDLES, normaliseHandle } from '@tipme/domain';
 import { useDatabase } from './helpers.mjs';
 
 const secret = 'test-auth-code-secret-at-least-32-chars!';
@@ -289,4 +290,46 @@ test('profiles, handles and page states', async (t) => {
       );
     },
   );
+});
+
+// Two lists answer "reserved": the built-in words in code (RESERVED_HANDLES, which also holds the
+// example people the site prints) and the staff reservations table. The public can't tell which.
+test('checkHandle says reserved for a staff reservation, as for a built-in word', async (t) => {
+  const database = await useDatabase(t);
+  const now = new Date('2026-11-05T10:00:00Z');
+  await database.fresh();
+  // Two-letter words (me, qr) are on the list for the router but can never be handles at all.
+  for (const word of RESERVED_HANDLES)
+    assert.equal(
+      await checkHandle(database.db, word, now),
+      normaliseHandle(word) ? 'reserved' : 'invalid',
+      word,
+    );
+  assert.equal(await checkHandle(database.db, 'mtn', now), 'available');
+  const id = randomUUID();
+  await database.pool.query(
+    `INSERT INTO handle_reservations (id, handle_lower, source, reason, reserved_at)
+     VALUES ($1, 'mtn', 'staff', 'brand name', now())`,
+    [id],
+  );
+  assert.equal(await checkHandle(database.db, 'MTN', now), 'reserved');
+  assert.equal(await checkHandle(database.db, 'mtn', now), 'reserved');
+  // A staff reservation is refused at claim like a taken name, never created around the check.
+  const userId = randomUUID();
+  await database.pool.query(`INSERT INTO users (id) VALUES ($1)`, [userId]);
+  await assert.rejects(
+    claimHandle(database.db, { userId, handle: 'Mtn', now }),
+    { code: 'HANDLE_TAKEN' },
+  );
+  await assert.rejects(
+    claimHandle(database.db, { userId, handle: 'admin', now }),
+    { code: 'HANDLE_TAKEN' },
+  );
+  await database.pool.query(
+    `UPDATE handle_reservations
+        SET released_at = now(), released_by = $2, release_reason = 'not needed'
+      WHERE id = $1`,
+    [id, userId],
+  );
+  assert.equal(await checkHandle(database.db, 'mtn', now), 'available');
 });

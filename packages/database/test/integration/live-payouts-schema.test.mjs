@@ -349,7 +349,7 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   t.after(() => old.close());
   // The seed writes today's users columns; this one arrives with a later migration.
   // Likewise the profile columns that handle changes and covers add (0062, 0063), and the
-  // social links list (0072_social_links).
+  // social links list (0074_social_links).
   await pool.query(
     `ALTER TABLE profiles
        ADD COLUMN handle_changes_used integer NOT NULL DEFAULT 0,

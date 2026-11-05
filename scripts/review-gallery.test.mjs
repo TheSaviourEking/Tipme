@@ -125,6 +125,11 @@ test('the stamp is taken from git when the shots are taken: short commit, edits,
   });
   assert.deepEqual(calls, ['rev-parse --short HEAD', 'status --porcelain']);
   assert.equal(readStamp(() => '', new Date(0)).dirty, false);
+  const noGit = readStamp(() => {
+    throw new Error('git: not found');
+  }, new Date(0));
+  assert.equal(noGit.sha, 'unknown');
+  assert.equal(noGit.dirty, false);
 });
 
 test("a run without a build carries the build's own stamp, never a fresh one from git", () => {

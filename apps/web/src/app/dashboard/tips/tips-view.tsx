@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import type { MyTipRow, TipTotals } from '@tipme/contracts';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
-import { nairaSign } from '@/lib/withdraw-state';
+import { dayKey, timeOf } from '@/lib/lagos-time';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { apiDownload, apiFetch } from '@/lib/session-client';
@@ -29,15 +29,6 @@ const stateText = {
   cancelled: 'Expired',
 } as const;
 
-const ZONE = 'Africa/Lagos';
-const dayKey = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-CA', { timeZone: ZONE });
-const timeOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: ZONE,
-  });
 function dayTitle(key: string, now: number) {
   if (key === dayKey(new Date(now).toISOString())) return 'Today';
   if (key === dayKey(new Date(now - 86_400_000).toISOString()))
@@ -123,7 +114,7 @@ export default function TipsPage() {
           <h1>Your tips</h1>
           {totals.data && totals.data.paidTipCount > 0 && (
             <p className="tm-hint">
-              {nairaSign(totals.data.receivedNetMinor)} from{' '}
+              {formatNaira(totals.data.receivedNetMinor)} from{' '}
               {totals.data.paidTipCount}{' '}
               {totals.data.paidTipCount === 1 ? 'tip' : 'tips'} so far
             </p>
@@ -140,7 +131,7 @@ export default function TipsPage() {
             );
             setDownload(
               result.ok
-                ? 'Downloaded. Amounts and status only; messages stay private.'
+                ? 'Downloaded. It has the date, supporter name, amounts, status and the last 6 characters of each reference. Messages stay private.'
                 : 'We couldn’t prepare the file. Please try again.',
             );
           }}
