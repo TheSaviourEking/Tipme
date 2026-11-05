@@ -197,11 +197,13 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | DELETE | `/v1/me/sessions/{id}` | yes | – | – |
 | POST | `/v1/me/sessions/sign-out-others` | yes | – | – |
 | PUT | `/v1/me/tip-amounts` | yes | – | – |
+| GET | `/v1/me/tip-totals` | n/a (read) | – | – |
 | GET | `/v1/me/tips` | n/a (read) | – | – |
 | GET | `/v1/me/tips/{tipId}` | n/a (read) | – | – |
 | POST | `/v1/me/tips/{tipId}/message/hide` | yes | – | – |
 | POST | `/v1/me/tips/{tipId}/message/report` | yes | – | – |
 | GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
+| GET | `/v1/me/withdrawals` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
 | GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
