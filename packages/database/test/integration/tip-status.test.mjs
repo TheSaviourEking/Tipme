@@ -133,4 +133,91 @@ test('tip status view', async (t) => {
       assert.equal('noteMayShow' in keptView, false);
     },
   );
+  const setPage = (sql) =>
+    database.pool.query(
+      `UPDATE profiles SET ${sql} WHERE handle_lower = 'ada'`,
+    );
+  const paidTip = async () => {
+    const tip = await newTip();
+    await place('tips', tip.tipId, 'SUCCEEDED', ', completed_at = now()');
+    return tip;
+  };
+
+  await t.test(
+    "a paid tip receipt carries the recipient's line; a Free page shows paper, unsigned",
+    async () => {
+      await setPage(
+        `plan = 'free', thanks_line = 'Thank you for backing me.', thanks_style = 'night', thanks_signed = true`,
+      );
+      const { tipId } = await paidTip();
+      const view = await tipStatusView(database.db, tipId, new Date());
+      assert.deepEqual(view.thanks, {
+        line: 'Thank you for backing me.',
+        style: 'paper',
+      });
+      assert.doesNotMatch(JSON.stringify(view), /private words/);
+    },
+  );
+
+  await t.test(
+    'a receipt that is not paid has no thank-you, and a page without a line has none',
+    async () => {
+      await setPage(`thanks_line = 'Thank you for backing me.'`);
+      const waiting = await newTip();
+      assert.equal(
+        'thanks' in
+          (await tipStatusView(database.db, waiting.tipId, new Date())),
+        false,
+      );
+      const failed = await newTip();
+      await place('tips', failed.tipId, 'FAILED');
+      assert.equal(
+        'thanks' in
+          (await tipStatusView(database.db, failed.tipId, new Date())),
+        false,
+      );
+      await setPage(`thanks_line = NULL`);
+      const { tipId } = await paidTip();
+      assert.equal(
+        'thanks' in (await tipStatusView(database.db, tipId, new Date())),
+        false,
+      );
+    },
+  );
+
+  await t.test(
+    'a page that leaves Pro shows paper and unsigned, and its choices come back on Pro',
+    async () => {
+      await setPage(
+        `plan = 'pro', thanks_line = 'Thank you.', thanks_style = 'violet', thanks_signed = true`,
+      );
+      const { tipId } = await paidTip();
+      const pro = await tipStatusView(database.db, tipId, new Date());
+      const first = pro.recipient.displayName.split(/\s+/)[0];
+      assert.deepEqual(pro.thanks, {
+        line: 'Thank you.',
+        style: 'violet',
+        signature: first,
+      });
+      await setPage(`plan = 'free'`);
+      assert.deepEqual(
+        (await tipStatusView(database.db, tipId, new Date())).thanks,
+        { line: 'Thank you.', style: 'paper' },
+      );
+      await setPage(`plan = 'pro'`);
+      assert.deepEqual(
+        (await tipStatusView(database.db, tipId, new Date())).thanks,
+        pro.thanks,
+      );
+      // The line as it is now, not as it was when the tip was made.
+      await setPage(`thanks_line = 'Edited.'`);
+      assert.equal(
+        (await tipStatusView(database.db, tipId, new Date())).thanks.line,
+        'Edited.',
+      );
+      await setPage(
+        `plan = 'free', thanks_line = NULL, thanks_style = NULL, thanks_signed = false`,
+      );
+    },
+  );
 });

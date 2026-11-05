@@ -1,4 +1,9 @@
-import type { TipStatusState, TipStatusView } from '@tipme/contracts';
+import {
+  shownThanks,
+  type PagePlan,
+  type TipStatusState,
+  type TipStatusView,
+} from '@tipme/contracts';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { paymentAttempts, profiles, tipMessages, tips } from '../schema.js';
@@ -28,6 +33,10 @@ export function tipStatusView(
         createdAt: tips.createdAt,
         handle: profiles.handle,
         displayName: profiles.displayName,
+        plan: profiles.plan,
+        thanksLine: profiles.thanksLine,
+        thanksStyle: profiles.thanksStyle,
+        thanksSigned: profiles.thanksSigned,
       })
       .from(tips)
       .innerJoin(profiles, eq(profiles.id, tips.profileId))
@@ -81,6 +90,18 @@ export function tipStatusView(
         .where(eq(tipMessages.tipId, tipId));
       noteMayShow = note?.mayShow === true;
     }
+    // The recipient's line as it is now, not as it was when the tip was made (owner's answer,
+    // 5 Nov 2026): an edit, or a page leaving Pro, also changes what older receipts show.
+    const thanks =
+      state === 'paid'
+        ? shownThanks({
+            line: tip.thanksLine,
+            style: tip.thanksStyle,
+            signed: tip.thanksSigned,
+            plan: tip.plan as PagePlan,
+            displayName: tip.displayName,
+          })
+        : null;
     return {
       state,
       recipient: { handle: tip.handle, displayName: tip.displayName },
@@ -89,6 +110,7 @@ export function tipStatusView(
       completedAt: tip.completedAt?.toISOString() ?? null,
       reference,
       ...(noteMayShow ? { noteMayShow: true as const } : {}),
+      ...(thanks ? { thanks } : {}),
     };
   });
 }

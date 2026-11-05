@@ -2,6 +2,10 @@ import {
   MAX_HANDLE_CHANGE_EXTRA,
   isProQrStyle,
   shownQrStyle,
+  thanksChoiceOf,
+  thanksNeedsPro,
+  thanksPatchSchema,
+  type ThanksPatchRequest,
   MAX_HANDLE_CHANGE_GRANT,
   profilePatchSchema,
   resolveCover,
@@ -251,6 +255,57 @@ export function setTipAmounts(
 }
 
 /**
+ * Saves the thank-you line on the supporter's receipt. Any plan may save the line; a card style
+ * other than paper, or a signature, needs Pro. Leaving `style` or `signed` out keeps what is
+ * stored, so a Free save never erases a lapsed page's Pro choices.
+ */
+export function setThanks(
+  db: Database,
+  userId: string,
+  patch: ThanksPatchRequest,
+): Promise<MyProfile> {
+  return guarded(async () => {
+    const parsed = thanksPatchSchema.safeParse(patch);
+    if (!parsed.success) {
+      const onLine = parsed.error.issues.some(
+        (issue) => issue.path[0] === 'line',
+      );
+      throw new OperationError(
+        onLine ? 'INVALID_THANKS_LINE' : 'INVALID_INPUT',
+      );
+    }
+    const values = parsed.data;
+    const row = await myRow(db, userId);
+    const needsPro = thanksNeedsPro(values);
+    if (needsPro && row.profile.plan !== 'pro')
+      throw new OperationError('THANKS_PRO_REQUIRED');
+    // Only while still Pro when a Pro part is set: staff (or billing) may have moved the page to
+    // Free since it was read.
+    const updated = await db
+      .update(profiles)
+      .set({
+        thanksLine: values.line,
+        ...(values.style !== undefined ? { thanksStyle: values.style } : {}),
+        ...(values.signed !== undefined ? { thanksSigned: values.signed } : {}),
+      })
+      .where(
+        and(
+          eq(profiles.id, row.profile.id),
+          ...(needsPro ? [eq(profiles.plan, 'pro')] : []),
+        ),
+      )
+      .returning({ id: profiles.id });
+    if (updated.length === 0) {
+      const again = await myRow(db, userId);
+      if (again.profile.plan !== 'pro')
+        throw new OperationError('THANKS_PRO_REQUIRED');
+      return toMine(db, again);
+    }
+    return toMine(db, await myRow(db, userId));
+  });
+}
+
+/**
  * A page as staff see it, by its handle or one of its old handles (permission `pages.plan`).
  * Deleted pages are not found.
  */
@@ -392,6 +447,11 @@ const toMine = async (
     hasPhoto: row.profile.coverPath !== null,
   },
   handleChanges: handleChangesOf(row.profile),
+  thanks: thanksChoiceOf({
+    line: row.profile.thanksLine,
+    style: row.profile.thanksStyle,
+    signed: row.profile.thanksSigned,
+  }),
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
@@ -796,6 +856,9 @@ export function deleteAccount(
             socials: {},
             phonePublic: false,
             emailPublic: false,
+            thanksLine: null,
+            thanksStyle: null,
+            thanksSigned: false,
           })
           .where(eq(profiles.id, row.id));
         // The photo is personal data too: its bytes go with the page (PR-013).
