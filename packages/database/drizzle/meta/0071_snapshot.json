@@ -1,5 +1,5 @@
 {
-  "id": "0d3b0497-8079-435a-8b99-6df14523fd6f",
+  "id": "9e22e764-1be6-4f95-a396-aa202dd5cbd0",
   "prevId": "abbc3914-d177-4f3f-b441-a01b75d9e2b0",
   "version": "7",
   "dialect": "postgresql",
@@ -1020,124 +1020,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.handle_reservations": {
-      "name": "handle_reservations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "handle_lower": {
-          "name": "handle_lower",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "take_back_id": {
-          "name": "take_back_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reserved_by": {
-          "name": "reserved_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reserved_at": {
-          "name": "reserved_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "released_at": {
-          "name": "released_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "released_by": {
-          "name": "released_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "release_reason": {
-          "name": "release_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "handle_reservations_active": {
-          "name": "handle_reservations_active",
-          "columns": [
-            {
-              "expression": "handle_lower",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "released_at IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "handle_reservations_reserved_by_users_id_fk": {
-          "name": "handle_reservations_reserved_by_users_id_fk",
-          "tableFrom": "handle_reservations",
-          "tableTo": "users",
-          "columnsFrom": ["reserved_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "handle_reservations_released_by_users_id_fk": {
-          "name": "handle_reservations_released_by_users_id_fk",
-          "tableFrom": "handle_reservations",
-          "tableTo": "users",
-          "columnsFrom": ["released_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "handle_reservations_source": {
-          "name": "handle_reservations_source",
-          "value": "\"handle_reservations\".\"source\" IN ('staff', 'take_back')"
-        },
-        "handle_reservations_released": {
-          "name": "handle_reservations_released",
-          "value": "\"handle_reservations\".\"released_at\" IS NULL OR (\"handle_reservations\".\"released_by\" IS NOT NULL AND \"handle_reservations\".\"release_reason\" IS NOT NULL)"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.issue_notes": {
@@ -3831,6 +3713,33 @@
               "expression": "lower(right(\"provider_reference\", 6))",
               "asc": true,
               "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payouts_profile_created": {
+          "name": "payouts_profile_created",
+          "columns": [
+            {
+              "expression": "profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
               "nulls": "last"
             }
           ],

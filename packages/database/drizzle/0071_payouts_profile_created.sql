@@ -1,0 +1,1 @@
+CREATE INDEX "payouts_profile_created" ON "payouts" USING btree ("profile_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);

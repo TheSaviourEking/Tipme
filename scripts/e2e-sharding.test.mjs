@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SHARDS = 3;
+const SHARDS = 6;
 
 /** Playwright's own --list, one "[project] › file › title" per test. */
 function listed(args, env = {}) {
@@ -51,7 +51,7 @@ test('CI gives @alone its own job in the matrix, not behind a shard', () => {
     new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z-]+:\\n)`).exec(
       ci,
     )?.[1] ?? '';
-  assert.match(job('e2e'), /shard: \[1, 2, 3, alone\]/);
+  assert.match(job('e2e'), /shard: \[1, 2, 3, 4, 5, 6, alone\]/);
   // scripts/test-integration.mjs only takes numbered shards.
   assert.match(job('integration'), /shard: \[1, 2, 3\]/);
   assert.match(ci, /fail-fast: false/);

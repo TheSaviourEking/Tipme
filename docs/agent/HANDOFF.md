@@ -1,3 +1,11 @@
+# Current handoff — dashboard data (5 November 2026)
+
+- Branch `feat/dashboard-data`, test lane 1, not pushed. Migration 0071 is `CREATE INDEX payouts_profile_created` only.
+- A withdrawal records a bank only if the recipient had saved one when asking. The pretend provider needs none, so a pretend payout with no saved bank shows no bank line, while the withdraw form still says "Pretend bank ••0000". That is the rule "never the current bank", not a bug.
+- Totals are lifetime and paid-only; "tips", not "people" (no supporter identity is kept).
+- Verified (commands in the build report `.superpowers/program/d-build-report.md`): format:check, lint, typecheck, unit tests, the four changed integration files, and the withdraw, dashboard, reports, gaps and tips-list e2e specs. See the report for pass counts.
+- Follow-ups: a stored running total if the totals p95 grows; the board's "people" copy; the tips list `at` is still shown to the millisecond (only the cursor keeps microseconds).
+
 # Current handoff — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration. Nothing ran against staging or production.
