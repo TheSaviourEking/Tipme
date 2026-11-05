@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { test } from '@playwright/test';
-import { API_ORIGIN, E2E_DATABASE_URL } from '../e2e/stack';
+import { API_ORIGIN, E2E_DATABASE_URL, WEB_ORIGIN } from '../e2e/stack';
 
 // Lab only: simulated mid-range phone (4x CPU slowdown) on a "Fast 3G"-like link.
 async function lcp(page: import('@playwright/test').Page, url: string) {
@@ -50,7 +50,7 @@ test('lab LCP sample', async ({ page }) => {
     { 'idempotency-key': randomUUID() },
   );
   // Tobi signs in through the API in this browser context (its cookies are shared with the page).
-  const headers = { origin: 'http://127.0.0.1:3100', 'x-tipme-csrf': '1' };
+  const headers = { origin: WEB_ORIGIN, 'x-tipme-csrf': '1' };
   await page.request.post(`${API_ORIGIN}/v1/auth/code`, {
     headers,
     data: { phone: '+2348000000002' },

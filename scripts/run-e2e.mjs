@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { assertBuildMatchesLane } from '../tests/lane.mjs';
 
 /*
  * The browser suite in two stages. Playwright shards only top-level projects, so a project that
@@ -11,6 +13,16 @@ import { spawnSync } from 'node:child_process';
  *
  * Other arguments go to Playwright. A filter may match nothing in one stage, which isn't a failure.
  */
+// `pnpm test:e2e` builds first, so this holds; it catches running this script on someone else's build.
+try {
+  assertBuildMatchesLane((path) =>
+    existsSync(path) ? readFileSync(path, 'utf8') : undefined,
+  );
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+
 const args = process.argv.slice(2).filter((arg) => arg !== '--');
 const onlyAlone = args.includes('--alone');
 const others = args.filter((arg) => arg !== '--alone');
