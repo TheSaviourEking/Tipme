@@ -18,7 +18,7 @@
 2. **The key carries a stamp taken from TipMe's own records.** The stamp is a hash of the account reference, manual-payouts flag, account `updated_at`, current destination id and status, every payout's id, status and reference, and the ledger's available balance. It is read before the partner call. Any recorded change to the partner side therefore changes the key, whichever process records it (API, worker or staff). A failed Redis invalidation can never serve stale data for those changes, and a read in flight can't store an old answer under the new key.
 3. **Explicit invalidation as well.** `invalidate()` raises a per-account version in Redis (`INCR`), and every key includes that version. It runs before and after `POST /v1/me/withdrawals` and after `PUT /v1/me/payout-destination`. Payout outcomes are covered by the stamp, because their status change is in the hash.
 4. **Expiry:** `PARTNER_QUOTE_CACHE_SECONDS`, default 30, `0` turns it off. It is passed through both compose files and the env examples.
-5. **Redis down or slow:** every store call has a 200 ms limit, and any failure counts as a miss. The quote then asks the partner directly, and nothing throws. Failed partner reads are never cached.
+5. **Redis down or slow:** one quote has a 150 ms Redis budget for all its reads, writes are never awaited, and any failure counts as a miss. The quote then asks the partner directly, and nothing throws. Failed partner reads are never cached.
 6. **Keyed per payment account:** provider name plus profile, which identifies one payment account. The account reference is also in the stamp.
 
 ## Steps (test-first, a commit each)

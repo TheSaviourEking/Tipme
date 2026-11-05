@@ -86,8 +86,8 @@ const stalled = () => {
   };
 };
 
-const cache = (redis, seconds = 30) =>
-  new RedisPartnerQuoteCache(redis, { prefix: 'it', seconds, timeoutMs: 50 });
+const cache = (redis, seconds = 30, budgetMs = 50) =>
+  new RedisPartnerQuoteCache(redis, { prefix: 'it', seconds, budgetMs });
 
 test('an entry is kept for the configured seconds, shared by key', async () => {
   const redis = fakeRedis();
@@ -96,7 +96,7 @@ test('an entry is kept for the configured seconds, shared by key', async () => {
   assert.equal(await entries.get('base:x'), 'v');
   assert.equal(await (await cache(redis).open(SCOPE)).get('base:x'), 'v');
   const [key] = [...redis.expiries.keys()];
-  assert.match(key, /^pq:it:mock:p1:0:base:x$/);
+  assert.match(key, /^pq1:it:mock:p1:0:base:x$/);
   assert.equal(redis.expiries.get(key), 30);
 });
 
@@ -117,7 +117,7 @@ test('invalidating raises the version, so nothing stored before is read', async 
   await before.set('base:x', 'stale');
   assert.equal(await (await cache(redis).open(SCOPE)).get('base:x'), null);
   // The version outlives every entry, so it can't lapse back to a version still holding one.
-  assert.ok(redis.expiries.get('pq:it:mock:p1:version') > 30);
+  assert.ok(redis.expiries.get('pq1:it:mock:p1:version') > 30);
 });
 
 test('Redis down: no entries, no errors, and invalidate says it failed', async () => {
@@ -176,4 +176,42 @@ test('PARTNER_QUOTE_CACHE_SECONDS defaults to 30 and refuses nonsense', () => {
     () => loadApiConfig({ ...valid, PARTNER_QUOTE_CACHE_SECONDS: '3600' }),
     /PARTNER_QUOTE_CACHE_SECONDS/,
   );
+});
+
+test('one quote spends one Redis budget in all, then every read is a miss', async () => {
+  const redis = fakeRedis();
+  await (await cache(redis).open(SCOPE)).set('base:x', 'v');
+  const slow = (ms) => (value) =>
+    new Promise((resolve) => setTimeout(() => resolve(value), ms));
+  const get = redis.get.bind(redis);
+  redis.get = async (key) => slow(30)(await get(key));
+  const started = performance.now();
+  const entries = await cache(redis, 30, 100).open(SCOPE);
+  const reads = [];
+  for (let i = 0; i < 6; i++) reads.push(await entries.get('base:x'));
+  // Each read alone fits the budget, but six of them don't: later ones miss without asking.
+  assert.ok(performance.now() - started < 200);
+  assert.equal(reads[0], 'v');
+  assert.equal(reads.at(-1), null);
+});
+
+test('a write is never waited for', async () => {
+  const redis = stalled();
+  const fake = fakeRedis();
+  redis.get = fake.get;
+  const entries = await cache(redis).open(SCOPE);
+  const started = performance.now();
+  await entries.set('base:x', 'v');
+  assert.ok(performance.now() - started < 20);
+});
+
+test('with the cache off, invalidating sends nothing', async () => {
+  const redis = fakeRedis();
+  let sent = 0;
+  redis.multi = () => {
+    sent += 1;
+    return fakeRedis().multi();
+  };
+  assert.equal(await cache(redis, 0).invalidate(SCOPE), true);
+  assert.equal(sent, 0);
 });

@@ -58,8 +58,8 @@ class InfraLifecycle implements OnApplicationShutdown {
         new RedisPartnerQuoteCache(redis, {
           prefix: config.QUEUE_PREFIX,
           seconds: config.PARTNER_QUOTE_CACHE_SECONDS,
-          // A quote waits this long at most for Redis before asking the provider itself.
-          timeoutMs: 200,
+          // A quote's reads together wait this long at most for Redis, then ask the provider.
+          budgetMs: 150,
         }),
     },
     InfraLifecycle,

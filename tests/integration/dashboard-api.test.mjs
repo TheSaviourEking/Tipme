@@ -300,7 +300,7 @@ test('quotes share the partner read in Redis briefly; a withdrawal clears it', a
   const { cookie } = await session('+2348000000002');
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
   try {
-    const account = `pq:${stack.prefix}:mock:${DEMO_PROFILES[1].id}`;
+    const account = `pq1:${stack.prefix}:mock:${DEMO_PROFILES[1].id}`;
     const version = async () =>
       Number((await redis.get(`${account}:version`)) ?? 0);
     const entries = async () => redis.keys(`${account}:${await version()}:*`);
@@ -317,10 +317,19 @@ test('quotes share the partner read in Redis briefly; a withdrawal clears it', a
     // TipMe's ledger isn't cached: the stored entries hold the partner's answer only.
     for (const key of stored)
       assert.doesNotMatch(await redis.get(key), /ledger/i);
+    // A hit leaves the entries alone: a re-read of the partner would write them again and
+    // restart their expiry, so the remaining time only falls.
+    const ttls = async () => Promise.all(stored.map((key) => redis.pttl(key)));
+    const firstTtls = await ttls();
+    await new Promise((resolve) => setTimeout(resolve, 1100));
     const again = (await (await get('/v1/me/withdrawal-quote', cookie)).json())
       .data;
     assert.deepEqual(again, first);
     assert.deepEqual((await entries()).sort(), stored.sort());
+    const secondTtls = await ttls();
+    secondTtls.forEach((ttl, i) =>
+      assert.ok(ttl <= firstTtls[i] - 1000, `${stored[i]} was not rewritten`),
+    );
 
     const before = await version();
     const ok = await fetch(`${stack.api}/v1/me/withdrawals`, {
