@@ -366,17 +366,17 @@ test('withdrawals page by cursor without gaps or repeats, even within one millis
   ];
   const ids = [];
   for (const createdAt of times) ids.push(await payout(TOBI.id, { createdAt }));
-  const seen = [];
-  let cursor;
-  let pages = 0;
-  do {
-    const page = await listMyWithdrawals(db, TOBI.id, { limit: 2, cursor });
-    seen.push(...page.items.map((row) => row.payoutId));
-    cursor = page.nextCursor ?? undefined;
-    pages += 1;
-  } while (cursor);
-  assert.equal(pages, 3);
-  assert.deepEqual(seen, [...ids].reverse());
+  // Limits 1 and 3 put a page boundary between the two rows that share a millisecond.
+  for (const limit of [1, 2, 3]) {
+    const seen = [];
+    let cursor;
+    do {
+      const page = await listMyWithdrawals(db, TOBI.id, { limit, cursor });
+      seen.push(...page.items.map((row) => row.payoutId));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    assert.deepEqual(seen, [...ids].reverse(), `limit ${limit}`);
+  }
   const first = await listMyWithdrawals(db, TOBI.id, { limit: 2 });
   const tampered = await listMyWithdrawals(db, TOBI.id, {
     limit: 2,
