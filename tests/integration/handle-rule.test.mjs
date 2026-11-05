@@ -461,3 +461,49 @@ test('deleting a page holds all its old handles, however many, and a first claim
     'HANDLE_CHANGE_PRO_REQUIRED',
   );
 });
+
+// Staff reservations (username reservation spec, 3.4): a reserved name is refused like a taken one.
+const staffReserve = (key) =>
+  database.pool.query(
+    `INSERT INTO handle_reservations (id, handle_lower, source, reason, reserved_at)
+     VALUES (gen_random_uuid(), $1, 'staff', 'brand name', now())`,
+    [key],
+  );
+
+test('a reserved name is refused at claim', async () => {
+  await staffReserve('mtn_claim');
+  const { cookie } = await signIn(stack.api, '+2348031270040');
+  const refused = await call('POST', '/v1/me/page', cookie, {
+    handle: 'MTN_claim',
+  });
+  assert.equal(refused.status, 409);
+  assert.equal(await code(refused), 'HANDLE_TAKEN');
+  const { rowCount } = await database.pool.query(
+    `SELECT 1 FROM profiles WHERE handle_lower = 'mtn_claim'`,
+  );
+  assert.equal(rowCount, 0);
+});
+
+test('a reserved name is refused at rename', async () => {
+  const cookie = await proPage('+2348031270041', 'mtn_renamer');
+  await staffReserve('mtn_rename');
+  const refused = await rename(cookie, 'mtn_rename');
+  assert.equal(refused.status, 409);
+  assert.equal(await code(refused), 'HANDLE_TAKEN');
+  const profile = await mine(cookie);
+  assert.equal(profile.handle, 'mtn_renamer');
+  assert.deepEqual(profile.handleChanges, { used: 0, allowed: 3 });
+  assert.deepEqual(profile.previousHandles, []);
+});
+
+test('the availability route answers reserved, never which list', async () => {
+  await staffReserve('mtn_avail');
+  const staffList = await call('GET', '/v1/handles/MTN_avail/availability');
+  const builtIn = await call('GET', '/v1/handles/admin/availability');
+  assert.equal(staffList.status, 200);
+  assert.equal(builtIn.status, 200);
+  const [a, b] = [await staffList.json(), await builtIn.json()];
+  // The same shape as for a built-in word: the name asked about and 'reserved', nothing more.
+  assert.deepEqual(a, { data: { handle: 'mtn_avail', status: 'reserved' } });
+  assert.deepEqual(b, { data: { handle: 'admin', status: 'reserved' } });
+});
