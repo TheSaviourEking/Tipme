@@ -60,12 +60,26 @@ export async function enrolOwner(page: Page, testInfo: TestInfo) {
   expect(secret).toMatch(/^[A-Z2-7]{32}$/);
   await page.getByLabel('Authenticator code').fill(await totpNow(secret, 1n));
   await page.getByRole('button', { name: 'Confirm' }).click();
+  // In: the sidebar on a desktop, the Menu button on a phone.
   await expect(
-    page.getByRole('navigation', { name: 'Admin' }).getByRole('link', {
-      name: 'Issues',
-    }),
+    page
+      .getByRole('navigation', { name: 'Admin' })
+      .getByRole('link', { name: 'Issues' })
+      .or(page.getByRole('button', { name: /^Menu · / })),
   ).toBeVisible();
   return { email, secret };
+}
+
+/**
+ * Opens an admin page from the menu: the sidebar on a desktop, or the Menu sheet on a phone.
+ */
+export async function openOpsLink(page: Page, name: string) {
+  const menu = page.getByRole('button', { name: /^Menu · / });
+  if (await menu.isVisible()) await menu.click();
+  await page
+    .getByRole('navigation', { name: 'Admin' })
+    .getByRole('link', { name, exact: true })
+    .click();
 }
 
 /** A tip whose provider reports the wrong amount: a money issue in the inbox. */

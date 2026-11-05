@@ -1,10 +1,10 @@
 'use client';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { FreshCodePrompt } from '@/components/ops/fresh-code';
+import { OpsFrame } from '@/components/ops/ops-frame';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
 import { PageUnavailable } from '@/components/page-unavailable';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -18,7 +18,6 @@ import {
   type OpsAccess,
 } from '@/lib/ops-client';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
-import { opsMenu } from '@/lib/ops-menu';
 import { apiFetch } from '@/lib/session-client';
 
 /** Where this visitor stands: signed out, not staff, the authenticator step, or in. */
@@ -94,15 +93,6 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
   const mode = usePaymentMode();
   const pathname = usePathname();
   const [state, setState] = useState<State>({ step: 'loading' });
-  const menu = useRef<HTMLElement>(null);
-  const granted = state.step === 'granted';
-  // The admin menu scrolls sideways: keep the open page's link in view.
-  useEffect(() => {
-    if (!granted) return;
-    menu.current
-      ?.querySelector('[aria-current="page"]')
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [granted, pathname]);
 
   const apply = useCallback(
     (next: State | 'signed_out') => {
@@ -145,6 +135,16 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
 
   if (state.step === 'unavailable')
     return <PageUnavailable showDemo={mode === 'test'} />;
+  if (state.step === 'granted')
+    return (
+      <OpsGranted
+        access={state.access}
+        pathname={pathname}
+        onLeave={() => void signOut()}
+      >
+        {children}
+      </OpsGranted>
+    );
   return (
     <main id="main" tabIndex={-1} className="dashboard-page ops-page">
       <Container>
@@ -160,31 +160,45 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
           <OpsEnrol onDone={reload} canDecline={state.canDecline} />
         )}
         {state.step === 'needs_code' && <OpsCode onDone={reload} />}
-        {state.step === 'granted' && (
-          <>
-            <div className="dashboard-bar">
-              <nav aria-label="Admin" className="dashboard-nav" ref={menu}>
-                {opsMenu(state.access.permissions).map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    aria-current={pathname === link.href ? 'page' : undefined}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </nav>
-              <Button variant="quiet" onClick={() => void signOut()}>
-                Leave admin
-              </Button>
-            </div>
-            <FreshCodePrompt />
-            <OpsAccessContext.Provider value={state.access}>
-              {children}
-            </OpsAccessContext.Provider>
-          </>
-        )}
       </Container>
     </main>
+  );
+}
+
+/**
+ * Inside the admin area: the frame and the pages. Mounted only once access is
+ * granted, so the site's header and footer give way to the frame only then (`data-ops-frame`); a
+ * visitor who isn't staff, and the sign-in steps, keep them.
+ */
+function OpsGranted({
+  access,
+  pathname,
+  onLeave,
+  children,
+}: {
+  access: OpsAccess;
+  pathname: string;
+  onLeave: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.opsFrame = 'on';
+    return () => {
+      delete root.dataset.opsFrame;
+    };
+  }, []);
+  return (
+    <OpsFrame
+      permissions={access.permissions}
+      pathname={pathname}
+      approvals={null}
+      onLeave={onLeave}
+    >
+      <FreshCodePrompt />
+      <OpsAccessContext.Provider value={access}>
+        {children}
+      </OpsAccessContext.Provider>
+    </OpsFrame>
   );
 }

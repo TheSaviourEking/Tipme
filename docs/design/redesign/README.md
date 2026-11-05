@@ -40,3 +40,5 @@ Where a board and a newer owner decision disagree, the decision wins:
 | `StatesMap`                 | States: every message on every screen and the pattern it becomes        |
 | `FeedbackMoments`           | Feedback: press, settle, shake and the withdrawal's step lamps           |
 | `SocialLinks`               | Social links: the editor in Settings and the public row (version 97, approved by the owner 5 Nov 2026) |
+| `OpsShell`                  | Admin: the frame (grouped sidebar, phone Menu sheet, staff strip), the Overview and the shared patterns (approved 5 Nov 2026; the frame is built, the patterns follow) |
+| `OpsPages`                  | Admin: every other admin page in the patterns (approved 5 Nov 2026; not built yet) |

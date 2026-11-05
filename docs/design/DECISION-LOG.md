@@ -286,6 +286,14 @@ The owner: "add an update on the UI so the current user knows that there has bee
 - **Owner decision, 3 Nov 2026: the 10% fee is stated in the terms.** The terms page was a placeholder with no fee disclosure. It now has a Fees section: a supporter pays exactly the tip, with nothing added; TipMe keeps 10% of each tip unless a different fee has been agreed with the recipient (a staff-set share, ADR-0014), and processing is paid from that share, so a ₦5,000 tip leaves ₦4,500; the smallest tip and the smallest withdrawal are ₦2,000, unless the whole balance is withdrawn; withdrawing is free, because a payout's provider fee is TipMe's cost (`packages/domain/src/ledger.ts`). Every figure follows `FEE_POLICY_V1` and must change with it.
 - **This is disclosure, not approval.** It states the flat 10% that D-05 already decided. Refunds and chargebacks are still OPEN under D-05, so the terms say nothing about them. Entity, jurisdiction and the rest of the terms still wait on D-02 and D-07, and the page still says the full terms are being finalised. It no longer says they will come "before TipMe takes real payments", because real payments are live. The full terms need a lawyer.
 
+## 2026-11-05 — Admin menu: a grouped sidebar and a phone Menu sheet
+
+- **Owner's request, 5 Nov 2026** ("the admin restyle"). A visual decision, not a regulatory approval; no D-item changes, and no permission, staff action or audit changes. Boards: `docs/design/redesign/boards/OpsShell.dc.html` and `OpsPages.dc.html`.
+- The OpsShell board's grouped sidebar (desktop, from 1024px) and Menu sheet (below) replace #126's one-row scrolling menu. Groups, in order: Overview and Approvals; Work (Issues, Search, Pages, Usernames); Numbers (Visibility, Market); Email and records (Providers, Email, Audit log); Staff (People, Roles, Your access). Each person still sees only the links their permissions allow.
+- The site header and footer are hidden in the admin area only once access is granted, so a non-staff visitor still sees the ordinary missing page, and the sign-in and authenticator steps keep the site's header.
+- The Approvals link carries a purple count of the waiting requests this person can decide now (never their own); no count when the list can't be read.
+- Group labels use the secondary text colour, not the board's `#8A867E`, which is under 4.5:1 on the canvas at 12px.
+
 ## 2026-11-05 — Make it yours: a Pro accent, and the thank-you slip
 
 - **Owner's request, 5 Nov 2026.** A product and visual decision, not a regulatory approval; see `docs/00-DECISIONS.md` ("Make it yours"). Boards: `docs/design/redesign/boards/ProCustomise.dc.html`, `ProStartAmount.dc.html` and `AppreciationDetails.dc.html`.
