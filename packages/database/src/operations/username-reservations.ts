@@ -233,7 +233,7 @@ export function checkUsername(
   });
 }
 
-/** Active reservations, newest first, by name prefix and source; and the built-in list. */
+/** The newest 200 active reservations, by name prefix and source, whether more match; and the built-in list. */
 export function listUsernames(
   db: Database,
   input: { q?: string; state?: 'staff' | 'take_back' },
@@ -256,7 +256,12 @@ export function listUsernames(
         ),
       )
       .orderBy(desc(handleReservations.reservedAt), desc(handleReservations.id))
-      .limit(LIST_LIMIT);
-    return { reservations: rows.map(toReservation), builtIn: RESERVED_HANDLES };
+      // One more than is shown, to know whether there are more.
+      .limit(LIST_LIMIT + 1);
+    return {
+      reservations: rows.slice(0, LIST_LIMIT).map(toReservation),
+      more: rows.length > LIST_LIMIT,
+      builtIn: RESERVED_HANDLES,
+    };
   });
 }

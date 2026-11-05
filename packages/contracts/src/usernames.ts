@@ -45,7 +45,10 @@ export type OpsUsernameCheck =
   | { name: string; state: 'page'; kind: 'current' | 'old'; page: OpsPage };
 
 export interface OpsUsernamesList {
+  /** The newest 200 that match, newest first. */
   reservations: OpsReservation[];
+  /** More match than are shown: narrow by the start of the name to find them. */
+  more: boolean;
   /** TipMe's own list, in code; never released from /ops. */
   builtIn: readonly string[];
 }

@@ -509,3 +509,32 @@ test('60+ checks never block a fee request; reads have their own limit', async (
     await limited.stop();
   }
 });
+
+// Review M3: the list shows the newest 200 and says when there are more, never silently stops.
+test('the list says when it shows only the newest 200', async () => {
+  const first = await json(
+    await call('GET', '/v1/ops/usernames?q=bulk_', staff.cookie),
+  );
+  assert.equal(first.more, false);
+  await database.pool.query(
+    `INSERT INTO handle_reservations (id, handle_lower, source, reason, reserved_at)
+     SELECT gen_random_uuid(), 'bulk_' || n, 'staff', 'bulk brand list', now() - n * interval '1 minute'
+       FROM generate_series(1, 201) AS n`,
+  );
+  const list = await json(
+    await call('GET', '/v1/ops/usernames?q=bulk_', staff.cookie),
+  );
+  assert.equal(list.reservations.length, 200);
+  assert.equal(list.more, true);
+  // Newest first: the oldest one is the one left out.
+  assert.equal(list.reservations[0].name, 'bulk_1');
+  assert.ok(!list.reservations.some((r) => r.name === 'bulk_201'));
+  const narrowed = await json(
+    await call('GET', '/v1/ops/usernames?q=bulk_201', staff.cookie),
+  );
+  assert.deepEqual(
+    narrowed.reservations.map((r) => r.name),
+    ['bulk_201'],
+  );
+  assert.equal(narrowed.more, false);
+});

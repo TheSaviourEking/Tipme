@@ -23,7 +23,7 @@ import {
 } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { age, can, useOpsAccess, when } from '@/lib/ops-client';
-import { refusalWords } from '@/lib/ops-answers';
+import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 type Said = {
@@ -240,16 +240,28 @@ export default function UsernamesPage() {
     setChecking(false);
   };
 
-  // A refusal re-reads the name, so staff see what holds it now (the first reservation, the page).
+  // A refusal means the name changed under you (someone reserved or released it, a page took it),
+  // so the card re-reads it and redraws, closing the form. The words therefore go to the notice at
+  // the top, never into the form that is about to go, and never as a success (review I1). A
+  // refused reason (400) is the exception: nothing changed, so it stays in the form to be fixed.
   const refused = async (
     raw: string,
     result: { status: number; code: string; message?: string },
   ) => {
-    const current = await recheck(raw);
-    return refusalWords(
-      result,
-      current?.state === 'page' ? { handle: current.page.handle } : undefined,
-    );
+    if (result.status === 400) return refusalWords(result);
+    const current = answer?.name === raw ? await recheck(raw) : null;
+    void load(filters);
+    say({
+      tone: 'error',
+      title: outcomeIsUnknown(result)
+        ? 'We can’t say what happened'
+        : 'Not done',
+      text: refusalWords(
+        result,
+        current?.state === 'page' ? { handle: current.page.handle } : undefined,
+      ),
+    });
+    return null;
   };
 
   const onReserve = async (raw: string, reason: string) => {
@@ -404,6 +416,12 @@ export default function UsernamesPage() {
             No staff reservation matches. TipMe’s own list is below.
           </EmptyState>
         )}
+        {list?.more && (
+          <p className="tm-hint">
+            Showing the newest {list.reservations.length}. Search by the start
+            of the name to find others, or check a name above.
+          </p>
+        )}
         {list && list.reservations.length > 0 && (
           <div
             className="ops-table-wrap"
@@ -462,8 +480,8 @@ export default function UsernamesPage() {
               TipMe’s own list <Badge>{list.builtIn.length}</Badge>
             </summary>
             <p className="tm-hint">
-              Built into TipMe: its own pages, words it may need, and the
-              example people the site shows. They can’t be released here.
+              Built into TipMe: its own pages and words it may need. They can’t
+              be released here.
             </p>
             <p>{list.builtIn.join(', ')}</p>
           </details>
