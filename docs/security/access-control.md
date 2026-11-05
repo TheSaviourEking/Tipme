@@ -164,6 +164,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/email/confirm` | yes | `auth_verify` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
+| PUT | `/v1/me/links` | yes | – | – |
 | GET | `/v1/me/moments` | n/a (read) | – | – |
 | POST | `/v1/me/moments/{id}/share` | yes | – | – |
 | GET | `/v1/me/notification-preferences` | n/a (read) | – | – |

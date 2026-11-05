@@ -361,7 +361,7 @@ export default function OpsPagesPage() {
     setDone(
       plan === 'pro'
         ? `@${result.data.handle} is now Pro: they can choose their own tip amounts in Settings.`
-        : `@${result.data.handle} is back on Free: their page shows the standard amounts.`,
+        : `@${result.data.handle} is back on Free: their page shows the standard amounts and its first 3 links from Free sites. Other links are kept, hidden, not deleted.`,
     );
     return null;
   };

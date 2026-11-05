@@ -32,6 +32,10 @@ export function ProPlan() {
           Three changes to your handle. Free pages keep the handle they claimed.
         </li>
         <li>Your own tip amounts</li>
+        <li>
+          Up to 8 links in your own order, one of them featured, including your
+          website, Telegram, LinkedIn and more. Free pages show 3.
+        </li>
         <li>No “Get your own TipMe page” link at the foot of your page</li>
       </ul>
       <p className="tm-hint">

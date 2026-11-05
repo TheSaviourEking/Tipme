@@ -10,6 +10,7 @@ export * from './payment-accounts.js';
 export * from './auth.js';
 export * from './covers.js';
 export * from './profiles.js';
+export * from './social-links.js';
 export * from './dashboard.js';
 export * from './ops.js';
 export * from './analytics.js';

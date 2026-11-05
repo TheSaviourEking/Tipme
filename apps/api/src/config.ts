@@ -100,6 +100,13 @@ export const apiConfigSchema = z
       .min(1)
       .default(30),
     RATE_LIMIT_BANK_READ_PER_MIN: z.coerce.number().int().min(1).default(30),
+    // OnlyFans and Fansly links (Pro only, the owner's decision of 5 Nov 2026). `off` hides them
+    // from every public page and refuses new ones, deleting nothing: the lever for the payment
+    // partner's answer (docs/runbooks/adult-platform-links.md). Default on.
+    ADULT_PLATFORM_LINKS: z
+      .enum(['on', 'off'])
+      .default('on')
+      .transform((value) => value === 'on'),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z

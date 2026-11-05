@@ -519,6 +519,13 @@
       "when": 1793851001386,
       "tag": "0073_usernames_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793865205363,
+      "tag": "0074_social_links",
+      "breakpoints": true
     }
   ]
 }

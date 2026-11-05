@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Social links on a page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+.board{width:1840px;height:3260px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+h2{margin:0 0 6px;font:400 34px/1.05 'DM Serif Display',Georgia,serif}
+.sub{margin:0 0 18px;font-size:14px;line-height:1.5;color:#5d5a54;max-width:1100px}
+.sec{margin-top:44px}
+.paper{background:#fffefa;border-radius:22px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.4);padding:22px 26px}
+.today{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:20px}
+.today p{margin:6px 0 0;font-size:14px;line-height:1.5}
+.src{font-size:12px;color:#5d5a54;font-family:Manrope,Arial,sans-serif}
+.glyph{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 6px;border-radius:9px;background:#141210;color:#fff;font-size:11px;font-weight:800;letter-spacing:.02em;box-sizing:border-box}
+.glyph.l{background:#eceae4;color:#000;border:1px solid rgba(20,18,16,.15)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-size:12px;color:#5d5a54;font-weight:700;padding:8px 10px;border-bottom:1px solid rgba(20,18,16,.15)}
+td{padding:9px 10px;border-bottom:1px solid rgba(20,18,16,.08);vertical-align:top;line-height:1.4}
+td.p{white-space:nowrap;font-weight:700}
+.rec{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
+.free{background:#e7f1e3;color:#1f4a17}
+.pro{background:#f1e9ff;color:#4d16a8}
+.no{background:#141210;color:#fff}
+.wait{background:#fde9c8;color:#6b3d00}
+.model{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.model ul{margin:8px 0 0;padding-left:18px;font-size:14.5px;line-height:1.65}
+.decision{background:#141210;color:#fff;border-radius:22px;padding:26px 30px}
+.decision h2{color:#fff}
+.decision .sub{color:#d9d4cb}
+.decision ul{margin:8px 0 0;padding-left:18px;font-size:14px;line-height:1.6}
+.decision li{margin:4px 0}
+.decision a{color:#d7c4ff}
+.decision .rule{margin-top:16px;padding:14px 18px;border-radius:14px;background:#2a2622;font-size:14.5px;line-height:1.5}
+.draws{display:grid;grid-template-columns:560px 560px 1fr;gap:24px;align-items:start}
+.label{margin:0 0 10px;font-size:13px;font-weight:700;color:#5d5a54}
+.field{display:flex;align-items:center;gap:10px;margin-top:10px}
+.well{flex:1;height:42px;border-radius:11px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1);display:flex;align-items:center;padding:0 12px;font-size:13px;color:#3b3934;overflow:hidden;white-space:nowrap}
+.well.e{color:#8a857c}
+.add{margin-top:12px;height:42px;border-radius:11px;border:1.5px dashed rgba(20,18,16,.25);display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:700;color:#3b3934}
+.add.lock{border-color:rgba(122,50,249,.5);color:#4d16a8}
+.pick{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+.chip{height:30px;padding:0 10px;border-radius:9px;background:#fffefa;border:1px solid rgba(20,18,16,.14);box-shadow:0 2px 0 rgba(20,18,16,.1);display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.star{font-size:12px;font-weight:800;color:#7a32f9}
+.handle{font-size:11px;color:#5d5a54;margin-left:auto}
+.go{margin-top:16px;height:46px;border-radius:12px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.check{margin-top:12px;font-size:13.5px;display:flex;gap:8px;align-items:center}
+.box{width:18px;height:18px;border-radius:5px;background:#000;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center}
+.card{background:#fffefa;border-radius:24px;overflow:hidden;border:1px solid rgba(20,18,16,.1);box-shadow:0 20px 40px -18px rgba(20,18,16,.35)}
+.cv{height:90px;background:#1c4e8a}
+.av{width:64px;height:64px;border-radius:50%;margin:-32px 0 0 20px;border:3px solid #fffefa;background:#f1e9ff;color:#4d16a8;display:flex;align-items:center;justify-content:center;font:400 26px 'DM Serif Display',Georgia,serif;position:relative}
+.nm{margin:8px 20px 0;font:400 30px 'DM Serif Display',Georgia,serif}
+.rl{margin:2px 20px 0;font-size:13px;font-weight:600}
+.row{margin:14px 20px 0;display:flex;flex-wrap:wrap;gap:8px}
+.lk{height:36px;padding:0 10px;border-radius:10px;background:#eceae4;border:1px solid rgba(20,18,16,.12);display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700}
+.feat{margin:14px 20px 0;height:48px;border-radius:12px;background:#fffefa;border:1px solid rgba(20,18,16,.16);box-shadow:0 3px 0 rgba(20,18,16,.12);display:flex;align-items:center;gap:10px;padding:0 14px;font-size:13.5px;font-weight:700}
+.tipbtn{margin:16px 20px 20px;height:46px;border-radius:12px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+.tag{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:999px;background:#7a32f9;color:#fff;font-size:11px;font-weight:800;vertical-align:middle}
+.prop{display:inline-block;padding:2px 8px;border-radius:999px;background:#fde9c8;color:#6b3d00;font-size:11px;font-weight:800;vertical-align:middle}
+.notes{font-size:12.5px;line-height:1.55;color:#3b3934}
+.notes li{margin:3px 0}
+</style>
+</helmet>
+<div class="board">
+  <h2>Social links on a page: what to allow, and what Pro adds</h2>
+  <p class="sub">Answering the owner, 5 Nov 2026: TikTok, whether Facebook should be Pro, which apps Free and Pro can show, what each one is worth, and adult platforms such as OnlyFans. Everything new here is <span class="prop">Proposed</span>.</p>
+
+  <div class="sec">
+    <p class="label">1. Today on dev: three links, the same on Free and Pro</p>
+    <div class="today">
+      <div class="paper"><b>Which sites</b><p><span class="glyph">f</span> Facebook &nbsp; <span class="glyph">IG</span> Instagram &nbsp; <span class="glyph">X</span> X (twitter.com accepted)</p><p class="src">packages/contracts/src/profiles.ts:5-10. Each link must be https and on that site's own address (:13-29).</p></div>
+      <div class="paper"><b>Who gets them</b><p>Every page, Free or Pro. Nothing about links is behind Pro. The owner picks "Show my social links on my page".</p><p class="src">my-page.tsx:684-712 (three fields and the switch); recipient-card.tsx:90-100 shows them as "Find Ada elsewhere", next to phone and email if shown.</p></div>
+      <div class="paper"><b>What we already measure</b><p>Where visitors came from: instagram, x, facebook, whatsapp, qr, link, search, direct, other. That is arrivals, not clicks out to a link.</p><p class="src">packages/contracts/src/analytics.ts:48-58. TikTok is not a channel yet, so a visitor from TikTok counts as "other".</p></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="label">2. Each platform, for TipMe's people (creators, streamers, DJs, barbers, drivers)</p>
+    <div class="paper">
+      <table>
+        <tr><th style="width:150px">Platform</th><th style="width:230px">Reach in Nigeria (source)</th><th>Who on TipMe uses it</th><th style="width:300px">Helps a supporter find or trust them</th><th style="width:140px">Proposal</th></tr>
+        <tr><td class="p"><span class="glyph">TT</span> TikTok</td><td>37.4M ad reach, 18+ (DataReportal, early 2025)</td><td>Creators, comedians, streamers. Nigeria is not in TikTok's Creator Rewards, so creators need other income.</td><td>High: the place many supporters first meet them</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">f</span> Facebook</td><td>38.7M ad reach (DataReportal, early 2025)</td><td>Everyone, especially older supporters, barbers, drivers, local businesses</td><td>High: widest reach. Keeping it free answers the owner's question: no, not Pro</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">IG</span> Instagram</td><td>9.9M ad reach</td><td>Creators, DJs, stylists, barbers (portfolio)</td><td>High: the usual "is this really them" check</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">YT</span> YouTube</td><td>27.0M ad reach</td><td>Video editors, creators, musicians</td><td>High</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">X</span> X</td><td>7.57M ad reach</td><td>Commentators, creators, tech people</td><td>Medium to high</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">SC</span> Snapchat</td><td>19.6M ad reach</td><td>Younger creators</td><td>Medium</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">WA</span> WhatsApp channel</td><td>Most-favoured app in a 2023 survey (Statista); no 2025 count found</td><td>Barbers, drivers, small traders, artists</td><td>High for local trust. Only a channel link (whatsapp.com/channel), not a phone number: the phone already has its own switch</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">Tw</span> Twitch</td><td>Top Nigerian streamers (Carter Efe, Shank Comics, Enzo) stream on Twitch (Vanguard, Jan 2026)</td><td>Streamers</td><td>High for streamers: where the tipping happens live</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">K</span> Kick</td><td>Peller, Nigeria's biggest Kick streamer (Vanguard, Pulse, 2026)</td><td>Streamers</td><td>High for streamers</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">AM</span> Audiomack</td><td>About 15.3M monthly users in Nigeria (Audiomack's own figure); Nigeria is its largest market (Jan 2026)</td><td>Musicians, DJs</td><td>High for music people</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">BP</span> Boomplay</td><td>About 4.8M Android users, Q2 2025 (Sensor Tower)</td><td>Musicians, DJs</td><td>Medium</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">SP</span> Spotify, Apple Music, SoundCloud</td><td>No Nigeria user count found</td><td>Musicians, DJs, podcasters</td><td>Medium</td><td><span class="rec free">Free</span></td></tr>
+        <tr><td class="p"><span class="glyph">TG</span> Telegram</td><td>No reliable count found</td><td>Communities, some creators</td><td>Medium. Spam-heavy, so channels only</td><td><span class="rec pro">Pro</span></td></tr>
+        <tr><td class="p"><span class="glyph">in</span> LinkedIn</td><td>11.0M registered members (not active users)</td><td>Freelancers, coaches, video editors for hire</td><td>Low for tipping, some trust value</td><td><span class="rec pro">Pro</span></td></tr>
+        <tr><td class="p"><span class="glyph">Th</span> Threads</td><td>No Nigeria count found</td><td>Small</td><td>Low</td><td><span class="rec pro">Pro</span></td></tr>
+        <tr><td class="p"><span class="glyph l">www</span> Own website</td><td>n/a</td><td>Businesses, established creators</td><td>Medium. Any address, so it needs the same checks we'd run on any link (https, no tricks)</td><td><span class="rec pro">Pro</span></td></tr>
+        <tr><td class="p"><span class="glyph l">$</span> Patreon, Selar, Substack</td><td>No Nigeria count found</td><td>Creators who also sell or run memberships</td><td>Medium. These take money elsewhere; fine as a link, since TipMe stays the place to tip</td><td><span class="rec pro">Pro</span></td></tr>
+        <tr><td class="p"><span class="glyph l">LT</span> Linktree and link pages</td><td>n/a</td><td>Many creators</td><td>Low: a page of links inside a page of links, and it hides where people end up</td><td><span class="rec no">Not supported</span></td></tr>
+        <tr><td class="p"><span class="glyph l">18+</span> OnlyFans, Fansly</td><td>n/a</td><td>Adult creators</td><td>See section 4</td><td><span class="rec wait">Pro only (owner, 5 Nov 2026)</span></td></tr>
+      </table>
+      <p class="src" style="margin-top:12px">Ad reach comes from each platform's own ad tools and is not a count of unique active people; don't add the rows up (DataReportal's own caveat). Free/Pro choices are our recommendation, not data.</p>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="label">3. Recommended model <span class="prop">Approved by the owner, 5 Nov 2026</span></p>
+    <div class="model">
+      <div class="paper"><b style="font-size:16px">Free: identity is never behind Pro</b>
+        <ul>
+          <li>Up to <b>3 links</b>, picked from every platform marked Free above, including <b>TikTok</b>.</li>
+          <li>Facebook stays free. It is the widest reach in Nigeria; charging for it would make pages look less real, and real-looking pages are what make people tip.</li>
+          <li>Each link is checked against that site's own address, as today, and shows the @handle we read from it.</li>
+        </ul>
+      </div>
+      <div class="paper"><b style="font-size:16px">Pro: more, and in their order</b>
+        <ul>
+          <li>Up to <b>8 links</b>, including the Pro-only kinds (own website, Telegram, LinkedIn, Threads, Patreon, Selar, Substack).</li>
+          <li><b>One featured link</b> as a full-width key above the row ("Watch me live on Twitch").</li>
+          <li><b>Their own order</b>, by dragging.</li>
+          <li><b>See which links get pressed</b>: a count per link on the dashboard (new; today we only see where visitors came from).</li>
+        </ul>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:12px">If Pro lapses, the extra links are kept but hidden, and the first 3 still show. Nothing is deleted.</p>
+  </div>
+
+  <div class="sec decision">
+    <h2>4. Adult platforms (OnlyFans, Fansly): owner decided 5 Nov 2026, Pro only</h2>
+    <p class="sub">The facts as we could find them. This is not legal advice and implies no regulatory approval.</p>
+    <ul>
+      <li><b>Card networks treat adult content as the highest-risk category.</b> Visa's Integrity Risk Program (from April 2023) puts adult content (MCC 5967) in High Integrity Risk Tier 1, with registration, content moderation, age checks and monthly reporting. Mastercard's rules from 15 Oct 2021 require the acquiring bank to certify the seller's controls, age and identity checks for everyone shown, and fast takedowns. (Visa's own document was seen only through a Chile copy and processor summaries; Mastercard's full rule text is not public.)</li>
+      <li><b>Nigerian processors exclude it.</b> Paystack's "Ineligible businesses" page lists "Obscene material or pornography" and "Certain sexually oriented materials or services" (support.paystack.com, no date shown). We could not find Flutterwave's own list.</li>
+      <li><b>Our payment partner's terms decide this for TipMe.</b> We can't see them from here. A page that sends supporters to adult content could be read as TipMe taking adult-content payments, even if the tip itself is "just a tip".</li>
+      <li><b>App stores:</b> Apple's guideline 1.1.4 bars overtly sexual material; a future TipMe app with pages linking straight to adult sites would be at risk in review.</li>
+      <li><b>Brand:</b> TipMe is "for the people who make a difference". In 2025 TikTok removed about 3.8M Nigerian videos in one quarter, and an explicit-content flood was reported on TikTok Live in Nigeria (headline seen, body not confirmed). A tipping product can attract the same.</li>
+      <li><b>A plain website link can point anywhere anyway</b>, so whatever we decide needs an acceptable-use rule and a report button (pages already have "Report this page"), not just a list of sites.</li>
+    </ul>
+    <div class="rule" style="background:#f1e9ff"><b>Owner decision, 5 Nov 2026:</b> OnlyFans and Fansly links are allowed for Pro users only. The open points below stay true and are tracked: our payment partner's written position, and the acceptable-use section of the Terms. This is the owner's product decision, not legal advice or a regulatory approval.</div>
+    <div class="rule"><b>Recommendation:</b> don't add OnlyFans, Fansly or other adult-platform links. Revisit only once you have (1) our payment partner's written answer on adult creators and (2) a written acceptable-use policy in the Terms, which today only lists "Acceptable use and how accounts can be suspended" as a heading still to write (apps/web/src/app/legal/terms/page.tsx).</div>
+  </div>
+
+  <div class="sec">
+    <p class="label">5. How it looks <span class="prop">Proposed</span></p>
+    <div class="draws">
+      <div class="paper">
+        <p class="label" style="margin-bottom:4px">Settings › My page › Your links, on Free</p>
+        <div class="field"><span class="glyph">TT</span><span class="well">tiktok.com/@ada.edits</span></div>
+        <div class="field"><span class="glyph">IG</span><span class="well">instagram.com/ada.edits</span></div>
+        <div class="field"><span class="glyph">YT</span><span class="well">youtube.com/@adaedits</span></div>
+        <div class="add lock">Add more links with Pro (up to 8)</div>
+        <p class="src" style="margin-top:10px">3 of 3 used. Paste a link from the app and we'll spot which site it is.</p>
+        <div class="check"><span class="box">✓</span>Show my links on my page</div>
+        <div class="go">Save</div>
+      </div>
+      <div class="paper">
+        <p class="label" style="margin-bottom:4px">The same, on Pro <span class="tag">Pro</span></p>
+        <div class="field"><span class="star">★</span><span class="glyph">Tw</span><span class="well">twitch.tv/adaedits</span><span class="handle">featured</span></div>
+        <div class="field"><span style="color:#8a857c">⋮⋮</span><span class="glyph">TT</span><span class="well">tiktok.com/@ada.edits</span></div>
+        <div class="field"><span style="color:#8a857c">⋮⋮</span><span class="glyph">IG</span><span class="well">instagram.com/ada.edits</span></div>
+        <div class="field"><span style="color:#8a857c">⋮⋮</span><span class="glyph">YT</span><span class="well">youtube.com/@adaedits</span></div>
+        <div class="field"><span style="color:#8a857c">⋮⋮</span><span class="glyph l">www</span><span class="well">adaedits.com</span></div>
+        <div class="pick"><span class="chip">+ Facebook</span><span class="chip">+ X</span><span class="chip">+ Audiomack</span><span class="chip">+ Kick</span><span class="chip">+ WhatsApp channel</span><span class="chip">+ more</span></div>
+        <p class="src" style="margin-top:10px">5 of 8. Drag ⋮⋮ to reorder; ★ makes one the big key on your page.</p>
+        <div class="go">Save</div>
+      </div>
+      <div>
+        <p class="label">On Ada's page</p>
+        <div class="card" style="width:400px">
+          <div class="cv"></div><div class="av">A</div>
+          <p class="nm">Ada Okafor</p><p class="rl">Content creator/Video editor</p>
+          <div class="feat"><span class="glyph">Tw</span>Watch me live on Twitch<span class="handle">twitch.tv/adaedits</span></div>
+          <div class="row"><span class="lk"><span class="glyph" style="min-width:22px;height:22px;font-size:9px">TT</span>@ada.edits</span><span class="lk"><span class="glyph" style="min-width:22px;height:22px;font-size:9px">IG</span>@ada.edits</span><span class="lk"><span class="glyph" style="min-width:22px;height:22px;font-size:9px">YT</span>@adaedits</span><span class="lk"><span class="glyph l" style="min-width:22px;height:22px;font-size:9px">www</span>adaedits.com</span></div>
+          <div class="tipbtn">Tip Ada</div>
+        </div>
+        <ul class="notes" style="margin-top:14px;padding-left:16px;max-width:420px">
+          <li>Links show the @handle, so supporters can check it's really her.</li>
+          <li>Links open in a new tab and never sit between the amount and the Tip button.</li>
+          <li>Simple letter badges here stand in for each site's real icon, which we'd draw to each brand's own rules.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec paper notes">
+    <b>Sources</b> (all read 5 Nov 2026):
+    DataReportal, Digital 2025: Nigeria — datareportal.com/reports/digital-2025-nigeria ·
+    Paystack, Ineligible businesses — support.paystack.com/en/articles/2127042 ·
+    Mastercard, Protecting our network (14 Apr 2021) — mastercard.com/news/perspectives/2021/protecting-our-network-protecting-you-preventing-illegal-adult-content-on-our-network ·
+    Visa Integrity Risk Program (Chile PDF) — visa.cl/content/dam/VCOM/regional/lac/SPA/chile/Documents/visa-integrity-risk-program-chile.pdf; LegitScript summary — legitscript.com/regulatory-and-card-brand-compliance/visa-integrity-risk-program ·
+    Audiomack 50M users (Jan 2026) — thecondia.com/audiomack-50m-users-human-curation ·
+    Sensor Tower Q2 2025 Nigeria music apps — sensortower.com/blog ·
+    Statista, favourite platforms in Nigeria (Q3 2023) — statista.com/statistics/1324590 ·
+    Vanguard, Africa's top streamers (Jan 2026) — vanguardngr.com/2026/01/top-10-biggest-streamers-in-africa-2026 ·
+    Legit.ng, TikTok monetisation in Nigeria — legit.ng/ask-legit/guides/1680596 ·
+    Apple App Review Guidelines 1.1.4 (secondary summaries; Apple's page not fetched).
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3260}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

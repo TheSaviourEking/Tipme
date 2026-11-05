@@ -12,8 +12,17 @@ import {
   type PagePlan,
   type ProfilePatch,
   type PublicProfile,
+  type SocialLink,
   type Socials,
   type TipAmounts,
+  PRO_LINK_LIMIT,
+  linksNeedPro,
+  mergeFreeSave,
+  isAdultPlatform,
+  linkKey,
+  myLinksSchema,
+  visibleLinks,
+  type MyLinksRequest,
 } from '@tipme/contracts';
 import {
   FEE_POLICY_V1,
@@ -359,7 +368,12 @@ export function setPagePlan(
         };
       const [row] = await tx
         .update(profiles)
-        .set({ plan: input.plan })
+        .set({
+          plan: input.plan,
+          // What shows changes with the plan, so the old links column follows it (see setMyLinks).
+          // TODO(social-links): stop writing it in the release that drops the column.
+          socials: legacySocials(visibleLinks(current.links, input.plan)),
+        })
         .where(eq(profiles.id, input.profileId))
         .returning();
       await recordAudit(tx, {
@@ -393,7 +407,8 @@ const toMine = async (
   displayName: row.profile.displayName,
   role: row.profile.role,
   bio: row.profile.bio,
-  socials: row.profile.socials as Socials,
+  socials: legacySocials(row.profile.links),
+  links: row.profile.links,
   bioPublic: row.profile.bioPublic,
   socialsPublic: row.profile.socialsPublic,
   phonePublic: row.profile.phonePublic,
@@ -451,7 +466,6 @@ export function updateMyProfile(
           : {}),
         ...(values.role !== undefined ? { role: values.role || null } : {}),
         ...(values.bio !== undefined ? { bio: values.bio || null } : {}),
-        ...(values.socials !== undefined ? { socials: values.socials } : {}),
         ...(values.bioPublic !== undefined
           ? { bioPublic: values.bioPublic }
           : {}),
@@ -475,6 +489,87 @@ export function updateMyProfile(
       .returning({ id: profiles.id });
     if (updated.length === 0)
       throw new OperationError('QR_DESIGN_PRO_REQUIRED');
+    return toMine(db, await myRow(db, userId));
+  });
+}
+
+/** The first Facebook, Instagram and X links, in the old shape, for tabs opened before `links`. */
+function legacySocials(links: readonly SocialLink[]): Socials {
+  const socials: Socials = {};
+  for (const link of links)
+    if (
+      (link.platform === 'facebook' ||
+        link.platform === 'instagram' ||
+        link.platform === 'x') &&
+      !socials[link.platform]
+    )
+      socials[link.platform] = link.url;
+  return socials;
+}
+
+/**
+ * The page's links (SocialLinks board, owner 5 Nov 2026), saved whole and in order. Free: up to 3
+ * from Free sites, catalogue order, none featured; refused otherwise (SOCIAL_LINKS_PRO_REQUIRED).
+ * A Free save replaces only the links Free shows and keeps the hidden ones a lapsed Pro page has.
+ * Pro: up to 8, any order, one featured. The page row is locked for the save, so a staff plan
+ * change (which locks it too) lands wholly before or after: a save that needs Pro never lands on
+ * a page that has just become Free.
+ */
+export function setMyLinks(
+  db: Database,
+  userId: string,
+  input: MyLinksRequest,
+  /** `adultLinks: false` while ADULT_PLATFORM_LINKS is off: no new OnlyFans or Fansly links. */
+  { adultLinks = true }: { adultLinks?: boolean } = {},
+): Promise<MyProfile> {
+  return guarded(async () => {
+    const parsed = myLinksSchema.safeParse(input);
+    if (!parsed.success) throw new OperationError('INVALID_INPUT');
+    const { links, show, hidden } = parsed.data;
+    const { profile } = await myRow(db, userId);
+    await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ plan: profiles.plan, links: profiles.links })
+        .from(profiles)
+        .where(eq(profiles.id, profile.id))
+        .for('update');
+      if (!current) throw new OperationError('NO_PAGE');
+      const pro = current.plan === 'pro';
+      if (!pro && linksNeedPro(links))
+        throw new OperationError('SOCIAL_LINKS_PRO_REQUIRED');
+      if (pro && links.length > PRO_LINK_LIMIT)
+        throw new OperationError('INVALID_INPUT');
+      // Switched off, adult-platform links already stored may stay (they don't show); new ones
+      // can't be added.
+      if (!adultLinks) {
+        const stored = new Set(current.links.map((link) => linkKey(link.url)));
+        if (
+          links.some(
+            (link) =>
+              isAdultPlatform(link.platform) && !stored.has(linkKey(link.url)),
+          )
+        )
+          throw new OperationError('SOCIAL_LINK_UNAVAILABLE');
+      }
+      const saved = pro ? links : mergeFreeSave(current.links, links, hidden);
+      await tx
+        .update(profiles)
+        .set({
+          links: saved,
+          // The old column follows what shows, so an API from before social links (a rollback,
+          // or the old colour during a deploy) shows the truth and never a hidden link.
+          // TODO(social-links): stop writing it in the release that drops the column.
+          socials: legacySocials(
+            visibleLinks(saved, current.plan as PagePlan, {
+              adult: adultLinks,
+            }),
+          ),
+          socialsPublic: show,
+        })
+        .where(
+          and(eq(profiles.id, profile.id), eq(profiles.plan, current.plan)),
+        );
+    });
     return toMine(db, await myRow(db, userId));
   });
 }
@@ -674,6 +769,8 @@ export function publicProfile(
       provider: string;
       environment: PaymentAccountEnvironment;
     };
+    /** False while ADULT_PLATFORM_LINKS is off: OnlyFans and Fansly links don't show. */
+    adultLinks?: boolean;
   } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
@@ -697,7 +794,9 @@ export function publicProfile(
       );
     if (!row) return null;
     const { profile } = row;
-    const socials = profile.socials as Socials;
+    const links = visibleLinks(profile.links, profile.plan as PagePlan, {
+      adult: options.adultLinks ?? true,
+    });
     const celebration = await publicCelebration(db, profile.id);
     const acceptingTips = options.requiredAccount
       ? (await getReadyPaymentAccount(db, {
@@ -713,9 +812,7 @@ export function publicProfile(
       ...(profile.note ? { note: profile.note } : {}),
       ...(profile.avatarPath ? { avatarPath: profile.avatarPath } : {}),
       ...(profile.bio && profile.bioPublic ? { bio: profile.bio } : {}),
-      ...(profile.socialsPublic && Object.keys(socials).length > 0
-        ? { socials }
-        : {}),
+      ...(profile.socialsPublic && links.length > 0 ? { links } : {}),
       ...(profile.phonePublic && row.phone ? { phone: row.phone } : {}),
       ...(profile.emailPublic && row.email && row.emailVerifiedAt
         ? { email: row.email }
@@ -822,6 +919,7 @@ export function deleteAccount(
             coverColour: null,
             coverPath: null,
             socials: {},
+            links: [],
             phonePublic: false,
             emailPublic: false,
           })
