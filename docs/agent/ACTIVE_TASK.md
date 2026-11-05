@@ -1,3 +1,9 @@
+# Current task — Make it yours, PR A: the chapter and the thank-you line (5 November 2026)
+
+- Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2, not pushed. PR C's three commits come first on the branch; PR A follows. Migration 0077 (`profiles.thanks_line`, `thanks_style`, `thanks_signed`).
+- Built: `PUT /v1/me/thanks`; a paid receipt shows the recipient's current line as a slip (Paper on Free; Paper, Violet or Night and a first-name signature on Pro); Settings > "Make it yours" (after My page) with "Your thank-you" and "Covers that move, QR codes that are yours"; the Plan list names card styles and the signature.
+- Next: PR B (starting amount) and PR D (pinned note, accent, the supporter's withdrawal). Owner answers Q1-Q5 are recorded in `docs/00-DECISIONS.md`. Build report: `.superpowers/program/miy-build-report.md`.
+
 # Current task — Make it yours, PR C: the note consent tick box (5 November 2026)
 
 - Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2, not pushed. The C commits come first, so they can be split onto `feat/make-it-yours-consent`. Migration 0076 (`tip_messages.may_show`, default false).

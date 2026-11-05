@@ -32,6 +32,7 @@ export function ProPlan() {
           Three changes to your handle. Free pages keep the handle they claimed.
         </li>
         <li>Your own tip amounts</li>
+        <li>Card styles and your signature on your thank-you</li>
         <li>No “Get your own TipMe page” link at the foot of your page</li>
       </ul>
       <p className="tm-hint">

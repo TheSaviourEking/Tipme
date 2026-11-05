@@ -1,3 +1,10 @@
+# Current handoff — Make it yours, PR A: the chapter and the thank-you line (5 November 2026)
+
+- Branch `feat/make-it-yours`, test lane 2, not pushed. Migrations 0076 (C) and 0077 (A) leave a gap after dev's 0071, so `migration-journal.test` fails on the gap until merge order settles it; it was not relaxed.
+- The thank-you field has no native `maxLength`: the browser counts UTF-16 units, so 140 would stop an emoji line at 70. The count, the check and the server all use code points.
+- The bio still has no link check (reported by the plan, not fixed here).
+- Verified (commands and counts in `.superpowers/program/miy-build-report.md`): format:check, lint, typecheck, unit tests, scripts tests, the touched integration files on `tipme_test_lane2`, and the touched e2e specs plus profile-page and checkout on lane 2, and review:screens.
+
 # Current handoff — Make it yours, PR C: the note consent tick box (5 November 2026)
 
 - Branch `feat/make-it-yours`, test lane 2, not pushed. Migration 0076 leaves a gap after dev's 0071 (0072-0075 are held by other branches), so `migration-journal.test` fails on the gap until merge order settles it; it was not relaxed.
