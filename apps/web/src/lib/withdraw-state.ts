@@ -138,3 +138,21 @@ export function withdrawState(input: {
     }
   }
 }
+
+/**
+ * The most that can be withdrawn right now: the ledger balance, and no more than the quote allows.
+ * Zero whenever the quote refuses (paused, setup needed, tips still settling, no quote at all).
+ * Withdraw and the dashboard both use this, so neither shows more as ready than the quote allows.
+ */
+export function withdrawableNow(input: {
+  availableMinor: string;
+  withdrawalsAvailable: boolean;
+  quote: WithdrawalQuoteResponse | null;
+}): bigint {
+  const state = withdrawState(input);
+  const { quote } = input;
+  if (!state.canWithdraw || quote?.state !== 'ready') return BigInt(0);
+  const available = BigInt(input.availableMinor);
+  const allowed = BigInt(quote.withdrawableMinor);
+  return allowed < available ? allowed : available;
+}

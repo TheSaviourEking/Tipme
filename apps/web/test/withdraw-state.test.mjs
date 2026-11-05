@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { withdrawState } from '../src/lib/withdraw-state.ts';
+import { withdrawableNow, withdrawState } from '../src/lib/withdraw-state.ts';
 
 const ready = (over = {}) => ({
   state: 'ready',
@@ -119,4 +119,29 @@ test('withdrawals switched off for everyone say so plainly, with no form and no 
     'Withdrawals are paused for now. Your balance is safe.',
   );
   assert.doesNotMatch(JSON.stringify(view.notice), /bachs/i);
+});
+
+const now = (quote, available = '1000000', withdrawalsAvailable = true) =>
+  withdrawableNow({ availableMinor: available, withdrawalsAvailable, quote });
+
+test('withdrawableNow is what the quote allows, never more than the balance', () => {
+  assert.equal(now(ready({ withdrawableMinor: '180000' })), BigInt(180000));
+  assert.equal(
+    now(ready({ withdrawableMinor: '900000' }), '500000'),
+    BigInt(500000),
+  );
+});
+
+test('withdrawableNow is zero for a balance the quote refuses', () => {
+  assert.equal(now(ready({ withdrawableMinor: '0' })), BigInt(0));
+  for (const state of [
+    'paused',
+    'setup_needed',
+    'no_destination',
+    'destination_pending',
+    'provider_unavailable',
+  ])
+    assert.equal(now({ state, inReview: false }), BigInt(0), state);
+  assert.equal(now(null), BigInt(0));
+  assert.equal(now(ready(), '1000000', false), BigInt(0));
 });

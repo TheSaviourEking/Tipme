@@ -144,16 +144,74 @@ test('the balance comes first, with what is still being confirmed under it', asy
   });
   await page.goto('/dashboard');
   const main = page.locator('main');
-  await expect(main.getByRole('heading').first()).toHaveText(
-    'Ready to withdraw',
+  await expect(main.getByRole('heading', { level: 1 })).toHaveText(
+    'Your balance',
   );
   await expect(page.getByTestId('balance')).toHaveText('NGN 48,600.00');
+  // The quote allows nothing on a page with no tips behind it, so none of the balance is called
+  // ready to withdraw (the ledger figure is not what can go).
+  await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
   await expect(
     main.getByText('NGN 1,800.00 still being confirmed'),
   ).toBeVisible();
   // Pending money is never counted as available.
   await expect(page.getByTestId('balance')).not.toContainText('50,400');
   await expectAccessible(page);
+});
+
+test('Ready to withdraw is only what the withdrawal quote allows', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.route('**/v1/me/dashboard', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { data: { ...body.data, availableMinor: '1000000' } },
+    });
+  });
+  const quote = {
+    inReview: false,
+    ledgerMinor: '1000000',
+    providerMinor: '500000',
+    feeMinor: '5000',
+    destination: { bankName: 'GTBank', last4: '1234' },
+  };
+  // Only part of the balance has reached the account: that part, not the ledger figure, is ready.
+  await page.route('**/v1/me/withdrawal-quote', (route) =>
+    route.fulfill({
+      json: {
+        data: { ...quote, state: 'ready', withdrawableMinor: '500000' },
+      },
+    }),
+  );
+  await page.goto('/dashboard');
+  await expect(page.getByTestId('balance')).toHaveText('NGN 10,000.00');
+  await expect(page.getByTestId('ready')).toHaveText(
+    'Ready to withdraw NGN 5,000.00',
+  );
+  // A quote that refuses: the balance stays, and nothing is called ready.
+  await page.unroute('**/v1/me/withdrawal-quote');
+  await page.route('**/v1/me/withdrawal-quote', (route) =>
+    route.fulfill({
+      json: { data: { ...quote, state: 'ready', withdrawableMinor: '0' } },
+    }),
+  );
+  await page.reload();
+  await expect(page.getByTestId('balance')).toHaveText('NGN 10,000.00');
+  await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
+  await page.unroute('**/v1/me/withdrawal-quote');
+  await page.route('**/v1/me/withdrawal-quote', (route) =>
+    route.fulfill({
+      json: {
+        data: { inReview: false, state: 'paused', reason: 'switched_off' },
+      },
+    }),
+  );
+  await page.reload();
+  await expect(page.getByTestId('balance')).toHaveText('NGN 10,000.00');
+  await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
 });
 
 test('before the first tip, a checklist instead of empty numbers', async ({

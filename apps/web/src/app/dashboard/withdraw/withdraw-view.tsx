@@ -14,7 +14,11 @@ import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { naira, parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
-import { nairaSign, withdrawState } from '@/lib/withdraw-state';
+import {
+  nairaSign,
+  withdrawableNow,
+  withdrawState,
+} from '@/lib/withdraw-state';
 
 /** Quick amounts, offered only when the balance can cover them with something left over. */
 const SHORTCUTS_MINOR = [BigInt(500_000), BigInt(2_000_000)];
@@ -225,12 +229,11 @@ export default function WithdrawPage({
   const ready = quote?.state === 'ready' ? quote : null;
   const available = BigInt(summary.availableMinor);
   // The most that can go now: the balance, and no more than the quote allows. Never pending money.
-  const withdrawable =
-    ready && state.canWithdraw
-      ? BigInt(ready.withdrawableMinor) < available
-        ? BigInt(ready.withdrawableMinor)
-        : available
-      : BigInt(0);
+  const withdrawable = withdrawableNow({
+    availableMinor: summary.availableMinor,
+    withdrawalsAvailable: summary.withdrawalsAvailable,
+    quote,
+  });
   const chosen = amount === null ? null : BigInt(amount);
   // Tapping the amount already chosen changes nothing: the request key and any warning stay, as
   // they do when typing the same text. Only a different amount starts a new request.

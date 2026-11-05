@@ -5,6 +5,7 @@ import type {
   ActivityRow,
   DashboardSummary,
   WeeklyReportData,
+  WithdrawalQuoteResponse,
 } from '@tipme/contracts';
 import { Button, Notice, Skeleton } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -18,6 +19,7 @@ import { recipientReturned, track } from '@/lib/analytics';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { isPaymentAttention } from '@/lib/owner-attention';
+import { withdrawableNow } from '@/lib/withdraw-state';
 
 function Tile({
   label,
@@ -52,6 +54,7 @@ export default function DashboardHome() {
   // One loader per panel: each returns its data, an error and reload(), so a later live stream
   // can call reload() without reworking this page.
   const balance = usePanel<DashboardSummary>('/v1/me/dashboard');
+  const quote = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote');
   const recent = usePanel<ActivityRow[]>('/v1/me/activity');
   const week =
     usePanel<{ week: string; data: WeeklyReportData }[]>('/v1/me/reports');
@@ -100,6 +103,17 @@ export default function DashboardHome() {
     balance.error === 'refresh' || recent.error === 'refresh';
   // Pending money is named only when the API reports some, and is never counted as available.
   const pending = summary.confirmingMinor !== '0';
+  // "Ready to withdraw" is only what the withdrawal quote allows now (the rule Withdraw uses). The
+  // ledger balance above it can be larger: tips still settling, or setup not finished. A quote that
+  // is loading or failed says nothing rather than guessing.
+  const withdrawable =
+    quote.data && !quote.error
+      ? withdrawableNow({
+          availableMinor: summary.availableMinor,
+          withdrawalsAvailable: summary.withdrawalsAvailable,
+          quote: quote.data,
+        })
+      : BigInt(0);
 
   const shareStatus = (
     <p role="status" className="tm-hint dashboard-share-status">
@@ -220,12 +234,17 @@ export default function DashboardHome() {
             <section className="balance-card" aria-labelledby="balance-label">
               <div className="balance-card__figures">
                 <h1 id="balance-label" className="balance-card__label">
-                  Ready to withdraw
+                  Your balance
                 </h1>
                 {/* One element, never animated: a refetch must not imply money that is not confirmed. */}
                 <strong data-testid="balance">
                   {naira(summary.availableMinor)}
                 </strong>
+                {withdrawable > BigInt(0) && (
+                  <span className="balance-card__note" data-testid="ready">
+                    Ready to withdraw {naira(withdrawable.toString())}
+                  </span>
+                )}
                 {pending && (
                   <span className="balance-card__note">
                     {naira(summary.confirmingMinor)} still being confirmed
