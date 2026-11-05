@@ -3,6 +3,9 @@ import { resolve } from 'node:path';
 import { expect, test, type Locator } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { makePagePro } from './ops-helpers';
+import { WEB_ORIGIN } from './stack';
+
+const WEB_HOST = new URL(WEB_ORIGIN).host;
 
 // sharp and jsQR are other packages' dependencies (resolved from there); only what is used is typed.
 type Decode = (
@@ -55,9 +58,7 @@ test('a recipient styles their QR code, then prints, shows and shares it', async
   await expect(page.getByRole('heading', { name: 'My QR code' })).toBeVisible();
   await expect(page.getByRole('radio', { name: /Purple/ })).toBeChecked();
   await expect(page.getByText(/Premium|free in preview/)).toHaveCount(0);
-  await expect(
-    page.getByText(`127.0.0.1:3100/@${handle}`).first(),
-  ).toBeVisible();
+  await expect(page.getByText(`${WEB_HOST}/@${handle}`).first()).toBeVisible();
   await page.getByRole('radio', { name: /Night/ }).check();
   await expect(page.getByText('Style saved')).toBeVisible();
   await page.reload();
@@ -79,11 +80,9 @@ test('a recipient styles their QR code, then prints, shows and shares it', async
 
   await page.getByRole('link', { name: 'Print card' }).click();
   await page.waitForURL(/\/dashboard\/qr\/print$/);
+  await expect(page.getByText(`${WEB_HOST}/@${handle}`).first()).toBeVisible();
   await expect(
-    page.getByText(`127.0.0.1:3100/@${handle}`).first(),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('img', { name: `QR code for 127.0.0.1:3100/@${handle}` }),
+    page.getByRole('img', { name: `QR code for ${WEB_HOST}/@${handle}` }),
   ).toBeVisible();
   await expectAccessible(page);
 
@@ -116,9 +115,7 @@ test('a Free page previews a Pro design with its mark, and cannot print, share o
   await page.goBack();
   await page.getByRole('radio', { name: /Heart modules/ }).check();
   // A screenshot of it leads to the TipMe home page, never to the person's page.
-  await expect
-    .poll(() => scan(image))
-    .toBe('http://127.0.0.1:3100/?src=qr-preview');
+  await expect.poll(() => scan(image)).toBe(`${WEB_ORIGIN}/?src=qr-preview`);
   // Nothing was saved: a reload is back on the free style.
   await page.reload();
   await expect(page.getByRole('radio', { name: /Purple/ })).toBeChecked();
@@ -156,7 +153,7 @@ test('a Pro page saves a design, prints it in each format, and its printed code 
   ).toHaveCount(0);
   await expect
     .poll(() => scan(image))
-    .toBe(`http://127.0.0.1:3100/@${handle}?src=qr`);
+    .toBe(`http://${WEB_HOST}/@${handle}?src=qr`);
   await page.reload();
   await expect(
     page.getByRole('radio', { name: /Heart modules/ }),
@@ -179,7 +176,7 @@ test('a Pro page saves a design, prints it in each format, and its printed code 
     await expect(code).toBeVisible();
     await expect
       .poll(() => scan(code), { message: format })
-      .toBe(`http://127.0.0.1:3100/@${handle}?src=qr`);
+      .toBe(`http://${WEB_HOST}/@${handle}?src=qr`);
   }
   // The sheet itself never animates, on screen or on paper.
   await page.emulateMedia({ media: 'print' });

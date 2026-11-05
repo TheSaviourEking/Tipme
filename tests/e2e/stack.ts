@@ -1,20 +1,30 @@
 /** The full stack the e2e suite runs: web, API and worker against the disposable `tipme_test`. */
-const base = new URL(
+import { laneConfig, withDatabaseName, withRedisDb } from '../lane';
+
+// E2E_LANE picks the ports, database, Redis db and queue prefix (tests/lane.ts); lane 0 is the default.
+export const LANE = laneConfig();
+export const E2E_DATABASE_URL = withDatabaseName(
   process.env.DATABASE_URL ??
     'postgres://tipme_local:tipme_local_password@127.0.0.1:5432/tipme_local',
+  LANE.databaseName,
 );
-base.pathname = '/tipme_test';
-export const E2E_DATABASE_URL = base.toString();
-export const E2E_REDIS_URL = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
-export const WEB_ORIGIN = 'http://127.0.0.1:3100';
-export const API_ORIGIN = 'http://127.0.0.1:4100';
+export const E2E_REDIS_URL = withRedisDb(
+  process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
+  LANE.redisDb,
+);
+// globalSetup opens the lane's database through openTestDatabase, which reads this.
+process.env.TIPME_TEST_DATABASE = LANE.databaseName;
+export const WEB_ORIGIN = LANE.webOrigin;
+export const API_ORIGIN = LANE.apiOrigin;
 
 /** Test-only values; the developer's .env is never loaded for e2e. */
 export const stackEnv = {
   NODE_ENV: 'test',
   DATABASE_URL: E2E_DATABASE_URL,
   REDIS_URL: E2E_REDIS_URL,
-  QUEUE_PREFIX: 'e2e',
+  QUEUE_PREFIX: LANE.queuePrefix,
+  // Read by openTestDatabase (globalSetup, helpers) in the test process and the servers.
+  TIPME_TEST_DATABASE: LANE.databaseName,
   LOG_LEVEL: 'warn',
   MOCK_PROVIDER_WEBHOOK_SECRET: 'e2e-only-mock-webhook-secret-32-characters',
 };
