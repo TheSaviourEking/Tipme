@@ -9,6 +9,7 @@
 **Tech Stack:** Drizzle and Postgres migrations, `@tipme/domain`, `@tipme/contracts`, `@tipme/database` operations, NestJS controllers (`apps/api/src/ops`, `apps/api/src/profiles`), BullMQ worker (`apps/worker`), `@tipme/mail` templates, Next.js client pages (`apps/web/src/app/ops`, `apps/web/src/app/dashboard`), `node:test` unit and integration tests, Playwright e2e.
 
 **Spec:** `docs/superpowers/specs/2026-11-03-username-reservation-design.md`. Section 12 ("The owner's answers, 3 Nov 2026") wins over anything above it, and this plan follows it wherever the two differ:
+
 - the clock starts at the earlier of the notice email being sent and the banner being seen (`banner_seen_at`);
 - after 14 days with neither, the take-back goes ahead (the never-reached path);
 - the email and the banner carry the category's fixed wording only, with no staff free text;
@@ -57,36 +58,40 @@
    - built-in words are refused as staff reservations;
    - `isReservedHandle` is unchanged.
 
-   *Test:* Task 1 (`reservationKey` unit tests) and Task 3 (`a second reservation differing by case or hyphen is refused and shown the first`).
+   _Test:_ Task 1 (`reservationKey` unit tests) and Task 3 (`a second reservation differing by case or hyphen is refused and shown the first`).
+
 2. **Racing writers at the same moment.** Reserve against claim, reserve against rename, two reservations of one name, and an older release inserting a profile or alias on a reserved name: one wins, and the database refuses the rest with `unique_violation`.
 
-   *Test:* Task 1 (`the trigger refuses a claim and an alias on a reserved name`) and Task 3 (`reserve against claim at once: exactly one wins`).
+   _Test:_ Task 1 (`the trigger refuses a claim and an alias on a reserved name`) and Task 3 (`reserve against claim at once: exactly one wins`).
+
 3. **The notice clock.** It must start only from a sent email or a banner seen in a visible tab. It must never start from a queued-but-unsent email, a hidden tab's refetch, or approval itself. With neither, the 14-day path still runs.
 
-   *Test:*
+   _Test:_
    - Task 7 (`a queued email that never sends leaves the row approved`);
    - Task 8 (`seen is recorded once, and only the first time starts the clock`);
    - Task 10 (`never reached for 14 days: completed as unreached and recorded`).
+
 4. **Sweep against user choice against cancel against deletion.** Each locks the profile, then the take-back row. The second sees the new state and stops: there is one outcome, one done email and no deadlock.
 
-   *Test:* Task 10 (`cancel racing the deadline sweep: one outcome`, `user choice racing the sweep: one outcome`).
+   _Test:_ Task 10 (`cancel racing the deadline sweep: one outcome`, `user choice racing the sweep: one outcome`).
+
 5. **A page left without a working username, or keeping a taken one.** Completion never writes an alias for the taken name.
 
    Switching back to an old username that is under an open `old` take-back is refused.
 
    A Free page in take-back mode can choose a name, and the choice is not counted. The generated `page_xxxxxx` is never built-in, reserved or taken.
 
-   *Test:* Task 9 (`switching back to an old username under take-back is refused`, `no alias is written for the taken name`) and Task 10 (`the generated username retries on collision`).
+   _Test:_ Task 9 (`switching back to an old username under take-back is refused`, `no alias is written for the taken name`) and Task 10 (`the generated username retries on collision`).
 
 ## PR boundaries
 
 The spec (section 11) asks for these PRs.
 
-| PR | Tasks | Ships |
-|---|---|---|
-| **PR 1: Reservations** | 1 to 4 | Reserved names are refused at sign-up and rename; staff reserve and release from `/ops/usernames`. Safe to ship alone. |
-| **PR 2: Take-backs** | 5 to 13 | Take-backs with notice of 1 to 30 days, emails, banner, seen-time, user choice, worker, never-reached path, free change, Pages card, search, docs. **Do not deploy PR 2 to production before the terms' "Your username" section is on `main`.** On `dev` it is already present in `apps/web/src/app/legal/terms/page.tsx`. |
-| **PR 3: Without notice** | 14 | `notice_days = 0` for impersonation, trademark and legal. Optional split, per section 11.3. Until it lands, `validate` refuses 0. |
+| PR                       | Tasks   | Ships                                                                                                                                                                                                                                                                                                                      |
+| ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PR 1: Reservations**   | 1 to 4  | Reserved names are refused at sign-up and rename; staff reserve and release from `/ops/usernames`. Safe to ship alone.                                                                                                                                                                                                     |
+| **PR 2: Take-backs**     | 5 to 13 | Take-backs with notice of 1 to 30 days, emails, banner, seen-time, user choice, worker, never-reached path, free change, Pages card, search, docs. **Do not deploy PR 2 to production before the terms' "Your username" section is on `main`.** On `dev` it is already present in `apps/web/src/app/legal/terms/page.tsx`. |
+| **PR 3: Without notice** | 14      | `notice_days = 0` for impersonation, trademark and legal. Optional split, per section 11.3. Until it lands, `validate` refuses 0.                                                                                                                                                                                          |
 
 The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 would leave a Free page stuck with `page_xxxxxx`, against owner answer 4.
 
@@ -97,6 +102,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 1: The canonical key, the reservations table and the database guard
 
 **Files:**
+
 - Modify:
   - `packages/domain/src/handles.ts`: add `reservationKey`;
   - `packages/database/src/schema.ts`: add the `handleReservations` table.
@@ -107,6 +113,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `packages/database/test/integration/migration-journal.test.mjs` (unchanged; it must pass).
 
 **Interfaces:**
+
 - Produces `reservationKey(raw: string): string | null`. It trims, lower-cases, replaces `-` with `_`, then applies `normaliseHandle`.
 - Produces the table `handle_reservations`:
   - `id uuid PK`;
@@ -125,6 +132,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `tipme_alias_handle_not_reserved` on `handle_aliases BEFORE INSERT OR UPDATE`.
 
   Both raise `unique_violation` when an active reservation holds `NEW.handle_lower`.
+
 - Also produces `tipme_reservation_not_held` on `handle_reservations BEFORE INSERT`. It raises `unique_violation` when a profile or alias holds the name.
 
   A take-back completion moves the page first and writes the reservation after, so it needs no exception flag.
@@ -158,6 +166,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 2: Reserved names block sign-up and handle changes
 
 **Files:**
+
 - Modify:
   - `packages/database/src/operations/profiles.ts`: `checkHandle`, `isTaken`, `claimHandle`, `renameHandle`;
   - new helper `activeReservation`.
@@ -166,6 +175,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `packages/database/test/integration/profiles.test.mjs`.
 
 **Interfaces:**
+
 - Produces `activeReservation(db: Database | Tx, key: string): Promise<{ id: string } | null>`, exported for Task 3.
 - `isTaken` gains a fourth lookup: an active reservation for the name. `claimHandle` and `renameHandle` therefore refuse it with the existing `HANDLE_TAKEN`.
 - `checkHandle` returns `'reserved'` for a staff reservation, before the `isTaken` lookup, just as it does for a built-in word.
@@ -196,6 +206,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 3: The permission, and the reserve, release and check API
 
 **Files:**
+
 - Modify:
   - `packages/contracts/src/ops-catalogue.ts`: `OPS_PERMISSIONS` and `OPS_CATALOGUE`;
   - `packages/contracts/src/index.ts`;
@@ -216,26 +227,43 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `tests/integration/username-reservations.test.mjs`.
 
 **Interfaces:**
+
 - The catalogue entry: `'usernames.manage': { description: 'Reserve and release usernames, and ask to take one back from a page', group: 'people', sensitive: true }`.
 - `packages/contracts/src/usernames.ts` produces:
 
   ```ts
-  export const opsUsernameReserveSchema = z.object({ name: z.string().min(1).max(40), reason: z.string() }).strict();
-  export type OpsUsernameReserveRequest = z.infer<typeof opsUsernameReserveSchema>;
+  export const opsUsernameReserveSchema = z
+    .object({ name: z.string().min(1).max(40), reason: z.string() })
+    .strict();
+  export type OpsUsernameReserveRequest = z.infer<
+    typeof opsUsernameReserveSchema
+  >;
   // release body: the existing opsReasonSchema / OpsReasonRequest
-  export const opsUsernamesQuerySchema = z.object({ q: z.string().max(30).optional(), state: z.enum(['staff', 'take_back']).optional() }).strict();
+  export const opsUsernamesQuerySchema = z
+    .object({
+      q: z.string().max(30).optional(),
+      state: z.enum(['staff', 'take_back']).optional(),
+    })
+    .strict();
   export interface OpsReservation {
-    id: string; name: string; source: 'staff' | 'take_back'; reason: string;
-    reservedBy: string | null;        // masked staff email, null when the system completed a take-back
-    reservedAt: string; takeBackId: string | null;
+    id: string;
+    name: string;
+    source: 'staff' | 'take_back';
+    reason: string;
+    reservedBy: string | null; // masked staff email, null when the system completed a take-back
+    reservedAt: string;
+    takeBackId: string | null;
   }
   export type OpsUsernameCheck =
     | { name: string; state: 'invalid' }
     | { name: string; state: 'built_in' }
-    | { name: string; state: 'free'; heldUntil: string | null }        // heldUntil: a 90-day deletion hold
+    | { name: string; state: 'free'; heldUntil: string | null } // heldUntil: a 90-day deletion hold
     | { name: string; state: 'reserved'; reservation: OpsReservation }
     | { name: string; state: 'page'; kind: 'current' | 'old'; page: OpsPage }; // Task 7 adds facts and the open take-back
-  export interface OpsUsernamesList { reservations: OpsReservation[]; builtIn: readonly string[] } // Task 7 adds takeBacks, pending
+  export interface OpsUsernamesList {
+    reservations: OpsReservation[];
+    builtIn: readonly string[];
+  } // Task 7 adds takeBacks, pending
   ```
 
 - `username-reservations.ts` produces:
@@ -255,12 +283,12 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - a release of a take-back reservation adds `withAuditChange(reason, { takeBackId })`.
 - Routes on `OpsUsernamesController`, `@Controller('v1/ops/usernames')`:
 
-  | Route | Answers |
-  |---|---|
-  | `GET /` | `OpsUsernamesList` |
-  | `GET /check/:name` | `OpsUsernameCheck` |
-  | `POST /` `{ name, reason }` | `OpsReservation`, 201 |
-  | `POST /:name/release` `{ reason }` | `{ name }` |
+  | Route                              | Answers               |
+  | ---------------------------------- | --------------------- |
+  | `GET /`                            | `OpsUsernamesList`    |
+  | `GET /check/:name`                 | `OpsUsernameCheck`    |
+  | `POST /` `{ name, reason }`        | `OpsReservation`, 201 |
+  | `POST /:name/release` `{ reason }` | `{ name }`            |
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -298,6 +326,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
     3. insert the row and audit it.
 
     If the insert hits `23505`, re-read the winner and throw `USERNAME_RESERVED` (or `USERNAME_HELD_BY_PAGE`).
+
   - `releaseUsername` updates the active row's `released_*` columns. With no active row it throws `USERNAME_NOT_RESERVED`. A built-in name throws `USERNAME_BUILT_IN` before any lookup.
   - `checkUsername` reuses `opsPageByHandle` for the page case. `kind` is `current` when `profiles.handle_lower` matches, otherwise `old`.
   - Mask staff emails with `maskEmail`, as on the Overview.
@@ -307,6 +336,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 4: The admin "Usernames" screen
 
 **Files:**
+
 - Create: `apps/web/src/app/ops/usernames/page.tsx`.
 - Modify:
   - `apps/web/src/lib/ops-menu.ts`: add `{ href: '/ops/usernames', label: 'Usernames', needs: ['usernames.manage'] }` right after Pages;
@@ -318,6 +348,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `tests/e2e/ops-staff.spec.ts`.
 
 **Interfaces:**
+
 - The page consumes `OpsUsernameCheck`, `OpsUsernamesList` and `OpsReservation` from Task 3.
 - `refusalWords` gains:
   - `USERNAME_BUILT_IN`: "TipMe's own list already reserves this";
@@ -350,10 +381,12 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   3. **TipMe's own list:** read-only, inside `<details>`, closed by default.
 
   Every action goes through `opsAct`. Nothing animates beyond the existing ops styles. State words are text, so they hold up in forced colours.
+
 - [ ] **Step 4: Run** the same commands and `pnpm test:e2e -- tests/e2e/ops-staff.spec.ts`. Expected: PASS.
 - [ ] **Step 5: Commit.** `feat(ops): the Usernames screen for reserving and releasing`
 
 **PR 1 ends here.**
+
 - Run the pre-PR checks, `node scripts/test-integration.mjs`, and the three e2e files.
 - Open PR 1: "Staff reserve usernames".
 - The only user-facing change is that reserved names are refused.
@@ -365,6 +398,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 5: The take-back data model, issue kinds and shared words
 
 **Files:**
+
 - Modify:
   - `packages/database/src/schema.ts`: add `handleTakeBacks`;
   - `packages/contracts/src/ops.ts`: `ISSUE_KINDS` gains `username_take_back_unnoticed` and `username_take_back_overdue`;
@@ -382,6 +416,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `packages/database/test/integration/issues.test.mjs`.
 
 **Interfaces:**
+
 - The table `handle_take_backs`:
   - `id uuid PK`;
   - `approval_request_id uuid NULL REFERENCES approval_requests`;
@@ -405,27 +440,40 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - index `(state, due_at)`.
 
   There is **no `message_to_user` column**: owner answer 3 says no staff free text reaches the user.
+
 - Contracts produce:
 
   ```ts
-  export const TAKE_BACK_CATEGORIES = ['ordinary', 'impersonation', 'trademark', 'legal'] as const;
+  export const TAKE_BACK_CATEGORIES = [
+    'ordinary',
+    'impersonation',
+    'trademark',
+    'legal',
+  ] as const;
   export type TakeBackCategory = (typeof TAKE_BACK_CATEGORIES)[number];
   export type TakeBackKind = 'current' | 'old';
-  export type TakeBackState = 'approved' | 'noticed' | 'due' | 'done' | 'cancelled';
-  export type TakeBackOutcome = 'user_chose' | 'assigned' | 'page_deleted' | 'old_removed';
+  export type TakeBackState =
+    'approved' | 'noticed' | 'due' | 'done' | 'cancelled';
+  export type TakeBackOutcome =
+    'user_chose' | 'assigned' | 'page_deleted' | 'old_removed';
   export type TakeBackNoticedVia = 'email' | 'banner' | 'unreached';
   /** The fixed "why" per category (owner answer 3). Shown to the user verbatim; never staff text. */
   export const TAKE_BACK_WHY: Record<TakeBackCategory, string> = {
-    ordinary: 'We need it to protect a brand, a public figure or one of our own names.',
+    ordinary:
+      'We need it to protect a brand, a public figure or one of our own names.',
     impersonation: 'The username impersonates someone.',
     trademark: 'The username infringes a trademark.',
     legal: 'The law requires us to change it.',
   };
-  export const TAKE_BACK_CATEGORY_WORDS: Record<TakeBackCategory, string> =
-    { ordinary: 'Ordinary', impersonation: 'Impersonation', trademark: 'Trademark', legal: 'Required by law' };
+  export const TAKE_BACK_CATEGORY_WORDS: Record<TakeBackCategory, string> = {
+    ordinary: 'Ordinary',
+    impersonation: 'Impersonation',
+    trademark: 'Trademark',
+    legal: 'Required by law',
+  };
   export const TAKE_BACK_NEVER_REACHED_MS = 14 * 86_400_000;
   export const TAKE_BACK_FREE_CHANGE_MS = 30 * 86_400_000;
-  export const TAKE_BACK_REMINDER_MS = 2 * 86_400_000;   // only when notice_days >= 4
+  export const TAKE_BACK_REMINDER_MS = 2 * 86_400_000; // only when notice_days >= 4
   ```
 
 - Domain produces:
@@ -455,6 +503,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 6: The take-back emails
 
 **Files:**
+
 - Create: `packages/mail/src/templates/types/username-take-back.ts`.
 - Modify:
   - `packages/mail/src/templates/registry.ts`;
@@ -464,6 +513,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `packages/database/test/integration/mail-triggers.test.mjs` (the `mailOwner` return).
 
 **Interfaces:**
+
 - Every type is `category: 'account'`, `sender: 'notifications'`, `preference: null`, with a strict zod schema and a sample.
 - The types:
   - `usernameTakeBackNotice`, id `username_take_back_notice`. Data: `{ kind: 'current' | 'old'; old: string; current: string; why: string; dueDate: string }`;
@@ -481,6 +531,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - **Done, unreached.** This variant is new: owner answer 2 needs it and the spec has no wording. The plan's wording, for the owner to check, is subject "Your TipMe page has a new username"; body "We couldn't reach you about the username @{old}, so, as our terms say, TipMe has taken it back. {why} Your page is now at {origin}/@{new}. Your tips and balance haven't changed. Links and QR codes with @{old} no longer work, so share your new link and print a new QR code. You can change your new username once, for free, in Settings until {free change date}."
 
     When `kind = old`, the unreached completion uses the "old" variant.
+
   - **6.5 Cancelled.** Subject "You can keep your TipMe username". Body: "We no longer need the username @{old}. It stays yours, and your links and QR codes keep working. You don't need to do anything."
 - Each email's `reason` footer says: "You get this email when TipMe needs a username back. It can't be turned off."
 
@@ -503,6 +554,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 7: The serious action, and the request, cancel and list routes
 
 **Files:**
+
 - Create: `packages/database/src/operations/username-take-backs.ts`.
 - Modify:
   - `packages/contracts/src/ops-catalogue.ts`: `SERIOUS_ACTIONS`, `SERIOUS_ACTION_WORDS` and `SERIOUS_ACTION_PERMISSIONS`;
@@ -522,27 +574,56 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - new `tests/integration/username-take-backs.test.mjs`.
 
 **Interfaces:**
+
 - The catalogue: `'username.take_back'`, with words "Take a username back from a page" and permission `'usernames.manage'`.
 - Contracts add:
 
   ```ts
-  export const opsTakeBackRequestSchema = z.object({
-    profileId: z.uuid(), category: z.enum(TAKE_BACK_CATEGORIES), noticeDays: z.number().int().min(0).max(30), reason: z.string(),
-  }).strict();
+  export const opsTakeBackRequestSchema = z
+    .object({
+      profileId: z.uuid(),
+      category: z.enum(TAKE_BACK_CATEGORIES),
+      noticeDays: z.number().int().min(0).max(30),
+      reason: z.string(),
+    })
+    .strict();
   export type OpsTakeBackRequest = z.infer<typeof opsTakeBackRequestSchema>;
   export interface OpsTakeBackFacts {
-    plan: PagePlan; pageState: PageState; suspended: boolean; hasBalance: boolean;
-    withdrawalInFlight: boolean; verifiedEmail: boolean; liveCheckoutListed: boolean; // the API fills liveCheckoutListed
+    plan: PagePlan;
+    pageState: PageState;
+    suspended: boolean;
+    hasBalance: boolean;
+    withdrawalInFlight: boolean;
+    verifiedEmail: boolean;
+    liveCheckoutListed: boolean; // the API fills liveCheckoutListed
   }
   export interface OpsTakeBack {
-    id: string; name: string; profileId: string; pageHandle: string; plan: PagePlan;
-    kind: TakeBackKind; category: TakeBackCategory; noticeDays: number; state: TakeBackState;
-    requestedBy: string; approvedBy: string | null;           // masked
-    approvedAt: string; noticedAt: string | null; noticedVia: TakeBackNoticedVia | null;
-    dueAt: string | null; doneAt: string | null; cancelledAt: string | null;
-    outcome: TakeBackOutcome | null; newHandle: string | null;
+    id: string;
+    name: string;
+    profileId: string;
+    pageHandle: string;
+    plan: PagePlan;
+    kind: TakeBackKind;
+    category: TakeBackCategory;
+    noticeDays: number;
+    state: TakeBackState;
+    requestedBy: string;
+    approvedBy: string | null; // masked
+    approvedAt: string;
+    noticedAt: string | null;
+    noticedVia: TakeBackNoticedVia | null;
+    dueAt: string | null;
+    doneAt: string | null;
+    cancelledAt: string | null;
+    outcome: TakeBackOutcome | null;
+    newHandle: string | null;
   }
-  export interface OpsTakeBackPending { requestId: string; name: string; profileId: string; requestedAt: string }
+  export interface OpsTakeBackPending {
+    requestId: string;
+    name: string;
+    profileId: string;
+    requestedAt: string;
+  }
   // OpsUsernameCheck 'page' gains: facts: OpsTakeBackFacts; openTakeBack: OpsTakeBack | null; pendingRequestId: string | null
   // OpsUsernamesList gains: takeBacks: OpsTakeBack[]; pending: OpsTakeBackPending[]
   ```
@@ -573,18 +654,20 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   3. audits `username.take_back_started` with `withAuditChange(reason, { requestedBy, approvedBy, category, noticeDays, kind, profileId })`.
 
   A `23505` on the open index becomes `TAKE_BACK_OPEN`.
+
 - New codes:
   - `TAKE_BACK_OPEN` → 409;
   - `TAKE_BACK_NOT_FOUND` → 404;
   - `TAKE_BACK_CLOSED` → 409, for cancelling a done or cancelled take-back.
 - Routes:
 
-  | Route | Does |
-  |---|---|
+  | Route                                                                                  | Does                                                                                                                                                                |
+  | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
   | `POST /v1/ops/usernames/:name/take-back` `{ profileId, category, noticeDays, reason }` | `requestSeriousAction('username.take_back')`. Answers `OpsSeriousPending`, or `{ takeBack: OpsTakeBack, actedAlone: true }` after revalidating `revalidateHandles`. |
-  | `POST /v1/ops/usernames/take-backs/:id/cancel` `{ reason }` | Instant. |
+  | `POST /v1/ops/usernames/take-backs/:id/cancel` `{ reason }`                            | Instant.                                                                                                                                                            |
 
   `GET /check/:name` sets `facts.liveCheckoutListed` from `API_CONFIG.LIVE_CHECKOUT_HANDLES`.
+
 - `STAFF_ACTIVITY_ACTIONS` gains `username.take_back_started`, `username.take_back_done` and `username.released`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -621,6 +704,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 8: The dashboard banner and the seen-time
 
 **Files:**
+
 - Modify:
   - `packages/contracts/src/profiles.ts`: `MyProfile`;
   - `packages/database/src/operations/profiles.ts`: `toMine`;
@@ -634,6 +718,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - new `apps/web/test/take-back-banner.test.mjs`, which tests the pure wording helper.
 
 **Interfaces:**
+
 - `MyProfile` gains `usernameTakeBack?: { id: string; handle: string; kind: TakeBackKind; dueAt: string; why: string; current: string } | null`.
   - It is optional, because the web deploys first.
   - The name matches what the live-updates spec expects, so it arrives with `profile.changed` later.
@@ -645,6 +730,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - if `noticed_at` is null, it also sets `state = 'noticed'`, `noticed_at = now`, `noticed_via = 'banner'` and `due_at = takeBackDueAt(now, notice_days)`, then audits `username.take_back_noticed` (the user, `withAuditChange` `{ via: 'banner' }`).
 
   A second call changes nothing. An id that isn't the caller's page answers `TAKE_BACK_NOT_FOUND`.
+
 - Route: `POST /v1/me/handle/take-back/:id/seen` returns `{ data: MyProfile }`.
 - Produces the web helper `takeBackBannerWords(t: NonNullable<MyProfile['usernameTakeBack']>): { title: string; action: string | null }`:
   - `current`: "TipMe needs your username @{handle} back. Choose a new one by the end of {date}." with action "Choose a new username";
@@ -678,6 +764,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 9: The user chooses a new name during the notice
 
 **Files:**
+
 - Modify:
   - `packages/database/src/operations/profiles.ts`: `renameHandle` and `deleteAccount`;
   - `packages/database/src/operations/username-take-backs.ts`;
@@ -690,6 +777,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `packages/database/test/integration/profiles.test.mjs`.
 
 **Interfaces:**
+
 - `renameHandle(db, input: { userId: string; handle: string; now?: Date; sealing?: MailSealing })`:
   - it returns the same shape plus `takeBack?: true`;
   - the `PUT /v1/me/handle` route is unchanged;
@@ -697,6 +785,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - when one exists, it skips the Pro and limit checks, checks availability as usual, sets the handle **without** inserting an alias for the old one, leaves `handle_changes_used` alone, and calls `completeTakeBack(tx, { outcome: 'user_chose', chosenHandle, ... })`.
 
   This is the single path for both the take-back form and an ordinary change during the notice.
+
 - In `renameHandle`, the `reclaimed` branch refuses a name under an open `old` take-back of this page with `HANDLE_TAKEN`. Its alias must not come back as a current handle.
 - `completeTakeBack` with outcome `user_chose`, `assigned`, `old_removed` or `page_deleted` does the following, in this order:
   1. moves the page (update the profile, or delete the alias);
@@ -731,6 +820,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 10: The worker sweep, the deadline and the 14-day never-reached path
 
 **Files:**
+
 - Modify:
   - `packages/database/src/operations/username-take-backs.ts`;
   - `packages/database/src/operations/issues.ts`: `runIssueDetectors` and `autoResolveIssues`;
@@ -749,6 +839,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `scripts/production-compose.test.mjs`, if it pins worker variables.
 
 **Interfaces:**
+
 - Produces `sweepTakeBacks(db: Database, input: { sealing: MailSealing; now: Date; batch?: number }): Promise<{ noticed: number; reminded: number; completed: number; unreached: number; revalidate: string[] }>`. The batch defaults to 100. Each step reads candidate ids without locking, then handles each id in its own transaction. Per id, it locks the profile with `FOR UPDATE SKIP LOCKED` (skipped if busy; the next run gets it), then the take-back row, then re-reads the state.
   1. **Email noticed.** For `approved` rows whose `notice_mail_id` message has `sent_at`, it sets `noticed`, `noticed_at = sent_at`, `noticed_via = 'email'` and `due_at = takeBackDueAt(sent_at, notice_days)`, then audits `username.take_back_noticed` (system).
   2. **Reminder.** For `noticed` rows with `notice_days >= 4`, `reminded_at` null and `due_at - 2 days <= now`, it queues the reminder (dedupe `username_take_back_reminder.{id}`) and sets `reminded_at`.
@@ -763,6 +854,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `username_take_back_overdue`: dedupe `username_take_back_overdue.{id}`, for rows not `done`/`cancelled` an hour after `due_at`.
 
   `autoResolveIssues` closes both once the row is noticed, done or cancelled.
+
 - The outbox event `username.take_back_done` posts the staff alert: "TipMe staff alert: username.take_back_done: Take a username back from a page (by {requestedBy})".
 
 - [ ] **Step 1: Write the failing tests**
@@ -796,6 +888,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 11: One free change within 30 days of an assigned username
 
 **Files:**
+
 - Modify:
   - `packages/database/src/operations/profiles.ts`: `renameHandle` and `toMine`;
   - `packages/contracts/src/profiles.ts`;
@@ -806,6 +899,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `apps/web/test/take-back-banner.test.mjs`.
 
 **Interfaces:**
+
 - `MyProfile` gains `usernameFreeChange?: { until: string; assignedHandle: string; old: string } | null`. It is present while some done take-back of the page has `free_change_until > now` and `free_change_used_at IS NULL`.
 - In `renameHandle`, when there is no open take-back but a free change is available, the change is allowed on Free or Pro and is not counted. It keeps the usual alias for the assigned name (`page_xxxxxx`), sets `free_change_used_at`, and audits `username.free_change_used` (the user's id, `subjectType: 'profile'`).
 - The dashboard notice, which keeps the terms' "tell you ... on your dashboard" for people without email: "Your page has a new username, @{assignedHandle}. Links and QR codes with @{old} no longer work. You can change it once, for free, until {date}." It carries the action "Choose a new username".
@@ -830,6 +924,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 12: Take-backs on the admin screens
 
 **Files:**
+
 - Modify:
   - `apps/web/src/app/ops/usernames/page.tsx`;
   - `apps/web/src/app/ops/pages/page.tsx`;
@@ -847,6 +942,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `tests/e2e/ops-alone.spec.ts`.
 
 **Interfaces:**
+
 - `TakeBackForm({ name, kind, page, facts, onDone })` gathers:
   - the category, as radios with `TAKE_BACK_CATEGORY_WORDS`;
   - the notice: Ordinary starts at 7 and can go up to 30; the others default to 7 and can go down to 1 (and "No notice" after Task 14);
@@ -854,6 +950,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - a read-only preview of the email from `TAKE_BACK_WHY`.
 
   The server facts appear as yes/no lines: "Plan", "Live", "Has a balance", "Withdrawal in flight", "Verified address on file". When `liveCheckoutListed` is true it warns: "This page is listed in LIVE_CHECKOUT_HANDLES. Update it to the new username, or it loses live checkout." It submits through `opsAct`, which shows "Waiting for approval" or "Done alone".
+
 - The take-back state words are "Waiting for approval", "Notice being sent", "Notice sent, due {date}", "Being completed", "Done" and "Cancelled". Pending ones link to `/ops/approvals`.
 - The Pages card, for `can(access, 'usernames.manage')` only, shows any open take-back on the page's names and a "Take back this username" button.
 - Search: for a name that has a `done` take-back, `byText` returns the page with `takenBackOn` set, labelled "username taken back on {date}". The page appears with page-level fields only.
@@ -882,6 +979,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 13: Audit, runbook and decisions
 
 **Files:**
+
 - Modify:
   - `docs/runbooks/admin-roles.md`: `username.take_back` under "Serious actions", plus a "Taking a username back" procedure covering the categories, the 14-day never-reached rule, cancel, `LIVE_CHECKOUT_HANDLES`, and pausing a harmful page with `pages.suspend` while approval waits;
   - `docs/00-DECISIONS.md`: a dated note amending the handle rule;
@@ -892,6 +990,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `packages/database/test/integration/dashboard.test.mjs` or the Overview staff-activity test.
 
 **Interfaces:**
+
 - The decisions note, dated 4 Nov 2026 and quoting the owner's answers of 3 Nov 2026: "Old handles keep leading to the page and stay unclaimable while it exists, unless TipMe takes one back (`docs/superpowers/specs/2026-11-03-username-reservation-design.md`)." It also says that a take-back breaks the old links and printed QR codes for that name only, and that this approves nothing in D-02 to D-07.
 
 - [ ] **Step 1: Write the failing tests**
@@ -903,12 +1002,14 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   ```
 
   The runbook test fails until `username.take_back` is in the runbook.
+
 - [ ] **Step 2: Run** the contracts unit tests and IT on the file. Expected: FAIL.
 - [ ] **Step 3: Implement** the docs.
 - [ ] **Step 4: Run** the same commands. Expected: PASS.
 - [ ] **Step 5: Commit.** `docs: take-back runbook, handle rule amendment and audit list`
 
 **PR 2 ends here.**
+
 - Run the pre-PR checks, then `node scripts/test-integration.mjs`, then `pnpm test:e2e`.
 - Open PR 2: "Staff take a username back from a page".
 - Keep it out of production until the terms' "Your username" section is on `main`.
@@ -920,6 +1021,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 ### Task 14: The immediate path for impersonation, trademark and legal reasons
 
 **Files:**
+
 - Modify:
   - `packages/database/src/operations/serious-actions-registered.ts`: `validate` allows 0 for the non-ordinary categories;
   - `packages/database/src/operations/username-take-backs.ts`: `startTakeBack`;
@@ -929,6 +1031,7 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
   - `tests/e2e/ops-usernames.spec.ts`.
 
 **Interfaces:**
+
 - When `noticeDays === 0`, `startTakeBack` inserts the row and immediately calls `completeTakeBack` with outcome `assigned` (`current`) or `old_removed` (`old`) and `withoutNotice: true`, all in the approving transaction.
   - The done email uses variant `without_notice` for `current` and `old` for `old`.
   - It sends no notice email, and the row never shows a banner.
@@ -953,31 +1056,31 @@ The free change after an assignment stays in PR 2, not PR 3. Without it, PR 2 wo
 
 ## Self-review against the spec
 
-| Spec section | Where |
-|---|---|
-| 1 Intent, goals | Tasks 1 to 4 (goals 1 and 2); Tasks 7 to 11 (goal 3); Task 14 (goal 4). |
-| 1 Anti-goals | Money unchanged: Task 7 test. No silent loss: Tasks 9 and 10 tests. Second person: Task 7. User never sees staff: Tasks 6 to 8 (fixed why only). Rollback: Task 1 trigger. |
-| 2 Code facts | Lines named in Files and Interfaces; checked on `dev` at `c013899`. |
-| 3.1 Key | Task 1. |
-| 3.2 Reservations | Task 1. |
-| 3.3 Take-backs | Task 5. `message_to_user` is dropped and `banner_seen_at`/`noticed_via` added (section 12). |
-| 3.4 Blocking | Tasks 1 and 2. Router unchanged. A hold can be reserved (Task 3 test). |
-| 4 Permission, routes | Tasks 3 and 7. Menu: Task 4. Pages card: Task 12. |
-| 5.1, 5.2 | Task 3 (API), Task 4 (screen). |
-| 5.3, 5.4 | Task 7. |
-| 5.5 | Tasks 8 and 10. `why` is fixed wording only (12.3). |
-| 5.6 | Task 9. |
-| 5.7 | Task 10 (deadline); Task 11 (free change, 12.4); `page_` plus 6 (12.5). |
-| 5.8 | Task 10. |
-| 5.9 | Task 7 (cancel); Task 10 (races). |
-| 5.10 | Tasks 7 and 10 (1 to 6 days); Task 14 (0). |
-| 6 Emails | Task 6; the unreached variant is added for 12.2. |
-| 7 Screens | Tasks 4 and 12. |
-| 8 Edge cases | Tasks 7, 9 and 10 tests (deletion, suspension, release-check, rename while waiting, worker down, no address). |
-| 9 Audit | Tasks 3, 7, 8, 9, 11 and 13. |
-| 10 Testing | Each file named there is in a task. |
-| 11 Rollout | The PR boundaries above. Migrations are additive, and `issues_kind` uses `NOT VALID`/`VALIDATE`. |
-| 12 Owner's answers | 1: Task 7. 2: Tasks 8 and 10 (14 days). 3: Tasks 5 and 6. 4: Task 11. 5: Task 10. 6: `pro` is already built-in on `dev` (Task 1 test). |
-| 13 Disagreements | The terms are on `dev` now, and PR 2's gate is `main`. Decision amendment: Task 13. Free rule waiver: Task 9. No email: Task 8. |
+| Spec section         | Where                                                                                                                                                                      |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Intent, goals      | Tasks 1 to 4 (goals 1 and 2); Tasks 7 to 11 (goal 3); Task 14 (goal 4).                                                                                                    |
+| 1 Anti-goals         | Money unchanged: Task 7 test. No silent loss: Tasks 9 and 10 tests. Second person: Task 7. User never sees staff: Tasks 6 to 8 (fixed why only). Rollback: Task 1 trigger. |
+| 2 Code facts         | Lines named in Files and Interfaces; checked on `dev` at `c013899`.                                                                                                        |
+| 3.1 Key              | Task 1.                                                                                                                                                                    |
+| 3.2 Reservations     | Task 1.                                                                                                                                                                    |
+| 3.3 Take-backs       | Task 5. `message_to_user` is dropped and `banner_seen_at`/`noticed_via` added (section 12).                                                                                |
+| 3.4 Blocking         | Tasks 1 and 2. Router unchanged. A hold can be reserved (Task 3 test).                                                                                                     |
+| 4 Permission, routes | Tasks 3 and 7. Menu: Task 4. Pages card: Task 12.                                                                                                                          |
+| 5.1, 5.2             | Task 3 (API), Task 4 (screen).                                                                                                                                             |
+| 5.3, 5.4             | Task 7.                                                                                                                                                                    |
+| 5.5                  | Tasks 8 and 10. `why` is fixed wording only (12.3).                                                                                                                        |
+| 5.6                  | Task 9.                                                                                                                                                                    |
+| 5.7                  | Task 10 (deadline); Task 11 (free change, 12.4); `page_` plus 6 (12.5).                                                                                                    |
+| 5.8                  | Task 10.                                                                                                                                                                   |
+| 5.9                  | Task 7 (cancel); Task 10 (races).                                                                                                                                          |
+| 5.10                 | Tasks 7 and 10 (1 to 6 days); Task 14 (0).                                                                                                                                 |
+| 6 Emails             | Task 6; the unreached variant is added for 12.2.                                                                                                                           |
+| 7 Screens            | Tasks 4 and 12.                                                                                                                                                            |
+| 8 Edge cases         | Tasks 7, 9 and 10 tests (deletion, suspension, release-check, rename while waiting, worker down, no address).                                                              |
+| 9 Audit              | Tasks 3, 7, 8, 9, 11 and 13.                                                                                                                                               |
+| 10 Testing           | Each file named there is in a task.                                                                                                                                        |
+| 11 Rollout           | The PR boundaries above. Migrations are additive, and `issues_kind` uses `NOT VALID`/`VALIDATE`.                                                                           |
+| 12 Owner's answers   | 1: Task 7. 2: Tasks 8 and 10 (14 days). 3: Tasks 5 and 6. 4: Task 11. 5: Task 10. 6: `pro` is already built-in on `dev` (Task 1 test).                                     |
+| 13 Disagreements     | The terms are on `dev` now, and PR 2's gate is `main`. Decision amendment: Task 13. Free rule waiver: Task 9. No email: Task 8.                                            |
 
 Type names are consistent across tasks: `TakeBackKind`, `TakeBackCategory`, `TakeBackState`, `TakeBackOutcome`, `TakeBackNoticedVia`, `OpsTakeBack`, `OpsReservation`, `OpsUsernameCheck`, `completeTakeBack`, `startTakeBack`, `sweepTakeBacks`, `markTakeBackSeen`, and `MyProfile.usernameTakeBack` / `usernameFreeChange`.

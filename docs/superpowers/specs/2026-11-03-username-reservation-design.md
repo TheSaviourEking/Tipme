@@ -80,40 +80,40 @@ A new domain function, `reservationKey(raw)`, in `packages/domain/src/handles.ts
 
 Separate from the built-in list, which stays in code because the router and the route test depend on it.
 
-| Column | Meaning |
-|---|---|
-| `id` uuid PK | |
-| `handle_lower` text not null | the canonical key |
-| `source` text not null | `staff` (reserved directly) or `take_back` (the end of a take-back) |
-| `take_back_id` uuid null | the take-back it came from, when `source = take_back` |
-| `reason` text not null | staff's written reason, checked like other reasons (`checkedReason`) |
-| `reserved_by` uuid null, FK users | null only when the system completed a take-back; then `take_back_id` names who asked and who approved |
-| `reserved_at` timestamptz not null | |
-| `released_at`, `released_by`, `release_reason` | null while active |
+| Column                                         | Meaning                                                                                               |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `id` uuid PK                                   |                                                                                                       |
+| `handle_lower` text not null                   | the canonical key                                                                                     |
+| `source` text not null                         | `staff` (reserved directly) or `take_back` (the end of a take-back)                                   |
+| `take_back_id` uuid null                       | the take-back it came from, when `source = take_back`                                                 |
+| `reason` text not null                         | staff's written reason, checked like other reasons (`checkedReason`)                                  |
+| `reserved_by` uuid null, FK users              | null only when the system completed a take-back; then `take_back_id` names who asked and who approved |
+| `reserved_at` timestamptz not null             |                                                                                                       |
+| `released_at`, `released_by`, `release_reason` | null while active                                                                                     |
 
 A partial unique index on `handle_lower WHERE released_at IS NULL` means one active reservation per name; released rows stay as history, so "who reserved it, when and why" is answerable for past reservations too (the audit log has the same, and is the record of truth).
 
 ### 3.3 `handle_take_backs`
 
-| Column | Meaning |
-|---|---|
-| `id` uuid PK | |
-| `approval_request_id` uuid null, FK approval_requests | null when it ran alone |
-| `profile_id` uuid not null, FK profiles | the page losing the name |
-| `handle_lower` text not null | the name being taken |
-| `kind` text | `current` (the page's username) or `old` (one of its old usernames that still redirects) |
-| `category` text | `ordinary`, `impersonation`, `trademark`, `legal` |
-| `notice_days` int | 7 to 30 for `ordinary`; 0 to 7 for the others; 0 means at once |
-| `reason` text | staff's internal reason, never shown to the user |
-| `message_to_user` text null, at most 300 characters | what the email says about why, written by the requester and shown verbatim to the approver (open question 3) |
-| `state` text | see below |
-| `requested_by`, `approved_by` uuid | `approved_by` null when it ran alone |
-| `approved_at`, `noticed_at`, `due_at`, `reminded_at`, `done_at`, `cancelled_at` | |
-| `notice_mail_id` uuid null, FK mail_messages | the notice email, to read its `sent_at` |
-| `outcome` text null | `user_chose`, `assigned`, `page_deleted`, `old_removed` |
-| `new_handle` text null | the username the page ended with |
-| `cancelled_by` uuid null, `cancel_reason` text null | |
-| `free_change_until` timestamptz null, `free_change_used_at` null | see 5.7 |
+| Column                                                                          | Meaning                                                                                                      |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `id` uuid PK                                                                    |                                                                                                              |
+| `approval_request_id` uuid null, FK approval_requests                           | null when it ran alone                                                                                       |
+| `profile_id` uuid not null, FK profiles                                         | the page losing the name                                                                                     |
+| `handle_lower` text not null                                                    | the name being taken                                                                                         |
+| `kind` text                                                                     | `current` (the page's username) or `old` (one of its old usernames that still redirects)                     |
+| `category` text                                                                 | `ordinary`, `impersonation`, `trademark`, `legal`                                                            |
+| `notice_days` int                                                               | 7 to 30 for `ordinary`; 0 to 7 for the others; 0 means at once                                               |
+| `reason` text                                                                   | staff's internal reason, never shown to the user                                                             |
+| `message_to_user` text null, at most 300 characters                             | what the email says about why, written by the requester and shown verbatim to the approver (open question 3) |
+| `state` text                                                                    | see below                                                                                                    |
+| `requested_by`, `approved_by` uuid                                              | `approved_by` null when it ran alone                                                                         |
+| `approved_at`, `noticed_at`, `due_at`, `reminded_at`, `done_at`, `cancelled_at` |                                                                                                              |
+| `notice_mail_id` uuid null, FK mail_messages                                    | the notice email, to read its `sent_at`                                                                      |
+| `outcome` text null                                                             | `user_chose`, `assigned`, `page_deleted`, `old_removed`                                                      |
+| `new_handle` text null                                                          | the username the page ended with                                                                             |
+| `cancelled_by` uuid null, `cancel_reason` text null                             |                                                                                                              |
+| `free_change_until` timestamptz null, `free_change_used_at` null                | see 5.7                                                                                                      |
 
 A partial unique index on `handle_lower WHERE state IN ('approved','noticed','due')`: one open take-back per name.
 
@@ -149,14 +149,14 @@ The domain package stays free of the database: `isReservedHandle` keeps meaning 
 
 **Routes** (new `OpsUsernamesController`, rate limit `ops_request`):
 
-| Route | Does |
-|---|---|
-| `GET /v1/ops/usernames?q=&state=` | The list (section 7) |
-| `GET /v1/ops/usernames/check/:name` | What the name is now: free, built-in, reserved (by whom, when, why), a page's username or old username (page id, handle, display name, plan, live state: the public-level fields `OpsPage` already returns), in a deletion hold until a date, or with an open take-back |
-| `POST /v1/ops/usernames` `{ name, reason }` | Reserve, instant |
-| `POST /v1/ops/usernames/:name/release` `{ reason }` | Release, instant |
-| `POST /v1/ops/usernames/:name/take-back` `{ profileId, category, noticeDays, reason, messageToUser }` | Asks through `requestSeriousAction('username.take_back')`; answers pending or, alone, the started take-back |
-| `POST /v1/ops/usernames/take-backs/:id/cancel` `{ reason }` | Cancel, instant |
+| Route                                                                                                 | Does                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/ops/usernames?q=&state=`                                                                     | The list (section 7)                                                                                                                                                                                                                                                    |
+| `GET /v1/ops/usernames/check/:name`                                                                   | What the name is now: free, built-in, reserved (by whom, when, why), a page's username or old username (page id, handle, display name, plan, live state: the public-level fields `OpsPage` already returns), in a deletion hold until a date, or with an open take-back |
+| `POST /v1/ops/usernames` `{ name, reason }`                                                           | Reserve, instant                                                                                                                                                                                                                                                        |
+| `POST /v1/ops/usernames/:name/release` `{ reason }`                                                   | Release, instant                                                                                                                                                                                                                                                        |
+| `POST /v1/ops/usernames/:name/take-back` `{ profileId, category, noticeDays, reason, messageToUser }` | Asks through `requestSeriousAction('username.take_back')`; answers pending or, alone, the started take-back                                                                                                                                                             |
+| `POST /v1/ops/usernames/take-backs/:id/cancel` `{ reason }`                                           | Cancel, instant                                                                                                                                                                                                                                                         |
 
 Approve and reject use the existing approvals routes.
 
