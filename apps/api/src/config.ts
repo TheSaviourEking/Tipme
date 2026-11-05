@@ -100,6 +100,14 @@ export const apiConfigSchema = z
       .min(1)
       .default(30),
     RATE_LIMIT_BANK_READ_PER_MIN: z.coerce.number().int().min(1).default(30),
+    // How long every API copy reuses the provider's balance and fee for showing a withdrawal
+    // quote. Its rate limit is shared with payouts. A withdrawal itself always asks fresh; 0 is off.
+    PARTNER_QUOTE_CACHE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(300)
+      .default(30),
     // OnlyFans and Fansly links (Pro only, the owner's decision of 5 Nov 2026). `off` hides them
     // from every public page and refuses new ones, deleting nothing: the lever for the payment
     // partner's answer (docs/runbooks/adult-platform-links.md). Default on.

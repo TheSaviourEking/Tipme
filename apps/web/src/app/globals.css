@@ -2392,6 +2392,7 @@ body:has(.profile-page) .brand__mark {
 }
 
 .link-chip {
+  min-width: 44px;
   min-height: 44px;
   padding: 0 0.75rem;
   border: 1px solid var(--border-material);

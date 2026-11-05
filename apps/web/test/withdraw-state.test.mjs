@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { withdrawableNow, withdrawState } from '../src/lib/withdraw-state.ts';
+import {
+  withdrawableNow,
+  withdrawRefusal,
+  withdrawState,
+} from '../src/lib/withdraw-state.ts';
 
 const ready = (over = {}) => ({
   state: 'ready',
@@ -119,6 +123,45 @@ test('withdrawals switched off for everyone say so plainly, with no form and no 
     'Withdrawals are paused for now. Your balance is safe.',
   );
   assert.doesNotMatch(JSON.stringify(view.notice), /bachs/i);
+});
+
+// The amount shown can be up to a few seconds old (the partner's figures are cached for the
+// quote), while the withdrawal itself is checked fresh. A refusal over the amount must reload it.
+test('a refused amount keeps its message and reloads the figures', () => {
+  assert.deepEqual(withdrawRefusal('INSUFFICIENT_BALANCE'), {
+    message: 'That is more than your available balance.',
+    reload: true,
+  });
+  assert.deepEqual(withdrawRefusal('WITHDRAWAL_TOO_SMALL'), {
+    message: 'The smallest withdrawal is ₦2,000.',
+    reload: true,
+  });
+});
+
+test('a refusal the page itself explains reloads with no message', () => {
+  for (const code of [
+    'WITHDRAWALS_PAUSED',
+    'WITHDRAWALS_SWITCHED_OFF',
+    'PAYOUT_SETUP_NEEDED',
+    'PAYOUT_DESTINATION_NEEDED',
+    'PAYOUT_PROVIDER_UNAVAILABLE',
+    'WITHDRAWAL_UNAVAILABLE',
+  ])
+    assert.deepEqual(withdrawRefusal(code), { message: null, reload: true });
+});
+
+test('an answer that may follow a recorded request only says so', () => {
+  assert.deepEqual(withdrawRefusal('IDEMPOTENCY_CONFLICT'), {
+    message:
+      'This withdrawal may already be on its way. Check your dashboard before asking again.',
+    reload: false,
+  });
+  for (const code of ['NETWORK', undefined])
+    assert.deepEqual(withdrawRefusal(code), {
+      message:
+        'We couldn’t confirm your withdrawal. Check your dashboard before trying again.',
+      reload: false,
+    });
 });
 
 const now = (quote, available = '1000000', withdrawalsAvailable = true) =>
