@@ -159,3 +159,57 @@ test('the settings email section lists security and account mail as always sent'
       .getByLabel('Send me guides and suggestions for getting started'),
   ).not.toBeChecked();
 });
+
+test('Settings shows "Hide who tipped and how much in pop-ups" off and "Sound for new tips" on, and saving keeps them after a reload', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#popups');
+  const card = page.locator('#popups');
+  await expect(
+    card.getByRole('heading', { name: 'Pop-ups and sound' }),
+  ).toBeVisible();
+  const hide = card.getByLabel('Hide who tipped and how much in pop-ups');
+  const sound = card.getByLabel('Sound for new tips');
+  await expect(hide).not.toBeChecked();
+  await expect(sound).toBeChecked();
+  await expect(
+    card.getByText(
+      'For shared screens and shop counters. Your tips list still shows the details.',
+    ),
+  ).toBeVisible();
+  await expect(
+    card.getByText(
+      'Plays once for a new paid tip while TipMe is in a background tab.',
+    ),
+  ).toBeVisible();
+  await expectAccessible(page);
+  await hide.check();
+  await sound.uncheck();
+  await card.getByRole('button', { name: 'Save pop-ups and sound' }).click();
+  await expect(card.getByRole('status')).toHaveText('Saved.');
+  await page.reload();
+  const again = page.locator('#popups');
+  await expect(
+    again.getByLabel('Hide who tipped and how much in pop-ups'),
+  ).toBeChecked();
+  await expect(again.getByLabel('Sound for new tips')).not.toBeChecked();
+  // The emails card saving later keeps these two as they are.
+  await page
+    .locator('#emails')
+    .getByLabel('Tell me about milestones and rewards')
+    .uncheck();
+  await page
+    .locator('#emails')
+    .getByRole('button', { name: 'Save notifications' })
+    .click();
+  await expect(page.locator('#emails').getByRole('status')).toHaveText(
+    'Saved.',
+  );
+  await page.reload();
+  await expect(
+    page
+      .locator('#popups')
+      .getByLabel('Hide who tipped and how much in pop-ups'),
+  ).toBeChecked();
+});

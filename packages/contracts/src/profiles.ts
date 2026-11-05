@@ -192,6 +192,20 @@ export const notificationPrefsSchema = z
     milestones: z.boolean(),
     /** Guides and suggestions (engagement mail without a switch of its own). */
     guideEmails: z.boolean(),
+    /**
+     * "Hide who tipped and how much in pop-ups". Off by default. Optional, so an older client's PUT
+     * still validates and leaves it as it was.
+     */
+    hideTipDetailsInPopups: z.boolean().optional(),
+    /**
+     * "Sound for new tips". On by default. A boolean for now; a choice of sounds was shown to the
+     * owner but is not approved, and would arrive as a separate optional field.
+     */
+    tipSound: z.boolean().optional(),
   })
   .strict();
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
+/** What GET and PUT return: always complete. */
+export type NotificationPrefsView = Required<NotificationPrefs>;
+/** A window event (same tab): the notification preferences were just saved. */
+export const NOTIFICATION_PREFS_CHANGED = 'tipme:notification-prefs-changed';

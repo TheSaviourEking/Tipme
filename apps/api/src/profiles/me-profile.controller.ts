@@ -24,6 +24,7 @@ import {
   type ApiDataResponse,
   type MyProfile,
   type NotificationPrefs,
+  type NotificationPrefsView,
   type ProfilePatch,
   type TipAmountsRequest,
 } from '@tipme/contracts';
@@ -150,7 +151,7 @@ export class MeProfileController {
   @Get('notification-preferences')
   async preferences(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<NotificationPrefs>> {
+  ): Promise<ApiDataResponse<NotificationPrefsView>> {
     return { data: await getNotificationPrefs(this.database.db, auth.userId) };
   }
 
@@ -159,7 +160,7 @@ export class MeProfileController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(notificationPrefsSchema))
     body: NotificationPrefs,
-  ): Promise<ApiDataResponse<NotificationPrefs>> {
+  ): Promise<ApiDataResponse<NotificationPrefsView>> {
     return {
       data: await setNotificationPrefs(this.database.db, auth.userId, body),
     };

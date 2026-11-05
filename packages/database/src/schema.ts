@@ -531,6 +531,12 @@ export const profiles = pgTable(
       .notNull()
       .default(true),
     notifyMilestones: boolean('notify_milestones').notNull().default(true),
+    // Live updates (owner's ruling, 3 Nov 2026): "Hide who tipped and how much in pop-ups" (shared
+    // screens, shop counters), and "Sound for new tips" in a background tab. Per account.
+    popupHideTipDetails: boolean('popup_hide_tip_details')
+      .notNull()
+      .default(false),
+    tipSound: boolean('tip_sound').notNull().default(true),
     // Free or Pro (PR-012). Staff set it; there is no billing while money is pretend.
     plan: text('plan').notNull().default('free'),
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.

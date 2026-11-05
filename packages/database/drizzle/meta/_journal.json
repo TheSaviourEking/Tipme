@@ -498,6 +498,13 @@
       "when": 1793579044023,
       "tag": "0070_roles_updated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793846011500,
+      "tag": "0072_live_popup_prefs",
+      "breakpoints": true
     }
   ]
 }
