@@ -35,6 +35,24 @@ test('someone invited can open the decline confirmation, cancel it, and decline'
   await expect(enrolStep(page)).toHaveCount(0);
 });
 
+test('the admin sign-in card sits in the middle of the page, under the staff banner', async ({
+  page,
+}, testInfo) => {
+  const { email } = identity(testInfo);
+  await grantOwner(email);
+  await signInWithEmail(page, email, '/sign-in?next=/ops');
+  await page.waitForURL(/\/ops$/);
+  await expect(enrolStep(page)).toBeVisible();
+  const card = await page.locator('.ops-step').boundingBox();
+  const banner = await page.locator('.ops-banner').boundingBox();
+  if (!card || !banner) throw new Error('the card or the banner is missing');
+  // Narrower than the banner, and centred under it (within 2px).
+  expect(card.width).toBeLessThan(banner.width);
+  expect(
+    Math.abs(card.x + card.width / 2 - (banner.x + banner.width / 2)),
+  ).toBeLessThanOrEqual(2);
+});
+
 test('a decline the server refuses says so plainly', async ({
   page,
 }, testInfo) => {
