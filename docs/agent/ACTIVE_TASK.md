@@ -1,3 +1,10 @@
+# Current task — live updates PR 2: plan, withdrawals and banners (5 November 2026)
+
+- Branch/worktree: `feat/live-updates-2` / `.worktrees/live-updates-2`, from `origin/dev` at `931a545`, test lane 5. Committed, not pushed. Plan `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 13-15. No migration.
+- Built: worker mappings (payout paid/failed, freeze opened/released, the switch to all, payout start, payout setup sweep, weekly reports); API publish points (profile, withdrawals, payments, account); `GET /v1/me/withdrawal-quote?scope=local` so a live re-read never calls the payment partner; the web side (shell, Withdraw, Home, Settings dirty-form rule, QR studio, reports, bell).
+- Evidence and rulings: `.superpowers/program/c2-report.md` (main checkout).
+- Next: review, then PR 3 (Task 16, staff stream).
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.
