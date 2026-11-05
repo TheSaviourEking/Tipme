@@ -23,7 +23,7 @@ export default function NotFound() {
     >
       <p>
         {handle
-          ? 'Check the spelling, or ask them for their link. They may have changed their handle.'
+          ? 'Check the link, or ask them for their TipMe link.'
           : 'Check the link, or ask the person for their TipMe link or QR code.'}
       </p>
     </QuietScreen>

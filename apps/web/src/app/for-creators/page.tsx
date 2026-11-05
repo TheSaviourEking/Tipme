@@ -16,7 +16,7 @@ const MIN_WITHDRAWAL = formatNaira(Number(FEE_POLICY_V1.minWithdrawalMinor));
 /** Individuals, built to the PageCreators board. The page is server HTML; only the demo is a client island. */
 export default function ForCreators() {
   return (
-    <main id="main" tabIndex={-1}>
+    <main id="main" tabIndex={-1} className="marketing-page">
       <Container>
         <section className="creators-hero" aria-labelledby="creators-title">
           <div>

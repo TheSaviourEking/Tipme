@@ -1,13 +1,13 @@
 'use client';
 import Image from 'next/image';
 import { useState } from 'react';
-import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
+import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { ActionLink, Lever, ProBadge, Surface } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
+import { TIPME_SHARE_PERCENT } from '@/lib/fee-share';
 
 type Plan = 'free' | 'pro';
 
-const TIPME_SHARE_PERCENT = Number(FEE_POLICY_V1.tipmeShareBps) / 100;
 // Ada's handle on Free, then the three changes Pro allows. The sample never touches a real page.
 const HANDLES = ['ada', 'adacuts', 'adaedits', 'adaokafor'] as const;
 const MAX_CHANGES = HANDLES.length - 1;
@@ -31,23 +31,14 @@ const HEARTS = [
 /** Ada's sample page beside what each plan changes, built to the PagePro board. */
 export function PlanPreview() {
   const [plan, setPlan] = useState<Plan>('free');
-  const [motion, setMotion] = useState<'once' | 'loop'>('once');
   const [changes, setChanges] = useState(0);
   const [own, setOwn] = useState(false);
-  // A new key replays the hearts: the cover starts again when a choice changes how it plays.
-  const [coverKey, setCoverKey] = useState(0);
 
   const pro = plan === 'pro';
-  const playing = pro ? motion : 'once';
   const used = pro ? changes : 0;
   const handle = HANDLES[used];
   const amounts = pro && own ? OWN_AMOUNTS : STANDARD_AMOUNTS;
   const handlesLeft = pro && used < MAX_CHANGES;
-
-  const choosePlan = (next: Plan) => {
-    setPlan(next);
-    setCoverKey((key) => key + 1);
-  };
 
   return (
     <div className="pro-wrap">
@@ -62,12 +53,13 @@ export function PlanPreview() {
             { value: 'pro', label: 'Pro' },
           ]}
           value={plan}
-          onChange={choosePlan}
+          onChange={setPlan}
         />
       </section>
       <section className="pro-body">
         <Surface material="instrument" className="pro-sample">
-          <div className="pro-cover" key={coverKey} data-motion={playing}>
+          {/* A still picture of a cover. Animated covers are not built yet, so nothing here moves or is promised. */}
+          <div className="pro-cover" aria-hidden="true">
             {HEARTS.map((heart) => (
               <span
                 key={heart.x}
@@ -126,40 +118,6 @@ export function PlanPreview() {
               'Free'
             )}
           </p>
-          <div className="pro-row">
-            <div>
-              <strong>Animated cover</strong>
-              <br />
-              {pro
-                ? 'More designs, and you choose how they play.'
-                : '3 designs that play once.'}
-            </div>
-            <div className="pro-row__controls">
-              <button
-                type="button"
-                className="pro-mini"
-                aria-pressed={playing === 'once'}
-                onClick={() => {
-                  setMotion('once');
-                  setCoverKey((key) => key + 1);
-                }}
-              >
-                Play once
-              </button>
-              {/* A picture of the Pro option: on Free it is shown, and cannot be used. */}
-              <button
-                type="button"
-                className="pro-mini"
-                aria-pressed={playing === 'loop'}
-                aria-disabled={!pro}
-                onClick={() => {
-                  if (pro) setMotion('loop');
-                }}
-              >
-                Slow loop
-              </button>
-            </div>
-          </div>
           <div className="pro-row">
             <div>
               <strong>Handle</strong>

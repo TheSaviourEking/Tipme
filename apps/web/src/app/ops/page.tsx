@@ -11,7 +11,7 @@ import { Funnel, Tile } from '@/components/ops/charts';
 import { StaffActivity } from '@/components/ops/staff-activity';
 import { WaitingRequests } from '@/components/ops/waiting-requests';
 import { WithdrawalsSwitch } from '@/components/ops/withdrawals-switch';
-import { change, naira } from '@/lib/money';
+import { change, nairaCode as naira } from '@/lib/money';
 import { liveSwitchView } from '@/lib/live-switch-view';
 import { reserveView } from '@/lib/payment-reserve';
 import { can, useOpsAccess } from '@/lib/ops-client';

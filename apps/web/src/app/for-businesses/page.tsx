@@ -11,7 +11,7 @@ export const metadata = marketingMetadata(
 /** Businesses, built to the PageBusinesses board: interest only, no pricing and no date. */
 export default function ForBusinesses() {
   return (
-    <main id="main" tabIndex={-1}>
+    <main id="main" tabIndex={-1} className="marketing-page">
       <Container>
         <section className="business-hero" aria-labelledby="businesses-title">
           <div>
