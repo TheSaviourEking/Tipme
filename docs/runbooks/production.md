@@ -169,6 +169,20 @@ The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xy
 - **Check after step 5:** open `/@<a real handle>` (the line sits under the Tip button), a receipt and `/dashboard`; each shows it with a `mailto:support@usetipme.xyz` link. A brief API outage makes the web treat the copy as closed for a few seconds, and the line disappears with it.
 - Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.
 
+### Before deploying the reserved example handles
+
+TipMe's own pages show six example handles, and they are reserved (`RESERVED_HANDLES`). If a real person already owns one, Home advertises that stranger's page. Run this on production before the deploy:
+
+```sql
+SELECT 'profile' AS kind, handle_lower, page_state FROM profiles
+  WHERE handle_lower IN ('ada','adacuts','adaedits','adaokafor','tobi','zainab')
+UNION ALL
+SELECT 'alias', handle_lower, NULL FROM handle_aliases
+  WHERE handle_lower IN ('ada','adacuts','adaedits','adaokafor','tobi','zainab');
+```
+
+**Stop rule:** if any row comes back, do not deploy, and tell the owner. The owner decides: drop that handle from the examples and the reserved list, or contact the person. No row means it is safe. (An owner who has one of these handles keeps the page and can rename back to it; only new claims are refused.)
+
 ### Never set the pretend-delivery switch in production
 
 `NEXT_PUBLIC_PRETEND_DELIVERY` belongs to test copies only (the e2e stack, `review:screens`, local staging). In a production build it opens `/dev/inbox` (every sign-in code, readable by anyone) and `/dev/crash`. Production web must not set it; check the Vercel production environment before launch.

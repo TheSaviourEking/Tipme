@@ -142,6 +142,31 @@ test('switching back to an old handle counts', async () => {
   assert.equal((await mine(cookie)).handle, 'back_b');
 });
 
+test('an owner who renamed away from a reserved name can rename back to it', async () => {
+  const cookie = await proPage('+2348031270091', 'was_zainab');
+  // A page that predates the reservation (a demo page, or one claimed before it): set directly.
+  await database.db.execute(
+    "update profiles set handle = 'zainab', handle_lower = 'zainab' where handle_lower = 'was_zainab'",
+  );
+  assert.equal((await rename(cookie, 'zainab_now')).status, 200);
+  // Someone else still cannot take the reserved name, but its owner can come back to it.
+  const other = await livePage('+2348031270092', 'not_zainab');
+  assert.equal(
+    await code(await rename(other, 'zainab')),
+    'HANDLE_CHANGE_PRO_REQUIRED',
+  );
+  assert.equal((await rename(cookie, 'zainab')).status, 200);
+  assert.equal((await mine(cookie)).handle, 'zainab');
+});
+
+test('a Pro page cannot take a reserved name that is not its own old handle', async () => {
+  const cookie = await proPage('+2348031270093', 'wants_reserved');
+  const refused = await rename(cookie, 'tobi');
+  assert.equal(refused.status, 409);
+  assert.equal(await code(refused), 'HANDLE_TAKEN');
+  assert.equal((await mine(cookie)).handle, 'wants_reserved');
+});
+
 test('a change of case alone changes and counts nothing', async () => {
   const pro = await proPage('+2348031270006', 'case_pro');
   const cased = await rename(pro, 'Case_PRO');
