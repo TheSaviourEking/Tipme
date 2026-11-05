@@ -307,6 +307,20 @@ test('a pretend tip produces tips.changed and then notifications.changed on the 
   tobi.close();
 });
 
+test('GET /v1/me/profile says live updates are on', async () => {
+  const { cookie } = await signIn(stack.api, nextPhone());
+  await fetch(`${stack.api}/v1/me/page`, {
+    method: 'POST',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ handle: `lv_${Date.now().toString(36)}` }),
+  });
+  const profile = await fetch(`${stack.api}/v1/me/profile`, {
+    headers: { cookie },
+  });
+  assert.equal(profile.status, 200);
+  assert.equal((await profile.json()).data.liveUpdates, true);
+});
+
 test('draining refuses new streams with 503 and closes open ones with a retry line', async () => {
   const { cookie } = await signIn(stack.api, nextPhone());
   const stream = await events(cookie);
@@ -322,7 +336,7 @@ test('draining refuses new streams with 503 and closes open ones with a retry li
   await refused.ended;
 });
 
-test('flag off and the per-address limit (their own stack)', async (t) => {
+test('flag off: 204 before any guard, limit or read (its own stack)', async (t) => {
   const off = await startStack({
     databaseUrl: database.url,
     apiEnv: { WEB_ORIGIN: WEB, LIVE_UPDATES_ENABLED: 'false' },
@@ -340,29 +354,60 @@ test('flag off and the per-address limit (their own stack)', async (t) => {
       assert.equal(stream.status, 204);
       await stream.ended;
       assert.equal(stream.body, '');
+      // The page is told, so it never opens a stream at all.
+      await fetch(`${off.api}/v1/me/page`, {
+        method: 'POST',
+        headers: browserHeaders(cookie),
+        body: JSON.stringify({ handle: `lo_${Date.now().toString(36)}` }),
+      });
+      const profile = await fetch(`${off.api}/v1/me/profile`, {
+        headers: { cookie },
+      });
+      assert.equal(profile.status, 200);
+      assert.equal((await profile.json()).data.liveUpdates, false);
     },
   );
 
   await t.test(
-    'the 61st connect from one IP in a minute gets 429',
+    'nothing counts against the address limit while it is off',
     async () => {
-      // A fixed one-minute window: start clear of its end so all 61 land in one window.
-      const intoMinute = Date.now() % 60_000;
-      if (intoMinute > 50_000) await sleep(60_000 - intoMinute + 100);
       const statuses = [];
-      for (let i = 0; i < 61; i += 1) {
+      for (let i = 0; i < 70; i += 1) {
         const stream = await openEventStream(`${off.api}/v1/me/events`, {
           origin: WEB,
         });
         statuses.push(stream.status);
         await stream.ended;
       }
-      // The 204 test above counted once against this address.
-      assert.equal(statuses.at(-1), 429);
-      assert.ok(
-        statuses.slice(0, 59).every((s) => s === 401),
-        JSON.stringify(statuses),
+      assert.deepEqual(
+        [...new Set(statuses)],
+        [204],
+        'not 401, not 429: the flag comes first',
       );
     },
   );
+});
+
+test('the 61st connect from one IP in a minute gets 429 (its own stack, the default limit)', async (t) => {
+  const limited = await startStack({
+    databaseUrl: database.url,
+    apiEnv: { WEB_ORIGIN: WEB, LIVE_UPDATES_ENABLED: 'true' },
+  });
+  t.after(() => limited.stop());
+  // A fixed one-minute window: start clear of its end so all 61 land in one window.
+  const intoMinute = Date.now() % 60_000;
+  if (intoMinute > 50_000) await sleep(60_000 - intoMinute + 100);
+  const statuses = [];
+  for (let i = 0; i < 61; i += 1) {
+    const stream = await openEventStream(`${limited.api}/v1/me/events`, {
+      origin: WEB,
+    });
+    statuses.push(stream.status);
+    await stream.ended;
+  }
+  assert.ok(
+    statuses.slice(0, 60).every((s) => s === 401),
+    JSON.stringify(statuses),
+  );
+  assert.equal(statuses.at(-1), 429);
 });

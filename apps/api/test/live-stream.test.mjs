@@ -12,6 +12,7 @@ function fakes({ destroyed = false, ended = false } = {}) {
   const res = Object.assign(new EventEmitter(), {
     destroyed,
     writableEnded: ended,
+    locals: {},
     headers: {},
     statusCode: 0,
     status(code) {

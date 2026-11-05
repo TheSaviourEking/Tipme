@@ -77,6 +77,12 @@ export interface HandleChanges {
 export interface MyProfile {
   handle: string;
   /**
+   * Whether this API copy serves live updates (LIVE_UPDATES_ENABLED). Only GET /v1/me/profile sets
+   * it; the dashboard opens no stream unless it is true, so with the flag off a page behaves as it
+   * did before the feature. Optional: an older API has no live updates.
+   */
+  liveUpdates?: boolean;
+  /**
    * Old handles that still lead to this page (PR-011), oldest first. Optional until the release
    * after PR-011: the web app deploys before the API, so it may talk to an API without it.
    */

@@ -67,7 +67,15 @@ export function openStream(o: {
   /** 20 s. */
   heartbeatMs?: number;
 }): void {
-  const { req, res, hub, metrics } = o;
+  const { req, res, hub } = o;
+  // Counted here, so the gate in front (live-gate.middleware.ts) doesn't count it again.
+  const metrics = {
+    connect: (outcome: Parameters<LiveMetrics['connect']>[0]) => {
+      res.locals['liveCounted'] = true;
+      o.metrics.connect(outcome);
+    },
+    close: (reason: LiveCloseReason) => o.metrics.close(reason),
+  };
   // The client can leave while the connect awaits Redis and Postgres. By now its close has already
   // fired, and writes to it raise nothing: registering would hold a slot for half an hour.
   if (clientGone(req, res)) {
@@ -174,7 +182,14 @@ export class LiveController {
     @Res() res: Response,
     @CurrentUser() auth: AuthContext,
   ): Promise<void> {
-    const metrics = this.hub.metrics;
+    const metrics = {
+      ...this.hub.metrics,
+      connect: (outcome: Parameters<LiveMetrics['connect']>[0]) => {
+        res.locals['liveCounted'] = true;
+        this.hub.metrics.connect(outcome);
+      },
+    };
+    // The gate answers 204 first while live updates are off; this stays as a second line.
     if (!this.config.LIVE_UPDATES_ENABLED) {
       metrics.connect('disabled');
       res.status(204).end();

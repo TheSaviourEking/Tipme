@@ -51,11 +51,16 @@ export function DashboardShell({
   const pathname = usePathname();
   const copy = paymentModeCopy(usePaymentMode());
   const [profile, setProfile] = useState<MyProfile | null>(null);
+  // From the first profile read only (later writes return a profile without it): with live updates
+  // off, no stream is opened and the page makes exactly the requests it made before the feature.
+  const [liveUpdates, setLiveUpdates] = useState(false);
 
   useEffect(() => {
     void apiFetch<MyProfile>('/v1/me/profile').then((result) => {
-      if (result.ok) setProfile(result.data);
-      else if (result.status === 404) router.replace('/sign-up');
+      if (result.ok) {
+        setProfile(result.data);
+        setLiveUpdates(result.data.liveUpdates === true);
+      } else if (result.status === 404) router.replace('/sign-up');
       else router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
     });
   }, [router, pathname]);
@@ -102,7 +107,7 @@ export function DashboardShell({
       {/* Around the bar too: the bell is live. It connects once the profile has loaded. */}
       <LiveProvider
         stream="me"
-        enabled={profile !== null}
+        enabled={profile !== null && liveUpdates}
         onSignedOut={signedOutElsewhere}
       >
         <Container>

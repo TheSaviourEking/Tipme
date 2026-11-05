@@ -104,7 +104,12 @@ export class MeProfileController {
   async profile(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<MyProfile>> {
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: {
+        ...(await getMyProfile(this.database.db, auth.userId)),
+        liveUpdates: this.config.LIVE_UPDATES_ENABLED,
+      },
+    };
   }
 
   @Patch('profile')
