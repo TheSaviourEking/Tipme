@@ -1,3 +1,12 @@
+# Current handoff — bank picker (5 November 2026)
+
+- Branch `feat/bank-picker`, test lane 3, not pushed. Web only: `apps/web/src/lib/bank-{aliases,directory,search}.ts`, `listbox-navigation.ts`, `name-check.ts`, `components/account/bank-picker.tsx`, `get-paid-card.tsx`, a `.bank-picker` block in `globals.css`.
+- Popular keys show by code only. The fintech codes (OPay, Moniepoint, PalmPay, Kuda) were not checked against the partner's live list (staging is behind the preview password, which is not to be used), so a key whose code the partner doesn't use simply hides; a unit test pins that.
+- The e2e API now lifts the per-IP name-check limit (`RATE_LIMIT_BANK_RESOLVE_PER_HOUR`), as it lifts the others; the 10-a-day limit per person is unchanged.
+- The web tsconfig allows `.ts` import extensions, so `node --test` can load lib modules that import each other.
+- Verified (commands and counts in `.superpowers/program/bank-build-report.md`): format:check, lint, typecheck, all unit tests, scripts tests, the bank-picker, get-paid, withdraw and cover-settings e2e specs on lane 3, and review:screens.
+- Known differences from the board: "fir" doesn't list Fidelity Bank (no fuzzy matching); the no-match sentence uses a curly apostrophe; option B is not built.
+
 # Current handoff — dashboard data (5 November 2026)
 
 - Branch `feat/dashboard-data`, test lane 1, not pushed. Migration 0071 is `CREATE INDEX payouts_profile_created` only.

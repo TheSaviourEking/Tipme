@@ -27,7 +27,7 @@ const messageFor = (code: string, copy: PaymentAccountCopy): string => {
   if (code === 'EMAIL_VERIFICATION_REQUIRED') return copy.verifyEmailFirst;
   if (code === 'PROVIDER_OUTCOME_UNKNOWN')
     return 'We couldn’t confirm whether your payment account was created. TipMe support will check it. Please don’t try again.';
-  return 'We couldn’t reach the payment provider. Please try again in a moment.';
+  return 'We couldn’t reach our payment partner. Please try again in a moment.';
 };
 
 /**

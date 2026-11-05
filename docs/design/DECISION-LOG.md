@@ -1,5 +1,36 @@
 # Design decision log
 
+## 2026-11-05 — Bank picker: search your bank (A) and the name check on its own (C)
+
+The owner approved sections A and C of the `BankPicker` board
+(`docs/design/redesign/boards/BankPicker.dc.html`) for the Get paid card:
+
+1. Popular banks show as keys only when their code is in the partner's list.
+2. Forgiving aliases. The alias list lives in code and is unit-tested.
+3. Popular keys first, then A to Z. Microfinance and mortgage banks are grouped
+   under "More banks", classified from their names.
+4. Phones get a full-screen sheet with the search field focused.
+5. The WAI-ARIA combobox and listbox pattern.
+6. The name check fires once a bank is chosen and 10 digits are typed. It never
+   fires again for the same bank-and-number pair. "Check again" shows only after
+   an error.
+7. All existing copy is kept, except "The payment provider can’t pay to this
+   account. Please add another.", which becomes "Our payment partner can’t pay
+   to this account. Please add another." By the owner's later ruling (5 Nov
+   2026), the card's two other "payment provider" messages also say "our
+   payment partner".
+8. Users never see the provider's name.
+
+Rulings on the plan's open questions (5 Nov 2026): popular keys stay code-only,
+because the partner's live list could not be checked (staging is behind a
+preview password that is not to be used), so a key whose code is missing simply
+hides; badge colours are the board's, with initials only and no logos.
+
+B (account number first) deferred until the payment partner confirms its codes
+are CBN codes. Presentation only: the bank list, codes, name-check limit, email
+code and bank-change pause are unchanged. No regulatory or partner approval is
+implied (`docs/00-DECISIONS.md`).
+
 ## 2026-10-27 — Payer-total-only tip summary
 
 At the product owner's direction, the public tip quote displays only the exact

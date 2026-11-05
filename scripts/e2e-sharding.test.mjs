@@ -31,9 +31,11 @@ test('CI shards split the suite: each test once, and none far from a fair share'
   assert.deepEqual([...together].sort(), [...whole].sort());
   for (const shard of shards)
     assert.ok(
-      // Serial files stay together, so a share is near even, not exact.
+      // Serial files stay together, so a share is near even, not exact. With six shards a share is
+      // about 64 tests and one serial file (ops-staff, 19 tests) moves a whole block, so the margin
+      // is 20%: about 13 tests, still tighter than the 19 that 15% allowed with three shards.
       Math.abs(shard.length - whole.length / SHARDS) <=
-        (whole.length / SHARDS) * 0.15,
+        (whole.length / SHARDS) * 0.2,
       `${shard.length} of ${whole.length}`,
     );
 });
