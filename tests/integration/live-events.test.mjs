@@ -90,7 +90,7 @@ test('a stream outlives requestTimeout', { timeout: 30_000 }, async () => {
   );
   assert.ok(Date.now() - opened >= 12_000);
   assert.ok(
-    stream.frames.filter((f) => f === ': hb').length >= 1,
+    stream.frames.filter((f) => f === ': hb\nevent: hb\ndata: {}').length >= 1,
     'at least one heartbeat',
   );
   // Order: retry first, then ready, then heartbeats.

@@ -41,6 +41,12 @@ const LIFETIME_JITTER_MS = 3 * 60_000;
 /** How long the browser waits before its own reconnect, if it ever uses the built-in one. */
 const CLIENT_RETRY_MS = 5000;
 const REFUSED_RETRY_AFTER_S = 30;
+/**
+ * A `: hb` comment for curl and proxies, plus a named `hb` event: EventSource never shows comments
+ * to the page, and the client's watchdog must see the heartbeat. A named event never reaches
+ * `onmessage`, and its data is empty JSON.
+ */
+export const HEARTBEAT = ': hb\nevent: hb\ndata: {}\n\n';
 
 /** Shared by /v1/me/events and (later) /v1/ops/events. */
 export function openStream(o: {
@@ -112,7 +118,7 @@ export function openStream(o: {
   if (!hub.subscriberUp) res.write(sseFrame({ type: 'poll' }));
 
   timers.heartbeat = setInterval(() => {
-    if (open) res.write(': hb\n\n');
+    if (open) res.write(HEARTBEAT);
   }, o.heartbeatMs ?? 20_000);
   const lifetimeMs =
     o.lifetimeMs ??
@@ -146,7 +152,7 @@ export class LiveController {
   @EventStreamResponse({
     description:
       'A text/event-stream of change signals for the signed-in recipient: `retry: 5000`, then ' +
-      '`data: {"type":"ready"}`, then `data: {"type":"<signal>"}` lines and a `: hb` comment every ' +
+      '`data: {"type":"ready"}`, then `data: {"type":"<signal>"}` lines and a heartbeat (a `: hb` comment and an `hb` event) every ' +
       '20 s. Signals carry only a type, never data; on one, re-read the matching endpoints. ' +
       '204 while live updates are off. 429 LIVE_LIMIT past 8 streams for one person; 503 ' +
       'LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.',
