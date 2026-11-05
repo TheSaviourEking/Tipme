@@ -348,7 +348,8 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   const old = createDatabase(url.toString());
   t.after(() => old.close());
   // The seed writes today's users columns; this one arrives with a later migration.
-  // Likewise the profile columns that handle changes and covers add (0062, 0063).
+  // Likewise the profile columns that handle changes and covers add (0062, 0063), and the
+  // social links list (0072_social_links).
   await pool.query(
     `ALTER TABLE profiles
        ADD COLUMN handle_changes_used integer NOT NULL DEFAULT 0,
@@ -356,7 +357,8 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        ADD COLUMN cover_design text,
        ADD COLUMN cover_colour text,
        ADD COLUMN cover_path text,
-       ADD COLUMN cover_version integer NOT NULL DEFAULT 0`,
+       ADD COLUMN cover_version integer NOT NULL DEFAULT 0,
+       ADD COLUMN links jsonb NOT NULL DEFAULT '[]'::jsonb`,
   );
   await pool.query(`ALTER TABLE users ADD COLUMN email_changed_at timestamptz`);
   await seedDemoProfiles(old.db);
@@ -368,7 +370,8 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        DROP COLUMN cover_design,
        DROP COLUMN cover_colour,
        DROP COLUMN cover_path,
-       DROP COLUMN cover_version`,
+       DROP COLUMN cover_version,
+       DROP COLUMN links`,
   );
   const payoutId = randomUUID();
   await pool.query(
