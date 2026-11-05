@@ -532,3 +532,101 @@ test('the availability route answers reserved, never which list', async () => {
   assert.deepEqual(a, { data: { handle: 'mtn_avail', status: 'reserved' } });
   assert.deepEqual(b, { data: { handle: 'admin', status: 'reserved' } });
 });
+
+/* Choosing a new username while TipMe takes the current one back (username reservation, Task 9) */
+
+async function openTakeBack(handle, kind = 'current') {
+  const [{ id: profileId }] = (
+    await database.pool.query(
+      kind === 'current'
+        ? `SELECT id FROM profiles WHERE handle_lower = $1`
+        : `SELECT profile_id AS id FROM handle_aliases WHERE handle_lower = $1`,
+      [handle],
+    )
+  ).rows;
+  const [{ id: staffId }] = (
+    await database.pool.query(
+      `SELECT user_id AS id FROM staff WHERE revoked_at IS NULL LIMIT 1`,
+    )
+  ).rows;
+  const [{ id }] = (
+    await database.pool.query(
+      `INSERT INTO handle_take_backs (id, profile_id, handle_lower, kind, category, notice_days, reason, state, requested_by, approved_at, noticed_at, noticed_via, due_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'ordinary', 7, 'Brand protection', 'noticed', $4, now(), now(), 'banner', now() + interval '7 days')
+       RETURNING id`,
+      [profileId, handle, kind, staffId],
+    )
+  ).rows;
+  return id;
+}
+const takeBackRow = async (id) =>
+  (
+    await database.pool.query(`SELECT * FROM handle_take_backs WHERE id = $1`, [
+      id,
+    ])
+  ).rows[0];
+
+test('a Free page can choose during notice, and it is not counted', async () => {
+  const cookie = await livePage('+2348031270201', 'tb_free_old');
+  const id = await openTakeBack('tb_free_old');
+  const moved = await rename(cookie, 'tb_free_new');
+  assert.equal(moved.status, 200, await moved.clone().text());
+  const profile = await json(moved);
+  assert.equal(profile.handle, 'tb_free_new');
+  assert.deepEqual(profile.handleChanges, { used: 0, allowed: 3 });
+  assert.equal(profile.usernameTakeBack, null, 'the banner is gone');
+  const row = await takeBackRow(id);
+  assert.equal(row.state, 'done');
+  assert.equal(row.outcome, 'user_chose');
+  assert.equal(row.new_handle, 'tb_free_new');
+});
+
+test('no alias is written for the taken name; the old link stops working', async () => {
+  const cookie = await livePage('+2348031270202', 'tb_link_old');
+  await openTakeBack('tb_link_old');
+  assert.equal((await rename(cookie, 'tb_link_new')).status, 200);
+  assert.deepEqual((await mine(cookie)).previousHandles, []);
+  assert.equal(
+    (
+      await database.pool.query(
+        `SELECT 1 FROM handle_aliases WHERE handle_lower = 'tb_link_old'`,
+      )
+    ).rowCount,
+    0,
+  );
+  const old = await call('GET', '/v1/profiles/tb_link_old');
+  assert.equal(old.status, 404);
+  const status = await call('GET', '/v1/handles/tb_link_old/availability');
+  assert.equal((await json(status)).status, 'reserved');
+});
+
+test('an ordinary change during the notice goes through the take-back path', async () => {
+  const cookie = await proPage('+2348031270203', 'tb_pro_old');
+  const id = await openTakeBack('tb_pro_old');
+  const moved = await rename(cookie, 'tb_pro_new');
+  assert.equal(moved.status, 200);
+  assert.deepEqual((await json(moved)).handleChanges, {
+    used: 0,
+    allowed: 3,
+  });
+  assert.equal((await takeBackRow(id)).outcome, 'user_chose');
+  // Later changes are ordinary again, and counted.
+  const again = await rename(cookie, 'tb_pro_third');
+  assert.equal(again.status, 200);
+  const later = await json(again);
+  assert.deepEqual(later.handleChanges, { used: 1, allowed: 3 });
+  assert.deepEqual(later.previousHandles, ['tb_pro_new']);
+});
+
+test('switching back to an old username under take-back is refused', async () => {
+  const cookie = await proPage('+2348031270204', 'tb_back_old');
+  assert.equal((await rename(cookie, 'tb_back_now')).status, 200);
+  await openTakeBack('tb_back_old', 'old');
+  const refused = await rename(cookie, 'tb_back_old');
+  assert.equal(refused.status, 409);
+  assert.equal(await code(refused), 'HANDLE_TAKEN');
+  const profile = await mine(cookie);
+  assert.equal(profile.handle, 'tb_back_now');
+  assert.deepEqual(profile.previousHandles, ['tb_back_old']);
+  assert.deepEqual(profile.handleChanges, { used: 1, allowed: 3 });
+});

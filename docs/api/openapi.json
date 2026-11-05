@@ -2042,6 +2042,53 @@
         ]
       }
     },
+    "/v1/me/handle/take-back/{id}/seen": {
+      "post": {
+        "operationId": "MeProfile.takeBackSeen",
+        "tags": [
+          "MeProfile"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/links": {
       "put": {
         "operationId": "MeProfile.links",
@@ -6019,7 +6066,9 @@
                 "provider_key_refused",
                 "staff_acted_alone",
                 "staff_approval_pending",
-                "staff_last_approver_removed"
+                "staff_last_approver_removed",
+                "username_take_back_unnoticed",
+                "username_take_back_overdue"
               ]
             }
           },
@@ -9731,6 +9780,76 @@
         "x-tipme-permission": "usernames.manage"
       }
     },
+    "/v1/ops/usernames/take-backs/{id}/cancel": {
+      "post": {
+        "operationId": "OpsUsernames.cancelTakeBack",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
     "/v1/ops/usernames/{name}/release": {
       "post": {
         "operationId": "OpsUsernames.release",
@@ -9761,6 +9880,96 @@
                   }
                 },
                 "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/take-back": {
+      "post": {
+        "operationId": "OpsUsernames.takeBack",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "profileId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "ordinary",
+                      "impersonation",
+                      "trademark",
+                      "legal"
+                    ]
+                  },
+                  "noticeDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 30
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profileId",
+                  "category",
+                  "noticeDays",
                   "reason"
                 ],
                 "additionalProperties": false
@@ -10724,6 +10933,9 @@
                   "USERNAME_RESERVED",
                   "USERNAME_HELD_BY_PAGE",
                   "USERNAME_NOT_RESERVED",
+                  "TAKE_BACK_OPEN",
+                  "TAKE_BACK_NOT_FOUND",
+                  "TAKE_BACK_CLOSED",
                   "ROLE_IN_USE",
                   "ROLE_PROTECTED",
                   "STAFF_PROTECTED",

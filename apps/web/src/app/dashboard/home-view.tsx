@@ -8,6 +8,7 @@ import type {
   WithdrawalQuoteResponse,
 } from '@tipme/contracts';
 import { Button, Notice, Skeleton } from '@tipme/ui';
+import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';
 import { useRecipient } from '@/components/account/recipient-context';
 import { ActivityList } from '@/components/dashboard/activity-list';
 import { Moments } from '@/components/dashboard/moments';
@@ -144,6 +145,7 @@ export default function DashboardHome() {
   return (
     <div className="dashboard-home">
       <div className="dashboard-home__main">
+        <UsernameTakeBackBanner />
         {firstDay ? (
           <section className="first-day recipient-setup" aria-labelledby="next">
             <div>

@@ -75,7 +75,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
 | `search.view` | GET `/v1/ops/search` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
-| `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>GET `/v1/ops/usernames/check/{name}` |
+| `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>POST `/v1/ops/usernames/{name}/take-back`<br>GET `/v1/ops/usernames/check/{name}`<br>POST `/v1/ops/usernames/take-backs/{id}/cancel` |
 
 <!-- /generated:permissions -->
 <!-- prettier-ignore-end -->
@@ -165,6 +165,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/events` | n/a (read) | `live_connect` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
+| POST | `/v1/me/handle/take-back/{id}/seen` | yes | – | – |
 | PUT | `/v1/me/links` | yes | – | – |
 | GET | `/v1/me/moments` | n/a (read) | – | – |
 | POST | `/v1/me/moments/{id}/share` | yes | – | – |
@@ -294,7 +295,9 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/usernames` | `usernames.manage` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/usernames` | `usernames.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/usernames/{name}/release` | `usernames.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/usernames/{name}/take-back` | `usernames.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/usernames/check/{name}` | `usernames.manage` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/usernames/take-backs/{id}/cancel` | `usernames.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
 | GET | `/v1/ops/withdrawals-switch` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/withdrawals-switch` | `payouts.resolve` | yes | – | – |

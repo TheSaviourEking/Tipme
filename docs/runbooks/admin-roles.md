@@ -59,6 +59,7 @@ These wait for a second person when one is available:
 | `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                              |
 | `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                               |
 | `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                          |
+| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it        |
 
 Giving someone a role or permission counts as serious only if it contains something sensitive. A harmless edit applies at once. Hand closes of money issues are serious, except releasing a freeze (below).
 
