@@ -32,6 +32,7 @@ export function ProPlan() {
           Three changes to your handle. Free pages keep the handle they claimed.
         </li>
         <li>Your own tip amounts</li>
+        <li>Card styles and your signature on your thank-you</li>
         <li>
           Up to 8 links in your own order, one of them featured, including your
           website, Telegram, LinkedIn and more. Free pages show 3.

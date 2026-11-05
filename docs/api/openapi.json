@@ -3826,6 +3826,81 @@
         ]
       }
     },
+    "/v1/me/thanks": {
+      "put": {
+        "operationId": "MeProfile.thanks",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "line": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1120
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "style": {
+                    "type": "string",
+                    "enum": [
+                      "paper",
+                      "violet",
+                      "night"
+                    ]
+                  },
+                  "signed": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "line"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/tip-amounts": {
       "put": {
         "operationId": "MeProfile.tipAmounts",
@@ -10183,6 +10258,10 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "noteMayShow": {
+                    "type": "boolean",
+                    "const": true
                   }
                 },
                 "required": [
@@ -10572,6 +10651,7 @@
                   "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "QR_DESIGN_PRO_REQUIRED",
+                  "THANKS_PRO_REQUIRED",
                   "SOCIAL_LINKS_PRO_REQUIRED",
                   "SOCIAL_LINK_UNAVAILABLE",
                   "QR_ART_PHOTO_REQUIRED",

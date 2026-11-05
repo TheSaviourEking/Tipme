@@ -262,6 +262,34 @@ const pretend = (api, reference, outcome) =>
 const stateOf = async (api, tipId, token) =>
   (await (await statusOf(api, tipId, token)).json()).data.state;
 
+test('a supporter’s consent for their note is kept, and the paid receipt says so without the note', async () => {
+  const { body: q } = await quote(stack.api);
+  const created = await intent(stack.api, {
+    quoteId: q.data.quoteId,
+    message: 'consented-note',
+    noteMayShow: true,
+  });
+  assert.equal(created.status, 201);
+  const { tipId, statusToken, checkoutUrl } = created.body.data;
+  const { rows } = await database.pool.query(
+    'SELECT may_show FROM tip_messages WHERE tip_id = $1',
+    [tipId],
+  );
+  assert.equal(rows[0].may_show, true);
+  await pretend(stack.api, checkoutUrl.split('/mock-checkout/')[1], 'succeed');
+  const receipt = await statusOf(stack.api, tipId, statusToken);
+  const text = await receipt.text();
+  assert.doesNotMatch(text, /consented-note/);
+  assert.equal(JSON.parse(text).data.noteMayShow, true);
+  // Consent is only ever true: false is not a value the form sends.
+  const refused = await intent(stack.api, {
+    quoteId: (await quote(stack.api)).body.data.quoteId,
+    message: 'x',
+    noteMayShow: false,
+  });
+  assert.equal(refused.status, 400);
+});
+
 test('the pretend checkout shows what is being paid', async () => {
   const tip = await tipFor(stack.api);
   const response = await fetch(

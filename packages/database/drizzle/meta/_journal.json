@@ -533,6 +533,13 @@
       "when": 1793871494302,
       "tag": "0075_live_popup_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793878814523,
+      "tag": "0076_note_consent_and_thanks",
+      "breakpoints": true
     }
   ]
 }

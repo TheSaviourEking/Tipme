@@ -436,7 +436,7 @@ export function TipAmountsSettings() {
   const [busy, setBusy] = useState(false);
   if (!pro)
     return (
-      <Card className="settings-section">
+      <Card id="tip-amounts" className="settings-section">
         <h3>Tip amounts</h3>
         <p className="tm-hint">
           Your page offers{' '}
@@ -495,7 +495,7 @@ export function TipAmountsSettings() {
       });
   };
   return (
-    <Card className="settings-section">
+    <Card id="tip-amounts" className="settings-section">
       <h3>Tip amounts (Pro)</h3>
       <p className="tm-hint">
         Choose the amounts on your page and the smallest tip you accept.

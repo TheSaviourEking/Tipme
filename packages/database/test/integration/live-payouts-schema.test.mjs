@@ -349,7 +349,7 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   t.after(() => old.close());
   // The seed writes today's users columns; this one arrives with a later migration.
   // Likewise the profile columns that handle changes and covers add (0062, 0063), and the
-  // social links list (0074_social_links), and the live-update switches (0075_live_popup_prefs).
+  // social links list (0074_social_links), the live-update switches (0075_live_popup_prefs), and the thank-you line (0076_note_consent_and_thanks).
   await pool.query(
     `ALTER TABLE profiles
        ADD COLUMN handle_changes_used integer NOT NULL DEFAULT 0,
@@ -360,7 +360,10 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        ADD COLUMN cover_version integer NOT NULL DEFAULT 0,
        ADD COLUMN links jsonb NOT NULL DEFAULT '[]'::jsonb,
        ADD COLUMN popup_hide_tip_details boolean NOT NULL DEFAULT false,
-       ADD COLUMN tip_sound boolean NOT NULL DEFAULT true`,
+       ADD COLUMN tip_sound boolean NOT NULL DEFAULT true,
+       ADD COLUMN thanks_line text,
+       ADD COLUMN thanks_style text,
+       ADD COLUMN thanks_signed boolean NOT NULL DEFAULT false`,
   );
   await pool.query(`ALTER TABLE users ADD COLUMN email_changed_at timestamptz`);
   await seedDemoProfiles(old.db);
@@ -375,7 +378,10 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        DROP COLUMN cover_version,
        DROP COLUMN links,
        DROP COLUMN popup_hide_tip_details,
-       DROP COLUMN tip_sound`,
+       DROP COLUMN tip_sound,
+       DROP COLUMN thanks_line,
+       DROP COLUMN thanks_style,
+       DROP COLUMN thanks_signed`,
   );
   const payoutId = randomUUID();
   await pool.query(

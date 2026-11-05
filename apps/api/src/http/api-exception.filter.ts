@@ -117,6 +117,7 @@ const messages: Record<ApiErrorCode, string> = {
     'Your sign-in email changed recently, so your bank account can’t be added or changed yet.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   QR_DESIGN_PRO_REQUIRED: 'Saving a Pro QR design is part of TipMe Pro.',
+  THANKS_PRO_REQUIRED: 'Card styles and your signature are part of TipMe Pro.',
   SOCIAL_LINK_UNAVAILABLE:
     'OnlyFans and Fansly links can’t be added right now.',
   SOCIAL_LINKS_PRO_REQUIRED:
@@ -229,6 +230,7 @@ const operationErrors: Partial<
   },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   QR_DESIGN_PRO_REQUIRED: { status: 403, code: 'QR_DESIGN_PRO_REQUIRED' },
+  THANKS_PRO_REQUIRED: { status: 403, code: 'THANKS_PRO_REQUIRED' },
   SOCIAL_LINK_UNAVAILABLE: { status: 409, code: 'SOCIAL_LINK_UNAVAILABLE' },
   SOCIAL_LINKS_PRO_REQUIRED: {
     status: 403,
@@ -305,6 +307,12 @@ const operationErrors: Partial<
     status: 400,
     code: 'VALIDATION_FAILED',
     fields: ['minMinor'],
+  },
+  // The thank-you line (PUT /v1/me/thanks): its own code, as INVALID_INPUT points at `message`.
+  INVALID_THANKS_LINE: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['line'],
   },
 };
 

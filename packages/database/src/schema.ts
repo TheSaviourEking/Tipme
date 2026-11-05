@@ -554,6 +554,11 @@ export const profiles = pgTable(
     // standard allowance, at most MAX_HANDLE_CHANGE_EXTRA. Only Pro pages can make one.
     handleChangesUsed: integer('handle_changes_used').notNull().default(0),
     handleChangesExtra: integer('handle_changes_extra').notNull().default(0),
+    // The thank-you line on the supporter's receipt ("Make it yours"), up to 140 characters. The
+    // card style (NULL reads as paper) and the signature are Pro; a page that leaves Pro keeps them.
+    thanksLine: text('thanks_line'),
+    thanksStyle: text('thanks_style'),
+    thanksSigned: boolean('thanks_signed').notNull().default(false),
     createdAt: createdAt(),
   },
   (table) => [
@@ -592,6 +597,15 @@ export const profiles = pgTable(
     check(
       'profiles_tip_presets_range',
       sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
+    ),
+    // char_length counts code points, as THANKS_LINE_LIMIT does, so an emoji counts once.
+    check(
+      'profiles_thanks_line_length',
+      sql`thanks_line IS NULL OR char_length(thanks_line) BETWEEN 1 AND 140`,
+    ),
+    check(
+      'profiles_thanks_style',
+      sql`thanks_style IS NULL OR thanks_style IN ('paper', 'violet', 'night')`,
     ),
   ],
 );
@@ -965,6 +979,9 @@ export const tipMessages = pgTable(
       .primaryKey()
       .references(() => tips.id),
     body: text('body').notNull(),
+    // The supporter ticked "may show this note on their page". Consent belongs to the note; only
+    // notes written after this column existed can ever be true.
+    mayShow: boolean('may_show').notNull().default(false),
     createdAt: createdAt(),
   },
   () => [

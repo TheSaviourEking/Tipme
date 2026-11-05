@@ -1,8 +1,14 @@
-# Current task — states and feedback, PR A primitives (5 November 2026)
+# Current task — Make it yours: the note consent tick box and the thank-you line (5 November 2026)
 
-- Branch/worktree: `feat/states` / `.worktrees/states`, origin/dev merged, test lane 1. Not pushed, no PR.
+- Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2. One PR into `dev` (ruling: C and A ship together). One migration, 0076 (`tip_messages.may_show`; `profiles.thanks_line`, `thanks_style`, `thanks_signed`), regenerated after merging `origin/dev` (#112–#124).
+- Built: the consent tick box ("{first name} may show this note on their page") and `noteMayShow`; `PUT /v1/me/thanks`; the receipt slip (Paper on Free; Paper, Violet or Night and a first-name signature on Pro; nothing while the page is suspended); Settings > "Make it yours" with "Your thank-you" and "Covers and QR codes that are yours"; the Plan list line. Review fixes I1, I2 and M1-M7 are in (`.superpowers/program/miy-review.md`).
+- Next: owner review of the PR; then PR B (starting amount) and PR D (pinned note, accent, the supporter's withdrawal). Rename the "already yours" card to "Covers that move, QR codes that are yours" once animated covers merge.
+
+# Previous task — states and feedback, PR A primitives (5 November 2026): merged into dev in #124
+
+- Branch/worktree: `feat/states` / `.worktrees/states`, test lane 1. Merged in #124.
 - Plan: `docs/superpowers/plans/2026-11-05-states.md`. PR A (Tasks 1–8) built: `Lamp`, `Slip`, `StandingWarning`, `ResultKey`/`StateLine`/`useKeyResult`, field red edge/flag/shake, `EmptySlip`/`EmptyWell`, `Steps`, the design-system States specimen and the internal 6 places.
-- Next exact step: owner review and push of PR A; then PR B (Task 9). Task 9's money-safety-lines test must exempt `app/design-system/states-specimen.tsx`, which shows the proven lines as specimens. Task 17 (connection copy) still waits for the owner's yes.
+- Next: PR B (Task 9). Task 9's money-safety-lines test must exempt `app/design-system/states-specimen.tsx`, which shows the proven lines as specimens. Task 17 (connection copy) still waits for the owner's yes.
 
 # Verified state (5 November 2026, dev at `f85ec4d`)
 

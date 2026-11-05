@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ResolvedCover } from './covers.js';
 import { qrStyleSchema } from './qr.js';
+import type { ThanksChoice } from './thanks.js';
 import type { SocialLink } from './social-links.js';
 
 /**
@@ -117,6 +118,11 @@ export interface MyProfile {
     colour: string | null;
     hasPhoto: boolean;
   };
+  /**
+   * The thank-you line and its card, as stored: Pro parts are kept (and sent) after a page leaves
+   * Pro, so Settings can say they are kept. Optional: an older API sends none.
+   */
+  thanks?: ThanksChoice;
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
