@@ -1,5 +1,11 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
 import type { PayoutBank } from '@tipme/contracts';
 import {
@@ -20,6 +26,17 @@ type Option =
   | { id: string; kind: 'more' };
 
 type Section = { label: string; keys?: boolean; options: Option[] };
+
+// The phone breakpoint the rest of the app uses (globals.css, max-width: 40rem).
+const PHONE = '(max-width: 40rem)';
+function subscribePhone(onChange: () => void) {
+  const query = matchMedia(PHONE);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+const isPhoneNow = () => matchMedia(PHONE).matches;
+// The card draws only in the browser (it loads after hydration), so the server answer is unused.
+const isPhoneOnServer = () => false;
 
 function Badge({ badge }: { badge: BankBadge }) {
   return (
@@ -61,6 +78,7 @@ export function BankPicker({
   value,
   onChange,
   disabled = false,
+  error,
 }: {
   /** From the card's useId, so the label stays `${id}-bank`. */
   id: string;
@@ -70,6 +88,8 @@ export function BankPicker({
   /** Only on choosing an option, never while typing. */
   onChange(code: string): void;
   disabled?: boolean;
+  /** Shown under the field, as InputField shows its error. */
+  error?: string;
 }) {
   const directory = useMemo(() => arrangeBanks(banks), [banks]);
   const chosen = useMemo(
@@ -87,10 +107,19 @@ export function BankPicker({
   const [moreOpen, setMoreOpen] = useState(false);
   const [counted, setCounted] = useState({ query: '', text: '' });
   const input = useRef<HTMLInputElement>(null);
+  const sheet = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const isPhone = useSyncExternalStore(
+    subscribePhone,
+    isPhoneNow,
+    isPhoneOnServer,
+  );
 
-  const text = draft ?? chosenName;
+  // The phone sheet's search starts empty; the field on a desktop shows the chosen name.
+  const text = draft ?? (isPhone ? '' : chosenName);
   // The chosen name in the field counts as no query, so reopening shows the grouped view.
-  const query = draft === null || draft === chosenName ? '' : draft;
+  const query =
+    draft === null || (!isPhone && draft === chosenName) ? '' : draft;
   const results = useMemo(
     () => searchBanks(directory, query),
     [directory, query],
@@ -144,7 +173,7 @@ export function BankPicker({
     );
     return () => clearTimeout(timer);
   }, [query, results]);
-  const status = query && counted.query === query ? counted.text : '';
+  const liveCount = query && counted.query === query ? counted.text : '';
 
   useEffect(() => {
     if (!activeOption) return;
@@ -166,7 +195,21 @@ export function BankPicker({
       return;
     }
     onChange(option.bank.code);
+    if (isPhone) sheet.current?.close();
+    else close();
+  };
+
+  /** In the same tap, so phones raise the keyboard for the search. */
+  const openSheet = () => {
+    sheet.current?.showModal();
+    input.current?.focus();
+    setOpen(true);
+    setActive(-1);
+  };
+  /** The dialog's close event: after choosing, Esc (cancel) or ✕. */
+  const onSheetClose = () => {
     close();
+    trigger.current?.focus();
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -191,7 +234,8 @@ export function BankPicker({
         if (activeOption) choose(activeOption);
         return;
       case 'Escape':
-        if (open) {
+        // On a phone, Esc is the dialog's own cancel, which closes the sheet.
+        if (open && !isPhone) {
           event.preventDefault();
           close();
         }
@@ -200,92 +244,180 @@ export function BankPicker({
   };
 
   const listId = `${id}-banks`;
+  const errorId = `${id}-bank-error`;
+  const errorText = error && (
+    <p className="tm-field-error" id={errorId} role="alert">
+      {error}
+    </p>
+  );
   const noMatch = results !== null && results.length === 0;
+
+  const combobox = (
+    <input
+      ref={input}
+      id={isPhone ? `${id}-bank-search` : `${id}-bank`}
+      className="tm-input bank-picker__input"
+      role="combobox"
+      aria-label={isPhone ? 'Search your bank' : undefined}
+      aria-autocomplete="list"
+      aria-expanded={open}
+      aria-controls={listId}
+      aria-activedescendant={activeOption?.id}
+      aria-invalid={!isPhone && Boolean(error)}
+      aria-describedby={!isPhone && error ? errorId : undefined}
+      placeholder="Search your bank"
+      autoComplete="off"
+      spellCheck={false}
+      disabled={disabled}
+      value={text}
+      onFocus={(event) => {
+        if (isPhone) return;
+        event.currentTarget.select();
+        setOpen(true);
+      }}
+      onClick={() => setOpen(true)}
+      // On a phone, the sheet stays open until a choice, Esc or ✕.
+      onBlur={isPhone ? undefined : close}
+      onChange={(event) => {
+        const next = event.target.value;
+        const nextQuery = next === chosenName && !isPhone ? '' : next;
+        setDraft(next);
+        setOpen(true);
+        setActive(
+          nextQuery && searchBanks(directory, nextQuery)?.length ? 0 : -1,
+        );
+      }}
+      onKeyDown={onKeyDown}
+    />
+  );
+
+  const status = (
+    <p className="sr-only" role="status" aria-live="polite">
+      {liveCount}
+    </p>
+  );
+
+  const listbox = (
+    <>
+      <div
+        id={listId}
+        role="listbox"
+        aria-label="Banks"
+        className="bank-picker__list"
+        hidden={!open || noMatch}
+      >
+        {open &&
+          sections.map((section, index) =>
+            section.label ? (
+              <div
+                key={section.label}
+                role="group"
+                aria-labelledby={`${listId}-group-${index}`}
+                className="bank-picker__group"
+              >
+                <div
+                  role="presentation"
+                  id={`${listId}-group-${index}`}
+                  className="bank-picker__heading"
+                >
+                  {section.label}
+                </div>
+                <div
+                  className={
+                    section.keys ? 'bank-picker__keys' : 'bank-picker__rows'
+                  }
+                >
+                  {section.options.map((option) =>
+                    renderOption(option, section.keys),
+                  )}
+                </div>
+              </div>
+            ) : (
+              section.options.map((option) => renderOption(option))
+            ),
+          )}
+      </div>
+      {open && noMatch && (
+        <p className="bank-picker__none">{matchCountText(0, query)}</p>
+      )}
+    </>
+  );
+
+  if (isPhone)
+    return (
+      <div className="tm-field bank-picker">
+        <label id={`${id}-bank-label`} htmlFor={`${id}-bank`}>
+          Bank
+        </label>
+        {/* The badge and caret sit over the button, not in it, so its visible text is exactly
+            the bank's name (WCAG 2.5.3, label in name). */}
+        <div
+          className="bank-picker__field"
+          data-chosen={chosen ? '' : undefined}
+        >
+          <button
+            ref={trigger}
+            type="button"
+            id={`${id}-bank`}
+            className="tm-input bank-picker__trigger"
+            aria-haspopup="dialog"
+            aria-labelledby={`${id}-bank-label ${id}-bank-value`}
+            aria-describedby={error ? errorId : undefined}
+            disabled={disabled}
+            onClick={openSheet}
+          >
+            <span
+              id={`${id}-bank-value`}
+              className={
+                chosen ? 'bank-picker__value' : 'bank-picker__placeholder'
+              }
+            >
+              {chosenName || 'Search your bank'}
+            </span>
+          </button>
+          {chosen && <Badge badge={chosen.badge} />}
+          <span className="bank-picker__caret" aria-hidden="true">
+            ⌄
+          </span>
+        </div>
+        {errorText}
+        <dialog
+          ref={sheet}
+          className="bank-sheet"
+          aria-labelledby={`${id}-sheet-title`}
+          onClose={onSheetClose}
+        >
+          <div className="bank-sheet__top">
+            <h2 id={`${id}-sheet-title`}>Choose your bank</h2>
+            <button
+              type="button"
+              className="bank-sheet__close"
+              aria-label="Close"
+              onClick={() => sheet.current?.close()}
+            >
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
+          {combobox}
+          {status}
+          {listbox}
+        </dialog>
+      </div>
+    );
 
   return (
     <div className="tm-field bank-picker">
       <label htmlFor={`${id}-bank`}>Bank</label>
       <div className="bank-picker__field">
-        <input
-          ref={input}
-          id={`${id}-bank`}
-          className="tm-input bank-picker__input"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={open}
-          aria-controls={listId}
-          aria-activedescendant={activeOption?.id}
-          placeholder="Search your bank"
-          autoComplete="off"
-          spellCheck={false}
-          disabled={disabled}
-          value={text}
-          onFocus={(event) => {
-            event.currentTarget.select();
-            setOpen(true);
-          }}
-          onClick={() => setOpen(true)}
-          onBlur={close}
-          onChange={(event) => {
-            const next = event.target.value;
-            const nextQuery = next === chosenName ? '' : next;
-            setDraft(next);
-            setOpen(true);
-            setActive(
-              nextQuery && searchBanks(directory, nextQuery)?.length ? 0 : -1,
-            );
-          }}
-          onKeyDown={onKeyDown}
-        />
+        {combobox}
         <span className="bank-picker__caret" aria-hidden="true">
           ⌄
         </span>
       </div>
-      <p className="sr-only" role="status" aria-live="polite">
-        {status}
-      </p>
+      {errorText}
+      {status}
       <div className="bank-picker__popup" hidden={!open}>
-        <div
-          id={listId}
-          role="listbox"
-          aria-label="Banks"
-          className="bank-picker__list"
-          hidden={!open || noMatch}
-        >
-          {open &&
-            sections.map((section, index) =>
-              section.label ? (
-                <div
-                  key={section.label}
-                  role="group"
-                  aria-labelledby={`${listId}-group-${index}`}
-                  className="bank-picker__group"
-                >
-                  <div
-                    role="presentation"
-                    id={`${listId}-group-${index}`}
-                    className="bank-picker__heading"
-                  >
-                    {section.label}
-                  </div>
-                  <div
-                    className={
-                      section.keys ? 'bank-picker__keys' : 'bank-picker__rows'
-                    }
-                  >
-                    {section.options.map((option) =>
-                      renderOption(option, section.keys),
-                    )}
-                  </div>
-                </div>
-              ) : (
-                section.options.map((option) => renderOption(option))
-              ),
-            )}
-        </div>
-        {open && noMatch && (
-          <p className="bank-picker__none">{matchCountText(0, query)}</p>
-        )}
+        {listbox}
         {open && !noMatch && (
           <p className="tm-hint bank-picker__hint">
             ↑ ↓ to move, Enter to choose, Esc to close.

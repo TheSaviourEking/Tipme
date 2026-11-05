@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { chooseBank, standInBanks } from './bank-fixtures';
-import { expectAccessible, signUpRecipient } from './helpers';
+import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 
 /** A new recipient on the Get paid card, with the stand-in bank list. */
 async function openCard(page: Page, testInfo: TestInfo) {
@@ -162,4 +162,78 @@ test('forced colours keep the active option and the keys visible', async ({
     els.map((el) => getComputedStyle(el).borderTopStyle),
   ))
     expect(style).not.toBe('none');
+});
+
+test('on a phone, Bank opens a full-screen sheet with the search ready @mobile', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo);
+  const trigger = card.getByRole('button', { name: 'Bank' });
+  await trigger.click();
+  const sheet = page.getByRole('dialog', { name: 'Choose your bank' });
+  await expect(sheet).toBeVisible();
+  expect(await sheet.boundingBox()).toEqual({
+    x: 0,
+    y: 0,
+    width: 360,
+    height: 800,
+  });
+  const search = sheet.getByRole('combobox', { name: 'Search your bank' });
+  await expect(search).toBeFocused();
+  await search.pressSequentially('fir');
+  await expect(sheet.getByRole('option')).toHaveCount(2);
+  expect(await optionNames(sheet)).toEqual([
+    'First Bank of Nigeria',
+    'First City Monument Bank',
+  ]);
+  await sheet.getByRole('option', { name: 'First Bank of Nigeria' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toContainText('First Bank of Nigeria');
+  await expectAccessible(page);
+  await page.setViewportSize({ width: 320, height: 700 });
+  expect(await fitsViewport(page)).toBe(true);
+  await trigger.click();
+  await expect(sheet).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+});
+
+test('the sheet closes with Esc or ✕ and changes nothing @mobile', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo);
+  const trigger = card.getByRole('button', { name: 'Bank' });
+  const sheet = page.getByRole('dialog', { name: 'Choose your bank' });
+  const search = sheet.getByRole('combobox', { name: 'Search your bank' });
+  await trigger.click();
+  await search.fill('access');
+  await sheet.getByRole('option', { name: 'Access Bank' }).click();
+  await expect(trigger).toContainText('Access Bank');
+
+  await trigger.click();
+  await search.fill('zen');
+  await search.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toContainText('Access Bank');
+
+  await trigger.click();
+  await search.fill('zen');
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toContainText('Access Bank');
+});
+
+test('the sheet does not move when motion is reduced @mobile', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo);
+  await card.getByRole('button', { name: 'Bank' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Choose your bank' });
+  await expect(sheet).toBeVisible();
+  expect(await sheet.evaluate((el) => getComputedStyle(el).animationName)).toBe(
+    'none',
+  );
 });
