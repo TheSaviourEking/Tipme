@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 
-/** The six parts of Settings (ScreenSettings), in order. Each id is the hash that reaches it. */
+/** The seven parts of Settings (ScreenSettings), in order. Each id is the hash that reaches it. */
 export const SETTINGS_SECTIONS = [
   { id: 'page', title: 'My page' },
+  { id: 'yours', title: 'Make it yours' },
   { id: 'paid', title: 'Getting paid' },
   { id: 'notifications', title: 'Notifications' },
   { id: 'security', title: 'Sign-in and security' },

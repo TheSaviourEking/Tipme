@@ -308,10 +308,11 @@ test('removing the page photo keeps focus in the Photo card', async ({
   await expect(page.getByLabel('Choose a photo')).toBeFocused();
 });
 
-// Settings and the page editor (ScreenSettings): six sections on one page, each reached by its
+// Settings and the page editor (ScreenSettings): seven sections on one page, each reached by its
 // link, and a live preview of the page that follows unsaved edits and saves nothing itself.
 const SECTIONS: [string, string][] = [
   ['My page', 'page'],
+  ['Make it yours', 'yours'],
   ['Getting paid', 'paid'],
   ['Notifications', 'notifications'],
   ['Sign-in and security', 'security'],
@@ -350,14 +351,14 @@ async function reachEachSection(page: Page) {
   await expectAccessible(page);
 }
 
-test('settings has six sections, each reachable by its link', async ({
+test('settings has seven sections, each reachable by its link', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo);
   await reachEachSection(page);
 });
 
-test('settings has six sections on a phone, each reachable by its link @mobile', async ({
+test('settings has seven sections on a phone, each reachable by its link @mobile', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo);
