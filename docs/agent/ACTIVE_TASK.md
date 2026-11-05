@@ -1,3 +1,9 @@
+# Current task — states and feedback plan (5 November 2026)
+
+- Branch/worktree: `feat/states` / `.worktrees/states`, from `origin/dev` at `d0325dd`. Plan only, committed, not pushed. Nothing built.
+- Plan: `docs/superpowers/plans/2026-11-05-states.md` (18 tasks, PRs A to I). Task 17 (connection copy) waits for the owner's yes on the questions in the plan header.
+- Next exact step: Task 1, after the owner answers or waives the open questions.
+
 # Current task — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration.
