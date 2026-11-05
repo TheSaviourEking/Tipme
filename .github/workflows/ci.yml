@@ -263,13 +263,9 @@ jobs:
           path: .turbo/cache
           key: turbo-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ github.job }}-
-      # Next.js keeps its compile cache in .next/cache, which turbo deliberately leaves out of its
-      # outputs: restored here, a changed web app rebuilds incrementally instead of from scratch.
-      - uses: actions/cache@v4
-        with:
-          path: apps/web/.next/cache
-          key: nextjs-e2e-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: nextjs-e2e-${{ hashFiles('pnpm-lock.yaml') }}-
+      # No .next/cache restore: Turbopack reused a compile cache from another commit and built a
+      # stylesheet without newer rules (PR #117, run 41991783296: unstyled bank sheet, header not
+      # sticky). Every e2e build compiles the web app from scratch.
       - if: matrix.shard != 'alone'
         run: pnpm test:e2e --shard=${{ matrix.shard }}/6
       - if: matrix.shard == 'alone'
