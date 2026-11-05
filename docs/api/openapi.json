@@ -1595,6 +1595,24 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "animation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "motion": {
+                    "type": "string",
+                    "enum": [
+                      "once",
+                      "loop"
+                    ]
                   }
                 },
                 "required": [
@@ -10077,6 +10095,7 @@
                   "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "QR_DESIGN_PRO_REQUIRED",
+                  "COVER_DESIGN_PRO_REQUIRED",
                   "QR_ART_PHOTO_REQUIRED",
                   "QR_ART_PHOTO_TOO_LARGE",
                   "INVALID_IMAGE",
