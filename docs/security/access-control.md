@@ -196,6 +196,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/sessions` | n/a (read) | – | – |
 | DELETE | `/v1/me/sessions/{id}` | yes | – | – |
 | POST | `/v1/me/sessions/sign-out-others` | yes | – | – |
+| PUT | `/v1/me/thanks` | yes | – | – |
 | PUT | `/v1/me/tip-amounts` | yes | – | – |
 | GET | `/v1/me/tip-totals` | n/a (read) | – | – |
 | GET | `/v1/me/tips` | n/a (read) | – | – |

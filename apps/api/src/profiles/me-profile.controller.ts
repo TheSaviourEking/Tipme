@@ -20,11 +20,13 @@ import {
   profilePatchSchema,
   notificationPrefsSchema,
   renameHandleSchema,
+  thanksPatchSchema,
   tipAmountsSchema,
   type ApiDataResponse,
   type MyProfile,
   type NotificationPrefs,
   type ProfilePatch,
+  type ThanksPatch,
   type TipAmountsRequest,
 } from '@tipme/contracts';
 import {
@@ -36,6 +38,7 @@ import {
   renameHandle,
   setTipAmounts,
   setPageState,
+  setThanks,
   updateMyProfile,
 } from '@tipme/database';
 import type { Response } from 'express';
@@ -141,6 +144,21 @@ export class MeProfileController {
       presetsMinor: body.presetsMinor.map(BigInt),
       minTipMinor: BigInt(body.minMinor),
     });
+    this.revalidator.revalidate(updated.handle);
+    return { data: updated };
+  }
+
+  /**
+   * The thank-you line on the supporter's receipt ("Make it yours"). Any plan saves the line; a
+   * card style or signature on Free is THANKS_PRO_REQUIRED.
+   */
+  @Put('thanks')
+  async thanks(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(thanksPatchSchema)) body: ThanksPatch,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const updated = await setThanks(this.database.db, auth.userId, body);
+    // The public page does not show the line; kept so live updates' profile.changed has one place.
     this.revalidator.revalidate(updated.handle);
     return { data: updated };
   }
