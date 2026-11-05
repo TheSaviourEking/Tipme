@@ -106,3 +106,25 @@ test('the sample QR codes on the Pro page scan to Ada’s page', async ({
     expect(decoded, file).toBe('https://usetipme.xyz/@ada');
   }
 });
+
+test('the Pro page says what animated covers do on each plan', async ({
+  page,
+}) => {
+  await page.goto('/pro');
+  const main = page.locator('main');
+  const plan = page.getByRole('radiogroup', { name: 'Plan' });
+  await expect(
+    main.getByText('3 animated covers that play once.'),
+  ).toBeVisible();
+  await expect(main.getByRole('button', { name: 'Slow loop' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await plan.getByRole('radio', { name: 'Pro' }).click();
+  await expect(
+    main.getByText('Every design in every colour. Slow loop or Plays once.'),
+  ).toBeVisible();
+  await expect(
+    main.getByRole('button', { name: 'Slow loop' }),
+  ).not.toHaveAttribute('aria-disabled', 'true');
+});

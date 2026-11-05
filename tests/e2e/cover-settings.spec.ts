@@ -615,3 +615,60 @@ test('the chooser fits 320px and 360px with no overflow, and every control is at
     expect(small, `${width}px`).toEqual([]);
   }
 });
+
+test('a page that left Pro opens as plays once, and saving again clears the Pro settings', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await setPlan(handle, 'pro');
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Drifting' }).check();
+  await page
+    .getByRole('radiogroup', { name: 'Colour' })
+    .getByRole('radio', { name: 'Ocean' })
+    .check();
+  await playing(page).getByRole('radio', { name: 'Slow loop' }).check();
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+
+  await setPlan(handle, 'free');
+  await page.reload();
+  await expect(
+    playing(page).getByRole('radio', { name: 'Plays once' }),
+  ).toBeChecked();
+  await expect(
+    playing(page).getByRole('radio', { name: 'Slow loop' }),
+  ).not.toBeChecked();
+  // It still holds the loop and colour, so saving is offered, and it clears them.
+  const save = page.getByRole('button', { name: 'Save cover' });
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  const [row] = await sql<{
+    cover_motion: string | null;
+    cover_colour: string | null;
+  }>(
+    'SELECT cover_motion, cover_colour FROM profiles WHERE handle_lower = $1',
+    [handle.toLowerCase()],
+  );
+  expect(row).toEqual({ cover_motion: null, cover_colour: null });
+  await expect(save).toBeDisabled();
+});
+
+test('a Pro animation on a page that left Pro says it shows as a still picture', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await setPlan(handle, 'pro');
+  await page.goto('/dashboard/settings');
+  await animated(page).getByRole('radio', { name: 'Night sky' }).check();
+  await page.getByRole('button', { name: 'Save cover' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await setPlan(handle, 'free');
+  await page.reload();
+  await expect(
+    page.getByText(
+      'Your page is on Free, so Night sky shows as a still picture. Choose Drifting, Rising or Ripple to play it.',
+    ),
+  ).toBeVisible();
+});

@@ -5,6 +5,7 @@ import {
   automaticLabel,
   choiceBody,
   draftFromChoice,
+  differsFromSaved,
   draftPreview,
   sameDraft,
   takesColours,
@@ -236,4 +237,59 @@ test('the preview of an animation carries the plan, so a Free page plays once', 
     draftPreview({ ...draft, animation: 'night' }, 'ada', 'pro').play,
     'loop',
   );
+});
+
+// A page that left Pro (review M1): the draft opens without the Pro parts, and saving strips them.
+const leftPro = {
+  design: null,
+  colour: 'ocean',
+  animation: 'drift',
+  motion: 'loop',
+  hasPhoto: false,
+};
+
+test('a Free page opens a saved loop and colour as plays once, in its own colours', () => {
+  const draft = draftFromChoice(leftPro, false);
+  assert.equal(draft.motion, 'once');
+  assert.equal(draft.animationColour, null);
+  // Pro keeps them.
+  const pro = draftFromChoice(leftPro, true);
+  assert.equal(pro.motion, 'loop');
+  assert.equal(pro.animationColour, 'ocean');
+});
+
+test('on Free, stale Pro settings make the draft differ from what is saved, so it can be re-saved', () => {
+  const stored = draftFromChoice(leftPro, true);
+  assert.equal(
+    differsFromSaved(draftFromChoice(leftPro, false), stored, false),
+    true,
+  );
+  // A Free page's ordinary saved cover is not a change.
+  const plain = draftFromChoice(
+    {
+      design: null,
+      colour: null,
+      animation: 'drift',
+      motion: null,
+      hasPhoto: false,
+    },
+    false,
+  );
+  assert.equal(differsFromSaved(plain, plain, false), false);
+  // A Pro page choosing a loop is.
+  const night = draftFromChoice(
+    {
+      design: null,
+      colour: null,
+      animation: 'night',
+      motion: 'once',
+      hasPhoto: false,
+    },
+    true,
+  );
+  assert.equal(
+    differsFromSaved({ ...night, motion: 'loop' }, night, true),
+    true,
+  );
+  assert.equal(differsFromSaved(night, night, true), false);
 });

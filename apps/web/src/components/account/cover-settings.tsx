@@ -13,10 +13,10 @@ import { useRecipient } from '@/components/account/recipient-context';
 import { ProfileCover } from '@/components/profile/cover';
 import {
   choiceBody,
+  differsFromSaved,
   draftFromChoice,
   automaticLabel,
   draftPreview,
-  sameDraft,
   takesColours,
   type CoverDraft,
 } from '@/lib/cover-choice';
@@ -151,10 +151,13 @@ export function CoverSettings({
   const id = useId();
   const { profile, setProfile } = useRecipient();
   const choice = profile.coverChoice;
-  const saved = draftFromChoice(choice);
-  const hasPhoto = Boolean(choice?.hasPhoto);
   const pro = profile.plan === 'pro';
-  const [draft, setDraft] = useState<CoverDraft>(() => draftFromChoice(choice));
+  const saved = draftFromChoice(choice, pro);
+  const held = draftFromChoice(choice);
+  const hasPhoto = Boolean(choice?.hasPhoto);
+  const [draft, setDraft] = useState<CoverDraft>(() =>
+    draftFromChoice(choice, pro),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
@@ -232,7 +235,7 @@ export function CoverSettings({
     setDraft(next);
   };
 
-  const dirty = !sameDraft(draft, saved);
+  const dirty = differsFromSaved(draft, held, pro);
 
   const save = async () => {
     setBusy(true);
@@ -309,11 +312,15 @@ export function CoverSettings({
       ? 'Slow loop comes with Pro. On Free, animated covers play once when your page opens.'
       : tried
         ? `${tried} comes with Pro. Free includes ${FREE_NAMES.slice(0, -1).join(', ')} and ${FREE_NAMES.at(-1)}.`
-        : animation
-          ? pro
-            ? 'You choose. Slow loop keeps moving until someone starts tipping.'
-            : 'On Free, animated covers play once when your page opens.'
-          : '';
+        : animation &&
+            !pro &&
+            COVER_ANIMATIONS.some((a) => a.id === animation && a.pro)
+          ? `Your page is on Free, so ${animationName} shows as a still picture. Choose ${FREE_NAMES.slice(0, -1).join(', ')} or ${FREE_NAMES.at(-1)} to play it.`
+          : animation
+            ? pro
+              ? 'You choose. Slow loop keeps moving until someone starts tipping.'
+              : 'On Free, animated covers play once when your page opens.'
+            : '';
   const name = animationName ?? designName(draft.design);
   const unsaved = dirty;
 

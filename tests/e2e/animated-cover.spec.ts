@@ -230,3 +230,25 @@ test('nothing is written on the cover', async ({ page }, testInfo) => {
   }));
   expect(inside).toEqual({ text: '', focusable: 0 });
 });
+
+test('a submission in flight freezes the cover, with no earlier touch of the form', async ({
+  page,
+}, testInfo) => {
+  await openAnimated(page, testInfo, {
+    animation: 'night',
+    plan: 'pro',
+    motion: 'loop',
+  });
+  const cover = page.locator(COVER);
+  await expect(cover).not.toHaveAttribute('data-cover-frozen', '');
+  // The form marks itself while it submits; nothing has been focused or pressed.
+  await page
+    .locator('[data-tip-panel] form')
+    .evaluate((form) => form.setAttribute('data-submitting', ''));
+  await expect(cover).toHaveAttribute('data-cover-frozen', '');
+  await expect
+    .poll(async () =>
+      (await animations(page)).every((a) => a.state === 'paused'),
+    )
+    .toBe(true);
+});

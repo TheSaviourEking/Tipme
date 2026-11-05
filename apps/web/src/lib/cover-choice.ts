@@ -36,15 +36,20 @@ export const takesColours = (design: string | null): boolean =>
   COVER_DESIGNS.some((d) => d.id === design && d.colours);
 
 /** The draft a saved choice opens as. Unknown designs and colours fall back quietly. */
-export function draftFromChoice(choice: MyProfile['coverChoice']): CoverDraft {
+export function draftFromChoice(
+  choice: MyProfile['coverChoice'],
+  pro = true,
+): CoverDraft {
   if (COVER_ANIMATIONS.some((a) => a.id === choice?.animation)) {
     const known = COVER_COLOURS.some((c) => c.id === choice?.colour);
     return {
       design: null,
       colour: NEUTRAL,
       animation: choice?.animation ?? null,
-      motion: choice?.motion === 'loop' ? 'loop' : 'once',
-      animationColour: known && choice?.colour ? choice.colour : null,
+      // A page that left Pro still holds its loop and colour, but shows the still frame; its draft
+      // opens without them, so saving again strips what Free cannot keep.
+      motion: pro && choice?.motion === 'loop' ? 'loop' : 'once',
+      animationColour: pro && known && choice?.colour ? choice.colour : null,
     };
   }
   const design = COVER_DESIGNS.some((d) => d.id === choice?.design)
@@ -113,3 +118,22 @@ export function automaticLabel(handle: string): string {
     .filter(Boolean)
     .join(' ');
 }
+
+/** The body as stored: 'once' is the same as no setting, so it is left out. */
+function storedBody(draft: CoverDraft, pro: boolean): CoverDesignChoice {
+  const { motion, ...rest } = choiceBody(draft, pro);
+  return motion === 'once' ? rest : { ...rest, ...(motion ? { motion } : {}) };
+}
+
+/**
+ * Whether saving the draft would change what is stored. `stored` is the saved choice as the
+ * server holds it (`draftFromChoice(choice, true)`), so a page that left Pro, still holding a
+ * loop or a colour, differs from its Free draft and can save to clear them.
+ */
+export const differsFromSaved = (
+  draft: CoverDraft,
+  stored: CoverDraft,
+  pro: boolean,
+): boolean =>
+  JSON.stringify(storedBody(draft, pro)) !==
+  JSON.stringify(storedBody(stored, true));
