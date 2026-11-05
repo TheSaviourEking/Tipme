@@ -1,0 +1,170 @@
+'use client';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import {
+  LIVE_RECIPIENT_TYPES,
+  LIVE_STAFF_TYPES,
+  type LiveEventType,
+} from '@tipme/contracts';
+import {
+  createLiveClient,
+  type LiveClientDeps,
+  type LiveProbe,
+  type LiveStatus,
+} from '@/lib/live-client';
+import {
+  createRefetchScheduler,
+  type RefetchScheduler,
+} from '@/lib/live-refetch';
+import { apiUrl } from '@/lib/session-client';
+
+interface LiveContextValue {
+  scheduler: RefetchScheduler;
+  status: LiveStatus;
+}
+
+const LiveContext = createContext<LiveContextValue | null>(null);
+
+const PATHS = { me: '/v1/me/events', ops: '/v1/ops/events' } as const;
+const PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * Why the stream failed. EventSource can't read a status code, so this asks the same URL with
+ * fetch and drops the body at once: 204 is "turned off", 401 signed out, 429/503 a refusal.
+ */
+async function probe(url: string): Promise<LiveProbe> {
+  const abort = new AbortController();
+  const timer = window.setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      credentials: 'include',
+      signal: abort.signal,
+      headers: { accept: 'text/event-stream' },
+    });
+    abort.abort();
+    if (response.status === 204) return 'disabled';
+    if (response.status === 401) return 'unauthenticated';
+    if (response.status === 429 || response.status === 503) return 'refused';
+    return response.ok ? 'ok' : 'error';
+  } catch {
+    return 'error';
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+/**
+ * One live connection per tab (spec §6.1). Panels register what to re-read with useLiveEvents;
+ * a signal, a resync and the fallback poll all run those same reads. Renders no box of its own:
+ * `data-live` on a `display: contents` wrapper says how it is connected (tests read it).
+ */
+export function LiveProvider({
+  stream,
+  children,
+  keepOpenWhenHidden,
+  onSignedOut,
+  enabled = true,
+}: {
+  stream: 'me' | 'ops';
+  children: ReactNode;
+  /** False until the page knows who is signed in: nothing connects before then. */
+  enabled?: boolean;
+  keepOpenWhenHidden?: () => boolean;
+  onSignedOut?: () => void;
+}) {
+  const [scheduler] = useState(() =>
+    createRefetchScheduler({
+      debounceMs: 300,
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (timer) => window.clearTimeout(timer as number),
+    }),
+  );
+  const [status, setStatus] = useState<LiveStatus>('idle');
+  const keepOpen = useRef(keepOpenWhenHidden);
+  const signedOut = useRef(onSignedOut);
+  useEffect(() => {
+    keepOpen.current = keepOpenWhenHidden;
+    signedOut.current = onSignedOut;
+  });
+
+  useEffect(() => {
+    if (!enabled) return;
+    // No EventSource: stay 'idle', so the bell keeps its own poll, as today.
+    if (typeof window.EventSource !== 'function') return;
+    const url = apiUrl(PATHS[stream]);
+    const client = createLiveClient({
+      url,
+      // The DOM's handler types are narrower than the client's EventSourceLike; same object.
+      EventSource:
+        window.EventSource as unknown as LiveClientDeps['EventSource'],
+      now: () => performance.now(),
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (timer) => window.clearTimeout(timer as number),
+      random: Math.random,
+      visible: () => document.visibilityState === 'visible',
+      probe: () => probe(url),
+      keepOpenWhenHidden: () => keepOpen.current?.() ?? false,
+    });
+    const offs = [
+      ...[...LIVE_RECIPIENT_TYPES, ...LIVE_STAFF_TYPES].map((type) =>
+        client.on(type, () => scheduler.signal(type)),
+      ),
+      client.onResync(() => scheduler.resyncAll()),
+      client.onStatus(setStatus),
+      client.onSignedOut(() => signedOut.current?.()),
+    ];
+    const visibility = () => client.visibilityChanged();
+    const online = () => client.online();
+    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('online', online);
+    client.start();
+    return () => {
+      document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('online', online);
+      for (const off of offs) off();
+      client.stop();
+    };
+  }, [stream, scheduler, enabled]);
+
+  return (
+    <LiveContext.Provider value={{ scheduler, status }}>
+      <div data-live={status} style={{ display: 'contents' }}>
+        {children}
+      </div>
+    </LiveContext.Provider>
+  );
+}
+
+/**
+ * Re-runs `refetch` on any of `types`, and on every resync and fallback poll. A no-op outside a
+ * LiveProvider. `refetch` may change every render; the registration follows the latest one.
+ */
+export function useLiveEvents(
+  types: readonly LiveEventType[],
+  refetch: () => Promise<void>,
+): void {
+  const scheduler = useContext(LiveContext)?.scheduler;
+  const latest = useRef(refetch);
+  useEffect(() => {
+    latest.current = refetch;
+  });
+  const key = types.join(',');
+  useEffect(() => {
+    if (!scheduler) return;
+    return scheduler.register(
+      key ? (key.split(',') as LiveEventType[]) : [],
+      () => latest.current(),
+    );
+  }, [scheduler, key]);
+}
+
+/** 'idle' outside a provider. */
+export function useLiveStatus(): LiveStatus {
+  return useContext(LiveContext)?.status ?? 'idle';
+}

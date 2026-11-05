@@ -1,40 +1,52 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { LiveEventType } from '@tipme/contracts';
+import { useLiveEvents } from '@/components/live/live-provider';
 import { apiFetch } from '@/lib/session-client';
+import {
+  nextPanelState,
+  type PanelError,
+  type PanelState,
+} from './panel-state';
 
-/**
- * 'load': the first read failed, so there is nothing to show. 'refresh': a later read failed
- * after the panel had data; the last data stays on screen and the panel says so quietly.
- */
-export type PanelError = 'load' | 'refresh' | null;
+export type { PanelError };
 
 export interface Panel<T> {
   data: T | null;
   error: PanelError;
-  /** Reads again. A later live stream calls this and nothing else. */
+  /** Reads again: what a live signal, a resync and the fallback poll call. */
   reload: () => Promise<void>;
+  /** Browser clock at the last successful read; null before the first. */
+  updatedAt: Date | null;
 }
 
-/** The one place a dashboard panel loads its data. Reads once on mount; never polls. */
-export function usePanel<T>(path: string): Panel<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<PanelError>(null);
-  const have = useRef(false);
-  // An answer for an older path (a search typed over) never replaces a newer one.
+const NONE: readonly LiveEventType[] = [];
+
+/**
+ * The one place a dashboard panel loads its data. Reads once on mount, then again on the live
+ * signals in `options.live` (and every resync), never on a timer of its own.
+ */
+export function usePanel<T>(
+  path: string,
+  options?: { live?: readonly LiveEventType[] },
+): Panel<T> {
+  const [state, setState] = useState<PanelState<T>>({
+    data: null,
+    error: null,
+    updatedAt: null,
+  });
+  // An answer for an older path (a search typed over), or an older read, never replaces a newer one.
   const latest = useRef(0);
   const reload = useCallback(async () => {
     const mine = ++latest.current;
     const result = await apiFetch<T>(path);
     if (mine !== latest.current) return;
-    if (result.ok) {
-      have.current = true;
-      setData(result.data);
-      setError(null);
-    } else setError(have.current ? 'refresh' : 'load');
+    setState((prev) => nextPanelState(prev, result, new Date()));
   }, [path]);
   useEffect(() => {
     const first = setTimeout(() => void reload(), 0);
     return () => clearTimeout(first);
   }, [reload]);
-  return { data, error, reload };
+  useLiveEvents(options?.live ?? NONE, reload);
+  return { ...state, reload };
 }
