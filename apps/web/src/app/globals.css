@@ -6761,6 +6761,16 @@ body > .coming-soon-page {
   }
 }
 
+/*
+ * Freezing: once the tip form is used, and while the cover is off screen. A paused animation holds
+ * the frame it reached. Without scripts, focus in the panel still pauses it.
+ */
+.profile-cover[data-cover-frozen] .cover-fx,
+.profile-cover[data-cover-offscreen] .cover-fx,
+.profile-page:has([data-tip-panel]:focus-within) .cover-fx {
+  animation-play-state: paused;
+}
+
 /* Not animating: the settled frame. */
 [data-cover-play='still'] .cover-fx {
   animation: none;
