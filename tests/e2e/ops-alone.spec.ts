@@ -162,3 +162,74 @@ test('@alone a stale session can freeze and end sessions at once, and releasing 
   ).toBeVisible();
   await expect(page.getByTestId('action-outcome')).toBeFocused();
 });
+
+// Live updates, PR 2 (plan Task 14). @alone: it really switches every withdrawal off. The Withdraw
+// page re-reads only on signals (never on the fallback poll), so the change must come from the
+// stream: a broadcast, which each tab re-reads after its own random 0-10 s wait.
+test('@alone turning withdrawals off shows in an open Withdraw tab within 15 s', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const recipient = await (await browser.newContext()).newPage();
+  await signUpRecipient(recipient, testInfo);
+  await recipient.goto('/dashboard/withdraw');
+  await expect(
+    recipient.getByText('Nothing to withdraw right now'),
+  ).toBeVisible();
+  await expect(recipient.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await recipient.evaluate(() => {
+    (window as unknown as { __noReload: number }).__noReload = 1;
+  });
+
+  const owner = await enrolOwner(page, testInfo);
+  await page.goto('/ops');
+  const control = page.getByTestId('withdrawals-switch');
+  await control
+    .getByRole('button', { name: 'Switch off all withdrawals…' })
+    .click();
+  await control.getByLabel('Why stop all withdrawals?').fill(REASON);
+  await control.getByRole('button', { name: 'Switch off' }).click();
+  await expect(
+    control.getByText('Withdrawals are OFF for everyone'),
+  ).toBeVisible();
+
+  await expect(
+    recipient.getByText(
+      'Withdrawals are paused for now. Your balance is safe.',
+    ),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // Back on: TipMe's side no longer stops it, but only a full quote (the partner) can say how
+  // much, so the page asks, and asks the partner only when the person taps.
+  await control
+    .getByRole('button', { name: 'Switch withdrawals back on…' })
+    .click();
+  await control
+    .getByLabel(
+      'Why is it safe to start again? Queued withdrawals start at once.',
+    )
+    .fill(REASON);
+  await control.getByRole('button', { name: 'Switch on' }).click();
+  const prompt = page.getByRole('dialog', { name: 'Enter a fresh code' });
+  if (await prompt.isVisible().catch(() => false)) {
+    await prompt.getByLabel('Authenticator code').fill(await codeFor(owner));
+    await prompt.getByRole('button', { name: 'Continue' }).click();
+  }
+  await expect(control.getByText('Withdrawals: on.')).toBeVisible();
+  await expect(recipient.getByText('Check what you can withdraw')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expectAccessible(recipient);
+  await recipient.getByRole('button', { name: 'Check again' }).click();
+  await expect(
+    recipient.getByText('Nothing to withdraw right now'),
+  ).toBeVisible();
+  expect(
+    await recipient.evaluate(
+      () => (window as unknown as { __noReload?: number }).__noReload,
+    ),
+  ).toBe(1);
+});

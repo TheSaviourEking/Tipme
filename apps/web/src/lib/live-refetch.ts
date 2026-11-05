@@ -37,6 +37,8 @@ export function createRefetchScheduler(o: {
   debounceMs: number;
   setTimeout: (fn: () => void, ms: number) => unknown;
   clearTimeout: (timer: unknown) => void;
+  /** Extra wait before a signal's refetch, by type (withdrawalsSignalDelay). */
+  signalDelay?: (type: LiveEventType) => number;
 }): RefetchScheduler {
   const registrations = new Set<Registration>();
 
@@ -87,11 +89,32 @@ export function createRefetchScheduler(o: {
       };
     },
     signal(type) {
-      for (const r of registrations) if (r.types.has(type)) schedule(r);
+      const extra = o.signalDelay?.(type) ?? 0;
+      for (const r of registrations)
+        if (r.types.has(type)) schedule(r, o.debounceMs + extra);
     },
     resyncAll(options) {
       for (const r of registrations)
         if (r.resync) schedule(r, options?.delayMs);
     },
   };
+}
+
+/** The most a `withdrawals.changed` refetch waits when nothing of this person's is in flight. */
+export const WITHDRAWALS_SPREAD_MS = 10_000;
+
+/**
+ * `withdrawals.changed` also comes as a broadcast (the TipMe-wide switch), and the browser never
+ * learns which it was. So, unless this person has a withdrawal in flight (then the signal is most
+ * likely theirs, and they are watching it), each tab waits a random 0-10 s first: every open
+ * dashboard re-reading at once would be a herd. Other types never wait.
+ */
+export function withdrawalsSignalDelay(o: {
+  random: () => number;
+  inFlight: () => boolean;
+}): (type: LiveEventType) => number {
+  return (type) =>
+    type === 'withdrawals.changed' && !o.inFlight()
+      ? o.random() * WITHDRAWALS_SPREAD_MS
+      : 0;
 }

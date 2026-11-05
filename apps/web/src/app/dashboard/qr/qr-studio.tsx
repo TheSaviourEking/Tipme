@@ -63,7 +63,8 @@ export function QrStudio() {
         note: null,
       });
   const style = styleById(isFree(current) ? current : 'purple');
-  const art = useArtImage(design ? design.id : null, 1024);
+  // A plan change (staff turning Pro on, a live update) draws it again, without a reload.
+  const art = useArtImage(design ? design.id : null, 1024, profile.plan);
   // What the API actually drew wins over what this page last believed about its plan.
   const previewing =
     design !== null && (art.ready ? art.preview : design.locked);
@@ -94,7 +95,8 @@ export function QrStudio() {
     return () => {
       live = false;
     };
-  }, []);
+    // Again when the plan changes: which designs are locked comes from this list.
+  }, [pro]);
 
   const pick = (styleId: string) => {
     if (isFree(styleId) || pro) {

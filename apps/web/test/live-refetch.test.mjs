@@ -216,3 +216,45 @@ test('resyncAll with delayMs 0 reads at once (the page’s first ready: its pane
   await timers.advance(0);
   assert.equal(runs, 1);
 });
+
+test('withdrawals.changed waits 0–10 s when nothing is in flight, and refetches at once when a withdrawal is in flight', async () => {
+  const { withdrawalsSignalDelay } = await import('../src/lib/live-refetch.ts');
+  let inFlight = false;
+  let random = 0.999;
+  const delay = withdrawalsSignalDelay({
+    random: () => random,
+    inFlight: () => inFlight,
+  });
+  // Only this type waits: a broadcast (the switch) must not bring every tab back at once.
+  assert.equal(delay('tips.changed'), 0);
+  assert.equal(Math.round(delay('withdrawals.changed')), 9990);
+  random = 0;
+  assert.equal(delay('withdrawals.changed'), 0);
+  inFlight = true;
+  random = 0.5;
+  assert.equal(delay('withdrawals.changed'), 0);
+
+  // Wired into the scheduler: the debounce plus the wait.
+  inFlight = false;
+  random = 0.5;
+  const timers = fakeTimers();
+  const scheduler = createRefetchScheduler({
+    debounceMs: 300,
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
+    signalDelay: delay,
+  });
+  let reads = 0;
+  scheduler.register(['withdrawals.changed'], async () => {
+    reads += 1;
+  });
+  scheduler.signal('withdrawals.changed');
+  await timers.advance(5299);
+  assert.equal(reads, 0);
+  await timers.advance(1);
+  assert.equal(reads, 1);
+  inFlight = true;
+  scheduler.signal('withdrawals.changed');
+  await timers.advance(300);
+  assert.equal(reads, 2);
+});

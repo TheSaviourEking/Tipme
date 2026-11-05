@@ -4,13 +4,14 @@ import { useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type {
   DashboardSummary,
-  WithdrawalQuoteResponse,
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
 import { FEE_POLICY_V1 } from '@tipme/domain';
 import { Button, InputField, Notice, Skeleton, Surface } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
+import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
+import { useWithdrawalInFlight } from '@/components/live/live-provider';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { formatNaira } from '@/lib/demo-amount';
@@ -18,14 +19,22 @@ import { dateOf, dayKey, timeOf } from '@/lib/lagos-time';
 import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 import { bankLine } from '@/lib/withdrawal-bank';
+import { withdrawalInFlight } from '@/lib/quote-merge';
 import {
   withdrawableNow,
   withdrawRefusal,
   withdrawState,
 } from '@/lib/withdraw-state';
 
-/** Read once per visit (review I5): see the panels below. */
-const ONCE = { resync: false } as const;
+/**
+ * Re-read on a withdrawal change or a tip (live updates, PR 2), but never on a resync, a tab focus
+ * or the fallback poll: the page reads once per visit as before (review I5). None of these reads
+ * asks the payment partner; the quote has its own rule (use-withdrawal-quote.ts).
+ */
+const LIVE = {
+  live: ['withdrawals.changed', 'tips.changed'],
+  resync: false,
+} as const;
 
 /** Quick amounts, offered only when the balance can cover them with something left over. */
 const SHORTCUTS_MINOR = [BigInt(500_000), BigInt(2_000_000)];
@@ -166,16 +175,15 @@ export default function WithdrawPage({
 }) {
   const id = useId();
   const copy = paymentModeCopy(usePaymentMode());
-  // Read once per visit, as before live updates (review I5): the quote asks the payment partner
-  // for its balance, so no resync, safety refresh or fallback poll may repeat it. PR 2 (Task 14)
-  // decides which signals re-read these, behind a shared server cache of that balance.
-  const balance = usePanel<DashboardSummary>('/v1/me/dashboard', ONCE);
-  const latest = usePanel<WithdrawalQuoteResponse>(
-    '/v1/me/withdrawal-quote',
-    ONCE,
-  );
+  const balance = usePanel<DashboardSummary>('/v1/me/dashboard', LIVE);
+  // The full quote asks the payment partner: once per visit and on the person's own action. A
+  // withdrawal change re-reads only TipMe's side of it. A tip doesn't change what the partner
+  // allows until it settles there, so the quote stays as read (the request is checked fresh).
+  const latest = useWithdrawalQuote(['withdrawals.changed']);
   const firstPath = '/v1/me/withdrawals';
-  const withdrawalsPanel = usePanel<WithdrawalsPage>(firstPath, ONCE);
+  const withdrawalsPanel = usePanel<WithdrawalsPage>(firstPath, LIVE);
+  // One of theirs on its way: its signals are re-read at once, not after the broadcast spread.
+  useWithdrawalInFlight(() => withdrawalInFlight(withdrawalsPanel.data?.items));
   // Later pages, kept with the list they belong to: a reload starts from the first page again.
   const [more, setMore] = useState<{
     source: WithdrawalsPage;
@@ -233,12 +241,13 @@ export default function WithdrawPage({
       </Notice>
     );
   // A quote that failed to refresh is no quote: it is never read as a yes.
-  if (!summary || (!latest.data && !latest.error))
+  if (!summary || (!latest.data && !latest.error && !latest.needsCheck))
     return <Skeleton label="Loading your balance" />;
   const quote = latest.error ? null : latest.data;
   const state = withdrawState({
     withdrawalsAvailable: summary.withdrawalsAvailable,
     quote,
+    needsCheck: latest.needsCheck,
   });
   const ready = quote?.state === 'ready' ? quote : null;
   const available = BigInt(summary.availableMinor);
@@ -247,6 +256,7 @@ export default function WithdrawPage({
     availableMinor: summary.availableMinor,
     withdrawalsAvailable: summary.withdrawalsAvailable,
     quote,
+    needsCheck: latest.needsCheck,
   });
   const chosen = amount === null ? null : BigInt(amount);
   // Tapping the amount already chosen changes nothing: the request key and any warning stay.
@@ -308,6 +318,14 @@ export default function WithdrawPage({
           <>
             {' '}
             <Link href={state.notice.href}>{state.notice.linkLabel}</Link>
+          </>
+        )}
+        {state.kind === 'needs_check' && (
+          <>
+            {' '}
+            <Button variant="secondary" onClick={() => void latest.reload()}>
+              Check again
+            </Button>
           </>
         )}
       </Notice>

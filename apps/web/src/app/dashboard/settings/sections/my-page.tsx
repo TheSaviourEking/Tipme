@@ -9,6 +9,8 @@ import { useRecipient } from '@/components/account/recipient-context';
 import { CoverSettings, type Layer } from '@/components/account/cover-settings';
 import { Avatar } from '@/components/avatar';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { ChangedElsewhere } from '@/components/dashboard/changed-elsewhere';
+import { useLiveForm } from '@/components/dashboard/use-live-form';
 import { hasAvatar } from '@/lib/avatar-source';
 import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
@@ -415,18 +417,30 @@ const wholeNairaMinor = (value: string): string | null => {
 };
 
 /** Free pages show the standard amounts; Pro pages choose their own (PR-012). */
+/** What the amounts form edits, from the saved amounts. */
+function amountsForm(amounts: { presetsMinor: string[]; minMinor: string }) {
+  return {
+    presets: [0, 1, 2, 3].map((i) =>
+      amounts.presetsMinor[i] ? nairaText(amounts.presetsMinor[i]) : '',
+    ),
+    minimum: nairaText(amounts.minMinor),
+  };
+}
+
 export function TipAmountsSettings() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
   // An API older than PR-012 sends neither: treat the page as Free with the standard amounts.
   const amounts = profile.tipAmounts ?? STANDARD_TIP_AMOUNTS;
   const pro = profile.plan === 'pro';
-  const [presets, setPresets] = useState(() =>
-    [0, 1, 2, 3].map((i) =>
-      amounts.presetsMinor[i] ? nairaText(amounts.presetsMinor[i]) : '',
-    ),
-  );
-  const [minimum, setMinimum] = useState(nairaText(amounts.minMinor));
+  const [form, setForm] = useState(() => amountsForm(amounts));
+  const { presets, minimum } = form;
+  const setPresets = (next: (current: string[]) => string[]) =>
+    setForm((current) => ({ ...current, presets: next(current.presets) }));
+  const setMinimum = (value: string) =>
+    setForm((current) => ({ ...current, minimum: value }));
+  // Saved elsewhere (another device, or staff turning Pro on): follow it, keep what is being typed.
+  const live = useLiveForm(amountsForm(amounts), form, setForm);
   // Which field the problem is in, so the message sits next to it.
   const [error, setError] = useState<{
     field: 'presets' | 'minimum';
@@ -501,6 +515,9 @@ export function TipAmountsSettings() {
         Choose the amounts on your page and the smallest tip you accept.
         Supporters can still type their own amount, from your minimum up.
       </p>
+      {live.changedElsewhere && (
+        <ChangedElsewhere onShowLatest={live.showLatest} />
+      )}
       <form className="settings-form" onSubmit={save} noValidate>
         <fieldset className="tip-amount-fields">
           <legend>Amounts on your page (NGN)</legend>
@@ -576,6 +593,8 @@ export function AboutYou({
 }) {
   const id = useId();
   const { profile, setProfile } = useRecipient();
+  // Saved elsewhere while this is open: untouched fields follow, what is being typed stays.
+  const live = useLiveForm(aboutFrom(profile), form, setForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -635,6 +654,9 @@ export function AboutYou({
       <p className="tm-hint">
         Everything here is optional. You decide what supporters see.
       </p>
+      {live.changedElsewhere && (
+        <ChangedElsewhere onShowLatest={live.showLatest} />
+      )}
       <form className="settings-form" onSubmit={save} noValidate>
         <InputField
           id={`${id}-name`}
