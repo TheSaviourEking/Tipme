@@ -1,3 +1,9 @@
+# Current handoff — social links (5 November 2026)
+
+- Branch/worktree: `feat/social-links` / `.worktrees/social-links`, not pushed. Lane 0 used for e2e and review:screens.
+- Verified: format, lint, typecheck, every unit test, the touched integration files, e2e social-links, accounts and profile-page specs, and review:screens (82 shots). Evidence: `.superpowers/program/social-build-report.md`.
+- Open for the owner: the payment partner's written position on adult-platform links, and the Terms' acceptable-use section. Nothing here is legal or regulatory approval.
+
 # Current handoff — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration. Nothing ran against staging or production.

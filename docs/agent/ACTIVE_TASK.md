@@ -1,3 +1,10 @@
+# Current task — social links (5 November 2026)
+
+- Branch/worktree: `feat/social-links` / `.worktrees/social-links`, from `origin/dev` d0325dd. Committed, not pushed. Migration `0071_social_links` (renumber at merge if 0071 is taken).
+- Done: the link catalogue (14 Free sites, 9 Pro, link pages refused); Free and Pro limits enforced on the server, under a row lock; lapsed Pro hides extras and keeps them; Your links editor; the public link row and featured key; the dated decision in `docs/00-DECISIONS.md`. Plan: `docs/superpowers/plans/2026-11-05-social-links.md`.
+- Not done: press counts per link (needs D-07). Report: `.superpowers/program/social-build-report.md`.
+- Next exact step: review, then the PR to dev.
+
 # Current task — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration.
