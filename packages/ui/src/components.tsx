@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { ComponentPropsWithRef, HTMLAttributes, ReactNode } from 'react';
 
 /** `continue` is the black continuation action: the one step forward on a screen. */
@@ -223,6 +224,108 @@ export function AmountChoice(
     />
   );
 }
+export type SlipTone = 'error' | 'unsure' | 'waiting' | 'done' | 'neutral';
+const stampColour: Record<SlipTone, 'red' | 'ink' | 'purple'> = {
+  error: 'red',
+  unsure: 'ink',
+  waiting: 'ink',
+  neutral: 'ink',
+  done: 'purple',
+};
+/** Something present beside a value: false, null, undefined and '' are not. */
+const given = (node: ReactNode) =>
+  node !== undefined && node !== null && node !== false && node !== '';
+
+/**
+ * Concept A, the slip: a paper slip for a state that needs explaining (money, account safety,
+ * staff actions). Errors and unsure outcomes are alerts; everything else is a polite status.
+ */
+export function Slip({
+  tone = 'neutral',
+  title,
+  stamp,
+  safe,
+  actions,
+  dense = false,
+  children,
+  className,
+  id,
+  'data-testid': testId,
+}: {
+  tone?: SlipTone;
+  /** Some titles come from the server, so any node is allowed. */
+  title: ReactNode;
+  /** The ink stamp's words. Decoration: the title carries the meaning, so it is aria-hidden. */
+  stamp?: string;
+  /**
+   * The reassuring line. Only where the code proves it (states plan, Money-safety proofs): the slip
+   * never writes one of its own.
+   */
+  safe?: ReactNode;
+  /** Keys on the slip: the way out. */
+  actions?: ReactNode;
+  /** Staff screens: tighter padding, smaller stamp. */
+  dense?: boolean;
+  children?: ReactNode;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <div
+      id={id}
+      data-testid={testId}
+      className={classes(
+        'tm-slip',
+        `tm-slip--${tone}`,
+        dense ? 'tm-slip--dense' : undefined,
+        stamp ? 'tm-slip--stamped' : undefined,
+        className,
+      )}
+      role={tone === 'error' || tone === 'unsure' ? 'alert' : 'status'}
+    >
+      {stamp && (
+        <span
+          className={`tm-slip__stamp tm-slip__stamp--${stampColour[tone]}`}
+          aria-hidden="true"
+        >
+          {stamp.split('\n').map((line, index) => (
+            <Fragment key={index}>
+              {index > 0 && <br />}
+              {line}
+            </Fragment>
+          ))}
+        </span>
+      )}
+      <strong className="tm-slip__title">{title}</strong>
+      {given(children) && <div className="tm-slip__body">{children}</div>}
+      {given(safe) && (
+        <div className="tm-slip__safe">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path
+              d="M8 1.5 2.75 3.5v4c0 3.2 2.2 5.9 5.25 7 3.05-1.1 5.25-3.8 5.25-7v-4L8 1.5Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+            <path
+              d="m5.5 8 1.75 1.75L10.75 6.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span>{safe}</span>
+        </div>
+      )}
+      {given(actions) && <div className="tm-slip__actions">{actions}</div>}
+    </div>
+  );
+}
+
 export function Notice({
   tone = 'neutral',
   title,

@@ -477,6 +477,188 @@ textarea.tm-input {
   outline-offset: 3px;
 }
 
+/* Concept A, the slip (StatesConcepts .slip, .stamp, .safe): paper torn from a pad, with a
+   perforated top edge, an ink stamp and, only where the code proves it, a recessed safe line. */
+.tm-slip {
+  position: relative;
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  padding: 1.125rem 1.125rem 1rem;
+  border: 1px solid var(--edge-hairline);
+  border-radius: 4px 4px 16px 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tm-slip::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 10px;
+  left: 10px;
+  height: 10px;
+  background: radial-gradient(
+      circle at 5px 5px,
+      var(--canvas) 3.2px,
+      transparent 3.6px
+    )
+    0 0 / 12px 10px repeat-x;
+  pointer-events: none;
+}
+
+.tm-slip--stamped {
+  padding-right: 6.5rem;
+}
+
+.tm-slip--unsure {
+  border-color: var(--edge-warning);
+}
+
+.tm-slip__title {
+  display: block;
+  font: 400 1.45rem / 1.1 var(--font-editorial);
+  letter-spacing: -0.01em;
+}
+
+.tm-slip__body {
+  margin-top: 0.375rem;
+}
+
+.tm-slip__body > :first-child {
+  margin-top: 0;
+}
+
+.tm-slip__body > :last-child {
+  margin-bottom: 0;
+}
+
+.tm-slip__stamp {
+  position: absolute;
+  top: 0.875rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  box-sizing: border-box;
+  border: 2.5px solid currentColor;
+  border-radius: 50%;
+  font: 800 0.72rem / 1.15 var(--font-interface);
+  text-align: center;
+  opacity: 0.9;
+  transform: rotate(-9deg);
+}
+
+.tm-slip__stamp::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+.tm-slip__stamp--red {
+  color: var(--state-danger);
+}
+
+.tm-slip__stamp--ink {
+  color: var(--stamp-ink);
+}
+
+.tm-slip__stamp--purple {
+  color: var(--brand-primary);
+}
+
+.tm-slip__safe {
+  display: flex;
+  gap: 0.625rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 12px;
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+  font-size: 0.84375rem;
+  font-weight: 700;
+}
+
+.tm-slip__safe svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.tm-slip__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 0.875rem;
+}
+
+.tm-slip--dense {
+  padding: 0.75rem 0.875rem;
+}
+
+.tm-slip--dense.tm-slip--stamped {
+  padding-right: 5.75rem;
+}
+
+.tm-slip--dense .tm-slip__title {
+  font-size: 1.25rem;
+}
+
+.tm-slip--dense .tm-slip__stamp {
+  top: 0.625rem;
+  right: 0.75rem;
+  width: 66px;
+  height: 66px;
+  font-size: 0.66rem;
+}
+
+/* On the narrowest phones the stamp leaves the corner and sits beside the title, so a long
+   title never runs under it. */
+@media (max-width: 359px) {
+  .tm-slip--stamped,
+  .tm-slip--dense.tm-slip--stamped {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.75rem;
+    padding-right: 1.125rem;
+  }
+
+  .tm-slip--dense.tm-slip--stamped {
+    padding-right: 0.875rem;
+  }
+
+  .tm-slip--stamped > * {
+    grid-column: 1 / -1;
+  }
+
+  .tm-slip--stamped > .tm-slip__title {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+  }
+
+  .tm-slip--stamped > .tm-slip__stamp,
+  .tm-slip--dense .tm-slip__stamp {
+    position: relative;
+    top: auto;
+    right: auto;
+    grid-row: 1;
+    grid-column: 2;
+    width: 56px;
+    height: 56px;
+    font-size: 0.6rem;
+  }
+}
+
 .tm-notice {
   padding: 1rem 1.1rem;
   border: 1px solid var(--edge-hairline);
@@ -613,6 +795,20 @@ textarea.tm-input {
   .tm-well,
   .tm-lever,
   .tm-notice {
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .tm-slip {
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .tm-slip::before {
+    content: none;
+  }
+
+  .tm-slip__safe {
     border: 1px solid CanvasText;
     box-shadow: none;
   }
