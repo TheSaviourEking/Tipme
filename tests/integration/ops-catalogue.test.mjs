@@ -195,3 +195,35 @@ test('release_check keeps exactly its four permissions', async () => {
     'issues.view',
   ]);
 });
+
+test('owner holds usernames.manage after migrating; release_check does not', async () => {
+  // An owner that existed before the migration is topped up by it: replay that step.
+  await database.pool.query(
+    `DELETE FROM role_permissions WHERE role_id = 'owner' AND permission = 'usernames.manage'`,
+  );
+  const migration = await import('node:fs').then((fs) =>
+    fs.readFileSync(
+      new URL(
+        '../../packages/database/drizzle/0075_usernames_permission.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  await database.pool.query(migration.slice(migration.indexOf('INSERT INTO')));
+  const { rows } = await database.pool.query(
+    `SELECT role_id FROM role_permissions WHERE permission = 'usernames.manage' ORDER BY role_id`,
+  );
+  assert.deepEqual(
+    rows.map((r) => r.role_id),
+    ['owner'],
+  );
+  const { userId } = await grantOwner(database.db, {
+    phone: '+2348037770016',
+    role: 'release_check',
+  });
+  assert.equal(
+    (await staffPermissions(database.db, userId)).has('usernames.manage'),
+    false,
+  );
+});

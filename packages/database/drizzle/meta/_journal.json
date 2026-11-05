@@ -505,6 +505,13 @@
       "when": 1793843317927,
       "tag": "0073_handle_reservations",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793843960182,
+      "tag": "0075_usernames_permission",
+      "breakpoints": true
     }
   ]
 }
