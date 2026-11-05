@@ -3,9 +3,9 @@ import {
   ActionLink,
   Card,
   Container,
-  EmptyState,
-  Notice,
+  EmptySlip,
   Skeleton,
+  Slip,
 } from '@tipme/ui';
 import { previewMetadata } from '@/lib/metadata';
 
@@ -35,7 +35,7 @@ export default function PreviewStates() {
         <section aria-labelledby="state-unavailable">
           <h2 id="state-unavailable">Unavailable</h2>
           <Card>
-            <EmptyState
+            <EmptySlip
               title="This profile isn’t available."
               action={
                 <ActionLink href="/@ada" variant="secondary">
@@ -44,14 +44,14 @@ export default function PreviewStates() {
               }
             >
               The link may be incorrect, or the page may no longer be here.
-            </EmptyState>
+            </EmptySlip>
           </Card>
         </section>
         <section aria-labelledby="state-error">
           <h2 id="state-error">Recoverable error</h2>
-          <Notice tone="error" title="Example: we couldn’t load this profile.">
+          <Slip tone="error" title="Example: we couldn’t load this profile.">
             No appreciation has been sent. Retry, or return to the home page.
-          </Notice>
+          </Slip>
           <p>
             <Link className="text-link" href="/">
               Back to TipMe

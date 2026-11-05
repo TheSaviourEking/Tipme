@@ -33,6 +33,13 @@ test('the material contract exposes one semantic token for every physical role',
     'duration-spatial',
     'duration-appreciation',
     'ease-physical',
+    'lamp-red',
+    'lamp-amber',
+    'lamp-off',
+    'stamp-ink',
+    'edge-danger',
+    'edge-warning',
+    'key-face-dark',
   ]) {
     const declarations = tokens.match(new RegExp(`--${name}:`, 'g')) ?? [];
     assert.equal(declarations.length, 1, `--${name} must be declared once`);

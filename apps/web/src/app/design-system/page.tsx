@@ -4,15 +4,17 @@ import {
   Button,
   Card,
   Container,
-  EmptyState,
+  EmptySlip,
+  EmptyWell,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
   Surface,
   TextareaField,
 } from '@tipme/ui';
 import { previewMetadata } from '@/lib/metadata';
 import { LeverSpecimen } from './lever-specimen';
+import { FeedbackKeysSpecimen, StatesSpecimen } from './states-specimen';
 import {
   MotionSpecimen,
   ResponsiveSpecimen,
@@ -221,15 +223,10 @@ export default function DesignSystem() {
           </section>
           <section aria-labelledby="ds-feedback">
             <h2 id="ds-feedback">Feedback</h2>
-            <Notice title="Neutral notice">
+            <Slip title="Neutral notice">
               Supporting context for the current step.
-            </Notice>
-            <Notice tone="success" title="Preferences saved">
-              A generic, non-financial success example.
-            </Notice>
-            <Notice tone="error" title="Could not save">
-              The action is available to try again.
-            </Notice>
+            </Slip>
+            <FeedbackKeysSpecimen />
             <Card material="recessed">
               <Skeleton label="Loading specimen" />
             </Card>
@@ -238,9 +235,15 @@ export default function DesignSystem() {
           <MotionSpecimen />
           <ResponsiveSpecimen />
         </div>
-        <EmptyState title="Nothing here yet">
-          Empty states explain what is missing and what to do next.
-        </EmptyState>
+        <StatesSpecimen />
+        <div className="empty-specimens">
+          <EmptySlip title="Nothing here yet">
+            Empty states explain what is missing and what to do next.
+          </EmptySlip>
+          <EmptyWell title="Nothing here yet">
+            In the admin area, an unlit well: on and ready, with nothing in it.
+          </EmptyWell>
+        </div>
       </Container>
     </main>
   );
