@@ -128,6 +128,25 @@
 
 > **Withdrawals switch: the owner's decision, 1 Nov 2026 ("we should be able to switch of withdrawals toooo").** Staff with `payouts.resolve` can stop all withdrawals from the Overview with a written reason, audited and alerted, on every copy at once, with no deploy. It is independent of `PAYMENTS_LIVE_ENABLED`. While off, requests are refused and queued payouts wait, reserved; payouts already with the provider can't be recalled and keep settling. The same D-06 limit applies: this doesn't approve holds.
 
+> **Social links: the owner's product decision, 5 Nov 2026.** The owner approved the SocialLinks board (design artifact 8D6hJZsqMkLSGh8KUUBmmh, version 97) as designed. This is a product decision. It is not legal advice, and it is not a regulatory or payment-partner approval.
+> - **Free:** up to 3 links, from TikTok, Facebook, Instagram, YouTube, X, Snapchat, WhatsApp channel, Twitch, Kick, Audiomack, Boomplay, Spotify, Apple Music and SoundCloud.
+> - **Pro:** also own website, Telegram, LinkedIn, Threads, Patreon, Selar and Substack. Up to 8 links, a featured link, and the page's own order.
+> - **Adult platforms:** OnlyFans and Fansly links are allowed **for Pro only**. This is the owner's product decision, not legal or regulatory approval.
+> - **Never allowed:** Linktree and other link-list pages, and URL shorteners, as any site or as a website.
+> - **When Pro lapses:** the extra links are hidden, not deleted. The page shows the first 3 Free-site links in the saved order, without the featured styling.
+> - **Still open:**
+>   - our payment partner's written position on pages that link to adult platforms;
+>   - the acceptable-use section of the Terms, which is still only a heading (`apps/web/src/app/legal/terms/page.tsx`).
+> - **Builder's calls (PROPOSED):**
+>   - **Accepted addresses:** each site's own https addresses, as listed in `packages/contracts/src/social-links.ts`, with the sources in the build report.
+>   - **WhatsApp:** channel links only.
+>   - **Telegram:** public usernames only, not invite links.
+>   - **Order on Free:** the catalogue order.
+>   - **Featured key:** fixed wording for each site, with no free text.
+>   - **Letter badges** in place of brand logos.
+>   - **A Free save on a lapsed Pro page:** it keeps the hidden links. The page then stores at most 11.
+> - **Not built:** press counts per link. Analytics is staff-only, anonymous, and off in production until D-07. A count per link shown to recipients would be a new use of visitor data.
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 
