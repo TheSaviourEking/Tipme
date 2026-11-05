@@ -517,6 +517,45 @@ export function EmptyWell({
   );
 }
 
+/**
+ * Progress as lamps in wells (FeedbackMoments "Withdrawal requested"): lamps fill one by one, from
+ * the API's state only. A failure lights the first lamp red and leaves the others dark.
+ */
+export function Steps({
+  labels,
+  filled,
+  failed = false,
+  label = 'Progress',
+}: {
+  labels: readonly string[];
+  /** How many are done, from the API's state only. */
+  filled: number;
+  failed?: boolean;
+  label?: string;
+}) {
+  return (
+    <ol className="tm-steps" aria-label={label}>
+      {labels.map((step, index) => {
+        const done = !failed && index < filled;
+        const broke = failed && index === 0;
+        return (
+          <li
+            key={step}
+            className="tm-steps__step"
+            data-filled={done ? 'true' : 'false'}
+          >
+            <Lamp tone={broke ? 'red' : done ? 'purple' : 'off'} />
+            <span>{step}</span>
+            <span className="sr-only">
+              {broke ? ', didn’t go through' : done ? ', done' : ', not yet'}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function Skeleton({ label = 'Loading content' }: { label?: string }) {
   return (
     <div className="tm-skeleton" role="status">

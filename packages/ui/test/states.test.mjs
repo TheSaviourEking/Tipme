@@ -347,3 +347,29 @@ test('an empty well has an unlit lamp and an h3 when asked', () => {
   assert.match(html, /<h3[^>]*>Nothing is waiting<\/h3>/);
   assert.doesNotMatch(html, /<p/);
 });
+
+test('steps say done or not yet, and a failure lights only the first lamp red', () => {
+  const labels = ['Requested', 'Sent to our payment partner', 'Paid'];
+  const two = renderToStaticMarkup(h(ui.Steps, { labels, filled: 2 }));
+  assert.match(two, /^<ol class="tm-steps" aria-label="Progress">/);
+  assert.equal(two.match(/tm-lamp--purple/g).length, 2);
+  assert.equal(two.match(/tm-lamp--off/g).length, 1);
+  assert.equal(two.match(/data-filled="true"/g).length, 2);
+  assert.match(two, /Paid<\/span><span class="sr-only">, not yet<\/span>/);
+  assert.match(two, /Requested<\/span><span class="sr-only">, done<\/span>/);
+  const failed = renderToStaticMarkup(
+    h(ui.Steps, { labels, filled: 0, failed: true }),
+  );
+  assert.equal(failed.match(/tm-lamp--red/g).length, 1);
+  assert.equal(failed.match(/tm-lamp--off/g).length, 2);
+  assert.match(
+    failed,
+    /Requested<\/span><span class="sr-only">, didn’t go through<\/span>/,
+  );
+  assert.match(
+    renderToStaticMarkup(
+      h(ui.Steps, { labels, filled: 1, label: 'Withdrawal' }),
+    ),
+    /aria-label="Withdrawal"/,
+  );
+});
