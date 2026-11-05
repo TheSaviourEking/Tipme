@@ -8,9 +8,11 @@ import type { LiveEventType } from '@tipme/contracts';
  * sees anything committed before the hub's last dropped repeat.
  */
 export interface RefetchScheduler {
+  /** `resync: false`: only its signals run it (a "New tips" button, not a re-read). */
   register(
     types: readonly LiveEventType[],
     refetch: () => Promise<void>,
+    options?: { resync?: boolean },
   ): () => void;
   /** Debounced per registration. */
   signal(type: LiveEventType): void;
@@ -20,6 +22,7 @@ export interface RefetchScheduler {
 
 interface Registration {
   types: ReadonlySet<string>;
+  resync: boolean;
   refetch: () => Promise<void>;
   timer: unknown;
   running: boolean;
@@ -62,9 +65,10 @@ export function createRefetchScheduler(o: {
   };
 
   return {
-    register(types, refetch) {
+    register(types, refetch, options) {
       const r: Registration = {
         types: new Set(types),
+        resync: options?.resync ?? true,
         refetch,
         timer: undefined,
         running: false,
@@ -83,7 +87,7 @@ export function createRefetchScheduler(o: {
       for (const r of registrations) if (r.types.has(type)) schedule(r);
     },
     resyncAll() {
-      for (const r of registrations) schedule(r);
+      for (const r of registrations) if (r.resync) schedule(r);
     },
   };
 }

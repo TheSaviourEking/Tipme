@@ -1,11 +1,16 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
-import type { MyTipRow } from '@tipme/contracts';
+import type { LiveEventType, MyTipRow } from '@tipme/contracts';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
+import { useLiveEvents } from '@/components/live/live-provider';
+import { canInsertInPlace } from '@/lib/live-merge';
+
+const TIPS_CHANGED: readonly LiveEventType[] = ['tips.changed'];
+const NO_SIGNALS: readonly LiveEventType[] = [];
 import { apiDownload, apiFetch } from '@/lib/session-client';
 
 type Filter = 'all' | 'paid' | 'confirming';
@@ -82,10 +87,28 @@ export default function TipsPage() {
   const listPath = (cursor?: string) =>
     `/v1/me/tips?status=${filter}${searched ? `&q=${encodeURIComponent(searched)}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
   const path = listPath();
-  // One loader: data, error and reload(). A failed refresh keeps the rows already shown.
-  const { data, error } = usePanel<Page>(path);
-
   const extra = more?.path === path ? more : null;
+  // Only the first page refreshes in place. Someone searching or further down the list gets a
+  // "New tips: show" button instead of rows inserted under them.
+  const inPlace = canInsertInPlace({ searched, extraPages: extra ? 1 : 0 });
+  // One loader: data, error and reload(). A failed refresh keeps the rows already shown.
+  const { data, error, reload } = usePanel<Page>(path, {
+    live: inPlace ? TIPS_CHANGED : NO_SIGNALS,
+    resync: inPlace,
+  });
+  const [newTips, setNewTips] = useState(false);
+  useLiveEvents(
+    inPlace ? NO_SIGNALS : TIPS_CHANGED,
+    async () => setNewTips(true),
+    { resync: false },
+  );
+  const showNewTips = () => {
+    setNewTips(false);
+    setMore(null);
+    setQuery('');
+    setSearched('');
+    void reload();
+  };
   const items = data ? [...data.items, ...(extra?.items ?? [])] : null;
   const next = extra ? extra.next : (data?.nextCursor ?? null);
 
@@ -166,6 +189,13 @@ export default function TipsPage() {
           : ''}
         {error === 'refresh' ? 'Couldn’t refresh' : ''}
       </p>
+      {newTips && !inPlace && (
+        <p className="tips-new">
+          <Button variant="secondary" onClick={showNewTips}>
+            New tips: show
+          </Button>
+        </p>
+      )}
       {!items ? (
         <Skeleton label="Loading your tips" />
       ) : items.length === 0 ? (

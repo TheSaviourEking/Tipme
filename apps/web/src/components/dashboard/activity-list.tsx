@@ -19,7 +19,21 @@ const when = (iso: string) =>
     timeZone: 'Africa/Lagos',
   });
 
-export function ActivityList({ rows }: { rows: ActivityRow[] }) {
+const NONE: ReadonlySet<string> = new Set();
+
+/**
+ * `arriving`: ids of new paid tips, which come down once (no motion under reduced motion).
+ * `highlighted`: ids just confirmed, highlighted in place. Rows keep their keys, so focus stays.
+ */
+export function ActivityList({
+  rows,
+  arriving = NONE,
+  highlighted = NONE,
+}: {
+  rows: ActivityRow[];
+  arriving?: ReadonlySet<string>;
+  highlighted?: ReadonlySet<string>;
+}) {
   return (
     <ul className="activity-list">
       {rows.map((row) => {
@@ -44,13 +58,20 @@ export function ActivityList({ rows }: { rows: ActivityRow[] }) {
             </span>
           </>
         );
+        const tipRow = row.kind === 'tip';
+        const rowClass = [
+          'activity-list__row',
+          tipRow && arriving.has(row.id) ? 'activity-list__row--arriving' : '',
+          tipRow && highlighted.has(row.id)
+            ? 'activity-list__row--highlighted'
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
         return (
           <li key={`${row.kind}-${row.id}`}>
             {row.kind === 'tip' ? (
-              <Link
-                href={`/dashboard/tips/${row.id}`}
-                className="activity-list__row"
-              >
+              <Link href={`/dashboard/tips/${row.id}`} className={rowClass}>
                 {body}
               </Link>
             ) : (

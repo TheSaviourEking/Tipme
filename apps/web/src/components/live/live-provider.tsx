@@ -148,7 +148,9 @@ export function LiveProvider({
 export function useLiveEvents(
   types: readonly LiveEventType[],
   refetch: () => Promise<void>,
+  options?: { resync?: boolean },
 ): void {
+  const resync = options?.resync ?? true;
   const scheduler = useContext(LiveContext)?.scheduler;
   const latest = useRef(refetch);
   useEffect(() => {
@@ -160,8 +162,9 @@ export function useLiveEvents(
     return scheduler.register(
       key ? (key.split(',') as LiveEventType[]) : [],
       () => latest.current(),
+      { resync },
     );
-  }, [scheduler, key]);
+  }, [scheduler, key, resync]);
 }
 
 /** 'idle' outside a provider. */

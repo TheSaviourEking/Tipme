@@ -28,7 +28,8 @@ const NONE: readonly LiveEventType[] = [];
  */
 export function usePanel<T>(
   path: string,
-  options?: { live?: readonly LiveEventType[] },
+  /** `resync: false`: not re-read on a resync either (a list someone is reading deep into). */
+  options?: { live?: readonly LiveEventType[]; resync?: boolean },
 ): Panel<T> {
   const [state, setState] = useState<PanelState<T>>({
     data: null,
@@ -47,6 +48,8 @@ export function usePanel<T>(
     const first = setTimeout(() => void reload(), 0);
     return () => clearTimeout(first);
   }, [reload]);
-  useLiveEvents(options?.live ?? NONE, reload);
+  useLiveEvents(options?.live ?? NONE, reload, {
+    resync: options?.resync ?? true,
+  });
   return { ...state, reload };
 }

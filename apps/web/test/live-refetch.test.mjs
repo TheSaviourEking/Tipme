@@ -18,7 +18,9 @@ function fakeTimers() {
     async advance(ms) {
       const end = now + ms;
       for (;;) {
-        const due = [...timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
+        const due = [...timers]
+          .filter((t) => t.at <= end)
+          .sort((a, b) => a.at - b.at)[0];
         if (!due) break;
         timers.delete(due);
         now = due.at;
@@ -170,11 +172,36 @@ test('a failed reload keeps data and updatedAt', () => {
   assert.deepEqual(loaded, { data: { n: 1 }, error: null, updatedAt: at });
   const failed = nextPanelState(loaded, { ok: false }, later);
   assert.deepEqual(failed, { data: { n: 1 }, error: 'refresh', updatedAt: at });
-  assert.deepEqual(nextPanelState({ data: null, error: null, updatedAt: null }, { ok: false }, at), {
-    data: null,
-    error: 'load',
-    updatedAt: null,
-  });
+  assert.deepEqual(
+    nextPanelState(
+      { data: null, error: null, updatedAt: null },
+      { ok: false },
+      at,
+    ),
+    {
+      data: null,
+      error: 'load',
+      updatedAt: null,
+    },
+  );
   const again = nextPanelState(failed, { ok: true, data: { n: 2 } }, later);
   assert.deepEqual(again, { data: { n: 2 }, error: null, updatedAt: later });
+});
+
+test('a registration made with resync: false hears its signals but not resyncs', async () => {
+  const { s, timers } = scheduler();
+  let runs = 0;
+  s.register(
+    ['tips.changed'],
+    async () => {
+      runs += 1;
+    },
+    { resync: false },
+  );
+  s.resyncAll();
+  await timers.advance(1000);
+  assert.equal(runs, 0);
+  s.signal('tips.changed');
+  await timers.advance(300);
+  assert.equal(runs, 1);
 });
