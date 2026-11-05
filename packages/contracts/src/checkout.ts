@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ThanksSlip } from './thanks.js';
 
 /** Guest checkout wire shapes. Amounts travel as decimal strings of minor units; NGN only (illustrative). */
 export const tipQuoteRequestSchema = z
@@ -87,4 +88,9 @@ export interface TipStatusView {
    * itself is never sent here.
    */
   noteMayShow?: true;
+  /**
+   * The recipient's thank-you, only when the tip is paid and the page has a line. It is the line as
+   * it is now, not as it was when the tip was made (owner's answer, 5 Nov 2026).
+   */
+  thanks?: ThanksSlip;
 }

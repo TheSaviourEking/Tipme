@@ -16,3 +16,4 @@ export * from './analytics.js';
 export * from './release.js';
 export * from './ops-catalogue.js';
 export * from './qr.js';
+export * from './thanks.js';
