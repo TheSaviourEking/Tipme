@@ -111,6 +111,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Your sign-in email changed recently, so your bank account can’t be added or changed yet.',
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   QR_DESIGN_PRO_REQUIRED: 'Saving a Pro QR design is part of TipMe Pro.',
+  SOCIAL_LINK_UNAVAILABLE:
+    'OnlyFans and Fansly links can’t be added right now.',
   SOCIAL_LINKS_PRO_REQUIRED:
     'More than 3 links, Pro sites, a featured link and your own order are part of TipMe Pro.',
   QR_ART_PHOTO_REQUIRED:
@@ -218,6 +220,7 @@ const operationErrors: Partial<
   },
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   QR_DESIGN_PRO_REQUIRED: { status: 403, code: 'QR_DESIGN_PRO_REQUIRED' },
+  SOCIAL_LINK_UNAVAILABLE: { status: 409, code: 'SOCIAL_LINK_UNAVAILABLE' },
   SOCIAL_LINKS_PRO_REQUIRED: {
     status: 403,
     code: 'SOCIAL_LINKS_PRO_REQUIRED',

@@ -75,6 +75,11 @@ export interface MyProfile {
    * until the release after this one: the web app deploys before the API.
    */
   links?: SocialLink[];
+  /**
+   * False while this copy has OnlyFans and Fansly links switched off (ADULT_PLATFORM_LINKS):
+   * they can't be added and don't show. Absent means allowed.
+   */
+  adultLinks?: boolean;
   bioPublic: boolean;
   socialsPublic: boolean;
   phonePublic: boolean;

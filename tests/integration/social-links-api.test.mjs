@@ -58,7 +58,7 @@ const tt = { platform: 'tiktok', url: 'https://www.tiktok.com/@ada.edits' };
 const ig = { platform: 'instagram', url: 'https://instagram.com/ada.edits' };
 const yt = { platform: 'youtube', url: 'https://youtube.com/@adaedits' };
 const tw = { platform: 'twitch', url: 'https://twitch.tv/adaedits' };
-const site = { platform: 'website', url: 'https://adaedits.com' };
+const site = { platform: 'website', url: 'https://adaedits.com/' };
 
 test('Free: three Free-site links save and show; Pro-only saves are refused with 403', async () => {
   const cookie = await livePage('+2348031280001', 'links_free');
@@ -130,4 +130,71 @@ test('the show switch hides every link from the page', async () => {
   const page = await json(await call('GET', '/v1/profiles/links_hidden'));
   assert.equal('links' in page, false);
   assert.equal('socials' in page, false);
+});
+
+test('a Settings tab opened before the release still saves About you, and still reads the old links', async () => {
+  const cookie = await livePage('+2348031280005', 'links_stale');
+  await put(cookie, [ig]);
+  // Exactly what the old About form sends.
+  const response = await call('PATCH', '/v1/me/profile', cookie, {
+    displayName: 'Ada',
+    role: 'Video editor',
+    bio: '',
+    socials: { facebook: 'https://facebook.com/ada' },
+    bioPublic: true,
+    socialsPublic: true,
+    phonePublic: false,
+  });
+  assert.equal(response.status, 200);
+  const mine = await json(response);
+  assert.equal(mine.displayName, 'Ada');
+  assert.deepEqual(mine.links, [ig], 'the old field is ignored');
+  assert.deepEqual(mine.socials, { instagram: ig.url });
+});
+
+test('the adult-platform switch: off hides OnlyFans and Fansly and refuses new ones, keeping the stored', async () => {
+  const cookie = await livePage('+2348031280006', 'links_adult');
+  await plan('links_adult', 'pro');
+  const of = { platform: 'onlyfans', url: 'https://onlyfans.com/ada' };
+  assert.equal((await put(cookie, [of, tt])).status, 200);
+  assert.equal(
+    (await json(await call('GET', '/v1/me/profile', cookie))).adultLinks,
+    true,
+  );
+  const off = await startStack({
+    databaseUrl: database.url,
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      ADULT_PLATFORM_LINKS: 'off',
+    },
+  });
+  try {
+    const at = (method, path, body) =>
+      fetch(`${off.api}${path}`, {
+        method,
+        headers: method === 'GET' ? { cookie } : browserHeaders(cookie),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    assert.deepEqual(
+      (await json(await at('GET', '/v1/profiles/links_adult'))).links,
+      [tt],
+    );
+    const mine = await json(await at('GET', '/v1/me/profile'));
+    assert.equal(mine.adultLinks, false);
+    assert.deepEqual(mine.links, [of, tt], 'kept');
+    const refused = await at('PUT', '/v1/me/links', {
+      links: [of, tt, { platform: 'fansly', url: 'https://fansly.com/ada' }],
+      show: true,
+    });
+    assert.equal(refused.status, 409);
+    assert.equal((await refused.json()).error.code, 'SOCIAL_LINK_UNAVAILABLE');
+    assert.equal(
+      (await at('PUT', '/v1/me/links', { links: [of, tt, ig], show: true }))
+        .status,
+      200,
+    );
+  } finally {
+    await off.stop();
+  }
 });
