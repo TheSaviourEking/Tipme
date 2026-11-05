@@ -205,3 +205,14 @@ test('a registration made with resync: false hears its signals but not resyncs',
   await timers.advance(300);
   assert.equal(runs, 1);
 });
+
+test('resyncAll with delayMs 0 reads at once (the page’s first ready: its panels’ first read)', async () => {
+  const { s, timers } = scheduler();
+  let runs = 0;
+  s.register([], async () => {
+    runs += 1;
+  });
+  s.resyncAll({ delayMs: 0 });
+  await timers.advance(0);
+  assert.equal(runs, 1);
+});

@@ -22,11 +22,14 @@ import {
   createRefetchScheduler,
   type RefetchScheduler,
 } from '@/lib/live-refetch';
+import type { FirstReadPhase } from '@/lib/first-read';
 import { apiUrl } from '@/lib/session-client';
 
 interface LiveContextValue {
   scheduler: RefetchScheduler;
   status: LiveStatus;
+  /** Whether panels hold their first read for the stream's ready (src/lib/first-read.ts). */
+  phase: FirstReadPhase;
   /** Reasons a hidden tab keeps its stream (the armed tip sound). */
   keepers: Set<() => boolean>;
 }
@@ -59,6 +62,18 @@ async function probe(url: string): Promise<LiveProbe> {
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+/** A stream that will connect (or is connecting) holds panels' first reads; see first-read.ts. */
+function firstReadPhase(enabled: boolean, status: LiveStatus): FirstReadPhase {
+  if (
+    !enabled ||
+    typeof window === 'undefined' ||
+    typeof window.EventSource !== 'function'
+  )
+    return 'free';
+  if (status === 'idle' || status === 'connecting') return 'hold';
+  return status === 'connected' ? 'connected' : 'free';
 }
 
 /**
@@ -119,7 +134,9 @@ export function LiveProvider({
       ...[...LIVE_RECIPIENT_TYPES, ...LIVE_STAFF_TYPES].map((type) =>
         client.on(type, () => scheduler.signal(type)),
       ),
-      client.onResync(() => scheduler.resyncAll()),
+      client.onResync(({ immediate }) =>
+        scheduler.resyncAll(immediate ? { delayMs: 0 } : undefined),
+      ),
       client.onStatus(setStatus),
       client.onSignedOut(() => signedOut.current?.()),
     ];
@@ -137,7 +154,14 @@ export function LiveProvider({
   }, [stream, scheduler, enabled, keepers]);
 
   return (
-    <LiveContext.Provider value={{ scheduler, status, keepers }}>
+    <LiveContext.Provider
+      value={{
+        scheduler,
+        status,
+        keepers,
+        phase: firstReadPhase(enabled, status),
+      }}
+    >
       <div data-live={status} style={{ display: 'contents' }}>
         {children}
       </div>
@@ -191,4 +215,9 @@ export function useKeepStreamOpenWhenHidden(keep: () => boolean): void {
       keepers.delete(entry);
     };
   }, [keepers]);
+}
+
+/** 'free' outside a provider: nothing to wait for. */
+export function useFirstReadPhase(): FirstReadPhase {
+  return useContext(LiveContext)?.phase ?? 'free';
 }

@@ -7,12 +7,18 @@ import {
 } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import {
+  useFirstReadPhase,
   useKeepStreamOpenWhenHidden,
   useLiveEvents,
   useLiveStatus,
 } from '@/components/live/live-provider';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import {
+  createFirstRead,
+  FIRST_READ_CAP_MS,
+  type FirstRead,
+} from '@/lib/first-read';
 import { announce, type AnnouncerState } from '@/lib/tip-announcement';
 import { createTipSound, type TipSound } from '@/lib/tip-sound';
 import type { RecoveryEmailStatus } from '@tipme/contracts';
@@ -39,7 +45,9 @@ function useNotifications(onFresh: (fresh: NotificationView[]) => void) {
     fresh.current = onFresh;
   });
 
+  const first = useRef<FirstRead | null>(null);
   const reload = useCallback(async () => {
+    first.current?.started();
     const result = await apiFetch<NotificationView[]>(
       '/v1/me/notifications?unreadOnly=1',
     );
@@ -63,10 +71,21 @@ function useNotifications(onFresh: (fresh: NotificationView[]) => void) {
   useLiveEvents(NOTIFICATIONS_CHANGED, reload);
   const status = useLiveStatus();
   const ownPoll = status === 'idle' || status === 'disabled';
+  // One read on load: while the stream connects, its ready resync is the first (first-read.ts).
   useEffect(() => {
-    const first = setTimeout(() => void reload(), 0);
-    return () => clearTimeout(first);
+    const controller = createFirstRead({
+      capMs: FIRST_READ_CAP_MS,
+      read: () => void reload(),
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (timer) => window.clearTimeout(timer as number),
+    });
+    first.current = controller;
+    return () => controller.dispose();
   }, [reload]);
+  const phase = useFirstReadPhase();
+  useEffect(() => {
+    first.current?.update(phase);
+  }, [phase, reload]);
   useEffect(() => {
     if (!ownPoll) return;
     const timer = setInterval(() => {
