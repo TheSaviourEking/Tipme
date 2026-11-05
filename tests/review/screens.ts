@@ -360,23 +360,59 @@ export const SCREENS: ReviewScreen[] = [
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
       // Only the withdrawal list is stubbed; the balance and the quote are the real ones.
-      await page.route('**/v1/me/activity', (route) =>
-        route.fulfill({
-          json: {
-            data: [
-              ['w1', new Date().toISOString(), '2000000', 'processing'],
-              ['w2', '2026-10-24T09:00:00.000Z', '3500000', 'sent'],
-              ['w3', '2026-10-17T09:00:00.000Z', '1250000', 'failed'],
-            ].map(([id, at, amountMinor, state]) => ({
-              kind: 'withdrawal',
-              id,
-              at,
-              amountMinor,
-              state,
-              supporterLabel: null,
-            })),
-          },
-        }),
+      await page.route('**/v1/me/withdrawals*', (route) =>
+        route.request().method() !== 'GET'
+          ? route.continue()
+          : route.fulfill({
+              json: {
+                data: {
+                  nextCursor: null,
+                  items: [
+                    [
+                      'w1',
+                      new Date().toISOString(),
+                      null,
+                      '2000000',
+                      'processing',
+                      null,
+                    ],
+                    [
+                      'w2',
+                      '2026-10-24T08:00:00.000000Z',
+                      '2026-10-24T09:00:00.000000Z',
+                      '3500000',
+                      'sent',
+                      { bankName: 'GTBank', last4: '6789' },
+                    ],
+                    [
+                      'w3',
+                      '2026-10-17T09:00:00.000000Z',
+                      null,
+                      '1250000',
+                      'failed',
+                      null,
+                    ],
+                  ].map(
+                    ([
+                      payoutId,
+                      requestedAt,
+                      paidAt,
+                      amountMinor,
+                      state,
+                      bank,
+                    ]) => ({
+                      payoutId,
+                      requestedAt,
+                      paidAt,
+                      currency: 'NGN',
+                      amountMinor,
+                      state,
+                      bank,
+                    }),
+                  ),
+                },
+              },
+            }),
       );
       await page.goto('/dashboard/withdraw');
       await page.getByRole('list', { name: 'Progress' }).waitFor();

@@ -34,6 +34,13 @@ after(async () => {
   await database.close();
 });
 
+// Sign-in codes are limited per phone, so each phone signs in once for the whole file.
+const sessions = new Map();
+const session = (phone) => {
+  if (!sessions.has(phone)) sessions.set(phone, signIn(stack.api, phone));
+  return sessions.get(phone);
+};
+
 const get = (path, cookie) =>
   fetch(`${stack.api}${path}`, { headers: cookie ? { cookie } : {} });
 
@@ -75,7 +82,7 @@ async function tipTobi(message) {
 
 test('a recipient sees their balance, tips and a tip with its proof', async () => {
   const tipId = await tipTobi('Lovely coffee');
-  const { cookie } = await signIn(stack.api, '+2348000000002');
+  const { cookie } = await session('+2348000000002');
   const summary = (await (await get('/v1/me/dashboard', cookie)).json()).data;
   assert.equal(summary.availableMinor, '360000');
   assert.equal(summary.today, '360000');
@@ -95,7 +102,7 @@ test('a recipient sees their balance, tips and a tip with its proof', async () =
 
 test('another recipient can never see those tips', async () => {
   const tipId = await tipTobi('Not for Ada');
-  const ada = await signIn(stack.api, '+2348000000001');
+  const ada = await session('+2348000000001');
   const detail = await get(`/v1/me/tips/${tipId}`, ada.cookie);
   assert.equal(detail.status, 404);
   const list = (await (await get('/v1/me/tips', ada.cookie)).json()).data;
@@ -110,7 +117,20 @@ test('another recipient can never see those tips', async () => {
 test('a withdrawal needs a key, respects the balance and is confirmed by reconciliation', async () => {
   const { browserHeaders } = await import('./helpers.mjs');
   await tipTobi('For the withdrawal');
-  const { cookie } = await signIn(stack.api, '+2348000000002');
+  // The pretend provider needs no bank, so a payout records one only if the recipient has saved one.
+  const { setPayoutDestination, mailSealing, DEMO_PROFILES } =
+    await import('../../packages/database/dist/index.js');
+  await setPayoutDestination(database.db, {
+    profileId: DEMO_PROFILES[1].id,
+    provider: 'mock',
+    destinationRef: 'dest_integration',
+    bankCode: '058',
+    bankName: 'GTBank',
+    last4: '6789',
+    status: 'usable',
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+  });
+  const { cookie } = await session('+2348000000002');
   const before = (await (await get('/v1/me/dashboard', cookie)).json()).data
     .availableMinor;
   const withdraw = (amountMinor, key = randomUUID()) =>
@@ -188,6 +208,67 @@ test('a withdrawal needs a key, respects the balance and is confirmed by reconci
   assert.equal(activity.find((row) => row.id === payoutId).state, 'sent');
 });
 
+test('withdrawals are listed on their own, with their bank, and only to their owner', async () => {
+  const { cookie } = await session('+2348000000002');
+  const list = await get('/v1/me/withdrawals', cookie);
+  assert.equal(list.status, 200);
+  assert.equal(list.headers.get('cache-control'), 'private, no-store');
+  const { items, nextCursor } = (await list.json()).data;
+  assert.equal(nextCursor, null);
+  const row = items[0];
+  assert.ok(row.payoutId);
+  assert.ok(
+    [
+      'requested',
+      'processing',
+      'in_review',
+      'sent',
+      'failed',
+      'reversed',
+    ].includes(row.state),
+  );
+  assert.deepEqual(row.bank, { bankName: 'GTBank', last4: '6789' });
+  assert.deepEqual(Object.keys(row.bank).sort(), ['bankName', 'last4']);
+  assert.equal((await get('/v1/me/withdrawals')).status, 401);
+  const ada = await session('+2348000000001');
+  const adas = (await (await get('/v1/me/withdrawals', ada.cookie)).json()).data
+    .items;
+  assert.equal(
+    adas.some((other) => other.payoutId === row.payoutId),
+    false,
+  );
+  assert.equal((await get('/v1/me/withdrawals?limit=0', cookie)).status, 400);
+  assert.equal((await get('/v1/me/withdrawals?status=x', cookie)).status, 400);
+});
+
+test('tip totals and the note filter', async () => {
+  await tipTobi('Thanks');
+  await tipTobi();
+  const { cookie } = await session('+2348000000002');
+  const totalsResponse = await get('/v1/me/tip-totals', cookie);
+  assert.equal(totalsResponse.status, 200);
+  assert.equal(
+    totalsResponse.headers.get('cache-control'),
+    'private, no-store',
+  );
+  const totals = (await totalsResponse.json()).data;
+  const paid = (
+    await (await get('/v1/me/tips?status=paid&limit=50', cookie)).json()
+  ).data.items;
+  assert.equal(totals.paidTipCount, paid.length);
+  assert.equal(
+    BigInt(totals.receivedNetMinor),
+    paid.reduce((sum, tip) => sum + BigInt(tip.netMinor), 0n),
+  );
+  assert.equal((await get('/v1/me/tip-totals')).status, 401);
+  const noted = (
+    await (await get('/v1/me/tips?status=paid&note=with', cookie)).json()
+  ).data.items;
+  assert.ok(noted.length > 0 && noted.length < paid.length);
+  assert.ok(noted.every((tip) => tip.hasMessage === true));
+  assert.equal((await get('/v1/me/tips?note=yes', cookie)).status, 400);
+});
+
 test('a weekly report is made on demand (development), listed, and read in full only by its owner', async () => {
   const { isoWeekOf } = await import('../../packages/database/dist/index.js');
   await tipTobi('For the report');
@@ -199,7 +280,7 @@ test('a weekly report is made on demand (development), listed, and read in full 
   });
   assert.equal(run.status, 200);
   assert.ok((await run.json()).data.created >= 1);
-  const tobi = await signIn(stack.api, '+2348000000002');
+  const tobi = await session('+2348000000002');
   const list = (await (await get('/v1/me/reports', tobi.cookie)).json()).data;
   assert.equal(list[0].week, week);
   const report = (
@@ -207,6 +288,6 @@ test('a weekly report is made on demand (development), listed, and read in full 
   ).data;
   assert.equal(report.topSupporterLabel, 'Ada M.');
   assert.ok(Number(report.totalNetMinor) > 0);
-  const ada = await signIn(stack.api, '+2348000000001');
+  const ada = await session('+2348000000001');
   assert.equal((await get(`/v1/me/reports/${week}`, ada.cookie)).status, 404);
 });

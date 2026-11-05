@@ -87,7 +87,7 @@ test('each tip reads like a message, with what you received and what was given',
   await expect(row).toContainText('from ₦2,000');
   // Search, filters and the CSV export stay, out of the way.
   await expect(page.getByLabel('Search')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Paid' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'With a note' })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Download as CSV' }),
   ).toBeVisible();
@@ -151,7 +151,10 @@ test('the week’s notes are a stack you press through', async ({
   await tipAsVisitor(browser, handle, { name: 'Bo', message: 'Second note.' });
   await runWeeklyReport(page, request, handle);
   await page.goto('/dashboard');
+  // The notes are found by asking for tips with a note, not by paging through every tip.
+  const asked = page.waitForRequest(/\/v1\/me\/tips\?.*note=with/);
   await page.getByRole('link', { name: /Your week/ }).click();
+  await asked;
   const next = page.getByRole('button', { name: 'Next note' });
   const current = page.getByTestId('note-text');
   await expect(next).toBeVisible();

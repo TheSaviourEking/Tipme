@@ -1,9 +1,15 @@
 # Current task — social links (5 November 2026)
 
-- Branch/worktree: `feat/social-links` / `.worktrees/social-links`, from `origin/dev` d0325dd. Committed, not pushed. Migration `0071_social_links` (renumber at merge if 0071 is taken).
+- Branch/worktree: `feat/social-links` / `.worktrees/social-links`, from `origin/dev` d0325dd. Migration regenerated after merging dev (see the PR).
 - Done: the link catalogue (14 Free sites, 9 Pro, link pages refused); Free and Pro limits enforced on the server, under a row lock; lapsed Pro hides extras and keeps them; Your links editor; the public link row and featured key; the dated decision in `docs/00-DECISIONS.md`. Plan: `docs/superpowers/plans/2026-11-05-social-links.md`.
 - Not done: press counts per link (needs D-07). Report: `.superpowers/program/social-build-report.md`.
 - Next exact step: review, then the PR to dev.
+
+# Current task — dashboard data (5 November 2026)
+
+- Branch/worktree: `feat/dashboard-data` / `.worktrees/dashboard-data`, from `origin/dev` with `feat/e2e-lanes` merged. Not pushed. Migration 0071 (one index).
+- Built: `GET /v1/me/withdrawals` (paged, with the bank each went to), `GET /v1/me/tip-totals`, `note=with` on `/v1/me/tips`, `bank` on activity rows; the Withdraw, Home, Tips and weekly-report screens use them. The tips list cursor now keeps microseconds.
+- Next: owner says to push, then one PR to `dev`. Plan: `docs/superpowers/plans/2026-11-04-dashboard-data.md`.
 
 # Current task — database connection budget (2 November 2026)
 
