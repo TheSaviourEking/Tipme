@@ -4,10 +4,12 @@ import { useId, useRef, useState } from 'react';
 import type { Dispatch, DragEvent, FormEvent, SetStateAction } from 'react';
 import {
   SOCIAL_PLATFORMS,
-  SOCIAL_PLATFORM_KEYS,
   detectPlatform,
+  isAdultPlatform,
+  linkHandle,
   socialLinkProblem,
   type MyProfile,
+  type SocialLink,
   type SocialPlatform,
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
@@ -17,7 +19,10 @@ import { apiFetch } from '@/lib/session-client';
 import {
   addRow,
   editorFrom,
+  hiddenStatus,
+  legacyPatch,
   moveRow,
+  notShown,
   rowProblems,
   setRowUrl,
   toRequest,
@@ -32,11 +37,17 @@ import {
 export interface LinksDraft {
   rows: LinkRow[];
   show: boolean;
+  /** Free: the links kept from Pro that the owner hasn't removed. */
+  kept: SocialLink[];
 }
-export const linksDraftFrom = (profile: MyProfile): LinksDraft => ({
-  rows: editorFrom(profile).rows,
-  show: profile.socialsPublic,
-});
+export const linksDraftFrom = (profile: MyProfile): LinksDraft => {
+  const editor = editorFrom(profile);
+  return {
+    rows: editor.rows,
+    show: profile.socialsPublic,
+    kept: editor.hidden,
+  };
+};
 
 /** The most used sites first; the rest wait behind "+ more". */
 const COMMON: SocialPlatform[] = [
@@ -64,6 +75,14 @@ const placeholder = (platform: SocialPlatform) =>
   PLACEHOLDERS[platform] ??
   `https://${SOCIAL_PLATFORMS[platform].hosts[0]}/you`;
 
+/** Why a page holding more links than Pro shows (it was Free with links kept) can't save. */
+function overflowText(overflow: LinkRow[], limit: number) {
+  const names = overflow
+    .map((row) => SOCIAL_PLATFORMS[row.platform].label)
+    .join(', ');
+  return `Your page shows up to ${limit} links, so it can’t save ${limit + overflow.length}. These don’t show on your page now: ${names}. Remove ${overflow.length} ${overflow.length === 1 ? 'link' : 'links'} to save.`;
+}
+
 const PRO_REQUIRED =
   'More than 3 links, Pro sites, a featured link and your own order are part of TipMe Pro.';
 
@@ -76,10 +95,12 @@ export function YourLinks({
 }) {
   const id = useId();
   const { profile, setProfile } = useRecipient();
-  const plan = profile.plan ?? 'free';
+  const { limit, legacy, sites, plan } = editorFrom(profile);
   const pro = plan === 'pro';
-  const { hidden, limit } = editorFrom(profile);
-  const { rows } = draft;
+  const adultOff = profile.adultLinks === false;
+  const { rows, kept } = draft;
+  const keptStatus = pro ? [] : hiddenStatus(profile.links ?? [], rows, kept);
+  const overflow = notShown(rows, plan);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -90,6 +111,9 @@ export function YourLinks({
   const [pasteError, setPasteError] = useState('');
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const pasteInput = useRef<HTMLInputElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const chipButtons = useRef(new Map<SocialPlatform, HTMLButtonElement>());
+  const keptButtons = useRef(new Map<string, HTMLButtonElement>());
   const dragged = useRef<number | null>(null);
 
   const label = (platform: SocialPlatform) => SOCIAL_PLATFORMS[platform].label;
@@ -109,9 +133,9 @@ export function YourLinks({
     });
 
   const full = rows.length >= limit;
-  const allowed = SOCIAL_PLATFORM_KEYS.filter(
-    (platform) => pro || SOCIAL_PLATFORMS[platform].tier === 'free',
-  ).filter((platform) => !rows.some((row) => row.platform === platform));
+  const allowed = sites.filter(
+    (platform) => !rows.some((row) => row.platform === platform),
+  );
   const chips = more
     ? allowed
     : allowed.filter((platform) => COMMON.includes(platform));
@@ -135,8 +159,14 @@ export function YourLinks({
       );
       return;
     }
-    if (!pro && SOCIAL_PLATFORMS[platform].tier === 'pro') {
-      setPasteError(`${label(platform)} links are part of TipMe Pro.`);
+    if (!sites.includes(platform)) {
+      setPasteError(
+        legacy
+          ? 'For a moment only Facebook, Instagram and X links can be saved. More sites are coming.'
+          : adultOff && isAdultPlatform(platform)
+            ? 'OnlyFans and Fansly links can’t be added right now.'
+            : `${label(platform)} links are part of TipMe Pro.`,
+      );
       return;
     }
     setPaste('');
@@ -159,6 +189,29 @@ export function YourLinks({
     clearError(row.id);
     say(`${label(row.platform)} link removed.`);
     focusRow(rows[index + 1]?.id ?? rows[index - 1]?.id);
+  };
+
+  const showMore = () => {
+    const first = allowed.find((platform) => !COMMON.includes(platform));
+    setMore(true);
+    // The button goes away: focus moves to the first site it revealed.
+    requestAnimationFrame(() =>
+      (first ? chipButtons.current.get(first) : pasteInput.current)?.focus(),
+    );
+  };
+
+  const removeKept = (index: number) => {
+    const link = kept[index]!;
+    const next = kept[index + 1] ?? kept[index - 1];
+    setDraft((current) => ({
+      ...current,
+      kept: current.kept.filter((other) => other !== link),
+    }));
+    setSaved(false);
+    say(`${label(link.platform)} link will be removed when you save.`);
+    requestAnimationFrame(() =>
+      (next ? keptButtons.current.get(next.url) : saveButton.current)?.focus(),
+    );
   };
 
   const feature = (index: number) => {
@@ -192,17 +245,26 @@ export function YourLinks({
       focusRow(first.id);
       return;
     }
-    if (rows.length > limit) {
-      setFormError(
-        `Your page shows up to ${limit} links. Remove ${rows.length - limit} to save.`,
-      );
+    if (overflow.length > 0) {
+      setFormError(overflowText(overflow, limit));
       return;
     }
     setBusy(true);
-    const result = await apiFetch<MyProfile>('/v1/me/links', {
-      method: 'PUT',
-      body: { links: toRequest(rows, plan), show: draft.show },
-    });
+    // An API from before social links has no links route: the old profile route takes the three
+    // fixed links and the show switch.
+    const result = legacy
+      ? await apiFetch<MyProfile>('/v1/me/profile', {
+          method: 'PATCH',
+          body: legacyPatch(rows, draft.show),
+        })
+      : await apiFetch<MyProfile>('/v1/me/links', {
+          method: 'PUT',
+          body: {
+            links: toRequest(rows, plan),
+            show: draft.show,
+            ...(pro ? {} : { hidden: kept.map((link) => link.url) }),
+          },
+        });
     setBusy(false);
     if (result.ok) {
       setProfile(result.data);
@@ -214,21 +276,28 @@ export function YourLinks({
       setFormError(PRO_REQUIRED);
       return;
     }
-    // The server names a link by its place in the saved list (links.N.url).
+    if (result.code === 'SOCIAL_LINK_UNAVAILABLE') {
+      setFormError('OnlyFans and Fansly links can’t be added right now.');
+      return;
+    }
+    // The server names a link by its place in the saved list (links.N.url), or, on an older
+    // API, by its site (socials.instagram).
+    const sent = toRequest(rows, plan);
     const byField = Object.fromEntries(
       (result.fields ?? []).flatMap((field) => {
         const index = /^links\.(\d+)\./.exec(field)?.[1];
-        const sent =
-          index === undefined
-            ? undefined
-            : toRequest(rows, plan)[Number(index)];
-        const row = sent && rows.find((r) => r.url === sent.url);
+        const site = /^socials\.(\w+)$/.exec(field)?.[1];
+        const row =
+          index !== undefined
+            ? rows.find((r) => r.url === sent[Number(index)]?.url)
+            : rows.find((r) => r.platform === site);
         return row ? [[row.id, 'Check this link.']] : [];
       }),
     );
     setErrors(byField);
-    if (Object.keys(byField).length === 0)
-      setFormError('We couldn’t save your links. Please try again.');
+    const wrong = rows.find((row) => byField[row.id]);
+    if (wrong) focusRow(wrong.id);
+    else setFormError('We couldn’t save your links. Please try again.');
   };
 
   return (
@@ -341,6 +410,11 @@ export function YourLinks({
                     aria-invalid={Boolean(error)}
                     aria-describedby={error ? `${inputId}-error` : undefined}
                   />
+                  {adultOff && isAdultPlatform(row.platform) && (
+                    <p className="tm-hint">
+                      Not showing on your page right now. It stays saved.
+                    </p>
+                  )}
                   {error && (
                     <p
                       className="tm-field-error"
@@ -355,11 +429,46 @@ export function YourLinks({
             })}
           </ol>
         )}
-        {hidden > 0 && !pro && (
-          <p className="tm-hint">
-            {hidden === 1 ? '1 more link is' : `${hidden} more links are`} kept
-            for when you’re back on Pro. They don’t show on your page now.
-          </p>
+        {keptStatus.length > 0 && (
+          <div className="link-kept">
+            <p className="link-kept__title" id={`${id}-kept`}>
+              Kept from Pro
+            </p>
+            <p className="tm-hint">
+              These stay saved for when you’re back on Pro. You can remove them;
+              adding more is part of Pro.
+            </p>
+            <ul className="link-kept__list" aria-labelledby={`${id}-kept`}>
+              {keptStatus.map(({ link, status }, index) => (
+                <li key={link.url} data-status={status}>
+                  <LinkBadge platform={link.platform} small />
+                  <span className="link-kept__name">
+                    {label(link.platform)}
+                    {linkHandle(link) ? `: ${linkHandle(link)}` : ''}
+                  </span>
+                  <span className="link-kept__status">
+                    {status === 'will_show'
+                      ? 'Will show on your page when you save'
+                      : status === 'pro'
+                        ? 'Not shown: part of Pro'
+                        : 'Not shown: Free shows 3 links'}
+                  </span>
+                  <button
+                    ref={(element) => {
+                      if (element) keptButtons.current.set(link.url, element);
+                      else keptButtons.current.delete(link.url);
+                    }}
+                    type="button"
+                    className="link-row__tool"
+                    aria-label={`Remove the kept ${label(link.platform)} link`}
+                    onClick={() => removeKept(index)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {full ? (
           !pro && (
@@ -407,6 +516,10 @@ export function YourLinks({
               >
                 {chips.map((platform) => (
                   <button
+                    ref={(element) => {
+                      if (element) chipButtons.current.set(platform, element);
+                      else chipButtons.current.delete(platform);
+                    }}
                     key={platform}
                     type="button"
                     className="link-chip"
@@ -419,15 +532,22 @@ export function YourLinks({
                   <button
                     type="button"
                     className="link-chip"
-                    aria-expanded={false}
-                    onClick={() => setMore(true)}
+                    onClick={showMore}
                   >
                     + more
                   </button>
                 )}
               </div>
             )}
+            {legacy && (
+              <p className="tm-hint">More sites are coming in a moment.</p>
+            )}
           </>
+        )}
+        {overflow.length > 0 && (
+          <p className="tm-hint link-overflow">
+            {overflowText(overflow, limit)}
+          </p>
         )}
         <p className="tm-hint">
           {pro
@@ -452,7 +572,7 @@ export function YourLinks({
             {formError}
           </Notice>
         )}
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button ref={saveButton} type="submit" disabled={busy} aria-busy={busy}>
           Save links
         </Button>
         <p role="status" className="settings-saved">

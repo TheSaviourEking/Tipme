@@ -57,7 +57,8 @@ function ContactLink({
 
 const NEW_TAB = ' (opens in a new tab)';
 const external = {
-  rel: 'noopener noreferrer nofollow',
+  // Links people typed: `ugc` tells search engines so, as well as not following them.
+  rel: 'noopener noreferrer nofollow ugc',
   target: '_blank',
 } as const;
 

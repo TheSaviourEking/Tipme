@@ -2052,6 +2052,14 @@
                   },
                   "show": {
                     "type": "boolean"
+                  },
+                  "hidden": {
+                    "maxItems": 11,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
                   }
                 },
                 "required": [
@@ -2989,6 +2997,24 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "socials": {
+                    "type": "object",
+                    "properties": {
+                      "facebook": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "instagram": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "x": {
+                        "type": "string",
+                        "maxLength": 200
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "bioPublic": {
                     "type": "boolean"
@@ -10167,6 +10193,7 @@
                   "PRO_REQUIRED",
                   "QR_DESIGN_PRO_REQUIRED",
                   "SOCIAL_LINKS_PRO_REQUIRED",
+                  "SOCIAL_LINK_UNAVAILABLE",
                   "QR_ART_PHOTO_REQUIRED",
                   "QR_ART_PHOTO_TOO_LARGE",
                   "INVALID_IMAGE",

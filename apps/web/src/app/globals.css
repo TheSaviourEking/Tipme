@@ -2363,6 +2363,59 @@ body:has(.profile-page) .brand__mark {
   cursor: default;
 }
 
+/* Links a lapsed Pro page keeps: listed, removable, not editable. */
+.link-kept {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--border-material);
+  border-radius: var(--radius-field);
+}
+
+.link-kept__title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.link-kept__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link-kept__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.link-kept__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.link-kept__status {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.link-kept__list li[data-status='will_show'] .link-kept__status {
+  color: var(--brand-ink);
+  font-weight: 700;
+}
+
+.link-kept__list .link-row__tool {
+  margin-left: auto;
+}
+
+.link-overflow {
+  color: var(--state-warning);
+  font-weight: 600;
+}
+
 .link-paste {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

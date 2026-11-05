@@ -200,6 +200,15 @@ export function PlanPreview() {
               Try yours
             </button>
           </div>
+          <div className="pro-row">
+            <div>
+              <strong>Links</strong>
+              <br />
+              {pro
+                ? 'Up to 8, in your order, with one featured. Add your website, Telegram, LinkedIn and more.'
+                : 'Up to 3, from TikTok, Instagram, YouTube and more.'}
+            </div>
+          </div>
           <div className="pro-row pro-row--last">
             <div>
               <strong>QR code</strong>

@@ -477,7 +477,7 @@ test.describe('the page in each payment state', () => {
       await expect(list.locator('.link-badge')).toHaveText(['TT', 'www']);
       await expect(list.getByRole('link').last()).toHaveAttribute(
         'rel',
-        'noopener noreferrer nofollow',
+        'noopener noreferrer nofollow ugc',
       );
       const key = await featured.boundingBox();
       const row = await list.boundingBox();
