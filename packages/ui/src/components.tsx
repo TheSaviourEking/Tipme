@@ -120,12 +120,39 @@ type FieldDetails = {
   label: string;
   hint?: string;
   error?: string;
+  /** A few words beside the value, inside the well, with a red lamp ("below ₦2,000"). Shown only with an error. */
+  flag?: string;
 };
+/**
+ * With an error and a flag, the control sits in a wrap with the flag beside its value. The flag is
+ * hidden from screen readers: the error line, linked by aria-describedby, already says it in full.
+ */
+function Flagged({
+  error,
+  flag,
+  children,
+}: {
+  error?: string;
+  flag?: string;
+  children: ReactNode;
+}) {
+  if (!error || !flag) return children;
+  return (
+    <div className="tm-input-wrap">
+      {children}
+      <span className="tm-field-flag" aria-hidden="true">
+        <Lamp tone="red" />
+        {flag}
+      </span>
+    </div>
+  );
+}
 export function InputField({
   id,
   label,
   hint,
   error,
+  flag,
   className,
   ...props
 }: ComponentPropsWithRef<'input'> & FieldDetails) {
@@ -137,21 +164,23 @@ export function InputField({
           {hint}
         </p>
       )}
-      <input
-        {...props}
-        id={id}
-        className={classes('tm-input', className)}
-        aria-invalid={Boolean(error)}
-        aria-describedby={
-          [
-            hint && `${id}-hint`,
-            error && `${id}-error`,
-            props['aria-describedby'],
-          ]
-            .filter(Boolean)
-            .join(' ') || undefined
-        }
-      />
+      <Flagged error={error} flag={flag}>
+        <input
+          {...props}
+          id={id}
+          className={classes('tm-input', className)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={
+            [
+              hint && `${id}-hint`,
+              error && `${id}-error`,
+              props['aria-describedby'],
+            ]
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
+        />
+      </Flagged>
       {error && (
         <p className="tm-field-error" id={`${id}-error`} role="alert">
           {error}
@@ -165,6 +194,7 @@ export function TextareaField({
   label,
   hint,
   error,
+  flag,
   className,
   ...props
 }: ComponentPropsWithRef<'textarea'> & FieldDetails) {
@@ -176,22 +206,24 @@ export function TextareaField({
           {hint}
         </p>
       )}
-      <textarea
-        rows={3}
-        {...props}
-        id={id}
-        className={classes('tm-input', className)}
-        aria-invalid={Boolean(error)}
-        aria-describedby={
-          [
-            hint && `${id}-hint`,
-            error && `${id}-error`,
-            props['aria-describedby'],
-          ]
-            .filter(Boolean)
-            .join(' ') || undefined
-        }
-      />
+      <Flagged error={error} flag={flag}>
+        <textarea
+          rows={3}
+          {...props}
+          id={id}
+          className={classes('tm-input', className)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={
+            [
+              hint && `${id}-hint`,
+              error && `${id}-error`,
+              props['aria-describedby'],
+            ]
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
+        />
+      </Flagged>
       {error && (
         <p className="tm-field-error" id={`${id}-error`} role="alert">
           {error}

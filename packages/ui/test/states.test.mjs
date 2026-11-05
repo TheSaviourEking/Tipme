@@ -262,3 +262,61 @@ test('key CSS: the split key keeps 44px targets and wraps, and reduced motion st
   );
   assert.match(reduced, /\.tm-key-result--done[^{]*\{[^}]*transform: none/);
 });
+
+test('a field with an error is invalid, its line is linked, and the flag is hidden from screen readers', () => {
+  const html = renderToStaticMarkup(
+    h(ui.InputField, {
+      id: 'a',
+      label: 'Other amount',
+      error: 'Enter an amount of NGN 2,000 or more.',
+      flag: 'below 2,000',
+    }),
+  );
+  assert.match(html, /aria-invalid="true"/);
+  assert.match(html, /aria-describedby="a-error"/);
+  assert.match(html, /<div class="tm-input-wrap"><input/);
+  assert.match(
+    html,
+    /<span class="tm-field-flag" aria-hidden="true"><span class="tm-lamp tm-lamp--red" aria-hidden="true"><\/span>below 2,000<\/span>/,
+  );
+  assert.match(html, /<p class="tm-field-error" id="a-error" role="alert">/);
+});
+
+test('without an error the flag never shows, and the markup is as before', () => {
+  const html = renderToStaticMarkup(
+    h(ui.InputField, { id: 'a', label: 'L', flag: 'below 2,000' }),
+  );
+  assert.doesNotMatch(html, /tm-field-flag|tm-input-wrap|flag=/);
+  assert.equal(
+    html,
+    renderToStaticMarkup(h(ui.InputField, { id: 'a', label: 'L' })),
+  );
+  const area = renderToStaticMarkup(
+    h(ui.TextareaField, { id: 't', label: 'L', error: 'E', flag: 'too long' }),
+  );
+  assert.match(area, /<div class="tm-input-wrap"><textarea/);
+});
+
+test('state CSS: the red edge, one shake that reduced motion stops, edges in forced colours', () => {
+  assert.match(
+    css,
+    /\.tm-input\[aria-invalid='true'\]\s*\{[^}]*inset 3px 0 0 var\(--lamp-red\)/,
+  );
+  assert.doesNotMatch(
+    css,
+    /\.tm-input\[aria-invalid='true'\]\s*\{[^}]*--state-danger-soft/,
+  );
+  assert.match(css, /@keyframes tm-shake/);
+  const reduced = css.slice(
+    css.lastIndexOf('@media (prefers-reduced-motion: reduce)'),
+  );
+  assert.match(reduced, /\.tm-input[^{]*\{[^}]*animation: none/);
+  const forced = css.slice(css.indexOf('@media (forced-colors: active)'));
+  for (const s of [
+    '.tm-slip',
+    '.tm-warning',
+    '.tm-lamp',
+    '.tm-key-result__face',
+  ])
+    assert.ok(forced.includes(s), `forced colours miss ${s}`);
+});
