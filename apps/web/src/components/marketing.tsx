@@ -86,6 +86,12 @@ const ZAINAB_AMOUNTS = [
   { key: '₦1M', full: '₦1,000,000' },
 ];
 
+// Zainab's card is the one on screen first; Next 16 deprecates Image `priority`, so it loads eagerly at high priority.
+const ABOVE_THE_FOLD = {
+  loading: 'eager' as const,
+  fetchPriority: 'high' as const,
+};
+
 /**
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
  * technology and holds nothing focusable.
@@ -117,6 +123,7 @@ export function HomeDemo() {
               alt=""
               fill
               sizes="(max-width: 75rem) 90vw, 320px"
+              {...ABOVE_THE_FOLD}
               className="home-demo__img"
             />
           }
@@ -127,6 +134,7 @@ export function HomeDemo() {
               width={92}
               height={92}
               sizes="92px"
+              {...ABOVE_THE_FOLD}
               className="home-demo__img"
             />
           }
