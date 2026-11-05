@@ -114,6 +114,9 @@ export interface MyProfile {
   coverChoice?: {
     design: string | null;
     colour: string | null;
+    /** An id from `COVER_ANIMATIONS`, or null. Optional: older API responses lack it. */
+    animation?: string | null;
+    motion?: 'once' | 'loop' | null;
     hasPhoto: boolean;
   };
 }

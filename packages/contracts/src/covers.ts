@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PagePlan } from './profiles.js';
 
 // The cover catalogue (design spec §6), shared by web and API. It is a list on purpose: removing
 // an option means deleting one entry. A page still holding a removed option falls back in
@@ -169,18 +170,112 @@ export function automaticColour(handle: string): string {
   return colourById('neutral')?.id ?? COVER_COLOURS[0]?.id ?? 'neutral';
 }
 
+/**
+ * Animated covers (owner's decision, 2 Nov 2026). Held in their own column and catalogue, so an
+ * animated `ripple` never collides with the still design `ripple`. Free pages get the three
+ * non-`pro` ones; the palettes are the board's.
+ */
+export interface CoverAnimation {
+  id: string;
+  name: string;
+  pro: boolean;
+  base: string;
+  tone: string;
+}
+
+export const COVER_ANIMATIONS: readonly CoverAnimation[] = [
+  {
+    id: 'drift',
+    name: 'Drifting',
+    pro: false,
+    base: '#204f3b',
+    tone: '#3a7a5e',
+  },
+  { id: 'rise', name: 'Rising', pro: false, base: '#4d16a8', tone: '#7a32f9' },
+  {
+    id: 'ripple',
+    name: 'Ripple',
+    pro: false,
+    base: '#7c2d12',
+    tone: '#b45a2b',
+  },
+  { id: 'pulse', name: 'Pulse', pro: true, base: '#14110f', tone: '#7a32f9' },
+  {
+    id: 'night',
+    name: 'Night sky',
+    pro: true,
+    base: '#101a3a',
+    tone: '#3e5aa8',
+  },
+  { id: 'sun', name: 'Sunrise', pro: true, base: '#8a3b12', tone: '#e39a3b' },
+];
+
+export type CoverMotion = 'once' | 'loop';
+export type CoverPlay = CoverMotion | 'still';
+
+const animationById = (id: string) => COVER_ANIMATIONS.find((a) => a.id === id);
+
+export const isProAnimation = (id: string): boolean =>
+  animationById(id)?.pro === true;
+
+/** Whether a choice is part of Pro: a Pro animation, a slow loop, or a colour on an animation. */
+export function coverChoiceNeedsPro(c: CoverDesignChoice): boolean {
+  if (!c.animation) return false;
+  return isProAnimation(c.animation) || c.motion === 'loop' || !!c.colour;
+}
+
+/**
+ * How an animation plays. A Pro page plays its saved motion (once when none). Any other page
+ * shows the still frame for anything Pro-only (a Pro animation or a saved colour) and plays
+ * the rest once, whatever motion is saved. Nothing is deleted, so returning to Pro restores it.
+ */
+export function coverPlay(p: {
+  animation: string;
+  colour: string | null;
+  motion: CoverMotion | null;
+  plan: PagePlan | undefined;
+}): CoverPlay {
+  if (p.plan === 'pro') return p.motion ?? 'once';
+  return isProAnimation(p.animation) || p.colour ? 'still' : 'once';
+}
+
 export type ResolvedCover =
   | { kind: 'photo'; path: string }
-  | { kind: 'design'; design: string; colour?: string };
+  | { kind: 'design'; design: string; colour?: string }
+  | { kind: 'animated'; animation: string; colour?: string; play: CoverPlay };
 
-/** What a page shows: uploaded photo, then chosen design, then automatic. */
+/** What a page shows: uploaded photo, then animation, then chosen design, then automatic. */
 export function resolveCover(p: {
   handle: string;
   coverPath: string | null;
   coverDesign: string | null;
   coverColour: string | null;
+  coverAnimation?: string | null;
+  coverMotion?: string | null;
+  plan?: string;
 }): ResolvedCover {
   if (p.coverPath) return { kind: 'photo', path: p.coverPath };
+  const animation = p.coverAnimation
+    ? animationById(p.coverAnimation)
+    : undefined;
+  if (animation) {
+    const colour = p.coverColour ? colourById(p.coverColour) : undefined;
+    const motion =
+      p.coverMotion === 'once' || p.coverMotion === 'loop'
+        ? p.coverMotion
+        : null;
+    return {
+      kind: 'animated',
+      animation: animation.id,
+      ...(colour ? { colour: colour.id } : {}),
+      play: coverPlay({
+        animation: animation.id,
+        colour: colour?.id ?? null,
+        motion,
+        plan: p.plan === 'pro' ? 'pro' : p.plan === 'free' ? 'free' : undefined,
+      }),
+    };
+  }
   const chosen = p.coverDesign ? designById(p.coverDesign) : undefined;
   const id = chosen?.id ?? automaticCover(p.handle);
   if (!(chosen ?? designById(id))?.colours)
@@ -200,14 +295,46 @@ export function resolveCover(p: {
   };
 }
 
-/** `PUT /v1/me/cover-design`. `design: null` clears the choice, back to automatic. */
+/**
+ * `PUT /v1/me/cover-design`. `design: null` with no animation clears the choice, back to
+ * automatic. An animation replaces the still design, so the two are never sent together.
+ */
 export const coverDesignChoiceSchema = z
   .object({
     design: z.string().max(40).nullable(),
     colour: z.string().max(40).nullable().optional(),
+    animation: z.string().max(40).nullable().optional(),
+    motion: z.enum(['once', 'loop']).optional(),
   })
   .strict()
-  .superRefine(({ design, colour }, context) => {
+  .superRefine(({ design, colour, animation, motion }, context) => {
+    if (animation) {
+      if (design !== null)
+        context.addIssue({
+          code: 'custom',
+          path: ['design'],
+          message: 'an animation replaces the design',
+        });
+      if (!animationById(animation))
+        context.addIssue({
+          code: 'custom',
+          path: ['animation'],
+          message: 'unknown animation',
+        });
+      if (colour && !colourById(colour))
+        context.addIssue({
+          code: 'custom',
+          path: ['colour'],
+          message: 'colour not available',
+        });
+      return;
+    }
+    if (motion !== undefined)
+      context.addIssue({
+        code: 'custom',
+        path: ['motion'],
+        message: 'motion needs an animation',
+      });
     const known = design === null ? null : designById(design);
     if (known === undefined)
       context.addIssue({
