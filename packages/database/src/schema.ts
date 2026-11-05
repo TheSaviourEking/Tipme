@@ -506,7 +506,7 @@ export const profiles = pgTable(
     note: text('note'),
     avatarPath: text('avatar_path'),
     // The three fixed links of before 5 Nov 2026. No longer read or written: `links` replaced it
-    // (migration 0071 copied it across); kept until a later release drops it.
+    // (migration 0072 copied it across); kept until a later release drops it.
     socials: jsonb('socials')
       .$type<{ facebook?: string; instagram?: string; x?: string }>()
       .notNull()

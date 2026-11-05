@@ -2,7 +2,7 @@
 
 Spec: the SocialLinks board (`.superpowers/program/SocialLinks.board.html`, design artifact 8D6hJZsqMkLSGh8KUUBmmh v97),
 approved by the owner on 5 Nov 2026 as designed. OnlyFans and Fansly are Pro only, by the owner's decision.
-Branch `feat/social-links` from `origin/dev` d0325dd. Migration `0071_social_links` (the next free number on dev).
+Branch `feat/social-links` from `origin/dev` d0325dd. Migration `0072_social_links` (regenerated after dev landed 0071).
 
 ## Tasks
 
