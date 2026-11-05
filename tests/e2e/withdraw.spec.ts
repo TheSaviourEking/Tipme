@@ -1,7 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  PLAIN_TEXT,
+  errorColour,
   expectAccessible,
   fitsViewport,
+  hasRedEdge,
   signUpRecipient,
   tipAsVisitor,
 } from './helpers';
@@ -447,6 +450,11 @@ test('tapping the amount already chosen keeps the request key and the warning', 
   await page.getByRole('button', { name: 'Everything' }).click();
   await page.getByRole('button', { name: /^Withdraw NGN/ }).click();
   await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
+  // The amount keeps the red edge over the withdraw form's own input rules; the line is black.
+  const amountField = page.getByLabel('Amount (NGN)');
+  await expect(amountField).toHaveAttribute('aria-invalid', 'true');
+  expect(await hasRedEdge(amountField)).toBe(true);
+  expect(await errorColour(page.getByText(COULDNT_CONFIRM))).toBe(PLAIN_TEXT);
   await page.getByRole('button', { name: 'Everything' }).click();
   await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
   await page.getByRole('button', { name: /^Withdraw NGN/ }).click();

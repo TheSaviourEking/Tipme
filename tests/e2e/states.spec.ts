@@ -65,6 +65,11 @@ test('a done key settles for about two seconds, then springs back', async ({
   await page.goto('/design-system');
   const key = saveKey(page);
   await key.click();
+  // In flight: busy and still focusable, never disabled.
+  await expect(key).toHaveAttribute('aria-busy', 'true');
+  await expect(key).toHaveAttribute('aria-disabled', 'true');
+  await expect(key).toBeEnabled();
+  await page.clock.runFor(500);
   await expect(key).toHaveAttribute('data-result', 'done');
   await expect(key).toHaveText('Saved.');
   await expect(
@@ -83,9 +88,18 @@ test('a failed key moves focus to Try again, and Try again sends again', async (
   await states.getByRole('button', { name: 'Make the next save fail' }).click();
   await saveKey(page).focus();
   await page.keyboard.press('Enter');
+  await expect(saveKey(page)).toHaveAttribute('aria-busy', 'true');
+  await expect(saveKey(page)).toBeFocused();
   const again = states.locator('.tm-key-result__again');
   await expect(again).toBeFocused();
   await expect(again).toHaveText('Try again');
+  // Focus lands on Try again, so it says what failed.
+  await expect(again).toHaveAccessibleDescription(/Not saved/);
+  // The caller's test id stays on the key in its failed state.
+  await expect(states.getByTestId('states-save-key')).toHaveAttribute(
+    'data-result',
+    'failed',
+  );
   await expect(states.locator('.tm-key-result__face')).toContainText(
     'Not saved',
   );
@@ -95,12 +109,76 @@ test('a failed key moves focus to Try again, and Try again sends again', async (
   const box = (await again.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
   expect(box.width).toBeGreaterThanOrEqual(44);
+  // Try again runs the latest save: the toggle was used up, so this one goes through.
   await page.keyboard.press('Enter');
   const key = saveKey(page);
+  // While the retry is in flight focus stays on the key, not the page.
+  await expect(key).toHaveAttribute('aria-busy', 'true');
+  await expect(key).toBeFocused();
   await expect(key).toHaveAttribute('data-result', 'done');
   await expect(key).toBeFocused();
   await expect(again).toHaveCount(0);
 });
+
+test('typing into a flagged field as its error clears keeps the same input, its focus and its value', async ({
+  page,
+}) => {
+  await page.goto('/design-system');
+  const states = specimen(page);
+  const field = states.getByLabel('Other amount (NGN 2,000 or more)');
+  const before = await field.elementHandle();
+  await states.getByRole('button', { name: 'Check', exact: true }).click();
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  await expect(states.locator('.tm-field-flag')).toHaveText('below 2,000');
+  await field.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('0');
+  await expect(field).toHaveAttribute('aria-invalid', 'false');
+  await expect(states.locator('.tm-field-flag')).toHaveCount(0);
+  await page.keyboard.type('0');
+  expect(
+    await before!.evaluate(
+      (el) => el.isConnected && el === document.activeElement,
+    ),
+  ).toBe(true);
+  await expect(field).toHaveValue('1,50000');
+});
+
+for (const [form, wrapper] of [
+  ['tip form', 'div.tip-instrument'],
+  ['withdraw form', 'form.withdraw__form'],
+] as const)
+  test(`in the ${form} the flag keeps its space and sits centred in the field`, async ({
+    page,
+  }) => {
+    await page.goto('/design-system');
+    const states = specimen(page);
+    await states.getByRole('button', { name: 'Check', exact: true }).click();
+    // The real form's own input rules apply to the field inside its wrapper class.
+    await states
+      .locator('.states-specimen__field .tm-field')
+      .evaluate((fieldEl, tag) => {
+        const [name, className] = tag.split('.');
+        const box = document.createElement(name!);
+        box.className = className!;
+        fieldEl.replaceWith(box);
+        box.append(fieldEl);
+      }, wrapper);
+    const field = states.getByLabel('Other amount (NGN 2,000 or more)');
+    const flag = states.locator('.tm-field-flag');
+    await expect(flag).toBeVisible();
+    const input = (await field.boundingBox())!;
+    const mark = (await flag.boundingBox())!;
+    const padEnd = await field.evaluate((el) =>
+      parseFloat(getComputedStyle(el).paddingInlineEnd),
+    );
+    // The value's area ends before the flag starts.
+    expect(input.x + input.width - padEnd).toBeLessThanOrEqual(mark.x);
+    // Centred on the field, whatever its height (44px in the tip card, 84px on withdraw).
+    expect(
+      Math.abs(input.y + input.height / 2 - (mark.y + mark.height / 2)),
+    ).toBeLessThanOrEqual(1);
+  });
 
 test('a field shakes once on its first error and not on a repeat', async ({
   page,

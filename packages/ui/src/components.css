@@ -308,8 +308,9 @@ textarea.tm-input {
 }
 
 /* B's red edge inside the well (StatesConcepts .wellerr): no pink fill. The red lives in the
-   edge and the flag's lamp; the error line says it in words. */
-.tm-input[aria-invalid='true'] {
+   edge and the flag's lamp; the error line says it in words. The class is doubled so app rules
+   that restyle a form's inputs (.withdraw__form .tm-input, .tip-instrument .tm-input) keep it. */
+.tm-input.tm-input[aria-invalid='true'] {
   border: 1px solid var(--edge-danger);
   box-shadow:
     var(--shadow-recessed),
@@ -319,7 +320,7 @@ textarea.tm-input {
 /* One shake when a field turns invalid. The animation starts only when the selector starts to
    match, so a repeat error on a field that is already invalid does not shake again. */
 @media (prefers-reduced-motion: no-preference) {
-  .tm-input[aria-invalid='true'] {
+  .tm-input.tm-input[aria-invalid='true'] {
     animation: tm-shake var(--duration-component) var(--ease-physical) 1;
   }
 }
@@ -344,23 +345,30 @@ textarea.tm-input {
 }
 
 .tm-input-wrap {
+  /* A grid makes the input a block, so the wrap is exactly the field's height and the flag centres. */
   position: relative;
+  display: grid;
   min-width: 0;
 }
 
-.tm-input-wrap > .tm-input {
-  padding-right: 9.5rem;
+/* Room for the flag only while it shows. :has() and the wrap outrank a form's own input padding
+   (.tip-instrument and .withdraw__form set theirs on .tm-input), so the value never runs under it. */
+.tm-input-wrap {
+  --flag-space: 9.5rem;
+}
+
+.tm-input-wrap:has(.tm-field-flag) > .tm-input {
+  padding-inline-end: var(--flag-space);
 }
 
 .tm-field-flag {
   position: absolute;
-  top: 0;
+  inset-block: 0;
   right: 0.875rem;
   display: flex;
   gap: 0.5rem;
   align-items: center;
   max-width: 8.5rem;
-  height: 50px;
   color: var(--state-danger);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -377,6 +385,13 @@ textarea.tm-input {
 }
 
 .tm-field-error {
+  color: var(--state-danger);
+  font-weight: 700;
+}
+
+/* Beside an invalid field the red lives in its edge, so the line is plain black words. A line with
+   no edge beside it (a group of keys, an upload) keeps its red until its own batch restyles it. */
+.tm-field:has(.tm-input[aria-invalid='true']) > .tm-field-error {
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -948,6 +963,11 @@ textarea.tm-input {
   letter-spacing: -0.015em;
 }
 
+.tm-empty-slip__body > *,
+.tm-empty-well__body > * {
+  margin-block: 0;
+}
+
 .tm-empty-slip__body,
 .tm-empty-well__body {
   max-width: 34rem;
@@ -1173,7 +1193,7 @@ textarea.tm-input {
     color: ButtonText;
   }
 
-  .tm-input[aria-invalid='true'] {
+  .tm-input.tm-input[aria-invalid='true'] {
     border: 2px solid CanvasText;
     border-left-width: 4px;
   }

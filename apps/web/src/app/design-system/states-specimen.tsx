@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Button,
   EmptySlip,
@@ -140,42 +140,52 @@ export function FeedbackKeysSpecimen() {
   );
 }
 
-/** "Save notifications" on a result key; the toggle makes the next save fail once. */
+/** How long the specimen's pretend save takes, so the in-flight key can be seen and tested. */
+const SAVE_MS = 400;
+
+/**
+ * "Save notifications" on a result key. The toggle makes the next save fail once; the save is
+ * in flight for a moment, with the key busy but focusable.
+ */
 function SaveKeySpecimen() {
-  const key = useKeyResult();
   const [failNext, setFailNext] = useState(false);
-  // Read at the moment of the press: Try again calls the save it was given, from an older render.
-  const failing = useRef(false);
   const [line, setLine] = useState('');
-  const save = () => {
-    if (failing.current) {
-      failing.current = false;
-      setFailNext(false);
-      setLine('We couldn’t save that. Please try again.');
-      key.failed({
-        label: 'Not saved',
-        detail: '· notifications',
-        retryLabel: 'Try again',
-        onRetry: save,
-      });
-      return;
-    }
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => clearTimeout(timer.current ?? undefined), []);
+  // Try again runs the latest save, so it reads the toggle as it is now.
+  const key = useKeyResult({ onRetry: () => save() });
+  function save() {
+    const fail = failNext;
+    if (fail) setFailNext(false);
     setLine('');
-    key.done('Saved.');
-  };
+    key.start();
+    timer.current = setTimeout(() => {
+      if (fail) {
+        setLine('We couldn’t save that. Please try again.');
+        key.failed({
+          label: 'Not saved',
+          detail: '· notifications',
+          retryLabel: 'Try again',
+        });
+      } else key.done('Saved.');
+    }, SAVE_MS);
+  }
   return (
     <div className="states-specimen__keys">
       <div className="specimen-row">
-        <ResultKey variant="continue" result={key.result} onClick={save}>
+        <ResultKey
+          variant="continue"
+          result={key.result}
+          pending={key.pending}
+          onClick={save}
+          data-testid="states-save-key"
+        >
           Save notifications
         </ResultKey>
         <Button
           variant="secondary"
           aria-pressed={failNext}
-          onClick={() => {
-            failing.current = !failing.current;
-            setFailNext(failing.current);
-          }}
+          onClick={() => setFailNext((value) => !value)}
         >
           Make the next save fail
         </Button>
@@ -198,6 +208,8 @@ function AmountFieldSpecimen() {
         label="Other amount (NGN 2,000 or more)"
         inputMode="decimal"
         defaultValue="1,500"
+        // As on the tip form: typing clears the error, and the field must keep focus and value.
+        onChange={() => setError('')}
         error={error || undefined}
         flag="below 2,000"
       />

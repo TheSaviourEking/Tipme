@@ -120,12 +120,16 @@ type FieldDetails = {
   label: string;
   hint?: string;
   error?: string;
-  /** A few words beside the value, inside the well, with a red lamp ("below ₦2,000"). Shown only with an error. */
+  /**
+   * A few words beside the value, inside the well, with a red lamp ("below ₦2,000"). Shown only
+   * with an error, but passing it keeps the field in a wrap all the time.
+   */
   flag?: string;
 };
 /**
- * With an error and a flag, the control sits in a wrap with the flag beside its value. The flag is
- * hidden from screen readers: the error line, linked by aria-describedby, already says it in full.
+ * A field given a flag always sits in the same wrap, so the control never remounts as the error
+ * comes and goes (focus, the phone keyboard and the value survive). Only the flag text follows the
+ * error. It is hidden from screen readers: the linked error line already says it in full.
  */
 function Flagged({
   error,
@@ -136,14 +140,16 @@ function Flagged({
   flag?: string;
   children: ReactNode;
 }) {
-  if (!error || !flag) return children;
+  if (flag === undefined) return children;
   return (
     <div className="tm-input-wrap">
       {children}
-      <span className="tm-field-flag" aria-hidden="true">
-        <Lamp tone="red" />
-        {flag}
-      </span>
+      {error && flag && (
+        <span className="tm-field-flag" aria-hidden="true">
+          <Lamp tone="red" />
+          {flag}
+        </span>
+      )}
     </div>
   );
 }
@@ -279,6 +285,7 @@ export function Slip({
   safe,
   actions,
   dense = false,
+  live,
   children,
   className,
   id,
@@ -298,6 +305,11 @@ export function Slip({
   actions?: ReactNode;
   /** Staff screens: tighter padding, smaller stamp. */
   dense?: boolean;
+  /**
+   * The role, when the tone's default is wrong: 'none' inside a live region that already speaks
+   * (a nested region announces twice). Errors default to alert, everything else to status.
+   */
+  live?: 'alert' | 'status' | 'none';
   children?: ReactNode;
   className?: string;
   id?: string;
@@ -314,7 +326,12 @@ export function Slip({
         stamp ? 'tm-slip--stamped' : undefined,
         className,
       )}
-      role={tone === 'error' || tone === 'unsure' ? 'alert' : 'status'}
+      role={
+        live === 'none'
+          ? undefined
+          : (live ??
+            (tone === 'error' || tone === 'unsure' ? 'alert' : 'status'))
+      }
     >
       {stamp && (
         <span
@@ -367,6 +384,7 @@ export function StandingWarning({
   children,
   actions,
   dense = false,
+  className,
   id,
   'data-testid': testId,
 }: {
@@ -374,12 +392,17 @@ export function StandingWarning({
   children?: ReactNode;
   actions?: ReactNode;
   dense?: boolean;
+  className?: string;
   id?: string;
   'data-testid'?: string;
 }) {
   return (
     <div
-      className={classes('tm-warning', dense ? 'tm-warning--dense' : undefined)}
+      className={classes(
+        'tm-warning',
+        dense ? 'tm-warning--dense' : undefined,
+        className,
+      )}
       role="status"
       id={id}
       data-testid={testId}
@@ -470,23 +493,33 @@ export function EmptySlip({
   children,
   action,
   headingLevel = 2,
+  className,
+  id,
+  'data-testid': testId,
 }: {
-  title: string;
+  title: ReactNode;
   /** Decoration on the blank slip: hidden from screen readers. Put real explanation in children. */
   caption?: string;
   children?: ReactNode;
   action?: ReactNode;
   headingLevel?: 2 | 3;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
 }) {
   const Heading = headingLevel === 3 ? 'h3' : 'h2';
   return (
-    <div className="tm-empty-slip">
+    <div
+      className={classes('tm-empty-slip', className)}
+      id={id}
+      data-testid={testId}
+    >
       <div className="tm-empty-slip__blank" aria-hidden="true">
         <p className="tm-empty-slip__quote">“ … ”</p>
         {caption && <p className="tm-empty-slip__caption">{caption}</p>}
       </div>
       <Heading className="tm-empty-slip__title">{title}</Heading>
-      {given(children) && <p className="tm-empty-slip__body">{children}</p>}
+      {given(children) && <div className="tm-empty-slip__body">{children}</div>}
       {given(action) && <div className="tm-empty-slip__action">{action}</div>}
     </div>
   );
@@ -498,20 +531,30 @@ export function EmptyWell({
   children,
   action,
   headingLevel = 2,
+  className,
+  id,
+  'data-testid': testId,
 }: {
-  title: string;
+  title: ReactNode;
   children?: ReactNode;
   action?: ReactNode;
   headingLevel?: 2 | 3;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
 }) {
   const Heading = headingLevel === 3 ? 'h3' : 'h2';
   return (
-    <div className="tm-empty-well">
+    <div
+      className={classes('tm-empty-well', className)}
+      id={id}
+      data-testid={testId}
+    >
       <div className="tm-empty-well__well">
         <Lamp tone="off" />
         <Heading className="tm-empty-well__title">{title}</Heading>
       </div>
-      {given(children) && <p className="tm-empty-well__body">{children}</p>}
+      {given(children) && <div className="tm-empty-well__body">{children}</div>}
       {given(action) && <div className="tm-empty-well__action">{action}</div>}
     </div>
   );
@@ -526,15 +569,26 @@ export function Steps({
   filled,
   failed = false,
   label = 'Progress',
+  className,
+  id,
+  'data-testid': testId,
 }: {
   labels: readonly string[];
   /** How many are done, from the API's state only. */
   filled: number;
   failed?: boolean;
   label?: string;
+  className?: string;
+  id?: string;
+  'data-testid'?: string;
 }) {
   return (
-    <ol className="tm-steps" aria-label={label}>
+    <ol
+      className={classes('tm-steps', className)}
+      aria-label={label}
+      id={id}
+      data-testid={testId}
+    >
       {labels.map((step, index) => {
         const done = !failed && index < filled;
         const broke = failed && index === 0;

@@ -116,6 +116,15 @@ test('no state primitive renders a money-safety line unless the caller passes on
   );
   renders.push(
     h(ui.StandingWarning, { title: 'T', actions: h('button', null, 'Go') }),
+    h(ui.Steps, { labels: ['One', 'Two', 'Three'], filled: 1 }),
+    h(ui.Steps, { labels: ['One', 'Two', 'Three'], filled: 0, failed: true }),
+    h(ui.EmptySlip, {
+      title: 'T',
+      caption: 'C',
+      action: h('button', null, 'Go'),
+    }),
+    h(ui.EmptyWell, { title: 'T', action: h('button', null, 'Go') }),
+    h(ui.InputField, { id: 'f', label: 'L', error: 'E', flag: 'F' }),
   );
   for (const html of renders.map((el) => renderToStaticMarkup(el)))
     assert.doesNotMatch(html, reassurance, html);
@@ -133,7 +142,7 @@ test('no state primitive renders a money-safety line unless the caller passes on
     );
     assert.doesNotMatch(
       source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''),
-      /money is safe|haven[’']t paid|back in your balance|nothing was taken/i,
+      /money is (safe|fine)|haven[’']t paid|back in your balance|nothing was (taken|charged)|weren[’']t charged|refunded/i,
       file,
     );
   }
@@ -228,7 +237,7 @@ test('failed: a red lamp and the label on the face, and Try again is a real butt
   assert.match(html, /tm-lamp--red.*Not saved<small>· notifications<\/small>/s);
   assert.match(
     html,
-    /<button type="button" class="tm-key-result__again">Try again<\/button>/,
+    /<button type="button" class="tm-key-result__again" aria-describedby="[^"]+">Try again<\/button>/,
   );
   assert.doesNotMatch(html, />Save</);
 });
@@ -282,14 +291,25 @@ test('a field with an error is invalid, its line is linked, and the flag is hidd
   assert.match(html, /<p class="tm-field-error" id="a-error" role="alert">/);
 });
 
-test('without an error the flag never shows, and the markup is as before', () => {
-  const html = renderToStaticMarkup(
+test('without an error the flag text never shows, but a flagged field keeps its wrap so the input never remounts', () => {
+  const calm = renderToStaticMarkup(
     h(ui.InputField, { id: 'a', label: 'L', flag: 'below 2,000' }),
   );
-  assert.doesNotMatch(html, /tm-field-flag|tm-input-wrap|flag=/);
+  assert.match(calm, /<div class="tm-input-wrap"><input/);
+  assert.doesNotMatch(calm, /tm-field-flag|below 2,000/);
+  const invalid = renderToStaticMarkup(
+    h(ui.InputField, { id: 'a', label: 'L', flag: 'below 2,000', error: 'E' }),
+  );
+  // The same element path to the input with and without the error: React keeps the input.
+  const path = (html) => html.slice(0, html.indexOf('<input'));
   assert.equal(
-    html,
-    renderToStaticMarkup(h(ui.InputField, { id: 'a', label: 'L' })),
+    path(calm).replace(/ aria-invalid="false"/, ''),
+    path(invalid).replace(/ aria-invalid="true"/, ''),
+  );
+  // Without a flag prop the markup is as before.
+  assert.doesNotMatch(
+    renderToStaticMarkup(h(ui.InputField, { id: 'a', label: 'L', error: 'E' })),
+    /tm-input-wrap/,
   );
   const area = renderToStaticMarkup(
     h(ui.TextareaField, { id: 't', label: 'L', error: 'E', flag: 'too long' }),
@@ -298,9 +318,10 @@ test('without an error the flag never shows, and the markup is as before', () =>
 });
 
 test('state CSS: the red edge, one shake that reduced motion stops, edges in forced colours', () => {
+  // Doubled class: app rules such as .withdraw__form .tm-input must not reset the edge.
   assert.match(
     css,
-    /\.tm-input\[aria-invalid='true'\]\s*\{[^}]*inset 3px 0 0 var\(--lamp-red\)/,
+    /\.tm-input\.tm-input\[aria-invalid='true'\]\s*\{[^}]*inset 3px 0 0 var\(--lamp-red\)/,
   );
   assert.doesNotMatch(
     css,
@@ -372,4 +393,110 @@ test('steps say done or not yet, and a failure lights only the first lamp red', 
     ),
     /aria-label="Withdrawal"/,
   );
+});
+
+test('an error line is black only beside an invalid field; a line with no edge stays red', () => {
+  // The rule for .tm-field-error alone (not the shared .tm-hint, .tm-field-error block).
+  const base = css.match(/\}\n\n\.tm-field-error\s*\{([^}]*)\}/);
+  assert.ok(base, 'base .tm-field-error rule');
+  assert.match(base[1], /color: var\(--state-danger\)/);
+  assert.match(
+    css,
+    /\.tm-field:has\(\.tm-input\[aria-invalid='true'\]\)\s*>\s*\.tm-field-error\s*\{[^}]*color: var\(--text-primary\)/,
+  );
+});
+
+test('the flag reserves its space only when shown, above app padding, and centres in any height', () => {
+  assert.match(
+    css,
+    /\.tm-input-wrap:has\(\.tm-field-flag\)\s*>\s*\.tm-input\s*\{[^}]*padding-inline-end: var\(--flag-space\)/,
+  );
+  const flag = css.match(/\n\.tm-field-flag\s*\{([^}]*)\}/);
+  assert.ok(flag);
+  assert.match(flag[1], /inset-block: 0/);
+  assert.doesNotMatch(flag[1], /(^|\s)height:/);
+});
+
+test('Try again is described by the key face, and the failed key keeps the caller’s id, test id and description', () => {
+  const html = renderToStaticMarkup(
+    h(
+      ui.ResultKey,
+      {
+        id: 'save',
+        'data-testid': 'save-key',
+        'aria-describedby': 'save-line',
+        result: {
+          kind: 'failed',
+          label: 'Not saved',
+          retryLabel: 'Try again',
+          onRetry() {},
+        },
+      },
+      'Save',
+    ),
+  );
+  assert.match(
+    html,
+    /^<div class="tm-key-result tm-key-result--failed" data-result="failed" id="save" data-testid="save-key">/,
+  );
+  const face = html.match(/<span class="tm-key-result__face" id="([^"]+)">/);
+  assert.ok(face, 'the face has an id');
+  assert.match(
+    html,
+    new RegExp(
+      `class="tm-key-result__again" aria-describedby="${face[1]} save-line"`,
+    ),
+  );
+});
+
+test('a pending key stays focusable: aria-busy and aria-disabled, never disabled', () => {
+  const html = renderToStaticMarkup(
+    h(ui.ResultKey, { pending: true, variant: 'continue' }, 'Save'),
+  );
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /aria-disabled="true"/);
+  assert.doesNotMatch(html, / disabled=""/);
+});
+
+test('a slip inside an existing live region can drop or change its role', () => {
+  assert.doesNotMatch(
+    renderToStaticMarkup(
+      h(ui.Slip, { tone: 'error', title: 'T', live: 'none' }),
+    ),
+    /role=/,
+  );
+  assert.match(
+    renderToStaticMarkup(
+      h(ui.Slip, { tone: 'error', title: 'T', live: 'status' }),
+    ),
+    /role="status"/,
+  );
+});
+
+test('warnings, empties and steps pass className, id and data-testid through', () => {
+  const props = { className: 'x', id: 'i', 'data-testid': 't' };
+  for (const el of [
+    h(ui.StandingWarning, { title: 'T', ...props }),
+    h(ui.EmptySlip, { title: 'T', ...props }),
+    h(ui.EmptyWell, { title: 'T', ...props }),
+    h(ui.Steps, { labels: ['A'], filled: 0, ...props }),
+  ]) {
+    const html = renderToStaticMarkup(el);
+    assert.match(html, /^<[a-z]+ class="[^"]*\bx\b[^"]*"/, html);
+    assert.match(html, /id="i"/, html);
+    assert.match(html, /data-testid="t"/, html);
+  }
+});
+
+test('empties wrap their explanation in a div, so block content nests validly', () => {
+  for (const el of [
+    h(ui.EmptySlip, { title: 'T' }, h('p', null, 'Body')),
+    h(ui.EmptyWell, { title: 'T' }, h('p', null, 'Body')),
+  ]) {
+    const html = renderToStaticMarkup(el);
+    assert.match(
+      html,
+      /<div class="tm-empty-(slip|well)__body"><p>Body<\/p><\/div>/,
+    );
+  }
 });
