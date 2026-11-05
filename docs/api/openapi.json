@@ -3943,6 +3943,17 @@
                   "minMinor": {
                     "type": "string",
                     "pattern": "^\\d{1,12}$"
+                  },
+                  "startMinor": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{1,12}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [

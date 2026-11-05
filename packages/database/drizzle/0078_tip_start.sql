@@ -1,0 +1,2 @@
+ALTER TABLE "profiles" ADD COLUMN "tip_start_minor" bigint;--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_tip_start_in_presets" CHECK (tip_start_minor IS NULL OR coalesce(tip_start_minor = ANY (tip_presets_minor), false));
