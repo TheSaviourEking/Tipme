@@ -362,6 +362,33 @@ export function StandingWarning({
   );
 }
 
+/** The one plain line under a key, with no box. Always mounted, so a screen reader hears the change. */
+export function StateLine({
+  tone,
+  children,
+  id,
+  visuallyHidden = false,
+}: {
+  tone: 'error' | 'status';
+  children?: ReactNode;
+  id?: string;
+  /** The key face already shows it ("Saved."); the words stay for screen readers. */
+  visuallyHidden?: boolean;
+}) {
+  return (
+    <p
+      className={classes(
+        'tm-state-line',
+        visuallyHidden ? 'sr-only' : undefined,
+      )}
+      role={tone === 'error' ? 'alert' : 'status'}
+      id={id}
+    >
+      {children}
+    </p>
+  );
+}
+
 export function Notice({
   tone = 'neutral',
   title,

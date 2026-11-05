@@ -712,6 +712,99 @@ textarea.tm-input {
   padding: 0.625rem 0.75rem 0.625rem 0.875rem;
 }
 
+/* Concept B, the key tells you (StatesConcepts .pressed, .split). Done: the key stays pressed
+   with a dark face, a purple lamp and its label, then springs back. */
+.tm-button.tm-key-result--done,
+.tm-button.tm-key-result--done:hover {
+  border-color: var(--text-primary);
+  background:
+    linear-gradient(rgb(255 255 255 / 10%), transparent 30%),
+    var(--key-face-dark);
+  color: var(--surface-base);
+  box-shadow: var(--shadow-raised-continue-pressed);
+  transform: translateY(2px);
+  transition: transform var(--duration-tactile) var(--ease-physical);
+}
+
+/* Failed: the key splits. The face says what happened; the right half tries again. */
+.tm-key-result--failed {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  max-width: 100%;
+  min-height: 52px;
+  border-radius: var(--radius-field);
+  box-shadow: var(--shadow-raised-continue);
+  vertical-align: middle;
+}
+
+.tm-key-result__face {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.625rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--text-primary);
+  border-right: 0;
+  border-radius: var(--radius-field) 0 0 var(--radius-field);
+  background: var(--key-face-dark);
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / 60%);
+  color: var(--surface-base);
+  font: 700 0.90625rem / 1.3 var(--font-interface);
+  overflow-wrap: anywhere;
+}
+
+.tm-key-result__face small {
+  color: color-mix(in srgb, var(--surface-base) 78%, transparent);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.tm-key-result__again {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 1.125rem;
+  border: 1px solid var(--text-primary);
+  border-left-color: color-mix(
+    in srgb,
+    var(--surface-base) 20%,
+    var(--text-primary)
+  );
+  border-radius: 0 var(--radius-field) var(--radius-field) 0;
+  background:
+    linear-gradient(rgb(255 255 255 / 16%), transparent 30%),
+    var(--text-primary);
+  color: var(--surface-base);
+  font: 800 0.90625rem / 1.2 var(--font-interface);
+  cursor: pointer;
+  transition: transform var(--duration-tactile) var(--ease-physical);
+}
+
+.tm-key-result__again:active {
+  transform: translateY(2px);
+  transition-duration: 0s;
+}
+
+.tm-key-result__again:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 3px;
+}
+
+/* The plain line under a key: no box, the words carry it. */
+.tm-state-line {
+  margin: 0.625rem 0.125rem 0;
+  color: var(--text-primary);
+  font-size: 0.84375rem;
+  line-height: 1.5;
+}
+
+.tm-state-line:empty {
+  margin: 0;
+}
+
 .tm-notice {
   padding: 1rem 1.1rem;
   border: 1px solid var(--edge-hairline);
@@ -872,6 +965,17 @@ textarea.tm-input {
     box-shadow: none;
   }
 
+  .tm-key-result__face {
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .tm-key-result__again {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
   /* Backgrounds are forced away, so a lamp keeps its edge. */
   .tm-lamp {
     border: 1px solid CanvasText;
@@ -905,6 +1009,17 @@ textarea.tm-input {
   .tm-button,
   .tm-input,
   .tm-choice span {
+    transition: none;
+  }
+
+  /* A done key changes only its lamp and label; it does not sink. */
+  .tm-button.tm-key-result--done,
+  .tm-button.tm-key-result--done:hover {
+    transform: none;
+    transition: none;
+  }
+
+  .tm-key-result__again {
     transition: none;
   }
 
