@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { API_ORIGIN } from '../e2e/stack';
 
 /** What a screen needs before it can be shown: a signed-in recipient, with or without tips. */
 export interface ReviewContext {
@@ -318,12 +319,9 @@ export const SCREENS: ReviewScreen[] = [
         );
         return `${day.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
       });
-      await page.request.post(
-        'http://127.0.0.1:4100/v1/dev/jobs/weekly-report',
-        {
-          data: { handle, isoWeek },
-        },
-      );
+      await page.request.post(`${API_ORIGIN}/v1/dev/jobs/weekly-report`, {
+        data: { handle, isoWeek },
+      });
       await page.goto(`/dashboard/reports/${isoWeek}`);
       await page.getByRole('heading', { level: 1 }).waitFor();
     },
