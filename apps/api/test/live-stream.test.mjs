@@ -5,9 +5,16 @@ import { openStream } from '../dist/live/live.controller.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
-function fakes({ destroyed = false, ended = false } = {}) {
+function fakes({
+  destroyed = false,
+  ended = false,
+  reqDestroyed = destroyed,
+} = {}) {
   const socket = { setTimeout() {}, setNoDelay() {}, setKeepAlive() {} };
-  const req = Object.assign(new EventEmitter(), { socket, destroyed });
+  const req = Object.assign(new EventEmitter(), {
+    socket,
+    destroyed: reqDestroyed,
+  });
   const writes = [];
   const res = Object.assign(new EventEmitter(), {
     destroyed,
@@ -88,4 +95,13 @@ test('the response closing tears the stream down and frees its slot', () => {
   f.res.emit('close');
   assert.deepEqual(f.registered, []);
   assert.deepEqual(f.counted.at(-1), ['close', 'client']);
+});
+
+test('a request whose body was read (req.destroyed) still opens: only the response says the client left', () => {
+  // Node marks a request destroyed once anything drains it, while its response is still open.
+  const f = fakes({ reqDestroyed: true });
+  f.open();
+  assert.equal(f.registered.length, 1);
+  f.res.emit('close');
+  assert.deepEqual(f.registered, []);
 });

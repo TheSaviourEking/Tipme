@@ -48,9 +48,12 @@ const REFUSED_RETRY_AFTER_S = 30;
  */
 export const HEARTBEAT = ': hb\nevent: hb\ndata: {}\n\n';
 
-/** The client went away (or the response ended) while the connect was still awaiting. */
-export function clientGone(req: Request, res: Response): boolean {
-  return req.destroyed || res.destroyed || res.writableEnded;
+/**
+ * The client went away (or the response ended) while the connect was still awaiting. Only the
+ * response says so: a request also reads as destroyed once anything has drained its body.
+ */
+export function clientGone(res: Response): boolean {
+  return res.destroyed || res.writableEnded;
 }
 
 /** Shared by /v1/me/events and (later) /v1/ops/events. */
@@ -78,7 +81,7 @@ export function openStream(o: {
   };
   // The client can leave while the connect awaits Redis and Postgres. By now its close has already
   // fired, and writes to it raise nothing: registering would hold a slot for half an hour.
-  if (clientGone(req, res)) {
+  if (clientGone(res)) {
     metrics.connect('client_gone');
     return;
   }
@@ -203,7 +206,7 @@ export class LiveController {
       throw error;
     }
     // After each await: a client that left needs no database read.
-    if (clientGone(req, res)) {
+    if (clientGone(res)) {
       metrics.connect('client_gone');
       return;
     }
