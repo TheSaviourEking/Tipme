@@ -78,7 +78,7 @@ export interface Letter {
 
 const STYLE = `<style>
 :root{color-scheme:light dark;supported-color-schemes:light dark}
-@media (max-width:480px){.tm-amount{font-size:54px!important}.tm-slab{padding:24px 22px!important}.tm-slab-h{font-size:30px!important}.tm-card{padding:24px 20px!important}.tm-outer{padding:20px 8px!important}}
+@media (max-width:480px){.tm-amount{font-size:54px!important}.tm-slab{padding:24px 22px!important}.tm-slab-h{font-size:30px!important}.tm-card{padding:24px 20px!important}.tm-outer{padding:20px 8px!important}.tm-stat{padding:12px!important}.tm-stat-v{font-size:24px!important}}
 @media (prefers-color-scheme: dark){.tm-paper{background:${NIGHT}!important}.tm-card{background:#1E1C19!important;border-color:#34312C!important}.tm-ink{color:${PAPER}!important}.tm-muted{color:#B5B0A6!important}.tm-muted a{color:#B5B0A6!important}.tm-rule{border-color:#34312C!important}.tm-well{background:#2A2723!important;border-color:#3A3631!important;color:${PAPER}!important}.tm-warn{background:#2E1D52!important;color:${SLAB_LINE}!important}.tm-tag{color:#C9A8FF!important}}
 </style>`;
 
@@ -179,10 +179,10 @@ function blockHtml(block: Block): [string, number] {
       const cells = block.items
         .map(
           (item) =>
-            `<td class="tm-well" bgcolor="${WELL}" width="${Math.floor(100 / block.items.length)}%" style="padding:14px 16px;vertical-align:top;${wellStyle};"><div style="font-family:${SERIF};font-size:30px;line-height:1.1;">${e(item.value)}</div><div class="tm-muted" style="margin-top:2px;font-size:13px;font-weight:600;color:${MUTED};">${e(item.label)}</div></td>`,
+            `<td class="tm-well tm-stat" bgcolor="${WELL}" width="${Math.floor((100 - 3 * (block.items.length - 1)) / block.items.length)}%" style="padding:14px 16px;vertical-align:top;${wellStyle};"><div class="tm-stat-v" style="font-family:${SERIF};font-size:30px;line-height:1.1;">${e(item.value)}</div><div class="tm-muted" style="margin-top:2px;font-size:13px;font-weight:600;color:${MUTED};">${e(item.label)}</div></td>`,
         )
         .join(
-          '<td width="10" style="width:10px;font-size:0;line-height:0;">&nbsp;</td>',
+          '<td width="3%" style="width:3%;font-size:0;line-height:0;">&nbsp;</td>',
         );
       return [table(`<tr>${cells}</tr>`), 20];
     }
