@@ -1,8 +1,8 @@
 # Current task — bank picker (5 November 2026)
 
-- Branch/worktree: `feat/bank-picker` / `.worktrees/bank-picker`, from `origin/dev`, test lane 3. Not pushed. No API, contract or migration change.
-- Building: the Get paid card's search-your-bank combobox (A) and the name check on its own (C). Plan: `docs/superpowers/plans/2026-11-05-bank-picker.md`.
-- Next: Tasks 2 to 10 of the plan, test-first.
+- Branch/worktree: `feat/bank-picker` / `.worktrees/bank-picker`, from `origin/dev` (merged at `e0535cb`), test lane 3. Not pushed. No API, contract, database or migration change.
+- Built: the Get paid card's search-your-bank combobox (A) with popular keys by code, A to Z and More banks, a full-screen sheet on phones, and the name check on its own (C), once per bank and number, with Check again only after a failure. The card's three "payment provider" messages say "our payment partner". Plan: `docs/superpowers/plans/2026-11-05-bank-picker.md`.
+- Next: the owner reviews the `Get paid` group in `review-screens/index.html`, then push and open one PR to `dev`. Build report: `.superpowers/program/bank-build-report.md`.
 
 # Current task — dashboard data (5 November 2026)
 

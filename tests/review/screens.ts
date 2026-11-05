@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { standInBanks } from '../e2e/bank-fixtures';
 import { API_ORIGIN } from '../e2e/stack';
 
 /** What a screen needs before it can be shown: a signed-in recipient, with or without tips. */
@@ -55,6 +56,68 @@ async function atCodeStep(page: Page, path: string) {
   await page.getByRole('button', { name: 'Send code' }).click();
   await page.getByLabel('6-digit code').waitFor();
 }
+
+/** The Get paid card with the stand-in bank list, for the bank picker screens. */
+async function getPaid(page: Page, ctx: ReviewContext) {
+  await ctx.recipient();
+  await standInBanks(page);
+  await page.goto('/dashboard/settings#get-paid');
+  // Sign-up ends on settings, so the goto only moved to the anchor: load the stand-in list.
+  await page.reload();
+  const card = page.locator('#get-paid');
+  await card.getByLabel('Account number').waitFor();
+  return card;
+}
+
+/** Opens the picker: the popup on a desktop, the full-screen sheet on a phone. */
+async function openPicker(page: Page) {
+  const card = page.locator('#get-paid');
+  const phone = await page.evaluate(
+    () => matchMedia('(max-width: 40rem)').matches,
+  );
+  if (phone) await card.getByRole('button', { name: 'Bank' }).click();
+  else await card.getByRole('combobox', { name: 'Bank' }).focus();
+  return card.getByRole('combobox').first();
+}
+
+/** Bank picker screens: open, then optionally type into the search. */
+const picker = (typed?: string) => async (page: Page, ctx: ReviewContext) => {
+  await getPaid(page, ctx);
+  const search = await openPicker(page);
+  if (typed) await search.fill(typed);
+  // The live count waits for typing to pause.
+  await page.waitForTimeout(400);
+};
+
+/** Name check screens: GTBank by its key, then a number; `stub` answers the check. */
+const nameCheck =
+  (number: string, stub?: 'held' | 'failed') =>
+  async (page: Page, ctx: ReviewContext) => {
+    const card = await getPaid(page, ctx);
+    if (stub === 'held')
+      // Never answered, so the check stays in progress for the picture.
+      await page.route('**/v1/me/payout-destination/resolve', () => {});
+    if (stub === 'failed')
+      await page.route('**/v1/me/payout-destination/resolve', (route) =>
+        route.fulfill({
+          status: 503,
+          json: { error: { code: 'PAYOUT_PROVIDER_UNAVAILABLE' } },
+        }),
+      );
+    await openPicker(page);
+    await card
+      .getByRole('group', { name: 'Popular' })
+      .getByRole('option', { name: 'GTBank' })
+      .click();
+    await card.getByLabel('Account number').fill(number);
+    await (
+      stub === 'held'
+        ? card.getByText('Checking the name at your bank…')
+        : stub === 'failed'
+          ? card.getByRole('button', { name: 'Check again' })
+          : card.getByLabel('Name on the account')
+    ).waitFor();
+  };
 
 /** Each task of the redesign adds the screens it rebuilds, in the order of the plan. */
 export const SCREENS: ReviewScreen[] = [
@@ -432,6 +495,56 @@ export const SCREENS: ReviewScreen[] = [
         .waitFor();
     },
   })),
+  {
+    group: 'Get paid',
+    name: 'Bank picker, open',
+    board: 'BankPicker',
+    open: picker(),
+  },
+  {
+    group: 'Get paid',
+    name: 'Bank picker, typed gtb',
+    board: 'BankPicker',
+    open: picker('gtb'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Bank picker, no match',
+    board: 'BankPicker',
+    open: picker('gtbnk zz'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, checking',
+    board: 'BankPicker',
+    open: nameCheck('0123456789', 'held'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, found',
+    board: 'BankPicker',
+    open: nameCheck('0123456789'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, not found',
+    board: 'BankPicker',
+    open: nameCheck('1234560000'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, failed',
+    board: 'BankPicker',
+    open: nameCheck('0123456789', 'failed'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Bank sheet, typed fir',
+    board: 'BankPicker',
+    // On a phone the sheet fills the screen, so it is shot one screen tall.
+    viewport: true,
+    open: picker('fir'),
+  },
   {
     group: 'Small screens',
     name: 'Page not found',
