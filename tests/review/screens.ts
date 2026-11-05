@@ -56,6 +56,23 @@ async function atCodeStep(page: Page, path: string) {
   await page.getByLabel('6-digit code').waitFor();
 }
 
+/** Three links on a Free page, saved: TikTok, Instagram and YouTube. */
+async function addLinks(page: Page) {
+  const section = page.locator('.settings-section', {
+    has: page.getByRole('heading', { name: 'Your links' }),
+  });
+  for (const url of [
+    'https://www.tiktok.com/@ada.edits',
+    'https://instagram.com/ada.edits',
+    'https://youtube.com/@adaedits',
+  ]) {
+    await section.getByLabel('Add a link').fill(url);
+    await section.getByRole('button', { name: 'Add', exact: true }).click();
+  }
+  await section.getByRole('button', { name: 'Save links' }).click();
+  await section.getByRole('status').getByText('Saved').waitFor();
+}
+
 /** Each task of the redesign adds the screens it rebuilds, in the order of the plan. */
 export const SCREENS: ReviewScreen[] = [
   { group: 'Public', name: 'Home', board: 'ScreenHome', open: visit('/') },
@@ -396,6 +413,38 @@ export const SCREENS: ReviewScreen[] = [
         .waitFor();
     },
   })),
+  // SocialLinks: a Free page's three links in Settings, then the same links on its public page.
+  {
+    group: 'Dashboard',
+    name: 'Settings, your links',
+    board: 'SocialLinks',
+    async open(page, ctx) {
+      await ctx.recipient();
+      await page.goto('/dashboard/settings');
+      await addLinks(page);
+      await page
+        .getByRole('heading', { name: 'Your links' })
+        .scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    group: 'Public',
+    name: 'Tip page with links',
+    board: 'SocialLinks',
+    async open(page, ctx) {
+      const { handle } = await ctx.recipient();
+      await page.goto('/dashboard/settings');
+      await addLinks(page);
+      // The page is rebuilt after the save: reload until it has the links.
+      const links = page.getByRole('list', { name: /elsewhere$/ });
+      for (let tries = 0; tries < 20; tries++) {
+        await page.goto(`/@${handle}`);
+        if ((await links.count()) > 0) break;
+        await page.waitForTimeout(500);
+      }
+      await links.waitFor();
+    },
+  },
   {
     group: 'Small screens',
     name: 'Page not found',

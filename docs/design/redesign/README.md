@@ -36,3 +36,4 @@ Where a board and a newer owner decision disagree, the decision wins:
 | `ScreenSettings`            | Settings and page editor                                   |
 | `ScreenSmall`               | Errors, not found, coming soon, legal layout               |
 | `ScreenAnimatedCovers`, `OpsProPrice` | Later plans: animated covers, staff Pro price    |
+| `SocialLinks`               | Social links: the editor in Settings and the public row (version 97, approved by the owner 5 Nov 2026) |
