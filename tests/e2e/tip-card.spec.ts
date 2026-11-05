@@ -6,6 +6,7 @@ import {
   type Mode,
   type Stack,
 } from './profile-fixtures';
+import { DANGER_TEXT, PLAIN_TEXT, errorColour, hasRedEdge } from './helpers';
 
 // The owner-approved compact tip card (2 Nov 2026), on the built web app against the stand-in API.
 // Calls the browser makes for prices and tips are answered here: nothing reaches any provider.
@@ -254,6 +255,11 @@ test('a typed amount: minimum rule, wording, focus, and the Tip label follow it 
   ).toBeVisible();
   await expect(field).toBeFocused();
   await expect(field).toHaveAttribute('aria-invalid', 'true');
+  // The red is in the field's edge (the tip card's own input rules keep it); the line is black.
+  expect(await hasRedEdge(field)).toBe(true);
+  expect(await errorColour(page.getByText(/^Enter an amount of NGN/))).toBe(
+    PLAIN_TEXT,
+  );
   await field.fill('12500');
   await expect(page.getByText(/Enter an amount/)).toHaveCount(0);
   await field.blur();
@@ -761,6 +767,10 @@ test('a quote that fails on the tap offers a retry, and the retry pays once', as
         'We couldn’t reach TipMe. Check your connection and try again.',
       ),
   ).toBeVisible();
+  // No field edge beside this line, so it keeps its red until the public batch.
+  expect(
+    await errorColour(page.locator('.tip-quote .tm-field-error').first()),
+  ).toBe(DANGER_TEXT);
   expect(sent.intents).toEqual([]);
   await expect(tipButton(page)).toBeEnabled();
   fail = false;

@@ -1,3 +1,9 @@
+# Current task — states and feedback, PR A primitives (5 November 2026)
+
+- Branch/worktree: `feat/states` / `.worktrees/states`, origin/dev merged, test lane 1. Not pushed, no PR.
+- Plan: `docs/superpowers/plans/2026-11-05-states.md`. PR A (Tasks 1–8) built: `Lamp`, `Slip`, `StandingWarning`, `ResultKey`/`StateLine`/`useKeyResult`, field red edge/flag/shake, `EmptySlip`/`EmptyWell`, `Steps`, the design-system States specimen and the internal 6 places.
+- Next exact step: owner review and push of PR A; then PR B (Task 9). Task 9's money-safety-lines test must exempt `app/design-system/states-specimen.tsx`, which shows the proven lines as specimens. Task 17 (connection copy) still waits for the owner's yes.
+
 # Verified state (5 November 2026, dev at `f85ec4d`)
 
 Every "Current task" entry below for these branches is **merged into dev**; read them as history.

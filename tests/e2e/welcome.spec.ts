@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
+  DANGER_TEXT,
+  errorColour,
   expectAccessible,
   fitsViewport,
   identity,
@@ -144,3 +146,27 @@ test(
     });
   },
 );
+
+// PR A review I2: these lines sit below the fields, not inside one with a red edge, so they keep
+// their red until the dashboard batch restyles them.
+test('a welcome save that fails keeps its error line red', async ({
+  page,
+}, testInfo) => {
+  await claimNewPage(page, testInfo);
+  await page.route('**/v1/me/profile', (route) =>
+    route.request().method() === 'PATCH'
+      ? route.fulfill({
+          status: 503,
+          json: { error: { code: 'SERVICE_UNAVAILABLE', message: 'x' } },
+        })
+      : route.fallback(),
+  );
+  await page.getByRole('button', { name: 'Let’s set up your page' }).click();
+  await page.getByLabel('Your name').fill('Kemi Bello');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  const line = page
+    .getByRole('alert')
+    .filter({ hasText: 'We couldn’t save that.' });
+  await expect(line).toBeVisible();
+  expect(await errorColour(line)).toBe(DANGER_TEXT);
+});

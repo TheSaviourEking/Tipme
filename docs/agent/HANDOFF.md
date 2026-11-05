@@ -1,3 +1,10 @@
+# Current handoff — states PR A, primitives (5 November 2026)
+
+- Branch `feat/states`, test lane 1, not pushed. Front end only: `packages/ui`, the design-system page, `preview-states`, review screens. No API, contract, database or payment change.
+- `Notice` and `EmptyState` still exist; nothing new imports them. The Linux design-system baselines are not updated (darwin only); take them from CI's render as in 3841ef0.
+- `.tm-field-error` is now black text with the red in the field's edge, and invalid fields shake once (not with reduced motion): this reaches every form, not just the specimen.
+- Evidence: `.superpowers/program/states-a-build-report.md` in the main checkout.
+
 # Current handoff — live updates PR 1 (5 November 2026)
 
 - Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, merged with `origin/dev` at `527bce9` and pushed with a PR to dev. Nothing ran against staging or production; the Caddyfile and flag are the owner's deploy steps (`docs/runbooks/production.md` §10). No regulatory decision is implied (D-03, D-08, D-11 stay open).
