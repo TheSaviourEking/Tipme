@@ -827,10 +827,10 @@ test('a failed start is shown clear of the Tip bar @mobile', async ({
   );
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
   await tipButton(page).click();
-  const notice = page.locator('.appreciation-card .tm-notice');
+  const notice = page.locator('.appreciation-card .tm-slip');
   await expect(notice).toBeInViewport();
   await expect
-    .poll(() => clearOfBar(page, '.appreciation-card .tm-notice'))
+    .poll(() => clearOfBar(page, '.appreciation-card .tm-slip'))
     .toBe(true);
 });
 

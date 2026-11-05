@@ -9,7 +9,7 @@ import {
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { TipStatusView } from '@tipme/contracts';
-import { ActionLink, Button, Card, Notice, Skeleton, Surface } from '@tipme/ui';
+import { ActionLink, Button, Card, Skeleton, Slip, Surface } from '@tipme/ui';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
@@ -209,9 +209,9 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
         </p>
       )}
       {offline && (
-        <Notice tone="error" title="Connection lost">
+        <Slip tone="error" title="Connection lost">
           We’ll keep trying to reach TipMe.
-        </Notice>
+        </Slip>
       )}
       {stopped && !FINAL.has(tip.state) && (
         <div className="tip-status-actions">

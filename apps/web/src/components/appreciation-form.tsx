@@ -9,7 +9,7 @@ import {
   Button,
   Card,
   InputField,
-  Notice,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import { track } from '@/lib/analytics';
@@ -122,6 +122,10 @@ export function AppreciationForm({
   const [nameError, setNameError] = useState('');
   const [quote, setQuote] = useState<QuoteState>({ kind: 'idle' });
   const [notice, setNotice] = useState('');
+  // Whether the failed tip reached TipMe. Only one that never did may say "You haven't paid
+  // anything" (states plan, Money-safety proofs): payment happens only on the partner's page,
+  // after the redirect on success below.
+  const [reachedUs, setReachedUs] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   // One key per draft (quote + message): retries and double taps reuse it, so one tip at most.
   const draftKey = useRef<string | null>(null);
@@ -285,10 +289,13 @@ export function AppreciationForm({
     ) {
       // Nothing is charged without the supporter's tap. If the refresh itself fails, the quote area
       // already says why.
-      if (await fetchQuote(amount))
+      if (await fetchQuote(amount)) {
+        setReachedUs(true);
         setNotice('That took a little too long. Please tap Tip again.');
+      }
       return;
     }
+    setReachedUs(result.code !== 'NETWORK');
     setNotice(failureMessage(result, options.rangeText));
   };
 
@@ -303,7 +310,7 @@ export function AppreciationForm({
   useEffect(() => {
     if (!onProfile || !problem) return;
     form.current
-      ?.querySelector('.tm-notice, .tm-field-error')
+      ?.querySelector('.tm-slip, .tm-field-error')
       ?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
   }, [onProfile, problem]);
 
@@ -391,6 +398,10 @@ export function AppreciationForm({
   }, [onProfile, closed]);
 
   const busy = submitting;
+  // A typed amount that is only too small: the field says "below 2,000" and the key at the minimum
+  // lights up (states plan, Task 9). A mistyped one gets the line alone.
+  const belowMinimum =
+    selection === 'other' && Boolean(error) && options.belowMinimum(custom);
   const extras = (
     <>
       <div className="tm-field">
@@ -581,6 +592,9 @@ export function AppreciationForm({
                   value={String(preset.minor)}
                   aria-label={`${preset.label} NGN`}
                   checked={selection === String(preset.minor)}
+                  suggested={
+                    belowMinimum && preset.minor === options.suggestedMinor
+                  }
                   onChange={() => {
                     setSelection(String(preset.minor));
                     choseAmount.current = true;
@@ -632,6 +646,7 @@ export function AppreciationForm({
             setError('');
           }}
           error={selection === 'other' && error ? error : undefined}
+          flag={belowMinimum ? `below ${options.minLabel}` : ''}
         />
         {onProfile ? (
           <p className="tip-quote-live sr-only" aria-live="polite">
@@ -670,11 +685,6 @@ export function AppreciationForm({
           </summary>
           <div className="composer-extras__body">{extras}</div>
         </details>
-        {notice && (
-          <Notice tone="error" title="Not sent yet">
-            {notice}
-          </Notice>
-        )}
         {/* A fixed bar on a phone's public page (CSS): still this form's one submit button. */}
         <TipAction
           partner={copy.formPartner}
@@ -699,6 +709,26 @@ export function AppreciationForm({
             <Arrow />
           </Button>
         </TipAction>
+        {/* After Tip, so it comes out from under the button that was pressed. */}
+        {notice && (
+          <Slip
+            tone="error"
+            stamp={'Not\nsent'}
+            title="Not sent yet"
+            safe={reachedUs ? undefined : 'You haven’t paid anything.'}
+            actions={
+              <Button
+                variant="continue"
+                disabled={busy}
+                onClick={() => form.current?.requestSubmit()}
+              >
+                Try again
+              </Button>
+            }
+          >
+            {notice}
+          </Slip>
+        )}
         {(pilotNotice || copy.formDisclaimer) && (
           <p className="composer-disclaimer">
             {/* The mode wording: on a phone with the Tip bar, the bar carries it and CSS removes this

@@ -488,6 +488,23 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
   await expect(paidHeading(page)).toBeVisible();
 });
 
+test('a receipt that loses the API while waiting shows the Connection lost slip, and recovers', async ({
+  page,
+}) => {
+  // "No reply": paid, but the provider never tells TipMe, so the receipt keeps checking.
+  await tip(page, { outcome: /^No reply/ });
+  await expect(page.locator('.tip-status-card')).toBeVisible();
+  await page.route('**/v1/tips/*/status', (route) => route.abort());
+  const slip = page.locator('.tm-slip').filter({ hasText: 'Connection lost' });
+  await expect(slip).toBeVisible();
+  await expect(slip).toContainText('We’ll keep trying to reach TipMe.');
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(page.locator('.tm-notice')).toHaveCount(0);
+  await expectAccessible(page);
+  await page.unroute('**/v1/tips/*/status');
+  await expect(slip).toHaveCount(0);
+});
+
 test('fix: every receipt says the payment was pretend', async ({ page }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();
@@ -655,6 +672,12 @@ test('minor: the pretend provider page can retry loading', async ({ page }) => {
   await expect(
     page.getByText('The test provider is unavailable. Please try again.'),
   ).toBeVisible();
+  // A page-level error slip: no stamp, announced as an alert.
+  const slip = page
+    .locator('.tm-slip')
+    .filter({ hasText: 'Payment unavailable' });
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(slip.locator('.tm-slip__stamp')).toHaveCount(0);
   await page.unroute('**/v1/mock-provider/checkout/*');
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByText('NGN 2,000.00')).toBeVisible();
