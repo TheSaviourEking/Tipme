@@ -2,6 +2,7 @@
 
 - Branch `fix/partner-quote-cache`, lane 3. Review: `.superpowers/program/quote-cache-review.md`; build report: `.superpowers/program/quote-cache-report.md`.
 - The ledger, holds, the switch and the route are read fresh on every quote; only the partner's answer is cached. A failed invalidation can't serve stale data, because the stamp covers every recorded change. A Redis outage means a direct partner call. The Withdraw page reloads its figures after `INSUFFICIENT_BALANCE` or `WITHDRAWAL_TOO_SMALL`.
+- CI follow-up: `e2e (4)` failed its recovery-page axe audit on a social-link chip narrower than the 44px touch target. `apps/web/src/app/globals.css` now sets both minimum dimensions to 44px; the focused desktop recovery test passed on E2E lane 1.
 - Open: changes the partner makes that TipMe hasn't recorded last up to 30 s (the withdrawal still checks fresh). No operation sets `REVERSED` yet (TODO in the test). Use a version counter if a recipient's payout count grows large.
 
 # Current handoff — social links (5 November 2026)

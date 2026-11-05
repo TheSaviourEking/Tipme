@@ -2,7 +2,8 @@
 
 - Branch/worktree: `fix/partner-quote-cache` / `.worktrees/quote-cache`, from `origin/dev` d9de485, test lane 3. No migration.
 - Built: the withdrawal quote's partner read (capability, balance, fee) is cached in Redis for `PARTNER_QUOTE_CACHE_SECONDS` (default 30, 0 = off). Every key carries a stamp of TipMe's records. A withdrawal always asks fresh. Review fixes (I-1, M-1 to M-9) are done.
-- Next: PR to `dev`, review and merge. Plan: `docs/superpowers/plans/2026-11-05-partner-quote-cache.md`.
+- CI follow-up: job `e2e (4)` found one undersized social-link chip in the recovery test's accessibility audit. Its 44px minimum width is fixed in `globals.css`; the focused recovery E2E passes on lane 1.
+- Next: confirm CI is green, then merge the PR to `dev`. Plan: `docs/superpowers/plans/2026-11-05-partner-quote-cache.md`.
 
 # Current task — social links (5 November 2026)
 
