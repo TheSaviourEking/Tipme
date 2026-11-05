@@ -6660,6 +6660,134 @@ body > .coming-soon-page {
   overflow-wrap: anywhere;
 }
 
+/*
+ * Animated covers (owner's exception, EXPERIENCE-AND-MOTION 7.11). Five HTML layers over the base
+ * colour. A layer's own style is the settled frame, and the keyframes run only `from` an offset to
+ * it, so `animation: none` is always the right still picture. Only transform and opacity animate,
+ * and no will-change is left on. A unit is 1/170 of the frame's height, as on the board.
+ */
+.profile-cover[data-cover-play] {
+  container-type: size;
+}
+
+.cover-fx {
+  position: absolute;
+  left: var(--x);
+  bottom: calc(var(--b) * 100cqh / 170);
+  width: calc(var(--s) * 100cqh / 170);
+  height: calc(var(--s) * 100cqh / 170);
+  pointer-events: none;
+}
+
+.cover-fx svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+[data-cover-play='once'] .cover-fx,
+[data-cover-play='loop'] .cover-fx {
+  animation-delay: var(--d);
+  animation-fill-mode: both;
+  animation-timing-function: var(--ease-physical);
+}
+
+[data-cover-play='once'] .cover-fx {
+  animation-duration: var(--duration-cover-once);
+  animation-iteration-count: 1;
+}
+
+[data-cover-play='loop'] .cover-fx {
+  animation-duration: var(--duration-cover-loop);
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+.cover-fx--drift {
+  animation-name: cover-fx-drift;
+}
+.cover-fx--rise {
+  animation-name: cover-fx-rise;
+}
+.cover-fx--ripple {
+  animation-name: cover-fx-ripple;
+}
+.cover-fx--pulse {
+  animation-name: cover-fx-pulse;
+}
+.cover-fx--night {
+  animation-name: cover-fx-night;
+}
+.cover-fx--sun {
+  animation-name: cover-fx-sun;
+}
+
+@keyframes cover-fx-drift {
+  from {
+    transform: translate(-18px, 8px);
+  }
+}
+
+@keyframes cover-fx-rise {
+  from {
+    transform: translateY(60px);
+    opacity: 0.2;
+  }
+}
+
+@keyframes cover-fx-ripple {
+  from {
+    transform: scale(0.6);
+    opacity: 0.35;
+  }
+}
+
+@keyframes cover-fx-pulse {
+  from {
+    transform: scale(0.88);
+  }
+}
+
+@keyframes cover-fx-night {
+  from {
+    transform: translateY(4px);
+    opacity: 0.25;
+  }
+}
+
+@keyframes cover-fx-sun {
+  from {
+    transform: translateY(70px);
+  }
+}
+
+/* Not animating: the settled frame. */
+[data-cover-play='still'] .cover-fx {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cover-fx {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .cover-fx {
+    animation: none;
+  }
+
+  .profile-cover[data-cover-play] {
+    border-bottom: 1px solid CanvasText;
+  }
+}
+
+@media print {
+  .cover-fx {
+    animation: none;
+  }
+}
+
 /* The cover chooser in Settings (design spec §6, motion §7.6). */
 .cover-preview {
   position: relative;

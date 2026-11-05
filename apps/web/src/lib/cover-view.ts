@@ -1,7 +1,9 @@
 import {
   COVER_COLOURS,
   COVER_DARK,
+  COVER_ANIMATIONS,
   COVER_DESIGNS,
+  type CoverPlay,
   type ResolvedCover,
 } from '@tipme/contracts';
 
@@ -106,8 +108,39 @@ export interface HeartsView {
   layout: HeartLayout;
 }
 
+/**
+ * The five hearts of an animated cover, from the board (ScreenAnimatedCovers): x as a share of
+ * the width, bottom and size in units of a 170-unit-tall frame (the stylesheet scales a unit to
+ * the frame's real height), and the stagger delay. Each is drawn at its settled place; the
+ * animation only runs `from` an offset to it.
+ */
+export const ANIMATED_LAYERS: readonly {
+  x: number;
+  bottom: number;
+  size: number;
+  delay: number;
+}[] = [
+  { x: 6, bottom: 20, size: 46, delay: 0 },
+  { x: 30, bottom: 70, size: 30, delay: 0.3 },
+  { x: 50, bottom: 14, size: 62, delay: 0.15 },
+  { x: 76, bottom: 64, size: 34, delay: 0.45 },
+  { x: 88, bottom: 10, size: 44, delay: 0.6 },
+];
+
+export interface AnimatedView {
+  kind: 'animated';
+  animation: string;
+  base: string;
+  tone: string;
+  /** What the browser does: `still` when not animating here, or the page may not play it. */
+  play: CoverPlay;
+  layers: typeof ANIMATED_LAYERS;
+}
+
 export type CoverView =
-  { kind: 'image'; src: string; unoptimized: boolean } | HeartsView;
+  | { kind: 'image'; src: string; unoptimized: boolean }
+  | HeartsView
+  | AnimatedView;
 
 const NEUTRAL =
   COVER_COLOURS.find((c) => c.id === 'neutral') ?? COVER_COLOURS[0];
@@ -139,7 +172,30 @@ function hearts(design: string, colourId: string | undefined): HeartsView {
  * only the API's own cover route is ever turned into an image source. A design the catalogue
  * has dropped, or a path that isn't ours, shows the automatic look instead of breaking the page.
  */
-export function coverView(cover: ResolvedCover, apiOrigin: string): CoverView {
+export function coverView(
+  cover: ResolvedCover,
+  apiOrigin: string,
+  animate = false,
+): CoverView {
+  // A kind this build doesn't know (an API newer than the web app) draws the automatic look.
+  const kind: string = cover.kind;
+  if (kind !== 'photo' && kind !== 'design' && kind !== 'animated')
+    return hearts('scattered', 'neutral');
+  if (cover.kind === 'animated') {
+    const found = COVER_ANIMATIONS.find((a) => a.id === cover.animation);
+    if (!found) return hearts('scattered', 'neutral');
+    const picked = cover.colour
+      ? COVER_COLOURS.find((c) => c.id === cover.colour)
+      : undefined;
+    return {
+      kind: 'animated',
+      animation: found.id,
+      base: picked?.base ?? found.base,
+      tone: picked?.tone ?? found.tone,
+      play: animate ? cover.play : 'still',
+      layers: ANIMATED_LAYERS,
+    };
+  }
   if (cover.kind === 'photo') {
     if (/^\/v1\/covers\/[0-9a-f-]+\/\d+\.webp$/.test(cover.path))
       return {

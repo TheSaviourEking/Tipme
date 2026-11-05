@@ -81,6 +81,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             })
           }
           priority
+          animate
         />
         <div className="profile-columns">
           <RecipientIdentity
