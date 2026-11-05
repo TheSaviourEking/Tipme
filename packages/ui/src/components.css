@@ -659,6 +659,59 @@ textarea.tm-input {
   }
 }
 
+/* A standing warning: paper with an amber edge and lamp, the same edge language as a field's
+   red edge. No tinted background. */
+.tm-warning {
+  display: grid;
+  min-width: 0;
+  padding: 0.875rem 1rem 0.875rem 1.125rem;
+  border: 1px solid var(--edge-warning);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  box-shadow:
+    inset 3px 0 0 var(--lamp-amber),
+    var(--shadow-paper);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tm-warning__title {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  font: 800 var(--text-sm) / 1.4 var(--font-interface);
+}
+
+/* Centred on the first line, however many lines the title wraps to. */
+.tm-warning__title > .tm-lamp {
+  margin-top: calc(0.7em - 4px);
+}
+
+.tm-warning__body {
+  margin-top: 0.25rem;
+}
+
+.tm-warning__body > :first-child {
+  margin-top: 0;
+}
+
+.tm-warning__body > :last-child {
+  margin-bottom: 0;
+}
+
+.tm-warning__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+}
+
+.tm-warning--dense {
+  padding: 0.625rem 0.75rem 0.625rem 0.875rem;
+}
+
 .tm-notice {
   padding: 1rem 1.1rem;
   border: 1px solid var(--edge-hairline);
@@ -810,6 +863,12 @@ textarea.tm-input {
 
   .tm-slip__safe {
     border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .tm-warning {
+    border: 1px solid CanvasText;
+    border-left-width: 3px;
     box-shadow: none;
   }
 

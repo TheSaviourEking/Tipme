@@ -326,6 +326,42 @@ export function Slip({
   );
 }
 
+/**
+ * A condition people must know about that isn't a failed action (StatesMap legend). It is usually
+ * on the page from the start, where an alert is noise, so it is a polite status with an amber lamp.
+ */
+export function StandingWarning({
+  title,
+  children,
+  actions,
+  dense = false,
+  id,
+  'data-testid': testId,
+}: {
+  title: ReactNode;
+  children?: ReactNode;
+  actions?: ReactNode;
+  dense?: boolean;
+  id?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <div
+      className={classes('tm-warning', dense ? 'tm-warning--dense' : undefined)}
+      role="status"
+      id={id}
+      data-testid={testId}
+    >
+      <strong className="tm-warning__title">
+        <Lamp tone="amber" />
+        {title}
+      </strong>
+      {given(children) && <div className="tm-warning__body">{children}</div>}
+      {given(actions) && <div className="tm-warning__actions">{actions}</div>}
+    </div>
+  );
+}
+
 export function Notice({
   tone = 'neutral',
   title,

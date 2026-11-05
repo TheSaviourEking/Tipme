@@ -98,6 +98,9 @@ test('no state primitive renders a money-safety line unless the caller passes on
             actions: h('button', null, 'Go'),
           }),
         );
+  renders.push(
+    h(ui.StandingWarning, { title: 'T', actions: h('button', null, 'Go') }),
+  );
   for (const html of renders.map((el) => renderToStaticMarkup(el)))
     assert.doesNotMatch(html, reassurance, html);
   for (const empty of [false, null, '']) {
@@ -126,4 +129,17 @@ test('no state primitive puts "!" or "✓" in front of words', () => {
       renderToStaticMarkup(h(ui.Slip, { tone, title: 'Saved' })),
       /[!✓]\s*Saved/,
     );
+});
+
+test('a standing warning is a polite status with an amber lamp, never an alert', () => {
+  const html = renderToStaticMarkup(
+    h(
+      ui.StandingWarning,
+      { title: 'Withdrawals are OFF for everyone' },
+      'Body',
+    ),
+  );
+  assert.match(html, /^<div class="tm-warning" role="status">/);
+  assert.match(html, /tm-lamp--amber/);
+  assert.doesNotMatch(html, /role="alert"/);
 });
