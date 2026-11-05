@@ -8760,7 +8760,8 @@ body > .coming-soon-page {
   background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
 }
 
-.activity-list__row--arriving {
+.activity-list__row--arriving,
+.activity-list__row--following {
   animation: activity-arrive 240ms cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -8774,7 +8775,8 @@ body > .coming-soon-page {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activity-list__row--arriving {
+  .activity-list__row--arriving,
+  .activity-list__row--following {
     animation: none;
   }
 

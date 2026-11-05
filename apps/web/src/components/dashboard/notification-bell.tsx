@@ -19,6 +19,11 @@ import {
   FIRST_READ_CAP_MS,
   type FirstRead,
 } from '@/lib/first-read';
+import {
+  POPUP_PREFS_UNKNOWN,
+  popupPrefsFrom,
+  type PopupPrefs,
+} from '@/lib/popup-prefs';
 import { announce, type AnnouncerState } from '@/lib/tip-announcement';
 import { createTipSound, type TipSound } from '@/lib/tip-sound';
 import type { RecoveryEmailStatus } from '@tipme/contracts';
@@ -98,27 +103,17 @@ function useNotifications(onFresh: (fresh: NotificationView[]) => void) {
 
 const NOTIFICATIONS_CHANGED = ['notifications.changed'] as const;
 
-/** The pop-up switches, read on mount and whenever Settings saves them (same tab). */
-function usePopupPrefs(): Pick<
-  NotificationPrefsView,
-  'hideTipDetailsInPopups' | 'tipSound'
-> {
-  const [prefs, setPrefs] = useState({
-    hideTipDetailsInPopups: false,
-    tipSound: true,
-  });
+/**
+ * The pop-up switches, read on mount and whenever Settings saves them (same tab). Hidden details
+ * and no sound until they have loaded, and if they can't be (popup-prefs.ts).
+ */
+function usePopupPrefs(): PopupPrefs {
+  const [prefs, setPrefs] = useState<PopupPrefs>(POPUP_PREFS_UNKNOWN);
   useEffect(() => {
     const read = () =>
       void apiFetch<NotificationPrefsView>(
         '/v1/me/notification-preferences',
-      ).then((result) => {
-        if (result.ok)
-          setPrefs({
-            // An API without the switches (older copy) answers without them: the defaults.
-            hideTipDetailsInPopups: result.data.hideTipDetailsInPopups ?? false,
-            tipSound: result.data.tipSound ?? true,
-          });
-      });
+      ).then((result) => setPrefs(popupPrefsFrom(result)));
     read();
     window.addEventListener(NOTIFICATION_PREFS_CHANGED, read);
     return () => window.removeEventListener(NOTIFICATION_PREFS_CHANGED, read);

@@ -34,9 +34,13 @@ export function ActivityList({
   arriving?: ReadonlySet<string>;
   highlighted?: ReadonlySet<string>;
 }) {
+  // Rows below the first new tip follow it down (EXPERIENCE §7.4: transform only).
+  const firstArriving = rows.findIndex(
+    (row) => row.kind === 'tip' && arriving.has(row.id),
+  );
   return (
     <ul className="activity-list">
-      {rows.map((row) => {
+      {rows.map((row, index) => {
         const body = (
           <>
             <span>
@@ -59,9 +63,13 @@ export function ActivityList({
           </>
         );
         const tipRow = row.kind === 'tip';
+        const isArriving = tipRow && arriving.has(row.id);
         const rowClass = [
           'activity-list__row',
-          tipRow && arriving.has(row.id) ? 'activity-list__row--arriving' : '',
+          isArriving ? 'activity-list__row--arriving' : '',
+          !isArriving && firstArriving !== -1 && index > firstArriving
+            ? 'activity-list__row--following'
+            : '',
           tipRow && highlighted.has(row.id)
             ? 'activity-list__row--highlighted'
             : '',

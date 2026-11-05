@@ -107,7 +107,9 @@ export default function TipsPage() {
     setMore(null);
     setQuery('');
     setSearched('');
-    void reload();
+    // Clearing a search changes the path, and the panel reads the new one itself; only a deeper
+    // list of the same path needs asking again (a read of the old path would be thrown away).
+    if (!searched) void reload();
   };
   const items = data ? [...data.items, ...(extra?.items ?? [])] : null;
   const next = extra ? extra.next : (data?.nextCursor ?? null);
