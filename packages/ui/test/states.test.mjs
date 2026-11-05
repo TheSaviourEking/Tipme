@@ -317,6 +317,33 @@ test('state CSS: the red edge, one shake that reduced motion stops, edges in for
     '.tm-warning',
     '.tm-lamp',
     '.tm-key-result__face',
+    '.tm-empty-well',
+    '.tm-empty-slip',
   ])
     assert.ok(forced.includes(s), `forced colours miss ${s}`);
+});
+
+test('an empty slip keeps a real heading, hides its blank, and has one action', () => {
+  const html = renderToStaticMarkup(
+    h(ui.EmptySlip, {
+      title: 'No tips here yet.',
+      caption: 'Your first note lands here',
+      action: h('button', null, 'Copy your link'),
+    }),
+  );
+  assert.match(html, /<div class="tm-empty-slip__blank" aria-hidden="true">/);
+  assert.match(
+    html,
+    /<h2 class="tm-empty-slip__title">No tips here yet\.<\/h2>/,
+  );
+  assert.equal(html.match(/<button/g).length, 1);
+});
+
+test('an empty well has an unlit lamp and an h3 when asked', () => {
+  const html = renderToStaticMarkup(
+    h(ui.EmptyWell, { title: 'Nothing is waiting', headingLevel: 3 }),
+  );
+  assert.match(html, /tm-lamp--off/);
+  assert.match(html, /<h3[^>]*>Nothing is waiting<\/h3>/);
+  assert.doesNotMatch(html, /<p/);
 });

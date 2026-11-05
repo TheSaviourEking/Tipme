@@ -909,6 +909,92 @@ textarea.tm-input {
   line-height: 1.7;
 }
 
+/* Empty, Concept A (StatesConcepts empty row): a blank slip waiting to be written on. */
+.tm-empty-slip {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+
+.tm-empty-slip__blank {
+  display: grid;
+  gap: var(--space-1);
+  width: min(17rem, 100%);
+  padding: var(--space-5) var(--space-4);
+  border: 1.5px dashed var(--border-material);
+  border-radius: 6px 6px 14px 14px;
+  background: var(--surface-raised);
+  color: var(--text-tertiary);
+}
+
+.tm-empty-slip__blank p {
+  margin: 0;
+}
+
+.tm-empty-slip__quote {
+  font: 400 1.75rem / 1 var(--font-editorial);
+}
+
+.tm-empty-slip__caption {
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.tm-empty-slip__title {
+  margin: var(--space-2) 0 0;
+  font: 400 clamp(1.5rem, 3vw, 2rem) / 1.1 var(--font-editorial);
+  letter-spacing: -0.015em;
+}
+
+.tm-empty-slip__body,
+.tm-empty-well__body {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.tm-empty-slip__action,
+.tm-empty-well__action {
+  margin-top: var(--space-2);
+}
+
+/* Empty, Concept B: an unlit well in the admin area, on and ready, with nothing in it yet. */
+.tm-empty-well {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.tm-empty-well__well {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  align-items: center;
+  justify-content: center;
+  justify-self: stretch;
+  min-height: 150px;
+  padding: var(--space-4);
+  border: 1.5px dashed var(--border-material);
+  border-radius: 18px;
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+}
+
+.tm-empty-well__well > .tm-lamp {
+  width: 12px;
+  height: 12px;
+}
+
+.tm-empty-well__title {
+  margin: 0;
+  color: var(--text-secondary);
+  font: 700 var(--text-sm) / 1.4 var(--font-interface);
+}
+
 .tm-skeleton {
   display: grid;
   gap: 1rem;
@@ -987,6 +1073,10 @@ textarea.tm-input {
     padding: 1.5rem;
     border-radius: var(--radius-card);
   }
+
+  .tm-empty-slip {
+    padding: 2rem 1rem;
+  }
 }
 
 @media (forced-colors: active) {
@@ -1035,6 +1125,12 @@ textarea.tm-input {
   .tm-input[aria-invalid='true'] {
     border: 2px solid CanvasText;
     border-left-width: 4px;
+  }
+
+  .tm-empty-slip__blank,
+  .tm-empty-well__well {
+    border: 1px dashed CanvasText;
+    box-shadow: none;
   }
 
   /* Backgrounds are forced away, so a lamp keeps its edge. */

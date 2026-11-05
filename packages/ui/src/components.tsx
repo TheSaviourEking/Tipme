@@ -463,6 +463,60 @@ export function EmptyState({
     </div>
   );
 }
+/** Public and recipient pages: a blank slip waiting to be written on, with one key to fill it. */
+export function EmptySlip({
+  title,
+  caption,
+  children,
+  action,
+  headingLevel = 2,
+}: {
+  title: string;
+  /** Decoration on the blank slip: hidden from screen readers. Put real explanation in children. */
+  caption?: string;
+  children?: ReactNode;
+  action?: ReactNode;
+  headingLevel?: 2 | 3;
+}) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h2';
+  return (
+    <div className="tm-empty-slip">
+      <div className="tm-empty-slip__blank" aria-hidden="true">
+        <p className="tm-empty-slip__quote">“ … ”</p>
+        {caption && <p className="tm-empty-slip__caption">{caption}</p>}
+      </div>
+      <Heading className="tm-empty-slip__title">{title}</Heading>
+      {given(children) && <p className="tm-empty-slip__body">{children}</p>}
+      {given(action) && <div className="tm-empty-slip__action">{action}</div>}
+    </div>
+  );
+}
+
+/** The admin area: an unlit well, on and ready, with nothing in it yet. */
+export function EmptyWell({
+  title,
+  children,
+  action,
+  headingLevel = 2,
+}: {
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+  headingLevel?: 2 | 3;
+}) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h2';
+  return (
+    <div className="tm-empty-well">
+      <div className="tm-empty-well__well">
+        <Lamp tone="off" />
+        <Heading className="tm-empty-well__title">{title}</Heading>
+      </div>
+      {given(children) && <p className="tm-empty-well__body">{children}</p>}
+      {given(action) && <div className="tm-empty-well__action">{action}</div>}
+    </div>
+  );
+}
+
 export function Skeleton({ label = 'Loading content' }: { label?: string }) {
   return (
     <div className="tm-skeleton" role="status">
