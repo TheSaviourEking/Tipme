@@ -159,13 +159,33 @@ test('an idempotency conflict never says to simply try again', async ({
   );
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
-  await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
+  await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
   await expect(
     page.getByText(
       'This withdrawal may already be on its way. Check your dashboard before asking again.',
     ),
   ).toBeVisible();
   await expect(page.getByText(/please try again/i)).toHaveCount(0);
+});
+
+test('the withdraw screen writes every amount one way, and the minimum comes from the policy', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
+  await page.goto('/dashboard/withdraw');
+  await expect(page.getByText('Available:')).toHaveText('Available: ₦1,800');
+  // The minimum in the hint is the policy's, written in the same format.
+  await expect(
+    page.getByText(/The smallest withdrawal is ₦2,000, or your whole balance/),
+  ).toBeVisible();
+  await page.getByLabel('Amount (NGN)').fill('1800');
+  await expect(
+    page.getByRole('button', { name: 'Withdraw ₦1,800' }),
+  ).toBeEnabled();
+  // No amount on this screen is written as "NGN 1,800.00".
+  await expect(page.locator('main')).not.toContainText(/NGN \d/);
 });
 
 test('Everything fills the whole balance, and under ₦2,000 it is the only way', async ({
@@ -185,7 +205,7 @@ test('Everything fills the whole balance, and under ₦2,000 it is the only way'
   await expect(everything).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('Amount (NGN)')).toHaveValue('₦1,800');
   await expect(
-    page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }),
+    page.getByRole('button', { name: 'Withdraw ₦1,800' }),
   ).toBeEnabled();
   // Typing something else lets go of Everything.
   await page.getByLabel('Amount (NGN)').fill('1000');
@@ -276,7 +296,7 @@ test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
   await page.goto('/dashboard/withdraw');
   await page.getByRole('button', { name: 'Everything' }).click();
   expect(await fitsViewport(page)).toBe(true);
-  const button = page.getByRole('button', { name: /^Withdraw NGN/ });
+  const button = page.getByRole('button', { name: /^Withdraw ₦/ });
   const nav = page.locator('nav[aria-label="Dashboard"]');
   const start = (await button.boundingBox())!;
   expect(start.height).toBeGreaterThanOrEqual(44);
@@ -323,11 +343,11 @@ test('tapping the amount already chosen keeps the request key and the warning', 
   const keys = await failingRequests(page);
   await page.goto('/dashboard/withdraw');
   await page.getByRole('button', { name: 'Everything' }).click();
-  await page.getByRole('button', { name: /^Withdraw NGN/ }).click();
+  await page.getByRole('button', { name: /^Withdraw ₦/ }).click();
   await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
   await page.getByRole('button', { name: 'Everything' }).click();
   await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
-  await page.getByRole('button', { name: /^Withdraw NGN/ }).click();
+  await page.getByRole('button', { name: /^Withdraw ₦/ }).click();
   await expect.poll(() => keys.length).toBe(2);
   expect(keys[1]).toBe(keys[0]);
   expect(keys[0]).not.toBe('');
@@ -343,11 +363,11 @@ test('changing the amount makes a new request key', async ({
   const keys = await failingRequests(page);
   await page.goto('/dashboard/withdraw');
   await page.getByRole('button', { name: 'Everything' }).click();
-  await page.getByRole('button', { name: /^Withdraw NGN/ }).click();
+  await page.getByRole('button', { name: /^Withdraw ₦/ }).click();
   await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
   await page.getByLabel('Amount (NGN)').fill('2000');
   await expect(page.getByText(COULDNT_CONFIRM)).toHaveCount(0);
-  await page.getByRole('button', { name: 'Withdraw NGN 2,000.00' }).click();
+  await page.getByRole('button', { name: 'Withdraw ₦2,000' }).click();
   await expect.poll(() => keys.length).toBe(2);
   expect(keys[1]).not.toBe(keys[0]);
 });
@@ -367,7 +387,7 @@ test('figures are shown only for an amount that can be sent', async ({
     page.getByText(/The smallest withdrawal is ₦2,000/),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Withdraw NGN 1,500.00' }),
+    page.getByRole('button', { name: 'Withdraw ₦1,500' }),
   ).toBeDisabled();
   // More than can be withdrawn is no better.
   await page.getByLabel('Amount (NGN)').fill('5000');
@@ -375,7 +395,7 @@ test('figures are shown only for an amount that can be sent', async ({
   await page.getByRole('button', { name: 'Everything' }).click();
   await expect(page.getByTestId('you-receive')).toHaveText('₦1,800');
   await expect(
-    page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }),
+    page.getByRole('button', { name: 'Withdraw ₦1,800' }),
   ).toBeEnabled();
 });
 

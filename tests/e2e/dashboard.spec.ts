@@ -23,7 +23,7 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
     message: 'Lovely braids, thank you',
   });
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('NGN 1,800.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦1,800');
   const row = page.getByRole('link', { name: /Tip from Ada M\./ });
   await expect(row).toContainText('Paid');
   await expect(page.getByText('Today')).toBeVisible();
@@ -51,11 +51,11 @@ test('a new recipient sees the first-day screen, then their tip, its proof and a
 
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
-  await page.getByRole('button', { name: 'Withdraw NGN 1,800.00' }).click();
+  await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   await expectAccessible(page);
   await page.goto('/dashboard');
-  await expect(page.getByTestId('balance')).toHaveText('NGN 0.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦0');
   await expect(async () => {
     await page.reload();
     await expect(page.getByText(/Withdrawal.*Sent/)).toBeVisible({
@@ -147,13 +147,11 @@ test('the balance comes first, with what is still being confirmed under it', asy
   await expect(main.getByRole('heading', { level: 1 })).toHaveText(
     'Your balance',
   );
-  await expect(page.getByTestId('balance')).toHaveText('NGN 48,600.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦48,600');
   // The quote allows nothing on a page with no tips behind it, so none of the balance is called
   // ready to withdraw (the ledger figure is not what can go).
   await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
-  await expect(
-    main.getByText('NGN 1,800.00 still being confirmed'),
-  ).toBeVisible();
+  await expect(main.getByText('₦1,800 still being confirmed')).toBeVisible();
   // Pending money is never counted as available.
   await expect(page.getByTestId('balance')).not.toContainText('50,400');
   await expectAccessible(page);
@@ -187,9 +185,9 @@ test('Ready to withdraw is only what the withdrawal quote allows', async ({
     }),
   );
   await page.goto('/dashboard');
-  await expect(page.getByTestId('balance')).toHaveText('NGN 10,000.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦10,000');
   await expect(page.getByTestId('ready')).toHaveText(
-    'Ready to withdraw NGN 5,000.00',
+    'Ready to withdraw ₦5,000',
   );
   // A quote that refuses: the balance stays, and nothing is called ready.
   await page.unroute('**/v1/me/withdrawal-quote');
@@ -199,7 +197,7 @@ test('Ready to withdraw is only what the withdrawal quote allows', async ({
     }),
   );
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('NGN 10,000.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦10,000');
   await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
   await page.unroute('**/v1/me/withdrawal-quote');
   await page.route('**/v1/me/withdrawal-quote', (route) =>
@@ -210,7 +208,7 @@ test('Ready to withdraw is only what the withdrawal quote allows', async ({
     }),
   );
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('NGN 10,000.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦10,000');
   await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
 });
 
