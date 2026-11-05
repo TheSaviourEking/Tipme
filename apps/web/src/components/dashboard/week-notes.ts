@@ -16,8 +16,8 @@ const MOST_PAGES = 4;
 
 /**
  * The notes supporters left in one week. The report holds only a count, so this reads the
- * recipient's paid tips of that week (newest first, as the list gives them) and then each
- * tip that has a note. A note the recipient hid comes back without its text and is skipped.
+ * recipient's paid tips with a note (newest first, as the list gives them), keeps those of that
+ * week, and then reads each one. A note the recipient hid comes back without its text and is skipped.
  * Reading fails quietly: with no notes, the stack is simply not shown.
  */
 export async function loadWeekNotes(week: string): Promise<WeekNote[]> {
@@ -31,13 +31,14 @@ export async function loadWeekNotes(week: string): Promise<WeekNote[]> {
         typeof apiFetch<{ items: MyTipRow[]; nextCursor: string | null }>
       >
     > = await apiFetch(
-      `/v1/me/tips?status=paid${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      `/v1/me/tips?status=paid&note=with${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
     );
     if (!result.ok) break;
     let reachedOlder = false;
     for (const tip of result.data.items) {
       const at = new Date(tip.at).getTime();
       if (at < range.start) reachedOlder = true;
+      // `hasMessage` is checked again for an API that predates the note filter.
       else if (at < range.end && tip.hasMessage) withNote.push(tip);
     }
     cursor = result.data.nextCursor;

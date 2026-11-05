@@ -1015,6 +1015,12 @@ export const payouts = pgTable(
     index('payouts_reference_end').on(
       sql`lower(right(${table.providerReference}, 6))`,
     ),
+    // A recipient's withdrawals, newest request first (the dashboard's list and its cursor).
+    index('payouts_profile_created').on(
+      table.profileId,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
   ],
 );
 
