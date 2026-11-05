@@ -287,9 +287,9 @@ test('short /handle links permanently redirect to /@handle without shadowing pag
   request,
 }) => {
   for (const [path, target] of [
-    ['/ada', /\/@ada$/],
-    ['/Ada', /\/@ada$/],
-    ['/ada?src=qr', /\/@ada\?src=qr$/],
+    ['/kemi', /\/@kemi$/],
+    ['/Kemi', /\/@kemi$/],
+    ['/kemi?src=qr', /\/@kemi\?src=qr$/],
   ] as const) {
     const response = await request.get(path, { maxRedirects: 0 });
     expect(response.status(), path).toBe(308);
@@ -299,6 +299,12 @@ test('short /handle links permanently redirect to /@handle without shadowing pag
     expect((await request.get(path, { maxRedirects: 0 })).status(), path).toBe(
       200,
     );
+  // The example people on TipMe's own pages are reserved handles: no short link, but /@handle works.
+  for (const path of ['/ada', '/tobi', '/zainab'])
+    expect(
+      (await request.get(path, { maxRedirects: 0 })).status(),
+      path,
+    ).not.toBe(308);
 });
 
 // The owner, 3 Nov 2026: How it works lives on Home; "we don't need a seperate page".
