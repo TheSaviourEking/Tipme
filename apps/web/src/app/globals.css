@@ -6658,6 +6658,8 @@ html:has(.confirm-dialog[open]) {
   display: grid;
   gap: var(--space-4);
   max-width: 32rem;
+  /* The admin sign-in steps (set up, confirm it's you) sit centred under the staff banner. */
+  margin-inline: auto;
 }
 
 .ops-step h1 {
