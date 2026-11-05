@@ -352,6 +352,24 @@ test('payment intents', async (t) => {
         }),
         { code: 'IDEMPOTENCY_CONFLICT' },
       );
+      // The other way round: a key first used with consent, replayed without it, is refused too,
+      // so a replay can never silently drop the supporter's consent.
+      const withConsent = await quote();
+      const consentFirst = randomUUID();
+      await createPaymentIntent(database.db, {
+        quoteId: withConsent.quoteId,
+        idempotencyKey: consentFirst,
+        message: 'Thank you',
+        noteMayShow: true,
+      });
+      await assert.rejects(
+        createPaymentIntent(database.db, {
+          quoteId: withConsent.quoteId,
+          idempotencyKey: consentFirst,
+          message: 'Thank you',
+        }),
+        { code: 'IDEMPOTENCY_CONFLICT' },
+      );
       // The same request with consent replays as itself.
       const other = await quote();
       const consentKey = randomUUID();

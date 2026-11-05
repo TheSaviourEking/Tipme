@@ -34,6 +34,7 @@ export function tipStatusView(
         handle: profiles.handle,
         displayName: profiles.displayName,
         plan: profiles.plan,
+        pageStatus: profiles.status,
         thanksLine: profiles.thanksLine,
         thanksStyle: profiles.thanksStyle,
         thanksSigned: profiles.thanksSigned,
@@ -92,8 +93,9 @@ export function tipStatusView(
     }
     // The recipient's line as it is now, not as it was when the tip was made (owner's answer,
     // 5 Nov 2026): an edit, or a page leaving Pro, also changes what older receipts show.
+    // A page TipMe suspended shows no line, so an abusive one stops at once; staff cannot edit it.
     const thanks =
-      state === 'paid'
+      state === 'paid' && tip.pageStatus === 'active'
         ? shownThanks({
             line: tip.thanksLine,
             style: tip.thanksStyle,

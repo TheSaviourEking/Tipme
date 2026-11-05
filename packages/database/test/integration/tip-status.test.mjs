@@ -220,4 +220,64 @@ test('tip status view', async (t) => {
       );
     },
   );
+  await t.test(
+    'collected, checking and cancelled receipts carry no thank-you and no consent',
+    async () => {
+      await setPage(`thanks_line = 'Thank you for backing me.'`);
+      const agreedTip = async () => {
+        const { quoteId } = await createQuote(database.db, {
+          handle: 'ada',
+          tipMinor: 200000n,
+          currency: 'NGN',
+        });
+        return createPaymentIntent(database.db, {
+          quoteId,
+          idempotencyKey: randomUUID(),
+          message: 'private words',
+          noteMayShow: true,
+        });
+      };
+      const collected = await agreedTip();
+      await database.pool.query(
+        'UPDATE payment_attempts SET collected_at = now() WHERE id = $1',
+        [collected.attemptId],
+      );
+      const checking = await agreedTip();
+      await place('payment_attempts', checking.attemptId, 'UNKNOWN');
+      const cancelled = await agreedTip();
+      await place('tips', cancelled.tipId, 'CANCELLED');
+      for (const [tip, state] of [
+        [collected, 'collected'],
+        [checking, 'checking'],
+        [cancelled, 'cancelled'],
+      ]) {
+        const view = await tipStatusView(database.db, tip.tipId, new Date());
+        assert.equal(view.state, state);
+        assert.equal('thanks' in view, false, state);
+        assert.equal('noteMayShow' in view, false, state);
+      }
+      await setPage(`thanks_line = NULL`);
+    },
+  );
+
+  await t.test(
+    'a suspended page’s line does not show on receipts, and shows again once it is active',
+    async () => {
+      await setPage(`thanks_line = 'Thank you.'`);
+      const { tipId } = await paidTip();
+      await setPage(`status = 'suspended'`);
+      try {
+        const view = await tipStatusView(database.db, tipId, new Date());
+        assert.equal(view.state, 'paid');
+        assert.equal('thanks' in view, false);
+      } finally {
+        await setPage(`status = 'active'`);
+      }
+      assert.deepEqual(
+        (await tipStatusView(database.db, tipId, new Date())).thanks,
+        { line: 'Thank you.', style: 'paper' },
+      );
+      await setPage(`thanks_line = NULL`);
+    },
+  );
 });
