@@ -20,8 +20,8 @@ import {
   type FirstRead,
 } from '@/lib/first-read';
 import {
+  createPopupPrefsLoader,
   POPUP_PREFS_UNKNOWN,
-  popupPrefsFrom,
   type PopupPrefs,
 } from '@/lib/popup-prefs';
 import { announce, type AnnouncerState } from '@/lib/tip-announcement';
@@ -102,6 +102,7 @@ function useNotifications(onFresh: (fresh: NotificationView[]) => void) {
 }
 
 const NOTIFICATIONS_CHANGED = ['notifications.changed'] as const;
+const NO_SIGNALS = [] as const;
 
 /**
  * The pop-up switches, read on mount and whenever Settings saves them (same tab). Hidden details
@@ -109,15 +110,21 @@ const NOTIFICATIONS_CHANGED = ['notifications.changed'] as const;
  */
 function usePopupPrefs(): PopupPrefs {
   const [prefs, setPrefs] = useState<PopupPrefs>(POPUP_PREFS_UNKNOWN);
+  const [loader] = useState(() =>
+    createPopupPrefsLoader({
+      read: () =>
+        apiFetch<NotificationPrefsView>('/v1/me/notification-preferences'),
+      onPrefs: setPrefs,
+    }),
+  );
   useEffect(() => {
-    const read = () =>
-      void apiFetch<NotificationPrefsView>(
-        '/v1/me/notification-preferences',
-      ).then((result) => setPrefs(popupPrefsFrom(result)));
+    const read = () => void loader.load();
     read();
     window.addEventListener(NOTIFICATION_PREFS_CHANGED, read);
     return () => window.removeEventListener(NOTIFICATION_PREFS_CHANGED, read);
-  }, []);
+  }, [loader]);
+  // A failed read is tried again on the next ready (or other resync): only then does it ask.
+  useLiveEvents(NO_SIGNALS, () => loader.retryIfFailed());
   return prefs;
 }
 

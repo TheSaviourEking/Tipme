@@ -24,3 +24,25 @@ export function popupPrefsFrom(
     tipSound: result.data.tipSound ?? true,
   };
 }
+
+/**
+ * Reads the switches; after a failed read the next `ready` (any live resync) tries again, so a
+ * blip at load doesn't keep the sound off until a reload. A good read is not repeated.
+ */
+export function createPopupPrefsLoader(o: {
+  read: () => Promise<{ ok: true; data: Partial<PopupPrefs> } | { ok: false }>;
+  onPrefs: (prefs: PopupPrefs) => void;
+}): { load(): Promise<void>; retryIfFailed(): Promise<void> } {
+  let loaded = false;
+  const load = async () => {
+    const result = await o.read();
+    loaded = result.ok;
+    o.onPrefs(popupPrefsFrom(result));
+  };
+  return {
+    load,
+    async retryIfFailed() {
+      if (!loaded) await load();
+    },
+  };
+}
