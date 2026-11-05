@@ -1,11 +1,22 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type Route,
+  type TestInfo,
+} from '@playwright/test';
 import { chooseBank, standInBanks } from './bank-fixtures';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 
 /** A new recipient on the Get paid card, with the stand-in bank list. */
-async function openCard(page: Page, testInfo: TestInfo) {
+async function openCard(
+  page: Page,
+  testInfo: TestInfo,
+  { standIn = true }: { standIn?: boolean } = {},
+) {
   await signUpRecipient(page, testInfo, { live: false });
-  await standInBanks(page);
+  if (standIn) await standInBanks(page);
   await page.goto('/dashboard/settings#get-paid');
   // Sign-up ends on this page, so the goto above only moved to the anchor: load the stand-in.
   await page.reload();
@@ -236,4 +247,220 @@ test('the sheet does not move when motion is reduced @mobile', async ({
   expect(await sheet.evaluate((el) => getComputedStyle(el).animationName)).toBe(
     'none',
   );
+});
+
+// The name check on its own (board, section C). These use the pretend provider's own list (058
+// Pretend Guaranty Bank, 101 Pretend Providus Bank), so the checks reach the real test API.
+
+type Respond = (route: Route, call: number) => Promise<void>;
+
+/** Counts the card's name checks. `respond` answers each one; by default it goes to the API. */
+async function watchChecks(page: Page, respond?: Respond) {
+  let calls = 0;
+  await page.route('**/v1/me/payout-destination/resolve', async (route) => {
+    calls += 1;
+    if (respond) await respond(route, calls);
+    else await route.continue();
+  });
+  return () => calls;
+}
+
+/** A gate a test holds a check at, then opens. */
+function gate() {
+  let open = () => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  return { opened, open };
+}
+
+async function chooseByKey(card: Locator, label: string) {
+  const bank = card.getByRole('combobox', { name: 'Bank' });
+  // A click, as a person would: focus alone does nothing if the field already has it.
+  await bank.click();
+  await card
+    .getByRole('group', { name: 'Popular' })
+    .getByRole('option', { name: label })
+    .click();
+  await expect(bank).toHaveAttribute('aria-expanded', 'false');
+}
+
+test('the name is checked once, on the 10th digit, with no button', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo, { standIn: false });
+  const held = gate();
+  const checks = await watchChecks(page, async (route) => {
+    await held.opened;
+    await route.continue();
+  });
+  await chooseByKey(card, 'GTBank');
+  const number = card.getByLabel('Account number');
+  await number.pressSequentially('012345678');
+  await expect(card.getByText('9 of 10')).toBeVisible();
+  expect(checks()).toBe(0);
+  await expect(card.getByRole('button', { name: 'Check account' })).toHaveCount(
+    0,
+  );
+  await expect(card.getByRole('button', { name: 'Check again' })).toHaveCount(
+    0,
+  );
+
+  await number.press('9');
+  await expect(card.getByText('Checking the name at your bank…')).toBeVisible();
+  await expect(number).toBeFocused();
+  held.open();
+  const name = card.getByLabel('Name on the account');
+  await expect(name).toHaveValue('PRETEND ACCOUNT HOLDER');
+  await expect(name).toHaveAttribute('readonly', '');
+  await expect(card.getByText('9 of 10')).toHaveCount(0);
+  expect(checks()).toBe(1);
+  await expect(page.locator('body')).not.toContainText(/bachs/i);
+});
+
+test('the same bank and number are never checked twice', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo, { standIn: false });
+  const checks = await watchChecks(page);
+  const name = card.getByLabel('Name on the account');
+  await chooseByKey(card, 'GTBank');
+  const number = card.getByLabel('Account number');
+  await number.fill('0123456789');
+  await expect(name).toHaveValue('PRETEND ACCOUNT HOLDER');
+  expect(checks()).toBe(1);
+
+  await chooseBank(card, 'providus', 'Pretend Providus Bank');
+  await expect(name).toHaveValue('PRETEND ACCOUNT HOLDER');
+  expect(checks()).toBe(2);
+
+  await chooseByKey(card, 'GTBank');
+  await expect(name).toHaveValue('PRETEND ACCOUNT HOLDER');
+  await expect(card.getByText('Checking the name at your bank…')).toHaveCount(
+    0,
+  );
+  // fill, not End then Backspace: on macOS End scrolls the page and leaves the caret at 0.
+  await number.fill('012345678');
+  await expect(name).toHaveCount(0);
+  await number.press('9');
+  await expect(number).toHaveValue('0123456789');
+  await expect(name).toHaveValue('PRETEND ACCOUNT HOLDER');
+  // Give a stray call time to show up before counting.
+  await page.waitForTimeout(500);
+  expect(checks()).toBe(2);
+});
+
+test('no bank chosen: nothing is checked, and it says so', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo, { standIn: false });
+  const checks = await watchChecks(page);
+  await card.getByLabel('Account number').fill('0123456789');
+  await expect(card.getByText('Choose your bank.')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(checks()).toBe(0);
+  await chooseByKey(card, 'GTBank');
+  await expect(card.getByText('Choose your bank.')).toHaveCount(0);
+  await expect(card.getByLabel('Name on the account')).toHaveValue(
+    'PRETEND ACCOUNT HOLDER',
+  );
+  expect(checks()).toBe(1);
+});
+
+test('a short number says how many digits, and nothing is checked', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo, { standIn: false });
+  const checks = await watchChecks(page);
+  await chooseByKey(card, 'GTBank');
+  const number = card.getByLabel('Account number');
+  await number.fill('012345678');
+  await number.press('Tab');
+  await expect(
+    card.getByText('Enter your 10-digit account number.'),
+  ).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(checks()).toBe(0);
+  await number.fill('0123456789');
+  await expect(
+    card.getByText('Enter your 10-digit account number.'),
+  ).toHaveCount(0);
+});
+
+test('a failed check shows today’s message and Check again, which checks once more', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo, { standIn: false });
+  const checks = await watchChecks(page, async (route, call) => {
+    if (call === 1)
+      await route.fulfill({
+        status: 503,
+        json: { error: { code: 'PAYOUT_PROVIDER_UNAVAILABLE' } },
+      });
+    else await route.continue();
+  });
+  await chooseByKey(card, 'GTBank');
+  await card.getByLabel('Account number').fill('0123456789');
+  await expect(
+    card.getByText(
+      'We couldn’t reach our payment partner. Please try again in a moment.',
+    ),
+  ).toBeVisible();
+  const again = card.getByRole('button', { name: 'Check again' });
+  await expect(again).toBeVisible();
+  await expect(
+    card.getByRole('button', { name: 'Email me a code' }),
+  ).toHaveCount(0);
+  await expectAccessible(page);
+  expect(checks()).toBe(1);
+
+  await again.click();
+  await expect(card.getByLabel('Name on the account')).toHaveValue(
+    'PRETEND ACCOUNT HOLDER',
+  );
+  await expect(again).toBeHidden();
+  expect(checks()).toBe(2);
+});
+
+test('today’s 10 checks used up: the same message as today', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo, { standIn: false });
+  await watchChecks(page, (route) =>
+    route.fulfill({ status: 429, json: { error: { code: 'RATE_LIMITED' } } }),
+  );
+  await chooseByKey(card, 'GTBank');
+  await card.getByLabel('Account number').fill('0123456789');
+  await expect(
+    card.getByText('Too many tries. Please wait a while and try again.'),
+  ).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Check again' })).toBeVisible();
+});
+
+test('a late answer never shows against a newer number', async ({
+  page,
+}, testInfo) => {
+  const card = await openCard(page, testInfo, { standIn: false });
+  const held = gate();
+  const checks = await watchChecks(page, async (route, call) => {
+    if (call === 1) await held.opened;
+    await route.continue();
+  });
+  await chooseByKey(card, 'GTBank');
+  const number = card.getByLabel('Account number');
+  // The pretend provider finds 1234560001 and not 1234560000.
+  await number.fill('1234560001');
+  await expect(card.getByText('Checking the name at your bank…')).toBeVisible();
+  await number.fill('1234560000');
+  const name = card.getByLabel('Name on the account');
+  await expect(name).toBeEditable();
+  await expect(name).toHaveValue('');
+  expect(checks()).toBe(2);
+
+  const late = page.waitForResponse('**/v1/me/payout-destination/resolve');
+  held.open();
+  await late;
+  await page.waitForTimeout(300);
+  await expect(name).toBeEditable();
+  await expect(name).toHaveValue('');
+  await expect(card).not.toContainText('PRETEND ACCOUNT HOLDER');
+  await expect(page.locator('body')).not.toContainText(/bachs/i);
 });

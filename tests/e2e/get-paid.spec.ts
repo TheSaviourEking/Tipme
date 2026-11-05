@@ -42,9 +42,13 @@ test('adding a bank: pick a bank, enter a number, see the name, enter the code, 
     card.getByRole('heading', { name: 'Get paid' }),
   ).toBeInViewport();
 
+  // The pretend list has 058, so GTBank's key shows, and no other popular key.
+  await card.getByRole('combobox', { name: 'Bank' }).focus();
+  const keys = card.getByRole('group', { name: 'Popular' }).getByRole('option');
+  await expect(keys).toHaveCount(1);
+  await expect(keys).toHaveAccessibleName('GTBank');
   await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('0123456789');
-  await card.getByRole('button', { name: 'Check account' }).click();
 
   const name = card.getByLabel('Name on the account');
   await expect(name).toHaveValue('PRETEND ACCOUNT HOLDER');
@@ -82,7 +86,6 @@ test('a number the bank does not know: the name is typed instead', async ({
   const card = page.locator('#get-paid');
   await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('1234560000');
-  await card.getByRole('button', { name: 'Check account' }).click();
   const name = card.getByLabel('Name on the account');
   await expect(name).toBeEditable();
   await card.getByRole('button', { name: 'Email me a code' }).click();
@@ -97,7 +100,6 @@ test('the code step offers a new code and a way out', async ({
   const card = page.locator('#get-paid');
   await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('0123456789');
-  await card.getByRole('button', { name: 'Check account' }).click();
   await card.getByRole('button', { name: 'Email me a code' }).click();
   await expect(card.getByLabel('6-digit code')).toBeVisible();
   await bankCode(page, email, 0);
@@ -139,5 +141,38 @@ test('after an email change the card says when, and offers no form', async ({
   await expect(
     card.getByRole('button', { name: 'Change bank account' }),
   ).toBeHidden();
+  // No form, so no bank picker either way.
+  await expect(card.getByRole('combobox', { name: 'Bank' })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Bank' })).toHaveCount(0);
   await expectAccessible(page);
+});
+
+test('a rejected bank account says our payment partner can’t pay to it', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.route('**/v1/me/payout-destination', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          destination: {
+            status: 'rejected',
+            bankName: 'Pretend Bank',
+            last4: '6789',
+          },
+          bankChangesFrom: null,
+        },
+      },
+    }),
+  );
+  await page.goto('/dashboard/settings#get-paid');
+  await page.reload();
+  const card = page.locator('#get-paid');
+  await expect(
+    card.getByText(
+      'Our payment partner can’t pay to this account. Please add another.',
+    ),
+  ).toBeVisible();
+  await expect(card).not.toContainText('payment provider can’t pay');
+  await expect(page.locator('body')).not.toContainText(/bachs/i);
 });
