@@ -62,11 +62,14 @@ export function ResultKey({
   // React can see (it is detached), so this still holds when the next result renders.
   const focused = useRef(false);
   const failed = result?.kind === 'failed';
+  const face = useRef<HTMLSpanElement | null>(null);
+  // The type requires onRetry; a caller without one (plain JS, a cast) gets no dead button.
+  const canRetry = failed && typeof result.onRetry === 'function';
 
   useEffect(() => {
     if (!focused.current) return;
     // The pressed key became Try again, or Try again became the key: keep focus on the one shown.
-    const target = failed ? again.current : key.current;
+    const target = failed ? (again.current ?? face.current) : key.current;
     if (target && document.activeElement !== target) target.focus();
   }, [failed]);
 
@@ -89,22 +92,30 @@ export function ResultKey({
         id={id}
         data-testid={testId}
       >
-        <span className="tm-key-result__face" id={faceId}>
+        <span
+          className="tm-key-result__face"
+          id={faceId}
+          ref={face}
+          // With nothing to retry, focus rests on what failed rather than falling to the page.
+          tabIndex={canRetry ? undefined : -1}
+        >
           <Lamp tone="red" />
           {result.label}
           {result.detail && <small>{result.detail}</small>}
         </span>
-        <button
-          type="button"
-          className="tm-key-result__again"
-          // Focus lands here on a failure, so the button carries what failed with it.
-          aria-describedby={[faceId, describedBy].filter(Boolean).join(' ')}
-          ref={again}
-          onClick={() => result.onRetry()}
-          {...track}
-        >
-          {result.retryLabel}
-        </button>
+        {canRetry && (
+          <button
+            type="button"
+            className="tm-key-result__again"
+            // Focus lands here on a failure, so the button carries what failed with it.
+            aria-describedby={[faceId, describedBy].filter(Boolean).join(' ')}
+            ref={again}
+            onClick={() => result.onRetry()}
+            {...track}
+          >
+            {result.retryLabel}
+          </button>
+        )}
       </div>
     );
   }
@@ -163,16 +174,14 @@ type KeyResultOptions = {
    * What Try again does. Read at the moment of the press, so it sends what the form holds then,
    * never the values from when the save failed.
    */
-  onRetry?: () => void;
+  onRetry: () => void;
 };
 
 /**
  * One result at a time; a done result clears itself after settleMs. `start()` marks a press in
  * flight (pass `pending` to the ResultKey).
  */
-export function useKeyResult(options: number | KeyResultOptions = {}) {
-  const { settleMs = 2000, onRetry } =
-    typeof options === 'number' ? { settleMs: options } : options;
+export function useKeyResult({ settleMs = 2000, onRetry }: KeyResultOptions) {
   const [result, setResult] = useState<KeyResult | null>(null);
   const [pending, setPending] = useState(false);
   const latestRetry = useRef(onRetry);
@@ -201,7 +210,7 @@ export function useKeyResult(options: number | KeyResultOptions = {}) {
     setResult({
       kind: 'failed',
       ...next,
-      onRetry: () => latestRetry.current?.(),
+      onRetry: () => latestRetry.current(),
     });
   }, []);
   const clear = useCallback(() => {

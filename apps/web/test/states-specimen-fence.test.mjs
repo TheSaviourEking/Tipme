@@ -18,16 +18,36 @@ function sourceFiles(dir) {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return sourceFiles(path);
-    return /\.(ts|tsx)$/.test(name) ? [path] : [];
+    return /\.(ts|tsx|js|jsx|mjs)$/.test(name) ? [path] : [];
   });
 }
+
+// Every way a module can pull the specimen in: `from '…'`, a side-effect `import '…'`, a dynamic
+// `import('…')` (which next/dynamic uses) and `require('…')`.
+const SPECIMEN = String.raw`['"\`][^'"\`]*states-specimen(?:\.[cm]?[jt]sx?)?['"\`]`;
+const importsSpecimen = (text) =>
+  new RegExp(
+    String.raw`(?:\bfrom\s*|\bimport\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)${SPECIMEN}`,
+  ).test(text);
+
+test('the fence sees every way of importing the specimen', () => {
+  for (const text of [
+    "import { StatesSpecimen } from './states-specimen';",
+    "export * from '../design-system/states-specimen';",
+    "import './states-specimen';",
+    "const S = await import('./states-specimen');",
+    "const S = dynamic(() => import(\n  './states-specimen.tsx'\n));",
+    "const S = require('./states-specimen');",
+    'const S = import(`./states-specimen`);',
+  ])
+    assert.ok(importsSpecimen(text), text);
+  assert.equal(importsSpecimen("const name = 'states-specimen';"), false);
+});
 
 test('only the design-system page imports the states specimen', () => {
   const importers = sourceFiles(src)
     .filter((file) => file !== specimenFile)
-    .filter((file) =>
-      /from ['"][^'"]*states-specimen['"]/.test(readFileSync(file, 'utf8')),
-    )
+    .filter((file) => importsSpecimen(readFileSync(file, 'utf8')))
     .map((file) => relative(src, file).split(sep).join('/'));
   assert.deepEqual(importers, ['app/design-system/page.tsx']);
 });
@@ -39,8 +59,21 @@ test('the design-system page stays private and unindexed', () => {
   assert.match(page, /'\/design-system',?\s*\)/);
 });
 
+// JSX may spell an apostrophe as an entity; count the words as a reader sees them.
+const decode = (text) =>
+  text
+    .replace(/&(rsquo|lsquo|apos|#0*39|#0*8217|#x0*2019|#x0*27);/gi, '’')
+    .replace(/&(nbsp|#0*160|#x0*a0);/gi, ' ')
+    .replace(/&amp;/gi, '&');
+
+test('entity spellings are decoded before the money lines are counted', () => {
+  assert.equal(decode('haven&rsquo;t paid'), 'haven’t paid');
+  assert.equal(decode('haven&#8217;t&nbsp;paid'), 'haven’t paid');
+  assert.equal(decode('haven&#x2019;t paid'), 'haven’t paid');
+});
+
 test('the specimen holds exactly the expected money lines', () => {
-  const specimen = readFileSync(specimenFile, 'utf8');
+  const specimen = decode(readFileSync(specimenFile, 'utf8'));
   const count = (pattern) => (specimen.match(pattern) ?? []).length;
   assert.equal(count(/haven[’']t\s+paid\s+anything/gi), 1);
   assert.equal(count(/back\s+in\s+your\s+balance/gi), 2);

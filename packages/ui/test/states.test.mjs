@@ -500,3 +500,28 @@ test('empties wrap their explanation in a div, so block content nests validly', 
     );
   }
 });
+
+test('a failed key with no retry has no Try again button, never a dead one', () => {
+  const html = renderToStaticMarkup(
+    h(
+      ui.ResultKey,
+      {
+        result: { kind: 'failed', label: 'Not saved', retryLabel: 'Try again' },
+      },
+      'Save',
+    ),
+  );
+  assert.match(html, /data-result="failed"/);
+  assert.match(html, /Not saved/);
+  assert.doesNotMatch(html, /tm-key-result__again|Try again/);
+});
+
+test('useKeyResult needs its retry: the hook takes onRetry, not a bare duration', async () => {
+  const source = await readFile(
+    new URL('../src/result-key.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /onRetry: \(\) => void;/);
+  assert.doesNotMatch(source, /onRetry\?: \(\) => void/);
+  assert.doesNotMatch(source, /options: number \|/);
+});
