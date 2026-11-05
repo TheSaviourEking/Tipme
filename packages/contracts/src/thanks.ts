@@ -11,22 +11,49 @@ export type ThanksStyle = (typeof THANKS_STYLES)[number];
 /** Counted in code points, so it matches Postgres `char_length` (an emoji counts once). */
 export const THANKS_LINE_LIMIT = 140;
 
-/** Control characters out, whitespace collapsed to single spaces, trimmed; '' means "no line". */
+// A zero-width joiner that joins two emoji (a family, a profession) is part of the emoji.
+const LONE_JOINER =
+  /(?<![\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F])\u200D|\u200D(?!\p{Extended_Pictographic})/gu;
+// Every other format character (\p{Cf}: soft hyphen, zero-width space, word joiner, bidi
+// controls, byte-order mark, tags) renders as nothing, so "paypal\u00AD.me" would look like a
+// link that the check could not see. They go before anything else looks at the text.
+const INVISIBLE = /(?!\u200D)\p{Cf}/gu;
+
+/**
+ * Invisible format characters and control characters out, whitespace collapsed to single spaces,
+ * trimmed; '' means "no line".
+ */
 export function cleanThanksLine(raw: string): string {
   return raw
+    .replace(LONE_JOINER, '')
+    .replace(INVISIBLE, '')
     .replace(/\p{Cc}/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// A scheme, `www.`, or a host: letters or digits, a dot, then at least two letters (ada.com.ng,
-// tipme.xyz/@ada). A dot followed by a space ("Thanks. See you") or a digit ("No. 1") is not one.
-const LINK =
-  /(?:[a-z][a-z0-9+.-]*:\/\/|www\.|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\/|\b))/i;
+const SCHEME_OR_WWW = /[a-z][a-z0-9+.-]*:\/\/|www\./i;
+// A word, then one or more ".label" parts, and an optional "/" right after.
+const DOTTED = /\b[a-z0-9-]+((?:\.[a-z0-9-]+)+)(\/)?/gi;
 
-/** True when the text looks like a link: a scheme, `www.`, or a host with a dot and letters after it. */
+/**
+ * True when the text looks like a link: a scheme, `www.`, or a host (ada.com.ng, tipme.xyz/@ada,
+ * PAYPAL.ME). The part after the last dot must be two letters or more, so "No. 1", "3.5" and
+ * "e.g." are not hosts, and a dot followed by a space never is. "much.God bless" and "Mr.Ade", a
+ * missing space before a capitalised word, read as sentences unless a "/" follows.
+ */
 export function hasLink(text: string): boolean {
-  return LINK.test(text);
+  const visible = cleanThanksLine(text);
+  if (SCHEME_OR_WWW.test(visible)) return true;
+  for (const match of visible.matchAll(DOTTED)) {
+    const labels = (match[1] ?? '').slice(1).split('.');
+    const last = labels[labels.length - 1] ?? '';
+    if (!/^[a-z]{2,}$/i.test(last)) continue;
+    const sentence = /^[A-Z][a-z]/.test(labels[0] ?? '');
+    if (sentence && !match[2]) continue;
+    return true;
+  }
+  return false;
 }
 
 const codePoints = (text: string) => Array.from(text).length;

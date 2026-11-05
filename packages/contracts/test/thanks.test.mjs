@@ -19,6 +19,19 @@ test('cleanThanksLine removes control characters, collapses spaces and trims', (
   assert.equal(cleanThanksLine('   '), '');
 });
 
+test('cleanThanksLine removes invisible format characters, but keeps joined emoji whole', () => {
+  // Soft hyphen, zero-width space, word joiner, a right-to-left override, a byte-order mark.
+  assert.equal(
+    cleanThanksLine('Th\u00adank\u200b you\u2060 \u202eso\ufeff much'),
+    'Thank you so much',
+  );
+  // A family emoji is three people joined by zero-width joiners.
+  const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}';
+  assert.equal(cleanThanksLine(`Thanks ${family}`), `Thanks ${family}`);
+  // A joiner that joins nothing is removed like the rest.
+  assert.equal(cleanThanksLine('paypal\u200d.me'), 'paypal.me');
+});
+
 test('a line of 140 code points is accepted, 141 is refused, emoji count once', () => {
   assert.equal(THANKS_LINE_LIMIT, 140);
   assert.equal(
@@ -40,13 +53,27 @@ test('a line with a link is refused', () => {
     'www.me.ng',
     'tipme.xyz/@ada',
     'ada.com.ng',
+    // Invisible characters inside a host still make a link (the reviewer's probes).
+    'paypal\u00ad.me/ada',
+    'tipme\u200b.com/ada',
+    'evil\u2060.ng',
+    'paypal\u200d.me',
+    'PAYPAL.ME',
+    'see paypal.Me/ada',
   ]) {
     assert.equal(hasLink(line), true, line);
     const parsed = thanksPatchSchema.safeParse({ line });
     assert.equal(parsed.success, false, line);
     assert.deepEqual(parsed.error.issues[0].path, ['line']);
   }
-  for (const line of ['Thanks a lot. See you soon!', 'No. 1 fan', 'Mr. Ade']) {
+  for (const line of [
+    'Thanks a lot. See you soon!',
+    'No. 1 fan',
+    'Mr. Ade',
+    // A missing space before a capital letter is a sentence, not a host.
+    'Thank you so much.God bless',
+    'Mr.Ade',
+  ]) {
     assert.equal(hasLink(line), false, line);
     assert.equal(thanksPatchSchema.safeParse({ line }).success, true, line);
   }
