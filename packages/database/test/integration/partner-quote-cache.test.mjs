@@ -14,30 +14,42 @@ import {
 } from '../../dist/index.js';
 import { useDatabase } from './helpers.mjs';
 
-const [, TOBI] = DEMO_PROFILES;
+const [ADA, TOBI] = DEMO_PROFILES;
 
-/** The pretend provider's shape, counting every call, with a balance the test can move. */
-function countingProvider() {
-  const state = { calls: 0, availableMinor: 100_000_000n, fail: false };
+/**
+ * The pretend provider's shape, counting every call, with a balance the test can move. `perAccount`
+ * answers each account its own balance; `bachs` is a provider with connected accounts.
+ */
+function countingProvider({ bachs = false, perAccount = null } = {}) {
+  const state = {
+    calls: 0,
+    availableMinor: 100_000_000n,
+    fail: false,
+    exact: false,
+  };
   const touch = () => {
     state.calls += 1;
     if (state.fail) throw new Error('partner unreachable');
   };
   return {
     state,
-    name: 'mock',
-    capabilities: { connectedAccounts: false },
+    name: bachs ? 'bachs-sandbox' : 'mock',
+    capabilities: { connectedAccounts: bachs },
     async payoutCapability() {
       touch();
       return { status: 'active', requirementsDue: [] };
     },
-    async payoutBalance() {
+    async payoutBalance(accountRef) {
       touch();
-      return { availableMinor: state.availableMinor };
+      return {
+        availableMinor: perAccount
+          ? perAccount[accountRef]
+          : state.availableMinor,
+      };
     },
     async quotePayoutFee() {
       touch();
-      return { feeMinor: 5000n, exact: false };
+      return { feeMinor: 5000n, exact: state.exact };
     },
   };
 }
@@ -216,7 +228,8 @@ test('partner quote cache', async (t) => {
       await outcome(payoutId, await started(payoutId), 'paid');
       await quote(provider, cache);
       const calls = provider.state.calls;
-      // No operation reverses a payout yet; the status alone must be enough to miss.
+      // TODO: use the real operation once one moves a payout to REVERSED (none does yet). Until
+      // then the status alone must be enough to miss.
       await q(`UPDATE payouts SET status = 'REVERSED' WHERE id = $1`, [
         payoutId,
       ]);
@@ -296,6 +309,113 @@ test('partner quote cache', async (t) => {
       };
       assert.equal((await quote(provider, garbled)).state, 'ready');
       assert.equal(provider.state.calls, 12);
+    },
+  );
+  await t.test(
+    "the payment account's reference and change time are in the key",
+    async () => {
+      await database.fresh();
+      const provider = countingProvider({ bachs: true });
+      const cache = memoryCache();
+      const accountId = randomUUID();
+      await q(
+        `INSERT INTO payment_accounts
+           (id, profile_id, provider, environment, provider_account_reference, status,
+            charges_enabled, payouts_enabled, fee_collector, manual_payouts_at)
+         VALUES ($1, $2, 'bachs', 'sandbox', 'acct_one', 'ACTIVE', true, true, 'platform', now())`,
+        [accountId, TOBI.id],
+      );
+      await q(
+        `INSERT INTO payout_destinations
+           (id, profile_id, provider, destination_reference, bank_code, bank_name,
+            account_last4, status)
+         VALUES ($1, $2, 'bachs', 'ba_one', '058', 'Guaranty Trust Bank', '4321', 'usable')`,
+        [randomUUID(), TOBI.id],
+      );
+      assert.equal((await quote(provider, cache)).state, 'ready');
+      await quote(provider, cache);
+      assert.equal(provider.state.calls, 3, 'the second quote was a hit');
+      await q(
+        `UPDATE payment_accounts SET provider_account_reference = 'acct_two' WHERE id = $1`,
+        [accountId],
+      );
+      await quote(provider, cache);
+      assert.equal(provider.state.calls, 6, 'a new account reference misses');
+      await q(
+        `UPDATE payment_accounts SET updated_at = updated_at + interval '1 second' WHERE id = $1`,
+        [accountId],
+      );
+      await quote(provider, cache);
+      assert.equal(provider.state.calls, 9, 'a recorded account change misses');
+    },
+  );
+
+  await t.test('two recipients never share an answer', async () => {
+    await database.fresh();
+    await paidTip();
+    const provider = countingProvider({
+      perAccount: { [TOBI.id]: 100_000_000n, [ADA.id]: 7000n },
+    });
+    const cache = memoryCache();
+    const tobi = await quote(provider, cache);
+    const ada = await withdrawalQuote(db, {
+      profileId: ADA.id,
+      provider,
+      cache,
+    });
+    assert.equal(provider.state.calls, 6, 'Ada made her own partner calls');
+    assert.equal(tobi.providerMinor, 100_000_000n);
+    assert.equal(ada.providerMinor, 7000n);
+    assert.deepEqual(await quote(provider, cache), tobi);
+    assert.equal(provider.state.calls, 6);
+  });
+
+  await t.test('a hold or the switch wins over a warm cache', async () => {
+    const { provider, cache } = await setup();
+    assert.equal((await quote(provider, cache)).state, 'ready');
+    const issueId = randomUUID();
+    await q(
+      `INSERT INTO issues (id, kind, dedupe_key, severity, subject, summary, opened_at)
+       VALUES ($1, 'payment_reversed', $2, 'money', $3, 'test', now())`,
+      [issueId, `test.${issueId}`, JSON.stringify({ profileId: TOBI.id })],
+    );
+    const holdId = randomUUID();
+    await q(
+      `INSERT INTO withdrawal_holds (id, profile_id, reason, issue_id)
+       VALUES ($1, $2, 'reversal', $3)`,
+      [holdId, TOBI.id, issueId],
+    );
+    assert.deepEqual(await quote(provider, cache), {
+      state: 'paused',
+      reason: 'reversal',
+    });
+    await q(`UPDATE withdrawal_holds SET released_at = now() WHERE id = $1`, [
+      holdId,
+    ]);
+    assert.equal((await quote(provider, cache)).state, 'ready');
+    await q(`UPDATE withdrawals_switch SET paused = true`);
+    assert.deepEqual(await quote(provider, cache), {
+      state: 'paused',
+      reason: 'switched_off',
+    });
+    await q(`UPDATE withdrawals_switch SET paused = false`);
+  });
+
+  await t.test(
+    'entries are per currency, and a hit keeps the fee exactness',
+    async () => {
+      const { provider, cache } = await setup();
+      provider.state.exact = true;
+      await quote(provider, cache);
+      const keys = [...cache.entries.keys()];
+      assert.ok(
+        keys.length === 2 && keys.every((key) => key.includes(':NGN:')),
+      );
+      const fee = keys.find((key) => key.includes('fee:'));
+      assert.deepEqual(JSON.parse(cache.entries.get(fee)), {
+        feeMinor: '5000',
+        exact: true,
+      });
     },
   );
 });

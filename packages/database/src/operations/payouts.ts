@@ -940,10 +940,11 @@ async function partnerStamp(
     ledgerMinor: bigint;
   },
 ): Promise<string> {
+  // Hashed in Postgres, so 32 characters come back however many payouts there are.
   const result = await db.execute<{ digest: string | null }>(sql`
-    SELECT string_agg(
+    SELECT md5(string_agg(
              ${payouts.id} || ':' || ${payouts.status} || ':' || COALESCE(${payouts.providerReference}, ''),
-             ',' ORDER BY ${payouts.id}) AS digest
+             ',' ORDER BY ${payouts.id})) AS digest
       FROM ${payouts} WHERE ${payouts.profileId} = ${input.profileId}`);
   const { route } = input;
   return createHash('sha256')
@@ -989,8 +990,22 @@ function parseBase(text: string | null): CachedBase | null {
   return null;
 }
 
-function parseFee(text: string | null): bigint | null {
-  return text && /^\d+$/.test(text) ? BigInt(text) : null;
+function parseFee(
+  text: string | null,
+): { feeMinor: bigint; exact: boolean } | null {
+  if (!text) return null;
+  try {
+    const value = JSON.parse(text) as { feeMinor?: unknown; exact?: unknown };
+    if (
+      typeof value.feeMinor === 'string' &&
+      /^\d+$/.test(value.feeMinor) &&
+      typeof value.exact === 'boolean'
+    )
+      return { feeMinor: BigInt(value.feeMinor), exact: value.exact };
+  } catch {
+    // Unreadable is a miss.
+  }
+  return null;
 }
 
 /** The store's answer, or null on any failure: a store problem is never the quote's problem. */
@@ -1002,16 +1017,29 @@ async function safely<T>(run: () => Promise<T>): Promise<T | null> {
   }
 }
 
+/** Never awaited: a slow store must not hold the quote, and a lost write is only a later miss. */
+function store(entries: PartnerQuoteEntries, part: string, value: string) {
+  try {
+    void entries.set(part, value).catch(() => undefined);
+  } catch {
+    // Not stored.
+  }
+}
+
+/** The one currency a base entry's balance is in; the part names carry it. */
+const BASE_CURRENCY = 'NGN';
+
 /** The provider, read through the quote's cache. Only successful answers are stored. */
 function cachedReader(
   provider: PayoutReader,
   entries: PartnerQuoteEntries,
   stamp: string,
 ): PayoutReader {
+  const basePart = `base:${BASE_CURRENCY}:${stamp}`;
   let base: CachedBase | null = null;
   const loadBase = async (accountRef: string): Promise<CachedBase> => {
     if (base) return base;
-    const cached = parseBase(await safely(() => entries.get(`base:${stamp}`)));
+    const cached = parseBase(await safely(() => entries.get(basePart)));
     if (cached) return (base = cached);
     const capability = await provider.payoutCapability(accountRef);
     const fresh: CachedBase =
@@ -1019,11 +1047,11 @@ function cachedReader(
         ? {
             ...capability,
             availableMinor: (
-              await provider.payoutBalance(accountRef, 'NGN')
+              await provider.payoutBalance(accountRef, BASE_CURRENCY)
             ).availableMinor.toString(),
           }
         : capability;
-    await safely(() => entries.set(`base:${stamp}`, JSON.stringify(fresh)));
+    store(entries, basePart, JSON.stringify(fresh));
     return (base = fresh);
   };
   return {
@@ -1033,7 +1061,10 @@ function cachedReader(
       const { status, requirementsDue } = await loadBase(accountRef);
       return { status, requirementsDue };
     },
-    async payoutBalance(accountRef) {
+    async payoutBalance(accountRef, currency) {
+      // A second currency must never reuse the NGN figure.
+      if (currency !== BASE_CURRENCY)
+        return provider.payoutBalance(accountRef, currency);
       return {
         availableMinor: BigInt(
           (await loadBase(accountRef)).availableMinor ?? 0,
@@ -1041,15 +1072,19 @@ function cachedReader(
       };
     },
     async quotePayoutFee(accountRef, amountMinor, currency) {
-      const part = `fee:${stamp}:${amountMinor}`;
+      const part = `fee:${currency}:${stamp}:${amountMinor}`;
       const cached = parseFee(await safely(() => entries.get(part)));
-      if (cached !== null) return { feeMinor: cached, exact: false };
+      if (cached) return cached;
       const fee = await provider.quotePayoutFee(
         accountRef,
         amountMinor,
         currency,
       );
-      await safely(() => entries.set(part, fee.feeMinor.toString()));
+      store(
+        entries,
+        part,
+        JSON.stringify({ feeMinor: fee.feeMinor.toString(), exact: fee.exact }),
+      );
       return fee;
     },
   };
