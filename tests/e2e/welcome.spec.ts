@@ -170,3 +170,23 @@ test('a welcome save that fails keeps its error line red', async ({
   await expect(line).toBeVisible();
   expect(await errorColour(line)).toBe(DANGER_TEXT);
 });
+
+// States plan, Task 16: the welcome PATCH is safe to repeat, so a dropped one is tried again.
+test('a dropped save is retried once quietly', async ({ page }, testInfo) => {
+  await claimNewPage(page, testInfo);
+  let patches = 0;
+  await page.route('**/v1/me/profile', (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    patches += 1;
+    return patches === 1 ? route.abort() : route.fallback();
+  });
+  await page.getByRole('button', { name: 'Let’s set up your page' }).click();
+  await page.getByLabel('Your name').fill('Kemi Bello');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(
+    page.getByRole('textbox', { name: 'A line about you' }),
+  ).toBeVisible();
+  // No failure was shown (Next's route announcer is an alert region too, so look for the line).
+  await expect(page.locator('.tm-field-error')).toHaveCount(0);
+  expect(patches).toBe(2);
+});

@@ -292,3 +292,67 @@ test('a recovery code pasted with spaces or dashes still fills all six cells', a
     await expect(cells).toHaveText(SIX);
   }
 });
+
+// States plan, Task 16: one quiet retry for the code check, never for sending a code.
+const SIGN_IN_CODE_USED = /send a new/i;
+
+test('a dropped code check is retried once quietly and signs in', async ({
+  page,
+}, testInfo) => {
+  const { email } = identity(testInfo);
+  let checks = 0;
+  await page.route('**/v1/auth/verify', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    checks += 1;
+    return checks === 1 ? route.abort() : route.fallback();
+  });
+  await signInWithEmail(page, email, '/sign-up');
+  await expect(
+    page.getByRole('heading', { name: 'Choose your handle' }),
+  ).toBeVisible();
+  expect(checks).toBe(2);
+});
+
+test('a code used by a dropped first try asks for a new code', async ({
+  page,
+}, testInfo) => {
+  const { email } = identity(testInfo);
+  let checks = 0;
+  await page.route('**/v1/auth/verify', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    checks += 1;
+    if (checks > 1) return route.fallback();
+    // The first check reaches TipMe and uses the code; only its answer is lost.
+    await route.fetch();
+    return route.abort();
+  });
+  await signInWithEmail(page, email, '/sign-up');
+  await expect(
+    page.getByRole('alert').filter({ hasText: SIGN_IN_CODE_USED }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Send a new code' }),
+  ).toHaveAttribute('data-suggested', 'true');
+  expect(checks).toBe(2);
+  await expectAccessible(page);
+});
+
+test('sending a code is never retried quietly', async ({ page }, testInfo) => {
+  const { email } = identity(testInfo);
+  let sends = 0;
+  await page.route('**/v1/auth/code', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    sends += 1;
+    return route.abort();
+  });
+  await page.goto('/sign-in');
+  await page.getByLabel('Email address').fill(email);
+  await page.getByRole('button', { name: 'Send code' }).click();
+  await expect(
+    page.getByText(
+      'We couldn’t send a code. Check your connection and try again.',
+    ),
+  ).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(sends).toBe(1);
+});

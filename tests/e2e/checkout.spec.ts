@@ -505,6 +505,37 @@ test('a receipt that loses the API while waiting shows the Connection lost slip,
   await expect(slip).toHaveCount(0);
 });
 
+test('offline on the receipt: it checks again at once on reconnect', async ({
+  page,
+  context,
+}) => {
+  // The receipt must still be checking after the wait below, and TipMe soon learns a "No reply"
+  // tip was paid: so this receipt is always told the tip is still being checked.
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { data?: { state?: string } };
+    if (body.data) body.data.state = 'waiting';
+    return route.fulfill({ response, json: body });
+  });
+  await tip(page, { outcome: /^No reply/ });
+  await expect(page.locator('.tip-status-card')).toBeVisible();
+  // Past the first ten checks the receipt waits 2 s between them, so a check within a moment of
+  // reconnecting is the reconnect's own.
+  await page.waitForTimeout(11_000);
+  await context.setOffline(true);
+  const slip = page.locator('.tm-slip').filter({ hasText: 'Connection lost' });
+  await expect(slip).toBeVisible();
+  await page.waitForTimeout(2500);
+  let checks = 0;
+  page.on('request', (request) => {
+    if (/\/v1\/tips\/[^/]+\/status/.test(request.url())) checks += 1;
+  });
+  await context.setOffline(false);
+  // Well inside the 2 s the receipt would otherwise wait.
+  await expect.poll(() => checks, { timeout: 800 }).toBeGreaterThan(0);
+  await expect(slip).toHaveCount(0);
+});
+
 test('fix: every receipt says the payment was pretend', async ({ page }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();

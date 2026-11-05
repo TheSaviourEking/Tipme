@@ -916,11 +916,13 @@ test('a tip that could not reach TipMe shows the Not sent slip under Tip, keeps 
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
   expect(violations.map((v) => v.id)).toEqual([]);
+  // The first tap was tried twice (one quiet retry, Task 16), with one key.
+  expect(keys).toHaveLength(2);
   fail = false;
   await slip.getByRole('button', { name: 'Try again' }).click();
   await page.waitForURL(/legal\/terms/);
-  expect(keys).toHaveLength(2);
-  expect(keys[0]).toBe(keys[1]);
+  expect(keys).toHaveLength(3);
+  expect(new Set(keys).size).toBe(1);
   expect(sent.intents).toHaveLength(1);
 });
 
@@ -1052,4 +1054,114 @@ test('at 320px the flag and the slip fit, with long and unbroken names @mobile',
     ).toBe(true);
     await page.unroute('**/v1/tip-intents');
   }
+});
+
+// States plan, Task 16: one quiet retry where it is safe, and a send on reconnect.
+const OFFLINE = 'We couldn’t reach TipMe. Check your connection and try again.';
+const DROPPED = OFFLINE;
+const DROPPED_SAFE_LINES = 1;
+/** Counts tip intents by idempotency key; `plan` says what each attempt does. */
+async function intentsBy(
+  page: Page,
+  plan: (attempt: number) => 'abort' | 'fallback',
+) {
+  const keys: string[] = [];
+  await page.route('**/v1/tip-intents', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    keys.push(route.request().headers()['idempotency-key'] ?? '');
+    return plan(keys.length) === 'abort' ? route.abort() : route.fallback();
+  });
+  return keys;
+}
+
+test('a dropped connection is retried once quietly with the same key, and the tip goes through', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  const keys = await intentsBy(page, (n) => (n === 1 ? 'abort' : 'fallback'));
+  // Any slip that ever appears is remembered, even if the page leaves at once.
+  await page.evaluate(() => {
+    new MutationObserver(() => {
+      if (document.querySelector('.tm-slip'))
+        sessionStorage.setItem('saw-slip', '1');
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await tipButton(page).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBe(keys[1]);
+  expect(sent.intents).toHaveLength(1);
+  expect(await page.evaluate(() => sessionStorage.getItem('saw-slip'))).toBe(
+    null,
+  );
+});
+
+test('two dropped connections show the Not sent slip with the safe line; Try again replays the same key', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  const keys = await intentsBy(page, (n) => (n <= 2 ? 'abort' : 'fallback'));
+  await tipButton(page).click();
+  const slip = page.locator('.appreciation-card .tm-slip');
+  await expect(slip).toContainText('Not sent yet');
+  await expect(slip).toContainText(DROPPED);
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(DROPPED_SAFE_LINES);
+  expect(keys).toHaveLength(2);
+  await slip.getByRole('button', { name: 'Try again' }).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(keys).toHaveLength(3);
+  expect(new Set(keys).size).toBe(1);
+});
+
+test('offline at the tap: nothing is sent, the slip says so, and the tip goes on reconnect', async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  await context.setOffline(true);
+  await tipButton(page).click();
+  const slip = page.locator('.appreciation-card .tm-slip');
+  await expect(slip).toContainText('Not sent yet');
+  await expect(slip).toContainText(OFFLINE);
+  // Nothing was sent, so this one is proven.
+  await expect(slip.locator('.tm-slip__safe')).toHaveText(
+    'You haven’t paid anything.',
+  );
+  expect(sent.quotes).toBe(0);
+  expect(sent.intents).toHaveLength(0);
+  await context.setOffline(false);
+  await page.waitForURL(/legal\/terms/);
+  expect(sent.intents).toHaveLength(1);
+});
+
+test('changing the amount while offline cancels the send on reconnect', async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  await context.setOffline(true);
+  await tipButton(page).click();
+  await expect(page.locator('.appreciation-card .tm-slip')).toBeVisible();
+  await page.getByRole('radio', { name: '5,000 NGN' }).check();
+  await context.setOffline(false);
+  await page.waitForTimeout(1000);
+  expect(sent.quotes).toBe(0);
+  expect(sent.intents).toHaveLength(0);
+  expect(page.url()).toMatch(/\/@kemi$/);
 });

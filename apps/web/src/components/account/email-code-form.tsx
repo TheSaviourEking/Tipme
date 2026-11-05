@@ -1,10 +1,11 @@
 'use client';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { SignInVerified } from '@tipme/contracts';
 import { Button, InputField } from '@tipme/ui';
 import { CodeField } from '@/components/account/code-field';
 import { apiFetch, deviceLabel } from '@/lib/session-client';
+import { onReconnect, sendWithOneRetry } from '@/lib/connection';
 
 /** a•••@example.com: enough to recognise the address, not to read it over a shoulder. */
 const maskEmail = (email: string) => {
@@ -35,6 +36,17 @@ export function EmailCodeForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const codeField = useRef<HTMLInputElement>(null);
+  const codeForm = useRef<HTMLFormElement>(null);
+  // The first check may have used the code before its answer was lost (states plan, Task 16): the
+  // API then calls it invalid, before counting it as a wrong code, so a new code is the way on.
+  const [codeUsed, setCodeUsed] = useState(false);
+  // A check tapped offline goes when the connection is back; a new code or email cancels it.
+  const armed = useRef<(() => void) | null>(null);
+  const disarm = () => {
+    armed.current?.();
+    armed.current = null;
+  };
+  useEffect(() => disarm, []);
 
   const sendCode = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -42,8 +54,11 @@ export function EmailCodeForm({
       setError('Enter your email address, for example ada@example.com.');
       return;
     }
+    disarm();
     setBusy(true);
     setError('');
+    setCodeUsed(false);
+    // Never retried quietly: a second code replaces the first.
     const result = await apiFetch('/v1/auth/code', {
       method: 'POST',
       body: { email: email.trim() },
@@ -67,17 +82,30 @@ export function EmailCodeForm({
       setError('Enter the 6 digits from the email.');
       return;
     }
+    disarm();
+    if (!navigator.onLine) {
+      setError('We couldn’t check the code. Please try again.');
+      armed.current = onReconnect(window, () => {
+        armed.current = null;
+        codeForm.current?.requestSubmit();
+      });
+      return;
+    }
     setBusy(true);
     setError('');
-    const result = await apiFetch<SignInVerified>('/v1/auth/verify', {
-      method: 'POST',
-      body: { email: email.trim(), code, deviceLabel: deviceLabel() },
-    });
+    const body = { email: email.trim(), code, deviceLabel: deviceLabel() };
+    const { result, firstWasNetwork } = await sendWithOneRetry(
+      'sign-in-verify',
+      () =>
+        apiFetch<SignInVerified>('/v1/auth/verify', { method: 'POST', body }),
+    );
     setBusy(false);
     if (result.ok) {
       onSignedIn(result.data);
       return;
     }
+    const used = firstWasNetwork && result.code === 'CODE_INVALID';
+    setCodeUsed(used);
     setError(
       result.code === 'SIGN_IN_LOCKED'
         ? 'Too many wrong codes. Please wait 15 minutes and try again.'
@@ -106,7 +134,7 @@ export function EmailCodeForm({
       </Button>
     </form>
   ) : (
-    <form className="auth-form" onSubmit={verify} noValidate>
+    <form className="auth-form" onSubmit={verify} noValidate ref={codeForm}>
       <h2 className="auth-step-title">Check your email.</h2>
       <p role="status">
         We sent a 6-digit code to {maskEmail(email)}. It expires in 10 minutes.
@@ -117,22 +145,31 @@ export function EmailCodeForm({
         ref={codeField}
         label="6-digit code"
         value={code}
-        onChange={setCode}
+        onChange={(next) => {
+          disarm();
+          setCode(next);
+        }}
         error={error || undefined}
       />
       <Button type="submit" variant="continue" disabled={busy} aria-busy={busy}>
         {busy ? 'Checking…' : 'Continue'}
       </Button>
       <div className="auth-form__links">
-        <Button variant="quiet" onClick={() => void sendCode()}>
+        <Button
+          variant="quiet"
+          onClick={() => void sendCode()}
+          data-suggested={codeUsed ? 'true' : undefined}
+        >
           Send a new code
         </Button>
         <Button
           variant="quiet"
           onClick={() => {
+            disarm();
             setStep('email');
             setCode('');
             setError('');
+            setCodeUsed(false);
           }}
         >
           Use a different email

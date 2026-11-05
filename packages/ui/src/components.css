@@ -470,7 +470,8 @@ textarea.tm-input {
 
 /* The key a problem points to (states plan, Task 9): the nearest amount at or above the minimum.
    An outline, never a fill, so purple stays a signature material. */
-.tm-amount-choice[data-suggested='true'] span {
+.tm-amount-choice[data-suggested='true'] span,
+.tm-button[data-suggested='true'] {
   outline: 2px solid color-mix(in srgb, var(--brand-primary) 40%, transparent);
   outline-offset: 2px;
 }

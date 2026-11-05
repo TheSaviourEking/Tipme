@@ -19,6 +19,7 @@ import { formatDemoAmount, formatNaira } from '@/lib/demo-amount';
 import { amountOptions, keyLayout } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
+import { onReconnect, sendWithOneRetry } from '@/lib/connection';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
@@ -129,6 +130,17 @@ export function AppreciationForm({
   const [submitting, setSubmitting] = useState(false);
   // One key per draft (quote + message): retries and double taps reuse it, so one tip at most.
   const draftKey = useRef<string | null>(null);
+  // A tap made offline is sent when the connection comes back (states plan, Task 16), with the
+  // same draft. Anything that starts a new draft cancels it.
+  const armed = useRef<(() => void) | null>(null);
+  const disarm = () => {
+    armed.current?.();
+    armed.current = null;
+  };
+  const newDraft = () => {
+    draftKey.current = null;
+    disarm();
+  };
   const latestQuote = useRef(0);
   // Counted once a page view: choosing a key clears the field, and typing again is the same person.
   const customCounted = useRef(false);
@@ -148,7 +160,10 @@ export function AppreciationForm({
   const fetchQuote = async (minor: number) => {
     const request = ++latestQuote.current;
     setQuote({ kind: 'loading', amount: minor });
-    const result = await quoteTip(handle, minor);
+    // A read: a dropped connection is tried once more, quietly.
+    const { result } = await sendWithOneRetry('tip-quote', () =>
+      quoteTip(handle, minor),
+    );
     if (request !== latestQuote.current) return null;
     draftKey.current = null;
     if (!result.ok) {
@@ -184,6 +199,19 @@ export function AppreciationForm({
       : quote.amount !== amount)
       ? { kind: 'idle' }
       : quote;
+
+  // Nothing reached TipMe, so the slip's safe line holds. The send is armed once.
+  const waitForConnection = () => {
+    disarm();
+    setReachedUs(false);
+    setNotice(failureMessage({ ok: false, status: 0, code: 'NETWORK' }, ''));
+    armed.current = onReconnect(window, () => {
+      armed.current = null;
+      form.current?.requestSubmit();
+    });
+  };
+  // A new amount is a new draft: an armed send never goes with an amount it wasn't tapped for.
+  useEffect(() => disarm, [amount]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -228,6 +256,11 @@ export function AppreciationForm({
       (tooLongMessage ? messageField : nameField).current?.focus();
       return;
     }
+    // Offline at the tap: send nothing now, say so, and send this same draft on reconnect.
+    if (!navigator.onLine) {
+      waitForConnection();
+      return;
+    }
     // Never pay without a current server quote for exactly this amount.
     // Disabled from here on, so a double tap starts one tip.
     setSubmitting(true);
@@ -250,7 +283,10 @@ export function AppreciationForm({
     }
     draftKey.current ??= newIdempotencyKey();
     const trimmed = message.trim();
-    const result = await createTip(draftKey.current, {
+    const key = draftKey.current;
+    // The same key and body: the API replays the original tip for it (intents.ts), so the quiet
+    // second try can never start a second tip.
+    const body = {
       quoteId: current.quoteId,
       ...(trimmed ? { message: trimmed } : {}),
       ...(trimmed && noteMayShow ? { noteMayShow: true as const } : {}),
@@ -259,7 +295,10 @@ export function AppreciationForm({
       ...(joining && celebration
         ? { celebrationMomentId: celebration.momentId }
         : {}),
-    });
+    };
+    const { result } = await sendWithOneRetry('tip-intent', () =>
+      createTip(key, body),
+    );
     if (result.ok) {
       try {
         // The receipt token stays in this tab: it never travels through the provider's pages.
@@ -279,6 +318,11 @@ export function AppreciationForm({
       return;
     }
     setSubmitting(false);
+    if (result.code === 'NETWORK' && !navigator.onLine) {
+      // The retry found the connection gone: the same draft goes when it is back.
+      waitForConnection();
+      return;
+    }
     if (result.code === 'TIPPING_NOT_OPEN') {
       setClosed(true);
       return;
@@ -418,7 +462,7 @@ export function AppreciationForm({
               (option) => option.value === event.currentTarget.value,
             );
             setPurpose(selected?.value ?? '');
-            draftKey.current = null;
+            newDraft();
           }}
         >
           <option value="">Choose a reason</option>
@@ -443,7 +487,7 @@ export function AppreciationForm({
           setMessage(event.target.value);
           if (!event.target.value.trim()) setNoteMayShow(false);
           setMessageError('');
-          draftKey.current = null;
+          newDraft();
         }}
         placeholder="Your work made a difference. Thank you."
         hint={`${message.length}/${MESSAGE_LIMIT} characters. Sent privately with your tip.`}
@@ -458,7 +502,7 @@ export function AppreciationForm({
             disabled={submitting}
             onChange={(event) => {
               setNoteMayShow(event.target.checked);
-              draftKey.current = null;
+              newDraft();
             }}
           />
           <span>
@@ -481,7 +525,7 @@ export function AppreciationForm({
         onChange={(event) => {
           setPayerName(event.target.value);
           setNameError('');
-          draftKey.current = null;
+          newDraft();
         }}
         hint={`Shown to ${recipient} with your tip. Leave it empty to stay anonymous.`}
         error={nameError || undefined}
@@ -664,7 +708,7 @@ export function AppreciationForm({
               disabled={submitting}
               onChange={(event) => {
                 setJoining(event.target.checked);
-                draftKey.current = null;
+                newDraft();
               }}
             />
             <span>Add to the celebration</span>
