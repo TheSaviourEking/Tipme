@@ -242,8 +242,12 @@ export function Navigation() {
             Sign in
           </ActionLink>
           {/* Getting someone their own page is the one primary action. */}
-          <ActionLink className="nav-guest" href="/sign-up" onClick={close}>
-            Create your page <Arrow />
+          <ActionLink
+            className="nav-guest nav-claim"
+            href="/sign-up"
+            onClick={close}
+          >
+            Claim your username <Arrow />
           </ActionLink>
         </nav>
       </Container>

@@ -177,6 +177,44 @@ legend {
   background: var(--canvas);
 }
 
+/* Marketing pages: the header stays at the top of the screen, on the page background, above the
+   content. The dashboard and the staff console keep their own, unsticky header. In-page jumps
+   stop below it (html scroll-padding-top). */
+body:not(:has(.dashboard-page)) .site-header {
+  position: sticky;
+  top: 0;
+}
+
+/* Home, wide screens: "Claim your username" steps aside while the hero claim form is on screen
+   (HeaderClaimGate sets data-hero-claim). Hidden means visibility:hidden, so it cannot be focused
+   or announced. Without JavaScript the attribute never appears and the button stays. On a phone
+   the button is in the open menu and this does not apply. */
+@media (min-width: 801px) {
+  .site-nav .nav-claim {
+    transition:
+      opacity 200ms ease,
+      transform 200ms ease,
+      visibility 0s;
+  }
+
+  html[data-hero-claim='in'] .site-header .nav-claim {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateX(0.5rem) scale(0.96);
+    transition:
+      opacity 200ms ease,
+      transform 200ms ease,
+      visibility 0s linear 200ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .site-nav .nav-claim,
+    html[data-hero-claim='in'] .site-header .nav-claim {
+      transition: none;
+    }
+  }
+}
+
 .nav-shell {
   position: relative;
   min-height: var(--nav-height);
@@ -305,7 +343,7 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   display: none;
 }
 
-/* Compact tactile keys: "Sign in" raised, "Create your page" the single purple action. */
+/* Compact tactile keys: "Sign in" raised, "Claim your username" the single purple action. */
 .site-nav .tm-button {
   min-height: 44px;
   padding: 0.55rem 1rem;
@@ -3044,7 +3082,7 @@ body:has(.profile-page) .brand__mark {
     box-shadow: 0 1px 1px rgb(20 18 16 / 12%);
   }
 
-  /* "Sign in" is a plain link here, like the others; "Create your page" is the board's black
+  /* "Sign in" is a plain link here, like the others; "Claim your username" is the board's black
      action, pinned to the bottom. */
   .site-nav .tm-button--secondary:not(.menu-toggle) {
     justify-content: flex-start;
