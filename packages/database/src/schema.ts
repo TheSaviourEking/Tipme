@@ -9,6 +9,7 @@ import {
 } from '@tipme/contracts';
 import { ATTEMPT_STATUSES, PAYOUT_STATUSES, TIP_STATUSES } from '@tipme/domain';
 import { MAIL_CATEGORIES } from '@tipme/mail';
+import type { SocialLink } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -504,10 +505,15 @@ export const profiles = pgTable(
     craft: text('craft'),
     note: text('note'),
     avatarPath: text('avatar_path'),
+    // The three fixed links of before 5 Nov 2026. No longer read or written: `links` replaced it
+    // (migration 0071 copied it across); kept until a later release drops it.
     socials: jsonb('socials')
       .$type<{ facebook?: string; instagram?: string; x?: string }>()
       .notNull()
       .default({}),
+    // Every link the owner saved, in their order (@tipme/contracts socialLinksSchema). What shows
+    // depends on the plan (visibleLinks): a lapsed Pro page keeps its extras here, hidden.
+    links: jsonb('links').$type<SocialLink[]>().notNull().default([]),
     bioPublic: boolean('bio_public').notNull().default(true),
     socialsPublic: boolean('socials_public').notNull().default(true),
     phonePublic: boolean('phone_public').notNull().default(false),

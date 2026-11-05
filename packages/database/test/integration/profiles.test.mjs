@@ -13,6 +13,7 @@ import {
   publicProfile,
   requestSignInCode,
   resolveSession,
+  setMyLinks,
   setPageState,
   updateMyProfile,
   verifySignInCode,
@@ -94,7 +95,10 @@ test('profiles, handles and page states', async (t) => {
         displayName: 'Kemi Bello',
         role: 'Hairdresser at Glow Studio',
         bio: 'Braids and kindness.',
-        socials: { instagram: 'https://instagram.com/kemi' },
+      });
+      await setMyLinks(database.db, kemi, {
+        links: [{ platform: 'instagram', url: 'https://instagram.com/kemi' }],
+        show: true,
       });
       let page = await publicProfile(database.db, 'KEMI');
       assert.deepEqual(
@@ -103,14 +107,14 @@ test('profiles, handles and page states', async (t) => {
           displayName: page.displayName,
           role: page.role,
           bio: page.bio,
-          socials: page.socials,
+          links: page.links,
         },
         {
           handle: 'kemi',
           displayName: 'Kemi Bello',
           role: 'Hairdresser at Glow Studio',
           bio: 'Braids and kindness.',
-          socials: { instagram: 'https://instagram.com/kemi' },
+          links: [{ platform: 'instagram', url: 'https://instagram.com/kemi' }],
         },
       );
       assert.equal('phone' in page, false);
@@ -137,27 +141,22 @@ test('profiles, handles and page states', async (t) => {
     await database.fresh();
     const kemi = await signUp('+2348031230001');
     await claimHandle(database.db, { userId: kemi, handle: 'kemi', now });
+    const save = (platform, url) =>
+      setMyLinks(database.db, kemi, { links: [{ platform, url }], show: true });
     assert.equal(
-      await errorCode(
-        updateMyProfile(database.db, kemi, {
-          socials: { instagram: 'https://evil.example/kemi' },
-        }),
-      ),
+      await errorCode(save('instagram', 'https://evil.example/kemi')),
       'INVALID_INPUT',
     );
     assert.equal(
-      await errorCode(
-        updateMyProfile(database.db, kemi, {
-          socials: { x: 'http://x.com/kemi' },
-        }),
-      ),
+      await errorCode(save('x', 'http://x.com/kemi')),
       'INVALID_INPUT',
     );
-    await updateMyProfile(database.db, kemi, {
-      socials: {
-        x: 'https://twitter.com/kemi',
-        facebook: 'https://www.facebook.com/kemi',
-      },
+    await setMyLinks(database.db, kemi, {
+      links: [
+        { platform: 'facebook', url: 'https://www.facebook.com/kemi' },
+        { platform: 'x', url: 'https://twitter.com/kemi' },
+      ],
+      show: true,
     });
   });
 
@@ -200,6 +199,10 @@ test('profiles, handles and page states', async (t) => {
       const kemi = await signUp('+2348031230001');
       await claimHandle(database.db, { userId: kemi, handle: 'kemi', now });
       await setPageState(database.db, kemi, 'live');
+      await setMyLinks(database.db, kemi, {
+        links: [{ platform: 'tiktok', url: 'https://tiktok.com/@kemi' }],
+        show: true,
+      });
       const { token } = await createSession(database.db, {
         userId: kemi,
         deviceLabel: 'Phone',
@@ -218,13 +221,14 @@ test('profiles, handles and page states', async (t) => {
       assert.ok(user.deleted_at);
       const [profile] = (
         await database.pool.query(
-          'SELECT display_name, bio, socials, page_state FROM profiles WHERE user_id = $1',
+          'SELECT display_name, bio, socials, links, page_state FROM profiles WHERE user_id = $1',
           [kemi],
         )
       ).rows;
       assert.equal(profile.page_state, 'deleted');
       assert.equal(profile.bio, null);
       assert.deepEqual(profile.socials, {});
+      assert.deepEqual(profile.links, []);
       assert.equal(
         await checkHandle(
           database.db,
