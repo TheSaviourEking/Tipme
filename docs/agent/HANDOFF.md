@@ -1,3 +1,10 @@
+# Current handoff — states PR A, primitives (5 November 2026)
+
+- Branch `feat/states`, test lane 1, not pushed. Front end only: `packages/ui`, the design-system page, `preview-states`, review screens. No API, contract, database or payment change.
+- `Notice` and `EmptyState` still exist; nothing new imports them. The Linux design-system baselines are not updated (darwin only); take them from CI's render as in 3841ef0.
+- `.tm-field-error` is now black text with the red in the field's edge, and invalid fields shake once (not with reduced motion): this reaches every form, not just the specimen.
+- Evidence: `.superpowers/program/states-a-build-report.md` in the main checkout.
+
 # Current handoff — dashboard data (5 November 2026)
 
 - Branch `feat/dashboard-data`, test lane 1, not pushed. Migration 0071 is `CREATE INDEX payouts_profile_created` only.
