@@ -36,7 +36,7 @@ import { OpsPermission } from './permission.decorator.js';
 /**
  * Staff reserve and release usernames (username reservation spec, section 4). Every route needs
  * `usernames.manage` and a fresh code, whatever the screens show; reserve and release are instant
- * and audited. Sign-up and handle changes then refuse a reserved name (profiles.ts).
+ * and audited. Reads count against `ops_read`, asks against `ops_request` (ruling, 5 Nov 2026). Sign-up and handle changes then refuse a reserved name (profiles.ts).
  */
 @Controller('v1/ops/usernames')
 export class OpsUsernamesController {
@@ -45,7 +45,7 @@ export class OpsUsernamesController {
   ) {}
 
   @Get()
-  @RateLimit('ops_request')
+  @RateLimit('ops_read')
   @FreshCode()
   @OpsPermission('usernames.manage')
   async list(
@@ -61,7 +61,7 @@ export class OpsUsernamesController {
   }
 
   @Get('check/:name')
-  @RateLimit('ops_request')
+  @RateLimit('ops_read')
   @FreshCode()
   @OpsPermission('usernames.manage')
   async check(

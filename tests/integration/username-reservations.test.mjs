@@ -464,3 +464,48 @@ test('the list shows active reservations by prefix and source, and the built-in 
   );
   assert.equal(refused.status, 400);
 });
+
+// Reads count against their own per-person bucket, ops_read, so a session of checks never uses up
+// the ops_request asks (fee changes, staff changes) the same person needs (review I2, 5 Nov 2026).
+test('60+ checks never block a fee request; reads have their own limit', async () => {
+  const limited = await startStack({
+    databaseUrl: database.url,
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_OPS_READ_PER_HOUR: '65',
+    },
+  });
+  try {
+    const reader = await opsSignIn(limited.api, database.db, '+2348031280098');
+    const get = (path) =>
+      fetch(`${limited.api}${path}`, { headers: { cookie: reader.cookie } });
+    for (let i = 0; i < 64; i++) {
+      const read = await get(
+        i % 8 === 0 ? '/v1/ops/usernames' : `/v1/ops/usernames/check/read_${i}`,
+      );
+      assert.equal(read.status, 200, `read ${i}`);
+    }
+    const { rows } = await insertPage('fee_after_reads');
+    const fee = await fetch(`${limited.api}/v1/ops/pages/${rows[0].id}/fee`, {
+      method: 'POST',
+      headers: browserHeaders(reader.cookie),
+      body: JSON.stringify({ feeBps: 321, reason: REASON }),
+    });
+    // Accepted, not limited: it waits for the other owner here (202), or runs alone (200).
+    assert.ok([200, 202].includes(fee.status), await fee.clone().text());
+    // A reserve is an ask, not a read: it still works too.
+    const reserve = await fetch(`${limited.api}/v1/ops/usernames`, {
+      method: 'POST',
+      headers: browserHeaders(reader.cookie),
+      body: JSON.stringify({ name: 'after_reads', reason: REASON }),
+    });
+    assert.equal(reserve.status, 201);
+    assert.equal((await get('/v1/ops/usernames/check/read_x')).status, 200);
+    const over = await get('/v1/ops/usernames/check/read_y');
+    assert.equal(over.status, 429);
+    assert.equal((await over.json()).error.code, 'RATE_LIMITED');
+  } finally {
+    await limited.stop();
+  }
+});

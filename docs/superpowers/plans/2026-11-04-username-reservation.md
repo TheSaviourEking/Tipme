@@ -41,7 +41,8 @@
 - **Forced colours:** every state (banner, state words, buttons) stays legible under `forced-colors: active`. Meaning is carried by text, never by colour alone.
 - **UI** follows `docs/design/DESIGN-CONSTITUTION.md`. Use the existing ops patterns: `Card className="settings-section"`, `ReasonAction`, `opsAct`, `refusalWords`, `when`/`age`.
 - **The server always decides:**
-  - every new ops route carries `@OpsPermission('usernames.manage')`, `@FreshCode()` and `@RateLimit('ops_request')`;
+  - every new ops route carries `@OpsPermission('usernames.manage')` and `@FreshCode()`;
+  - every new ops route that changes something (an ask) carries `@RateLimit('ops_request')`; the read routes (`GET /v1/ops/usernames` and `GET /v1/ops/usernames/check/:name`) carry `@RateLimit('ops_read')` instead, a per-person bucket set by `RATE_LIMIT_OPS_READ_PER_HOUR` (default 600). Ruling of 5 Nov 2026 (PR 1 review, I2): reads must never use up the `ops_request` asks, such as fee and staff changes, that the same person needs;
   - none is added to `OPS_FRESH_CODE_EXEMPT` or `OPS_ANY_STAFF_ROUTES`.
 - **Money is never touched.** Nothing here reads or writes tips, quotes, balances, payouts, payment accounts or the plan, except read-only "has a balance" and "withdrawal in flight" flags.
 - **The user never learns** who asked or approved, or reads the internal reason. The public can't tell a staff reservation from a built-in one.

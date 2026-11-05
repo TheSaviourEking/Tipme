@@ -9270,7 +9270,7 @@
           }
         },
         "x-tipme-access": "staff-grant",
-        "x-tipme-rate-limit": "ops_request",
+        "x-tipme-rate-limit": "ops_read",
         "security": [
           {
             "session": []
@@ -9380,7 +9380,7 @@
           }
         },
         "x-tipme-access": "staff-grant",
-        "x-tipme-rate-limit": "ops_request",
+        "x-tipme-rate-limit": "ops_read",
         "security": [
           {
             "session": []
