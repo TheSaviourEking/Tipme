@@ -565,6 +565,35 @@ textarea.tm-input {
   }
 }
 
+/* A lamp: an 8px lit mark with a soft ring of its own colour (StatesConcepts .lamp). */
+.tm-lamp {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.tm-lamp--red {
+  background: var(--lamp-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp-red) 16%, transparent);
+}
+
+.tm-lamp--amber {
+  background: var(--lamp-amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp-amber) 18%, transparent);
+}
+
+.tm-lamp--purple {
+  background: var(--brand-primary);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--brand-primary) 18%, transparent);
+}
+
+.tm-lamp--off {
+  background: var(--lamp-off);
+}
+
 @media (max-width: 640px) {
   .tm-container {
     width: calc(100% - 2.5rem);
@@ -586,6 +615,12 @@ textarea.tm-input {
   .tm-notice {
     border: 1px solid CanvasText;
     box-shadow: none;
+  }
+
+  /* Backgrounds are forced away, so a lamp keeps its edge. */
+  .tm-lamp {
+    border: 1px solid CanvasText;
+    forced-color-adjust: none;
   }
 
   /* The thumb is the selected state; system colours keep it visible when backgrounds are forced. */

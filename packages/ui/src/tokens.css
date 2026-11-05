@@ -29,6 +29,16 @@
   --state-warning-soft: #fff4d8;
   --state-danger: #9b2820;
   --state-danger-soft: #fdecea;
+  /* State lamps, stamps and edges (StatesConcepts): small lit marks, never a tinted box. */
+  --lamp-red: #c2382c;
+  --lamp-amber: #d08a16;
+  --lamp-off: #cfcbc2;
+  /* Ink stamps; red stamps use --state-danger and purple ones --brand-primary. */
+  --stamp-ink: #3b3934;
+  --edge-danger: rgb(194 56 44 / 55%);
+  --edge-warning: rgb(208 138 22 / 50%);
+  /* The pressed face of a key that shows its result (StatesConcepts .split .face). */
+  --key-face-dark: #141210;
   /* Type roles; actual faces are supplied by the app */
   --font-interface: var(--font-manrope), 'Avenir Next', Arial, sans-serif;
   --font-body: var(--font-interface);

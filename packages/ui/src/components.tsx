@@ -8,6 +8,23 @@ export type Material =
 const classes = (...values: (string | undefined)[]) =>
   values.filter(Boolean).join(' ');
 
+/** A small lit mark that carries a state beside its words. Decoration: the words say it. */
+export type LampTone = 'red' | 'amber' | 'purple' | 'off';
+export function Lamp({
+  tone,
+  className,
+}: {
+  tone: LampTone;
+  className?: string;
+}) {
+  return (
+    <span
+      className={classes('tm-lamp', `tm-lamp--${tone}`, className)}
+      aria-hidden="true"
+    />
+  );
+}
+
 export function Button({
   variant = 'primary',
   className,
