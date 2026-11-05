@@ -11,6 +11,7 @@ import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { NameChecks, nameCheckKey } from '@/lib/name-check';
 import { apiFetch } from '@/lib/session-client';
 import { BankPicker } from './bank-picker';
+import { CodeField } from './code-field';
 
 const STATUS_WORDS: Record<PayoutDestinationView['status'], string> = {
   usable: 'Usable',
@@ -390,17 +391,12 @@ export function GetPaidCard() {
                 We’ve sent a code to your email. Enter it to save this bank
                 account.
               </p>
-              <InputField
+              <CodeField
                 id={`${id}-code`}
                 label="6-digit code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
                 value={code}
                 disabled={busy}
-                onChange={(event) =>
-                  setCode(event.target.value.replace(/\D/g, ''))
-                }
+                onChange={setCode}
               />
               <Button type="submit" disabled={busy}>
                 {busy ? 'Saving…' : 'Save bank account'}

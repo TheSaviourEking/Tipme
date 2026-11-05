@@ -92,6 +92,41 @@ test('a number the bank does not know: the name is typed instead', async ({
   await expect(card.getByText('Enter the name on the account.')).toBeVisible();
 });
 
+test('a bank code pasted with a space or a dash still fills all six cells', async ({
+  page,
+  context,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#get-paid');
+  const card = page.locator('#get-paid');
+  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await card.getByLabel('Account number').fill('0123456789');
+  await card.getByRole('button', { name: 'Check account' }).click();
+  await card.getByRole('button', { name: 'Email me a code' }).click();
+  const field = card.getByLabel('6-digit code');
+  await expect(field).toBeVisible();
+  // A real paste: the browser must not cut "123 456" to "123 45" before the space is stripped.
+  for (const pasted of ['123 456', '123-456', ' 123456 ']) {
+    await page.evaluate(
+      (value) => navigator.clipboard.writeText(value),
+      pasted,
+    );
+    await field.fill('');
+    await field.focus();
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect(field).toHaveValue('123456');
+    await expect(card.locator('.tm-code-cell')).toHaveText([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+    ]);
+  }
+});
+
 test('the code step offers a new code and a way out', async ({
   page,
 }, testInfo) => {

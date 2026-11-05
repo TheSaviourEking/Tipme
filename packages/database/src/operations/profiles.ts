@@ -28,6 +28,7 @@ import {
   emailTokens,
   handleAliases,
   handleHolds,
+  handleReservations,
   profileAvatars,
   profileCovers,
   emailRecoveries,
@@ -94,9 +95,31 @@ export function checkHandle(
   const handle = normaliseHandle(raw);
   if (!handle) return Promise.resolve('invalid');
   if (isReservedHandle(handle)) return Promise.resolve('reserved');
-  return guarded(async () =>
-    (await isTaken(db, handle, now)) ? 'taken' : 'available',
-  );
+  return guarded(async () => {
+    // A staff reservation answers exactly like a built-in word: the public never learns which list.
+    if (await activeReservation(db, handle)) return 'reserved';
+    return (await isTaken(db, handle, now)) ? 'taken' : 'available';
+  });
+}
+
+/**
+ * The active staff reservation of a name, if any. `key` is the reservationKey; a stored handle is
+ * already one (handles never contain '-'), so a handle can be passed as it is.
+ */
+export async function activeReservation(
+  db: Database | Tx,
+  key: string,
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .select({ id: handleReservations.id })
+    .from(handleReservations)
+    .where(
+      and(
+        eq(handleReservations.handleLower, key),
+        isNull(handleReservations.releasedAt),
+      ),
+    );
+  return row ?? null;
 }
 
 async function isTaken(
@@ -120,7 +143,8 @@ async function isTaken(
     .where(
       and(eq(handleHolds.handleLower, handle), gt(handleHolds.until, now)),
     );
-  return hold !== undefined;
+  if (hold) return true;
+  return (await activeReservation(db, handle)) !== null;
 }
 
 /** Claims a handle for the user's one page. The page starts not live, named after the handle. */
@@ -528,7 +552,8 @@ export function renameHandle(
           throw new OperationError('HANDLE_CHANGE_PRO_REQUIRED');
         const { used, allowed } = handleChangesOf(row);
         if (used >= allowed) throw new OperationError('HANDLE_CHANGE_LIMIT');
-        if (isReservedHandle(wanted)) throw new OperationError('HANDLE_TAKEN');
+        // A reserved name is refused unless it is this page's own old handle: someone who
+        // renamed away from a name that was later reserved can come back to it.
         const reclaimed = await tx
           .delete(handleAliases)
           .where(
@@ -538,7 +563,10 @@ export function renameHandle(
             ),
           )
           .returning({ handle: handleAliases.handleLower });
-        if (!reclaimed[0] && (await isTaken(tx, wanted, now)))
+        if (
+          !reclaimed[0] &&
+          (isReservedHandle(wanted) || (await isTaken(tx, wanted, now)))
+        )
           throw new OperationError('HANDLE_TAKEN');
         await tx
           .insert(handleAliases)

@@ -319,7 +319,7 @@ export const SCREENS: ReviewScreen[] = [
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
       await page.goto('/dashboard');
-      await page.getByRole('heading', { name: 'Ready to withdraw' }).waitFor();
+      await page.getByRole('heading', { name: 'Your balance' }).waitFor();
     },
   },
   {

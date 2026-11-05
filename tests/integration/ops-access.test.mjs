@@ -205,3 +205,73 @@ test('totpClock never repeats a step', async () => {
   const next = totpClock('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ');
   assert.notEqual(await next(), await next());
 });
+
+// Usernames (username reservation spec, section 4): every route needs usernames.manage and a
+// fresh code, whatever the screens show.
+const usernameRoutes = [
+  ['GET', '/v1/ops/usernames'],
+  ['GET', '/v1/ops/usernames/check/mtn_access'],
+  ['POST', '/v1/ops/usernames', { name: 'mtn_access', reason: 'Brand name' }],
+  [
+    'POST',
+    '/v1/ops/usernames/mtn_access/release',
+    { reason: 'No longer needed' },
+  ],
+];
+
+async function withRole(phone, roleId, permissions) {
+  const session = await opsSignIn(stack.api, database.db, phone);
+  await database.pool.query(
+    `INSERT INTO roles (id, name) VALUES ($1, $1) ON CONFLICT DO NOTHING`,
+    [roleId],
+  );
+  for (const permission of permissions)
+    await database.pool.query(
+      `INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [roleId, permission],
+    );
+  await database.pool.query(
+    `UPDATE staff SET role_id = $2 WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $1)`,
+    [phone, roleId],
+  );
+  return session.cookie;
+}
+
+test('a custom role without usernames.manage gets 403 on every usernames route; with it, success', async () => {
+  const without = await withRole('+2348036660020', 'pages_only', [
+    'pages.suspend',
+    'search.view',
+  ]);
+  for (const [method, path, body] of usernameRoutes) {
+    const response = await call(method, path, without, body);
+    assert.equal(response.status, 403, `${method} ${path}`);
+    assert.equal(await errorCode(response), 'FORBIDDEN', `${method} ${path}`);
+  }
+  const holder = await withRole('+2348036660021', 'usernames_only', [
+    'usernames.manage',
+  ]);
+  const expected = [200, 200, 201, 200];
+  for (const [i, [method, path, body]] of usernameRoutes.entries()) {
+    const response = await call(method, path, holder, body);
+    assert.equal(response.status, expected[i], `${method} ${path}`);
+  }
+});
+
+test('every usernames route asks for a fresh code', async () => {
+  const phone = '+2348036660022';
+  const owner = await opsSignIn(stack.api, database.db, phone);
+  await database.pool.query(
+    `UPDATE ops_sessions SET last_totp_at = now() - interval '6 minutes'
+      WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $1)`,
+    [phone],
+  );
+  for (const [method, path, body] of usernameRoutes) {
+    const response = await call(method, path, owner.cookie, body);
+    assert.equal(response.status, 403, `${method} ${path}`);
+    assert.equal(
+      await errorCode(response),
+      'FRESH_CODE_REQUIRED',
+      `${method} ${path}`,
+    );
+  }
+});

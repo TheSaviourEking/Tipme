@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useId, useState, type FormEvent } from 'react';
 import type { OpsSearchResult } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
-import { naira } from '@/lib/money';
+import { nairaCode as naira } from '@/lib/money';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 

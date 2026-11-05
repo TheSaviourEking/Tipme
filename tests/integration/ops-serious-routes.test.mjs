@@ -517,6 +517,33 @@ test('harmless changes apply at once: a role edit, a move to a harmless role', a
   assert.equal(await roleOf(userId), roleId);
 });
 
+// Reserving and releasing a username are instant for any holder of usernames.manage (owner, 3 Nov
+// 2026); only taking a name from a page waits for a second person (PR 2).
+test('reserving and releasing a username apply at once, with a second person available', async () => {
+  const reserve = await call(
+    stack.api,
+    'POST',
+    '/v1/ops/usernames',
+    first.cookie,
+    { name: 'instant_name', reason: REASON },
+  );
+  assert.equal(reserve.status, 201, await reserve.clone().text());
+  assert.equal((await reserve.json()).data.name, 'instant_name');
+  const release = await call(
+    stack.api,
+    'POST',
+    '/v1/ops/usernames/instant_name/release',
+    first.cookie,
+    { reason: REASON },
+  );
+  assert.equal(release.status, 200);
+  assert.equal(
+    (await q(`SELECT 1 FROM approval_requests WHERE action LIKE 'username%'`))
+      .length,
+    0,
+  );
+});
+
 test('I2: stopping needs no fresh code; switching back on does, and refuses until given', async () => {
   await q(`UPDATE ops_sessions SET last_totp_at = ${stale}`);
   const { id } = await profile('ada');
