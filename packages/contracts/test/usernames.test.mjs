@@ -18,7 +18,7 @@ test('TAKE_BACK_WHY has a sentence for every category, with no em dash', () => {
   for (const category of TAKE_BACK_CATEGORIES) {
     const why = TAKE_BACK_WHY[category];
     assert.match(why, /^[A-Z].*\.$/, category);
-    assert.equal(/[–—]/.test(why), false, category);
+    assert.equal(/[\u2013\u2014]/.test(why), false, category);
     assert.ok(TAKE_BACK_CATEGORY_WORDS[category], category);
   }
   assert.equal(

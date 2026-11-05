@@ -144,3 +144,212 @@ test('a takeover release tells owners whether withdrawals really resumed', () =>
   assert.match(held.text, /still holds/);
   assert.doesNotMatch(held.text, /can withdraw again/);
 });
+
+const TAKE_BACK_TYPES = [
+  'username_take_back_notice',
+  'username_take_back_reminder',
+  'username_take_back_done',
+  'username_take_back_cancelled',
+];
+const WHY = 'The username infringes a trademark.';
+const doneData = (variant, extra = {}) => ({
+  variant,
+  old: 'kemi',
+  new:
+    variant === 'user_chose' ||
+    variant === 'assigned' ||
+    variant === 'without_notice' ||
+    variant === 'unreached'
+      ? 'kemi_new'
+      : null,
+  current: 'kemi_now',
+  why: WHY,
+  noticeDate: variant === 'assigned' ? '3 November 2026' : null,
+  freeChangeDate:
+    variant === 'assigned' ||
+    variant === 'without_notice' ||
+    variant === 'unreached'
+      ? '10 December 2026'
+      : null,
+  ...extra,
+});
+
+test('each take-back type renders its sample and every variant', () => {
+  for (const id of TAKE_BACK_TYPES) {
+    const out = renderMail(id, MAIL_TYPES[id].sample, ctx);
+    assert.ok(out.subject && out.text, id);
+  }
+  const current = renderMail(
+    'username_take_back_notice',
+    {
+      kind: 'current',
+      old: 'kemi',
+      current: 'kemi',
+      why: WHY,
+      dueDate: '10 November 2026',
+    },
+    ctx,
+  );
+  assert.equal(current.subject, 'We need your TipMe username back');
+  for (const words of [
+    `TipMe needs the username @kemi back. ${WHY}`,
+    'Please choose a new username by the end of 10 November 2026. You can do it in Settings, and it won’t use up any of your username changes.',
+    'Your page, your tips and your balance stay yours under the new username. Links and QR codes that use @kemi will stop working, so update them once you have chosen.',
+    'If you haven’t chosen by then, we will give your page a new username and email it to you.',
+    'Reply to this email if you have a question.',
+    'Choose a new username: https://usetipme.xyz/dashboard/settings?ml=choose_username#handle',
+  ])
+    assert.ok(current.text.includes(words), words);
+  const old = renderMail(
+    'username_take_back_notice',
+    {
+      kind: 'old',
+      old: 'kemi_old',
+      current: 'kemi',
+      why: WHY,
+      dueDate: '10 November 2026',
+    },
+    ctx,
+  );
+  assert.equal(old.subject, 'A link to your TipMe page will stop working');
+  assert.ok(
+    old.text.includes(
+      `Your page keeps its username @kemi. Links and QR codes that still use your old username @kemi_old will stop working after 10 November 2026. ${WHY} Share your current link and print a new QR code if you need one.`,
+    ),
+  );
+  const reminder = renderMail(
+    'username_take_back_reminder',
+    { old: 'kemi', dueDate: '10 November 2026' },
+    ctx,
+  );
+  assert.equal(reminder.subject, '2 days left to choose a new TipMe username');
+  assert.ok(
+    reminder.text.includes(
+      'This is a reminder that TipMe needs the username @kemi back. Please choose a new username in Settings by the end of 10 November 2026. If you don’t, we will give your page one and email it to you. Your page, tips and balance stay yours.',
+    ),
+  );
+  const done = (variant) =>
+    renderMail('username_take_back_done', doneData(variant), ctx);
+  assert.equal(done('assigned').subject, 'Your TipMe page has a new username');
+  assert.ok(
+    done('assigned').text.includes(
+      'As we said on 3 November 2026, TipMe has taken back @kemi. Your page is now at https://usetipme.xyz/@kemi_new. Your tips and balance haven’t changed. Links and QR codes with @kemi no longer work, so share your new link and print a new QR code. You can change your new username once, for free, in Settings until 10 December 2026.',
+    ),
+  );
+  assert.equal(done('user_chose').subject, 'Your new TipMe username is ready');
+  assert.ok(
+    done('user_chose').text.includes(
+      'Your page is now at https://usetipme.xyz/@kemi_new. The username @kemi is no longer yours, and links with it no longer work.',
+    ),
+  );
+  assert.equal(
+    done('old').subject,
+    'An old link to your TipMe page has stopped working',
+  );
+  assert.ok(
+    done('old').text.includes(
+      'Links and QR codes with @kemi no longer lead to your page. Your page is still at https://usetipme.xyz/@kemi_now.',
+    ),
+  );
+  assert.equal(
+    done('without_notice').subject,
+    'We changed your TipMe username',
+  );
+  assert.ok(
+    done('without_notice').text.includes(
+      `We have changed your page’s username from @kemi to @kemi_new, without notice, as our terms allow in this case. ${WHY} Your page, your tips and your balance are unchanged. Links and QR codes with @kemi no longer work. You can change your new username once, for free, in Settings until 10 December 2026. Reply to this email if you think this is a mistake.`,
+    ),
+  );
+  assert.equal(done('unreached').subject, 'Your TipMe page has a new username');
+  assert.ok(
+    done('unreached').text.includes(
+      `We couldn’t reach you about the username @kemi, so, as our terms say, TipMe has taken it back. ${WHY} Your page is now at https://usetipme.xyz/@kemi_new. Your tips and balance haven’t changed. Links and QR codes with @kemi no longer work, so share your new link and print a new QR code. You can change your new username once, for free, in Settings until 10 December 2026.`,
+    ),
+  );
+  const cancelled = renderMail(
+    'username_take_back_cancelled',
+    { old: 'kemi' },
+    ctx,
+  );
+  assert.equal(cancelled.subject, 'You can keep your TipMe username');
+  assert.ok(
+    cancelled.text.includes(
+      'We no longer need the username @kemi. It stays yours, and your links and QR codes keep working. You don’t need to do anything.',
+    ),
+  );
+  // A variant missing what it says is refused rather than rendered with a gap.
+  assert.throws(() =>
+    renderMail(
+      'username_take_back_done',
+      doneData('assigned', { new: null }),
+      ctx,
+    ),
+  );
+});
+
+test('no take-back subject or body has an em dash, and subjects are sentence case', () => {
+  const samples = [
+    ...TAKE_BACK_TYPES.map((id) => [id, MAIL_TYPES[id].sample]),
+    ...['assigned', 'user_chose', 'old', 'without_notice', 'unreached'].map(
+      (v) => ['username_take_back_done', doneData(v)],
+    ),
+  ];
+  for (const [id, data] of samples) {
+    const out = renderMail(id, data, ctx);
+    // The shared layout's plain-text footer rule is a lone dash line; the copy itself has none.
+    const copy = out.text
+      .split('\n')
+      .filter((line) => line.trim() !== '\u2014')
+      .join('\n');
+    assert.equal(/[\u2013\u2014]/.test(out.subject + copy), false, id);
+    const rest = out.subject.slice(1).replace(/TipMe/g, '');
+    assert.equal(
+      rest,
+      rest.toLowerCase().replace(/tipme/g, ''),
+      `${id}: ${out.subject}`,
+    );
+    assert.ok(
+      out.text.includes(
+        'You get this email when TipMe needs a username back. It can’t be turned off.',
+      ),
+      id,
+    );
+  }
+});
+
+test('the notice carries the fixed why only', () => {
+  const schema = MAIL_TYPES.username_take_back_notice.schema;
+  const data = {
+    kind: 'current',
+    old: 'kemi',
+    current: 'kemi',
+    why: WHY,
+    dueDate: '10 November 2026',
+  };
+  assert.ok(schema.safeParse(data).success);
+  // No field for staff words, and the why is one of the fixed sentences.
+  assert.equal(
+    schema.safeParse({ ...data, message: 'Hello from staff' }).success,
+    false,
+  );
+  assert.equal(
+    schema.safeParse({ ...data, why: 'Because a staff member said so.' })
+      .success,
+    false,
+  );
+  assert.equal(
+    MAIL_TYPES.username_take_back_done.schema.safeParse({
+      ...doneData('assigned'),
+      why: 'Staff text.',
+    }).success,
+    false,
+  );
+});
+
+test('take-back emails cannot be turned off', () => {
+  for (const id of TAKE_BACK_TYPES) {
+    assert.equal(MAIL_TYPES[id].preference, null, id);
+    assert.equal(MAIL_TYPES[id].category, 'account', id);
+    assert.equal(MAIL_TYPES[id].sender, 'notifications', id);
+  }
+});

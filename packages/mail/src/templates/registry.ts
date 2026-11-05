@@ -45,6 +45,12 @@ import {
   staffInvitationDeclined,
 } from './types/staff-invitation.js';
 import { tipReceived } from './types/tip-received.js';
+import {
+  usernameTakeBackCancelled,
+  usernameTakeBackDone,
+  usernameTakeBackNotice,
+  usernameTakeBackReminder,
+} from './types/username-take-back.js';
 import { weeklyReport } from './types/weekly-report.js';
 
 // Heterogeneous registry: each entry checks its own data with its schema before rendering.
@@ -89,6 +95,10 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     withdrawalFailed,
     tipReversed,
     milestone,
+    usernameTakeBackNotice,
+    usernameTakeBackReminder,
+    usernameTakeBackDone,
+    usernameTakeBackCancelled,
   ].map((type) => [type.id, type]),
 );
 

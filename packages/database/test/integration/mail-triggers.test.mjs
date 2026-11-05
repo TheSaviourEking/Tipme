@@ -323,3 +323,33 @@ test('fix: restoring a page that was never paused sends nothing', async (t) => {
     'a repeat changes nothing',
   );
 });
+
+test('mailOwner returns the queued id, and null for an account without a verified address', async (t) => {
+  const { mailOwner } = await import('../../dist/operations/account-mail.js');
+  const { db, rows, userId } = await fresh(t);
+  const input = {
+    profileId: ADA,
+    type: 'username_take_back_cancelled',
+    data: { old: 'ada' },
+    dedupeKey: `test.${randomUUID()}`,
+  };
+  const queued = await mailOwner(db, sealing, input);
+  assert.match(queued.id, /^[0-9a-f-]{36}$/);
+  const [row] = await rows(
+    'SELECT id FROM mail_messages WHERE dedupe_key = $1',
+    [input.dedupeKey],
+  );
+  assert.equal(row.id, queued.id);
+  // The same dedupe key again answers the same message.
+  assert.equal((await mailOwner(db, sealing, input)).id, queued.id);
+  await rows('UPDATE users SET email_verified_at = NULL WHERE id = $1', [
+    userId,
+  ]);
+  assert.equal(
+    await mailOwner(db, sealing, {
+      ...input,
+      dedupeKey: `test.${randomUUID()}`,
+    }),
+    null,
+  );
+});
