@@ -88,6 +88,9 @@ test('a brief 503 retries quietly and a lasting one says so', async ({
     }),
   };
   let asked = 0;
+  // No live stream here: its connect resyncs every panel once, which would be a third read and
+  // isn't what this test counts (tests/e2e/live-updates.spec.ts covers the stream).
+  await page.route('**/v1/me/events', (route) => route.abort());
   await page.route('**/v1/me/dashboard', (route) =>
     ++asked === 1 ? route.fulfill(busy) : route.continue(),
   );
