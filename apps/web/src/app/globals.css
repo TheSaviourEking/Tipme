@@ -3414,6 +3414,73 @@ body:has(.profile-page) .brand__mark {
   font-weight: 600;
 }
 
+/* The recipient's thank-you line ("Make it yours"): a quoted slip under the heading. Paper on
+   Free; Violet (TipMe purple) and Night on Pro. Every style's text is at least 4.5:1. */
+.thanks-slip {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  text-align: left;
+  box-shadow: 0 14px 30px -18px rgb(20 18 16 / 55%);
+}
+
+.thanks-slip::before {
+  content: '\201C';
+  display: block;
+  height: 1.5rem;
+  color: var(--brand-primary);
+  font: 400 3rem / 1 var(--font-editorial);
+}
+
+.thanks-slip blockquote {
+  margin: 0;
+}
+
+.thanks-slip blockquote p {
+  margin: 0;
+  font: 400 1.25rem / 1.35 var(--font-editorial);
+  overflow-wrap: anywhere;
+}
+
+.thanks-slip figcaption {
+  margin-top: var(--space-3);
+  font-style: italic;
+  font-weight: 600;
+}
+
+.thanks-slip figcaption::before {
+  content: '\2014\00a0';
+}
+
+.thanks-slip[data-style='violet'] {
+  /* On the receipt's purple slab, a light edge keeps the card visible. */
+  border-color: rgb(255 255 255 / 60%);
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.thanks-slip[data-style='violet']::before,
+.thanks-slip[data-style='night']::before {
+  color: #fff;
+}
+
+.thanks-slip[data-style='night'] {
+  background: #141210;
+  color: #fff;
+}
+
+@media (forced-colors: active) {
+  .thanks-slip {
+    border: 1px solid CanvasText;
+  }
+}
+
 /* Forced colours drop every background: the slab, mark and receipt keep an edge. */
 @media (forced-colors: active) {
   .tip-thanks.tm-surface {
