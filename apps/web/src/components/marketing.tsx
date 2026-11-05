@@ -87,11 +87,10 @@ const ZAINAB_AMOUNTS = [
   { key: '₦1M', full: '₦1,000,000' },
 ];
 
-// Zainab's card is the one on screen first; Next 16 deprecates Image `priority`, so it loads eagerly at high priority.
-const ABOVE_THE_FOLD = {
-  loading: 'eager' as const,
-  fetchPriority: 'high' as const,
-};
+// Zainab's card is the one on screen first, so its images load eagerly. No fetchPriority: the lab
+// harness shows no gain (the LCP element is the headline) and a high-priority image can compete with
+// the CSS and font the headline needs on a slow link.
+const ABOVE_THE_FOLD = { loading: 'eager' as const };
 
 /**
  * Three example pages, as a picture of what TipMe makes. The stack is hidden from assistive
