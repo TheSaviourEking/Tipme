@@ -377,6 +377,8 @@ test('hidden pauses polling at once and closes the stream after 5 minutes; visib
   h.setVisible(true);
   assert.equal(h.sources.length, 2);
   await h.ready();
+  // A reconnect's ready re-reads after a random 0–5 s (random() is 0 here: at once).
+  await h.timers.advance(0);
   assert.equal(h.resyncs.length, 1);
 });
 
@@ -427,6 +429,9 @@ test('online reconnects', async () => {
   assert.equal(h.sources.length, 2);
   assert.equal(h.sources[0].closed, true);
   await h.ready();
+  // Not at once: a reconnect's re-read waits a random 0–5 s.
+  assert.equal(h.resyncs.length, 1);
+  await h.timers.advance(LIVE_TIMING.resyncJitterMs);
   assert.equal(h.resyncs.length, 2);
 });
 
@@ -474,4 +479,93 @@ test('stop closes the EventSource and clears every timer', async () => {
   assert.equal(h.es.closed, true);
   assert.equal(h.timers.count, 0);
   assert.equal(h.client.status, 'idle');
+});
+
+test('a stream that was ready and closes reconnects after 1–10 s, as the draining copy asks', async () => {
+  for (const [r, wait] of [
+    [0, 1000],
+    [0.5, 5500],
+    [0.999, 9991],
+  ]) {
+    const h = harness({ random: r });
+    h.client.start();
+    await h.ready();
+    // A drain (retry line, then close) or the 30-minute close: the server ended a healthy stream.
+    h.es.emitError(false);
+    await flush();
+    assert.deepEqual(h.probes, [], 'a healthy close is not a failure to probe');
+    await h.timers.advance(wait - 1);
+    assert.equal(h.sources.length, 1, `random ${r}: not before ${wait} ms`);
+    await h.timers.advance(1);
+    assert.equal(h.sources.length, 2, `random ${r}: at ${wait} ms`);
+    h.client.stop();
+  }
+});
+
+test('the first ready refetches at once; a ready after a reconnect refetches after 0–5 s', async () => {
+  const h = harness({ random: 0.6 });
+  const kinds = [];
+  h.client.onResync((o) => kinds.push(o?.immediate === true));
+  h.client.start();
+  await h.ready();
+  assert.equal(h.resyncs.length, 1);
+  assert.deepEqual(kinds, [true]);
+  h.es.emitError(false);
+  await h.timers.advance(6400);
+  assert.equal(h.sources.length, 2);
+  await h.ready();
+  assert.equal(h.resyncs.length, 1, 'not at once');
+  await h.timers.advance(2999);
+  assert.equal(h.resyncs.length, 1);
+  await h.timers.advance(1);
+  assert.equal(h.resyncs.length, 2, 'after random 0.6 × 5 s');
+  assert.deepEqual(kinds, [true, false]);
+});
+
+test('a deploy’s herd is spread: reconnects over 1–10 s and refetches over a further 0–5 s', async () => {
+  // A hundred tabs on a draining copy, each with its own random draws.
+  let seed = 11;
+  const draw = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  const reconnectAt = [];
+  const refetchAt = [];
+  for (let i = 0; i < 100; i += 1) {
+    const h = harness();
+    h.setRandom(draw());
+    h.client.start();
+    await h.ready();
+    const drained = h.timers.now();
+    h.es.emitError(false);
+    await flush();
+    while (h.sources.length === 1) await h.timers.advance(50);
+    reconnectAt.push(h.timers.now() - drained);
+    h.setRandom(draw());
+    const before = h.resyncs.length;
+    await h.ready();
+    const readyAt = h.timers.now();
+    while (h.resyncs.length === before) await h.timers.advance(50);
+    refetchAt.push(h.timers.now() - readyAt);
+    h.client.stop();
+  }
+  const spread = (xs) => Math.max(...xs) - Math.min(...xs);
+  assert.ok(
+    Math.min(...reconnectAt) >= 1000 && Math.max(...reconnectAt) <= 10_050,
+    `${Math.min(...reconnectAt)}..${Math.max(...reconnectAt)}`,
+  );
+  assert.ok(
+    spread(reconnectAt) > 7000,
+    `reconnects spread over ${spread(reconnectAt)} ms`,
+  );
+  // No more than a fifth of the tabs reconnect in any one second.
+  for (let s = 1000; s < 10_000; s += 1000)
+    assert.ok(
+      reconnectAt.filter((t) => t >= s && t < s + 1000).length <= 20,
+      `second ${s}`,
+    );
+  assert.ok(
+    Math.max(...refetchAt) <= 5050 && spread(refetchAt) > 3500,
+    `refetches spread over ${spread(refetchAt)} ms`,
+  );
 });

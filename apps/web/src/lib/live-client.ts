@@ -47,8 +47,11 @@ export interface LiveClient {
   start(): void;
   stop(): void;
   on(type: LiveEventType, fn: () => void): () => void;
-  /** ready, resync (after 0–5 s), poll ticks, safety, visible, online. */
-  onResync(fn: () => void): () => void;
+  /**
+   * ready, resync (after 0–5 s), poll ticks, safety, visible, online. `immediate` is set only for
+   * the page's first ready: that read is the panels' first, and nothing else is in flight.
+   */
+  onResync(fn: (o: { immediate: boolean }) => void): () => void;
   onStatus(fn: (status: LiveStatus) => void): () => void;
   onSignedOut(fn: () => void): () => void;
   visibilityChanged(): void;
@@ -67,6 +70,9 @@ export const LIVE_TIMING = {
   safetyMs: 300_000,
   backoffCapMs: 60_000,
   resyncJitterMs: 5_000,
+  /** After the server ends a healthy stream (a drain, the 30-minute close): its retry range. */
+  closedRetryMinMs: 1_000,
+  closedRetryMaxMs: 10_000,
 } as const;
 
 const CLOSED = 2;
@@ -96,7 +102,7 @@ type TimerName =
 
 export function createLiveClient(deps: LiveClientDeps): LiveClient {
   const signalListeners = new Map<string, Set<() => void>>();
-  const resyncListeners = new Set<() => void>();
+  const resyncListeners = new Set<(o: { immediate: boolean }) => void>();
   const statusListeners = new Set<(status: LiveStatus) => void>();
   const signedOutListeners = new Set<() => void>();
   const timers = new Map<TimerName, unknown>();
@@ -111,6 +117,8 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
   /** The stream was closed because the tab was hidden; reopen when it is visible. */
   let sleeping = false;
   let ready = false;
+  /** The page has had a ready: every later one is a reconnect, part of a herd. */
+  let everReady = false;
 
   const later = (name: TimerName, fn: () => void, ms: number) => {
     clear(name);
@@ -142,8 +150,8 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
   const statusNow = () =>
     setStatus(polling ? 'polling' : ready ? 'connected' : 'connecting');
 
-  const resync = () => {
-    for (const fn of [...resyncListeners]) fn();
+  const resync = (immediate = false) => {
+    for (const fn of [...resyncListeners]) fn({ immediate });
   };
 
   const closeSource = () => {
@@ -259,6 +267,24 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
     return 'retry';
   };
 
+  /**
+   * The server ended a stream that was ready: a draining copy (it sent `retry:` 1–10 s) or the
+   * 30-minute close. EventSource hides the retry value, so use the same range: every tab of a
+   * deploy then comes back spread over 9 seconds instead of within one.
+   */
+  const closedByServer = () => {
+    closeSource();
+    failures = 0;
+    statusNow();
+    later(
+      'reconnect',
+      connect,
+      LIVE_TIMING.closedRetryMinMs +
+        deps.random() *
+          (LIVE_TIMING.closedRetryMaxMs - LIVE_TIMING.closedRetryMinMs),
+    );
+  };
+
   const failed = async (refusedBeforeOpen: boolean) => {
     closeSource();
     failures += 1;
@@ -292,7 +318,16 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
         stopPolling();
         statusNow();
         armSafety();
-        resync();
+        if (!everReady) {
+          everReady = true;
+          resync(true);
+        } else
+          // A reconnect: the whole herd gets ready at about the same moment. Spread the re-reads.
+          later(
+            'resync',
+            () => resync(),
+            deps.random() * LIVE_TIMING.resyncJitterMs,
+          );
         return;
       case 'resync':
         // Every tab heard the same "back" at once: spread the refetches.
@@ -354,7 +389,8 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
       if (source !== s) return;
       // Closed before it ever opened: the server refused (204, 401, 429, 503). The client
       // always closes it itself, so the browser's own retry never runs.
-      void failed(!opened && s.readyState === CLOSED);
+      if (ready) closedByServer();
+      else void failed(!opened && s.readyState === CLOSED);
     };
   }
 
