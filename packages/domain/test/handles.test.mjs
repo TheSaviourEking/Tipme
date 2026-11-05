@@ -53,6 +53,8 @@ test('isReservedHandle is unchanged', () => {
   for (const word of ['admin', 'pro', 'how-it-works', 'how_it_works', 'ADMIN'])
     assert.equal(isReservedHandle(word), true, word);
   assert.equal(isReservedHandle('kemi'), false);
+});
+
 // The handles TipMe's own pages show as examples (Home, Pro, the postcards) are reserved, so a
 // visitor who types a printed address never lands on a stranger's live page (owner, 5 Nov 2026).
 // The seeded demo pages (ada, tobi) are inserted directly and keep working at /@handle.
