@@ -1,3 +1,9 @@
+# Current task — Make it yours, PR C: the note consent tick box (5 November 2026)
+
+- Branch/worktree: `feat/make-it-yours` / `.worktrees/make-it-yours`, test lane 2, not pushed. The C commits come first, so they can be split onto `feat/make-it-yours-consent`. Migration 0076 (`tip_messages.may_show`, default false).
+- Built: `noteMayShow` (only `true`, or absent) on `POST /v1/tip-intents`; stored with the note, ignored without one; the fingerprint is unchanged without consent; a paid receipt says `noteMayShow: true` and never the note. The tip form shows "{name} may show this note on their page" only while there is a note, off by default.
+- Next: PR A (the "Make it yours" chapter and the thank-you line), then B and D. Plan: `docs/superpowers/plans/2026-11-05-make-it-yours.md`.
+
 # Current task — dashboard data (5 November 2026)
 
 - Branch/worktree: `feat/dashboard-data` / `.worktrees/dashboard-data`, from `origin/dev` with `feat/e2e-lanes` merged. Not pushed. Migration 0071 (one index).

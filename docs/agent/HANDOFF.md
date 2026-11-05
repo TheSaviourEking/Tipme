@@ -1,3 +1,9 @@
+# Current handoff — Make it yours, PR C: the note consent tick box (5 November 2026)
+
+- Branch `feat/make-it-yours`, test lane 2, not pushed. Migration 0076 leaves a gap after dev's 0071 (0072-0075 are held by other branches), so `migration-journal.test` fails on the gap until merge order settles it; it was not relaxed.
+- Consent never makes a note public by itself: nothing reads `may_show` yet except the receipt flag. Pinning and the supporter's withdrawal are PR D.
+- Verified: contracts tests; `intents`, `tip-status` and `checkout-api` integration files on `tipme_test_lane2`; `note-consent`, `checkout` and `tip-card` e2e on lane 2 (66 passed).
+
 # Current handoff — dashboard data (5 November 2026)
 
 - Branch `feat/dashboard-data`, test lane 1, not pushed. Migration 0071 is `CREATE INDEX payouts_profile_created` only.
