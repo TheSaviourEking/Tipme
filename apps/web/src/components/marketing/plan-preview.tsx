@@ -131,8 +131,8 @@ export function PlanPreview() {
               <strong>Animated cover</strong>
               <br />
               {pro
-                ? 'More designs, and you choose how they play.'
-                : '3 designs that play once.'}
+                ? 'Every design in every colour. Slow loop or Plays once.'
+                : '3 animated covers that play once.'}
             </div>
             <div className="pro-row__controls">
               <button
