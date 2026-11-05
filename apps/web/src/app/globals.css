@@ -3456,12 +3456,19 @@ body:has(.profile-page) .brand__mark {
 }
 
 .thanks-slip figcaption::before {
-  content: '\2014\00a0';
+  /* A short drawn rule before the name: never a dash in the copy. */
+  content: '';
+  display: inline-block;
+  width: 1.25rem;
+  margin-right: 0.5rem;
+  border-top: 1px solid currentColor;
+  vertical-align: middle;
 }
 
 .thanks-slip[data-style='violet'] {
   /* On the receipt's purple slab, a light edge keeps the card visible. */
-  border-color: rgb(255 255 255 / 60%);
+  /* 70% white is 3.57:1 against the purple slab and the Settings preview. */
+  border-color: rgb(255 255 255 / 70%);
   background: var(--brand-primary);
   color: #fff;
 }

@@ -70,6 +70,13 @@ test('a Pro night card is signed with the first name, and is plain paper after t
   const slip = receipt.getByRole('figure');
   await expect(slip).toHaveAttribute('data-style', 'night');
   await expect(slip.locator('figcaption')).toHaveText('Ada');
+  // No dash in the signature, drawn or written: only a short rule drawn with a border.
+  const signature = await slip.locator('figcaption').evaluate((caption) => ({
+    text: (caption as HTMLElement).innerText,
+    before: getComputedStyle(caption, '::before').content,
+  }));
+  expect(signature.text).not.toMatch(/[\u2013\u2014]/);
+  expect(signature.before).not.toMatch(/[\u2013\u2014-]|\\20(13|14)/);
   await expectAccessible(receipt);
 
   await setPage(handle, `plan = 'free'`);

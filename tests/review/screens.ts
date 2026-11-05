@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { sql } from '../e2e/ops-helpers';
 import { API_ORIGIN } from '../e2e/stack';
 
 /** What a screen needs before it can be shown: a signed-in recipient, with or without tips. */
@@ -46,6 +47,50 @@ function afterTip(held: string | null) {
     await page.getByRole('button', { name: /^Pay/ }).click();
     await page.waitForURL(/\/tip\/[0-9a-f-]{36}/);
   };
+}
+
+/**
+ * The paid receipt with a recipient's thank-you slip in one card style ("Make it yours"). The demo
+ * page has no line, so the status answer gets one for this page only, as a Pro page would send it.
+ */
+function afterTipWithThanks(style: 'paper' | 'violet' | 'night') {
+  return async (page: Page) => {
+    await page.route('**/v1/tips/*/status', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          data: {
+            ...body.data,
+            thanks: {
+              line: 'Thank you for backing my channel. Every tip goes into better gear for the next video.',
+              style,
+              ...(style === 'paper' ? {} : { signature: 'Ada' }),
+            },
+          },
+        },
+      });
+    });
+    await afterTip(null)(page);
+    await page.locator('.thanks-slip').waitFor();
+  };
+}
+
+/** Settings opened at "Make it yours" for a new page, named Ada Okafor, on the given plan. */
+async function makeItYours(
+  page: Page,
+  ctx: ReviewContext,
+  plan: 'free' | 'pro',
+) {
+  const { handle } = await ctx.recipient();
+  await sql(
+    `UPDATE profiles SET display_name = 'Ada Okafor', plan = $2 WHERE handle_lower = $1`,
+    [handle, plan],
+  );
+  await page.goto('/dashboard/settings#yours');
+  await page.reload();
+  await page.getByLabel('Your thank-you line').waitFor();
 }
 
 /** Asks for a sign-in code for a new address and waits for the code step. */
@@ -128,6 +173,12 @@ export const SCREENS: ReviewScreen[] = [
     board: 'ScreenThanks',
     open: afterTip(null),
   },
+  ...(['paper', 'violet', 'night'] as const).map((style): ReviewScreen => ({
+    group: 'Tipping',
+    name: `Thank you, with a ${style} thank-you card`,
+    board: 'ProCustomise',
+    open: afterTipWithThanks(style),
+  })),
   {
     group: 'Tipping',
     name: "Didn't go through",
@@ -406,6 +457,7 @@ export const SCREENS: ReviewScreen[] = [
   ...(
     [
       ['My page', 'page'],
+      ['Make it yours', 'yours'],
       ['Getting paid', 'paid'],
       ['Notifications', 'notifications'],
       ['Sign-in and security', 'security'],
@@ -432,6 +484,42 @@ export const SCREENS: ReviewScreen[] = [
         .waitFor();
     },
   })),
+  // Make it yours (ProCustomise): the thank-you card on Pro with a signed Night card, and a line
+  // refused for its link.
+  {
+    group: 'Dashboard',
+    name: 'Make it yours, Pro: Night, signed',
+    board: 'ProCustomise',
+    async open(page, ctx) {
+      await makeItYours(page, ctx, 'pro');
+      await page
+        .getByLabel('Your thank-you line')
+        .fill(
+          'Thank you for backing my channel. Every tip goes into better gear for the next video.',
+        );
+      await page
+        .getByRole('group', { name: 'Card style' })
+        .getByRole('radio', { name: 'Night' })
+        .check();
+      await page.getByRole('checkbox', { name: /^Sign it/ }).check();
+      await page.locator('#thanks').scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    group: 'Dashboard',
+    name: 'Make it yours, a line with a link',
+    board: 'ProCustomise',
+    async open(page, ctx) {
+      await makeItYours(page, ctx, 'free');
+      await page
+        .getByLabel('Your thank-you line')
+        .fill('Thanks! Find more at www.ada.ng');
+      await page.getByRole('button', { name: 'Save thank-you' }).click();
+      await page
+        .getByText('Keep it to 140 characters, with no links.')
+        .waitFor();
+    },
+  },
   {
     group: 'Small screens',
     name: 'Page not found',

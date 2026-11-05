@@ -12,7 +12,7 @@ import {
   type MyProfile,
   type ThanksStyle,
 } from '@tipme/contracts';
-import { Button, Card, TextareaField } from '@tipme/ui';
+import { Button, Card, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { ThanksSlip } from '@/components/thanks-slip';
 import { apiFetch } from '@/lib/session-client';
@@ -44,6 +44,8 @@ export function ThanksSettings({ title }: { title: string }) {
   const [style, setStyle] = useState<ThanksStyle>(stored?.style ?? 'paper');
   const [signed, setSigned] = useState(stored?.signed ?? false);
   const [error, setError] = useState('');
+  // A refusal about the card as a whole (the page left Pro), not about the line.
+  const [cardError, setCardError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -63,6 +65,7 @@ export function ThanksSettings({ title }: { title: string }) {
   const edited = () => {
     setSaved(false);
     setError('');
+    setCardError('');
   };
 
   const save = async (event: FormEvent) => {
@@ -75,6 +78,7 @@ export function ThanksSettings({ title }: { title: string }) {
       return;
     }
     setError('');
+    setCardError('');
     setBusy(true);
     const result = await apiFetch<MyProfile>('/v1/me/thanks', {
       method: 'PUT',
@@ -89,12 +93,18 @@ export function ThanksSettings({ title }: { title: string }) {
       setSaved(true);
       return;
     }
+    if (result.code === 'THANKS_PRO_REQUIRED') {
+      // The page left Pro while Settings was open: show it as it is now, so the next save sends
+      // the line alone and works. What was chosen stays stored for when the page is Pro again.
+      const fresh = await apiFetch<MyProfile>('/v1/me/profile');
+      if (fresh.ok) setProfile(fresh.data);
+      setCardError(PRO_ERROR);
+      return;
+    }
     setError(
-      result.code === 'THANKS_PRO_REQUIRED'
-        ? PRO_ERROR
-        : result.fields?.includes('line')
-          ? LINE_ERROR
-          : 'We couldn’t save. Please try again.',
+      result.fields?.includes('line')
+        ? LINE_ERROR
+        : 'We couldn’t save. Please try again.',
     );
     field.current?.focus();
   };
@@ -117,7 +127,7 @@ export function ThanksSettings({ title }: { title: string }) {
               edited();
             }}
             placeholder="Thank you for backing my channel."
-            hint={`${lengthOf(line)} of ${THANKS_LINE_LIMIT}. Supporters read it on their receipt right after paying. No links.`}
+            hint={`${lengthOf(cleaned)} of ${THANKS_LINE_LIMIT}. Supporters read it on their receipt right after paying. No links.`}
             error={error || undefined}
           />
           {pro ? (
@@ -172,6 +182,12 @@ export function ThanksSettings({ title }: { title: string }) {
               )}
             </>
           )}
+          {cardError && (
+            <Notice tone="error" title="Not saved">
+              {cardError} Your page is on the Free plan now, so save again to
+              keep your line.
+            </Notice>
+          )}
           <Button type="submit" disabled={busy} aria-busy={busy}>
             Save thank-you
           </Button>
@@ -179,8 +195,10 @@ export function ThanksSettings({ title }: { title: string }) {
             {saved ? 'Saved' : ''}
           </p>
         </form>
-        <aside className="miy-receipt" aria-label="The supporter’s receipt">
-          <p className="miy-receipt__label">The supporter’s receipt</p>
+        <aside className="miy-receipt" aria-labelledby={`${id}-receipt`}>
+          <p id={`${id}-receipt`} className="miy-receipt__label">
+            The supporter’s receipt
+          </p>
           <p className="miy-receipt__heading">
             {profile.displayName} got your thanks.
           </p>
@@ -236,13 +254,14 @@ type Part = {
  *   there (the card links to it) or moves here, so it never appears twice. The picker needs
  *   profiles.tip_sound_choice text NULL, and celebrations profiles.tip_celebration text NULL; a
  *   Pro-only choice reads as the Free default on Free.
- * - The animated cover joins AlreadyYours once feat/animated-covers is in.
+ * - The animated cover joins AlreadyYours once feat/animated-covers is in; then rename 'more'
+ *   to "Covers that move, QR codes that are yours" (the board's title).
  */
 export const MAKE_IT_YOURS_PARTS: readonly Part[] = [
   { id: 'thanks', title: 'Your thank-you', Card: ThanksSettings },
   {
     id: 'more',
-    title: 'Covers that move, QR codes that are yours',
+    title: 'Covers and QR codes that are yours',
     Card: AlreadyYours,
   },
 ];
