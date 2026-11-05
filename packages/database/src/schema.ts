@@ -814,7 +814,7 @@ export const handleAliases = pgTable(
 /**
  * Usernames staff have reserved, on top of the built-in list in @tipme/domain (which stays in code
  * because the router depends on it). `handle_lower` is the reservationKey. Released rows stay as
- * history; at most one row per name is active. Triggers (migration 0073) keep a page or an old
+ * history; at most one row per name is active. Triggers (migration 0072) keep a page or an old
  * username off an active reservation, and a reservation off a name a page holds.
  */
 export const handleReservations = pgTable(

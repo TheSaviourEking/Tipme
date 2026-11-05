@@ -28,7 +28,7 @@ import { checkedReason, withAuditChange } from './staff.js';
  * Staff reservations of usernames (username reservation spec, sections 3 to 5). Instant for anyone
  * holding `usernames.manage`, with a reason, audited. A reservation only blocks a name: the
  * built-in list stays in code and is never a row, and a name a page holds is never reserved here
- * (taking it from the page is PR 2's take-back). The database triggers of migration 0073 back every
+ * (taking it from the page is PR 2's take-back). The database triggers of migration 0072 back every
  * refusal, under the same per-handle lock this module takes.
  */
 

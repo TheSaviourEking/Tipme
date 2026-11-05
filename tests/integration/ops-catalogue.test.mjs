@@ -204,7 +204,7 @@ test('owner holds usernames.manage after migrating; release_check does not', asy
   const migration = await import('node:fs').then((fs) =>
     fs.readFileSync(
       new URL(
-        '../../packages/database/drizzle/0075_usernames_permission.sql',
+        '../../packages/database/drizzle/0073_usernames_permission.sql',
         import.meta.url,
       ),
       'utf8',
