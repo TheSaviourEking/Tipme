@@ -171,6 +171,15 @@ function fakeBachs(overrides = {}) {
   };
 }
 
+/** Every quote-cache invalidation a controller asks for, in order. */
+const invalidations = [];
+const partnerCache = {
+  async invalidate(scope) {
+    invalidations.push(scope);
+    return true;
+  },
+};
+
 function controllerFor(database, provider, logs = []) {
   const logger = {
     info: (entry) => logs.push(entry),
@@ -183,6 +192,7 @@ function controllerFor(database, provider, logs = []) {
     provider,
     logger,
     sealing,
+    partnerCache,
   );
 }
 
@@ -505,6 +515,17 @@ test('only the destination reference, bank name and last four digits are stored'
     `SELECT string_agg(payload::text, ' ') AS dump FROM outbox_events`,
   );
   assert.doesNotMatch(dump ?? '', new RegExp(NUMBER));
+});
+
+test("adding a bank clears that account's cached quote", async (t) => {
+  const database = await setUp(t);
+  const provider = fakeBachs();
+  const controller = controllerFor(database, provider);
+  invalidations.length = 0;
+  await addBank(database, controller);
+  assert.deepEqual(invalidations, [
+    { provider: provider.name, profileId: TOBI },
+  ]);
 });
 
 test('provider failures log no account data and say nothing of the provider', async (t) => {

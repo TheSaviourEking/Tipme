@@ -1,9 +1,16 @@
 # Current task — live updates PR 1 (5 November 2026)
 
-- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, with `origin/feat/e2e-lanes` and `origin/dev` merged. Pushed; PR to dev open after the review rounds (`c-review.md`, `c-rereview.md`). Plan: `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 1-12 (PR 1).
-- Done: the live contract, the API hub and `GET /v1/me/events` (flag `LIVE_UPDATES_ENABLED`, off by default), worker signals after the relay and the tip handler, the Caddyfile change (owner's deploy step: runbook `production.md` §10), the browser client and provider, dashboard home, tips, tip detail and moments refresh on signals, the bell folded in, the two Settings switches (migration 0072, regenerated with drizzle-kit after merging dev's 0071) and the background-tab sound.
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, with `origin/dev` at `527bce9` merged. Pushed; PR to dev open after the review rounds (`c-review.md`, `c-rereview.md`). Plan: `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 1-12 (PR 1).
+- Done: the live contract, the API hub and `GET /v1/me/events` (flag `LIVE_UPDATES_ENABLED`, off by default), worker signals after the relay and the tip handler, the Caddyfile change (owner's deploy step: runbook `production.md` §10), the browser client and provider, dashboard home, tips, tip detail and moments refresh on signals, the bell folded in, the two Settings switches (migration 0075, regenerated with drizzle-kit after merging dev) and the background-tab sound.
 - Report with rulings and evidence: `.superpowers/program/c-build-report.md`.
-- Next exact step: owner review of the PR, then the owner's deploy steps (Caddyfile, `LIVE_UPDATES_ENABLED`). Then PR 2 (Tasks 13-15); the shared partner-balance cache is its own PR (`fix/partner-quote-cache`).
+- Next exact step: owner review of the PR, then the owner's deploy steps (Caddyfile, `LIVE_UPDATES_ENABLED`). Then PR 2 (Tasks 13-15); the shared partner-balance cache landed in dev as PR #118.
+
+# Completed task — partner quote cache (5 November 2026)
+
+- Branch/worktree: `fix/partner-quote-cache` / `.worktrees/quote-cache`, from `origin/dev` d9de485, test lane 3. Merged into dev as PR #118. No migration.
+- Built: the withdrawal quote's partner read (capability, balance, fee) is cached in Redis for `PARTNER_QUOTE_CACHE_SECONDS` (default 30, 0 = off). Every key carries a stamp of TipMe's records. A withdrawal always asks fresh. Review fixes (I-1, M-1 to M-9) are done.
+- CI follow-up: job `e2e (4)` found one undersized social-link chip in the recovery test's accessibility audit. Its 44px minimum width is fixed in `globals.css`; the focused recovery E2E passes on lane 1.
+- Plan: `docs/superpowers/plans/2026-11-05-partner-quote-cache.md`.
 
 # Current task — social links (5 November 2026)
 
