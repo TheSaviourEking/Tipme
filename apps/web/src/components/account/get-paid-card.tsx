@@ -9,6 +9,7 @@ import type {
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
+import { BankPicker } from './bank-picker';
 
 const STATUS_WORDS: Record<PayoutDestinationView['status'], string> = {
   usable: 'Usable',
@@ -262,26 +263,16 @@ export function GetPaidCard() {
         <form onSubmit={save} className="settings-form" noValidate>
           {step === 'details' && (
             <>
-              <div className="tm-field">
-                <label htmlFor={`${id}-bank`}>Bank</label>
-                <select
-                  id={`${id}-bank`}
-                  className="tm-input"
-                  value={bankCode}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setBankCode(event.target.value);
-                    setResolved(null);
-                  }}
-                >
-                  <option value="">Choose your bank</option>
-                  {banks.map((bank) => (
-                    <option key={bank.code} value={bank.code}>
-                      {bank.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <BankPicker
+                id={id}
+                banks={banks}
+                value={bankCode}
+                disabled={busy}
+                onChange={(code) => {
+                  setBankCode(code);
+                  setResolved(null);
+                }}
+              />
               <InputField
                 id={`${id}-number`}
                 label="Account number"

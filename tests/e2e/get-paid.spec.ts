@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { chooseBank } from './bank-fixtures';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 
 const hintOf = (email: string) => {
@@ -41,7 +42,7 @@ test('adding a bank: pick a bank, enter a number, see the name, enter the code, 
     card.getByRole('heading', { name: 'Get paid' }),
   ).toBeInViewport();
 
-  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('0123456789');
   await card.getByRole('button', { name: 'Check account' }).click();
 
@@ -79,7 +80,7 @@ test('a number the bank does not know: the name is typed instead', async ({
   await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard/settings#get-paid');
   const card = page.locator('#get-paid');
-  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('1234560000');
   await card.getByRole('button', { name: 'Check account' }).click();
   const name = card.getByLabel('Name on the account');
@@ -94,7 +95,7 @@ test('the code step offers a new code and a way out', async ({
   const { email } = await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard/settings#get-paid');
   const card = page.locator('#get-paid');
-  await card.getByLabel('Bank').selectOption({ index: 1 });
+  await chooseBank(card, 'guaranty', 'Pretend Guaranty Bank');
   await card.getByLabel('Account number').fill('0123456789');
   await card.getByRole('button', { name: 'Check account' }).click();
   await card.getByRole('button', { name: 'Email me a code' }).click();
@@ -129,6 +130,8 @@ test('after an email change the card says when, and offers no form', async ({
     }),
   );
   await page.goto('/dashboard/settings#get-paid');
+  // Sign-up ends on this page, so the goto above only moved to the anchor: load the stub.
+  await page.reload();
   const card = page.locator('#get-paid');
   await expect(card.getByText(/until .*2030/)).toBeVisible();
   await expect(card.getByText(/keep going to/)).toBeVisible();
