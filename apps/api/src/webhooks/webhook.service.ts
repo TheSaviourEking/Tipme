@@ -343,6 +343,11 @@ export class WebhookService {
         },
         log: (entry) => this.logger?.warn(entry),
       });
+    // After the account's status (and its payout setup) committed: Settings and the notices re-read.
+    void this.publishLive({
+      to: { profile: known.profileId },
+      type: 'payments.changed',
+    });
     return 'account_refreshed';
   }
 
