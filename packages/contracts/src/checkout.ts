@@ -44,6 +44,11 @@ export const tipIntentRequestSchema = z
     payerDisplayLabel: z.string().max(60).optional(),
     purpose: z.enum(tipPurposes).optional(),
     celebrationMomentId: z.uuid().optional(),
+    /**
+     * The supporter agrees the recipient may show their note on their page. Only ever `true` or absent:
+     * consent is never a default, and a request without a message stores none.
+     */
+    noteMayShow: z.literal(true).optional(),
   })
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;
@@ -77,4 +82,9 @@ export interface TipStatusView {
    * uppercased. Null until the tip is paid. Never the whole reference.
    */
   reference: string | null;
+  /**
+   * Present (true) only when the tip is paid and its supporter agreed their note may be shown. The note
+   * itself is never sent here.
+   */
+  noteMayShow?: true;
 }
