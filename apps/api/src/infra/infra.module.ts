@@ -7,6 +7,10 @@ import {
 import { Redis } from 'ioredis';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from './database.js';
+import {
+  PARTNER_QUOTE_CACHE,
+  RedisPartnerQuoteCache,
+} from './partner-quote-cache.js';
 
 export const PG_POOL = Symbol('PG_POOL');
 export const REDIS = Symbol('REDIS');
@@ -47,9 +51,20 @@ class InfraLifecycle implements OnApplicationShutdown {
       inject: [API_CONFIG],
       useFactory: (config: ApiConfig) => createRedis(config.REDIS_URL),
     },
+    {
+      provide: PARTNER_QUOTE_CACHE,
+      inject: [API_CONFIG, REDIS],
+      useFactory: (config: ApiConfig, redis: Redis) =>
+        new RedisPartnerQuoteCache(redis, {
+          prefix: config.QUEUE_PREFIX,
+          seconds: config.PARTNER_QUOTE_CACHE_SECONDS,
+          // A quote waits this long at most for Redis before asking the provider itself.
+          timeoutMs: 200,
+        }),
+    },
     InfraLifecycle,
     DatabaseProvider,
   ],
-  exports: [PG_POOL, REDIS, DatabaseProvider],
+  exports: [PG_POOL, REDIS, PARTNER_QUOTE_CACHE, DatabaseProvider],
 })
 export class InfraModule {}

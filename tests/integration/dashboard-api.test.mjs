@@ -291,3 +291,61 @@ test('a weekly report is made on demand (development), listed, and read in full 
   const ada = await session('+2348000000001');
   assert.equal((await get(`/v1/me/reports/${week}`, ada.cookie)).status, 404);
 });
+
+test('quotes share the partner read in Redis briefly; a withdrawal clears it', async () => {
+  const { browserHeaders, Redis } = await import('./helpers.mjs');
+  const { DEMO_PROFILES } =
+    await import('../../packages/database/dist/index.js');
+  await tipTobi('For the cache');
+  const { cookie } = await session('+2348000000002');
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+  try {
+    const account = `pq:${stack.prefix}:mock:${DEMO_PROFILES[1].id}`;
+    const version = async () =>
+      Number((await redis.get(`${account}:version`)) ?? 0);
+    const entries = async () => redis.keys(`${account}:${await version()}:*`);
+    const first = (await (await get('/v1/me/withdrawal-quote', cookie)).json())
+      .data;
+    assert.equal(first.state, 'ready');
+    const stored = await entries();
+    assert.equal(stored.filter((key) => key.includes(':base:')).length, 1);
+    assert.equal(stored.filter((key) => key.includes(':fee:')).length, 1);
+    for (const key of stored) {
+      const ttl = await redis.ttl(key);
+      assert.ok(ttl > 0 && ttl <= 30, `${key} expires within 30 s`);
+    }
+    // TipMe's ledger isn't cached: the stored entries hold the partner's answer only.
+    for (const key of stored)
+      assert.doesNotMatch(await redis.get(key), /ledger/i);
+    const again = (await (await get('/v1/me/withdrawal-quote', cookie)).json())
+      .data;
+    assert.deepEqual(again, first);
+    assert.deepEqual((await entries()).sort(), stored.sort());
+
+    const before = await version();
+    const ok = await fetch(`${stack.api}/v1/me/withdrawals`, {
+      method: 'POST',
+      headers: browserHeaders(cookie, { 'idempotency-key': randomUUID() }),
+      body: JSON.stringify({ amountMinor: '200000' }),
+    });
+    assert.equal(ok.status, 201);
+    assert.equal(await version(), before + 2, 'invalidated before and after');
+    // A refused request clears it too.
+    const refused = await fetch(`${stack.api}/v1/me/withdrawals`, {
+      method: 'POST',
+      headers: browserHeaders(cookie, { 'idempotency-key': randomUUID() }),
+      body: JSON.stringify({ amountMinor: '999999999999' }),
+    });
+    assert.equal(refused.status, 409);
+    assert.equal(await version(), before + 4);
+    assert.deepEqual(await entries(), []);
+    const after = (await (await get('/v1/me/withdrawal-quote', cookie)).json())
+      .data;
+    assert.equal(
+      BigInt(after.ledgerMinor),
+      BigInt(first.ledgerMinor) - 200000n,
+    );
+  } finally {
+    await redis.quit();
+  }
+});

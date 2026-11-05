@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { loadApiConfig } from '../dist/config.js';
-import { RedisPartnerQuoteCache } from '../dist/dashboard/partner-quote-cache.js';
+import { RedisPartnerQuoteCache } from '../dist/infra/partner-quote-cache.js';
 
 const SCOPE = { provider: 'mock', profileId: 'p1' };
 

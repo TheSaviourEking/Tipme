@@ -1,6 +1,6 @@
 import type { PartnerQuoteCache, PartnerQuoteEntries } from '@tipme/database';
 import type { Redis } from 'ioredis';
-import { withTimeout } from '../infra/timeout.js';
+import { withTimeout } from './timeout.js';
 
 export const PARTNER_QUOTE_CACHE = Symbol('PARTNER_QUOTE_CACHE');
 
