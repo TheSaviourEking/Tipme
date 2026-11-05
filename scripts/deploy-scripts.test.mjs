@@ -287,7 +287,8 @@ test('staging passes every setting the API and worker read (no silent defaults)'
     );
   };
   // Only for tests: never set on a real copy.
-  const testOnly = new Set(['TRACE_PROBE_TEST_DELAY_MS']);
+  // LIVE_HEARTBEAT_MS: the live stream's heartbeat; tests shorten it, copies keep 20 s.
+  const testOnly = new Set(['TRACE_PROBE_TEST_DELAY_MS', 'LIVE_HEARTBEAT_MS']);
   for (const service of ['api', 'worker']) {
     const config = readFileSync(
       new URL(`../apps/${service}/src/config.ts`, import.meta.url),
