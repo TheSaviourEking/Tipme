@@ -63,6 +63,8 @@ test('provider events', async (t) => {
         outcome: 'applied',
         tipStatus: 'SUCCEEDED',
         attemptStatus: 'VERIFIED_SUCCEEDED',
+        // The page whose dashboard the live signal reaches (live updates, #119).
+        profileId: ADA,
       });
       assert.equal(await tipStatus(tipId), 'SUCCEEDED');
       assert.equal(
@@ -186,6 +188,8 @@ test('provider events', async (t) => {
         outcome: 'mismatch',
         tipStatus: 'AWAITING_PAYMENT',
         attemptStatus: 'UNKNOWN',
+        // The page whose dashboard the live signal reaches (live updates, #119).
+        profileId: ADA,
       });
       assert.equal(
         (await q('SELECT count(*)::int AS n FROM ledger_entries'))[0].n,
