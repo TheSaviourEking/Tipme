@@ -8814,17 +8814,11 @@ body > .coming-soon-page {
   }
 }
 
-/* Make it yours (Settings): the thank-you card, its form beside the receipt preview. */
+/* Make it yours (Settings): the thank-you card, its form above the receipt preview. The Settings
+   column is narrow, so the two stack at every width. */
 .miy-thanks__body {
   display: grid;
   gap: var(--space-5);
-}
-
-@media (min-width: 60rem) {
-  .miy-thanks__body {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
-    align-items: start;
-  }
 }
 
 .miy-styles {
