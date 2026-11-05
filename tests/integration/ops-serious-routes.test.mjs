@@ -441,6 +441,8 @@ test('releasing a freeze is one person with a fresh code, audited and alerted, w
     [issueId],
   );
   assert.equal(alert?.payload.requestedBy, firstId);
+  // For live updates: the page whose withdrawals changed (an id, never shown to anyone).
+  assert.equal(alert?.payload.profileId, id);
 });
 
 test('a takeover can only close as released, and other money closes still wait with a second person', async () => {

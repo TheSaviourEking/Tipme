@@ -586,6 +586,11 @@ export async function sweepPayoutSetup(
   destinationReadsStopped: boolean;
   accountsCapped: boolean;
   stoppedEarly: boolean;
+  /**
+   * Pages whose recorded setup changed (manual payouts set, or a bank under review settled), for
+   * live updates' payments.changed. Ids, so never log this field.
+   */
+  changedProfileIds: string[];
 }> {
   const environment = bachsAccountEnvironment(input.provider.environment);
   const stored = recordedProviderName(input.provider.name);
@@ -599,6 +604,7 @@ export async function sweepPayoutSetup(
     accountsCapped: false,
     stoppedEarly: false,
   };
+  const changed = new Set<string>();
   const stop = (error: 'rate_limited' | 'repeated_failures') => {
     totals.stoppedEarly = true;
     input.log?.({
@@ -650,6 +656,7 @@ export async function sweepPayoutSetup(
       totals.checked += 1;
       const { failed, manualFailed, manualTried, rateLimited } =
         await applyPayoutSetup(db, input.provider, account, input.log);
+      if (manualTried && !manualFailed) changed.add(account.profileId);
       totals.failed += failed;
       if (manualFailed) inARow += 1;
       else if (manualTried) inARow = 0;
@@ -709,8 +716,10 @@ export async function sweepPayoutSetup(
           limited = isRateLimited(error);
         },
       })
-    )
+    ) {
       totals.destinationsSettled += 1;
+      changed.add(row.profileId);
+    }
     limitedInARow = limited ? limitedInARow + 1 : 0;
     if (limitedInARow >= PAYOUT_SWEEP_MAX_RATE_LIMITED_IN_A_ROW) {
       totals.destinationReadsStopped = true;
@@ -722,5 +731,5 @@ export async function sweepPayoutSetup(
       break;
     }
   }
-  return totals;
+  return { ...totals, changedProfileIds: [...changed] };
 }
