@@ -6960,6 +6960,15 @@ body > .coming-soon-page {
   font-weight: 700;
 }
 
+.cover-choice__tag {
+  color: var(--brand-primary);
+  font-weight: 700;
+}
+
+.cover-hint {
+  margin: 0;
+}
+
 .cover-colours__list {
   display: flex;
   flex-wrap: wrap;

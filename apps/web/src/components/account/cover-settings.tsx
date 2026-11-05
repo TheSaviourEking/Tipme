@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
+  COVER_ANIMATIONS,
   COVER_COLOURS,
   COVER_DESIGNS,
+  type CoverMotion,
   type MyProfile,
   type ResolvedCover,
 } from '@tipme/contracts';
@@ -35,8 +37,16 @@ const reducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function LayerView({ layer }: { layer: Layer }) {
-  if (layer.kind === 'design') return <ProfileCover cover={layer.cover} />;
+export function LayerView({
+  layer,
+  animate = false,
+}: {
+  layer: Layer;
+  /** Only the Settings preview animates; the page preview beside it and thumbnails stay still. */
+  animate?: boolean;
+}) {
+  if (layer.kind === 'design')
+    return <ProfileCover cover={layer.cover} animate={animate} />;
   return (
     <div className="profile-cover" data-profile-cover="image">
       {layer.src && (
@@ -83,7 +93,8 @@ function Preview({ next }: { next: Layer }) {
         className="cover-preview__layer cover-preview__layer--in"
         style={{ animationDuration: `${ms}ms` }}
       >
-        <LayerView layer={next} />
+        {/* A new key remounts the cover, so choosing an animation plays it again. */}
+        <LayerView layer={next} animate />
       </div>
     </div>
   );
@@ -142,10 +153,13 @@ export function CoverSettings({
   const choice = profile.coverChoice;
   const saved = draftFromChoice(choice);
   const hasPhoto = Boolean(choice?.hasPhoto);
+  const pro = profile.plan === 'pro';
   const [draft, setDraft] = useState<CoverDraft>(() => draftFromChoice(choice));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
+  // What someone reached for that this page's plan does not include: a Pro design or "Slow loop".
+  const [tried, setTried] = useState<string | null>(null);
   // The photo being uploaded, shown at once while it is stored.
   const [pending, setPending] = useState<string | null>(null);
   const clear = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -182,13 +196,18 @@ export function CoverSettings({
   // What the page shows: the photo if there is one, otherwise the design being looked at.
   // The stored photo once it has been read; until then the one just chosen, so nothing blanks.
   const photoSrc = storedUrl ?? pending;
-  const cover = draftPreview(draft, profile.handle);
+  const cover = draftPreview(draft, profile.handle, profile.plan);
   const layer: Layer = hasPhoto
     ? { key: 'photo', kind: 'photo', src: photoSrc }
     : {
         key: `design:${JSON.stringify(cover)}`,
         kind: 'design',
-        design: cover.kind === 'design' ? cover.design : '',
+        design:
+          cover.kind === 'design'
+            ? cover.design
+            : cover.kind === 'animated'
+              ? cover.animation
+              : '',
         cover,
       };
   // The layer is rebuilt each render; its key and photo say when the look really changed.
@@ -209,6 +228,7 @@ export function CoverSettings({
   const apply = (next: CoverDraft) => {
     setDone('');
     setError('');
+    setTried(null);
     setDraft(next);
   };
 
@@ -219,12 +239,16 @@ export function CoverSettings({
     setError('');
     const result = await apiFetch<MyProfile>('/v1/me/cover-design', {
       method: 'PUT',
-      body: choiceBody(draft),
+      body: choiceBody(draft, pro),
     });
     setBusy(false);
     if (result.ok) {
       setProfile(result.data);
       say('Saved');
+    } else if (result.code === 'COVER_DESIGN_PRO_REQUIRED') {
+      // The plan changed under the page: the saved cover stays, and the chooser goes back to it.
+      setError('This cover choice is part of TipMe Pro.');
+      setDraft(saved);
     } else setError('We couldn’t save that. Please try again.');
   };
 
@@ -276,7 +300,21 @@ export function CoverSettings({
   };
 
   const colours = takesColours(draft.design);
-  const name = designName(draft.design);
+  const animation = draft.animation ?? null;
+  const motion: CoverMotion = draft.motion ?? 'once';
+  const animationName = COVER_ANIMATIONS.find((a) => a.id === animation)?.name;
+  const FREE_NAMES = COVER_ANIMATIONS.filter((a) => !a.pro).map((a) => a.name);
+  const hint =
+    tried === 'loop'
+      ? 'Slow loop comes with Pro. On Free, animated covers play once when your page opens.'
+      : tried
+        ? `${tried} comes with Pro. Free includes ${FREE_NAMES.slice(0, -1).join(', ')} and ${FREE_NAMES.at(-1)}.`
+        : animation
+          ? pro
+            ? 'You choose. Slow loop keeps moving until someone starts tipping.'
+            : 'On Free, animated covers play once when your page opens.'
+          : '';
+  const name = animationName ?? designName(draft.design);
   const unsaved = dirty;
 
   return (
@@ -322,7 +360,7 @@ export function CoverSettings({
         <div className="cover-photo-note" data-testid="cover-photo-note">
           <p>
             Your photo is showing on your page.{' '}
-            {draft.design
+            {draft.design || animation
               ? unsaved
                 ? `${name} won’t show unless you remove the photo.`
                 : `${name} is saved. Remove the photo to show it.`
@@ -339,16 +377,153 @@ export function CoverSettings({
       )}
 
       <fieldset className="cover-choices" role="radiogroup">
+        <legend>Animated covers</legend>
+        <div className="cover-choices__grid">
+          {COVER_ANIMATIONS.map((option) => {
+            const locked = option.pro && !pro;
+            return (
+              <label key={option.id} className="cover-choice">
+                <input
+                  type="radio"
+                  name={`${id}-design`}
+                  checked={animation === option.id}
+                  onClick={(event) => {
+                    if (!locked) return;
+                    // Looking is free; a Pro design explains itself and selects nothing.
+                    event.preventDefault();
+                    setDone('');
+                    setTried(option.name);
+                  }}
+                  onChange={() => {
+                    if (locked) return;
+                    apply({
+                      design: null,
+                      colour: draft.colour,
+                      animation: option.id,
+                      motion: pro ? motion : 'once',
+                      animationColour: pro
+                        ? (draft.animationColour ?? null)
+                        : null,
+                    });
+                  }}
+                />
+                <span className="cover-choice__thumb" aria-hidden="true">
+                  <ProfileCover
+                    cover={draftPreview(
+                      {
+                        design: null,
+                        colour: draft.colour,
+                        animation: option.id,
+                        motion: 'once',
+                        animationColour: pro
+                          ? (draft.animationColour ?? null)
+                          : null,
+                      },
+                      profile.handle,
+                      profile.plan,
+                    )}
+                    sizes="(max-width: 520px) 45vw, 160px"
+                  />
+                </span>
+                <span className="cover-choice__name">
+                  {option.name}
+                  {locked && <span className="cover-choice__tag"> Pro</span>}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {animation && (
+        <fieldset className="cover-colours" role="radiogroup">
+          <legend>How it plays</legend>
+          <div className="cover-colours__list">
+            {(
+              [
+                ['once', 'Plays once'],
+                ['loop', 'Slow loop'],
+              ] as const
+            ).map(([value, label]) => {
+              const locked = value === 'loop' && !pro;
+              return (
+                <label key={value} className="cover-colour cover-motion">
+                  <input
+                    type="radio"
+                    name={`${id}-motion`}
+                    checked={motion === value}
+                    {...(locked ? { 'aria-disabled': true } : {})}
+                    onClick={(event) => {
+                      if (!locked) return;
+                      event.preventDefault();
+                      setDone('');
+                      setTried('loop');
+                    }}
+                    onChange={() => {
+                      if (!locked) apply({ ...draft, motion: value });
+                    }}
+                  />
+                  <span>
+                    {label}
+                    {locked && ' · Pro'}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
+
+      {animation && pro && (
+        <fieldset className="cover-colours" role="radiogroup">
+          <legend>Colour</legend>
+          <div className="cover-colours__list">
+            <label className="cover-colour">
+              <input
+                type="radio"
+                name={`${id}-animation-colour`}
+                checked={!draft.animationColour}
+                onChange={() => apply({ ...draft, animationColour: null })}
+              />
+              <span>Its own colours</span>
+            </label>
+            {COVER_COLOURS.map((colour) => (
+              <label key={colour.id} className="cover-colour">
+                <input
+                  type="radio"
+                  name={`${id}-animation-colour`}
+                  checked={draft.animationColour === colour.id}
+                  onChange={() =>
+                    apply({ ...draft, animationColour: colour.id })
+                  }
+                />
+                <span
+                  className="cover-colour__swatch"
+                  style={{ background: colour.base }}
+                  aria-hidden="true"
+                />
+                <span>{colour.name}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      <p role="status" className="tm-hint cover-hint" data-testid="cover-hint">
+        {hint}
+      </p>
+
+      <fieldset className="cover-choices" role="radiogroup">
         <legend>Or choose a design</legend>
         <div className="cover-choices__grid">
           <label className="cover-choice">
             <input
               type="radio"
               name={`${id}-design`}
-              checked={draft.design === null}
+              checked={draft.design === null && !animation}
               aria-label="Let TipMe pick"
               aria-describedby={`${id}-automatic`}
-              onChange={() => apply({ ...draft, design: null })}
+              onChange={() => apply({ design: null, colour: draft.colour })}
             />
             <span className="cover-choice__thumb" aria-hidden="true">
               <ProfileCover
@@ -374,13 +549,16 @@ export function CoverSettings({
                 type="radio"
                 name={`${id}-design`}
                 checked={draft.design === design.id}
-                onChange={() => apply({ ...draft, design: design.id })}
+                onChange={() =>
+                  apply({ design: design.id, colour: draft.colour })
+                }
               />
               <span className="cover-choice__thumb" aria-hidden="true">
                 <ProfileCover
                   cover={draftPreview(
                     { design: design.id, colour: draft.colour },
                     profile.handle,
+                    profile.plan,
                   )}
                   sizes="(max-width: 520px) 45vw, 160px"
                 />
@@ -415,7 +593,7 @@ export function CoverSettings({
         </fieldset>
       )}
 
-      {!saved.design && (
+      {!saved.design && !saved.animation && (
         <p className="tm-hint">
           {"If you don't choose, we'll pick one for your page."}
         </p>
