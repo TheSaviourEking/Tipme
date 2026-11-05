@@ -5,6 +5,7 @@ import type {
   ActivityRow,
   DashboardSummary,
   WeeklyReportData,
+  WithdrawalQuoteResponse,
 } from '@tipme/contracts';
 import { Button, Notice, Skeleton } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -20,6 +21,7 @@ import { recipientReturned, track } from '@/lib/analytics';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { isPaymentAttention } from '@/lib/owner-attention';
+import { withdrawableNow } from '@/lib/withdraw-state';
 
 function Tile({
   label,
@@ -54,6 +56,12 @@ export default function DashboardHome() {
   // One loader per panel, each re-read on its live signals (and every resync or fallback poll).
   const balance = usePanel<DashboardSummary>('/v1/me/dashboard', {
     live: ['tips.changed', 'withdrawals.changed'],
+  });
+  // The quote asks the payment partner: re-read on a withdrawal change only, never on every
+  // resync or tab focus (the same rule as the Withdraw page's panels).
+  const quote = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote', {
+    live: ['withdrawals.changed'],
+    resync: false,
   });
   const recent = usePanel<ActivityRow[]>('/v1/me/activity', {
     live: ['tips.changed', 'withdrawals.changed'],
@@ -112,6 +120,17 @@ export default function DashboardHome() {
     .sort((a, b) => a.getTime() - b.getTime())[0];
   // Pending money is named only when the API reports some, and is never counted as available.
   const pending = summary.confirmingMinor !== '0';
+  // "Ready to withdraw" is only what the withdrawal quote allows now (the rule Withdraw uses). The
+  // ledger balance above it can be larger: tips still settling, or setup not finished. A quote that
+  // is loading or failed says nothing rather than guessing.
+  const withdrawable =
+    quote.data && !quote.error
+      ? withdrawableNow({
+          availableMinor: summary.availableMinor,
+          withdrawalsAvailable: summary.withdrawalsAvailable,
+          quote: quote.data,
+        })
+      : BigInt(0);
 
   const shareStatus = (
     <p role="status" className="tm-hint dashboard-share-status">
@@ -232,7 +251,7 @@ export default function DashboardHome() {
             <section className="balance-card" aria-labelledby="balance-label">
               <div className="balance-card__figures">
                 <h1 id="balance-label" className="balance-card__label">
-                  Ready to withdraw
+                  Your balance
                 </h1>
                 {/* One element, never animated: a refetch must not imply money that is not confirmed.
                     A rise gets a 1 s highlight on the wrapper, never on the number. */}
@@ -243,6 +262,11 @@ export default function DashboardHome() {
                     {naira(summary.availableMinor)}
                   </strong>
                 </span>
+                {withdrawable > BigInt(0) && (
+                  <span className="balance-card__note" data-testid="ready">
+                    Ready to withdraw {naira(withdrawable.toString())}
+                  </span>
+                )}
                 {pending && (
                   <span className="balance-card__note">
                     {naira(summary.confirmingMinor)} still being confirmed

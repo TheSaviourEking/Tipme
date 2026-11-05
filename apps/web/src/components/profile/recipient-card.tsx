@@ -1,7 +1,14 @@
 import type { ReactNode } from 'react';
-import type { PublicProfile } from '@tipme/contracts';
+import {
+  SOCIAL_PLATFORMS,
+  linkHandle,
+  linksFromLegacy,
+  type PublicProfile,
+  type SocialLink,
+} from '@tipme/contracts';
 import { ProBadge } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
+import { LinkBadge } from './link-badge';
 import { ShareProfile } from '@/components/share-profile';
 
 const stroke = {
@@ -13,25 +20,6 @@ const stroke = {
 } as const;
 
 const ICONS = {
-  x: (
-    <path
-      fill="currentColor"
-      d="M18.2 2.5h3.3l-7.2 8.2 8.5 10.8h-6.7l-5.2-6.5-6 6.5H1.6l7.7-8.8L1.2 2.5H8l4.7 6 5.5-6Zm-1.2 17h1.8L7.1 4.4h-2L17 19.5Z"
-    />
-  ),
-  instagram: (
-    <g {...stroke}>
-      <rect x="3" y="3" width="18" height="18" rx="5" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="17.2" cy="6.8" r="0.6" fill="currentColor" />
-    </g>
-  ),
-  facebook: (
-    <path
-      fill="currentColor"
-      d="M14 8.5V6.8c0-.8.5-1 1-1h2V2.5h-2.9C11.2 2.5 10 4.5 10 6.5v2H7.5V12H10v9.5h4V12h2.7l.5-3.5H14Z"
-    />
-  ),
   phone: (
     <path
       {...stroke}
@@ -46,37 +34,95 @@ const ICONS = {
   ),
 };
 
-const SOCIAL_NAMES = {
-  x: 'X',
-  instagram: 'Instagram',
-  facebook: 'Facebook',
-} as const;
-
 function ContactLink({
   icon,
   href,
-  external = false,
   children,
 }: {
   icon: keyof typeof ICONS;
   href: string;
-  external?: boolean;
   children: ReactNode;
 }) {
   return (
     <li>
-      <a
-        href={href}
-        {...(external
-          ? { rel: 'noopener noreferrer nofollow', target: '_blank' }
-          : {})}
-      >
+      <a href={href}>
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
           {ICONS[icon]}
         </svg>
         {children}
       </a>
     </li>
+  );
+}
+
+const NEW_TAB = ' (opens in a new tab)';
+const external = {
+  // Links people typed: `ugc` tells search engines so, as well as not following them.
+  rel: 'noopener noreferrer nofollow ugc',
+  target: '_blank',
+} as const;
+
+/**
+ * Where else to find this person (SocialLinks board): a Pro page's featured link as a full-width
+ * key, then a row of links, each showing the handle read from it so supporters can check it's
+ * really them. They open in a new tab and never sit between the amount and the Tip button.
+ */
+export function ProfileLinks({
+  links,
+  firstName,
+}: {
+  links: SocialLink[];
+  firstName: string;
+}) {
+  if (links.length === 0) return null;
+  const featured = links.find((link) => link.featured);
+  const rest = links.filter((link) => link !== featured);
+  return (
+    <div className="profile-links">
+      {featured && (
+        <a
+          className="profile-links__featured"
+          href={featured.url}
+          {...external}
+        >
+          <LinkBadge platform={featured.platform} />
+          <span className="profile-links__words">
+            {SOCIAL_PLATFORMS[featured.platform].featured}
+          </span>{' '}
+          <span className="profile-links__handle">
+            {linkHandle(featured) ?? SOCIAL_PLATFORMS[featured.platform].label}
+          </span>
+          <span className="sr-only">{NEW_TAB}</span>
+        </a>
+      )}
+      {rest.length > 0 && (
+        <ul
+          className="profile-links__row"
+          aria-label={`Find ${firstName} elsewhere`}
+        >
+          {rest.map((link) => {
+            const { label } = SOCIAL_PLATFORMS[link.platform];
+            const handle = linkHandle(link);
+            return (
+              <li key={link.url}>
+                <a href={link.url} {...external}>
+                  <LinkBadge platform={link.platform} small />
+                  {handle ? (
+                    <>
+                      <span className="sr-only">{label}: </span>
+                      {handle}
+                    </>
+                  ) : (
+                    label
+                  )}
+                  <span className="sr-only">{NEW_TAB}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -87,18 +133,9 @@ function Contact({
   profile: PublicProfile;
   firstName: string;
 }) {
-  const socials = Object.entries(profile.socials ?? {}) as [
-    keyof typeof SOCIAL_NAMES,
-    string,
-  ][];
-  if (socials.length === 0 && !profile.phone && !profile.email) return null;
+  if (!profile.phone && !profile.email) return null;
   return (
-    <ul className="profile-contact" aria-label={`Find ${firstName} elsewhere`}>
-      {socials.map(([kind, url]) => (
-        <ContactLink key={kind} icon={kind} href={url} external>
-          {SOCIAL_NAMES[kind]}
-        </ContactLink>
-      ))}
+    <ul className="profile-contact" aria-label={`Contact ${firstName}`}>
       {profile.phone && (
         <ContactLink icon="phone" href={`tel:${profile.phone}`}>
           {profile.phone}
@@ -174,6 +211,10 @@ export function RecipientIdentity({
           </span>
         </p>
       )}
+      <ProfileLinks
+        links={profile.links ?? linksFromLegacy(profile.socials)}
+        firstName={firstName}
+      />
       <Contact profile={profile} firstName={firstName} />
       {(profile.craft ?? profile.note) && (
         <div className="profile-words">

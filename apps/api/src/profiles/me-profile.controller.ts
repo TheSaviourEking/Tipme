@@ -16,12 +16,14 @@ import {
 import {
   claimHandleSchema,
   deleteAccountSchema,
+  myLinksSchema,
   pageStateSchema,
   profilePatchSchema,
   notificationPrefsSchema,
   renameHandleSchema,
   tipAmountsSchema,
   type ApiDataResponse,
+  type MyLinksRequest,
   type MyProfile,
   type NotificationPrefs,
   type NotificationPrefsView,
@@ -35,6 +37,7 @@ import {
   getNotificationPrefs,
   setNotificationPrefs,
   renameHandle,
+  setMyLinks,
   setTipAmounts,
   setPageState,
   updateMyProfile,
@@ -77,6 +80,11 @@ export class MeProfileController {
     private readonly photos: PhotoStore | null = null,
   ) {}
 
+  /** The editor needs to know whether OnlyFans and Fansly links can be added on this copy. */
+  private mine(profile: MyProfile): MyProfile {
+    return { ...profile, adultLinks: this.config.ADULT_PLATFORM_LINKS };
+  }
+
   @Post('page')
   async claim(
     @CurrentUser() auth: AuthContext,
@@ -97,7 +105,9 @@ export class MeProfileController {
       `profile_created.${profileId}`,
       profileId,
     );
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
   }
 
   @Get('profile')
@@ -106,7 +116,7 @@ export class MeProfileController {
   ): Promise<ApiDataResponse<MyProfile>> {
     return {
       data: {
-        ...(await getMyProfile(this.database.db, auth.userId)),
+        ...this.mine(await getMyProfile(this.database.db, auth.userId)),
         liveUpdates: this.config.LIVE_UPDATES_ENABLED,
       },
     };
@@ -119,7 +129,23 @@ export class MeProfileController {
   ): Promise<ApiDataResponse<MyProfile>> {
     const updated = await updateMyProfile(this.database.db, auth.userId, body);
     this.revalidator.revalidate(updated.handle);
-    return { data: updated };
+    return { data: this.mine(updated) };
+  }
+
+  /**
+   * The page's links, whole and in order (SocialLinks board). Free: 3 from Free sites, in catalogue
+   * order; more, Pro sites, a featured link or another order are refused (SOCIAL_LINKS_PRO_REQUIRED).
+   */
+  @Put('links')
+  async links(
+    @CurrentUser() auth: AuthContext,
+    @Body(new ZodValidationPipe(myLinksSchema)) body: MyLinksRequest,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    const updated = await setMyLinks(this.database.db, auth.userId, body, {
+      adultLinks: this.config.ADULT_PLATFORM_LINKS,
+    });
+    this.revalidator.revalidate(updated.handle);
+    return { data: this.mine(updated) };
   }
 
   /** Changes the handle; the old one keeps leading here (PR-011). Both cached pages refresh. */
@@ -137,7 +163,9 @@ export class MeProfileController {
       this.revalidator.revalidateGone(previous);
       this.revalidator.revalidate(handle);
     }
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
   }
 
   /** A Pro page's own preset amounts and minimum (PR-012); refused on Free (PRO_REQUIRED). */
@@ -151,7 +179,7 @@ export class MeProfileController {
       minTipMinor: BigInt(body.minMinor),
     });
     this.revalidator.revalidate(updated.handle);
-    return { data: updated };
+    return { data: this.mine(updated) };
   }
 
   @Get('notification-preferences')
@@ -191,7 +219,9 @@ export class MeProfileController {
         `profile_published.${profileId}`,
         profileId,
       );
-    return { data: await getMyProfile(this.database.db, auth.userId) };
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
   }
 
   @Delete('account')

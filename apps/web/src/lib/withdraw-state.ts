@@ -1,4 +1,5 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
+import { formatNaira } from './demo-amount.ts';
 
 const SETTINGS = '/dashboard/settings';
 
@@ -16,14 +17,6 @@ export interface WithdrawState {
   };
   /** The provider itself is checking a withdrawal already under way. */
   review: string | null;
-}
-
-/** ₦1,800 or ₦1,800.50, from the API's decimal string of minor units. */
-export function nairaSign(minor: string): string {
-  const digits = minor.padStart(3, '0');
-  const kobo = digits.slice(-2);
-  const whole = new Intl.NumberFormat('en').format(BigInt(digits.slice(0, -2)));
-  return kobo === '00' ? `₦${whole}` : `₦${whole}.${kobo}`;
 }
 
 const unavailable = {
@@ -123,7 +116,7 @@ export function withdrawState(input: {
       const fee =
         quote.feeMinor === '0'
           ? ''
-          : ` TipMe pays the ${nairaSign(quote.feeMinor)} transfer fee.`;
+          : ` TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee.`;
       return {
         kind: 'ready',
         canWithdraw: true,
@@ -131,10 +124,28 @@ export function withdrawState(input: {
         review,
         notice: {
           title: 'Ready to withdraw',
-          body: `You can withdraw ${nairaSign(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.${fee}`,
+          body: `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.${fee}`,
           tone: 'neutral',
         },
       };
     }
   }
+}
+
+/**
+ * The most that can be withdrawn right now: the ledger balance, and no more than the quote allows.
+ * Zero whenever the quote refuses (paused, setup needed, tips still settling, no quote at all).
+ * Withdraw and the dashboard both use this, so neither shows more as ready than the quote allows.
+ */
+export function withdrawableNow(input: {
+  availableMinor: string;
+  withdrawalsAvailable: boolean;
+  quote: WithdrawalQuoteResponse | null;
+}): bigint {
+  const state = withdrawState(input);
+  const { quote } = input;
+  if (!state.canWithdraw || quote?.state !== 'ready') return BigInt(0);
+  const available = BigInt(input.availableMinor);
+  const allowed = BigInt(quote.withdrawableMinor);
+  return allowed < available ? allowed : available;
 }

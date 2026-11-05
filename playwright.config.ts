@@ -110,6 +110,9 @@ export default defineConfig({
         LIVE_UPDATES_ENABLED: 'true',
         // Every page opens a stream from 127.0.0.1.
         RATE_LIMIT_LIVE_CONNECT_PER_MIN: '10000',
+        // The Get paid card now checks a name on its own, so many tests check from 127.0.0.1.
+        // The 10-a-day limit per person still applies (every test is a new person).
+        RATE_LIMIT_BANK_RESOLVE_PER_HOUR: '10000',
       }),
     },
     {

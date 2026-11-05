@@ -10,8 +10,6 @@ test('the Pro page flips a sample page between Free and Pro', async ({
   const plan = page.getByRole('radiogroup', { name: 'Plan' });
   await expect(plan.getByRole('radio', { name: 'Free' })).toBeChecked();
   const main = page.locator('main');
-  const slowLoop = main.getByRole('button', { name: 'Slow loop' });
-  await expect(slowLoop).toHaveAttribute('aria-disabled', 'true');
   await expect(main.getByText('Stays as you claimed it.')).toBeVisible();
   await expect(
     main.getByText('usetipme.xyz/@ada', { exact: true }),
@@ -19,7 +17,6 @@ test('the Pro page flips a sample page between Free and Pro', async ({
 
   await plan.getByRole('radio', { name: 'Pro' }).click();
   await expect(plan.getByRole('radio', { name: 'Pro' })).toBeChecked();
-  await expect(slowLoop).not.toHaveAttribute('aria-disabled', 'true');
   await expect(main.getByText('Changed 0 of 3 times.')).toBeVisible();
   const change = main.getByRole('button', { name: 'Change it' });
   const handles = ['adacuts', 'adaedits', 'adaokafor'];
@@ -45,6 +42,34 @@ test('the Pro page flips a sample page between Free and Pro', async ({
   await expect(
     main.getByText('usetipme.xyz/@ada', { exact: true }),
   ).toBeVisible();
+});
+
+test('the Pro page does not sell animated covers, which are not built yet', async ({
+  page,
+}) => {
+  // The suite defaults to reduced motion; here motion is allowed, so a moving cover would show.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/pro');
+  const plan = page.getByRole('radiogroup', { name: 'Plan' });
+  const main = page.locator('main');
+  for (const name of ['Free', 'Pro']) {
+    await plan.getByRole('radio', { name }).click();
+    await expect(main).not.toContainText(
+      /animated|play once|slow loop|play\b/i,
+    );
+    await expect(
+      main.getByRole('button', { name: /play once|slow loop/i }),
+    ).toHaveCount(0);
+    // The sample cover is a still picture: nothing on it moves.
+    const animated = await page
+      .locator('.pro-cover *')
+      .evaluateAll((nodes) =>
+        nodes
+          .map((node) => getComputedStyle(node).animationName)
+          .filter((animation) => animation !== 'none'),
+      );
+    expect(animated).toEqual([]);
+  }
 });
 
 test('Pro shows no price until staff set one', async ({ page }) => {

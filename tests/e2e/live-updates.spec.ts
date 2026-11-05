@@ -20,7 +20,7 @@ async function dashboardAfterFirstTip(
   // Reloads until both exist, so the setup never depends on the stream it is about to test.
   await expect(async () => {
     await page.goto('/dashboard');
-    await expect(page.getByTestId('balance')).toHaveText('NGN 1,800.00', {
+    await expect(page.getByTestId('balance')).toHaveText('₦1,800', {
       timeout: 2000,
     });
     await expect(
@@ -29,7 +29,7 @@ async function dashboardAfterFirstTip(
   }).toPass({ timeout: 30_000 });
   // A fresh page that saw both on its first read: nothing announced, no minute window started.
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('NGN 1,800.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦1,800');
 }
 
 /** Marks the page (a reload would clear it) and records every text the balance shows. */
@@ -76,7 +76,7 @@ test('a visitor tips and the signed-in dashboard’s balance and tip list update
 
   await tipAsVisitor(browser, handle, { amount: '2,000 NGN', name: 'Chidi' });
 
-  await expect(page.getByTestId('balance')).toHaveText('NGN 3,600.00', {
+  await expect(page.getByTestId('balance')).toHaveText('₦3,600', {
     timeout: LIVE_BOUND_MS,
   });
   const first = page.locator('.dashboard-recent .activity-list a').first();
@@ -89,7 +89,7 @@ test('a visitor tips and the signed-in dashboard’s balance and tip list update
   ).toBeVisible({ timeout: LIVE_BOUND_MS });
   expect(await noReload(page)).toBe(1);
   // The money never performs: only the old figure and the new one, nothing in between.
-  expect(await balances(page)).toEqual(['NGN 1,800.00', 'NGN 3,600.00']);
+  expect(await balances(page)).toEqual(['₦1,800', '₦3,600']);
 });
 
 /**
@@ -172,7 +172,7 @@ test('with the stream blocked the balance still updates within 25 s', async ({
   await dashboardAfterFirstTip(page, handle, browser);
   await watchBalance(page);
   await tipAsVisitor(browser, handle, { name: 'Chidi' });
-  await expect(page.getByTestId('balance')).toHaveText('NGN 3,600.00', {
+  await expect(page.getByTestId('balance')).toHaveText('₦3,600', {
     timeout: 25_000,
   });
   expect(await noReload(page)).toBe(1);
@@ -262,20 +262,20 @@ test('a tip paid while the stream is still connecting still shows, with no reloa
     await route.continue();
   });
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('NGN 1,800.00', {
+  await expect(page.getByTestId('balance')).toHaveText('₦1,800', {
     timeout: 10_000,
   });
   await watchBalance(page);
   await tipAsVisitor(browser, handle, { name: 'Chidi' });
   await page.waitForTimeout(1000);
-  await expect(page.getByTestId('balance')).toHaveText('NGN 1,800.00');
+  await expect(page.getByTestId('balance')).toHaveText('₦1,800');
   // The stream registers now; its ready resync reads after the tip.
   release();
-  await expect(page.getByTestId('balance')).toHaveText('NGN 3,600.00', {
+  await expect(page.getByTestId('balance')).toHaveText('₦3,600', {
     timeout: LIVE_BOUND_MS + 2000,
   });
   expect(await noReload(page)).toBe(1);
-  expect(await balances(page)).toEqual(['NGN 1,800.00', 'NGN 3,600.00']);
+  expect(await balances(page)).toEqual(['₦1,800', '₦3,600']);
 });
 
 test('the Withdraw page asks for its quote once per visit, through focus and reconnects', async ({

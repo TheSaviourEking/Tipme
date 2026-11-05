@@ -1,41 +1,13 @@
 import { z } from 'zod';
 import type { ResolvedCover } from './covers.js';
 import { qrStyleSchema } from './qr.js';
+import type { SocialLink } from './social-links.js';
 
-/** Social links accepted on a recipient page: https only, on the named site. */
-export const SOCIAL_HOSTS = {
-  facebook: ['facebook.com', 'www.facebook.com'],
-  instagram: ['instagram.com', 'www.instagram.com'],
-  x: ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'],
-} as const;
-export type SocialKind = keyof typeof SOCIAL_HOSTS;
-
-const socialUrl = (kind: SocialKind) =>
-  z
-    .string()
-    .max(200)
-    .refine((value) => {
-      try {
-        const url = new URL(value);
-        return (
-          url.protocol === 'https:' &&
-          !url.username &&
-          !url.password &&
-          (SOCIAL_HOSTS[kind] as readonly string[]).includes(url.hostname)
-        );
-      } catch {
-        return false;
-      }
-    });
-
-export const socialsSchema = z
-  .object({
-    facebook: socialUrl('facebook').optional(),
-    instagram: socialUrl('instagram').optional(),
-    x: socialUrl('x').optional(),
-  })
-  .strict();
-export type Socials = z.infer<typeof socialsSchema>;
+/**
+ * The three fixed links pages had before the catalogue (5 Nov 2026). Kept as a type only: APIs
+ * older than `links` send it, and stale tabs read it from `MyProfile`.
+ */
+export type Socials = Partial<Record<'facebook' | 'instagram' | 'x', string>>;
 
 const optionalText = (max: number) => z.string().trim().max(max).nullable();
 
@@ -45,7 +17,19 @@ export const profilePatchSchema = z
     displayName: z.string().trim().min(1).max(60),
     role: optionalText(60),
     bio: optionalText(280),
-    socials: socialsSchema,
+    /**
+     * Accepted and ignored: Settings tabs opened before social links (5 Nov 2026) still send the
+     * old three links with every About save. Links are saved through PUT /v1/me/links now.
+     * TODO(social-links): remove in the release that drops the `profiles.socials` column.
+     */
+    socials: z
+      .object({
+        facebook: z.string().max(200),
+        instagram: z.string().max(200),
+        x: z.string().max(200),
+      })
+      .partial()
+      .strict(),
     bioPublic: z.boolean(),
     socialsPublic: z.boolean(),
     phonePublic: z.boolean(),
@@ -90,7 +74,18 @@ export interface MyProfile {
   displayName: string;
   role: string | null;
   bio: string | null;
+  /** Deprecated: the first Facebook, Instagram and X links, for tabs opened before `links`. */
   socials: Socials;
+  /**
+   * Every stored link in order, hidden ones included (a lapsed Pro page keeps them). Optional
+   * until the release after this one: the web app deploys before the API.
+   */
+  links?: SocialLink[];
+  /**
+   * False while this copy has OnlyFans and Fansly links switched off (ADULT_PLATFORM_LINKS):
+   * they can't be added and don't show. Absent means allowed.
+   */
+  adultLinks?: boolean;
   bioPublic: boolean;
   socialsPublic: boolean;
   phonePublic: boolean;
@@ -133,7 +128,10 @@ export interface PublicProfile {
   note?: string;
   avatarPath?: string;
   bio?: string;
+  /** Sent by APIs older than `links` only. */
   socials?: Socials;
+  /** The links this page's plan shows, in order (see `visibleLinks`). */
+  links?: SocialLink[];
   phone?: string;
   email?: string;
   /** A moment the recipient chose to share, for 14 days ("add to the celebration"). */

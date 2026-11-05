@@ -102,6 +102,13 @@ export const apiConfigSchema = z
     RATE_LIMIT_BANK_READ_PER_MIN: z.coerce.number().int().min(1).default(30),
     // Live stream connects per address per minute, counted before the session check. Tests raise it.
     RATE_LIMIT_LIVE_CONNECT_PER_MIN: z.coerce.number().int().min(1).default(60),
+    // OnlyFans and Fansly links (Pro only, the owner's decision of 5 Nov 2026). `off` hides them
+    // from every public page and refuses new ones, deleting nothing: the lever for the payment
+    // partner's answer (docs/runbooks/adult-platform-links.md). Default on.
+    ADULT_PLATFORM_LINKS: z
+      .enum(['on', 'off'])
+      .default('on')
+      .transform((value) => value === 'on'),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z
@@ -115,6 +122,8 @@ export const apiConfigSchema = z
     // Authenticator codes re-entered per staff member per hour (the code itself locks after 5 misses).
     RATE_LIMIT_OPS_CODE_PER_HOUR: z.coerce.number().int().min(1).default(60),
     RATE_LIMIT_OPS_REQUEST_PER_HOUR: z.coerce.number().int().min(1).default(60),
+    // Admin reads that are limited at all (the Usernames list and check), per staff member per hour.
+    RATE_LIMIT_OPS_READ_PER_HOUR: z.coerce.number().int().min(1).default(600),
     // Sign-in codes per phone number per hour. Keep 3 on any copy people use; local drills raise it.
     RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: z.coerce
       .number()

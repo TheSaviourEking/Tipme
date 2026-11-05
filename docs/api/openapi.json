@@ -2024,6 +2024,121 @@
         ]
       }
     },
+    "/v1/me/links": {
+      "put": {
+        "operationId": "MeProfile.links",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "links": {
+                    "maxItems": 11,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "platform": {
+                          "type": "string",
+                          "enum": [
+                            "tiktok",
+                            "facebook",
+                            "instagram",
+                            "youtube",
+                            "x",
+                            "snapchat",
+                            "whatsapp",
+                            "twitch",
+                            "kick",
+                            "audiomack",
+                            "boomplay",
+                            "spotify",
+                            "applemusic",
+                            "soundcloud",
+                            "website",
+                            "telegram",
+                            "linkedin",
+                            "threads",
+                            "patreon",
+                            "selar",
+                            "substack",
+                            "onlyfans",
+                            "fansly"
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "featured": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "platform",
+                        "url"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "show": {
+                    "type": "boolean"
+                  },
+                  "hidden": {
+                    "maxItems": 11,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  }
+                },
+                "required": [
+                  "links",
+                  "show"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/moments": {
       "get": {
         "operationId": "Moments.list",
@@ -8553,7 +8668,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8576,7 +8691,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -8660,7 +8776,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8683,7 +8799,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -8822,7 +8939,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8845,7 +8962,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -8964,7 +9082,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8987,12 +9105,13 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -9015,7 +9134,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -9345,6 +9465,247 @@
           }
         ],
         "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/usernames": {
+      "get": {
+        "operationId": "OpsUsernames.list",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 30
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "take_back"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      },
+      "post": {
+        "operationId": "OpsUsernames.reserve",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/check/{name}": {
+      "get": {
+        "operationId": "OpsUsernames.check",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/release": {
+      "post": {
+        "operationId": "OpsUsernames.release",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
       }
     },
     "/v1/ops/users/{userId}/cancel-recovery": {
@@ -10211,6 +10572,8 @@
                   "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "QR_DESIGN_PRO_REQUIRED",
+                  "SOCIAL_LINKS_PRO_REQUIRED",
+                  "SOCIAL_LINK_UNAVAILABLE",
                   "QR_ART_PHOTO_REQUIRED",
                   "QR_ART_PHOTO_TOO_LARGE",
                   "INVALID_IMAGE",
@@ -10258,6 +10621,10 @@
                   "PAYOUT_CHANGED",
                   "SELF_ACCESS_CHANGE",
                   "ROLE_NAME_TAKEN",
+                  "USERNAME_BUILT_IN",
+                  "USERNAME_RESERVED",
+                  "USERNAME_HELD_BY_PAGE",
+                  "USERNAME_NOT_RESERVED",
                   "ROLE_IN_USE",
                   "ROLE_PROTECTED",
                   "STAFF_PROTECTED",
