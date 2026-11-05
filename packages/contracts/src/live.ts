@@ -76,6 +76,16 @@ export const liveMessageSchema: z.ZodType<LiveMessage> = z
   })
   .strict();
 
+/**
+ * The one signal for "this person's sessions changed". Publish it after anything that ends sessions
+ * commits (sign-out, revokes, an email or phone change, a recovery, account deletion): each of their
+ * open streams re-checks its own session and closes with session.ended if it is gone.
+ */
+export const sessionsChanged = (userId: string): LiveMessage => ({
+  to: { user: userId },
+  type: 'sessions.changed',
+});
+
 export const liveChannel = (queuePrefix: string): string =>
   `${queuePrefix}:live:v1`;
 

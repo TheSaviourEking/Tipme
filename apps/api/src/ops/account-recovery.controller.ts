@@ -28,6 +28,7 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { sessionsChanged } from '@tipme/contracts';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { OpsPermission } from './permission.decorator.js';
@@ -90,7 +91,7 @@ export class OpsAccountRecoveryController {
     if (outcome === 'not_found') throw new CodedHttpException(404, 'NOT_FOUND');
     if (outcome === 'staff_account')
       throw new CodedHttpException(409, 'FORBIDDEN');
-    void this.publishLive({ to: { user: userId }, type: 'sessions.changed' });
+    void this.publishLive(sessionsChanged(userId));
     return { data: { outcome } };
   }
 }

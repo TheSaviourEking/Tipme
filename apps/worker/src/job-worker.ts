@@ -723,6 +723,7 @@ export async function startJobWorker(
       pretendDomains: config.MAIL_PRETEND_DOMAINS,
     },
     logger,
+    publishLive,
   });
 
   return {
