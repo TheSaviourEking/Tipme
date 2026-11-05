@@ -9,7 +9,9 @@ export type LiveConnectOutcome =
   | 'limit_user'
   | 'limit_process'
   | 'rate_limited'
-  | 'draining';
+  | 'draining'
+  /** The client left during the connect, before the stream opened. */
+  | 'client_gone';
 
 export interface LiveMetrics {
   connect(outcome: LiveConnectOutcome): void;

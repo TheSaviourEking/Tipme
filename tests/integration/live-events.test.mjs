@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
@@ -18,6 +19,7 @@ import {
 } from '../../packages/payments/dist/index.js';
 import { randomUUID } from 'node:crypto';
 import { ReadinessService } from '../../apps/api/dist/health/readiness.service.js';
+import { LiveHubService } from '../../apps/api/dist/live/live-hub.service.js';
 import {
   REDIS_URL,
   Redis,
@@ -164,6 +166,39 @@ test('a stream closes at its session’s expiresAt when that is sooner than 30 m
     sleep(4000).then(() => assert.fail('the stream outlived its session')),
   ]);
   assert.ok(Date.now() - started < 4000);
+});
+
+test('a client that leaves during the connect leaves no stream behind (the race)', async () => {
+  const { cookie } = await signIn(stack.api, nextPhone());
+  const hub = stack.app.get(LiveHubService);
+  const before = hub.counts().me;
+  // Hold the connect inside its awaits: myProfileId reads profiles, which this lock blocks.
+  const client = await database.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('LOCK TABLE profiles IN ACCESS EXCLUSIVE MODE');
+    const request = http.get(`${stack.api}/v1/me/events`, {
+      headers: { cookie, origin: WEB, accept: 'text/event-stream' },
+    });
+    request.on('error', () => undefined);
+    await sleep(300);
+    // The tab closes while the API still waits on Postgres.
+    request.destroy();
+    await sleep(100);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+  await sleep(500);
+  assert.equal(hub.counts().me, before, 'no slot held for a client that left');
+  // And the person's eight places are all still free.
+  const open = [];
+  for (let i = 0; i < 8; i += 1) {
+    const stream = await events(cookie);
+    assert.equal(stream.status, 200);
+    open.push(stream);
+  }
+  for (const stream of open) stream.close();
 });
 
 test('the ninth stream for one user gets 429 LIVE_LIMIT', async () => {

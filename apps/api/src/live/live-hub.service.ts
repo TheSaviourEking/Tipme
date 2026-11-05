@@ -158,4 +158,8 @@ export class LiveHubService implements OnModuleInit, OnApplicationShutdown {
   get subscriberUp(): boolean {
     return this.hub.subscriberUp;
   }
+
+  counts(): { me: number; ops: number } {
+    return this.hub.counts();
+  }
 }

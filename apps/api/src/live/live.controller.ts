@@ -48,6 +48,11 @@ const REFUSED_RETRY_AFTER_S = 30;
  */
 export const HEARTBEAT = ': hb\nevent: hb\ndata: {}\n\n';
 
+/** The client went away (or the response ended) while the connect was still awaiting. */
+export function clientGone(req: Request, res: Response): boolean {
+  return req.destroyed || res.destroyed || res.writableEnded;
+}
+
 /** Shared by /v1/me/events and (later) /v1/ops/events. */
 export function openStream(o: {
   req: Request;
@@ -63,6 +68,12 @@ export function openStream(o: {
   heartbeatMs?: number;
 }): void {
   const { req, res, hub, metrics } = o;
+  // The client can leave while the connect awaits Redis and Postgres. By now its close has already
+  // fired, and writes to it raise nothing: registering would hold a slot for half an hour.
+  if (clientGone(req, res)) {
+    metrics.connect('client_gone');
+    return;
+  }
   let open = true;
   // Started only once the stream is registered; cleared by whichever close comes first.
   const timers: { heartbeat?: NodeJS.Timeout; lifetime?: NodeJS.Timeout } = {};
@@ -130,7 +141,8 @@ export function openStream(o: {
     () => finish(untilExpiry <= lifetimeMs ? 'session_ended' : 'lifetime'),
     Math.max(0, Math.min(lifetimeMs, untilExpiry)),
   );
-  req.on('close', () => finish('client'));
+  // The response's close fires however the connection ends (the request's may have passed).
+  res.on('close', () => finish('client'));
   res.on('error', () => finish('error'));
 }
 
@@ -174,6 +186,11 @@ export class LiveController {
       if (error instanceof RateLimitedException)
         metrics.connect('rate_limited');
       throw error;
+    }
+    // After each await: a client that left needs no database read.
+    if (clientGone(req, res)) {
+      metrics.connect('client_gone');
+      return;
     }
     const db = this.database.db;
     // Someone without a page yet still gets a stream: it is indexed by user alone.
