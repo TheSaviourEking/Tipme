@@ -6,6 +6,7 @@ import {
   wipeExpiredMailContent,
   type MailDeliveryDeps,
 } from '@tipme/database';
+import { sessionsChanged, type LiveMessage } from '@tipme/contracts';
 import type { Logger } from '@tipme/observability';
 
 import { databaseFailureFields } from './job-retry.js';
@@ -27,6 +28,8 @@ export function startMailDelivery(options: {
   logger: Logger;
   intervalMs?: number;
   limit?: number;
+  /** A finished email recovery ended the account's sessions: close their live streams. */
+  publishLive?: (messages: LiveMessage[]) => Promise<void>;
 }): MailDelivery {
   const { deps, logger, intervalMs = 500, limit = 20 } = options;
   let stopped = false;
@@ -41,7 +44,11 @@ export function startMailDelivery(options: {
         lastHousekeeping = now.getTime();
         await requeueStuckMail(deps.db, now);
         await wipeExpiredMailContent(deps.db, now);
-        await completeDueRecoveries(deps.db, deps.sealing, now);
+        await completeDueRecoveries(deps.db, deps.sealing, now, {
+          // After each recovery's commit; never awaited, never failing the pass.
+          onSessionsEnded: (userId) =>
+            void options.publishLive?.([sessionsChanged(userId)]),
+        });
         await purgeEmailCodes(deps.db, now);
       }
       await deliverDueMail(

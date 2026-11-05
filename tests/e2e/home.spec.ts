@@ -10,7 +10,7 @@ test('home switches between getting tipped and tipping with one lever', async ({
   await page.goto('/');
   const lever = page.getByRole('radiogroup', { name: 'Show the steps for' });
   const tipped = lever.getByRole('radio', { name: 'If you get tipped' });
-  const tipping = lever.getByRole('radio', { name: "If you're tipping" });
+  const tipping = lever.getByRole('radio', { name: 'If you’re tipping' });
   await expect(tipped).toBeChecked();
   const steps = page.locator('main');
   for (const step of ['Make it yours', 'Share it anywhere', 'Get your thanks'])
@@ -41,9 +41,9 @@ test("the tipping steps' chosen amount reads as chosen on the grey well", async 
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('radio', { name: "If you're tipping" }).click();
+  await page.getByRole('radio', { name: 'If you’re tipping' }).click();
   const chosen = page
-    .getByRole('list', { name: "Steps if you're tipping" })
+    .getByRole('list', { name: 'Steps if you’re tipping' })
     .locator('.home-key[data-selected="true"]');
   await expect(chosen).toHaveText(/₦5,000/);
   // Its white figures need the purple behind them, not the plain keys' light face.
@@ -51,7 +51,7 @@ test("the tipping steps' chosen amount reads as chosen on the grey well", async 
     await chosen.evaluate((key) => getComputedStyle(key).backgroundColor),
   ).not.toBe(
     await page
-      .getByRole('list', { name: "Steps if you're tipping" })
+      .getByRole('list', { name: 'Steps if you’re tipping' })
       .locator('.home-key:not([data-selected])')
       .first()
       .evaluate((key) => getComputedStyle(key).backgroundColor),

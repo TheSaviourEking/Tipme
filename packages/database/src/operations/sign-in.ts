@@ -104,7 +104,13 @@ export function requestSignInCode(
 }
 
 export type VerifyResult =
-  | { status: 'ok'; userId: string; created: boolean }
+  | {
+      status: 'ok';
+      userId: string;
+      created: boolean;
+      /** A phone recovery took the account: all of its sessions were ended. */
+      endedSessions?: true;
+    }
   | { status: 'invalid' | 'expired' | 'locked' | 'pending_recovery' };
 
 /**
@@ -206,7 +212,12 @@ export function verifySignInCode(
             .where(
               and(eq(sessions.userId, account.id), isNull(sessions.revokedAt)),
             );
-          return { status: 'ok', userId: account.id, created: false };
+          return {
+            status: 'ok',
+            userId: account.id,
+            created: false,
+            endedSessions: true,
+          };
         }
       }
       const inserted = await tx

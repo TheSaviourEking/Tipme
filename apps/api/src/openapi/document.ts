@@ -19,6 +19,10 @@ import { loadApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { OPENAPI_IMAGE, type ImageResponseDoc } from './image.js';
 import {
+  OPENAPI_EVENT_STREAM,
+  type EventStreamResponseDoc,
+} from './event-stream.js';
+import {
   OPS_ANY_STAFF,
   OPS_PERMISSION,
   OpsGuard,
@@ -143,6 +147,8 @@ function operation(
   }
   const image = Reflect.getMetadata(OPENAPI_IMAGE, handler) as
     ImageResponseDoc | undefined;
+  const eventStream = Reflect.getMetadata(OPENAPI_EVENT_STREAM, handler) as
+    EventStreamResponseDoc | undefined;
   if (image?.size)
     parameters.push({
       name: 'size',
@@ -174,33 +180,40 @@ function operation(
       [String(status)]:
         status === 204
           ? { description: 'Done; no body.' }
-          : image
+          : eventStream
             ? {
-                description: image.description,
-                ...(image.headers
-                  ? {
-                      headers: Object.fromEntries(
-                        Object.entries(image.headers).map(([name, text]) => [
-                          name,
-                          { description: text, schema: { type: 'string' } },
-                        ]),
-                      ),
-                    }
-                  : {}),
+                description: eventStream.description,
                 content: {
-                  'image/png': {
-                    schema: { type: 'string', format: 'binary' },
-                  },
+                  'text/event-stream': { schema: { type: 'string' } },
                 },
               }
-            : {
-                description: 'Success.',
-                content: {
-                  'application/json': {
-                    schema: { $ref: '#/components/schemas/DataResponse' },
+            : image
+              ? {
+                  description: image.description,
+                  ...(image.headers
+                    ? {
+                        headers: Object.fromEntries(
+                          Object.entries(image.headers).map(([name, text]) => [
+                            name,
+                            { description: text, schema: { type: 'string' } },
+                          ]),
+                        ),
+                      }
+                    : {}),
+                  content: {
+                    'image/png': {
+                      schema: { type: 'string', format: 'binary' },
+                    },
+                  },
+                }
+              : {
+                  description: 'Success.',
+                  content: {
+                    'application/json': {
+                      schema: { $ref: '#/components/schemas/DataResponse' },
+                    },
                   },
                 },
-              },
       default: {
         description:
           'An error with a stable code; never echoes request values.',

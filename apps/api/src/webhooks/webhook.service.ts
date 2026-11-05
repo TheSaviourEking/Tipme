@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { MockWebhook } from '@tipme/contracts';
 import {
   bachsAccountReadiness,
@@ -26,7 +26,8 @@ import type { Logger } from '@tipme/observability';
 import { DatabaseProvider } from '../infra/database.js';
 import { LOGGER } from '../tokens.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
-import type { MailSealing } from '@tipme/database';
+import type { EventResult, MailSealing } from '@tipme/database';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 
 const PROVIDER = 'mock';
 
@@ -40,7 +41,27 @@ export class WebhookService {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(LOGGER) private readonly logger: Pick<Logger, 'warn'>,
+    // Optional: integration tests build this service by hand, without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
+
+  /**
+   * After a provider event moved a tip to "still being confirmed": its page's dashboards re-read.
+   * Called once recordProviderEvent has resolved, so outside its transaction. A paid or failed tip
+   * is signalled by the outbox relay instead.
+   */
+  private signalPending(result: EventResult): void {
+    if (
+      result.outcome === 'applied' &&
+      result.tipStatus === 'PENDING_VERIFICATION'
+    )
+      void this.publishLive({
+        to: { profile: result.profileId },
+        type: 'tips.changed',
+      });
+  }
 
   async apply(event: MockWebhook): Promise<string> {
     const { db } = this.database;
@@ -61,6 +82,7 @@ export class WebhookService {
         signatureVerified: true,
         payload: event,
       });
+      this.signalPending(result);
       return result.outcome;
     }
     const payoutId = await findPayoutByReference(db, PROVIDER, reference);
@@ -119,6 +141,7 @@ export class WebhookService {
         signatureVerified: true,
         payload: event,
       });
+      this.signalPending(result);
       // The webhook only proves something happened; read the payment back from Bachs now, with
       // the worker's own checks (quoted share, fee bearer), so the receipt turns paid at once.
       // A failed read changes nothing: the worker keeps checking.

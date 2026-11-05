@@ -1,6 +1,6 @@
 {
-  "id": "6329329a-578b-40b5-9783-77bbf4dcaa31",
-  "prevId": "fb87a7f3-5e6b-4f0b-9e6f-5e29fa63c2cb",
+  "id": "5e4418f0-85e6-490c-9659-8034b53230d0",
+  "prevId": "3f3e8310-e21e-4fdb-8e88-2f2d2d61a537",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1020,6 +1020,124 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.handle_reservations": {
+      "name": "handle_reservations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "handle_lower": {
+          "name": "handle_lower",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "take_back_id": {
+          "name": "take_back_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reserved_by": {
+          "name": "reserved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reserved_at": {
+          "name": "reserved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "released_at": {
+          "name": "released_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "released_by": {
+          "name": "released_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "release_reason": {
+          "name": "release_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "handle_reservations_active": {
+          "name": "handle_reservations_active",
+          "columns": [
+            {
+              "expression": "handle_lower",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "released_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "handle_reservations_reserved_by_users_id_fk": {
+          "name": "handle_reservations_reserved_by_users_id_fk",
+          "tableFrom": "handle_reservations",
+          "tableTo": "users",
+          "columnsFrom": ["reserved_by"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "handle_reservations_released_by_users_id_fk": {
+          "name": "handle_reservations_released_by_users_id_fk",
+          "tableFrom": "handle_reservations",
+          "tableTo": "users",
+          "columnsFrom": ["released_by"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "handle_reservations_source": {
+          "name": "handle_reservations_source",
+          "value": "\"handle_reservations\".\"source\" IN ('staff', 'take_back')"
+        },
+        "handle_reservations_released": {
+          "name": "handle_reservations_released",
+          "value": "\"handle_reservations\".\"released_at\" IS NULL OR (\"handle_reservations\".\"released_by\" IS NOT NULL AND \"handle_reservations\".\"release_reason\" IS NOT NULL)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.issue_notes": {
@@ -4394,25 +4512,6 @@
           "notNull": true,
           "default": 0
         },
-        "thanks_line": {
-          "name": "thanks_line",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thanks_style": {
-          "name": "thanks_style",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thanks_signed": {
-          "name": "thanks_signed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4496,14 +4595,6 @@
         "profiles_tip_presets_range": {
           "name": "profiles_tip_presets_range",
           "value": "tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)"
-        },
-        "profiles_thanks_line_length": {
-          "name": "profiles_thanks_line_length",
-          "value": "thanks_line IS NULL OR char_length(thanks_line) BETWEEN 1 AND 140"
-        },
-        "profiles_thanks_style": {
-          "name": "profiles_thanks_style",
-          "value": "thanks_style IS NULL OR thanks_style IN ('paper', 'violet', 'night')"
         }
       },
       "isRLSEnabled": false
@@ -5289,7 +5380,7 @@
       "checkConstraints": {
         "role_permissions_known": {
           "name": "role_permissions_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage', 'usernames.manage')"
         }
       },
       "isRLSEnabled": false
@@ -5761,7 +5852,7 @@
       "checkConstraints": {
         "staff_permission_overrides_known": {
           "name": "staff_permission_overrides_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage', 'usernames.manage')"
         },
         "staff_permission_overrides_effect": {
           "name": "staff_permission_overrides_effect",
@@ -5947,13 +6038,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "may_show": {
-          "name": "may_show",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",

@@ -53,3 +53,20 @@ test('labels are unique, so a screen reader can tell them apart', () => {
   ]).map((link) => link.label);
   assert.equal(new Set(labels).size, labels.length);
 });
+
+test('Usernames appears only with usernames.manage, right after Pages', () => {
+  assert.ok(!hrefs(['pages.plan', 'search.view']).includes('/ops/usernames'));
+  const menu = hrefs(['pages.plan', 'usernames.manage']);
+  assert.equal(menu[menu.indexOf('/ops/pages') + 1], '/ops/usernames');
+  assert.deepEqual(hrefs(['usernames.manage']), [
+    '/ops',
+    '/ops/approvals',
+    '/ops/usernames',
+    '/ops/staff',
+  ]);
+  assert.equal(
+    opsMenu(['usernames.manage']).find((l) => l.href === '/ops/usernames')
+      .label,
+    'Usernames',
+  );
+});

@@ -4,6 +4,7 @@ import {
   isReservedHandle,
   normaliseHandle,
   RESERVED_HANDLES,
+  reservationKey,
 } from '../dist/index.js';
 
 test('handles are lower-case letters, digits and underscores, 3–30 long', () => {
@@ -31,4 +32,47 @@ test('handles that clash with TipMe pages are reserved', () => {
 // The /pro page claims this address (owner, 3 Nov 2026).
 test('pro is reserved for the Pro page', () => {
   assert.equal(isReservedHandle('pro'), true);
+});
+
+// Staff reservations are stored and compared by one key, so names that differ only by case or by
+// '-'/'_' are one reservation, exactly as isReservedHandle folds the built-in list.
+test('reservationKey folds case and hyphens into one key', () => {
+  for (const raw of ['MTN', 'mtn', ' Mtn '])
+    assert.equal(reservationKey(raw), 'mtn', raw);
+  assert.equal(reservationKey('how-it-works'), 'how_it_works');
+  assert.equal(reservationKey('HOW-IT-WORKS'), 'how_it_works');
+  assert.equal(reservationKey('Kemi_NG'), 'kemi_ng');
+});
+
+test('reservationKey refuses what can never be a handle', () => {
+  for (const bad of ['ab', 'a'.repeat(31), 'kemi!', '', '   ', 'kémi'])
+    assert.equal(reservationKey(bad), null, JSON.stringify(bad));
+});
+
+test('isReservedHandle is unchanged', () => {
+  for (const word of ['admin', 'pro', 'how-it-works', 'how_it_works', 'ADMIN'])
+    assert.equal(isReservedHandle(word), true, word);
+  assert.equal(isReservedHandle('kemi'), false);
+});
+
+// The handles TipMe's own pages show as examples (Home, Pro, the postcards) are reserved, so a
+// visitor who types a printed address never lands on a stranger's live page (owner, 5 Nov 2026).
+// The seeded demo pages (ada, tobi) are inserted directly and keep working at /@handle.
+test('every example handle shown on the site is reserved', () => {
+  for (const example of [
+    'ada',
+    'adacuts',
+    'adaedits',
+    'adaokafor',
+    'tobi',
+    'zainab',
+  ])
+    assert.equal(isReservedHandle(example), true, example);
+  assert.equal(isReservedHandle('Zainab'), true);
+});
+
+test('the reserved list stays alphabetical, so a duplicate or a misfile is easy to see', () => {
+  const sorted = [...RESERVED_HANDLES].sort();
+  assert.deepEqual([...RESERVED_HANDLES], sorted);
+  assert.equal(new Set(RESERVED_HANDLES).size, RESERVED_HANDLES.length);
 });

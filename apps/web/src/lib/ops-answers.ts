@@ -130,6 +130,11 @@ const REFUSALS: Record<string, string> = {
     'Your earlier request for this is still waiting. Cancel it in Approvals to do this yourself.',
   APPROVAL_SUBJECT:
     'That address is a staff mailbox, or this concerns you. Nothing changed.',
+  USERNAME_BUILT_IN: 'TipMe’s own list already reserves this',
+  USERNAME_RESERVED: 'This username is already reserved',
+  USERNAME_HELD_BY_PAGE:
+    'A page has this username, now or as an old one. To take it, ask to take it back.',
+  USERNAME_NOT_RESERVED: 'This username isn’t reserved',
 };
 
 const UNKNOWN =
@@ -151,13 +156,19 @@ export function outcomeIsUnknown(answer: {
  * What to tell staff. "Nothing changed" only where the server's refusal means that: a 5xx or an
  * answer we don't know could mean it happened.
  */
-export function refusalWords(answer: {
-  status: number;
-  code: string;
-  message?: string;
-}): string {
+export function refusalWords(
+  answer: {
+    status: number;
+    code: string;
+    message?: string;
+  },
+  /** The page that holds the name, when the screen knows it (USERNAME_HELD_BY_PAGE). */
+  context?: { handle?: string },
+): string {
   if (answer.status === 0) return NO_ANSWER;
   if (outcomeIsUnknown(answer)) return UNKNOWN;
+  if (answer.code === 'USERNAME_HELD_BY_PAGE' && context?.handle)
+    return `This is @${context.handle}’s username. To take it, ask to take it back.`;
   return (
     REFUSALS[answer.code] ??
     answer.message ??

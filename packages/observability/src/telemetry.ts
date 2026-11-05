@@ -93,7 +93,11 @@ export function startTelemetry(options: TelemetryOptions): void {
             }),
           ],
     instrumentations: [
-      new HttpInstrumentation(),
+      new HttpInstrumentation({
+        // 30-minute stream requests would swamp the API's latency histogram and p95.
+        ignoreIncomingRequestHook: (request) =>
+          LIVE_PATHS.has(request.url?.split('?')[0] ?? ''),
+      }),
       new ExpressInstrumentation(),
       new NestInstrumentation(),
       new PgInstrumentation({ enhancedDatabaseReporting: false }),
@@ -112,6 +116,12 @@ export async function shutdownTelemetry(): Promise<void> {
   sdk = undefined;
   await current?.shutdown().catch(() => undefined);
 }
+
+/** The live update streams (spec §10): long-lived, so they make no HTTP server span. */
+export const LIVE_PATHS: ReadonlySet<string> = new Set([
+  '/v1/me/events',
+  '/v1/ops/events',
+]);
 
 export function getMeter(name: string): Meter {
   return metrics.getMeter(name);

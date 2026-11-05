@@ -1,7 +1,9 @@
+import type { LiveMessage } from '@tipme/contracts';
 import { relayOutboxOnce, type Database } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import type { Queue } from 'bullmq';
 import { databaseFailureFields, RELAY_JOB_RETRIES } from './job-retry.js';
+import { liveSignalFor } from './live-signals.js';
 
 const RETENTION_SECONDS = 7 * 24 * 60 * 60;
 
@@ -16,10 +18,12 @@ export interface OutboxRelay {
  */
 export function startOutboxRelay(options: {
   db: Database;
-  queue: Queue;
-  logger: Logger;
+  queue: Pick<Queue, 'add'>;
+  logger: Pick<Logger, 'warn'>;
   intervalMs?: number;
   maxBackoffMs?: number;
+  /** Live signals for the relayed rows; called only after the claim has committed. Never throws. */
+  publishLive?: (messages: LiveMessage[]) => Promise<void>;
 }): OutboxRelay {
   const {
     db,
@@ -34,6 +38,9 @@ export function startOutboxRelay(options: {
   let delay = intervalMs;
 
   const tick = async (): Promise<void> => {
+    // Collected inside the claim, published only once it has committed: a rolled-back claim
+    // (a failed queue add) signals nothing, and no publish ever waits inside the transaction.
+    const signals: LiveMessage[] = [];
     try {
       await relayOutboxOnce(db, async (row) => {
         await queue.add(
@@ -47,8 +54,11 @@ export function startOutboxRelay(options: {
             ...RELAY_JOB_RETRIES,
           },
         );
+        signals.push(...liveSignalFor(row.eventType, row.payload));
       });
       delay = intervalMs;
+      if (signals.length > 0 && options.publishLive)
+        void options.publishLive(signals).catch(() => undefined);
     } catch (error) {
       logger.warn({
         event: 'outbox.relay_failed',

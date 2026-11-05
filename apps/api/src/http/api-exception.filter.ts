@@ -54,6 +54,12 @@ const messages: Record<ApiErrorCode, string> = {
     'You already have this same request waiting. Cancel it first, then you can act.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
+  USERNAME_BUILT_IN:
+    'TipMe’s own list already reserves this username. It can’t be reserved or released here.',
+  USERNAME_RESERVED: 'This username is already reserved.',
+  USERNAME_HELD_BY_PAGE:
+    'A page has this username, now or as an old one. To take it, ask to take it back.',
+  USERNAME_NOT_RESERVED: 'This username isn’t reserved.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
   ROLE_PROTECTED: 'This built-in role can’t be changed.',
   STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
@@ -112,6 +118,10 @@ const messages: Record<ApiErrorCode, string> = {
   PRO_REQUIRED: 'Choosing your own tip amounts is part of TipMe Pro.',
   QR_DESIGN_PRO_REQUIRED: 'Saving a Pro QR design is part of TipMe Pro.',
   THANKS_PRO_REQUIRED: 'Card styles and your signature are part of TipMe Pro.',
+  SOCIAL_LINK_UNAVAILABLE:
+    'OnlyFans and Fansly links can’t be added right now.',
+  SOCIAL_LINKS_PRO_REQUIRED:
+    'More than 3 links, Pro sites, a featured link and your own order are part of TipMe Pro.',
   QR_ART_PHOTO_REQUIRED:
     'The photo mosaic is made from your page photo. Add a photo to your page first.',
   QR_ART_PHOTO_TOO_LARGE:
@@ -136,6 +146,9 @@ const messages: Record<ApiErrorCode, string> = {
   PREVIEW_REQUIRED:
     'This is a private preview. Please sign in with the preview password.',
   RATE_LIMITED: 'Too many requests. Please wait and retry.',
+  LIVE_LIMIT:
+    'Too many live connections are open. This page will refresh on its own.',
+  LIVE_UNAVAILABLE: 'Live updates are busy. This page will refresh on its own.',
   DEPENDENCY_UNAVAILABLE:
     'A required service is temporarily unavailable. Please retry.',
   EMAIL_VERIFICATION_REQUIRED:
@@ -218,6 +231,11 @@ const operationErrors: Partial<
   PRO_REQUIRED: { status: 403, code: 'PRO_REQUIRED' },
   QR_DESIGN_PRO_REQUIRED: { status: 403, code: 'QR_DESIGN_PRO_REQUIRED' },
   THANKS_PRO_REQUIRED: { status: 403, code: 'THANKS_PRO_REQUIRED' },
+  SOCIAL_LINK_UNAVAILABLE: { status: 409, code: 'SOCIAL_LINK_UNAVAILABLE' },
+  SOCIAL_LINKS_PRO_REQUIRED: {
+    status: 403,
+    code: 'SOCIAL_LINKS_PRO_REQUIRED',
+  },
   PHONE_TAKEN: { status: 409, code: 'PHONE_TAKEN' },
   CODE_INVALID: { status: 400, code: 'CODE_INVALID' },
   ENROLMENT_INVALID: { status: 400, code: 'ENROLMENT_INVALID' },
@@ -250,6 +268,10 @@ const operationErrors: Partial<
   SELF_ACCESS_CHANGE: { status: 403, code: 'SELF_ACCESS_CHANGE' },
   ROLE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   ROLE_NAME_TAKEN: { status: 409, code: 'ROLE_NAME_TAKEN' },
+  USERNAME_BUILT_IN: { status: 409, code: 'USERNAME_BUILT_IN' },
+  USERNAME_RESERVED: { status: 409, code: 'USERNAME_RESERVED' },
+  USERNAME_HELD_BY_PAGE: { status: 409, code: 'USERNAME_HELD_BY_PAGE' },
+  USERNAME_NOT_RESERVED: { status: 404, code: 'USERNAME_NOT_RESERVED' },
   ROLE_IN_USE: { status: 409, code: 'ROLE_IN_USE' },
   ROLE_PROTECTED: { status: 409, code: 'ROLE_PROTECTED' },
   STAFF_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
@@ -399,7 +421,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
     else if (fields) body.error.fields = fields;
     if (exception instanceof CodedHttpException && exception.reason)
       body.error.reason = exception.reason;
-    if (exception instanceof RateLimitedException)
+    if (
+      exception instanceof RateLimitedException ||
+      (exception instanceof CodedHttpException && exception.retryAfterSeconds)
+    )
       response.setHeader('Retry-After', String(exception.retryAfterSeconds));
     response.status(status).json(body);
   }

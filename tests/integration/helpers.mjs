@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import http from 'node:http';
 import { createRequire } from 'node:module';
 import { Writable } from 'node:stream';
 
@@ -87,6 +88,8 @@ export async function startStack({
   );
   return {
     api: await app.getUrl(),
+    /** The Nest app, for tests that reach a provider (readiness, the pool). */
+    app,
     prefix,
     logs,
     async stop() {
@@ -235,4 +238,73 @@ export async function opsSignIn(api, db, phone) {
     secret,
     nextCode,
   };
+}
+
+/**
+ * Reads a text/event-stream response without EventSource: `frames` are the raw blocks between blank
+ * lines (`data: {...}`, `retry: 5000`, `: hb`). `ended` resolves when the server closes the stream.
+ */
+export function openEventStream(url, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(
+      url,
+      { headers: { accept: 'text/event-stream', ...headers } },
+      (response) => {
+        const stream = {
+          status: response.statusCode,
+          headers: response.headers,
+          body: '',
+          frames: [],
+          ended: new Promise((done) => {
+            response.on('end', done);
+            response.on('close', done);
+            response.on('error', done);
+          }),
+          close() {
+            request.destroy();
+          },
+          /** Resolves with the first frame matching `pattern`; rejects after `ms`. */
+          waitFor(pattern, ms = 5000) {
+            const found = stream.frames.find((f) => pattern.test(f));
+            if (found) return Promise.resolve(found);
+            return new Promise((done, fail) => {
+              const timer = setTimeout(
+                () =>
+                  fail(
+                    new Error(
+                      `no frame matching ${pattern} in ${ms} ms: ${JSON.stringify(stream.frames)}`,
+                    ),
+                  ),
+                ms,
+              );
+              waiters.push({
+                pattern,
+                done: (f) => (clearTimeout(timer), done(f)),
+              });
+            });
+          },
+        };
+        const waiters = [];
+        let buffer = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          stream.body += chunk;
+          buffer += chunk;
+          let at;
+          while ((at = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, at);
+            buffer = buffer.slice(at + 2);
+            stream.frames.push(frame);
+            for (const w of [...waiters])
+              if (w.pattern.test(frame)) {
+                waiters.splice(waiters.indexOf(w), 1);
+                w.done(frame);
+              }
+          }
+        });
+        resolve(stream);
+      },
+    );
+    request.on('error', reject);
+  });
 }

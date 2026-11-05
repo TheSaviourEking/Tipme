@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useReducer, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
   PayoutBank,
@@ -8,7 +8,10 @@ import type {
   PayoutDestinationView,
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { NameChecks, nameCheckKey } from '@/lib/name-check';
 import { apiFetch } from '@/lib/session-client';
+import { BankPicker } from './bank-picker';
+import { CodeField } from './code-field';
 
 const STATUS_WORDS: Record<PayoutDestinationView['status'], string> = {
   usable: 'Usable',
@@ -32,10 +35,20 @@ function messageFor(code: string): string {
     case 'PAYOUT_SETUP_NEEDED':
       return 'Set up your payment account first, then add your bank account.';
     case 'PAYOUT_DESTINATION_REFUSED':
-      return 'The payment provider couldn’t accept this bank account. Please check the details.';
+      return 'Our payment partner couldn’t accept this bank account. Please check the details.';
     default:
-      return 'We couldn’t reach the payment provider. Please try again in a moment.';
+      return 'We couldn’t reach our payment partner. Please try again in a moment.';
   }
+}
+
+/**
+ * A failed name check. The limit (10 a day per person) gets its own words: another try can't work
+ * until tomorrow, so the card offers none. Proposed copy, awaiting the owner.
+ */
+function checkMessageFor(code: string): string {
+  return code === 'RATE_LIMITED'
+    ? 'You’ve used today’s account checks. Try again tomorrow.'
+    : messageFor(code);
 }
 
 type Step = 'details' | 'code';
@@ -57,9 +70,8 @@ export function GetPaidCard() {
   const [step, setStep] = useState<Step>('details');
   const [bankCode, setBankCode] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
-  const [resolved, setResolved] = useState<PayoutBankResolveResponse | null>(
-    null,
-  );
+  // "Enter your 10-digit account number." once the field is left short; cleared on the next change.
+  const [numberError, setNumberError] = useState('');
   const [typedName, setTypedName] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -102,38 +114,51 @@ export function GetPaidCard() {
     setStep('details');
     setBankCode('');
     setAccountNumber('');
-    setResolved(null);
+    setNumberError('');
     setTypedName('');
     setCode('');
     setError('');
     setResent(false);
   };
 
-  const accountName =
-    resolved?.resolved === true ? resolved.accountName : typedName.trim();
+  // Every name check this card has made, by bank and number, kept for as long as the card is
+  // mounted (resetForm leaves it), so a pair is never checked twice: the partner allows 10 a
+  // day. Mutable on purpose, so claiming a check is synchronous. Its keys hold the full account
+  // number, so it is never rendered, stored or logged.
+  const [checks] = useState(() => new NameChecks());
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const key = nameCheckKey(bankCode, accountNumber);
+  const run = useCallback(
+    async (claimed: string, bank: string, number: string) => {
+      redraw();
+      const result = await apiFetch<PayoutBankResolveResponse>(
+        '/v1/me/payout-destination/resolve',
+        { method: 'POST', body: { bankCode: bank, accountNumber: number } },
+      );
+      // Stored for its own pair: a late answer never shows against a newer number.
+      checks.finish(
+        claimed,
+        !result.ok
+          ? { kind: 'failed', code: result.code }
+          : result.data.resolved
+            ? { kind: 'found', accountName: result.data.accountName }
+            : { kind: 'not_found' },
+      );
+      redraw();
+    },
+    [checks],
+  );
+  useEffect(() => {
+    if (checks.claim(key)) void run(key, bankCode, accountNumber);
+  }, [checks, key, bankCode, accountNumber, run]);
+  const nameCheck = checks.view(key);
 
-  const lookUp = async () => {
-    if (!bankCode) {
-      setError('Choose your bank.');
-      return;
-    }
-    if (!/^\d{10}$/.test(accountNumber)) {
-      setError('Enter your 10-digit account number.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    const result = await apiFetch<PayoutBankResolveResponse>(
-      '/v1/me/payout-destination/resolve',
-      { method: 'POST', body: { bankCode, accountNumber } },
-    );
-    setBusy(false);
-    if (!result.ok) {
-      setError(messageFor(result.code));
-      return;
-    }
-    setResolved(result.data);
-  };
+  const accountName =
+    nameCheck.kind === 'found'
+      ? nameCheck.accountName
+      : nameCheck.kind === 'not_found'
+        ? typedName.trim()
+        : '';
 
   const sendCode = async () => {
     if (!accountName) {
@@ -237,7 +262,7 @@ export function GetPaidCard() {
       )}
       {destination?.status === 'rejected' && (
         <p className="tm-hint">
-          The payment provider can’t pay to this account. Please add another.
+          Our payment partner can’t pay to this account. Please add another.
         </p>
       )}
       {bankChangesFrom && (
@@ -262,26 +287,18 @@ export function GetPaidCard() {
         <form onSubmit={save} className="settings-form" noValidate>
           {step === 'details' && (
             <>
-              <div className="tm-field">
-                <label htmlFor={`${id}-bank`}>Bank</label>
-                <select
-                  id={`${id}-bank`}
-                  className="tm-input"
-                  value={bankCode}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setBankCode(event.target.value);
-                    setResolved(null);
-                  }}
-                >
-                  <option value="">Choose your bank</option>
-                  {banks.map((bank) => (
-                    <option key={bank.code} value={bank.code}>
-                      {bank.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <BankPicker
+                id={id}
+                banks={banks}
+                value={bankCode}
+                disabled={busy}
+                error={
+                  accountNumber.length === 10 && !bankCode
+                    ? 'Choose your bank.'
+                    : undefined
+                }
+                onChange={setBankCode}
+              />
               <InputField
                 id={`${id}-number`}
                 label="Account number"
@@ -289,21 +306,44 @@ export function GetPaidCard() {
                 autoComplete="off"
                 maxLength={10}
                 value={accountNumber}
+                // busy is sending a code or saving, never checking: disabling the field while
+                // checking would take focus away on the 10th digit.
                 disabled={busy}
+                hint={
+                  accountNumber.length > 0 && accountNumber.length < 10
+                    ? `${accountNumber.length} of 10`
+                    : undefined
+                }
+                error={numberError || undefined}
+                onBlur={() => {
+                  if (accountNumber.length > 0 && accountNumber.length < 10)
+                    setNumberError('Enter your 10-digit account number.');
+                }}
                 onChange={(event) => {
                   setAccountNumber(event.target.value.replace(/\D/g, ''));
-                  setResolved(null);
+                  setNumberError('');
                 }}
               />
-              {resolved?.resolved === true && (
-                <InputField
-                  id={`${id}-name`}
-                  label="Name on the account"
-                  value={resolved.accountName}
-                  readOnly
-                />
+              {nameCheck.kind === 'checking' && (
+                <p role="status" className="bank-check">
+                  <span className="bank-check__spin" aria-hidden="true" />
+                  Checking the name at your bank…
+                </p>
               )}
-              {resolved?.resolved === false && (
+              {nameCheck.kind === 'found' && (
+                <div className="bank-found">
+                  <span className="bank-found__tick" aria-hidden="true">
+                    ✓
+                  </span>
+                  <InputField
+                    id={`${id}-name`}
+                    label="Name on the account"
+                    value={nameCheck.accountName}
+                    readOnly
+                  />
+                </div>
+              )}
+              {nameCheck.kind === 'not_found' && (
                 <InputField
                   id={`${id}-name`}
                   label="Name on the account"
@@ -314,15 +354,27 @@ export function GetPaidCard() {
                   onChange={(event) => setTypedName(event.target.value)}
                 />
               )}
-              {!resolved ? (
-                <Button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void lookUp()}
-                >
-                  {busy ? 'Checking…' : 'Check account'}
-                </Button>
-              ) : (
+              {nameCheck.kind === 'failed' && (
+                <>
+                  <Notice tone="error" title="Not saved">
+                    {checkMessageFor(nameCheck.code)}
+                  </Notice>
+                  {nameCheck.code !== 'RATE_LIMITED' && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        if (checks.retry(key))
+                          void run(key, bankCode, accountNumber);
+                      }}
+                    >
+                      Check again
+                    </Button>
+                  )}
+                </>
+              )}
+              {(nameCheck.kind === 'found' ||
+                nameCheck.kind === 'not_found') && (
                 <Button
                   type="button"
                   disabled={busy}
@@ -339,17 +391,12 @@ export function GetPaidCard() {
                 We’ve sent a code to your email. Enter it to save this bank
                 account.
               </p>
-              <InputField
+              <CodeField
                 id={`${id}-code`}
                 label="6-digit code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
                 value={code}
                 disabled={busy}
-                onChange={(event) =>
-                  setCode(event.target.value.replace(/\D/g, ''))
-                }
+                onChange={setCode}
               />
               <Button type="submit" disabled={busy}>
                 {busy ? 'Saving…' : 'Save bank account'}

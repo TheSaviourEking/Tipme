@@ -52,6 +52,7 @@ export class PublicProfileController {
     // checkout refuses them otherwise.
     const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
     const page = await publicProfile(this.database.db, handle, {
+      adultLinks: this.config.ADULT_PLATFORM_LINKS,
       ...(environment
         ? { requiredAccount: { provider: 'bachs', environment } }
         : {}),

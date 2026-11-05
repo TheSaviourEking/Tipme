@@ -8,9 +8,17 @@ const gitOutput = (...args) => execFileSync('git', args, { encoding: 'utf8' });
 
 /** The short commit, whether the tree has uncommitted edits, and when (UTC). */
 export function readStamp(git = gitOutput, now = new Date()) {
+  // Without git (an export, a CI cache), the stamp says so rather than stopping the build.
+  const safe = (...args) => {
+    try {
+      return git(...args);
+    } catch {
+      return '';
+    }
+  };
   return {
-    sha: git('rev-parse', '--short', 'HEAD').trim(),
-    dirty: git('status', '--porcelain').trim() !== '',
+    sha: safe('rev-parse', '--short', 'HEAD').trim() || 'unknown',
+    dirty: safe('status', '--porcelain').trim() !== '',
     builtAt: now.toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
   };
 }

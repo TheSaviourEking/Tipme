@@ -23,6 +23,7 @@ export const OPS_PERMISSIONS = [
   'email.export',
   'payments.repair',
   'staff.manage',
+  'usernames.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -139,6 +140,13 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
   'staff.manage': {
     description: 'Add staff, change their access and roles',
     group: 'settings',
+    sensitive: true,
+  },
+  // Sensitive: taking a name from a page changes a person's account (PR 2's serious action needs it).
+  'usernames.manage': {
+    description:
+      'Reserve and release usernames, and ask to take one back from a page',
+    group: 'people',
     sensitive: true,
   },
 };

@@ -54,6 +54,10 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import {
+  PARTNER_QUOTE_CACHE,
+  type RedisPartnerQuoteCache,
+} from '../infra/partner-quote-cache.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { LOGGER } from '../tokens.js';
 
@@ -88,6 +92,8 @@ export class PayoutDestinationController {
     private readonly provider: DestinationProvider,
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(PARTNER_QUOTE_CACHE)
+    private readonly partnerCache: RedisPartnerQuoteCache,
   ) {}
 
   @Get('payout-banks')
@@ -227,6 +233,12 @@ export class PayoutDestinationController {
       bankName: bank.name,
       last4: body.accountNumber.slice(-4),
       status,
+    });
+    // The quote's provider figures belong to the old bank. The new destination row changes the
+    // cache key anyway, so a failed invalidation here still never shows the old answer.
+    await this.partnerCache.invalidate({
+      provider: this.provider.name,
+      profileId,
     });
     return { data: await this.view(profileId) };
   }

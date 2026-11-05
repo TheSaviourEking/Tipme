@@ -434,3 +434,36 @@ test('preview and test copies keep these settings', () => {
   const config = loadApiConfig(preview);
   assert.equal(config.RELEASE_KIND, 'test');
 });
+
+test('LIVE_UPDATES_ENABLED defaults to false; true turns it on; LIVE_MAX_STREAMS defaults to 2000', () => {
+  const off = loadApiConfig({ ...valid, NODE_ENV: 'development' });
+  assert.equal(off.LIVE_UPDATES_ENABLED, false);
+  assert.equal(off.LIVE_MAX_STREAMS, 2000);
+  assert.equal(off.LIVE_HEARTBEAT_MS, 20000);
+  assert.equal(
+    loadApiConfig({
+      ...valid,
+      NODE_ENV: 'development',
+      LIVE_UPDATES_ENABLED: 'true',
+    }).LIVE_UPDATES_ENABLED,
+    true,
+  );
+  assert.throws(
+    () =>
+      loadApiConfig({
+        ...valid,
+        NODE_ENV: 'development',
+        LIVE_UPDATES_ENABLED: 'yes',
+      }),
+    /LIVE_UPDATES_ENABLED/,
+  );
+  assert.throws(
+    () =>
+      loadApiConfig({
+        ...valid,
+        NODE_ENV: 'development',
+        LIVE_HEARTBEAT_MS: '999',
+      }),
+    /LIVE_HEARTBEAT_MS/,
+  );
+});

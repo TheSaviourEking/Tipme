@@ -509,15 +509,36 @@
     {
       "idx": 72,
       "version": "7",
-      "when": 1793852707209,
-      "tag": "0072_note_consent",
+      "when": 1793850998259,
+      "tag": "0072_handle_reservations",
       "breakpoints": true
     },
     {
       "idx": 73,
       "version": "7",
-      "when": 1793852709137,
-      "tag": "0073_thanks_line",
+      "when": 1793851001386,
+      "tag": "0073_usernames_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793865205363,
+      "tag": "0074_social_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793871494302,
+      "tag": "0075_live_popup_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793878814523,
+      "tag": "0076_note_consent_and_thanks",
       "breakpoints": true
     }
   ]

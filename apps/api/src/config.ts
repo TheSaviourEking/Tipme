@@ -100,6 +100,23 @@ export const apiConfigSchema = z
       .min(1)
       .default(30),
     RATE_LIMIT_BANK_READ_PER_MIN: z.coerce.number().int().min(1).default(30),
+    // Live stream connects per address per minute, counted before the session check. Tests raise it.
+    RATE_LIMIT_LIVE_CONNECT_PER_MIN: z.coerce.number().int().min(1).default(60),
+    // How long every API copy reuses the provider's balance and fee for showing a withdrawal
+    // quote. Its rate limit is shared with payouts. A withdrawal itself always asks fresh; 0 is off.
+    PARTNER_QUOTE_CACHE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(300)
+      .default(30),
+    // OnlyFans and Fansly links (Pro only, the owner's decision of 5 Nov 2026). `off` hides them
+    // from every public page and refuses new ones, deleting nothing: the lever for the payment
+    // partner's answer (docs/runbooks/adult-platform-links.md). Default on.
+    ADULT_PLATFORM_LINKS: z
+      .enum(['on', 'off'])
+      .default('on')
+      .transform((value) => value === 'on'),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z
@@ -113,6 +130,8 @@ export const apiConfigSchema = z
     // Authenticator codes re-entered per staff member per hour (the code itself locks after 5 misses).
     RATE_LIMIT_OPS_CODE_PER_HOUR: z.coerce.number().int().min(1).default(60),
     RATE_LIMIT_OPS_REQUEST_PER_HOUR: z.coerce.number().int().min(1).default(60),
+    // Admin reads that are limited at all (the Usernames list and check), per staff member per hour.
+    RATE_LIMIT_OPS_READ_PER_HOUR: z.coerce.number().int().min(1).default(600),
     // Sign-in codes per phone number per hour. Keep 3 on any copy people use; local drills raise it.
     RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: z.coerce
       .number()
@@ -173,6 +192,12 @@ export const apiConfigSchema = z
       .optional(),
     // Proxies in front of the API whose X-Forwarded-For is trusted for the client IP (0: none).
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Live updates (signals over text/event-stream). Off: both stream routes answer 204.
+    LIVE_UPDATES_ENABLED: flag,
+    // Open streams per API process; beyond it a connect gets 503 and the page polls.
+    LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
+    // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.
+    LIVE_HEARTBEAT_MS: z.coerce.number().int().min(1000).default(20000),
     // On SIGTERM, how long readiness answers 503 before the server closes, so the load balancer
     // (health checks every 2 s) stops routing here first. Keep above two check intervals.
     SHUTDOWN_DRAIN_MS: z.coerce.number().int().min(0).max(30000).default(5000),
