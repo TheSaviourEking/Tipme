@@ -505,6 +505,13 @@
       "when": 1793839479669,
       "tag": "0071_payouts_profile_created",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793851674832,
+      "tag": "0072_social_links",
+      "breakpoints": true
     }
   ]
 }
