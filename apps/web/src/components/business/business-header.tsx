@@ -7,10 +7,13 @@
 export function BusinessHeader({
   name,
   location,
+  where,
   titleLevel,
 }: {
   name: string;
-  location: string;
+  location?: string;
+  /** The business page's own line ("3 places"), in place of "{location} · on today". */
+  where?: string;
   /** The location page's title is the business; the staff page's is the person. */
   titleLevel: 'h1' | 'p';
 }) {
@@ -24,7 +27,9 @@ export function BusinessHeader({
         </span>
         <div className="business-header__names">
           <Title className="business-header__name">{name}</Title>
-          <p className="business-header__where">{location} · on today</p>
+          <p className="business-header__where">
+            {where ?? `${location} · on today`}
+          </p>
         </div>
       </div>
       <p className="business-header__verified">
