@@ -568,7 +568,7 @@ test('a business balance and its withdrawals', async (t) => {
       const reversed = await db.transaction((tx) =>
         reverseTip(tx, {
           tipId,
-          providerEventId: `evt_refund_${randomUUID()}`,
+          partnerReversalId: `refund.rfnd_${randomUUID()}`,
           refundedMinor: GROSS,
         }),
       );
@@ -631,7 +631,7 @@ test('a business balance and its withdrawals', async (t) => {
           db.transaction((tx) =>
             reverseTip(tx, {
               tipId,
-              providerEventId: `evt_refund_${randomUUID()}`,
+              partnerReversalId: `refund.rfnd_${randomUUID()}`,
               refundedMinor: GROSS,
             }),
           ),
