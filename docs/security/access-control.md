@@ -207,6 +207,9 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/tips/{tipId}` | n/a (read) | – | – |
 | POST | `/v1/me/tips/{tipId}/message/hide` | yes | – | – |
 | POST | `/v1/me/tips/{tipId}/message/report` | yes | – | – |
+| GET | `/v1/me/whats-new` | n/a (read) | – | – |
+| POST | `/v1/me/whats-new/seen` | yes | – | – |
+| GET | `/v1/me/whats-new/status` | n/a (read) | – | – |
 | GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
 | GET | `/v1/me/withdrawals` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
