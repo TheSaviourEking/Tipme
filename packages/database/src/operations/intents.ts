@@ -136,11 +136,15 @@ export async function createPaymentIntent(
         .from(tipQuotes)
         .where(eq(tipQuotes.id, input.quoteId));
       if (!quote) throw new OperationError('QUOTE_NOT_FOUND');
+      // A team quote (business release 2, R2-D) names a location, not a person, and is paid only
+      // through its own intent route: here it reads as no quote at all.
+      const profileId = quote.profileId;
+      if (profileId === null) throw new OperationError('QUOTE_NOT_FOUND');
       // Where the tip is made, resolved before the fingerprint, since that needs the quote's page.
       // A label, never a destination: no posting reads it.
       const member = await tippableMember(
         tx,
-        quote.profileId,
+        profileId,
         input.businessMemberId,
         now,
       );
@@ -161,7 +165,7 @@ export async function createPaymentIntent(
           .from(paymentIntents)
           .where(
             and(
-              eq(paymentIntents.profileId, quote.profileId),
+              eq(paymentIntents.profileId, profileId),
               eq(paymentIntents.idempotencyKey, input.idempotencyKey),
             ),
           );
@@ -204,7 +208,7 @@ export async function createPaymentIntent(
           plan: profiles.plan,
         })
         .from(profiles)
-        .where(eq(profiles.id, quote.profileId));
+        .where(eq(profiles.id, profileId));
       if (page?.pageState !== 'live' || page.status !== 'active')
         throw new OperationError('TIP_NOT_PAYABLE');
 
@@ -215,7 +219,7 @@ export async function createPaymentIntent(
         .values({
           id: intentId,
           quoteId: quote.id,
-          profileId: quote.profileId,
+          profileId,
           idempotencyKey: input.idempotencyKey,
           requestFingerprint: fingerprint,
           status: 'AWAITING_PAYMENT',
@@ -235,7 +239,7 @@ export async function createPaymentIntent(
       await tx.insert(tips).values({
         id: tipId,
         intentId,
-        profileId: quote.profileId,
+        profileId,
         currency: quote.currency,
         grossMinor: quote.tipMinor,
         status: 'AWAITING_PAYMENT',
@@ -243,7 +247,7 @@ export async function createPaymentIntent(
         purpose: input.purpose ?? null,
         celebrationMomentId: await sharedMomentOf(
           tx,
-          quote.profileId,
+          profileId,
           input.celebrationMomentId,
         ),
         businessMemberId: member?.memberId ?? null,
@@ -265,7 +269,7 @@ export async function createPaymentIntent(
         page.plan === 'pro'
       )
         await recordSupporter(tx, {
-          profileId: quote.profileId,
+          profileId,
           keyHash,
           label,
           tipId,

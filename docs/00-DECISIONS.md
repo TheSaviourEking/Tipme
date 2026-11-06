@@ -38,6 +38,8 @@
 >
 > **1 Nov 2026:** the owner's decision of this date (see "Launching without these" below) supersedes that sentence for launch, unless the owner's ADR says otherwise. D-04 stays open and is not approved.
 
+> **D-05 note (6 Nov 2026):** Reversal of business shares: see Q7/Q8 defaults in "Business release 2 (owner's report, 6 Nov 2026)" below. D-05 keeps its status: refunds and chargebacks stay OPEN.
+
 > **PR-008 notes (19 Oct 2026), all PROPOSED:**
 > - **Paid plans** (future idea from the user): premium QR styles, custom backgrounds, deeper insights. Premium styles are marked "free in preview"; nothing is billed. Charging to keep personal details private is **not** planned: phone and email stay private by default and free (privacy by default; D-07).
 > - **Cash rewards:** TipMe-funded bonuses of 50% of the platform fees a recipient earned since the last bonus, capped at 50% of lifetime fees (cash plus waived fees) and by a monthly budget. Pretend money only; real rewards need D-05, a legal review of financial promotions, and the two-person rule for manual adjustments.
@@ -212,3 +214,20 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 >   - Q5, no naira in the business view except the weekly amounts of people who chose to share theirs.
 >   - Q9, a share (release 2) is of what the person receives after TipMe's fee.
 > - **Spec items shipped with their defaults:** O1 people on shift first, then everyone; O2 staff check name, address and a contact, no document upload; O3 tags Friendly, Fast, Went the extra mile, Great advice, Made my day; O4 the business plan price comes later, with billing (nothing built, no price shown).
+
+> **Business release 2 (owner's report, 6 Nov 2026).** The owner reported that our payment partner and a legal check said yes to a business sharing staff tips and to team tips. The options are 100/0, 90/10, 80/20, 70/30 and 50/50, with a cap of 50%. This records the owner's report. It is not a regulatory approval, a licence, or written provider confirmation held in this repository. D-03, D-04 and D-05 keep their status (OPEN, OPEN, PARTLY DECIDED), and `AGENTS.md`'s hard stop on real payments is unchanged. Spec `docs/superpowers/specs/2026-11-06-business-design.md` ("Release 2"), plan `docs/superpowers/plans/2026-11-06-business.md` (PRs R2-0 to R2-E). Each part sits behind its own flag on top of `BUSINESS_ENABLED`, off by default: `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED`. The owner turns them on only after the share and team-tip PRs are on dev and the terms and privacy text below is live.
+> - **Safeguards (spec item 11):**
+>   - The split is "staff keeps / business takes", one of the five options; the business never takes more than 50%, so staff always keep at least half. The database refuses any other value.
+>   - A share applies only after the staff member accepts, and only to tips made after the agreed start date. It is fixed on the tip when the supporter starts paying and never changes afterwards.
+>   - Tips through the staff member's own page, outside the business, are never shared. The database refuses a share on a tip not made at that membership.
+>   - At most one change takes effect per person per calendar month (Lagos), with at least 14 days' notice.
+>   - The business never learns who declined: a declined proposal reads "No change", like one never answered.
+>   - Staff can report the business to TipMe; the report is never shown to the business.
+>   - The supporter is told about any share on the tip page before paying.
+>   - The share is its own ledger line (`business_payable`), so a refund or chargeback reverses the person's part and the business's part together.
+>   - Leaving a business ends its agreement at once; rejoining starts at 100/0.
+> - **Owner's answers and defaults:**
+>   - Q7, staff confirm each reversal of a refunded or charged-back tip as a serious action (`tip.reverse`, `payments.repair`) after checking our payment partner's dashboard; it is never automatic. A partial refund reverses each line in proportion, with the remaining kobo on the person's line. (Default kept, 6 Nov 2026.)
+>   - Q8, a reversal after the money was withdrawn posts anyway: the balance may go below zero, withdrawals for that person or business stop until it is back above zero, and a money issue opens. Nothing is collected automatically. (Default kept.)
+>   - Q9, the share is of what the person receives after TipMe's 10% fee (ADR-0014), so TipMe's fee and the supporter's total are unchanged. The tip page says: "Of what Tobi receives, they keep 90% and 10% goes to The Yellow Chilli." (Owner's answer.)
+>   - Q10, team tips carry no business share. A team tip is split equally among the people on shift at that location when the tip is made; the earliest check-in takes any remaining kobo. (Default kept.)

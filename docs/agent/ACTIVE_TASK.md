@@ -108,6 +108,12 @@
 - Done: `GET /v1/me/businesses/:id/codes` (manager scope; `BUSINESS_NOT_VERIFIED` while pending or suspended, M12); `BusinessCodes` gains the business and location names; `apps/web/src/lib/business-sign.ts` draws the sign and badge with `qrMatrix` / `renderQrPixels`; Business → Codes, the print view `/dashboard/business/codes/print` (A5 sign, A6 table tent, 85 × 55 mm badge, one per page, black or purple), Work → My code.
 - Next: coordinator review, rebase onto dev once B0 merges, CI's full e2e suite. When B1 and B3 land, the e2e spec's stand-ins for their detail and work routes can go.
 
+# Current task — TipMe for businesses, PR R2-0: release 2 foundation (6 November 2026)
+
+- Branch/worktree: `feat/business-r2-0` / `.worktrees/business-r2-0`, off local `feat/business-b0` `3888c8e6` (B0 not merged yet), test lane 6. Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-0" (Tasks 26–27) and the owner's answers at the end.
+- Done: the decisions entry "Business release 2 (owner's report, 6 Nov 2026)" (the owner's report, not a regulatory approval; D-03/D-04/D-05 keep their status) and a D-05 note; terms and privacy sections on shares and team tips; migration `0079_business_release2` (shares, reports, team splits, table cards and assignments, business-owned ledger accounts/payment accounts/destinations/payouts, `reversal` transactions, database guard triggers); domain `splitShare`/`splitEqually` and the share constants; contracts, error codes, two issue kinds; `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED` (off by default) with 404 guards; empty controllers for R2-A..R2-E; fixtures `seedAgreement`, `seedTableCard`.
+- Next: coordinator review; rebase onto dev after B0 merges and regenerate `0079_business_release2` if another migration lands first; then R2-A, R2-B, R2-C1, R2-E.
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.

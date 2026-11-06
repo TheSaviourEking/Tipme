@@ -9,7 +9,10 @@ export type AccountCode =
   | 'provider_fee_expense'
   | 'provider_fee_recovered'
   // What TipMe gives recipients from its own pocket (cash rewards, PR-008).
-  | 'promotions_expense';
+  | 'promotions_expense'
+  // What TipMe owes a business: its agreed share of staff tips (business release 2). Postings
+  // that use it arrive with R2-A; the type is here so the schema and contracts can name it.
+  | 'business_payable';
 
 export interface LedgerLine {
   account: AccountCode;

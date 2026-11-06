@@ -575,6 +575,13 @@
       "when": 1793984443097,
       "tag": "0081_business",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793985109242,
+      "tag": "0082_business_release2",
+      "breakpoints": true
     }
   ]
 }

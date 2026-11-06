@@ -147,3 +147,87 @@ export async function payAtBusiness(
   await post(`/v1/mock-provider/checkout/${reference}`, { outcome: 'succeed' });
   return { tipId: intent.data.tipId, statusToken: intent.data.statusToken };
 }
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Business release 2: a share agreement for a member, by default accepted and in force since
+ * yesterday (proposed 15 days ago, so the database's 14-day notice holds). `startedDaysAgo` < 0
+ * makes one that starts in the future; `accepted: false` leaves it open; `supersedes` names the
+ * accepted agreement it replaces. The database refuses a backdated proposal or acceptance, so
+ * this writes history through the test-only `tipme.allow_backdate` setting, in one transaction.
+ */
+export async function seedAgreement(
+  db,
+  {
+    memberId,
+    businessBps = 1000,
+    proposedBy = 'business',
+    proposedByUser = ADA_USER,
+    accepted = true,
+    startedDaysAgo = 1,
+    supersedes,
+    now = new Date(),
+  },
+) {
+  const agreementId = randomUUID();
+  const effectiveFrom = new Date(now.getTime() - startedDaysAgo * DAY_MS);
+  const proposedAt = new Date(effectiveFrom.getTime() - 14 * DAY_MS);
+  const acceptedAt = accepted ? new Date(proposedAt.getTime() + DAY_MS) : null;
+  const client = await poolOf(db).connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL tipme.allow_backdate = 'on'`);
+    await client.query(
+      `INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
+         proposed_at, effective_from)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        agreementId,
+        memberId,
+        businessBps,
+        proposedBy,
+        proposedByUser,
+        proposedAt,
+        effectiveFrom,
+      ],
+    );
+    // A change is accepted as R2-C1 does it: the old one names its successor, then it is accepted.
+    if (supersedes)
+      await client.query(
+        `UPDATE share_agreements SET superseded_by = $2 WHERE id = $1`,
+        [supersedes, agreementId],
+      );
+    if (acceptedAt)
+      await client.query(
+        `UPDATE share_agreements SET accepted_at = $2 WHERE id = $1`,
+        [agreementId, acceptedAt],
+      );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return { agreementId, effectiveFrom };
+}
+
+const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
+
+/** Business release 2: a table card at a location (M18), with a fresh 10-character code. */
+export async function seedTableCard(
+  db,
+  { locationId, label = 'Table 1', createdBy = ADA_USER },
+) {
+  const cardId = randomUUID();
+  const code = Array.from(
+    { length: 10 },
+    () => BASE32[Math.floor(Math.random() * 32)],
+  ).join('');
+  await poolOf(db).query(
+    `INSERT INTO table_cards (id, location_id, label, code, created_by) VALUES ($1, $2, $3, $4, $5)`,
+    [cardId, locationId, label, code, createdBy],
+  );
+  return { cardId, code };
+}

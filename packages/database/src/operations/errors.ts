@@ -103,7 +103,16 @@ export type OperationErrorCode =
   | 'NOTE_NOT_OPEN'
   | 'NOTE_TEXT_REFUSED'
   | 'BUSINESS_LAST_OWNER'
-  | 'BUSINESS_NOT_VERIFIED';
+  | 'BUSINESS_NOT_VERIFIED'
+  // Business release 2 (R2-0).
+  | 'SHARE_NOT_ALLOWED'
+  | 'SHARE_CHANGE_TOO_SOON'
+  | 'SHARE_NOT_OPEN'
+  | 'TEAM_NOBODY_ON_SHIFT'
+  | 'CARD_NOT_FOUND'
+  | 'BALANCE_BELOW_ZERO'
+  // A release 1 path met a team tip or a business's row (see owner.ts personOf).
+  | 'NOT_A_PERSON';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is

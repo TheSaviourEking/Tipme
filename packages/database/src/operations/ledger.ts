@@ -18,6 +18,8 @@ const KIND: Record<AccountCode, 'asset' | 'liability' | 'revenue' | 'expense'> =
     // Contra-expense: the provider fee recovered from the tip.
     provider_fee_recovered: 'revenue',
     promotions_expense: 'expense',
+    // What TipMe owes a business (release 2): R2-A posts it, on the business's own account.
+    business_payable: 'liability',
   };
 
 async function accountId(
@@ -40,6 +42,8 @@ async function accountId(
         profileId === null
           ? isNull(ledgerAccounts.profileId)
           : eq(ledgerAccounts.profileId, profileId),
+        // Release 2 adds business accounts, which also have no profile: never pick one up here.
+        isNull(ledgerAccounts.businessId),
       ),
     );
   if (!row) throw new Error('ledger account could not be created');

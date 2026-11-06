@@ -1,4 +1,4 @@
-import type { TipBusinessNote } from './business.js';
+import type { ShareDisclosure, TipBusinessNote } from './business.js';
 import { z } from 'zod';
 import { SUPPORTER_KEY_PATTERN } from './supporters.js';
 import type { ThanksSlip } from './thanks.js';
@@ -27,6 +27,11 @@ export interface TipQuote {
   feePolicyVersion: string;
   /** TipMe's fee is waived on this tip (a fee-free reward for the recipient). */
   feeFree: boolean;
+  /**
+   * Business release 2: the share agreed with the business the tip is made at, shown before
+   * paying. Only with BUSINESS_SHARES_ENABLED, and only for a tip made at that business.
+   */
+  share?: ShareDisclosure;
 }
 
 /** Why the supporter is tipping. A closed list: it is stored, filtered and shown to the recipient. */
@@ -77,6 +82,19 @@ export const tipIntentRequestSchema = z
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;
 
+/**
+ * Business release 2 (R2-D): paying a team quote. No message (it would reach several people) and
+ * no member: the split is fixed from who is on shift when the tip is made.
+ */
+export const teamTipIntentRequestSchema = z
+  .object({
+    quoteId: z.uuid(),
+    payerDisplayLabel: z.string().max(60).optional(),
+    purpose: z.enum(tipPurposes).optional(),
+  })
+  .strict();
+export type TeamTipIntentRequest = z.infer<typeof teamTipIntentRequestSchema>;
+
 export interface TipIntentCreated {
   tipId: string;
   statusToken: string;
@@ -126,4 +144,8 @@ export interface TipStatusView {
    * open (7 days, once). Never carries the note.
    */
   businessNote?: TipBusinessNote;
+  /** Business release 2: a team tip, shared equally among `people` on shift at `location`. */
+  team?: { location: string; people: number };
+  /** Business release 2: the share the business received of this tip, in percentages only. */
+  share?: ShareDisclosure;
 }

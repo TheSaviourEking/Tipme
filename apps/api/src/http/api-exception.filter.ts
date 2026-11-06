@@ -48,6 +48,15 @@ const messages: Record<ApiErrorCode, string> = {
   BUSINESS_LAST_OWNER:
     'Make someone else an owner of the business first, or close it.',
   BUSINESS_NOT_VERIFIED: 'This business isn’t verified yet.',
+  SHARE_NOT_ALLOWED: 'A share isn’t possible here.',
+  SHARE_CHANGE_TOO_SOON:
+    'A share can change at most once a month. Try a later start date.',
+  SHARE_NOT_OPEN: 'This proposal can’t be answered any more.',
+  TEAM_NOBODY_ON_SHIFT:
+    'Nobody is on shift here right now. Tip someone from the list instead.',
+  CARD_NOT_FOUND: 'That table card does not exist.',
+  BALANCE_BELOW_ZERO:
+    'Withdrawals are paused until the balance is back above zero.',
   PERMISSION_NOT_HELD:
     'You can only give or take away access you hold yourself.',
   FRESH_CODE_REQUIRED: 'Enter a code from your authenticator to do this.',
@@ -335,6 +344,13 @@ const operationErrors: Partial<
   MEMBER_NOT_TIPPABLE: { status: 409, code: 'MEMBER_NOT_TIPPABLE' },
   OWNER_REQUIRED: { status: 403, code: 'OWNER_REQUIRED' },
   BUSINESS_NOT_VERIFIED: { status: 403, code: 'BUSINESS_NOT_VERIFIED' },
+  // Business release 2 (R2-0).
+  SHARE_NOT_ALLOWED: { status: 409, code: 'SHARE_NOT_ALLOWED' },
+  SHARE_CHANGE_TOO_SOON: { status: 409, code: 'SHARE_CHANGE_TOO_SOON' },
+  SHARE_NOT_OPEN: { status: 404, code: 'SHARE_NOT_OPEN' },
+  TEAM_NOBODY_ON_SHIFT: { status: 409, code: 'TEAM_NOBODY_ON_SHIFT' },
+  CARD_NOT_FOUND: { status: 404, code: 'CARD_NOT_FOUND' },
+  BALANCE_BELOW_ZERO: { status: 409, code: 'BALANCE_BELOW_ZERO' },
   NOTE_TEXT_REFUSED: {
     status: 400,
     code: 'VALIDATION_FAILED',

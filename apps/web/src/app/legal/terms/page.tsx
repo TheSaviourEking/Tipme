@@ -61,6 +61,37 @@ export default function TermsPlaceholder() {
           someone, infringes a trademark, or the law requires it.
         </p>
       </section>
+      {/* Business release 2 (decisions log, 6 Nov 2026). Shown ahead of the feature, which the owner
+          turns on only after this text is live. No wording here claims approval by any authority. */}
+      <section aria-labelledby="business-shares">
+        <h2 id="business-shares">Tips at a business</h2>
+        <p>
+          <strong>Sharing with the business.</strong> A business you work at on
+          TipMe can ask for a share of the tips you receive there. A share
+          applies only if you agree to it, and only to tips made after the start
+          date you agreed. It never applies to tips through your own page
+          outside the business.
+        </p>
+        <p>
+          The share is taken from what you receive after TipMe’s fee. You always
+          keep at least half: the business can ask for 10%, 20%, 30% or 50%, and
+          nothing else. A change takes effect at least 14 days after the
+          business asks, and at most once a month. You can say no, and the
+          business is not told that you did. If you leave the business, its
+          share ends at once. You can report a business to TipMe at any time.
+        </p>
+        <p>
+          <strong>Tipping the whole team.</strong> A supporter can tip everyone
+          on shift at a location. The tip, after TipMe’s fee, is shared equally
+          among the people on shift when the tip is made. The business takes no
+          share of a team tip.
+        </p>
+        <p>
+          <strong>Refunds and chargebacks.</strong> If a tip is refunded or
+          charged back, both the staff member’s part and the business’s part are
+          taken back, each in proportion to the amount refunded.
+        </p>
+      </section>
     </LegalPlaceholder>
   );
 }

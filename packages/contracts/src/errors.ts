@@ -115,6 +115,13 @@ export const apiErrorCodes = [
   'NOTE_NOT_OPEN',
   'BUSINESS_LAST_OWNER',
   'BUSINESS_NOT_VERIFIED',
+  // Business release 2 (R2-0).
+  'SHARE_NOT_ALLOWED',
+  'SHARE_CHANGE_TOO_SOON',
+  'SHARE_NOT_OPEN',
+  'TEAM_NOBODY_ON_SHIFT',
+  'CARD_NOT_FOUND',
+  'BALANCE_BELOW_ZERO',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];
