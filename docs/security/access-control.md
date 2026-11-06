@@ -77,7 +77,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
-| `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/search` |
+| `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/businesses/{id}/logo`<br>GET `/v1/ops/search` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
 | `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>POST `/v1/ops/usernames/{name}/take-back`<br>GET `/v1/ops/usernames/check/{name}`<br>POST `/v1/ops/usernames/take-backs/{id}/cancel` |
 
@@ -112,6 +112,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/b/{business}/{location}` | n/a (read) | – | – |
 | GET | `/v1/b/{business}/{location}/{handle}` | n/a (read) | – | – |
 | GET | `/v1/b/{business}/people` | n/a (read) | `business_public` | – |
+| GET | `/v1/business-logos/{businessId}/{file}` | n/a (read) | – | – |
 | GET | `/v1/covers/{profileId}/{file}` | n/a (read) | – | – |
 | GET | `/v1/dev/inbox` | n/a (read) | – | yes |
 | POST | `/v1/dev/jobs/weekly-report` | – | – | yes |
@@ -190,6 +191,9 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/businesses/{id}/locations` | yes | – | – |
 | PATCH | `/v1/me/businesses/{id}/locations/{locationId}` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/locations/{locationId}/close` | yes | – | – |
+| DELETE | `/v1/me/businesses/{id}/logo` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/logo` | n/a (read) | – | – |
+| PUT | `/v1/me/businesses/{id}/logo` | yes | `avatars` | – |
 | GET | `/v1/me/businesses/{id}/managers` | n/a (read) | – | – |
 | POST | `/v1/me/businesses/{id}/managers/{managerId}/remove` | yes | – | – |
 | GET | `/v1/me/businesses/{id}/members` | n/a (read) | – | – |
@@ -307,6 +311,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/business-notes/{tipId}/review` | `issues.resolve` | yes | – | – |
 | GET | `/v1/ops/businesses` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}` | `search.view` | n/a (read) | – | – |
+| GET | `/v1/ops/businesses/{id}/logo` | `search.view` | n/a (read) | – | – |
 | POST | `/v1/ops/businesses/{id}/restore` | `businesses.manage` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/reveal` | `private.view` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/suspend` | `businesses.manage` | yes | – | – |

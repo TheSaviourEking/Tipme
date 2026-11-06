@@ -8,6 +8,7 @@ import type {
   OpsBusinessDetail,
 } from '@tipme/contracts';
 import { Badge, Card, EmptyWell, Skeleton, Slip } from '@tipme/ui';
+import { BusinessLogoTile } from '@/components/business/business-logo-tile';
 import {
   ActionOutcome,
   outcomeOf,
@@ -20,6 +21,7 @@ import {
   OPS_BUSINESS_STATUS_WORDS,
   revealContact,
 } from '@/lib/business/ops-api';
+import { usePrivateLogo } from '@/lib/business/logo';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 
@@ -78,6 +80,11 @@ export default function OpsBusinessPage() {
   const [missing, setMissing] = useState<'not_found' | 'failed' | null>(null);
   const [contact, setContact] = useState<OpsBusinessContact | null>(null);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
+  // Staff see the owners' logo whatever the status: what the public pages show once verified.
+  const logo = usePrivateLogo(
+    `/v1/ops/businesses/${encodeURIComponent(businessId)}/logo`,
+    business?.hasLogo ? business.id : null,
+  );
 
   const show = useCallback(
     (result: Awaited<ReturnType<typeof loadBusiness>>) => {
@@ -147,7 +154,14 @@ export default function OpsBusinessPage() {
       <p>
         <Link href="/ops/businesses">← All businesses</Link>
       </p>
-      <h1 id="business-title">{business.name}</h1>
+      <div className="business-page__brand">
+        <BusinessLogoTile
+          name={business.name}
+          src={logo}
+          className="business-page__logo"
+        />
+        <h1 id="business-title">{business.name}</h1>
+      </div>
       <p>
         <Badge className={`ops-business-status--${business.status}`}>
           {OPS_BUSINESS_STATUS_WORDS[business.status]}

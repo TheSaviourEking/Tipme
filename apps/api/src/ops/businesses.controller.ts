@@ -5,6 +5,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Query,
@@ -30,7 +31,9 @@ import {
   requestSeriousAction,
   restoreBusiness,
   revealBusinessContact,
+  staffBusinessLogo,
   suspendBusiness,
+  type PhotoStore,
   type SeriousActionServices,
 } from '@tipme/database';
 import { BusinessEnabledGuard } from '../business/business-enabled.guard.js';
@@ -38,6 +41,8 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { sendPrivateImage } from '../profiles/image-upload.js';
+import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
@@ -64,6 +69,9 @@ export class OpsBusinessesController {
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Optional()
+    @Inject(PHOTO_STORE)
+    private readonly photos: PhotoStore | null = null,
   ) {}
 
   @Get()
@@ -85,6 +93,27 @@ export class OpsBusinessesController {
     return {
       data: await opsBusinessDetail(this.database.db, businessIdOf(id)),
     };
+  }
+
+  /**
+   * The business's logo, whatever its status: what the owners will show publicly once it's
+   * verified. Never cached.
+   */
+  @Get(':id/logo')
+  @OpsPermission('search.view')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async logo(
+    @Param('id') id: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    sendPrivateImage(
+      response,
+      await staffBusinessLogo(
+        this.database.db,
+        businessIdOf(id),
+        this.photos ?? undefined,
+      ),
+    );
   }
 
   /** The full contact and the managers' emails: audited with the reason (access-control rule 6). */

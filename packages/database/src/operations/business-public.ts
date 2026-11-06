@@ -158,6 +158,7 @@ async function openLocation(
       businessId: businesses.id,
       businessSlug: businesses.slug,
       businessName: businesses.name,
+      logoPath: businesses.logoPath,
       locationId: businessLocations.id,
       locationSlug: businessLocations.slug,
       locationName: businessLocations.name,
@@ -179,6 +180,7 @@ async function openLocation(
       slug: row.businessSlug,
       name: row.businessName,
       verified: true,
+      ...(row.logoPath ? { logoPath: row.logoPath } : {}),
     },
     location: {
       id: row.locationId,
