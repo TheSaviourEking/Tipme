@@ -64,7 +64,8 @@ export default async function BusinessPage({ params, searchParams }: Props) {
     );
   const { slug, name } = page.business;
   const [only, ...others] = page.locations;
-  // `redirect` answers 307 here: temporary, so it stops the day a second place opens.
+  // Proxy answers this case with a real 307 (lib/business/single-place.ts); this covers a moment
+  // when its half-minute memory and this page's cache disagree.
   if (only && others.length === 0)
     redirect(withQrSource(`/b/${slug}/${only.slug}`, query));
   const count = page.locations.length;
