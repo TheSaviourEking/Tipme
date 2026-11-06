@@ -7321,6 +7321,21 @@ body > .coming-soon-page {
   overflow-wrap: anywhere;
 }
 
+/* The changelog (changelog plan, Design §5): the number heads each row at row-heading size. */
+.ops-row .ops-changelog__number {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.ops-changelog__audience {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ops-changelog__audience:disabled {
+  opacity: 0.6;
+}
+
 .ops-row .ops-summary {
   overflow-wrap: anywhere;
 }

@@ -141,6 +141,13 @@ const REFUSALS: Record<string, string> = {
   TAKE_BACK_OPEN: 'This username already has a take-back under way',
   TAKE_BACK_CLOSED: 'This take-back has already finished',
   TAKE_BACK_NOT_FOUND: 'We couldn’t find that take-back',
+  CHANGELOG_EDITED_ELSEWHERE:
+    'Someone else changed this entry while you were working. Nothing changed; the page now shows their version.',
+  CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
+  CHANGELOG_TEXT_NOT_ALLOWED:
+    'This text can’t be shown to users as it is. Nothing changed; see the reasons by the field.',
+  APPROVAL_NO_APPROVER:
+    'Nobody who can approve this is set up yet. Nothing changed; ask an owner to give someone changelog.publish.',
 };
 
 const UNKNOWN =
