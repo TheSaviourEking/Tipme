@@ -1,5 +1,9 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import type { BusinessDetail, MemberRow, MyMembership } from '@tipme/contracts';
+import type {
+  BusinessDetail,
+  MemberRow,
+  MyMembership,
+} from '../../packages/contracts/src/business';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { accountOf, seedBusiness, seedMember } from './business-fixtures';
 import { sql } from './ops-helpers';
