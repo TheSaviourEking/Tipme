@@ -39,6 +39,10 @@ export const businessInvitation = defineMailType({
     return letter(
       {
         subject,
+        // Fixed and data-free, like every other type's preview line.
+        preheader: staff
+          ? 'Your tips go to your own TipMe balance, as always.'
+          : 'Accept or decline from your Work page on TipMe.',
         heading: staff
           ? 'You’re invited to the team'
           : 'You’re invited to help manage a business',

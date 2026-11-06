@@ -7,6 +7,7 @@ import {
   MAIL_SENDERS,
   senderAddress,
 } from '../dist/index.js';
+import { preheaderOf } from './preheader.mjs';
 
 const ctx = { webOrigin: 'https://usetipme.xyz', unsubscribeUrl: null };
 
@@ -203,4 +204,36 @@ test('a business invitation carries its code only in the fragment, untracked, na
       ctx,
     ),
   );
+});
+
+/** Every string in a sample, at any depth, long enough to mean something. */
+function sampleStrings(value, key = '') {
+  if (typeof value === 'string')
+    return value.length > 2 ? [{ key, value }] : [];
+  if (Array.isArray(value)) return value.flatMap((v) => sampleStrings(v, key));
+  if (value && typeof value === 'object')
+    return Object.entries(value).flatMap(([k, v]) => sampleStrings(v, k));
+  return [];
+}
+
+test('no sample value reaches a subject or preheader', () => {
+  // The tip amount and the staff-only provider name are already in today's subjects.
+  const allowed = {
+    tip_received: ['netMinor'],
+    provider_test: ['providerLabel'],
+    // The inviting business's public name (shown on its own TipMe pages), so the invitee knows who asks.
+    business_invitation: ['businessName'],
+  };
+  for (const [id, type] of Object.entries(MAIL_TYPES)) {
+    const out = renderMail(id, type.sample, ctx);
+    const pre = preheaderOf(out.html);
+    // An enum's value is one of the template's own words ("cover"), not someone's data.
+    const fixed = (key) =>
+      ['enum', 'literal'].includes(type.schema.shape?.[key]?._zod?.def?.type);
+    for (const { key, value } of sampleStrings(type.sample)) {
+      if (allowed[id]?.includes(key) || fixed(key)) continue;
+      assert.ok(!out.subject.includes(value), `${id} subject has ${key}`);
+      assert.ok(!pre.includes(value), `${id} preheader has ${key}: ${pre}`);
+    }
+  }
 });

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Emails: account</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{width:1400px;height:1640px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:48px 56px;align-content:start}
+.label{margin:0 0 12px;font-size:13px;font-weight:700;color:#5d5a54}
+.client{background:#f3f2ee;border-radius:18px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4);overflow:hidden}
+.bar{display:flex;flex-direction:column;gap:4px;padding:14px 20px;background:#fffefa;border-bottom:1px solid rgba(20,18,16,.08);font-size:13px;color:#5d5a54}
+.bar strong{color:#000;font-size:15px}
+.mail{padding:28px 40px 34px}
+.mark{display:flex;align-items:center;gap:6px;margin:0 4px 18px;font:800 22px Manrope,Arial,sans-serif;letter-spacing:-.02em}
+.mark svg{width:20px;height:20px}
+.card{background:#fffefa;border-radius:24px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.45);padding:28px 28px 30px}
+.card h1{margin:0;font:400 32px/1.1 'DM Serif Display',Georgia,serif}
+.card p{margin:14px 0 0;font-size:16px;line-height:1.55}
+.cells{display:flex;gap:8px;margin:22px 0 4px}
+.cells span{flex:1;height:64px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.12);font:700 30px Manrope,Arial,sans-serif;font-variant-numeric:tabular-nums}
+.go{display:block;margin:24px 0 0;height:54px;line-height:54px;border-radius:14px;background:#000;color:#fff;text-align:center;text-decoration:none;font-weight:700;font-size:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.quiet{margin:18px 0 0;font-size:14px;line-height:1.55;color:#5d5a54}
+.warn{margin:18px 0 0;padding:14px 16px;border-radius:14px;background:#f1e9ff;color:#2d0b66;font-size:14px;line-height:1.5;font-weight:600}
+.steps{margin:20px 0 0;padding:0;list-style:none;display:grid;gap:10px}
+.steps li{display:flex;gap:12px;align-items:flex-start;font-size:15px;line-height:1.45}
+.steps b{flex:none;width:28px;height:28px;border-radius:50%;background:#7a32f9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
+.foot{margin:26px 4px 0;padding-top:16px;border-top:1px solid rgba(20,18,16,.12);font-size:12.5px;line-height:1.6;color:#5d5a54}
+.foot a{color:#5d5a54}
+</style>
+</helmet>
+<div class="board">
+  <div>
+    <p class="label">Sign-in code</p>
+    <div class="client">
+      <div class="bar"><strong>Your TipMe sign-in code</strong><span>The code is never in the subject line</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>Your sign-in code</h1>
+          <p>Type it on TipMe to sign in.</p>
+          <div class="cells" aria-label="Code 482 913"><span>4</span><span>8</span><span>2</span><span>9</span><span>1</span><span>3</span></div>
+          <p class="warn">It works for 10 minutes. Never share it. TipMe staff will never ask for it.</p>
+        </section>
+        <p class="foot">You get this email because someone asked to sign in to TipMe with this address. If it wasn’t you, ignore it. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Confirm an email address</p>
+    <div class="client">
+      <div class="bar"><strong>Confirm your email for TipMe</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>Confirm your email</h1>
+          <p>Confirm this address for your TipMe account, so we can reach you about your tips and your money.</p>
+          <a class="go" href="#">Confirm my email</a>
+          <p class="quiet">The link works for 24 hours. If you didn’t ask for this, ignore this email.</p>
+        </section>
+        <p class="foot">You get this email because this address was added to a TipMe account. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Getting back in</p>
+    <div class="client">
+      <div class="bar"><strong>Get back into TipMe</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>Get back into TipMe</h1>
+          <p>Lost your phone number? Attach a new one with this link. You will need a code sent to the new number.</p>
+          <a class="go" href="#">Attach a new number</a>
+          <p class="quiet">The link works for 30 minutes. If you didn’t ask for this, ignore this email: nothing changes.</p>
+        </section>
+        <p class="foot">You get this email because someone asked to recover the TipMe account at this address. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Welcome</p>
+    <div class="client">
+      <div class="bar"><strong>Welcome to TipMe</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>Welcome to TipMe</h1>
+          <p>One link people can use to thank you with a tip. Three steps and you are ready:</p>
+          <ol class="steps">
+            <li><b>1</b><span>Claim your username and add your face.</span></li>
+            <li><b>2</b><span>Add the bank account your money goes to.</span></li>
+            <li><b>3</b><span>Share your link or your QR code.</span></li>
+          </ol>
+          <a class="go" href="#">Create your page</a>
+        </section>
+        <p class="foot">You get this email because you just created a TipMe account. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":1640}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Email: you got a tip</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{width:1240px;height:1080px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;display:flex;gap:56px;padding:48px 56px;align-items:flex-start}
+.client{flex:none;width:720px;background:#f3f2ee;border-radius:18px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4);overflow:hidden}
+.bar{display:flex;flex-direction:column;gap:4px;padding:16px 22px;background:#fffefa;border-bottom:1px solid rgba(20,18,16,.08);font-size:13px;color:#5d5a54}
+.bar strong{color:#000;font-size:15px}
+.mail{padding:32px 60px 40px}
+.phone{flex:none;width:390px;height:984px;background:#f3f2ee;border-radius:44px;border:10px solid #141210;box-sizing:border-box;overflow:hidden}
+.phone .mail{padding:22px 14px 28px}
+.mark{display:flex;align-items:center;gap:6px;margin:0 4px 20px;font:800 22px Manrope,Arial,sans-serif;letter-spacing:-.02em;color:#000}
+.mark svg{width:20px;height:20px}
+.slab{background:#7a32f9;color:#fff;border-radius:24px;padding:30px 30px 28px;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 18px 30px -20px rgba(77,22,168,.7)}
+.slab h1{margin:0;font:400 34px/1.08 'DM Serif Display',Georgia,serif}
+.amount{margin:18px 0 0;font:400 64px/1 'DM Serif Display',Georgia,serif;letter-spacing:-.01em}
+.from{margin:10px 0 0;font-size:15px;line-height:1.5;color:#efe6ff}
+.slip{margin:-14px 14px 0;position:relative;background:#fffefa;border-radius:16px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 14px 24px -18px rgba(20,18,16,.45);padding:22px 24px}
+.slip q{display:block;quotes:none;font:400 23px/1.25 'DM Serif Display',Georgia,serif}
+.slip q:before{content:'\201C';display:block;height:22px;font-size:52px;line-height:.75;color:#7a32f9}
+.slip p{margin:12px 0 0;font-size:14px;font-weight:700}
+.go{display:block;margin:26px 0 0;height:54px;line-height:54px;border-radius:14px;background:#000;color:#fff;text-align:center;text-decoration:none;font-weight:700;font-size:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.note{margin:18px 4px 0;font-size:14px;line-height:1.55;color:#5d5a54}
+.foot{margin:32px 4px 0;padding-top:18px;border-top:1px solid rgba(20,18,16,.12);font-size:12.5px;line-height:1.6;color:#5d5a54}
+.foot a{color:#5d5a54}
+.label{margin:0 0 12px;font-size:13px;font-weight:700;color:#5d5a54}
+</style>
+</helmet>
+<div class="board">
+  <div>
+    <p class="label">In a desktop inbox</p>
+    <div class="client">
+      <div class="bar"><strong>You got a ₦4,500 tip on TipMe</strong><span>TipMe &lt;hello@usetipme.xyz&gt; to you</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="slab">
+          <h1>{{name}}, you got a tip.</h1>
+          <p class="amount">{{amount}}</p>
+          <p class="from">From {{supporter}}. Confirmed by our payment partner.</p>
+        </section>
+        <div class="slip">
+          <q>{{message}}</q>
+          <p>{{supporter}}</p>
+        </div>
+        <a class="go" href="#">See your tips</a>
+        <p class="note">It is in your balance now. You can withdraw from ₦2,000.</p>
+        <p class="foot">You get this email when someone tips you on TipMe. <a href="#">Email settings</a>. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">On a phone</p>
+    <div class="phone">
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="slab" style="padding: 24px 22px 24px">
+          <h1 style="font-size: 30px">{{name}}, you got a tip.</h1>
+          <p class="amount" style="font-size: 54px">{{amount}}</p>
+          <p class="from">From {{supporter}}. Confirmed by our payment partner.</p>
+        </section>
+        <div class="slip" style="margin: -12px 10px 0; padding: 18px 18px">
+          <q style="font-size: 20px">{{message}}</q>
+          <p>{{supporter}}</p>
+        </div>
+        <a class="go" href="#">See your tips</a>
+        <p class="note">It is in your balance now. You can withdraw from ₦2,000.</p>
+        <p class="foot">You get this email when someone tips you on TipMe. <a href="#">Email settings</a>. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"name":{"editor":"text","default":"Ada"},"amount":{"editor":"text","default":"₦4,500"},"supporter":{"editor":"text","default":"Chidi"},"message":{"editor":"text","default":"Your edits saved my channel. Thank you."},"$preview":{"width":1240,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      name: this.props.name ?? 'Ada',
+      amount: this.props.amount ?? '₦4,500',
+      supporter: this.props.supporter ?? 'Chidi',
+      message: this.props.message ?? 'Your edits saved my channel. Thank you.'
+    };
+  }
+}
+</script>
+</body>
+</html>
