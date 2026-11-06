@@ -72,3 +72,25 @@ test('with businesses on, the businesses page invites people to create one', asy
   await expect(main).not.toContainText(/20\d\d/);
   await expect(main).not.toContainText(/approved|licensed|regulated/i);
 });
+
+test('the businesses page is centred: the text and the card sit as one block in the middle', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/for-businesses');
+  const hero = page.locator('.business-hero');
+  const parts = hero.locator('> *').filter({ visible: true });
+  const text = parts.first();
+  const card = parts.last();
+  await expect(parts).toHaveCount(2);
+  const [t, c] = [(await text.boundingBox())!, (await card.boundingBox())!];
+  // Horizontally: the space left of the text matches the space right of the card.
+  const left = t.x;
+  const right = 1440 - (c.x + c.width);
+  expect(Math.abs(left - right)).toBeLessThan(24);
+  // Vertically: the block sits mid-way between the header and the bottom of the window.
+  const header = (await page.locator('header').first().boundingBox())!;
+  const top = Math.min(t.y, c.y) - (header.y + header.height);
+  const bottom = 900 - Math.max(t.y + t.height, c.y + c.height);
+  expect(Math.abs(top - bottom)).toBeLessThan(64);
+});
