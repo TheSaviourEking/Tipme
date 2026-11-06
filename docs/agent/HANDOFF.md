@@ -105,6 +105,14 @@
 - `/v1/b/` is added to the API's uncredentialed cross-origin paths (the browser calls the search). The `people` route is declared before `:location`, so a location slugged `people` would be shadowed: B1 should refuse that slug.
 - Nothing in the API calls `/api/revalidate` with `{ business }` yet; business pages fall back to a 30 s cache. B3/B6 can call it on join, leave and shift changes.
 
+# Current handoff — TipMe for businesses, PR B5: notes after paying (6 November 2026)
+
+- Branch `feat/business-b5`, lane 7, committed, not pushed. Off B0 (`3888c8e6`); no migration.
+- The note never touches the tip: one `INSERT … SELECT` from the paid, attributed tip within 7 days (`ON CONFLICT DO NOTHING`), so a race writes one note; anything else is `NOTE_NOT_OPEN` (404). Text with links, emails or phone numbers is refused (400, `fields: ['body']`).
+- A report (member: any of their memberships, past or current; manager: owner or that location's manager) inserts the flag and opens `business_note_reported` in one transaction. A pending or removed flag hides the note from the business (`noteShownToBusiness`); restored shows it again. A decision is final: a later report of a restored note changes nothing.
+- Staff read the words only via `POST /v1/ops/business-notes/:tipId/reveal` (`private.view`, reason, audited `business_note.reveal`); review needs `issues.resolve` and resolves the issue. The generic issue reveal no longer offers the supporter's private message or name on this kind (`evidence.ts`).
+- Open: the Work page draws cards from B3's `GET /v1/me/work` (mocked in the e2e); a person with no current membership has no Work page, so their old notes are API-only until then. Evidence: `.superpowers/program/b5-report.md` (main checkout).
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.

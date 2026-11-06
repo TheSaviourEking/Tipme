@@ -24,6 +24,7 @@ import {
   locationUpdateSchema,
   memberDisplaySchema,
   noteReportSchema,
+  noteReviewSchema,
   shareAmountsSchema,
   shownCount,
   tipIntentRequestSchema,
@@ -324,4 +325,16 @@ test('a location can never be slugged "people": that path is the public search (
 
 test('a verified business can not be renamed: BUSINESS_NAME_LOCKED is a code of its own', () => {
   assert.ok(apiErrorCodes.includes('BUSINESS_NAME_LOCKED'));
+});
+
+test('noteReviewSchema: restored or removed, with a written reason of 10 to 500 characters (PR B5)', () => {
+  const reason = 'Read it; it is kind and names nobody.';
+  assert.ok(ok(noteReviewSchema, { outcome: 'restored', reason }));
+  assert.ok(ok(noteReviewSchema, { outcome: 'removed', reason }));
+  assert.ok(!ok(noteReviewSchema, { outcome: 'hidden', reason }));
+  assert.ok(!ok(noteReviewSchema, { outcome: 'removed', reason: 'too short' }));
+  assert.ok(
+    !ok(noteReviewSchema, { outcome: 'removed', reason: 'x'.repeat(501) }),
+  );
+  assert.ok(!ok(noteReviewSchema, { outcome: 'removed', reason, extra: 1 }));
 });

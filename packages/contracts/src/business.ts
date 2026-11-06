@@ -272,6 +272,15 @@ export const noteReportSchema = z
   .strict();
 export type NoteReport = z.infer<typeof noteReportSchema>;
 
+/** TipMe staff decide a reported note (PR B5): shown to the business again, or never again. */
+export const noteReviewSchema = z
+  .object({
+    outcome: z.enum(NOTE_REVIEW_OUTCOMES),
+    reason: z.string().trim().min(10).max(500),
+  })
+  .strict();
+export type NoteReview = z.infer<typeof noteReviewSchema>;
+
 /** An ISO week in Lagos time; the operation refuses a week that does not exist. */
 export const insightsQuerySchema = z
   .object({
@@ -474,6 +483,34 @@ export interface BusinessNoteView {
   reported: boolean;
   /** On the member's own list: TipMe removed it after a report (the body is not sent). */
   removed?: boolean;
+}
+/** The member's own list (PR B5): every membership's notes, current and past, newest first. */
+export interface WorkNoteView extends BusinessNoteView {
+  memberId: string;
+  business: string;
+  location: string;
+  /** The membership has ended; its notes stay the person's own (spec 8). */
+  left: boolean;
+  /** Nobody has reported it yet. */
+  canReport: boolean;
+}
+/** Ops: a reported note, read only through a reasoned, audited reveal (PR B5). */
+export interface OpsBusinessNote {
+  tipId: string;
+  business: string;
+  location: string;
+  shownName: string;
+  /** YYYY-MM-DD in Lagos. */
+  date: string;
+  tags: BusinessNoteTag[];
+  body?: string;
+  report: {
+    reportedAt: string;
+    reportedBy: (typeof NOTE_REPORTED_BY)[number];
+    reason: (typeof NOTE_REPORT_REASONS)[number];
+    outcome?: (typeof NOTE_REVIEW_OUTCOMES)[number];
+    reviewedAt?: string;
+  };
 }
 export interface BusinessCodes {
   location: { locationId: string; path: string }[];
