@@ -38,18 +38,31 @@ export function gh(path, query) {
   return out.trim();
 }
 
+export function commitTree(repo, sha, api = gh) {
+  return api(`repos/${repo}/commits/${sha}`, '.commit.tree.sha');
+}
+
 function decide() {
   const repo = process.env.GITHUB_REPOSITORY;
   const sha = process.env.GITHUB_SHA;
-  const commit = JSON.parse(gh(`repos/${repo}/commits/${sha}`));
-  const tree = commit.commit.tree.sha;
-  const parents = commit.parents.map((p) => p.sha);
-  const pullHeads = JSON.parse(gh(`repos/${repo}/commits/${sha}/pulls`)).map(
-    (p) => p.head.sha,
+  const commit = JSON.parse(
+    gh(
+      `repos/${repo}/commits/${sha}`,
+      '{tree: .commit.tree.sha, parents: [.parents[].sha]}',
+    ),
+  );
+  const { tree, parents } = commit;
+  const pullHeads = JSON.parse(
+    gh(`repos/${repo}/commits/${sha}/pulls`, 'map(.head.sha)'),
   );
   let reused = false;
   for (const head of candidateHeads({ parents, pullHeads })) {
-    const statuses = JSON.parse(gh(`repos/${repo}/commits/${head}/statuses`));
+    const statuses = JSON.parse(
+      gh(
+        `repos/${repo}/commits/${head}/statuses`,
+        'map({context, state, description})',
+      ),
+    );
     if (testedTree(tree, statuses)) {
       console.log(
         `Tree ${tree} passed every job on ${head}: reusing that run.`,
@@ -70,8 +83,7 @@ function record() {
   const repo = process.env.GITHUB_REPOSITORY;
   const head = process.env.PR_HEAD_SHA;
   // GITHUB_SHA on a pull_request run is the merge commit it tested.
-  const tree = JSON.parse(gh(`repos/${repo}/commits/${process.env.GITHUB_SHA}`))
-    .commit.tree.sha;
+  const tree = commitTree(repo, process.env.GITHUB_SHA);
   execFileSync(
     'gh',
     [

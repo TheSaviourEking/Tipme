@@ -12,6 +12,7 @@ export {
   type RenderedMail,
 } from './templates/define.js';
 export { escapeHtml } from './templates/escape.js';
+export type { Block, Letter } from './templates/layout.js';
 export { MAIL_TYPES, renderMail } from './templates/registry.js';
 export {
   MAIL_SENDERS,
