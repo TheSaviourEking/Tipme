@@ -213,6 +213,29 @@ SELECT 'alias', handle_lower, NULL FROM handle_aliases
 
 `NEXT_PUBLIC_PRETEND_DELIVERY` belongs to test copies only (the e2e stack, `review:screens`, local staging). In a production build it opens `/dev/inbox` (every sign-in code, readable by anyone) and `/dev/crash`. Production web must not set it; check the Vercel production environment before launch.
 
+## 11. TipMe for businesses: turning it on and verifying the first business (owner)
+
+Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are off until `BUSINESS_ENABLED=true` on the API. While off, every business route answers 404, the web shows no Business or Work link, `/b/*` shows as unavailable, and a tip ignores any business label. Release 2's own flags (`BUSINESS_SHARES_ENABLED`, `TEAM_TIPS_ENABLED`) stay off; this section does not turn them on.
+
+**Before turning it on:**
+
+1. The privacy page on production (`/legal/privacy`) shows "If you tip at a business" and "If you work at a business", and `docs/00-DECISIONS.md` has "What a business sees". Both describe what the code shows; neither claims any approval.
+2. At least **two** staff members hold `businesses.manage` and can enter an authenticator code (`docs/runbooks/admin-roles.md`). **A business's own managers can't verify it fairly:** approving is refused for them, but today a staff member who manages the business can still ask, and with nobody else qualified it runs alone (audited, alert sent). A separate PR refuses that request. Until it is on production, the person who verifies a business must not be one of its managers.
+
+**Turning it on:**
+
+3. **Staging first.** Set `BUSINESS_ENABLED=true` in `/srv/tipme/staging.env` and recreate the API. Check `curl -s https://$STAGING_API_HOST/health/release` shows `"business":true`. The web reads that answer; no web deploy is needed.
+4. Walk the journey on staging: create a business from the navbar's "Businesses", verify it from `/ops/businesses` as a second staff member, invite someone by link, check them in, print the location sign, tip through it with the pretend partner, and see the count and note on the Business page.
+5. Then set `BUSINESS_ENABLED=true` in `production.env` and recreate the API colour, and check `/health/release` on production the same way.
+
+**Verifying the first business (staff, not one of its managers):**
+
+6. Open `/ops/businesses`, then the business. Check its name, address and a contact against something outside TipMe (O2: no documents are uploaded). The contact shows masked; **Reveal** needs a reason and is audited. Each location links to its public page: before verification it reads "isn't taking tips on TipMe right now", which is expected.
+7. **Verify this business** with a reason and a fresh code. With a second qualified person it waits for their approval; it runs alone only when nobody else qualifies, which the log and the alert record.
+8. After verification the location page shows the verified line and the people on shift, and the owners can print their codes.
+
+**To turn it off:** set `BUSINESS_ENABLED=false` and recreate the API colour. Business pages show as unavailable and tips go on as plain tips to each person; nothing is deleted, and a person's own data stays downloadable (`/v1/me/exports/work.csv`).
+
 ## Staff access
 
 Add and remove staff in the dashboard: `docs/runbooks/admin-roles.md`. `pnpm ops:grant-owner` on the server is only for when every owner is locked out, and it is logged. Server access and GitHub deploy rights go around every role and approval, so keep them with very few people.

@@ -213,6 +213,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/email/confirm` | yes | `auth_verify` | – |
 | GET | `/v1/me/events` | n/a (read) | `live_connect` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
+| GET | `/v1/me/exports/work.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
 | POST | `/v1/me/handle/take-back/{id}/seen` | yes | – | – |
 | PUT | `/v1/me/links` | yes | – | – |

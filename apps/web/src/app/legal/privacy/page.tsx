@@ -20,6 +20,42 @@ export default function PrivacyPlaceholder() {
         'Consent for analytics, and your rights',
       ]}
     >
+      {/* Business release 1 (plan B9 Task 24): what a business sees, written before it is turned on. */}
+      <section aria-labelledby="business-tipping">
+        <h2 id="business-tipping">If you tip at a business</h2>
+        <p>
+          When you tip someone through a business’s code on TipMe, the tip goes
+          to that person, as any tip does. The business sees how many tips each
+          person received, the tags and notes supporters chose to leave, and its
+          busiest hours. Any count smaller than 3 shows as “Fewer than 3”, so a
+          single tip can’t be picked out. A note you leave after paying shows
+          with its date only, never the time.
+        </p>
+        <p>
+          The business never sees your name, your contact details, your message
+          to the person, the exact time you tipped or your payment reference.
+          Your message stays private to the person you tipped. If the person or
+          a manager reports a note, the business stops seeing it until TipMe
+          reviews it.
+        </p>
+      </section>
+      <section aria-labelledby="business-working">
+        <h2 id="business-working">If you work at a business</h2>
+        <p>
+          Supporters at the business see the name you choose to show and, if you
+          choose, your photo. The business sees how many tips you received each
+          week, the tags and notes supporters left about you, and whether you
+          are on shift. It sees your amounts only if you choose to share them,
+          and only in a week with at least 3 tips. You can stop sharing at any
+          time.
+        </p>
+        <p>
+          When you leave, your name, your row and the notes about you disappear
+          from the business’s view. The business keeps only its location’s
+          totals. You can download where you have worked, and the notes written
+          about you, from your settings.
+        </p>
+      </section>
       {/* Business release 2 (decisions log, 6 Nov 2026): what a share or a team tip shows to whom. */}
       <section aria-labelledby="business-shares">
         <h2 id="business-shares">Tips at a business</h2>
