@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin area: shell, Overview and shared patterns</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{width:1840px;height:3580px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:44px 48px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.intro{display:flex;justify-content:space-between;gap:40px;align-items:flex-end;margin:0 0 28px}
+.intro h1{margin:0;font:400 44px/1 'DM Serif Display',Georgia,serif}
+.intro p{margin:8px 0 0;max-width:880px;font-size:15px;line-height:1.5;color:#5d5a54}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:#5d5a54}
+.prop{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;border:1.5px solid #7a32f9;color:#4d16a8;font-size:12px;font-weight:700;background:#f6f0ff;white-space:nowrap}
+.sample{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#eeede8;color:#5d5a54;font-size:12px;font-weight:700;box-shadow:inset 0 1px 2px rgba(20,18,16,.12);white-space:nowrap}
+.label{margin:0 0 10px;font-size:13px;font-weight:700;color:#5d5a54;display:flex;gap:8px;align-items:center}
+.row1{display:grid;grid-template-columns:1320px 390px;gap:34px;align-items:start}
+.desk{height:1420px;background:#f3f2ee;border-radius:18px;overflow:hidden;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4);display:grid;grid-template-columns:236px minmax(0,1fr)}
+.side{padding:22px 16px;border-right:1px solid rgba(20,18,16,.09);display:flex;flex-direction:column;gap:2px}
+.mark{display:flex;align-items:center;gap:6px;margin:4px 8px 16px;font:800 22px Manrope,Arial,sans-serif;letter-spacing:-.02em}
+.mark svg{width:18px;height:18px}
+.adminpill{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:#000;color:#fff;font-size:11.5px;font-weight:800;letter-spacing:.02em}
+.group{margin:14px 10px 4px;font-size:12px;font-weight:700;color:#8a867e}
+.nav{height:38px;padding:0 12px;display:flex;align-items:center;border-radius:10px;font-weight:600;font-size:14.5px;color:#5d5a54;text-decoration:none}
+.nav.on{background:#fffefa;color:#000;font-weight:700;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07)}
+.nav .count{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#7a32f9;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+.leave{margin-top:auto}
+.main{padding:0;display:flex;flex-direction:column;min-width:0}
+.strip{display:flex;align-items:center;gap:12px;padding:10px 32px;background:#141210;color:#fff;font-size:13.5px}
+.strip strong{padding:2px 10px;border-radius:999px;background:#7a32f9;font-size:12px;font-weight:800;letter-spacing:.02em}
+.content{padding:26px 32px 32px;display:flex;flex-direction:column;gap:22px}
+.h1{margin:0;font:400 40px/1 'DM Serif Display',Georgia,serif}
+.h2{margin:0 0 10px;font:400 25px/1.1 'DM Serif Display',Georgia,serif}
+.hint{margin:0;font-size:13.5px;line-height:1.45;color:#5d5a54}
+p{margin:0}
+.paper{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:20px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 10px 24px -14px rgba(20,18,16,.25)}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px}
+.switch b{font-size:15px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#23623b;margin-right:8px;vertical-align:1px}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px;border:1px solid rgba(20,18,16,.14);border-radius:11px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 4px 10px rgba(20,18,16,.06);font:700 14px Manrope,Arial,sans-serif;color:#000;white-space:nowrap}
+.btn.go{background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;border-color:#000;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24)}
+.btn.quiet{background:none;border-color:transparent;box-shadow:none;color:#5d5a54;padding:0 8px}
+.btn.danger{color:#9b2820}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.list{list-style:none;margin:0;padding:0}
+.list li{padding:13px 18px;border-top:1px solid rgba(20,18,16,.08);display:grid;gap:3px;font-size:14px;line-height:1.4}
+.list li:first-child{border-top:0}
+.list strong{font-size:14.5px}
+.secpad{padding:16px 0 6px}
+.secpad .h2{padding:0 18px}
+.secpad>.hint{padding:0 18px 8px}
+.tiles{display:grid;gap:10px}
+.t4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.t5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.tile{background:#eeede8;border-radius:14px;padding:13px 14px;box-shadow:inset 0 1px 2px rgba(20,18,16,.09)}
+.tile .l{font-size:12.5px;font-weight:600;color:#5d5a54}
+.tile .v{margin-top:4px;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.tile .p{margin-top:2px;font-size:12px;color:#5d5a54}
+.up{color:#23623b;font-weight:700}
+.funnel{display:grid;gap:7px}
+.funnel div{display:grid;grid-template-columns:140px minmax(0,1fr) 60px;gap:12px;align-items:center;font-size:13.5px}
+.bar{height:14px;border-radius:5px;background:#7a32f9}
+.bar.s{background:#b9a2f0}
+.num{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.timeline{list-style:none;margin:0;padding:0 18px 8px}
+.timeline li{position:relative;padding:8px 0 8px 20px;font-size:13.5px;line-height:1.4}
+.timeline li::before{content:"";position:absolute;left:3px;top:14px;width:7px;height:7px;border-radius:50%;background:#b8b5ab}
+.timeline li.alone::before{background:#9b2820}
+.badge{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eeede8;color:#3d3a35;white-space:nowrap}
+.b-money{background:#fdecea;color:#9b2820}
+.b-account{background:#fff4d8;color:#75500b}
+.b-info{background:#eeede8;color:#3d3a35}
+.b-ok{background:#e8f4ec;color:#23623b}
+.notice{border-radius:14px;padding:13px 16px;font-size:13.5px;line-height:1.45}
+.notice b{display:block;font-size:14px;margin-bottom:2px}
+.n-error{background:#fdecea;color:#5c1712;border:1px solid rgba(155,40,32,.18)}
+.n-neutral{background:#eeede8;color:#2d2a26;border:1px solid rgba(20,18,16,.1)}
+.n-success{background:#e8f4ec;color:#143d24;border:1px solid rgba(35,98,59,.2)}
+.phonecol{display:flex;flex-direction:column;gap:20px}
+.phone{width:390px;background:#f3f2ee;border-radius:40px;border:10px solid #141210;box-sizing:border-box;overflow:hidden;position:relative}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px}
+.pstrip{display:flex;align-items:center;gap:8px;padding:8px 16px;background:#141210;color:#fff;font-size:12px}
+.pstrip strong{padding:1px 8px;border-radius:999px;background:#7a32f9;font-size:11px;font-weight:800}
+.pc{padding:14px 14px 18px;display:flex;flex-direction:column;gap:14px}
+.pc .h1{font-size:32px}
+.t2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.sheet{position:absolute;inset:auto 0 0 0;background:#fffefa;border-radius:24px 24px 0 0;box-shadow:0 -20px 40px -10px rgba(20,18,16,.35);padding:10px 16px 18px}
+.grab{width:40px;height:5px;border-radius:3px;background:#d7d4cc;margin:0 auto 12px}
+.sheet .nav{height:40px}
+.scrim{position:absolute;inset:0;background:rgba(20,18,16,.35)}
+.row2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:30px;margin-top:44px;align-items:start}
+.card{background:#f3f2ee;border-radius:18px;padding:22px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4);display:flex;flex-direction:column;gap:14px}
+.card>h3{margin:0;font:400 26px/1.1 'DM Serif Display',Georgia,serif}
+.field{display:grid;gap:6px;font-size:13.5px;font-weight:700}
+.field .hint{font-weight:500}
+.select,.input{display:flex;align-items:center;justify-content:space-between;height:42px;padding:0 12px;border-radius:12px;background:#eeede8;border:1px solid rgba(20,18,16,.14);box-shadow:inset 0 1px 2px rgba(20,18,16,.11);font-size:14px;font-weight:600;color:#000}
+.input.empty{color:#8a867e;font-weight:500}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.irow{display:grid;gap:4px;padding:13px 16px;border-top:1px solid rgba(20,18,16,.08);font-size:13.5px;line-height:1.4}
+.irow:first-child{border-top:0}
+.irow .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.irow .head strong{font-size:14.5px}
+.irow .head .hint{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-weight:700;color:#5d5a54;padding:9px 10px;border-bottom:1px solid rgba(20,18,16,.14);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid rgba(20,18,16,.07);vertical-align:top;line-height:1.35}
+tr:last-child td{border-bottom:0}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.facts{display:grid;grid-template-columns:130px minmax(0,1fr);gap:7px 14px;margin:0;padding:14px 16px;font-size:13.5px;line-height:1.4}
+.facts dt{color:#5d5a54;font-weight:600}
+.facts dd{margin:0;font-weight:600}
+.sec{display:grid;gap:8px}
+.sec h4{margin:0;font:400 20px/1.1 'DM Serif Display',Georgia,serif}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.cells{display:flex;gap:6px}
+.cells span{flex:1;height:46px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:#eeede8;border:1px solid rgba(20,18,16,.14);box-shadow:inset 0 1px 2px rgba(20,18,16,.12);font:700 20px Manrope,Arial,sans-serif}
+.cells span.e{color:transparent}
+.textarea{min-height:58px;padding:10px 12px;border-radius:12px;background:#eeede8;border:1px solid rgba(20,18,16,.14);box-shadow:inset 0 1px 2px rgba(20,18,16,.11);font-size:13.5px;color:#8a867e}
+.row3{margin-top:44px}
+.states{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px}
+.state{background:#f3f2ee;border-radius:16px;padding:18px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 36px -24px rgba(20,18,16,.4);display:flex;flex-direction:column;gap:12px;min-height:300px}
+.state .k{font-size:12.5px;font-weight:700;color:#5d5a54}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:20px 10px;border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.09)}
+.empty b{font:400 22px/1.1 'DM Serif Display',Georgia,serif}
+.skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#e4e1da,#efede8,#e4e1da)}
+.note{font-size:12.5px;line-height:1.45;color:#5d5a54}
+.where{font-size:11.5px;color:#8a867e;font-family:ui-monospace,Menlo,monospace}
+</style>
+</helmet>
+<div class="board">
+  <div class="intro">
+    <div>
+      <h1>Admin area, in the new style</h1>
+      <p>The shell, the Overview and the patterns every admin page shares. The words are the live wording from the current admin pages. The style follows the Pro price board: same paper, wells and buttons as the dashboard, but denser and calmer.</p>
+    </div>
+    <div class="legend"><span class="prop">Proposed</span><span>a layout change that isn't in the app today</span><span class="sample">Sample</span><span>made-up names, amounts and references</span></div>
+  </div>
+
+  <div class="row1">
+    <div>
+      <p class="label">Desktop: the shell and the Overview, for an owner <span class="sample">Sample</span></p>
+      <div class="desk">
+        <nav class="side" aria-label="Admin">
+          <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg><span class="adminpill">Admin</span></div>
+          <a class="nav on" href="#">Overview</a>
+          <a class="nav" href="#">Approvals<span class="count">2</span></a>
+          <p class="group" style="margin-top:2px">Waiting count on Approvals: <span class="prop" style="height:18px;font-size:10.5px;padding:0 6px">Proposed</span></p>
+          <p class="group">Work <span class="prop" style="height:18px;font-size:10.5px;padding:0 6px">Proposed</span></p>
+          <a class="nav" href="#">Issues</a>
+          <a class="nav" href="#">Search</a>
+          <a class="nav" href="#">Pages</a>
+          <p class="group">Numbers</p>
+          <a class="nav" href="#">Visibility</a>
+          <a class="nav" href="#">Market</a>
+          <p class="group">Email and records</p>
+          <a class="nav" href="#">Providers</a>
+          <a class="nav" href="#">Email</a>
+          <a class="nav" href="#">Audit log</a>
+          <p class="group">Staff</p>
+          <a class="nav" href="#">People</a>
+          <a class="nav" href="#">Roles</a>
+          <a class="nav" href="#">Your access</a>
+          <a class="nav leave" href="#">Leave admin</a>
+        </nav>
+        <div class="main">
+          <div class="strip" role="note"><strong>Admin</strong><span>Staff area · every view and action is recorded</span></div>
+          <div class="content">
+            <h2 class="h1">Overview</h2>
+            <section class="paper switch" aria-label="Withdrawals"><p><b><span class="dot"></span>Withdrawals: on.</b></p><span class="btn danger">Switch off all withdrawals…</span></section>
+            <div class="two">
+              <section class="paper secpad"><h3 class="h2">Pending approvals</h3>
+                <ul class="list">
+                  <li><strong>Settle a stuck withdrawal</strong><span>Mark …4f21c8 for @ada_sample as paid, NGN 20,000.00</span><span class="hint">You can decide this</span></li>
+                  <li><strong>Give someone sensitive access</strong><span>fees.manage for k•••@example.com</span><span class="hint">You asked for this</span></li>
+                </ul>
+                <p style="padding:6px 18px 4px"><a href="#" style="font-size:14px;font-weight:700">Open approvals</a></p>
+              </section>
+              <section class="paper secpad"><h3 class="h2">Staff activity</h3>
+                <ol class="timeline">
+                  <li class="alone"><strong>Acted alone, with nobody else to approve</strong>: Change a page’s fee <span class="hint" style="display:inline">m•••@example.com · 4 Nov 2026, 16:02</span></li>
+                  <li><strong>Changed someone’s role</strong> <span class="hint" style="display:inline">m•••@example.com · 3 Nov 2026, 11:40</span></li>
+                  <li><strong>Added someone to staff</strong> <span class="hint" style="display:inline">m•••@example.com · 2 Nov 2026, 09:15</span></li>
+                </ol>
+              </section>
+            </div>
+            <div style="display:grid;gap:4px"><p class="hint">This week (from Monday, Lagos time) against all of last week. Test money only.</p><p style="font-size:14px;font-weight:600">Live payments: off. Test money only.</p><p class="hint">Last recorded change: off, 3 Nov 2026, 18:20, by 607db5b</p></div>
+            <section><h3 class="h2">Money</h3>
+              <div class="tiles t4">
+                <div class="tile"><p class="l">Tips paid</p><p class="v">42</p><p class="p">Last week 35 · <span class="up">▲ 20%</span></p></div>
+                <div class="tile"><p class="l">Amount tipped</p><p class="v">NGN 186,000.00</p><p class="p">Last week NGN 151,500.00</p></div>
+                <div class="tile"><p class="l">TipMe keeps (after processing)</p><p class="v">NGN 12,090.00</p><p class="p">Last week NGN 9,850.00</p></div>
+                <div class="tile"><p class="l">Reward cost</p><p class="v">NGN 0.00</p><p class="p">Last week NGN 0.00</p></div>
+              </div>
+            </section>
+            <div class="two" style="grid-template-columns:300px minmax(0,1fr)">
+              <section><h3 class="h2">Payment reserve</h3>
+                <div class="tile"><p class="l">Reserve available</p><p class="v">₦84,200</p><p class="p">Alert below ₦50,000 · read 6 min ago</p></div>
+              </section>
+              <section><h3 class="h2">Tipping funnel</h3>
+                <div class="paper funnel" style="padding:14px 16px">
+                  <div><span>Visits</span><span class="bar" style="width:100%"></span><span class="num">1,240</span></div>
+                  <div><span>Amount chosen</span><span class="bar" style="width:31%"></span><span class="num">388</span></div>
+                  <div><span>Payment started</span><span class="bar" style="width:6%"></span><span class="num">71</span></div>
+                  <div><span>Paid</span><span class="bar" style="width:3.4%"></span><span class="num">42</span></div>
+                </div>
+              </section>
+            </div>
+            <section><h3 class="h2">Reliability</h3>
+              <div class="tiles t4">
+                <div class="tile"><p class="l">Declined</p><p class="v">4.8%</p><p class="p">Last week 6.1%</p></div>
+                <div class="tile"><p class="l">Median time to confirm</p><p class="v">38 s</p><p class="p">Last week 44 s</p></div>
+                <div class="tile"><p class="l">Stuck confirming now</p><p class="v">0</p></div>
+                <div class="tile"><p class="l">Open issues</p><p class="v">3</p><p class="p">1 money · 1 account · 1 info</p></div>
+              </div>
+              <p style="margin-top:8px"><a href="#" style="font-size:14px;font-weight:700">Go to the issues inbox</a></p>
+            </section>
+            <section><h3 class="h2">Recipients</h3>
+              <div class="tiles t5">
+                <div class="tile"><p class="l">New sign-ups</p><p class="v">18</p><p class="p">Last week 11</p></div>
+                <div class="tile"><p class="l">New pages</p><p class="v">9</p><p class="p">Last week 7</p></div>
+                <div class="tile"><p class="l">Live pages now</p><p class="v">64</p></div>
+                <div class="tile"><p class="l">Recipients tipped</p><p class="v">21</p><p class="p">Last week 17</p></div>
+                <div class="tile"><p class="l">Tipped both weeks</p><p class="v">12</p></div>
+              </div>
+            </section>
+            <p class="note">The Page speed section (five tiles, “75th percentile on phones over the last 28 days, against the launch budgets.”) shows only when real-visit numbers exist. It uses the same tiles. The notices for a low or unreadable reserve, stopped checks, “Anonymous collection is off” and “The record of live payments disagrees” use the error and neutral notices shown in the patterns below.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phonecol">
+      <p class="label" style="margin-bottom:-10px">Phone: the same Overview <span class="prop">Proposed</span></p>
+      <div class="phone" style="height:860px">
+        <div class="pstrip"><strong>Admin</strong><span>Every view and action is recorded</span></div>
+        <div class="ptop"><div class="mark" style="margin:0"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div><span class="btn">Menu · Overview</span></div>
+        <div class="pc">
+          <h2 class="h1">Overview</h2>
+          <section class="paper" style="padding:14px 16px;display:grid;gap:10px"><b style="font-size:14.5px"><span class="dot"></span>Withdrawals: on.</b><span class="btn danger" style="width:100%;box-sizing:border-box">Switch off all withdrawals…</span></section>
+          <section class="paper secpad"><h3 class="h2" style="font-size:22px">Pending approvals</h3>
+            <ul class="list"><li><strong>Settle a stuck withdrawal</strong><span class="hint">You can decide this</span></li><li><strong>Give someone sensitive access</strong><span class="hint">You asked for this</span></li></ul>
+          </section>
+          <section><h3 class="h2" style="font-size:22px">Money</h3>
+            <div class="tiles t2">
+              <div class="tile"><p class="l">Tips paid</p><p class="v">42</p><p class="p">Last week 35 · <span class="up">▲ 20%</span></p></div>
+              <div class="tile"><p class="l">Amount tipped</p><p class="v" style="font-size:17px">NGN 186,000.00</p><p class="p">Last week NGN 151,500.00</p></div>
+              <div class="tile"><p class="l">TipMe keeps (after processing)</p><p class="v" style="font-size:17px">NGN 12,090.00</p></div>
+              <div class="tile"><p class="l">Reward cost</p><p class="v" style="font-size:17px">NGN 0.00</p></div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <p class="label" style="margin-bottom:-10px">Phone: the menu, opened from “Menu” <span class="prop">Proposed</span></p>
+      <div class="phone" style="height:540px">
+        <div class="pstrip"><strong>Admin</strong><span>Every view and action is recorded</span></div>
+        <div class="pc"><h2 class="h1">Overview</h2><div class="skel" style="width:80%"></div><div class="skel" style="width:60%"></div></div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <a class="nav on" href="#">Overview</a>
+          <a class="nav" href="#">Approvals<span class="count">2</span></a>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px">
+            <a class="nav" href="#">Issues</a><a class="nav" href="#">Search</a>
+            <a class="nav" href="#">Pages</a><a class="nav" href="#">Visibility</a>
+            <a class="nav" href="#">Market</a><a class="nav" href="#">Providers</a>
+            <a class="nav" href="#">Email</a><a class="nav" href="#">Audit log</a>
+            <a class="nav" href="#">People</a><a class="nav" href="#">Roles</a>
+            <a class="nav" href="#">Your access</a><a class="nav" href="#">Leave admin</a>
+          </div>
+        </div>
+      </div>
+      <p class="note">Today the admin menu is a wrapped row of 13 pills above every page, on desktop and phone. Since the 4 Nov fix, the admin area doesn't use the dashboard's phone tab bar. The proposal: a sidebar on desktop and a “Menu” sheet on a phone. Each person still sees only the links their permissions allow.</p>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="card">
+      <p class="label" style="margin:0">Pattern 1: a list with filters (Issues) <span class="sample">Sample</span></p>
+      <h3 class="serif" style="margin:0;font-size:32px">Issues</h3>
+      <div class="filters">
+        <div class="field">Status<span class="select">Open<span>▾</span></span></div>
+        <div class="field">Kind of problem<span class="select">All<span>▾</span></span></div>
+      </div>
+      <div class="paper">
+        <div class="irow"><div class="head"><span class="badge b-money">Money</span><strong>Withdrawal failed</strong><span class="hint">2 h ago</span></div><span>@ada_sample: withdrawal …4f21c8 of NGN 20,000.00 failed at the provider.</span></div>
+        <div class="irow"><div class="head"><span class="badge b-account">Account</span><strong>Pending phone recovery</strong><span class="hint">5 h ago</span></div><span>A recovery to a new number ending 47 is waiting out its 24 hours.</span></div>
+        <div class="irow"><div class="head"><span class="badge b-info">Info</span><strong>Reported page</strong><span class="hint">2 days ago</span></div><span>A visitor reported @tobi_sample: “Pretending to be someone else”.</span></div>
+      </div>
+      <span class="btn" style="align-self:flex-start">Show more</span>
+      <p class="note">Each row opens the issue. The list refreshes every 30 seconds while it's open. The summaries are the server's own words; these ones are samples.</p>
+      <p class="label" style="margin:8px 0 0">Pattern 1b: a table (Audit log) <span class="sample">Sample</span></p>
+      <div class="paper" style="overflow:hidden">
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Subject</th><th>Reason</th></tr></thead>
+          <tbody>
+            <tr><td>5 Nov 2026, 09:20</td><td>Staff …a91f03</td><td class="mono">issue.resolved</td><td>issue …77b2e1</td><td>Provider confirmed it paid</td></tr>
+            <tr><td>5 Nov 2026, 08:02</td><td>System</td><td class="mono">issue.auto_resolved</td><td>issue …5c09d4</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">On a phone, each table row becomes a stacked card with the same five fields. <span class="prop">Proposed</span></p>
+    </div>
+
+    <div class="card">
+      <p class="label" style="margin:0">Pattern 2: a detail view (an issue) <span class="sample">Sample</span></p>
+      <a href="#" style="font-size:14px;font-weight:700">← All issues</a>
+      <h3 class="serif" style="margin:0;font-size:34px">Withdrawal failed</h3>
+      <p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="badge b-money">Money</span><span class="badge">Open</span><span class="hint">Opened 5 Nov 2026, 07:41</span></p>
+      <p style="font-size:14.5px;line-height:1.5">@ada_sample: withdrawal …4f21c8 of NGN 20,000.00 failed at the provider.</p>
+      <div class="sec"><h4>Decide</h4><div class="actions"><span class="btn go">Resolve…</span><span class="btn">Re-check with the provider…</span></div></div>
+      <div class="sec"><h4>Page</h4><dl class="paper facts"><dt>Page</dt><dd><a href="#">@ada_sample</a></dd><dt>Plan and pricing</dt><dd><a href="#">Open the page’s plan and pricing</a></dd><dt>State</dt><dd>Live</dd></dl></div>
+      <div class="sec"><h4>Person</h4><dl class="paper facts"><dt>Phone</dt><dd>•••0147</dd><dt>Email</dt><dd>a•••@example.com (verified)</dd><dt>Account</dt><dd>Active</dd></dl></div>
+      <div class="sec"><h4>Withdrawal</h4><dl class="paper facts"><dt>Status</dt><dd class="mono">FAILED</dd><dt>Amount</dt><dd>NGN 20,000.00</dd><dt>Reference</dt><dd>…4f21c8</dd><dt>Requested</dt><dd>5 Nov 2026, 07:30</dd><dt>Last step tried</dt><dd>The payout itself, so it may have reached the provider</dd><dt>Provider review</dt><dd>No</dd></dl></div>
+      <div class="sec"><h4>Notes</h4><p class="hint">No notes yet.</p><div class="field">Add a note<div class="textarea">&nbsp;</div></div><span class="btn" style="justify-self:start">Save note</span></div>
+      <p class="note">Other sections appear only when they apply: Private details (with “Reveal private details”), The tip and its History, Payment provider and its events, Unmatched event, Phone recovery, Support reference, Related open issues, plus the repair tools for withdrawals and unknown checkouts.</p>
+    </div>
+
+    <div class="card">
+      <p class="label" style="margin:0">Pattern 3: a serious action and the second person <span class="sample">Sample</span></p>
+      <article class="paper" style="padding:16px 18px;display:grid;gap:10px">
+        <h4 class="serif" style="margin:0;font-size:22px;font-weight:400">Settle a stuck withdrawal</h4>
+        <p style="font-size:13.5px;line-height:1.45">Mark …4f21c8 for @ada_sample as paid, NGN 20,000.00.</p>
+        <dl class="facts" style="padding:0;grid-template-columns:90px minmax(0,1fr)"><dt>Asked by</dt><dd>t•••@example.com</dd><dt>Why</dt><dd>The provider's dashboard shows it paid on 5 Nov.</dd><dt>Asked</dt><dd>5 Nov 2026, 09:02</dd><dt>Expires</dt><dd>6 Nov 2026, 09:02</dd></dl>
+        <div style="display:grid;gap:10px;padding:14px;border-radius:14px;background:#f3f2ee;border:1px solid rgba(20,18,16,.08)">
+          <div class="field">Authenticator code<span class="hint">Each approval takes its own code, however recently you entered one. It runs at once, after the facts are checked again.</span>
+            <div class="cells"><span>4</span><span>8</span><span>2</span><span class="e">·</span><span class="e">·</span><span class="e">·</span></div></div>
+          <div class="field">Note (optional)<span class="hint">Recorded with your approval. At least 10 characters if you write one.</span><div class="textarea">&nbsp;</div></div>
+          <div class="actions"><span class="btn go">Approve and run</span><span class="btn quiet">Back</span></div>
+        </div>
+        <div class="actions"><span class="btn">Reject…</span></div>
+      </article>
+      <p class="label" style="margin:6px 0 0">What the person who asked sees</p>
+      <div class="notice n-neutral"><b>Waiting for a second person</b>Nothing has changed yet. Someone else who holds this permission has to approve it, and they’ve been told. <a href="#">See it in Approvals</a></div>
+      <div class="notice n-success"><b>Done, without a second person</b>The issue is resolved. Nobody else can approve this right now, so it ran straight away. The log and the alert say you acted alone.</div>
+      <div class="notice n-success"><b>Approved and done</b>It ran, and the log records you both.</div>
+      <p class="label" style="margin:6px 0 0">When a sensitive action needs a fresh code</p>
+      <div class="paper" style="padding:16px 18px;display:grid;gap:10px"><h4 class="serif" style="margin:0;font-size:22px;font-weight:400">Enter a fresh code</h4><div class="field">Authenticator code<span class="hint">The 6-digit code your app shows now.</span><div class="cells"><span class="e">·</span><span class="e">·</span><span class="e">·</span><span class="e">·</span><span class="e">·</span><span class="e">·</span></div></div></div>
+      <p class="note">Every reasoned action opens the same way: a button ending in “…” opens a reason box (“Recorded in the audit log with your name and the time.”, at least 10 characters), then a black button that names the action.</p>
+    </div>
+  </div>
+
+  <div class="row3">
+    <p class="label">Pattern 4: the same states on every page <span class="sample">Sample</span></p>
+    <div class="states">
+      <div class="state"><p class="k">Loading</p><div class="paper" style="padding:16px;display:grid;gap:10px;flex:1"><div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:85%"></div><div class="skel" style="width:50%"></div></div><p class="note">“Loading issues”, read out to screen readers</p></div>
+      <div class="state"><p class="k">Empty</p><div class="empty"><b>Nothing needs you</b><span class="hint">No issues match these filters.</span></div></div>
+      <div class="state"><p class="k">Couldn’t load</p><div class="notice n-error"><b>Couldn’t load the issues</b>Check your connection; the list retries every 30 seconds.</div><p class="note">Every page has its own wording. A lost answer to an action says “We can’t say whether it went through. Reload and check before trying again.”</p></div>
+      <div class="state"><p class="k">Not part of your role</p><div class="notice n-neutral"><b>Not part of your role</b>Searching needs the “search.view” permission.</div><p class="note">Pages you can't use don't appear in the menu at all. This notice shows if a link is opened directly.</p></div>
+      <div class="state"><p class="k">Confirm it’s you</p><div class="paper" style="padding:16px;display:grid;gap:10px"><h4 class="serif" style="margin:0;font-size:22px;font-weight:400">Confirm it’s you</h4><p class="hint">Enter the current code from your authenticator app to open the admin area.</p><div class="cells"><span class="e">·</span><span class="e">·</span><span class="e">·</span><span class="e">·</span><span class="e">·</span><span class="e">·</span></div><span class="btn go">Continue</span></div></div>
+      <div class="state"><p class="k">Not staff</p><div class="empty"><b>This page isn’t available right now</b><span class="hint">The link may be mistyped, or the person may have paused their page. Please check the link or try again later.</span><span class="btn go">Go to TipMe</span></div><p class="note">The same screen as a missing page, so the admin area’s existence isn’t revealed.</p></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3580}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
