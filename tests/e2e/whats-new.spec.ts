@@ -119,6 +119,8 @@ test('closing the slip clears it and the dot, and a second browser context for t
   const other = await (await browser.newContext()).newPage();
   try {
     await signInWithEmail(other, email);
+    // Wait for the sign-in to land (session cookie set) before leaving the page.
+    await other.waitForURL(/\/dashboard/);
     await other.goto('/dashboard');
     await expect(
       other.locator('.dashboard-home__main h1').first(),
