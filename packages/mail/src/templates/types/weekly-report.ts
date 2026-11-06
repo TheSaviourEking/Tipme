@@ -22,6 +22,8 @@ export const weeklyReport = defineMailType({
       {
         subject: 'Your week on TipMe',
         heading: 'Your week on TipMe',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'See the whole week.',
         blocks: [
           { kind: 'text', text: `Your week (${data.isoWeek}): ${summary}.` },
           {

@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { signUpRecipient, tipAsVisitor } from '../e2e/helpers';
+import { enrolOwner } from '../e2e/ops-helpers';
 import { SCREENS, type ReviewContext } from './screens';
 
 const OUT = 'review-screens';
@@ -23,6 +24,7 @@ for (const screen of SCREENS) {
     ).toBe(true);
     const ctx: ReviewContext = {
       recipient: () => signUpRecipient(page, testInfo),
+      owner: () => enrolOwner(page, testInfo),
       recipientWithTips: async (count) => {
         const who = await signUpRecipient(page, testInfo);
         for (let tip = 0; tip < count; tip += 1)

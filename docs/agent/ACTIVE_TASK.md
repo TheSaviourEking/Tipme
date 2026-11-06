@@ -5,6 +5,13 @@
 - Evidence and rulings: `.superpowers/program/c2-report.md` (main checkout).
 - Next: review, then PR 3 (Task 16, staff stream).
 
+# Current task — states and feedback, PR B public (5 November 2026)
+
+- Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.
+- Built: Task 9 (public places: tip form Not sent slip with the proven safe line, amount flag and lit key, report page and unsubscribe keys, page slips on unsubscribe, mock checkout and receipt; `states-migration` and `money-safety-lines` guards). By the coordinator's scope change: Task 16 (connection mechanism, `lib/connection.ts`, `useOnline`) and Task 17 (connection copy in `lib/connection-copy.ts`, owner-approved 5 Nov 2026, `docs/design/DECISION-LOG.md`).
+- Evidence: `.superpowers/program/states-b-report.md`.
+- Next: review, push and PR into dev. Tasks 16 and 17 touch sign-in and welcome, which PRs C and D restyle: expect small conflicts there.
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.

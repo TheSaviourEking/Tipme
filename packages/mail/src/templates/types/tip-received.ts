@@ -29,6 +29,8 @@ export const tipReceived = defineMailType({
       {
         subject: `You got a ${nairaWhole(data.netMinor)} tip on TipMe`,
         heading: `${data.firstName}, you got a tip`,
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'It is confirmed by the payment provider.',
         blocks: [
           {
             kind: 'text',
