@@ -165,6 +165,12 @@ export function ThisWeekCard({ business }: { business: BusinessDetail }) {
               {shownText(insights.tips)}
             </strong>
           </p>
+          {insights.peopleHidden && (
+            <p className="tm-hint" data-testid="insights-people-hidden">
+              So few people were tipped this week that showing each person would
+              give away a colleague’s exact count. Only the total is shown.
+            </p>
+          )}
           {insights.people.length > 0 && (
             <div className="insights__table-wrap">
               <table className="insights__table">
@@ -189,7 +195,9 @@ export function ThisWeekCard({ business }: { business: BusinessDetail }) {
                         <td>
                           {person.amountMinor !== undefined
                             ? naira(person.amountMinor)
-                            : 'Not shared'}
+                            : 'hidden' in person.tips
+                              ? 'Hidden'
+                              : 'Not shared'}
                         </td>
                       )}
                     </tr>

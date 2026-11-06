@@ -48,7 +48,8 @@ export function ShareCard({ membership }: { membership: MyMembership }) {
           </label>
           <small id={`${id}-hint`}>
             They see your weekly total only, and only in weeks with 3 or more
-            tips. Turn it off any time.
+            tips. Turning this on shows the business your amounts for past weeks
+            too. Turn it off any time.
           </small>
         </span>
       </div>

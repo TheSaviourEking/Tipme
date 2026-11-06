@@ -7,7 +7,7 @@ import {
   type LocationInsights,
   type MyMembership,
   type NoteReport,
-  type Shown,
+  type ShownOrHidden,
 } from '@tipme/contracts';
 import { lagosWeekOf, lagosWeekRange } from '@tipme/domain';
 import { apiFetch, type SessionResult } from '@/lib/session-client';
@@ -59,9 +59,12 @@ export function saveShareAmounts(
   );
 }
 
-/** "Fewer than 3" in words, never a number under 3. */
-export function shownText(shown: Shown): string {
-  return 'n' in shown ? String(shown.n) : 'Fewer than 3';
+/** "Fewer than 3" in words, never a number under 3; a withheld count says why. */
+export function shownText(shown: ShownOrHidden): string {
+  if ('n' in shown) return String(shown.n);
+  return 'hidden' in shown
+    ? 'Hidden to protect a colleague’s privacy'
+    : 'Fewer than 3';
 }
 
 export const tagLabel = (tag: BusinessNoteTag): string =>

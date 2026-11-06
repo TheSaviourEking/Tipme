@@ -10,6 +10,7 @@ import {
   type MemberWeek,
   type MyMembership,
   type Shown,
+  type ShownOrHidden,
 } from '@tipme/contracts';
 import { LAGOS_TIME_ZONE, lagosWeekRange, onShift } from '@tipme/domain';
 import { sql } from 'drizzle-orm';
@@ -81,8 +82,63 @@ const paidAt = (locationId: string, range: { from: Date; to: Date }) => sql`
    AND t.completed_at >= ${range.from} AND t.completed_at < ${range.to}
    AND p.rehearsal_run_id IS NULL`;
 
-/** Rank: a count the business may see; every count under 3 shares one rank below 3. */
-const rankOf = (shown: Shown) => ('n' in shown ? shown.n : MIN_GROUP - 1);
+/** Rank: a count the business may see; every withheld count shares one rank below 3. */
+const rankOf = (shown: ShownOrHidden) =>
+  'n' in shown ? shown.n : MIN_GROUP - 1;
+
+/**
+ * Complementary suppression (coordinator's ruling, 6 Nov 2026). "Fewer than 3" alone is not
+ * enough: the location total minus the counts shown can give it away (10 in all, 5 and 4 shown:
+ * the third person had 1). So the smallest counts shown are withheld too, one at a time, until
+ * no withheld person's count can be worked out from what is shown.
+ *
+ * What a business can know, and what this assumes it knows: the total; every count shown; that a
+ * "fewer than 3" is 1 or 2; that a withheld count is at least 3 and, because the smallest go
+ * first, at most the smallest count still shown; and each person's notes, which it can count in
+ * the notes list. People who left add an unknown amount to the total, which only helps.
+ *
+ * Returns the people whose counts are withheld (beyond "fewer than 3"), or null when every count
+ * would be withheld or nothing is safe: then only the location total shows.
+ */
+export function withheldCounts(
+  people: { id: string; name: string; tips: number; notes: number }[],
+  total: number,
+  leftTips: number,
+): Set<string> | null {
+  const under = people.filter((person) => person.tips < MIN_GROUP);
+  if (under.length === 0) return new Set();
+  // A total under 3 is itself "fewer than 3": shared by two or more, it can only be 1 each.
+  if (total < MIN_GROUP) return people.length >= 2 ? null : new Set();
+  const shown = people
+    .filter((person) => person.tips >= MIN_GROUP)
+    .sort((a, b) => a.tips - b.tips || a.name.localeCompare(b.name));
+  const hidden: typeof people = [];
+  const safe = () => {
+    const rest = total - shown.reduce((sum, person) => sum + person.tips, 0);
+    const ceiling = shown[0]?.tips ?? Infinity;
+    const bounds = [
+      ...under.map((person) => [Math.max(1, person.notes), 2]),
+      ...hidden.map((person) => [Math.max(MIN_GROUP, person.notes), ceiling]),
+    ] as [number, number][];
+    const extra = leftTips > 0 ? Infinity : 0;
+    const lows = bounds.reduce((sum, [low]) => sum + low, 0);
+    const highs = bounds.reduce((sum, [, high]) => sum + high, 0) + extra;
+    // Each withheld count must have at least two values that fit with everyone else's.
+    return bounds.every(([low, high]) => {
+      const least = Math.max(low, rest - (highs - high));
+      const most = Math.min(high, rest - (lows - low));
+      return most - least >= 1;
+    });
+  };
+  while (!safe()) {
+    const next = shown.shift();
+    if (!next) return null;
+    hidden.push(next);
+  }
+  // Every count withheld: show only the total (the ruling), not a table of hidden rows.
+  if (hidden.length > 0 && shown.length === 0) return null;
+  return new Set(hidden.map((person) => person.id));
+}
 
 /**
  * One location's week, for a manager of it. A location manager of another location, someone who
@@ -132,11 +188,15 @@ export async function locationInsights(
       TAG_IDS.map((tag) => [tag, 0]),
     ) as Record<BusinessNoteTag, number>;
     let visibleNotes = 0;
+    let leftTips = 0;
     for (const row of rows.rows) {
       const key = `${row.dow}:${row.hour}`;
       byHour.set(key, (byHour.get(key) ?? 0) + 1);
       // Someone who left counts in the total and the hours only (M6).
-      if (!row.active) continue;
+      if (!row.active) {
+        leftTips += 1;
+        continue;
+      }
       let person = people.get(row.member_id);
       if (!person) {
         person = {
@@ -165,17 +225,30 @@ export async function locationInsights(
       }
     }
 
+    const withheld = withheldCounts(
+      [...people.entries()].map(([id, person]) => ({
+        id,
+        name: person.shownName,
+        tips: person.tips,
+        notes: person.notes,
+      })),
+      rows.rows.length,
+      leftTips,
+    );
     const weekRows: MemberWeek[] = [...people.entries()].map(
       ([memberId, person]) => ({
         memberId,
         shownName: person.shownName,
         left: false,
-        tips: shownCount(person.tips),
+        tips: withheld?.has(memberId)
+          ? { hidden: true as const }
+          : shownCount(person.tips),
         notes: shownCount(person.notes),
         tags: Object.fromEntries(
           TAG_IDS.map((tag) => [tag, shownCount(person.tags[tag])]),
         ) as Record<BusinessNoteTag, Shown>,
-        ...(person.share && person.tips >= MIN_GROUP
+        // A withheld count's amount is withheld with it.
+        ...(person.share && person.tips >= MIN_GROUP && !withheld?.has(memberId)
           ? { amountMinor: person.net.toString() }
           : {}),
       }),
@@ -220,7 +293,9 @@ export async function locationInsights(
       week: q.week,
       locationId: q.locationId,
       tips: shownCount(rows.rows.length),
-      people: weekRows,
+      ...(withheld === null
+        ? { people: [], peopleHidden: true as const }
+        : { people: weekRows }),
       ...(busiest ? { busiest } : {}),
       ...(topTag ? { topTag } : {}),
     };

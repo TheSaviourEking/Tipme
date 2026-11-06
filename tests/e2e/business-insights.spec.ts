@@ -16,6 +16,10 @@ import {
 // list (B3) belong to other lanes, so this spec answers those two reads itself; everything B7
 // owns (insights, notes, share amounts) is the real API.
 
+// Each test pays 10 pretend tips through the API to reach the counts it needs; under load that
+// alone can pass the 30-second default.
+test.describe.configure({ timeout: 120_000 });
+
 type Seeded = {
   businessId: string;
   slug: string;
@@ -41,17 +45,36 @@ async function seed(
     profileId,
     shownName: 'Kemi',
   });
-  const [tobi] = await sql<{ id: string }>(
-    `SELECT id FROM profiles WHERE handle_lower = 'tobi'`,
-  );
+  const pageOf = async (handle: string) =>
+    (
+      await sql<{ id: string }>(
+        `SELECT id FROM profiles WHERE handle_lower = $1`,
+        [handle],
+      )
+    )[0]!.id;
   const tobiMember = (
-    await seedMember({ locationId, profileId: tobi!.id, shownName: 'Tobi' })
+    await seedMember({
+      locationId,
+      profileId: await pageOf('tobi'),
+      shownName: 'Tobi',
+    })
   ).memberId;
+  const adaMember = (
+    await seedMember({
+      locationId,
+      profileId: await pageOf('ada'),
+      shownName: 'Ada',
+    })
+  ).memberId;
+  // Kemi 5, Ada 4, Tobi 1: 10 in all. Showing Ada's 4 would leave 10 - 5 - 4 = 1 for Tobi, so
+  // Ada's count is hidden too.
   const kemiTips = [];
-  for (let i = 0; i < 3; i += 1)
+  for (let i = 0; i < 5; i += 1)
     kemiTips.push(
       await payAtBusiness(page.request, { handle: who.handle, memberId }),
     );
+  for (let i = 0; i < 4; i += 1)
+    await payAtBusiness(page.request, { handle: 'ada', memberId: adaMember });
   await payAtBusiness(page.request, { handle: 'tobi', memberId: tobiMember });
   await sql(
     `INSERT INTO business_notes (tip_id, member_id, tags, body) VALUES ($1, $2, '{friendly,extra_mile}', 'Fixed our order in five minutes.')`,
@@ -145,9 +168,13 @@ test('the owner sees this week in groups of 3, no amounts, and the notes; report
   const s = await seed(page, testInfo);
   await page.goto('/dashboard/business');
   const week = page.getByRole('region', { name: 'This week' });
-  await expect(week.getByTestId('insights-total')).toHaveText('4');
+  await expect(week.getByTestId('insights-total')).toHaveText('10');
   const table = week.getByRole('table', { name: 'Who’s thanked most' });
-  await expect(table.getByRole('row', { name: /Kemi/ })).toContainText('3');
+  await expect(table.getByRole('row', { name: /Kemi/ })).toContainText('5');
+  await expect(table.getByRole('row', { name: /Ada/ })).toContainText(
+    'Hidden to protect a colleague’s privacy',
+  );
+  await expect(table.getByRole('row', { name: /Ada/ })).not.toContainText('4');
   await expect(table.getByRole('row', { name: /Tobi/ })).toContainText(
     'Fewer than 3',
   );
@@ -218,7 +245,7 @@ test('a staff member shares their amounts from Work; the business then sees thei
   await expect(toggle).not.toBeChecked();
   await expect(
     page.getByText(
-      'They see your weekly total only, and only in weeks with 3 or more tips. Turn it off any time.',
+      'They see your weekly total only, and only in weeks with 3 or more tips. Turning this on shows the business your amounts for past weeks too. Turn it off any time.',
     ),
   ).toBeVisible();
   await expectAccessible(page);
@@ -238,6 +265,9 @@ test('a staff member shares their amounts from Work; the business then sees thei
   await expect(table.getByRole('row', { name: /Kemi/ })).toContainText(
     /₦[\d,]+/,
   );
+  // Ada's count is hidden, so is anything to do with it.
+  await expect(table.getByRole('row', { name: /Ada/ })).toContainText('Hidden');
+  await expect(table.getByRole('row', { name: /Ada/ })).not.toContainText('₦');
   // Tobi doesn't share (and has fewer than 3 tips).
   await expect(table.getByRole('row', { name: /Tobi/ })).toContainText(
     'Not shared',

@@ -42,6 +42,52 @@ function shownNumbers(value, found = []) {
   return found;
 }
 
+/**
+ * Works out what a business could by subtraction: every split of the location total that fits the
+ * rows shown (a "fewer than 3" is 1 or 2; a hidden count is at least 3, at least the notes it shows,
+ * and at most the smallest count still shown, since the smallest are hidden first). Fails when any
+ * withheld person's count comes out as only one possible value.
+ */
+function assertNobodyWorkedOut(result) {
+  const shownN = (shown) => ('n' in shown ? shown.n : null);
+  const people = result.people;
+  const withheld = people.filter((person) => shownN(person.tips) === null);
+  if (withheld.length === 0) return;
+  const visible = people.filter((person) => shownN(person.tips) !== null);
+  const total = shownN(result.tips);
+  const smallestShown = visible.length
+    ? Math.min(...visible.map((person) => person.tips.n))
+    : Infinity;
+  // With the total under 3, it is 1 or 2.
+  const totals = total === null ? [1, 2] : [total];
+  const ranges = withheld.map((person) => {
+    const notes = shownN(person.notes) ?? 0;
+    return 'fewerThan' in person.tips
+      ? [Math.max(1, notes), 2]
+      : [Math.max(3, notes), smallestShown];
+  });
+  const possible = withheld.map(() => new Set());
+  for (const t of totals) {
+    const rest = t - visible.reduce((sum, person) => sum + person.tips.n, 0);
+    const walk = (i, left, chosen) => {
+      if (i === ranges.length) {
+        if (left === 0) chosen.forEach((value, j) => possible[j].add(value));
+        return;
+      }
+      const [low, high] = ranges[i];
+      for (let v = low; v <= Math.min(high, left); v += 1)
+        walk(i + 1, left - v, [...chosen, v]);
+    };
+    walk(0, rest, []);
+  }
+  withheld.forEach((person, i) =>
+    assert.ok(
+      possible[i].size >= 2,
+      `${person.shownName}'s count can be worked out by subtraction: ${[...possible[i]]}`,
+    ),
+  );
+}
+
 test('what the business sees', async (t) => {
   const database = await useDatabase(t);
   const { db } = database;
@@ -209,6 +255,8 @@ test('what the business sees', async (t) => {
       assert.deepEqual(row(result, 'Chioma').tags.made_my_day, {
         fewerThan: 3,
       });
+      // Ada and Chioma: 3 left over, as 1 + 2 or 2 + 1, so neither can be worked out.
+      assertNobodyWorkedOut(result);
       // Emeka works there but had no tips this week: no row.
       assert.equal(row(result, 'Emeka'), undefined);
       for (const shown of shownNumbers(result))
@@ -227,11 +275,72 @@ test('what the business sees', async (t) => {
   );
 
   await t.test(
+    'one person under 3 can never be worked out by subtraction: smaller rows are hidden too, or only the total shows',
+    async () => {
+      const at = (n, hour) =>
+        Array.from({ length: n }, (_, i) =>
+          lagos(
+            `2026-10-${String(12 + (i % 6)).padStart(2, '0')}T${hour}:0${i % 6}:00`,
+          ),
+        );
+      const tipsFor = async (handle, memberId, n, hour) => {
+        for (const when of at(n, hour)) await paid(handle, memberId, when);
+      };
+
+      // Ada 5, Tobi 4, Chioma 1: 10 in all. Showing Ada and Tobi would leave 10 - 9 = 1 for
+      // Chioma. Tobi (the next smallest) is hidden too; Tobi shares, and the amount goes with it.
+      let s = await setUp();
+      await tipsFor('ada', s.adaMember, 5, '10');
+      await tipsFor('tobi', s.tobiMember, 4, '11');
+      await tipsFor('chioma', s.chiomaMember, 1, '12');
+      await setShareAmounts(db, TOBI.userId, s.tobiMember, true);
+      let result = await insights(s);
+      assert.deepEqual(result.tips, { n: 10 });
+      assert.deepEqual(row(result, 'Ada').tips, { n: 5 });
+      assert.deepEqual(row(result, 'Tobi').tips, { hidden: true });
+      assert.equal(row(result, 'Tobi').amountMinor, undefined);
+      assert.deepEqual(row(result, 'Chioma').tips, { fewerThan: 3 });
+      assert.equal(result.peopleHidden, undefined);
+      assertNobodyWorkedOut(result);
+
+      // Ada 5, Tobi 3, Chioma 1: hiding Tobi still gives it away (9 - 5 = 4 = 3 + 1), and so
+      // would hiding everyone, so only the location total shows.
+      s = await setUp();
+      await tipsFor('ada', s.adaMember, 5, '10');
+      await tipsFor('tobi', s.tobiMember, 3, '11');
+      await tipsFor('chioma', s.chiomaMember, 1, '12');
+      result = await insights(s);
+      assert.deepEqual(result.tips, { n: 9 });
+      assert.deepEqual(result.people, []);
+      assert.equal(result.peopleHidden, true);
+      assert.doesNotMatch(JSON.stringify(result), /Chioma|Tobi|Ada/);
+
+      // Two people under 3 with 1 each and Tobi on 3: 5 - 3 = 2 can only be 1 + 1.
+      s = await setUp();
+      await tipsFor('tobi', s.tobiMember, 3, '11');
+      await tipsFor('ada', s.adaMember, 1, '10');
+      await tipsFor('chioma', s.chiomaMember, 1, '12');
+      result = await insights(s);
+      assert.deepEqual(result.people, []);
+      assert.equal(result.peopleHidden, true);
+
+      // A total under 3 shared by two people: it can only be 1 each.
+      s = await setUp();
+      await tipsFor('ada', s.adaMember, 1, '10');
+      await tipsFor('chioma', s.chiomaMember, 1, '12');
+      result = await insights(s);
+      assert.deepEqual(result.tips, { fewerThan: 3 });
+      assert.deepEqual(result.people, []);
+      assert.equal(result.peopleHidden, true);
+    },
+  );
+
+  await t.test(
     'amounts appear only for a person who shares them and has at least 3 tips',
     async () => {
       const s = await setUp();
       const nets = [];
-      for (const day of ['12', '13', '14'])
+      for (const day of ['12', '13', '14', '15', '16'])
         nets.push(
           (
             await paid('tobi', s.tobiMember, lagos(`2026-10-${day}T12:00:00`), {
@@ -239,7 +348,7 @@ test('what the business sees', async (t) => {
             })
           ).net,
         );
-      for (const day of ['12', '13', '14'])
+      for (const day of ['12', '13', '14', '15'])
         await paid('chioma', s.chiomaMember, lagos(`2026-10-${day}T15:00:00`));
       await paid('ada', s.adaMember, lagos('2026-10-13T12:00:00'));
       await paid('ada', s.adaMember, lagos('2026-10-14T12:00:00'));
@@ -250,7 +359,7 @@ test('what the business sees', async (t) => {
         assert.equal(person.amountMinor, undefined, person.shownName);
       assert.doesNotMatch(JSON.stringify(before), /amount/i);
 
-      // Tobi (3 tips) and Ada (2 tips) turn sharing on; Chioma (3 tips) doesn't.
+      // Tobi (5 tips) and Ada (2 tips) turn sharing on; Chioma (4 tips) doesn't.
       const shared = await setShareAmounts(db, TOBI.userId, s.tobiMember, true);
       assert.equal(shared.shareAmounts, true);
       assert.equal(shared.memberId, s.tobiMember);
@@ -260,6 +369,9 @@ test('what the business sees', async (t) => {
       );
       await setShareAmounts(db, ADA.userId, s.adaMember, true);
       const after = await insights(s);
+      assertNobodyWorkedOut(after);
+      // Ada's 2 needs Chioma's 4 hidden too (otherwise 11 - 5 - 4 = 2).
+      assert.deepEqual(row(after, 'Chioma').tips, { hidden: true });
       const total = nets.reduce((sum, net) => sum + net, 0n);
       // The net of each tip: the same figure the person's own Tips list shows.
       assert.equal(row(after, 'Tobi').amountMinor, total.toString());
