@@ -1,3 +1,9 @@
+# Current task — public boards PR 4, QR studio (6 November 2026)
+
+- Branch/worktree: `feat/qr-studio-restyle` / `.worktrees/qr-studio`, test lane 4, from `origin/dev` at `246bebb`. Committed, not pushed. Front end only: no API, contract, migration or payment change.
+- Done: Tasks 4.0 to 4.4 of the public boards plan (PR 4): the code on a paper panel (`.qr-studio__panel`); the one status line directly under the Upgrade panel, before the style lists, at every width; designs in Patterns, Cards and Photo by the API's `kind` (`lib/qr-groups.ts`); the Free card lettered in Manrope (`lib/brand-font.ts`, `drawQrCard`'s `fontFamily`). The `QrStudio.dc.html` board was not on disk to copy.
+- Next: the controller pushes the branch as a draft PR; CI runs the full e2e suite. Then PR 5 (QR print) builds on `qr-card.ts` and the QR CSS block. Evidence: `.superpowers/program/pub4-report.md` (main checkout).
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.

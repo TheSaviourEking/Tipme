@@ -1,3 +1,11 @@
+# Current handoff — public boards PR 4, QR studio (6 November 2026)
+
+- Branch `feat/qr-studio-restyle`, lane 4, committed, not pushed. Web only; nothing about payments, plans or the QR link changes.
+- The studio's only `role="status"` line now sits under the Upgrade panel and before every list, at every width (one DOM order); it stays mounted.
+- Designs: three fieldsets, "Patterns", "Cards", "Photo", in the API's order; an unknown `kind` joins Patterns. All radios share one `name`, so arrow keys cross groups.
+- `drawQrCard` letters the Free card in the page's `--font-manrope` family (next/font names it `"manrope"`) after `document.fonts.load`, waiting at most 3 s, else Arial. Pro designs (server pictures) are unchanged. The code's pixels are unchanged: unit decode test plus the e2e scan of the free canvas.
+- Verified locally: format, lint, typecheck, `pnpm test` (web 352/352), `tests/e2e/qr.spec.ts` 9/9 on lane 4. The full e2e suite was not run locally (6 Nov overload rule); CI runs it.
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.
