@@ -57,6 +57,7 @@ export const usernameTakeBackNotice = defineMailType({
       ? letter(
           {
             subject: 'We need your TipMe username back',
+            preheader: 'Please choose a new username for your page.',
             heading: 'We need your username back',
             blocks: [
               {
@@ -88,6 +89,7 @@ export const usernameTakeBackNotice = defineMailType({
       : letter(
           {
             subject: 'A link to your TipMe page will stop working',
+            preheader: 'Update your links and QR codes when you can.',
             heading: 'An old link will stop working',
             blocks: [
               {
@@ -112,6 +114,7 @@ export const usernameTakeBackReminder = defineMailType({
     letter(
       {
         subject: '2 days left to choose a new TipMe username',
+        preheader: 'Choose a new username before the deadline.',
         heading: '2 days left to choose a new username',
         blocks: [
           {
@@ -184,6 +187,7 @@ export const usernameTakeBackDone = defineMailType({
         return letter(
           {
             subject: 'Your TipMe page has a new username',
+            preheader: 'Your page, tips and balance are unchanged.',
             heading: 'Your page has a new username',
             blocks: [
               {
@@ -200,6 +204,7 @@ export const usernameTakeBackDone = defineMailType({
         return letter(
           {
             subject: 'Your TipMe page has a new username',
+            preheader: 'Your page, tips and balance are unchanged.',
             heading: 'Your page has a new username',
             blocks: [
               {
@@ -216,6 +221,7 @@ export const usernameTakeBackDone = defineMailType({
         return letter(
           {
             subject: 'We changed your TipMe username',
+            preheader: 'Your page, tips and balance are unchanged.',
             heading: 'We changed your username',
             blocks: [
               {
@@ -232,6 +238,7 @@ export const usernameTakeBackDone = defineMailType({
         return letter(
           {
             subject: 'Your new TipMe username is ready',
+            preheader: 'Your page, tips and balance are unchanged.',
             heading: 'Your new username is ready',
             blocks: [
               {
@@ -247,6 +254,7 @@ export const usernameTakeBackDone = defineMailType({
         return letter(
           {
             subject: 'An old link to your TipMe page has stopped working',
+            preheader: 'Update your links and QR codes when you can.',
             heading: 'An old link has stopped working',
             blocks: [
               {
@@ -273,6 +281,7 @@ export const usernameTakeBackCancelled = defineMailType({
     letter(
       {
         subject: 'You can keep your TipMe username',
+        preheader: 'Nothing changes for your page.',
         heading: 'You can keep your username',
         blocks: [
           {
