@@ -9732,6 +9732,51 @@ body > .coming-soon-page {
 /* business:B5 end */
 
 /* business:B6 start */
+.work-shift {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.work-shift__state {
+  margin: 0;
+  font-weight: 600;
+}
+
+.on-today {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.on-today__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: 44px;
+}
+
+.on-today__row .tm-state-line {
+  grid-column: 1 / -1;
+}
+
+.on-today__who {
+  display: grid;
+}
+
+.on-today__who small {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.on-today__switch {
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+}
 /* business:B6 end */
 
 /* business:B7 start */

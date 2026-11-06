@@ -1,5 +1,6 @@
 import type { MyMembership } from '@tipme/contracts';
 import type { JSX } from 'react';
+import { ShiftCard } from './sections/shift';
 
 /**
  * The Work page's sections, one card each per membership (PR B0 registry). Each lane adds its own
@@ -12,4 +13,6 @@ export type WorkSection = {
   Card: (props: { membership: MyMembership }) => JSX.Element;
 };
 
-export const WORK_SECTIONS: readonly WorkSection[] = [];
+export const WORK_SECTIONS: readonly WorkSection[] = [
+  { id: 'shift', title: 'On shift', Card: ShiftCard },
+];
