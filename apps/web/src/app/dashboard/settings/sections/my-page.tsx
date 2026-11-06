@@ -328,6 +328,8 @@ export function HandleChange() {
         </h3>
         <div>
           <p className="settings-handle-row__name">Handle: @{profile.handle}</p>
+          {/* A Free page lands here right after choosing during a take-back. */}
+          {savedNotice}
           <p className="tm-hint" role={error ? 'alert' : undefined}>
             Handle changes are part of TipMe Pro.
           </p>

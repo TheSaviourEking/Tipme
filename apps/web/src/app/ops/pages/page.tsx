@@ -38,6 +38,7 @@ import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import { apiFetch } from '@/lib/session-client';
 
 const STATE_LABELS: Record<OpsPage['pageState'], string> = {
   live: 'Live',
@@ -299,17 +300,34 @@ function FreezeWithdrawals({
  */
 function UsernameCard({ handle }: { handle: string }) {
   const [answer, setAnswer] = useState<OpsUsernameCheck | null>(null);
+  const [needsCode, setNeedsCode] = useState(false);
   const [said, setSaid] = useState('');
-  const read = useCallback(async () => {
-    const result = await opsFetch<OpsUsernameCheck>(
-      `/v1/ops/usernames/check/${encodeURIComponent(handle)}`,
-    );
-    setAnswer(result.ok ? result.data : null);
-  }, [handle]);
+  const path = `/v1/ops/usernames/check/${encodeURIComponent(handle)}`;
+  // Opening the page must never raise the code prompt: it would sit over the stopping actions,
+  // which take no code. So the first read doesn't ask; a stale code offers a button that does.
+  const read = useCallback(
+    async (ask: boolean) => {
+      const result = ask
+        ? await opsFetch<OpsUsernameCheck>(path)
+        : await apiFetch<OpsUsernameCheck>(path);
+      setNeedsCode(!result.ok && result.code === 'FRESH_CODE_REQUIRED');
+      setAnswer(result.ok ? result.data : null);
+    },
+    [path],
+  );
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is set before the await
-    void read();
+    void read(false);
   }, [read]);
+  if (needsCode)
+    return (
+      <Card className="settings-section">
+        <h2>Username</h2>
+        <Button variant="secondary" onClick={() => void read(true)}>
+          Show username options
+        </Button>
+      </Card>
+    );
   if (!answer || answer.state !== 'page') return null;
   return (
     <Card className="settings-section">
@@ -344,7 +362,7 @@ function UsernameCard({ handle }: { handle: string }) {
                   ? 'Done alone'
                   : 'Take-back started',
             );
-            void read();
+            void read(true);
           }}
         />
       )}

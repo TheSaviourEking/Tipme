@@ -197,6 +197,8 @@ test('two staff request and approve a take-back; the user sees the banner, choos
   page,
   browser,
 }, testInfo) => {
+  // Three people sign in (two staff and the page's owner): slower than the default allows.
+  test.slow();
   const owner = await (await browser.newContext()).newPage();
   const { handle } = await signUpRecipient(owner, testInfo);
   await enrolOwner(page, testInfo);

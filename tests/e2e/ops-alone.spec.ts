@@ -167,6 +167,8 @@ test('@alone a single admin’s take-back runs alone and says so', async ({
   page,
   browser,
 }, testInfo) => {
+  // A recipient and an admin both sign in first.
+  test.slow();
   const { handle } = await signUpRecipient(
     await (await browser.newContext()).newPage(),
     testInfo,
