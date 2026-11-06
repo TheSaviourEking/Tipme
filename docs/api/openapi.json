@@ -6651,6 +6651,86 @@
         "x-tipme-permission": "private.view"
       }
     },
+    "/v1/ops/issues/{id}/reverse-tip": {
+      "post": {
+        "operationId": "OpsActions.reverseTip",
+        "tags": [
+          "OpsActions"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "refundedMinor": {
+                    "type": "string",
+                    "pattern": "^[1-9]\\d{0,11}$"
+                  },
+                  "dashboardVerified": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "reason",
+                  "refundedMinor",
+                  "dashboardVerified"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.repair"
+      }
+    },
     "/v1/ops/market": {
       "get": {
         "operationId": "OpsMarket.list",
@@ -10805,6 +10885,7 @@
                   "TEAM_NOBODY_ON_SHIFT",
                   "CARD_NOT_FOUND",
                   "BALANCE_BELOW_ZERO",
+                  "TIP_NOT_REVERSIBLE",
                   "INTERNAL_ERROR"
                 ]
               },
