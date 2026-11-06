@@ -293,11 +293,18 @@ test(
     try {
       assert.equal(budgetLines(fleet, 'api').at(-1).pool_max, 1);
       await changeLimit(50);
+      // Each process reads the new limit on its own timer: wait for both, not just the first.
       assert.ok(
-        await until(() => budgetLines(fleet, 'api').at(-1).pool_max === 4),
-        JSON.stringify(budgetLines(fleet, 'api').at(-1)),
+        await until(
+          () =>
+            budgetLines(fleet, 'api').at(-1).pool_max === 4 &&
+            budgetLines(fleet, 'worker').at(-1).pool_max === 4,
+        ),
+        JSON.stringify([
+          budgetLines(fleet, 'api').at(-1),
+          budgetLines(fleet, 'worker').at(-1),
+        ]),
       );
-      assert.equal(budgetLines(fleet, 'worker').at(-1).pool_max, 4);
       const raised = await loadAndWatch(fleet, 6, 12);
       assert.ok(raised.peak <= 32, `peak ${raised.peak}`);
       assert.ok(
@@ -308,12 +315,17 @@ test(
 
       await changeLimit(20);
       // Every process shrinks on its own next read, and closes its spare connections then:
-      // measure once all of them have, not when the first one says so.
+      // measure once all of them have, not when the first one says so. The restart drops every
+      // connection, and all eight processes reconnect at once still sized for 50, so the server
+      // may refuse some (53300): a refused process halves to its minimum and holds there for 60s
+      // (connection-budget.ts onRefused). That is the designed back-off, never above its share.
+      const settled = (line, share) =>
+        line.pool_max === share || (line.reduced && line.pool_max <= share);
       assert.ok(
         await until(
           () =>
-            budgetLines(fleet, 'api').at(-1).pool_max === 1 &&
-            budgetLines(fleet, 'worker').at(-1).pool_max === 2,
+            settled(budgetLines(fleet, 'api').at(-1), 1) &&
+            settled(budgetLines(fleet, 'worker').at(-1), 2),
         ),
         JSON.stringify(budgetLines(fleet, 'worker').at(-1)),
       );
