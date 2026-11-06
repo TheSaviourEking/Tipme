@@ -1,5 +1,5 @@
 'use client';
-import { hintFromAnswer, writeSignedInHint } from './signed-in-hint';
+import { hintFromAnswer, writeSignedInHint } from './signed-in-hint.ts';
 
 /** Calls the API as the signed-in recipient: the session cookie travels, never readable here. */
 const API_ORIGIN =

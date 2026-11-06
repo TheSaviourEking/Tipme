@@ -18,6 +18,7 @@ export function readSignedInHint(): boolean {
 }
 
 export function writeSignedInHint(signedIn: boolean): void {
+  if (typeof window === 'undefined') return;
   try {
     if (readSignedInHint() === signedIn) return;
     if (signedIn) window.localStorage.setItem(KEY, '1');
