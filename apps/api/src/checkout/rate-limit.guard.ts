@@ -37,13 +37,16 @@ type RateLimitedRoute =
   | 'bank_resolve'
   | 'bank_read'
   | 'live_connect'
-  | 'live_connect_user';
+  | 'live_connect_user'
+  | 'changelog_ingest';
 
 // Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
 const BANK_RESOLVES_PER_USER_PER_DAY = 10;
 const DAY_MS = 86_400_000;
 // Live stream connects per signed-in person per minute: a tab reconnecting with backoff uses few.
 const LIVE_CONNECTS_PER_USER_PER_MIN = 30;
+// CI's signed changelog calls, per address per minute: a deploy makes two, a merge one.
+const CHANGELOG_INGEST_PER_MIN = 60;
 
 type LimitedRequest = Request & { auth?: { userId: string } };
 
@@ -193,6 +196,11 @@ export class RateLimitGuard implements CanActivate {
       qr_thumb: {
         limit: this.config.RATE_LIMIT_QR_THUMBS_PER_HOUR,
         windowMs: 3_600_000,
+      },
+      // Counted before the signature check, so a flood of unsigned calls stops here too.
+      changelog_ingest: {
+        limit: CHANGELOG_INGEST_PER_MIN,
+        windowMs: 60_000,
       },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
