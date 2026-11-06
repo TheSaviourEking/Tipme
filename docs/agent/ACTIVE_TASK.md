@@ -1,3 +1,9 @@
+# Current task — public boards PR 1, app icons (6 November 2026)
+
+- Branch/worktree: `feat/app-icons` / `.worktrees/app-icons`, test lane 9, from `origin/dev` at `246bebb2`. Committed, not pushed. Front end only: no API, contract, database or payment change.
+- Plan: `docs/superpowers/plans/2026-11-05-public-boards.md` (on `feat/claim-moment`), PR 1, Tasks 1.0 to 1.4. `apple-icon` (180), `/icons/192.png`, `/icons/512-maskable.png` and `/manifest.webmanifest` (display `browser`), all open in both gates; the tab icon stays `icon.svg`.
+- Next: CI's full e2e run (only `app-icons.spec.ts` and `quality.spec.ts` ran locally, per the 6 Nov overload rule).
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.
