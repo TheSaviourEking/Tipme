@@ -1,5 +1,32 @@
 # Design decision log
 
+## 2026-11-05 — States: the connection-failure copy
+
+The owner approved changing the connection-failure wording (states plan
+`docs/superpowers/plans/2026-11-05-states.md`, Task 17) with the plan's proposed
+answers to its questions 1 to 4. The strings live in one file,
+`apps/web/src/lib/connection-copy.ts`. A copy decision, not a regulatory approval.
+
+1. **"Your code still works." is dropped** (it can't be proven: a first try that
+   reached TipMe has used the code). Sign-in, both tries dropped: "That didn’t go
+   through. The connection dropped before your code reached us. Tap Continue
+   again."
+2. **No "Your account and your money are safe."** TipMe's own faults say "This is
+   on our side. Try again in a minute." on sign-in and welcome. On the tip form,
+   before the redirect to the payment partner (the only way to pay), the line
+   also says "You haven’t paid anything.": "This is on our side. You haven’t paid
+   anything. Try again in a minute." Never on withdraw.
+3. **Welcome says "Tap Continue"**, as its buttons read: "That didn’t save. The
+   connection dropped. Tap Continue to try again."
+4. **A code used by a dropped first try:** "That code can’t be used now. Tap Send
+   a new code.", with the "Send a new code" key lit.
+
+Unchanged from the plan: "You’re offline. Connect to the internet and we’ll send
+your tip." (tip form, offline at the tap), "Your tip didn’t go through. The
+connection dropped before it reached us. You haven’t paid anything. Tap Tip to
+send it again." (tip form, both tries dropped), and on the receipt's "Connection
+lost" slip "We’ll check again in a moment." or "You’re offline.".
+
 ## 2026-11-05 — Bank picker: search your bank (A) and the name check on its own (C)
 
 The owner approved sections A and C of the `BankPicker` board
@@ -286,6 +313,14 @@ The owner: "add an update on the UI so the current user knows that there has bee
 - **Owner decision, 3 Nov 2026: the 10% fee is stated in the terms.** The terms page was a placeholder with no fee disclosure. It now has a Fees section: a supporter pays exactly the tip, with nothing added; TipMe keeps 10% of each tip unless a different fee has been agreed with the recipient (a staff-set share, ADR-0014), and processing is paid from that share, so a ₦5,000 tip leaves ₦4,500; the smallest tip and the smallest withdrawal are ₦2,000, unless the whole balance is withdrawn; withdrawing is free, because a payout's provider fee is TipMe's cost (`packages/domain/src/ledger.ts`). Every figure follows `FEE_POLICY_V1` and must change with it.
 - **This is disclosure, not approval.** It states the flat 10% that D-05 already decided. Refunds and chargebacks are still OPEN under D-05, so the terms say nothing about them. Entity, jurisdiction and the rest of the terms still wait on D-02 and D-07, and the page still says the full terms are being finalised. It no longer says they will come "before TipMe takes real payments", because real payments are live. The full terms need a lawyer.
 
+## 2026-11-05 — Admin menu: a grouped sidebar and a phone Menu sheet
+
+- **Owner's request, 5 Nov 2026** ("the admin restyle"). A visual decision, not a regulatory approval; no D-item changes, and no permission, staff action or audit changes. Boards: `docs/design/redesign/boards/OpsShell.dc.html` and `OpsPages.dc.html`.
+- The OpsShell board's grouped sidebar (desktop, from 1024px) and Menu sheet (below) replace #126's one-row scrolling menu. Groups, in order: Overview and Approvals; Work (Issues, Search, Pages, Usernames); Numbers (Visibility, Market); Email and records (Providers, Email, Audit log); Staff (People, Roles, Your access). Each person still sees only the links their permissions allow.
+- The site header and footer are hidden in the admin area only once access is granted, so a non-staff visitor still sees the ordinary missing page, and the sign-in and authenticator steps keep the site's header.
+- The Approvals link carries a purple count of the waiting requests this person can decide now (never their own); no count when the list can't be read.
+- Group labels use the secondary text colour, not the board's `#8A867E`, which is under 4.5:1 on the canvas at 12px.
+
 ## 2026-11-05 — Make it yours: a Pro accent, and the thank-you slip
 
 - **Owner's request, 5 Nov 2026.** A product and visual decision, not a regulatory approval; see `docs/00-DECISIONS.md` ("Make it yours"). Boards: `docs/design/redesign/boards/ProCustomise.dc.html`, `ProStartAmount.dc.html` and `AppreciationDetails.dc.html`.
@@ -324,3 +359,12 @@ the appreciation moment) is unchanged.
 - **Freeze rules.** The cover pauses on the first use of the tip form and stays paused for that view; it also pauses off screen. Reduced motion, forced colours and print show the still frame.
 - **Lock.** The server refuses Pro-only choices from Free pages. A page that leaves Pro shows the still frame and keeps its choice.
 - **Performance.** Transform and opacity only; profile LCP stays under 2000ms in `pnpm perf:lab`.
+
+## 2026-11-05 — Emails
+
+- **Owner decision, 5 Nov 2026.** The four email boards (`EmailTip`, `EmailAccount`, `EmailSecurity`, `EmailReports` in `docs/design/redesign/boards/`) are approved for building: every email TipMe sends moves into the new paper-and-slab frame. A visual and copy decision, not a legal, regulatory or provider approval; no D-item changes and nothing about fees, payouts or the ledger changes.
+- **Emails load nothing remote.** The serif is Georgia, not DM Serif Display, and the heart is a text glyph. A remote font or image would tell a third party when an email, security mail included, is opened.
+- **Tip notes never appear in email** (`schema.ts`: tip messages are never copied elsewhere). The boards' quoted notes are not built; the tip email may only say that a note exists.
+- **Codes in cells stay one copyable string**, so copy, paste and code autofill still get the whole code.
+- **Nothing private in a subject or preview line.** No code, link, address, name, bank or device in a subject or the hidden preheader; the tip amount in the tip email's subject is the one existing exception.
+- **Plan:** `docs/superpowers/plans/2026-11-05-emails-and-admin.md` (PR M1 is the frame and blocks with today's words; PR M2 is the boards' compositions).
