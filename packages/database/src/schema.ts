@@ -2787,3 +2787,118 @@ export const tableAssignments = pgTable(
     index('table_assignments_shift').on(table.shiftId),
   ],
 );
+
+/**
+ * One entry per pull request merged into dev (changelog plan, 5 Nov 2026). Staff edit the working
+ * copy (`user_text`, `audience`, each change bumping `revision`); users only ever read the
+ * published copy, which an approval writes. The state (draft, approved, live, recorded, withdrawn)
+ * is derived by `changelogState` in contracts, never stored. The PR body itself is never kept.
+ */
+export const changelogEntries = pgTable(
+  'changelog_entries',
+  {
+    prNumber: integer('pr_number').primaryKey(),
+    // What "reached production" is checked against, by git ancestry in the deploy job.
+    mergeSha: text('merge_sha').notNull(),
+    mergedAt: timestamp('merged_at', { withTimezone: true }).notNull(),
+    // As received; admin only.
+    prTitle: text('pr_title').notNull(),
+    staffText: text('staff_text').notNull(),
+    userText: text('user_text'),
+    audience: text('audience').notNull(),
+    revision: integer('revision').notNull().default(1),
+    publishedText: text('published_text'),
+    publishedAudience: text('published_audience'),
+    publishedRevision: integer('published_revision'),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    // First time staging, then production, ran a commit containing merge_sha. live_at is never cleared.
+    stagingAt: timestamp('staging_at', { withTimezone: true }),
+    liveAt: timestamp('live_at', { withTimezone: true }),
+    liveVersion: text('live_version'),
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+    withdrawnBy: uuid('withdrawn_by').references(() => users.id),
+    withdrawnReason: text('withdrawn_reason'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // What What's new lists, newest first.
+    index('changelog_entries_user_list')
+      .on(table.liveAt.desc(), table.prNumber.desc())
+      .where(
+        sql`${table.withdrawnAt} IS NULL AND ${table.publishedAudience} <> 'staff'`,
+      ),
+    index('changelog_entries_merged').on(table.mergedAt.desc()),
+    // What the deploy sync asks about.
+    index('changelog_entries_pending')
+      .on(table.prNumber)
+      .where(sql`${table.liveAt} IS NULL AND ${table.withdrawnAt} IS NULL`),
+    check('changelog_entries_pr_number', sql`${table.prNumber} > 0`),
+    check(
+      'changelog_entries_merge_sha',
+      sql`${table.mergeSha} ~ '^[0-9a-f]{40}$'`,
+    ),
+    check(
+      'changelog_entries_pr_title',
+      sql`char_length(${table.prTitle}) <= 256`,
+    ),
+    check(
+      'changelog_entries_staff_text',
+      sql`char_length(${table.staffText}) BETWEEN 1 AND 1000`,
+    ),
+    check(
+      'changelog_entries_user_text',
+      sql`${table.userText} IS NULL OR char_length(${table.userText}) BETWEEN 1 AND 280`,
+    ),
+    check(
+      'changelog_entries_audience',
+      sql`${table.audience} IN ('staff', 'everyone', 'pro', 'early_access')`,
+    ),
+    // Staff only exactly when there is no user text.
+    check(
+      'changelog_entries_audience_staff',
+      sql`(${table.audience} = 'staff') = (${table.userText} IS NULL)`,
+    ),
+    check('changelog_entries_revision', sql`${table.revision} >= 1`),
+    check(
+      'changelog_entries_published_text',
+      sql`${table.publishedText} IS NULL OR char_length(${table.publishedText}) BETWEEN 1 AND 280`,
+    ),
+    check(
+      'changelog_entries_published_audience',
+      sql`${table.publishedAudience} IS NULL OR ${table.publishedAudience} IN ('staff', 'everyone', 'pro', 'early_access')`,
+    ),
+    // A published copy is whole: its audience and revision together, with a text unless it is
+    // staff only (a user text removed, then approved).
+    check(
+      'changelog_entries_published_together',
+      sql`(${table.publishedAudience} IS NULL AND ${table.publishedRevision} IS NULL AND ${table.publishedText} IS NULL)
+        OR (${table.publishedAudience} IS NOT NULL AND ${table.publishedRevision} IS NOT NULL
+            AND (${table.publishedAudience} = 'staff') = (${table.publishedText} IS NULL))`,
+    ),
+    check(
+      'changelog_entries_live_version',
+      sql`${table.liveVersion} IS NULL OR ${table.liveVersion} ~ '^[0-9a-f]{12}$'`,
+    ),
+    check(
+      'changelog_entries_withdrawn_together',
+      sql`(${table.withdrawnAt} IS NULL AND ${table.withdrawnBy} IS NULL AND ${table.withdrawnReason} IS NULL)
+        OR (${table.withdrawnAt} IS NOT NULL AND ${table.withdrawnBy} IS NOT NULL
+            AND ${table.withdrawnReason} IS NOT NULL AND char_length(${table.withdrawnReason}) > 0)`,
+    ),
+  ],
+);
+
+/**
+ * When each person last looked at What's new, so the dot and the Home slip show once per update on
+ * any device. Its own table rather than a profiles column; deleteAccount removes the row.
+ */
+export const changelogReads = pgTable('changelog_reads', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id),
+  seenThrough: timestamp('seen_through', { withTimezone: true }).notNull(),
+});

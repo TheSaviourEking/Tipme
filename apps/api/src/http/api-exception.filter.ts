@@ -83,6 +83,14 @@ const messages: Record<ApiErrorCode, string> = {
     'Things have changed since this was asked for, so it stopped and nothing ran. Ask again if it is still needed.',
   APPROVAL_ALREADY_PENDING:
     'You already have this same request waiting. Cancel it first, then you can act.',
+  // Changelog (plan 2026-11-05). The routes that return these arrive in later PRs.
+  APPROVAL_NO_APPROVER: 'Nobody who can approve this is set up yet.',
+  CHANGELOG_SIGNATURE_INVALID: 'The request signature was not accepted.',
+  CHANGELOG_EDITED_ELSEWHERE:
+    'Someone else changed this entry since you opened it. Reload to see their change.',
+  CHANGELOG_TEXT_NOT_ALLOWED:
+    'This text can’t be shown to users as it is. Change it and try again.',
+  CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   USERNAME_BUILT_IN:
