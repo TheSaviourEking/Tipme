@@ -1,3 +1,10 @@
+# Current task — states and feedback, PR B public (5 November 2026)
+
+- Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.
+- Built: Task 9 (public places: tip form Not sent slip with the proven safe line, amount flag and lit key, report page and unsubscribe keys, page slips on unsubscribe, mock checkout and receipt; `states-migration` and `money-safety-lines` guards). By the coordinator's scope change: Task 16 (connection mechanism, `lib/connection.ts`, `useOnline`) and Task 17 (connection copy in `lib/connection-copy.ts`, owner-approved 5 Nov 2026, `docs/design/DECISION-LOG.md`).
+- Evidence: `.superpowers/program/states-b-report.md`.
+- Next: review, push and PR into dev. Tasks 16 and 17 touch sign-in and welcome, which PRs C and D restyle: expect small conflicts there.
+
 # Current task — TipMe for businesses, PR B3: invitations and membership (6 November 2026)
 
 - Branch/worktree: `feat/business-b3` / `.worktrees/business-b3`, off `feat/business-b0` (`3888c8e6`, not yet on dev), test lane 2. Not pushed. Plan Tasks 11–13 and the owner's answer on invitations (email, one-time link, TipMe username; block a business).
