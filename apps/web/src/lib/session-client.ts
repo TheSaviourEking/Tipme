@@ -1,4 +1,5 @@
 'use client';
+import { hintFromAnswer, writeSignedInHint } from './signed-in-hint';
 
 /** Calls the API as the signed-in recipient: the session cookie travels, never readable here. */
 const API_ORIGIN =
@@ -95,6 +96,8 @@ async function sendOnce<T>(
   } catch {
     return { ok: false, status: 0, code: 'NETWORK' };
   }
+  const signedIn = hintFromAnswer(path, response.status);
+  if (signedIn !== undefined) writeSignedInHint(signedIn);
   if (response.status === 204)
     return { ok: true, status: 204, data: undefined as T };
   const body = (await response.json().catch(() => null)) as {
