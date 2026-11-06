@@ -73,6 +73,12 @@ export const BUSINESS_NOTIFICATION_KINDS = [
 
 /** A number the business may see, or "fewer than 3". Never a raw count below MIN_GROUP. */
 export type Shown = { n: number } | { fewerThan: 3 };
+/**
+ * A person's tip count withheld so it can't be worked out by subtraction from the location total
+ * and the counts shown (complementary suppression, PR B7). Shown as "Hidden to protect a colleague's
+ * privacy".
+ */
+export type ShownOrHidden = Shown | { hidden: true };
 /** 0 is shown as 0: there is nobody to protect. 1 and 2 never leave the server as numbers. */
 export function shownCount(n: number): Shown {
   if (n === 0) return { n: 0 };
@@ -461,10 +467,10 @@ export interface MemberWeek {
   memberId?: string;
   shownName?: string;
   left: boolean;
-  tips: Shown;
+  tips: ShownOrHidden;
   notes: Shown;
   tags: Record<BusinessNoteTag, Shown>;
-  /** Integer minor units as a string; only with share_amounts and at least 3 tips that week. */
+  /** Integer minor units as a string; only with share_amounts, at least 3 tips, and not hidden. */
   amountMinor?: string;
 }
 export interface LocationInsights {
@@ -472,6 +478,12 @@ export interface LocationInsights {
   locationId: string;
   tips: Shown;
   people: MemberWeek[];
+  /**
+   * True when no person's row can be shown without giving someone's count away by subtraction:
+   * `people` is then empty and only the location total shows.
+   */
+  peopleHidden?: true;
+  /** The 2-hour window with the most tips (3 or more), Lagos time; day 0 is Sunday (as getDay). */
   busiest?: {
     day: 0 | 1 | 2 | 3 | 4 | 5 | 6;
     fromHour: number;
@@ -480,6 +492,10 @@ export interface LocationInsights {
   topTag?: { tag: BusinessNoteTag; percent: number };
 }
 export interface BusinessNoteView {
+  /**
+   * On the business's list (B7) this is an opaque reference to the note, not the tip's id: tip
+   * ids are UUIDv7 and carry the time the tip started. `noteTipOf` resolves it for that business.
+   */
   tipId: string;
   shownName: string;
   /** YYYY-MM-DD in Lagos: never a time (M5). */

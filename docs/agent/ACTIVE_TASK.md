@@ -96,6 +96,12 @@
 - Done: `startShift`, `endShift`, `expireShifts` (a shift that ran out closes 'expired' at the 14-hour mark, on the next start or end; no job); the four shift routes under `/v1/me/`; each change asks the web to refresh `/b/<business>/…` (`revalidateBusiness`, B2's identical method); Work → "On shift" card; Business → "On today" switches.
 - Next: rebase onto dev once B0 merges; full e2e on CI. Evidence: `.superpowers/program/b6-report.md` (main checkout).
 
+# Current task — TipMe for businesses, PR B7: what the business sees (6 November 2026)
+
+- Branch/worktree: `feat/business-b7` / `.worktrees/business-b7`, off `origin/feat/business-b0`, test lane 5. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 20–21.
+- Done: insights and notes for a manager (k ≥ 3, no naira by default, leavers folded into totals, opaque note references), share-my-amounts, the This week and Notes sections, the Work share switch.
+- Next: coordinator review; B5 resolves note references in its manager report route; rebase onto dev after B0 merges and rerun `pnpm api:openapi` and `pnpm docs:generate`.
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.

@@ -121,6 +121,16 @@
 - `BusinessModule` imports `ProfilesModule` for `ProfileRevalidator`; `revalidateBusiness` is byte-identical to B2's, so the two merge cleanly. The web route's `{ business }` branch is B2's/B4's; until one merges the call is refused (best effort, logged).
 - The Work and Business cards render once B3's `GET /v1/me/work` and members list and B1's detail are on the branch; the e2e answers those three reads from the database.
 
+# Current handoff — TipMe for businesses, PR B7: what the business sees (6 November 2026)
+
+- Branch `feat/business-b7` off `origin/feat/business-b0` (8e7a9752), lane 5, committed, not pushed. No migration, no money change.
+- API: `GET /v1/me/businesses/:id/insights` and `…/notes` (`?locationId&week`, a manager of that location; anything else 404), `PATCH /v1/me/work/:memberId/share-amounts` (the person, CSRF). Operations in `packages/database/src/operations/business-insights.ts`.
+- Privacy rules, each tested: counts through `shownCount` (1 and 2 read "Fewer than 3"); people with under 3 tips sort together by name; complementary suppression (`withheldCounts`): the smallest shown counts are withheld ("Hidden to protect a colleague's privacy") until no one's count follows by subtraction, else only the total (`peopleHidden`); naira only with `share_amounts` and 3+ tips; people who left count in the total and hours only; reported-unreviewed and removed notes hidden; top tag needs 3+ visible notes and the tag on 3+; busiest needs 3+ tips in the window; dates only.
+- Note references: the business gets `businessNoteRef(tipId)` in `BusinessNoteView.tipId`, never the tip id (UUIDv7 carries the time). **B5's manager report route must resolve it with `noteTipOf(db, businessId, ref)`** before calling `reportNoteAsManager`.
+- Web: Business sections `this-week` and `notes`, Work section `share`. The e2e spec answers B1's business detail and B3's Work list and B5's report route itself.
+- `setShareAmounts` builds `MyMembership` itself; swap to B3's `myMembership` when both are on dev.
+- Evidence: `.superpowers/program/b7-report.md` (main checkout).
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.

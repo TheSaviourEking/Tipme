@@ -6,6 +6,7 @@ import { InMemorySpanExporter } from '../../packages/observability/dist/testing.
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
   DEMO_PROFILES,
+  businessNoteRef,
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import {
@@ -269,10 +270,13 @@ test('the member lists their notes and reports one; it leaves the business view 
 test('the owner reports a note at their business; another business, or a manager of another location, gets 404', async () => {
   const { tipId, statusToken } = await paidTip();
   await writeNote(tipId, statusToken, { tags: ['fast'] });
+  // The business knows a note by its reference (B7), never by the tip id, whose UUIDv7 time would
+  // give away the visit (merge train 2: the route resolves it with noteTipOf).
+  const ref = businessNoteRef(tipId);
   const elsewhere = await seedBusiness(database, { owner: ADA.userId });
   const wrongBusiness = await call(
     'POST',
-    `/v1/me/businesses/${elsewhere.businessId}/notes/${tipId}/report`,
+    `/v1/me/businesses/${elsewhere.businessId}/notes/${ref}/report`,
     ada.cookie,
     { reason: 'spam' },
   );
@@ -285,14 +289,22 @@ test('the owner reports a note at their business; another business, or a manager
   });
   const otherLocation = await call(
     'POST',
-    `/v1/me/businesses/${business.businessId}/notes/${tipId}/report`,
+    `/v1/me/businesses/${business.businessId}/notes/${ref}/report`,
     ada.cookie,
     { reason: 'spam' },
   );
   assert.equal(otherLocation.status, 404);
-  const owner = await call(
+  const byTipId = await call(
     'POST',
     `/v1/me/businesses/${business.businessId}/notes/${tipId}/report`,
+    tobi.cookie,
+    { reason: 'spam' },
+  );
+  assert.equal(byTipId.status, 404, 'a raw tip id is not a note reference');
+  assert.equal((await byTipId.json()).error.code, 'BUSINESS_NOT_FOUND');
+  const owner = await call(
+    'POST',
+    `/v1/me/businesses/${business.businessId}/notes/${ref}/report`,
     tobi.cookie,
     { reason: 'spam' },
   );

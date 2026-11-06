@@ -17,6 +17,7 @@ export * from './operations/business-invitations.js';
 export * from './operations/business-members.js';
 export * from './operations/business-public.js';
 export * from './operations/business-notes.js';
+export * from './operations/business-insights.js';
 export * from './operations/provider-events.js';
 export * from './operations/payouts.js';
 export * from './operations/payout-start.js';

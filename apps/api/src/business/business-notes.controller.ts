@@ -19,7 +19,9 @@ import {
   type WorkNoteView,
 } from '@tipme/contracts';
 import {
+  OperationError,
   memberNotes,
+  noteTipOf,
   reportNoteAsManager,
   reportNoteAsMember,
   writeBusinessNote,
@@ -115,9 +117,15 @@ export class BusinessNotesController {
   async reportAsManager(
     @CurrentUser() auth: AuthContext,
     @Param('id') businessId: string,
-    @Param('tipId') tipId: string,
+    @Param('tipId') noteRef: string,
     @Body(new ZodValidationPipe(noteReportSchema)) body: NoteReport,
   ): Promise<void> {
+    // The business knows a note by its reference (B7's businessNoteRef), never by the tip id,
+    // whose UUIDv7 time would give away the visit. Unknown here reads like another business's.
+    const tipId = uuid.safeParse(businessId).success
+      ? await noteTipOf(this.database.db, businessId, noteRef)
+      : null;
+    if (tipId === null) throw new OperationError('NOT_A_MANAGER');
     await reportNoteAsManager(this.database.db, {
       userId: auth.userId,
       businessId,
