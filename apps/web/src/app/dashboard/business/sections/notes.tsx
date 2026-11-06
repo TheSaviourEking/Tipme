@@ -99,26 +99,29 @@ export function NotesCard({ business }: { business: BusinessDetail }) {
     notes: BusinessNoteView[] | null;
   } | null>(null);
   const [reporting, setReporting] = useState<string | null>(null);
-  const [reported, setReported] = useState(false);
+  // The view the last report was made in: the line goes when the week or location changes.
+  const [reportedIn, setReportedIn] = useState<string | null>(null);
 
-  const ready = view && view.businessId === business.id;
-  const key = ready ? `${view.locationId}|${view.week}` : '';
+  const ready = Boolean(view && view.businessId === business.id);
+  const locationId = view?.locationId ?? '';
+  const week = view?.week ?? '';
+  const key = ready ? `${locationId}|${week}` : '';
   useEffect(() => {
     if (!ready) return;
     let live = true;
-    setReported(false);
-    void loadBusinessNotes(business.id, view.locationId, view.week).then(
-      (result) => {
-        if (live) setLoaded({ key, notes: result.ok ? result.data : null });
-      },
-    );
+    void loadBusinessNotes(business.id, locationId, week).then((result) => {
+      if (live)
+        setLoaded({
+          key: `${locationId}|${week}`,
+          notes: result.ok ? result.data : null,
+        });
+    });
     return () => {
       live = false;
     };
-    // `key` carries the location and week.
-  }, [business.id, key]);
+  }, [business.id, ready, locationId, week]);
 
-  if (!ready) return <Skeleton label="Loading notes" />;
+  if (!ready || !view) return <Skeleton label="Loading notes" />;
   const notes = loaded?.key === key ? loaded.notes : undefined;
   if (notes === undefined) return <Skeleton label="Loading notes" />;
   if (notes === null)
@@ -129,7 +132,7 @@ export function NotesCard({ business }: { business: BusinessDetail }) {
     );
   return (
     <div className="business-notes">
-      {reported && (
+      {reportedIn === key && (
         <StateLine tone="status">Reported. TipMe will review it.</StateLine>
       )}
       {notes.length === 0 ? (
@@ -164,7 +167,7 @@ export function NotesCard({ business }: { business: BusinessDetail }) {
                   onCancel={() => setReporting(null)}
                   onReported={() => {
                     setReporting(null);
-                    setReported(true);
+                    setReportedIn(key);
                     setLoaded({
                       key,
                       notes: notes.filter(
