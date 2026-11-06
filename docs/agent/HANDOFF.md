@@ -1,3 +1,12 @@
+# Current handoff — Make it yours, PR B: the Pro starting amount (5 November 2026)
+
+- Branch `feat/miy-start-amount`, test lane 2, not pushed. Additive migration `0078_tip_start` (one nullable column and a check, no backfill), generated with drizzle-kit after rebuilding `@tipme/contracts`; regenerate if another branch takes 0078 first.
+- The check uses `coalesce(tip_start_minor = ANY (tip_presets_minor), false)`: `= ANY (NULL)` is NULL, which a CHECK would let through.
+- Lapse: a page that leaves Pro keeps `tip_start_minor`; the API sends no `startMinor`, so the form starts on ₦2,000. It comes back with Pro. A start whose amount fell under the floor is not sent either.
+- Deploy the API with or before the web: an older API's strict `tipAmountsSchema` refuses `startMinor` with a 400. The web sends it only when a start is or was chosen, so only those saves fail in between. An old web against the new API omits `startMinor`, which keeps the saved start while it is still offered.
+- No fee, minimum, quote, checkout or ledger change. No regulatory decision is implied.
+- Evidence: `.superpowers/program/miy-b-report.md` (main checkout).
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.

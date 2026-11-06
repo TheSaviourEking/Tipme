@@ -1,3 +1,9 @@
+# Current task — Make it yours, PR B: the Pro starting amount (5 November 2026)
+
+- Branch/worktree: `feat/miy-start-amount` / `.worktrees/miy-start-amount`, test lane 2, off `origin/dev` `931a545` (#125, #127 merged). Not pushed.
+- Built: Tasks B1-B4 of `docs/superpowers/plans/2026-11-05-make-it-yours.md`. `tipStartAllowed`; `TipAmounts.startMinor?` and `tipAmountsSchema.startMinor` (nullable, optional); migration `0078_tip_start` (`profiles.tip_start_minor`, check `profiles_tip_start_in_presets`); `setTipAmounts` takes `startMinor` (null clears, omitted keeps it while still offered, `INVALID_TIP_START` is 400 `fields: ['startMinor']`); `tipAmountsOf` sends it only for a Pro page's own payable amounts; `amountOptions().defaultMinor` uses it; Settings > Tip amounts (Pro) has "Your page starts on".
+- Next: review, then push and open the PR into dev. Then PR D (pinned note and accent).
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.

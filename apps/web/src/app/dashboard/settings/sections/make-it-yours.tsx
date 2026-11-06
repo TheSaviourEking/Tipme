@@ -232,7 +232,7 @@ export function AlreadyYours({ title }: { title: string }) {
         </li>
         <li>
           <Link href="#tip-amounts">Your tip amounts</Link>: the amounts on your
-          page and the smallest tip, on Pro.
+          page, the smallest tip and the one your page starts on, on Pro.
         </li>
       </ul>
     </Card>
