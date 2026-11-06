@@ -77,7 +77,11 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
   const celebrate = (view: TipStatusView) => {
     if (celebrated.current) return;
     celebrated.current = true;
-    let pending = { optIn: false, handle: null as string | null };
+    let pending: ReturnType<typeof readPendingTip> = {
+      optIn: false,
+      handle: null,
+      business: null,
+    };
     try {
       pending = readPendingTip(sessionStorage, tipId);
     } catch {
@@ -94,6 +98,8 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
       id: tipId,
       handle: view.recipient.handle,
       at: view.completedAt ?? new Date().toISOString(),
+      // Made at a business: the next visit there offers this person first (M8).
+      ...(pending.business ? { business: pending.business } : {}),
     });
     setCelebration(recognitionMessage(totals));
   };

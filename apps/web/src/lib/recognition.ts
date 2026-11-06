@@ -12,19 +12,23 @@ export interface RememberedTip {
   id: string;
   handle: string;
   at: string;
+  /** The business's slug when the tip was made at one (PR B4, M8). */
+  business?: string;
 }
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 const isTip = (value: unknown): value is RememberedTip => {
   if (typeof value !== 'object' || value === null) return false;
-  const { id, handle, at } = value as Record<string, unknown>;
+  const { id, handle, at, business } = value as Record<string, unknown>;
   return (
     typeof id === 'string' &&
     typeof handle === 'string' &&
     typeof at === 'string' &&
     id.length <= 64 &&
     handle.length <= 60 &&
-    at.length <= 40
+    at.length <= 40 &&
+    (business === undefined ||
+      (typeof business === 'string' && business.length <= 40))
   );
 };
 
@@ -103,7 +107,12 @@ export function rememberTip(
   const next: MyTipsRecord = {
     tips: [
       ...record.tips,
-      { id: tip.id, handle: tip.handle, at: tip.at },
+      {
+        id: tip.id,
+        handle: tip.handle,
+        at: tip.at,
+        ...(tip.business ? { business: tip.business } : {}),
+      },
     ].slice(-MAX_TIPS),
     count: record.count + 1,
     // Past the cap a returning person may be counted again: a rare, harmless overcount.
@@ -119,6 +128,21 @@ export function rememberTip(
     // Private mode or a full quota: celebrate this time, remember nothing.
   }
   return { count: next.count, people: next.peopleCount };
+}
+
+/**
+ * The latest remembered tip made at this business (its slug), or null: the "Tip {name} again" card
+ * on a location page. Only ever what this browser kept, with the supporter's opt-in.
+ */
+export function lastAtBusiness(
+  storage: StorageLike | undefined,
+  business: string,
+): RememberedTip | null {
+  const slug = business.toLowerCase();
+  const tips = readRecord(storage).tips;
+  for (let index = tips.length - 1; index >= 0; index -= 1)
+    if (tips[index]?.business?.toLowerCase() === slug) return tips[index]!;
+  return null;
 }
 
 export function forgetMyTips(storage: StorageLike | undefined): void {
