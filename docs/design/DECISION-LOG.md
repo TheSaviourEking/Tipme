@@ -324,3 +324,14 @@ the appreciation moment) is unchanged.
 - **Freeze rules.** The cover pauses on the first use of the tip form and stays paused for that view; it also pauses off screen. Reduced motion, forced colours and print show the still frame.
 - **Lock.** The server refuses Pro-only choices from Free pages. A page that leaves Pro shows the still frame and keeps its choice.
 - **Performance.** Transform and opacity only; profile LCP stays under 2000ms in `pnpm perf:lab`.
+
+## 2026-11-06 — The claim moment
+
+- **Owner-approved board, 5 Nov 2026** (Sign-up celebration). A product and visual decision, not a regulatory approval; no D-item is affected and nothing about payments changes.
+- **Trigger.** The moment follows the server's 2xx for `POST /v1/me/page` and nothing else. The claim leaves a one-time marker (the handle only) in this tab's session storage; the welcome reads and deletes it on mount. A reload, another tab or another device finds nothing, so the moment plays once and needs no "seen" record. Without session storage there is no moment.
+- **No name.** No name is known at claim time, so the copy is "@handle is yours." and "Welcome to TipMe. People can start thanking you the moment your page is online." The card shows the handle as the name.
+- **Purple hearts.** Six hearts rise once in TipMe purple: a new page has picked no colour yet. No confetti (FeedbackMoments).
+- **Timeline.** 1600ms in all (`CLAIM_MOMENT_MS`): the card falls (0–350ms) and lands (350–550ms), the stamp presses (550–800ms), the hearts rise and the heading fades in (800–1200ms), then the scene rises away (1200–1600ms). An exception to the acknowledgement duration in EXPERIENCE-AND-MOTION §3, as the claim is the first-day milestone. Any tap, any key, "Continue" or Escape hands over at once; focus goes to the hello heading.
+- **Vibration.** One 30ms buzz as the card lands, where the device allows it; never with reduced motion. An exception to the 10ms tick in EXPERIENCE-AND-MOTION §4, for this one moment.
+- **Reduced motion.** The still scene (card on the table, stamp in place, three hearts beside it), no vibration, the same hand-over.
+- **No sound** in this change. The stamp sound is a separate change, held for the owner.
