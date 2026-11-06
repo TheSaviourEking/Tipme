@@ -21,5 +21,8 @@ test-results/
 deploy/local/*.env
 deploy/local/data/
 
+# Every email rendered for review (pnpm --filter @tipme/mail preview)
+packages/mail/.preview/
+
 # The owner's local screen review (pnpm review:screens)
 review-screens/

@@ -30,6 +30,9 @@ export const payoutDestinationChanged = defineMailType({
       {
         subject: 'Your TipMe bank account changed',
         heading: 'Your bank account changed',
+        // The first text names someone or something private; the preview line must not.
+        preheader:
+          'A withdrawal already under way still goes to the account it started with.',
         blocks: [
           {
             kind: 'text',
