@@ -4,6 +4,9 @@ import {
   SHARE_CAP_BPS,
   SHARE_NOTICE_DAYS,
   SHARE_OPTIONS_BPS,
+  lagosDateOf,
+  lagosMonthOf,
+  shareStartsAt,
   splitEqually,
   splitShare,
 } from '../dist/index.js';
@@ -76,4 +79,38 @@ test('splitEqually refuses nobody, a fraction of a person, or less than a kobo e
   assert.throws(() => splitEqually(1000n, 1.5), RangeError);
   assert.throws(() => splitEqually(2n, 3), RangeError);
   assert.throws(() => splitEqually(0n, 1), RangeError);
+});
+
+// PR R2-C1: when a proposed split starts, and which calendar month a change falls in (M15).
+
+test('shareStartsAt: the first Lagos midnight at least 14 days on', () => {
+  // 6 Nov 2026 15:00 Lagos (14:00 UTC): 14 days on is 20 Nov 15:00, so it starts 21 Nov 00:00 Lagos.
+  const start = shareStartsAt(new Date('2026-11-06T14:00:00Z'));
+  assert.equal(start.toISOString(), '2026-11-20T23:00:00.000Z');
+  assert.equal(lagosDateOf(start), '2026-11-21');
+  // Exactly at a Lagos midnight: 14 days on is itself a midnight, so it starts then.
+  const atMidnight = shareStartsAt(new Date('2026-11-05T23:00:00Z'));
+  assert.equal(atMidnight.toISOString(), '2026-11-19T23:00:00.000Z');
+  // Always at least the notice, whatever the hour.
+  for (let hour = 0; hour < 48; hour += 1) {
+    const now = new Date(Date.UTC(2026, 11, 30, hour, 17));
+    const at = shareStartsAt(now);
+    assert.ok(at.getTime() - now.getTime() >= SHARE_NOTICE_DAYS * 86_400_000);
+    assert.ok(
+      at.getTime() - now.getTime() < (SHARE_NOTICE_DAYS + 1) * 86_400_000,
+    );
+    assert.equal(
+      (at.getTime() + 3_600_000) % 86_400_000,
+      0,
+      'a Lagos midnight',
+    );
+  }
+});
+
+test('lagosMonthOf and lagosDateOf read the Lagos calendar, not UTC', () => {
+  // 30 Nov 23:30 UTC is already 1 December in Lagos.
+  const at = new Date('2026-11-30T23:30:00Z');
+  assert.equal(lagosMonthOf(at), '2026-12');
+  assert.equal(lagosDateOf(at), '2026-12-01');
+  assert.equal(lagosMonthOf(new Date('2026-11-30T22:59:59Z')), '2026-11');
 });

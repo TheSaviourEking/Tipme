@@ -144,3 +144,39 @@ test('a takeover release tells owners whether withdrawals really resumed', () =>
   assert.match(held.text, /still holds/);
   assert.doesNotMatch(held.text, /can withdraw again/);
 });
+
+test('a share proposal names the business, the split and the start date, never an amount or the payment provider', () => {
+  const type = MAIL_TYPES.share_proposed;
+  assert.equal(type.category, 'account');
+  assert.equal(type.sender, 'notifications');
+  assert.equal(type.preference, null);
+  const out = renderMail(
+    'share_proposed',
+    {
+      businessName: 'The Yellow Chilli',
+      businessPercent: 10,
+      startsOn: '2026-12-01',
+    },
+    ctx,
+  );
+  assert.equal(
+    out.subject,
+    'The Yellow Chilli asks to keep 10% of the tips you get there',
+  );
+  assert.match(out.text, /You keep 90%/);
+  assert.match(out.text, /from 1 December 2026/);
+  assert.match(out.text, /Nothing changes unless you accept/);
+  assert.match(out.text, /never shared/);
+  for (const part of [out, out.snapshot])
+    assert.doesNotMatch(
+      `${part.subject} ${part.text} ${part.html}`,
+      /₦|NGN|kobo|bachs|paystack|flutterwave|provider/i,
+    );
+  assert.throws(() =>
+    renderMail(
+      'share_proposed',
+      { businessName: 'X', businessPercent: 60, startsOn: '2026-12-01' },
+      ctx,
+    ),
+  );
+});

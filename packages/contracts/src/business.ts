@@ -531,6 +531,11 @@ export interface BusinessShareRow {
   /** The business's percent: the one in force, or the one pending. */
   businessPercent?: number;
   startsOn?: string;
+  /**
+   * Who proposed a pending change (R2-C1): `member` is the staff member's suggested split, which
+   * the business accepts or declines. Set only while `pending`.
+   */
+  proposedBy?: (typeof SHARE_PROPOSED_BY)[number];
 }
 
 /** What the supporter is told before paying, and on the receipt. Percentages only, never naira. */
