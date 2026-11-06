@@ -1,0 +1,74 @@
+# Sends each pull request merged into dev to TipMe as a changelog draft (changelog plan, Design §1;
+# docs/runbooks/changelog.md). TipMe keeps the staff text (title + first paragraph) and the
+# "For users" section, never the body itself. A draft TipMe already has is left as staff edited it.
+#
+# Run it by hand (Actions → Changelog draft → Run workflow, with a PR number) to send one merged
+# PR again, for catching up.
+#
+# The PR title and body are untrusted text: they reach the script only through `env:`, never
+# `${{ }}` in a shell line. `pull_request` (not `pull_request_target`) and read-only permissions.
+#
+# Repository settings → Secrets and variables → Actions:
+#   secret:   CHANGELOG_SIGNING_SECRET (the same value as the API's; until it is set, the job
+#             only notes "Changelog not set up")
+#   variable: CHANGELOG_API_URL (production's API: drafts live in production's database)
+name: Changelog draft
+on:
+  pull_request:
+    types: [closed]
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      number:
+        description: The merged pull request (into dev) to send again
+        required: true
+        type: number
+permissions:
+  contents: read
+concurrency:
+  group: changelog-draft-${{ github.event.pull_request.number || inputs.number }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # pull-requests: lets a hand-run read the PR it resends.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      # A resend: the PR is read into a file, which the script reads (never into the shell).
+      - name: Read the pull request
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ inputs.number }}
+        run: |
+          gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,mergeCommit,mergedAt,baseRefName,state > "$RUNNER_TEMP/pr.json"
+          echo "CHANGELOG_PR_FILE=$RUNNER_TEMP/pr.json" >> "$GITHUB_ENV"
+
+      - name: Send the draft
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_MERGED_AT: ${{ github.event.pull_request.merged_at }}
+          CHANGELOG_API_URL: ${{ vars.CHANGELOG_API_URL }}
+          CHANGELOG_SIGNING_SECRET: ${{ secrets.CHANGELOG_SIGNING_SECRET }}
+        run: node scripts/changelog-send.mjs
