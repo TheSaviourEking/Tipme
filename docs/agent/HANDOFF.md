@@ -1,3 +1,12 @@
+# Current handoff — TipMe for businesses, PR B3 (6 November 2026)
+
+- Branch `feat/business-b3`, lane 2, committed, not pushed. No migration (B0's tables); contracts gain `invitationAnswerSchema`, `MyInvitations`, `InvitationAccepted` and `NotificationView.invitationId` (additions only).
+- Invitations: email, one-time link, or a TipMe username (search shows a public card of live, public pages only). Codes are 16 base32 characters, kept only as sha256, sent in request bodies and in the email link's fragment (`/dashboard/work#join=`), single-use, 7 days, revocable; every bad answer is `INVITATION_INVALID`. A username or proven-email invitation also notifies in the app and can be answered by id on Work. A link is answered only with its code.
+- Blocking: the invited person can stop a business inviting them (declines what is open). By username the business gets `INVITATIONS_BLOCKED`; by email the invitation is made but nobody is told, so an address never reveals an account.
+- Membership: remove (manager) and leave (self) end the membership and its open shift at once; tips, balance and notes are untouched. Deleting an account ends memberships, shifts, manager seats and blocks, and is refused with `BUSINESS_LAST_OWNER` for the only owner of a verified or suspended business.
+- Shared files touched outside B3's own: `business.module.ts` (the mail sealing provider), `work-view.tsx` (invitations above the workplaces), `dashboard-shell.tsx` (keeps `#join=` through sign-in; Work link while one is kept), `notification-bell.tsx` (a link for invitation notices), `settings/sections/data.tsx` (the refusal's words).
+- Evidence: `.superpowers/program/b3-report.md` (main checkout). Full e2e not run locally (overload ruling); CI runs it.
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.

@@ -1,3 +1,9 @@
+# Current task — TipMe for businesses, PR B3: invitations and membership (6 November 2026)
+
+- Branch/worktree: `feat/business-b3` / `.worktrees/business-b3`, off `feat/business-b0` (`3888c8e6`, not yet on dev), test lane 2. Not pushed. Plan Tasks 11–13 and the owner's answer on invitations (email, one-time link, TipMe username; block a business).
+- Done: invitations (operations, `business_invitation` email, API), membership lifecycle (list, remove, leave, display choices, account deletion's M13 rules), the People section on the Business page, the Work page's invitations and "How you show here", `#join=` kept through sign-in.
+- Next: rebase onto dev once B0 merges; regenerate OpenAPI and docs after merging; CI's full e2e. The People section draws only once B1's `GET /v1/me/businesses/:id` exists (the e2e stands in for it).
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.
