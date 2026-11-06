@@ -37,7 +37,9 @@ type RateLimitedRoute =
   | 'bank_resolve'
   | 'bank_read'
   | 'live_connect'
-  | 'live_connect_user';
+  | 'live_connect_user'
+  | 'business_public'
+  | 'business_note';
 
 // Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
 const BANK_RESOLVES_PER_USER_PER_DAY = 10;
@@ -144,6 +146,16 @@ export class RateLimitGuard implements CanActivate {
       live_connect: {
         limit: this.config.RATE_LIMIT_LIVE_CONNECT_PER_MIN,
         windowMs: 60_000,
+      },
+      // TipMe for businesses: a location page's search (roster scraping is the threat).
+      business_public: {
+        limit: this.config.RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN,
+        windowMs: 60_000,
+      },
+      // A supporter's note after paying: one per tip, so a few an hour is plenty.
+      business_note: {
+        limit: this.config.RATE_LIMIT_BUSINESS_NOTE_PER_HOUR,
+        windowMs: 3_600_000,
       },
       // Reporting a page (PR-013): a few an hour from one address is plenty for a real visitor.
       reports: {

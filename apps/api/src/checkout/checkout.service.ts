@@ -173,6 +173,10 @@ export class CheckoutService {
       purpose: request.purpose,
       celebrationMomentId: request.celebrationMomentId,
       noteMayShow: request.noteMayShow,
+      // With the business feature off, the label never reaches the database (plan, the flag).
+      ...(this.config.BUSINESS_ENABLED && request.businessMemberId
+        ? { businessMemberId: request.businessMemberId }
+        : {}),
     });
     const start = await findAttemptStart(db, intent.attemptId);
     if (!start) throw new OperationError('ATTEMPT_NOT_FOUND');

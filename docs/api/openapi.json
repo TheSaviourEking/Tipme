@@ -1454,6 +1454,42 @@
         ]
       }
     },
+    "/v1/me/business-roles": {
+      "get": {
+        "operationId": "BusinessRoles.roles",
+        "tags": [
+          "BusinessRoles"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/cover": {
       "delete": {
         "operationId": "Cover.remove",
@@ -6019,7 +6055,9 @@
                 "provider_key_refused",
                 "staff_acted_alone",
                 "staff_approval_pending",
-                "staff_last_approver_removed"
+                "staff_last_approver_removed",
+                "business_waiting",
+                "business_note_reported"
               ]
             }
           },
@@ -8761,7 +8799,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 20,
+                    "maxItems": 21,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8785,7 +8823,8 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "businesses.manage"
                       ]
                     }
                   }
@@ -8869,7 +8908,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 20,
+                    "maxItems": 21,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8893,7 +8932,8 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "businesses.manage"
                       ]
                     }
                   }
@@ -9032,7 +9072,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 20,
+                    "maxItems": 21,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -9056,7 +9096,8 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "businesses.manage"
                       ]
                     }
                   }
@@ -9175,7 +9216,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 20,
+                    "maxItems": 21,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -9199,12 +9240,13 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "businesses.manage"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 20,
+                    "maxItems": 21,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -9228,7 +9270,8 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "businesses.manage"
                       ]
                     }
                   }
@@ -10280,6 +10323,11 @@
                   "noteMayShow": {
                     "type": "boolean",
                     "const": true
+                  },
+                  "businessMemberId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
@@ -10736,6 +10784,19 @@
                   "STAFF_PHONE_LOCKED",
                   "STAFF_CANNOT_DELETE",
                   "STAFF_ALREADY_ENROLLED",
+                  "BUSINESS_NOT_FOUND",
+                  "BUSINESS_SLUG_TAKEN",
+                  "LOCATION_SLUG_TAKEN",
+                  "SLUG_LOCKED",
+                  "OWNER_REQUIRED",
+                  "INVITATION_INVALID",
+                  "INVITATIONS_BLOCKED",
+                  "INVITEE_UNAVAILABLE",
+                  "ALREADY_A_MEMBER",
+                  "MEMBER_NOT_TIPPABLE",
+                  "NOTE_NOT_OPEN",
+                  "BUSINESS_LAST_OWNER",
+                  "BUSINESS_NOT_VERIFIED",
                   "INTERNAL_ERROR"
                 ]
               },
