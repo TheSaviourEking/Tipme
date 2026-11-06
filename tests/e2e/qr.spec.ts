@@ -254,9 +254,25 @@ test('Show full screen waits for a Pro design to be drawn, and stays off if it f
   await context.close();
 });
 
-test('the code sits on a raised paper panel, and the free card still scans', async ({
+test('the code sits on a raised paper panel, lettered in Manrope, and the free card still scans', async ({
   page,
 }, testInfo) => {
+  // Every font the page hands a canvas, so the card's lettering can be read back.
+  await page.addInitScript(() => {
+    const fonts: string[] = [];
+    (window as unknown as { canvasFonts: string[] }).canvasFonts = fonts;
+    const font = Object.getOwnPropertyDescriptor(
+      CanvasRenderingContext2D.prototype,
+      'font',
+    )!;
+    Object.defineProperty(CanvasRenderingContext2D.prototype, 'font', {
+      ...font,
+      set(value: string) {
+        fonts.push(value);
+        font.set!.call(this, value);
+      },
+    });
+  });
   const { handle } = await signUpRecipient(page, testInfo);
   await page.goto('/dashboard/qr');
   const panel = page.locator('.qr-studio .qr-studio__panel');
@@ -267,6 +283,13 @@ test('the code sits on a raised paper panel, and the free card still scans', asy
   await expect
     .poll(() => scan(card))
     .toBe(`http://${WEB_HOST}/@${handle}?src=qr`);
+  // The page's own Manrope (next/font names it "manrope"), with Arial only behind it.
+  const fonts = await page.evaluate(
+    () => (window as unknown as { canvasFonts: string[] }).canvasFonts,
+  );
+  expect(fonts.length).toBeGreaterThan(0);
+  for (const font of fonts)
+    expect(font).toMatch(/^\d00 \d+px "manrope".*, Arial, sans-serif$/);
   // A Pro design's plate is on the same panel.
   await page.getByRole('radio', { name: /Heart modules/ }).check();
   await expect(panel.locator('.qr-design__plate')).toBeVisible();

@@ -17,6 +17,7 @@ import { Button, Surface } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
+import { interfaceFont } from '@/lib/brand-font';
 import { drawQrCard } from '@/lib/qr-card';
 import { groupDesigns } from '@/lib/qr-groups';
 import { frameCss, QR_STYLES, styleById } from '@/lib/qr-render';
@@ -72,18 +73,30 @@ export function QrStudio() {
   const big = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState('');
+  // The card is lettered in the page's own font once it has loaded (Arial if it never does).
+  const [font, setFont] = useState<{ family?: string } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void interfaceFont().then((family) => {
+      if (live) setFont({ family });
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const freeView = design === null;
   useEffect(() => {
-    if (!origin || !preview.current) return;
+    if (!origin || !preview.current || !font) return;
     drawQrCard(preview.current, {
       url,
       label,
       name: profile.displayName,
       style,
       size: 720,
+      fontFamily: font.family,
     });
-  }, [origin, url, label, profile.displayName, style, freeView]);
+  }, [origin, url, label, profile.displayName, style, freeView, font]);
 
   useEffect(() => {
     let live = true;
@@ -166,6 +179,7 @@ export function QrStudio() {
       name: profile.displayName,
       style,
       size: 1080,
+      fontFamily: font?.family,
     });
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, 'image/png'),
@@ -206,6 +220,7 @@ export function QrStudio() {
         name: profile.displayName,
         style,
         size: 1200,
+        fontFamily: font?.family,
       });
     await stage.current.requestFullscreen().catch(() => undefined);
     // Keep the screen on while someone scans, where the browser allows it.
