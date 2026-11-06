@@ -9738,4 +9738,140 @@ body > .coming-soon-page {
 /* business:B7 end */
 
 /* business:B8 start */
+.business-codes {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.business-codes h3 {
+  margin: var(--space-2) 0 0;
+}
+
+.business-codes__signs,
+.business-codes__staff {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-codes__signs {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+}
+
+.business-codes__sign {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.business-codes__preview {
+  width: 100%;
+  max-width: 15rem;
+  height: auto;
+  border-radius: var(--radius-field);
+}
+
+.business-codes__badge {
+  width: 100%;
+  max-width: 22rem;
+  height: auto;
+  border-radius: var(--radius-field);
+}
+
+.business-codes__name {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.business-codes__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-codes__staff li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.business-print__sheets {
+  display: grid;
+  gap: var(--space-5);
+  width: 100%;
+}
+
+.business-print__sheet {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  max-width: 24rem;
+}
+
+.business-print__canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media print {
+  /* One code per page, at its real size: an A5 sign, an A6 table tent, an 85 × 55 mm badge. */
+  @page business-sign {
+    size: A5;
+    margin: 0;
+  }
+
+  @page business-tent {
+    size: A6;
+    margin: 0;
+  }
+
+  @page business-badge {
+    size: 85mm 55mm;
+    margin: 0;
+  }
+
+  .business-print,
+  .business-print__sheets {
+    display: block;
+  }
+
+  .business-print__sheet {
+    max-width: none;
+    break-after: page;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .business-print__sheet:last-child {
+    break-after: auto;
+  }
+
+  .business-print__sheet--sign {
+    page: business-sign;
+  }
+
+  .business-print__sheet--tent {
+    page: business-tent;
+  }
+
+  .business-print__sheet--badge {
+    page: business-badge;
+  }
+
+  .business-print__canvas {
+    width: 100%;
+    max-height: 100vh;
+    object-fit: contain;
+  }
+}
 /* business:B8 end */
