@@ -28,8 +28,16 @@ export const staffAccessNotice = defineMailType({
             kind: 'text',
             text:
               data.change === 'granted'
-                ? 'This account can now use the TipMe admin area. If you weren’t expecting this, reply to this email straight away.'
-                : 'This account can no longer use the TipMe admin area, and any admin session was ended. If you weren’t expecting this, reply to this email.',
+                ? 'This account can now use the TipMe admin area.'
+                : 'This account can no longer use the TipMe admin area, and any admin session was ended.',
+          },
+          {
+            kind: 'alarm',
+            title: 'Didn’t expect this?',
+            text:
+              data.change === 'granted'
+                ? 'If you weren’t expecting this, reply to this email straight away.'
+                : 'If you weren’t expecting this, reply to this email.',
           },
         ],
         reason:

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   MAIL_TYPES,
@@ -711,6 +712,130 @@ test('every security email from the boards carries the safety line', () => {
     assert.doesNotMatch(
       renderMail(id, MAIL_TYPES[id].sample, ctx).html,
       /class="tm-tag"/,
+      id,
+    );
+});
+
+const BEFORE_M2 = JSON.parse(
+  readFileSync(
+    new URL('./fixtures/text-before-m2.json', import.meta.url),
+    'utf8',
+  ),
+);
+const sentences = (text) =>
+  text
+    .split(/\n+|(?<=[.?!])\s+/)
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter((s) => s && s !== '—');
+
+test('every type’s words survive the move into blocks', () => {
+  // The emails no board draws keep every sentence they had (the fixture is the text before M2).
+  for (const { id, data, text } of BEFORE_M2) {
+    const now = renderMail(id, data, ctx).text.replace(/\s+/g, ' ');
+    for (const sentence of sentences(text))
+      assert.ok(now.includes(sentence), `${id} lost: ${sentence}`);
+  }
+});
+
+/** The words in each black panel of an email. */
+const alarms = (html) => inside(html, 'bgcolor="#141210"');
+
+test('the security notices put “if this wasn’t you” in the black panel', () => {
+  const cases = [
+    [
+      'email_changed_notice',
+      {},
+      'Wasn’t you?',
+      'If this wasn’t you, contact support@usetipme.xyz straight away.',
+      true,
+    ],
+    [
+      'recovery_started_notice',
+      {},
+      'Wasn’t you?',
+      'If this wasn’t you, sign in now and cancel it in Settings.',
+      true,
+    ],
+    [
+      'recovery_completed_notice',
+      {},
+      'Wasn’t you?',
+      'If this wasn’t you, contact support@usetipme.xyz straight away.',
+      true,
+    ],
+    [
+      'staff_invitation_declined',
+      { own: true },
+      'Wasn’t you?',
+      'If this wasn’t you, someone else may be signed in to your account: tell whoever invited you.',
+      false,
+    ],
+    [
+      'staff_acted_alone',
+      {},
+      'Didn’t expect this?',
+      'If you didn’t expect this, check it now.',
+      false,
+    ],
+    [
+      'staff_freeze_released',
+      {},
+      'Didn’t expect this?',
+      'If you didn’t expect this, check it now.',
+      false,
+    ],
+    [
+      'staff_last_approver_removed',
+      {},
+      'Didn’t expect this?',
+      'If you didn’t expect this, check it now.',
+      false,
+    ],
+    [
+      'staff_access_notice',
+      {},
+      'Didn’t expect this?',
+      'If you weren’t expecting this, reply to this email straight away.',
+      false,
+    ],
+    [
+      'staff_access_notice',
+      { change: 'removed' },
+      'Didn’t expect this?',
+      'If you weren’t expecting this, reply to this email.',
+      false,
+    ],
+  ];
+  for (const [id, extra, title, sentence, safety] of cases) {
+    const out = renderMail(id, { ...MAIL_TYPES[id].sample, ...extra }, ctx);
+    assert.deepEqual(alarms(out.html), [`${title} ${sentence}`], id);
+    assert.ok(out.text.includes(`${title} ${sentence}`), id);
+    // Said once, in the panel, not also in the text above it.
+    assert.equal(out.text.split(sentence).length - 1, 1, `${id} once`);
+    assert.equal(/class="tm-tag"/.test(out.html), safety, `${id} safety line`);
+  }
+  // Someone else's declined invitation, and a cancelled recovery (which can reach an address
+  // that isn't the account's), have nothing to raise the alarm about.
+  for (const id of ['staff_invitation_declined', 'recovery_cancelled_notice']) {
+    const out = renderMail(id, MAIL_TYPES[id].sample, ctx);
+    assert.deepEqual(alarms(out.html), [], id);
+    assert.doesNotMatch(out.html, /class="tm-tag"/, id);
+  }
+  // Money and page emails keep their blocks.
+  for (const id of [
+    'withdrawal_paid',
+    'withdrawal_failed',
+    'tip_reversed',
+    'milestone',
+    'page_paused',
+    'page_image_removed',
+    'page_restored',
+    'payment_account_action_needed',
+    'provider_test',
+  ])
+    assert.deepEqual(
+      alarms(renderMail(id, MAIL_TYPES[id].sample, ctx).html),
+      [],
       id,
     );
 });

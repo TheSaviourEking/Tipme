@@ -105,6 +105,7 @@ export const emailChangedNotice = defineMailType({
       {
         subject: 'Your TipMe sign-in email changed',
         heading: 'Your sign-in email changed',
+        tag: 'safety',
         // The first text names someone or something private; the preview line must not.
         preheader: 'Your sign-in email changed.',
         blocks: [
@@ -113,7 +114,8 @@ export const emailChangedNotice = defineMailType({
             text: `Your TipMe account now signs in with ${data.newEmailHint}. This address no longer works for it.`,
           },
           {
-            kind: 'text',
+            kind: 'alarm',
+            title: 'Wasn’t you?',
             text: 'If this wasn’t you, contact support@usetipme.xyz straight away.',
           },
         ],
@@ -136,6 +138,7 @@ export const recoveryStartedNotice = defineMailType({
       {
         subject: 'Your TipMe account is being moved to a new email',
         heading: 'Someone is moving your account',
+        tag: 'safety',
         // The first text names someone or something private; the preview line must not.
         preheader:
           'It happens in 24 hours. If this wasn’t you, sign in now and cancel it in Settings.',
@@ -145,7 +148,8 @@ export const recoveryStartedNotice = defineMailType({
             text: `A recovery was started to move your TipMe account to ${data.newEmailHint}. It happens in 24 hours.`,
           },
           {
-            kind: 'text',
+            kind: 'alarm',
+            title: 'Wasn’t you?',
             text: 'If this wasn’t you, sign in now and cancel it in Settings.',
           },
           {
@@ -172,6 +176,7 @@ export const recoveryCompletedNotice = defineMailType({
       {
         subject: 'Your TipMe account moved to a new email',
         heading: 'Your account moved',
+        tag: 'safety',
         // The first text names someone or something private; the preview line must not.
         preheader: 'Every device was signed out.',
         blocks: [
@@ -180,7 +185,8 @@ export const recoveryCompletedNotice = defineMailType({
             text: `Your TipMe account now signs in with ${data.newEmailHint}. Every device was signed out.`,
           },
           {
-            kind: 'text',
+            kind: 'alarm',
+            title: 'Wasn’t you?',
             text: 'If this wasn’t you, contact support@usetipme.xyz straight away.',
           },
         ],
