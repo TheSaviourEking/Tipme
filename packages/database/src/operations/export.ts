@@ -91,7 +91,7 @@ export function exportMyTipsCsv(
       lines.push(
         [
           row.at,
-          row.label ?? 'A guest',
+          row.label ?? 'Anonymous',
           naira(row.gross),
           naira(row.fee),
           naira(row.net),

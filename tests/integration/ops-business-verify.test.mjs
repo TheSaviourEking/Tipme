@@ -218,3 +218,82 @@ test('a manager of the business cannot approve its verification', async () => {
   const outcome = await ask(requester, businessId);
   assert.equal(outcome.state, 'ran');
 });
+
+// Owner's ruling, 6 Nov 2026: someone who runs the business never verifies it, even alone.
+const recordedFor = async (businessId) =>
+  q(`SELECT 1 FROM approval_requests WHERE payload->>'businessId' = $1`, [
+    businessId,
+  ]);
+
+test('a lone admin who owns the business is refused and it stays pending', async () => {
+  const requester = await person();
+  const { businessId } = await seedBusiness(database, {
+    status: 'pending',
+    owner: requester,
+  });
+  await assert.rejects(ask(requester, businessId), {
+    code: 'APPROVAL_SUBJECT',
+  });
+  assert.equal((await statusOf(businessId)).status, 'pending');
+  assert.equal((await recordedFor(businessId)).length, 0);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type IN ('ops.acted_alone', 'ops.approval_pending')`,
+      )
+    ).length,
+    0,
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM audit_events WHERE staff_user_id = $1 AND action LIKE 'serious_action.%'`,
+        [requester],
+      )
+    ).length,
+    0,
+  );
+});
+
+test('a lone admin who does not manage the business still acts alone', async () => {
+  const requester = await person();
+  const { businessId } = await waitingBusiness();
+  const outcome = await ask(requester, businessId);
+  assert.equal(outcome.state, 'ran');
+  assert.equal(outcome.aloneReason, 'no_second_person');
+  assert.equal((await statusOf(businessId)).status, 'verified');
+});
+
+test('with a second admin, the owner-admin is refused rather than queued', async () => {
+  const requester = await person();
+  await person();
+  const { businessId } = await seedBusiness(database, {
+    status: 'pending',
+    owner: requester,
+  });
+  await assert.rejects(ask(requester, businessId), {
+    code: 'APPROVAL_SUBJECT',
+  });
+  assert.equal((await statusOf(businessId)).status, 'pending');
+  assert.equal((await recordedFor(businessId)).length, 0);
+});
+
+test('a manager who shares a mailbox with the requester also blocks the request', async () => {
+  const requester = await person();
+  const [{ email }] = await q(`SELECT email FROM users WHERE id = $1`, [
+    requester,
+  ]);
+  const [{ id: twin }] = await q(
+    `INSERT INTO users (id, email, email_verified_at, recovery_email, recovery_email_verified_at)
+     VALUES (gen_random_uuid(), $1, now(), $2, now()) RETURNING id`,
+    [`twin.${randomUUID().slice(0, 8)}@example.com`, email],
+  );
+  const { businessId } = await seedBusiness(database, {
+    status: 'pending',
+    owner: twin,
+  });
+  await assert.rejects(ask(requester, businessId), {
+    code: 'APPROVAL_SUBJECT',
+  });
+  assert.equal((await statusOf(businessId)).status, 'pending');
+});

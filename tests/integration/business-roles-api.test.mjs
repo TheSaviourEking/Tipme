@@ -143,12 +143,14 @@ test("with it on, business-roles lists a manager's business, a member's workplac
     manages: [
       {
         businessId: owned.businessId,
+        slug: owned.slug,
         name: 'Ada Bakes',
         status: 'pending',
         role: 'owner',
       },
       {
         businessId: other.businessId,
+        slug: other.slug,
         name: 'The Yellow Chilli',
         status: 'verified',
         role: 'location_manager',

@@ -17,6 +17,37 @@ import {
 type Draft = { name: string; slug: string; address: string };
 type Errors = Partial<Record<SetupField, string>>;
 
+/**
+ * A location's page address: a real link, and its own Copy link button. Copying the address as text
+ * used to pick up the Edit button beside it (the owner, 6 Nov 2026: "…/ewet-housing-branchEdit").
+ */
+function LocationLink({ path }: { path: string }) {
+  const [copied, setCopied] = useState('');
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        new URL(path, window.location.origin).href,
+      );
+      setCopied('Link copied');
+    } catch {
+      setCopied('Couldn’t copy. Press and hold the link to copy it.');
+    }
+  };
+  return (
+    <span className="business-location__link">
+      <a href={path} target="_blank" rel="noreferrer">
+        {path}
+      </a>
+      <Button variant="quiet" onClick={() => void copy()}>
+        Copy link
+      </Button>
+      <span role="status" className="tm-hint">
+        {copied}
+      </span>
+    </span>
+  );
+}
+
 /** One location's fields: adding (the slug suggested from the name) or editing. */
 function LocationForm({
   idPrefix,
@@ -215,10 +246,15 @@ export function LocationsCard({
                 <div className="business-location__text">
                   <strong>{location.name}</strong>
                   <span>{location.address}</span>
-                  <span className="tm-hint">
-                    /b/{business.slug}/{location.slug}
-                    {location.closed ? ' · Closed' : ''}
-                  </span>
+                  {location.closed ? (
+                    <span className="tm-hint">
+                      /b/{business.slug}/{location.slug} · Closed
+                    </span>
+                  ) : (
+                    <LocationLink
+                      path={`/b/${business.slug}/${location.slug}`}
+                    />
+                  )}
                 </div>
                 {!location.closed && (
                   <div className="business-location__keys">

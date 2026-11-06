@@ -123,6 +123,30 @@ test('an owner adds a second location and edits its address', async ({
   );
 });
 
+test("each location's address is a link to its page, and Copy link copies only the address", async ({
+  page,
+  context,
+}, testInfo) => {
+  // The owner, 6 Nov 2026: copying the address picked up the Edit button next to it
+  // ("/b/…/ewet-housing-branchEdit"), which leads nowhere.
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  const { userId } = await accountOf(who.email);
+  const { slug, locations } = await seedBusiness({
+    owner: userId,
+    name: 'Ada Bakes',
+  });
+  const path = `/b/${slug}/${locations[0]!.slug}`;
+  await page.goto('/dashboard/business');
+  const row = page.getByTestId('business-location').first();
+  const link = row.getByRole('link', { name: path });
+  await expect(link).toHaveAttribute('href', path);
+  await row.getByRole('button', { name: 'Copy link' }).click();
+  await expect(row.getByText('Link copied')).toBeVisible();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toBe(new URL(path, page.url()).href);
+});
+
 test('a verified business shows its name read-only, and other details still save', async ({
   page,
 }, testInfo) => {

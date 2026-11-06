@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import type {
+  PublicBusiness,
   PublicLocation,
   PublicStaffTipPage,
   StaffPageRedirect,
@@ -51,6 +52,20 @@ export async function getPublicLocation(
   );
 }
 
+/** The business page (`/b/<business>`): its open locations, no people (BusinessProfile board). */
+export async function getPublicBusiness(
+  business: string,
+): Promise<PublicBusiness | null> {
+  'use cache';
+  // Only names and addresses: refreshed by the business's own tag when staff or managers change it.
+  cacheLife({ stale: 30, revalidate: 30, expire: 300 });
+  cacheTag(businessTag(business));
+  if (!isBusinessSlug(business, 40)) return null;
+  return read<PublicBusiness>(
+    `/v1/b/${encodeURIComponent(business.toLowerCase())}`,
+  );
+}
+
 export async function getStaffTipPage(
   business: string,
   location: string,
@@ -82,6 +97,17 @@ export async function loadPublicLocation(
 ): Promise<PublicLocation | null | 'unreachable'> {
   try {
     return await getPublicLocation(business, location);
+  } catch (error) {
+    console.error('business lookup failed', error);
+    return 'unreachable';
+  }
+}
+
+export async function loadPublicBusiness(
+  business: string,
+): Promise<PublicBusiness | null | 'unreachable'> {
+  try {
+    return await getPublicBusiness(business);
   } catch (error) {
     console.error('business lookup failed', error);
     return 'unreachable';

@@ -70,7 +70,7 @@ export const tipReceived = defineMailType({
           'Confirmed by our payment partner. It is in your balance now.',
         slab: {
           amount: naira(data.netMinor),
-          line: `From ${data.supporterLabel ?? 'a guest'}. Confirmed by our payment partner.`,
+          line: `From ${data.supporterLabel ?? 'Anonymous'}. Confirmed by our payment partner.`,
         },
         blocks,
         reason: 'You get this email when someone tips you on TipMe.',

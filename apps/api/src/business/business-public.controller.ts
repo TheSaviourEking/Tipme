@@ -13,11 +13,13 @@ import {
   type ApiDataResponse,
   type BusinessPeopleQuery,
   type BusinessPersonMatch,
+  type PublicBusiness,
   type PublicLocation,
   type PublicStaffTipPage,
   type StaffPageRedirect,
 } from '@tipme/contracts';
 import {
+  publicBusiness,
   publicLocation,
   publicStaffTipPage,
   searchBusinessPeople,
@@ -32,8 +34,9 @@ import { BusinessEnabledGuard } from './business-enabled.guard.js';
 
 /**
  * PR B4: the public reads behind a location code and a staff code (`/b/<business>/<location>` and
- * `/b/<business>/<location>/<handle>` on the web, which caches them). Only the search is
- * rate-limited: it is the one a roster could be scraped through.
+ * `/b/<business>/<location>/<handle>` on the web, which caches them), and the business page
+ * (`/b/<business>`). Only the search is rate-limited: it is the one a roster could be scraped
+ * through; the business page names no people.
  */
 @Controller('v1')
 @UseGuards(BusinessEnabledGuard)
@@ -49,6 +52,17 @@ export class BusinessPublicController {
     return environment
       ? { requiredAccount: { provider: 'bachs', environment } }
       : {};
+  }
+
+  /** The business page: its open locations, no people. 404 unless verified with one open. */
+  @Get('b/:business')
+  @Header('Cache-Control', 'no-store')
+  async business(
+    @Param('business') business: string,
+  ): Promise<ApiDataResponse<PublicBusiness>> {
+    const page = await publicBusiness(this.database.db, business);
+    if (!page) throw new NotFoundException();
+    return { data: page };
   }
 
   // Declared before `:business/:location`, so `people` is never read as a location's slug.

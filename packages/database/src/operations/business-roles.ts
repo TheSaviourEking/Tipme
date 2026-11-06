@@ -18,12 +18,13 @@ export async function myBusinessRoles(
 ): Promise<MyBusinessRoles> {
   const manages = await db.execute<{
     business_id: string;
+    slug: string;
     name: string;
     status: string;
     role: string;
     location_id: string | null;
   }>(sql`
-    SELECT b.id AS business_id, b.name, b.status, m.role, m.location_id
+    SELECT b.id AS business_id, b.slug, b.name, b.status, m.role, m.location_id
       FROM business_managers m
       JOIN businesses b ON b.id = m.business_id
      WHERE m.user_id = ${userId} AND m.removed_at IS NULL
@@ -60,6 +61,7 @@ export async function myBusinessRoles(
   return {
     manages: manages.rows.map((row) => ({
       businessId: row.business_id,
+      slug: row.slug,
       name: row.name,
       status: row.status as BusinessStatus,
       role: row.role as ManagerRole,
