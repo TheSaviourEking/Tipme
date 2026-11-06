@@ -92,17 +92,21 @@ export class OpsApprovalsController {
     switch (outcome.status) {
       case 'approved': {
         // After the commit: a public page showing the old fee, as the route would refresh it.
-        const { revalidateHandle, revalidateHandles } = (outcome.result ??
-          {}) as {
-          revalidateHandle?: unknown;
-          revalidateHandles?: unknown;
-        };
+        const { revalidateHandle, revalidateHandles, revalidateBusiness } =
+          (outcome.result ?? {}) as {
+            revalidateHandle?: unknown;
+            revalidateHandles?: unknown;
+            revalidateBusiness?: unknown;
+          };
         if (typeof revalidateHandle === 'string')
           this.revalidator.revalidate(revalidateHandle);
         // A take-back that completes at once moves a page off one name onto another.
         if (Array.isArray(revalidateHandles))
           for (const handle of revalidateHandles)
             if (typeof handle === 'string') this.revalidator.revalidate(handle);
+        // A business verified on approval: its `/b/` pages go live (PR B2).
+        if (typeof revalidateBusiness === 'string')
+          this.revalidator.revalidateBusiness(revalidateBusiness);
         return { data: { status: 'approved' } };
       }
       case 'stale':

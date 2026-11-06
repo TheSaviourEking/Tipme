@@ -707,6 +707,16 @@ export default function IssuePage() {
           </Section>
         )}
 
+      {issue.subject.businessId && (
+        <Section title="Business">
+          <p>
+            <Link href={`/ops/businesses/${issue.subject.businessId}`}>
+              Open the business
+            </Link>
+          </p>
+        </Section>
+      )}
+
       {page && (
         <Section title="Page">
           <Facts

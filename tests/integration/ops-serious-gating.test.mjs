@@ -10,6 +10,7 @@ import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
 import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
 import { staffAlertPoster } from '../../apps/worker/dist/handlers/domain-events.js';
 import * as contracts from '../../packages/contracts/dist/index.js';
+import { seedBusiness } from '../../packages/database/test/integration/business-fixtures.mjs';
 import {
   MAIL_SEAL_KEY,
   OPS_TOTP_KEY,
@@ -396,6 +397,16 @@ const wired = {
       happened: async () =>
         (await q(`SELECT 1 FROM staff_totp WHERE user_id = $1`, [userId]))
           .length === 0,
+    };
+  },
+  'business.verify': async () => {
+    const { businessId } = await seedBusiness(database, { status: 'pending' });
+    return {
+      payload: { businessId },
+      happened: async () =>
+        (
+          await q(`SELECT status FROM businesses WHERE id = $1`, [businessId])
+        )[0].status === 'verified',
     };
   },
   'mail_provider.switch': async () => {

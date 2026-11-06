@@ -30,7 +30,11 @@
 - Next: owner review; the controller pushes a draft PR and follows CI's full e2e suite. Then PR 4 (the recipient's list). Turning `SUPPORTER_RECOGNITION` on in production is the owner's call under D-07.
 - Evidence: `.superpowers/program/pro3-report.md` (main checkout).
 
+# Current task — TipMe for businesses, PR B2: the admin side (6 November 2026)
 
+- Branch/worktree: `feat/business-b2` / `.worktrees/business-b2`, off `feat/business-b0` (`3888c8e6`), test lane 5. Not pushed. Plan Tasks 8–10.
+- Done: `/v1/ops/businesses` list and detail (search.view, contacts masked), reveal (private.view, reason, audited), suspend and restore (businesses.manage, reason, audited; suspending ends open shifts as `expired`), `business.verify` as a serious action (pinned on status and slug; resolves `business_waiting`; tells owners in-app); the web revalidate route takes a business slug (`business:<slug>` tag); the admin Businesses list and detail pages, a "Businesses" menu entry shown only while the feature is on, and a link from a `business_waiting` issue.
+- Next: coordinator review; rebase onto dev once B0 merges; full e2e on CI. B4 must tag its `/b/` reads with `businessTag(slug)` from `apps/web/src/lib/business/business-tag.ts`.
 # Current task — states and feedback, PR B public (5 November 2026)
 
 - Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.

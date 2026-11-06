@@ -460,6 +460,24 @@ export interface OpsBusinessDetail extends OpsBusinessRow {
   verifiedAt?: string;
   suspendedReason?: string;
 }
+/**
+ * PR B2: the Businesses list's filter and search. `q` matches the name or the slug only, never a
+ * contact detail, so a search can't be used to confirm someone's email.
+ */
+export const opsBusinessListQuerySchema = z
+  .object({
+    status: z.enum(BUSINESS_STATUSES).optional(),
+    q: z.string().trim().min(2).max(80).optional(),
+  })
+  .strict();
+export type OpsBusinessListQuery = z.infer<typeof opsBusinessListQuerySchema>;
+/** PR B2: what a `private.view` reveal with a reason shows. Managers without an email say so. */
+export interface OpsBusinessContact {
+  contactName: string;
+  contactEmail: string;
+  contactPhone?: string;
+  managers: { email?: string; role: ManagerRole }[];
+}
 
 /** On a paid tip made at a business: whether the supporter may still write their note (M9). */
 export interface TipBusinessNote {

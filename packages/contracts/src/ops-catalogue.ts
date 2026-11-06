@@ -287,6 +287,8 @@ export const SERIOUS_ACTIONS = [
   'staff.reset_authenticator',
   'mail_provider.switch',
   'username.take_back',
+  // TipMe for businesses (PR B2): verifying makes a business's printed codes live.
+  'business.verify',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -303,6 +305,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'staff.reset_authenticator': 'Reset someone’s authenticator',
   'mail_provider.switch': 'Switch the active email provider',
   'username.take_back': 'Take a username back from a page',
+  'business.verify': 'Verify a business',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -319,4 +322,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'staff.reset_authenticator': 'staff.manage',
     'mail_provider.switch': 'providers.manage',
     'username.take_back': 'usernames.manage',
+    'business.verify': 'businesses.manage',
   };
