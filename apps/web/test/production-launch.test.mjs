@@ -28,7 +28,15 @@ test('the Lagos midnight target is an explicit, exact instant', () => {
 
 test('future launch rewrites user routes but leaves operational assets reachable', () => {
   const decide = (path) => launchDecision({ path, target, now: target - 1 });
-  for (const path of ['/', '/@ada', '/dashboard', '/ops', '/people/ada'])
+  for (const path of [
+    '/',
+    '/@ada',
+    '/dashboard',
+    '/ops',
+    '/people/ada',
+    // A person's share card is held like their page: profiles are not public yet.
+    '/people/ada/share-card',
+  ])
     assert.equal(decide(path), 'rewrite', path);
   for (const path of [
     '/coming-soon',

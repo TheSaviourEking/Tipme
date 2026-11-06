@@ -388,7 +388,6 @@ the appreciation moment) is unchanged.
 - **Reduced motion.** The still scene (card on the table, stamp in place, three hearts beside it), no vibration, the same hand-over.
 - **No sound** in this change. The stamp sound is a separate change, held for the owner.
 
-
 ## 2026-11-05 — Withdraw, redesigned
 
 - **Owner's approval, 5 Nov 2026.** A visual and copy decision, not a legal, regulatory or provider approval; no D-item in `docs/00-DECISIONS.md` changes, and nothing about fees, the ₦2,000 minimum, payouts, the ledger or the partner quote cache changes. Boards: `docs/design/redesign/boards/WithdrawRedesign.dc.html` and `ScreenAudit.dc.html`. Plan: `docs/superpowers/plans/2026-11-05-withdraw-and-audit.md` (PRs W1 and W2).
@@ -399,3 +398,14 @@ the appreciation moment) is unchanged.
 - **The unconfirmed slip has no money words.** "We couldn’t confirm your withdrawal" (stamp "Not confirmed") and "This withdrawal may already be on its way" say nothing about money or the balance: the request may have arrived, and the key stays so the same amount again can't withdraw twice.
 - **Ledger stamps and "Back in your balance: ₦X"** (W2) only on rows the API reports as `failed`. Proof: a payout's ledger debit is posted only when it is paid, and a failed payout is released and no longer reserved (`packages/database/src/operations/payouts.ts`, `balance.ts`).
 - **The states plan's Task 12 (PR E, Withdraw) moved here**, to W1 and W2, with its money-line tests and key-keeping rules.
+
+## 2026-11-06 — Share cards
+
+- **Owner-approved board, 5 Nov 2026** (Share cards). A product and visual decision, not a regulatory approval; no D-item is affected.
+- **The general card** keeps its words ("A little thanks / goes a long way." and "For the people who make a difference.") in the new materials: the paper ground (`--canvas`), the headline in DM Serif Display, and the purple key with the white heart. It is still prerendered and the same for everyone.
+- **A card per person** for `/@handle` links, at `/people/<handle>/share-card`. It draws only what the public page shows: the display name, the public role, the handle and the cover's colour. Never the photo, phone, email, bio, links, tips, totals, balance or anything a supporter wrote.
+- **No photo (owner default, Q7).** The face is the person's initials on the cover's deeper tone.
+- **Colour (owner default, Q8).** A design with a colour uses that colour's base for the band and its tone for the face. A photo cover, a design without a colour, an animation without a colour, or no cover uses TipMe purple.
+- **Missing, paused and moved pages get the general card**, with status 200, so the card says nothing the page does not. Their metadata keeps advertising the general card.
+- **Fonts.** The cards are lettered in static TrueType copies of the two fonts already in the repo, because `next/og` cannot read WOFF2. DM Serif Display has no Ọ or Ẹ. A name (or its initials) with a letter DM Serif Display cannot draw is set wholly in Manrope Bold, which has them: `next/og` falls back word by word and loses the space after a fallback word, so mixing fonts would run words together.
+- **The board file was not available to copy**; these rulings follow the plan's written design (`.superpowers/program/plans/2026-11-05-public-boards.md`, PR 2).

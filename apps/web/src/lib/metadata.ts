@@ -21,10 +21,18 @@ export const shareCard = {
   width: 1200,
   height: 630,
 } as const;
+/**
+ * `image` replaces the general card: a person's live page passes their own card
+ * (`/people/<handle>/share-card`). Same size and type as the general card.
+ */
 export function previewMetadata(
   title: string,
   description: string,
   path: string,
+  image: { url: string; alt: string } = {
+    url: '/opengraph-image',
+    alt: shareCard.alt,
+  },
 ): Metadata {
   return {
     title,
@@ -38,13 +46,13 @@ export function previewMetadata(
       url: path,
       siteName: 'TipMe',
       type: 'website',
-      images: [{ url: '/opengraph-image', type: 'image/png', ...shareCard }],
+      images: [{ type: 'image/png', ...shareCard, ...image }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [{ url: '/opengraph-image', alt: shareCard.alt }],
+      images: [image],
     },
   };
 }
