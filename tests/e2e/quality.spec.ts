@@ -166,28 +166,36 @@ test(
   },
 );
 
-test('share card is a prerendered PNG advertised on profiles', async ({
+test('share cards: profiles advertise their own card, other pages the general one', async ({
   page,
   request,
 }) => {
-  await page.goto('/@ada');
-  const ogImage = await page
-    .locator('meta[property="og:image"]')
-    .getAttribute('content');
-  expect(ogImage).toMatch(/\/opengraph-image/);
-  await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
-    'content',
-    'TipMe. A little thanks goes a long way.',
-  );
-  const response = await request.get(
-    new URL(ogImage ?? '', WEB_ORIGIN).pathname,
-  );
-  expect(response.status()).toBe(200);
-  expect(response.headers()['content-type']).toBe('image/png');
+  for (const [path, image, alt] of [
+    ['/@ada', '/people/ada/share-card', 'Ada Okafor on TipMe'],
+    ['/', '/opengraph-image', 'TipMe. A little thanks goes a long way.'],
+  ] as const) {
+    await page.goto(path);
+    const ogImage = await page
+      .locator('meta[property="og:image"]')
+      .getAttribute('content');
+    expect(new URL(ogImage ?? '', WEB_ORIGIN).pathname, path).toBe(image);
+    await expect(
+      page.locator('meta[property="og:image:alt"]'),
+      path,
+    ).toHaveAttribute('content', alt);
+    const response = await request.get(image);
+    expect(response.status(), path).toBe(200);
+    expect(response.headers()['content-type'], path).toBe('image/png');
+  }
 });
 
 test('responses carry baseline security headers', async ({ request }) => {
-  for (const route of ['/', '/@ada', '/opengraph-image']) {
+  for (const route of [
+    '/',
+    '/@ada',
+    '/opengraph-image',
+    '/people/ada/share-card',
+  ]) {
     const headers = (await request.get(route)).headers();
     expect(headers['x-content-type-options'], route).toBe('nosniff');
     expect(headers['referrer-policy'], route).toBe(

@@ -342,5 +342,5 @@ the appreciation moment) is unchanged.
 - **No photo (owner default, Q7).** The face is the person's initials on the cover's deeper tone.
 - **Colour (owner default, Q8).** A design with a colour uses that colour's base for the band and its tone for the face. A photo cover, a design without a colour, an animation without a colour, or no cover uses TipMe purple.
 - **Missing, paused and moved pages get the general card**, with status 200, so the card says nothing the page does not. Their metadata keeps advertising the general card.
-- **Fonts.** The cards are lettered in static TrueType copies of the two fonts already in the repo, because `next/og` cannot read WOFF2. DM Serif Display has no Ọ or Ẹ; those letters fall back to Manrope on the card, as they fall back on the page.
+- **Fonts.** The cards are lettered in static TrueType copies of the two fonts already in the repo, because `next/og` cannot read WOFF2. DM Serif Display has no Ọ or Ẹ. A name (or its initials) with a letter DM Serif Display cannot draw is set wholly in Manrope Bold, which has them: `next/og` falls back word by word and loses the space after a fallback word, so mixing fonts would run words together.
 - **The board file was not available to copy**; these rulings follow the plan's written design (`.superpowers/program/plans/2026-11-05-public-boards.md`, PR 2).

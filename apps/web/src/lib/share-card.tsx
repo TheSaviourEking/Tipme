@@ -6,6 +6,7 @@ import {
   type ResolvedCover,
 } from '@tipme/contracts';
 import { HEART_MARK, WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
+import { characterMap, setsIn } from '@/lib/font-cmap';
 
 // The link-preview cards (1200 × 630), drawn by next/og. Both are request-independent drawings of
 // what they are given: the general card of nothing, the person card of `PersonCardInput` only.
@@ -172,8 +173,20 @@ const BAND_HEIGHT = 168;
 const FACE = 152;
 const FACE_RING = 8;
 
-export function PersonCard(p: PersonCardInput & { host: string }) {
+/** The face's letters and the name are in DM Serif when it draws all of them, else in Manrope. */
+const SERIF = { fontFamily: 'DM Serif Display', fontWeight: 400 } as const;
+const SANS = { fontFamily: 'Manrope', fontWeight: 700 } as const;
+
+export function PersonCard(
+  p: PersonCardInput & {
+    host: string;
+    /** DM Serif Display's characters (`serifCharacters`); without it the name is set in DM Serif. */
+    serif?: ReadonlySet<number>;
+  },
+) {
   const initials = initialsOf(p.name);
+  const face = !p.serif || setsIn(initials, p.serif) ? SERIF : SANS;
+  const name = !p.serif || setsIn(p.name, p.serif) ? SERIF : SANS;
   return (
     <div
       style={{
@@ -212,7 +225,7 @@ export function PersonCard(p: PersonCardInput & { host: string }) {
           border: `${FACE_RING}px solid ${PAPER}`,
           backgroundColor: p.face,
           color: inkOn(p.face),
-          fontFamily: 'DM Serif Display',
+          ...face,
           fontSize: 64,
         }}
       >
@@ -231,7 +244,7 @@ export function PersonCard(p: PersonCardInput & { host: string }) {
           <div
             style={{
               display: 'block',
-              fontFamily: 'DM Serif Display',
+              ...name,
               fontSize: 68,
               lineHeight: 1.06,
               letterSpacing: -1,
@@ -283,6 +296,7 @@ export function PersonCard(p: PersonCardInput & { host: string }) {
   );
 }
 
+let serifMap: ReadonlySet<number> | undefined;
 let fonts: Promise<NonNullable<ImageResponseOptions['fonts']>> | undefined;
 
 /** The two fonts as TrueType, read once per process. */
@@ -293,29 +307,38 @@ export function ogFonts(): Promise<NonNullable<ImageResponseOptions['fonts']>> {
     ),
     readFile(new URL('../fonts/og/Manrope-SemiBold.ttf', import.meta.url)),
     readFile(new URL('../fonts/og/Manrope-Bold.ttf', import.meta.url)),
-  ]).then(([serif, semibold, bold]) => [
-    {
-      name: 'DM Serif Display',
-      data: serif,
-      weight: 400 as const,
-      style: 'normal' as const,
-    },
-    {
-      name: 'Manrope',
-      data: semibold,
-      weight: 600 as const,
-      style: 'normal' as const,
-    },
-    {
-      name: 'Manrope',
-      data: bold,
-      weight: 700 as const,
-      style: 'normal' as const,
-    },
-  ]);
+  ]).then(([serif, semibold, bold]) => {
+    serifMap = characterMap(serif);
+    return [
+      {
+        name: 'DM Serif Display',
+        data: serif,
+        weight: 400 as const,
+        style: 'normal' as const,
+      },
+      {
+        name: 'Manrope',
+        data: semibold,
+        weight: 600 as const,
+        style: 'normal' as const,
+      },
+      {
+        name: 'Manrope',
+        data: bold,
+        weight: 700 as const,
+        style: 'normal' as const,
+      },
+    ];
+  });
   // A failed read must not stay cached: the next card tries again.
   fonts.catch(() => {
     fonts = undefined;
   });
   return fonts;
+}
+
+/** The characters DM Serif Display draws, read from the same file as `ogFonts`. */
+export async function serifCharacters(): Promise<ReadonlySet<number>> {
+  await ogFonts();
+  return serifMap ?? new Set();
 }
