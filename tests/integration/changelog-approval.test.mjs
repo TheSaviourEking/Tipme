@@ -215,11 +215,25 @@ test('an edit after asking makes the request stale at approval, and nothing is p
   const asker = await editor();
   await entry();
   const { requestId } = await ask(asker);
+  const waitingRow = async () =>
+    (await ops.listChangelog(database.db, { view: 'all' })).rows.find(
+      (row) => row.number === 400,
+    );
+  assert.equal(
+    (await ops.readChangelogEntry(database.db, 400)).editedSinceAsking,
+    false,
+  );
+  assert.equal((await waitingRow()).editedSinceAsking, false);
   await ops.editChangelogEntry(database.db, {
     staffUserId: asker,
     number: 400,
     patch: { userText: 'You can pin two notes.', revision: 1 },
   });
+  // The request still waits, but what it would publish is no longer what the page holds.
+  const edited = await ops.readChangelogEntry(database.db, 400);
+  assert.equal(edited.waitingRequestId, requestId);
+  assert.equal(edited.editedSinceAsking, true);
+  assert.equal((await waitingRow()).editedSinceAsking, true);
   const outcome = await approve(requestId, publisher);
   assert.equal(outcome.status, 'stale');
   assert.equal((await published()).published_revision, null);
