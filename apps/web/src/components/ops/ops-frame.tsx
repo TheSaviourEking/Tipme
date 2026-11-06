@@ -6,6 +6,7 @@ import { Wordmark } from '@/components/brand';
 import {
   opsMenuCurrent,
   opsMenuGroups,
+  type OpsMenuFeatures,
   type OpsMenuGroup,
 } from '@/lib/ops-menu';
 
@@ -92,12 +93,15 @@ function AdminNav({
  */
 export function OpsFrame({
   permissions,
+  features,
   pathname,
   approvals,
   onLeave,
   children,
 }: {
   permissions: readonly string[];
+  /** Feature-gated links that are switched on (Businesses while the business flag is on). */
+  features?: OpsMenuFeatures;
   pathname: string;
   /** The waiting count on the Approvals link (null for none). */
   approvals: ReactNode;
@@ -105,7 +109,7 @@ export function OpsFrame({
   /** The fresh-code prompt and the page. */
   children: ReactNode;
 }) {
-  const groups = opsMenuGroups(permissions);
+  const groups = opsMenuGroups(permissions, features);
   const current = opsMenuCurrent(
     groups.flatMap((group) => group.links),
     pathname,

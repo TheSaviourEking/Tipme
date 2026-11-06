@@ -85,7 +85,36 @@ export type OperationErrorCode =
   | 'USERNAME_NOT_RESERVED'
   | 'TAKE_BACK_OPEN'
   | 'TAKE_BACK_NOT_FOUND'
-  | 'TAKE_BACK_CLOSED';
+  | 'TAKE_BACK_CLOSED'
+  // TipMe for businesses (PR B0). NOT_A_MANAGER and NO_MEMBERSHIP answer as "not found".
+  | 'NOT_A_MANAGER'
+  | 'NO_MEMBERSHIP'
+  | 'BUSINESS_NOT_FOUND'
+  | 'BUSINESS_SLUG_TAKEN'
+  | 'LOCATION_SLUG_TAKEN'
+  | 'SLUG_LOCKED'
+  | 'BUSINESS_NAME_LOCKED'
+  | 'OWNER_REQUIRED'
+  | 'INVITATION_INVALID'
+  | 'INVITATIONS_BLOCKED'
+  | 'INVITEE_UNAVAILABLE'
+  | 'ALREADY_A_MEMBER'
+  | 'MEMBER_NOT_TIPPABLE'
+  | 'NOTE_NOT_OPEN'
+  | 'NOTE_TEXT_REFUSED'
+  | 'BUSINESS_LAST_OWNER'
+  | 'BUSINESS_NOT_VERIFIED'
+  // Business release 2 (R2-0).
+  | 'SHARE_NOT_ALLOWED'
+  | 'SHARE_CHANGE_TOO_SOON'
+  | 'SHARE_NOT_OPEN'
+  | 'TEAM_NOBODY_ON_SHIFT'
+  | 'CARD_NOT_FOUND'
+  | 'BALANCE_BELOW_ZERO'
+  // R2-A: nothing (more) of this tip's payment to take back, or a refund larger than what is left.
+  | 'TIP_NOT_REVERSIBLE'
+  // A release 1 path met a team tip or a business's row (see owner.ts personOf).
+  | 'NOT_A_PERSON';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is

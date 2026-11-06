@@ -356,6 +356,43 @@ test('take-back emails cannot be turned off', () => {
   }
 });
 
+test('a share proposal names the business, the split and the start date, never an amount or the payment provider', () => {
+  const type = MAIL_TYPES.share_proposed;
+  assert.equal(type.category, 'account');
+  assert.equal(type.sender, 'notifications');
+  assert.equal(type.preference, null);
+  const out = renderMail(
+    'share_proposed',
+    {
+      businessName: 'The Yellow Chilli',
+      businessPercent: 10,
+      startsOn: '2026-12-01',
+    },
+    ctx,
+  );
+  assert.equal(
+    out.subject,
+    'The Yellow Chilli asks to keep 10% of the tips you get there',
+  );
+  assert.match(out.text, /You keep 90%/);
+  assert.match(out.text, /from 1 December 2026/);
+  assert.match(out.text, /Nothing changes unless you accept/);
+  assert.match(out.text, /never shared/);
+  assert.match(out.text, /The business isn’t told how you answered/);
+  for (const part of [out, out.snapshot])
+    assert.doesNotMatch(
+      `${part.subject} ${part.text} ${part.html}`,
+      /₦|NGN|kobo|bachs|paystack|flutterwave|provider/i,
+    );
+  assert.throws(() =>
+    renderMail(
+      'share_proposed',
+      { businessName: 'X', businessPercent: 60, startsOn: '2026-12-01' },
+      ctx,
+    ),
+  );
+});
+
 /** Every string in a sample, at any depth, long enough to mean something. */
 function sampleStrings(value, key = '') {
   if (typeof value === 'string')
@@ -366,11 +403,75 @@ function sampleStrings(value, key = '') {
   return [];
 }
 
+test('a business invitation carries its code only in the fragment, untracked, naming no payment provider', () => {
+  const type = MAIL_TYPES.business_invitation;
+  assert.equal(type.category, 'account');
+  assert.equal(type.sender, 'notifications');
+  assert.equal(type.preference, null);
+  // A rewritten (tracked) link would carry the code through a redirect.
+  assert.equal(type.tracking, false);
+  const code = 'ABCDEFGHJKMNPQ23';
+  const staff = renderMail(
+    'business_invitation',
+    {
+      code,
+      businessName: 'The Yellow Chilli',
+      locationName: 'Victoria Island',
+      kind: 'staff',
+    },
+    ctx,
+  );
+  assert.equal(
+    staff.subject,
+    'The Yellow Chilli invites you to receive tips there',
+  );
+  assert.match(
+    staff.text,
+    /Your tips go to your own TipMe balance, as always\./,
+  );
+  assert.match(staff.text, /This link works once, for 7 days\./);
+  const href = /href="([^"]+)"/.exec(
+    staff.html.slice(staff.html.indexOf('See the invitation') - 400),
+  )?.[1];
+  assert.ok(href, 'the button has a link');
+  const url = new URL(href.replaceAll('&amp;', '&'));
+  assert.equal(url.pathname, '/dashboard/work');
+  assert.equal(url.hash, `#join=${code}`);
+  assert.equal(url.search.includes(code), false, 'never in the query');
+  for (const out of [staff, staff.snapshot])
+    assert.doesNotMatch(
+      `${out.subject} ${out.text} ${out.html}`,
+      /bachs|paystack|flutterwave|provider/i,
+    );
+  assert.ok(!staff.snapshot.text.includes(code), 'the snapshot hides the code');
+  assert.ok(!staff.snapshot.html.includes(code));
+  const manager = renderMail(
+    'business_invitation',
+    { code, businessName: 'The Yellow Chilli', kind: 'manager', role: 'owner' },
+    ctx,
+  );
+  assert.equal(
+    manager.subject,
+    'The Yellow Chilli invites you to help manage it on TipMe',
+  );
+  assert.throws(() =>
+    renderMail(
+      'business_invitation',
+      { code: 'short', businessName: 'X', kind: 'staff' },
+      ctx,
+    ),
+  );
+});
+
 test('no sample value reaches a subject or preheader', () => {
   // The tip amount and the staff-only provider name are already in today's subjects.
   const allowed = {
     tip_received: ['netMinor'],
     provider_test: ['providerLabel'],
+    // The inviting business's public name (shown on its own TipMe pages), so the invitee knows who asks.
+    business_invitation: ['businessName'],
+    // The business's public name (shown on its own TipMe pages), so the person knows who asks.
+    share_proposed: ['businessName'],
   };
   for (const [id, type] of Object.entries(MAIL_TYPES)) {
     const out = renderMail(id, type.sample, ctx);
@@ -605,6 +706,10 @@ const PREVIOUS_SAMPLES = {
   username_take_back_reminder: MAIL_TYPES.username_take_back_reminder.sample,
   username_take_back_done: MAIL_TYPES.username_take_back_done.sample,
   username_take_back_cancelled: MAIL_TYPES.username_take_back_cancelled.sample,
+  // TipMe for businesses (merge train 2): new types that no earlier release queued, so the only
+  // data they can meet is their own sample's shape.
+  business_invitation: MAIL_TYPES.business_invitation.sample,
+  share_proposed: MAIL_TYPES.share_proposed.sample,
 };
 
 const settingsCtx = {
@@ -1053,4 +1158,56 @@ test('the security notices put “if this wasn’t you” in the black panel', (
       [],
       id,
     );
+});
+
+test("a business's withdrawal names the business in the body only, and links to its page (R2-B)", () => {
+  for (const id of ['withdrawal_paid', 'withdrawal_failed']) {
+    const out = renderMail(
+      id,
+      { amountMinor: '250000', businessName: 'The Yellow Chilli' },
+      ctx,
+    );
+    assert.match(out.text, /The Yellow Chilli/, id);
+    assert.match(out.subject, /business/, id);
+    assert.doesNotMatch(out.subject, /Yellow Chilli/, id);
+    assert.doesNotMatch(preheaderOf(out.html), /Yellow Chilli/, id);
+    assert.doesNotMatch(out.text, /your balance/, id);
+    // A person's own withdrawal reads as it always has.
+    const own = renderMail(id, { amountMinor: '250000' }, ctx);
+    assert.doesNotMatch(own.subject, /business/, id);
+  }
+  const failed = renderMail(
+    'withdrawal_failed',
+    { amountMinor: '250000', businessName: 'The Yellow Chilli' },
+    ctx,
+  );
+  assert.match(failed.text, /\/dashboard\/business/);
+});
+
+test("a business's bank change tells its owners which business, in the body only (R2-B)", () => {
+  const data = {
+    bankName: 'Guaranty Trust Bank',
+    last4: '1234',
+    previousBankName: 'Providus Bank',
+    previousLast4: '6789',
+  };
+  const out = renderMail(
+    'payout_destination_changed',
+    { ...data, businessName: 'The Yellow Chilli' },
+    ctx,
+  );
+  // Merge train 2: M2 redrew this email (facts rows, no sentence naming both banks), so the
+  // business's name is a facts row and the opening line (the preview) names no one.
+  assert.match(
+    out.text,
+    /The business’s next withdrawal goes to the new account/,
+  );
+  assert.match(out.text, /The Yellow Chilli/);
+  assert.doesNotMatch(out.subject, /Yellow Chilli/);
+  assert.doesNotMatch(preheaderOf(out.html), /Yellow Chilli/);
+  assert.match(out.subject, /business/);
+  const own = renderMail('payout_destination_changed', data, ctx);
+  assert.match(own.text, /Your next withdrawal goes to the new account/);
+  assert.doesNotMatch(own.text, /Business/);
+  assert.equal(own.subject, 'Your TipMe bank account changed');
 });

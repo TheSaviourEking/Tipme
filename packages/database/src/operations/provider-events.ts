@@ -14,6 +14,7 @@ import {
   paymentAttempts,
   paymentIntents,
   providerEvents,
+  tipBusinessShares,
   tipQuotes,
   tips,
 } from '../schema.js';
@@ -22,6 +23,7 @@ import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordTransition } from './transitions.js';
+import { personOf } from './owner.js';
 
 /** A provider message about a payment. Only signature-verified events may reach this function. */
 export interface PaymentEvent {
@@ -111,7 +113,8 @@ async function lock(tx: Tx, attemptId: string): Promise<Locked | null> {
       provider: attempt.provider,
       providerReference: attempt.providerReference,
     },
-    tip,
+    // A team tip (R2-D) has no person and is posted by its own PR; until then it stops here.
+    tip: { ...tip, profileId: personOf(tip.profileId) },
     quote,
   };
 }
@@ -357,6 +360,17 @@ async function apply(
           gt(feeFreeCredits.remaining, 0),
         ),
       );
+  // Business release 2: a share fixed on the tip at intent time (only ever written for a tip made at
+  // a membership, with the agreement in force; the database checks it) is the business's own line,
+  // posted here in the payment's own transaction, so a paid tip never has one without the other.
+  // It is honoured whatever the flags say now: the supporter was told about it before paying.
+  const [share] = await tx
+    .select({
+      businessId: tipBusinessShares.businessId,
+      amountMinor: tipBusinessShares.shareMinor,
+    })
+    .from(tipBusinessShares)
+    .where(eq(tipBusinessShares.tipId, tip.id));
   await postLedgerTransaction(tx, {
     operationType: 'payment',
     operationKey: `payment.${attempt.id}`,
@@ -370,6 +384,7 @@ async function apply(
       actualProviderFeeMinor: providerFeeMinor,
       recipientNetMinor: quote.recipientNetMinor,
       profileId: tip.profileId,
+      ...(share ? { businessShare: share } : {}),
     }),
   });
   await enqueueOutbox(tx, {

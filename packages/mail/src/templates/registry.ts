@@ -30,11 +30,13 @@ import {
   withdrawalFailed,
   withdrawalPaid,
 } from './types/account-events.js';
+import { businessInvitation } from './types/business-invitation.js';
 import { emailVerificationLink } from './types/email-verification-link.js';
 import { payoutDestinationChanged } from './types/payout-destination-changed.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
 import { providerTest } from './types/provider-test.js';
 import { recoveryLink } from './types/recovery-link.js';
+import { shareProposed } from './types/share-proposed.js';
 import {
   staffActedAlone,
   staffFreezeReleased,
@@ -99,6 +101,8 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     usernameTakeBackReminder,
     usernameTakeBackDone,
     usernameTakeBackCancelled,
+    businessInvitation,
+    shareProposed,
   ].map((type) => [type.id, type]),
 );
 

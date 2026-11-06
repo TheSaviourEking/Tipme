@@ -10,6 +10,8 @@ import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
 import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
 import { staffAlertPoster } from '../../apps/worker/dist/handlers/domain-events.js';
 import * as contracts from '../../packages/contracts/dist/index.js';
+import { seedBusiness } from '../../packages/database/test/integration/business-fixtures.mjs';
+import { GROSS, reportedReversal } from './reversal-fixtures.mjs';
 import {
   MAIL_SEAL_KEY,
   OPS_TOTP_KEY,
@@ -56,6 +58,8 @@ const services = () => ({
   sealing,
   authCodeSecret: 'test-auth-code-secret-of-enough-length',
   payoutReader: reader,
+  // tip.reverse runs only while business shares are on (R2-A review finding 3).
+  businessSharesEnabled: true,
   mail: {
     production: false,
     configured: new Set(['mock']),
@@ -396,6 +400,30 @@ const wired = {
       happened: async () =>
         (await q(`SELECT 1 FROM staff_totp WHERE user_id = $1`, [userId]))
           .length === 0,
+    };
+  },
+  'business.verify': async () => {
+    const { businessId } = await seedBusiness(database, { status: 'pending' });
+    return {
+      payload: { businessId },
+      happened: async () =>
+        (
+          await q(`SELECT status FROM businesses WHERE id = $1`, [businessId])
+        )[0].status === 'verified',
+    };
+  },
+  'tip.reverse': async () => {
+    // No hold: beforeEach deletes payment_reversed issues, which a hold would still name.
+    const { tipId, issueId, partnerReversalId, reversals } =
+      await reportedReversal(database, { bps: 1000, keepHold: false });
+    return {
+      payload: {
+        issueId,
+        tipId,
+        partnerReversalId,
+        refundedMinor: GROSS.toString(),
+      },
+      happened: async () => (await reversals()) === 1,
     };
   },
   'mail_provider.switch': async () => {

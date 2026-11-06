@@ -83,10 +83,12 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   await them.getByLabel('Authenticator code').fill(await totpNow(secret, 1n));
   await them.getByRole('button', { name: 'Confirm' }).click();
   await expect(nav(them).getByRole('link', { name: 'Search' })).toBeVisible();
+  // Businesses reads with search.view too (the e2e stack has BUSINESS_ENABLED on).
   await expect(nav(them).getByRole('link')).toHaveText([
     'Overview',
     'Approvals',
     'Search',
+    'Businesses',
     'Your access',
   ]);
   // Overview works without analytics: it says what it can and no more.

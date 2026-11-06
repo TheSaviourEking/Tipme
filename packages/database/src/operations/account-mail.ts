@@ -2,6 +2,8 @@ import { SERIOUS_ACTION_WORDS, type SeriousAction } from '@tipme/contracts';
 import { eq, and, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   approvalRequests,
+  businesses,
+  businessManagers,
   paymentAttempts,
   payouts,
   profiles,
@@ -14,6 +16,7 @@ import { maskEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { qualifiedApprovers } from './serious-actions.js';
+import { personOf } from './owner.js';
 
 type Owner = { userId: string } | { profileId: string };
 
@@ -281,14 +284,43 @@ export function mailForDomainEvent(
       const payoutId = idOf(payload['payoutId']);
       if (!payoutId) return;
       const [payout] = await db
-        .select({ profileId: payouts.profileId, amount: payouts.amountMinor })
+        .select({
+          profileId: payouts.profileId,
+          businessId: payouts.businessId,
+          amount: payouts.amountMinor,
+        })
         .from(payouts)
         .where(eq(payouts.id, payoutId));
       if (!payout) return;
       const type =
         name === 'payout.paid' ? 'withdrawal_paid' : 'withdrawal_failed';
+      if (payout.businessId !== null) {
+        // A business's own withdrawal (R2-B): each of its owners is told, as only they can withdraw.
+        const owners = await db
+          .select({ userId: businessManagers.userId, name: businesses.name })
+          .from(businessManagers)
+          .innerJoin(businesses, eq(businesses.id, businessManagers.businessId))
+          .where(
+            and(
+              eq(businessManagers.businessId, payout.businessId),
+              eq(businessManagers.role, 'owner'),
+              isNull(businessManagers.removedAt),
+            ),
+          );
+        for (const owner of owners)
+          await mailOwner(db, sealing, {
+            userId: owner.userId,
+            type,
+            data: {
+              amountMinor: payout.amount.toString(),
+              businessName: owner.name,
+            },
+            dedupeKey: `${type}.${payoutId}.${owner.userId}`,
+          });
+        return;
+      }
       await mailOwner(db, sealing, {
-        profileId: payout.profileId,
+        profileId: personOf(payout.profileId),
         type,
         data: { amountMinor: payout.amount.toString() },
         dedupeKey: `${type}.${payoutId}`,
@@ -307,7 +339,7 @@ export function mailForDomainEvent(
       // One per provider event: a refund and a later dispute are different news.
       const suffix = (dedupeKey ?? attemptId).replace(/[^\w.-]/g, '_');
       await mailOwner(db, sealing, {
-        profileId: tip.profileId,
+        profileId: personOf(tip.profileId),
         type: 'tip_reversed',
         data: {},
         dedupeKey: `tip_reversed.${tip.id}.${suffix}`,

@@ -24,6 +24,7 @@ export const OPS_PERMISSIONS = [
   'payments.repair',
   'staff.manage',
   'usernames.manage',
+  'businesses.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -44,6 +45,12 @@ export interface OpsCatalogueEntry {
 }
 
 export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
+  // Sensitive: verifying makes a business's codes live; suspending stops its pages at once.
+  'businesses.manage': {
+    description: 'Verify, suspend and restore businesses, with a reason',
+    group: 'people',
+    sensitive: true,
+  },
   'analytics.view': {
     description: 'See health, visibility and market numbers',
     group: 'numbers',
@@ -280,6 +287,9 @@ export const SERIOUS_ACTIONS = [
   'staff.reset_authenticator',
   'mail_provider.switch',
   'username.take_back',
+  // TipMe for businesses (PR B2): verifying makes a business's printed codes live.
+  'business.verify',
+  'tip.reverse',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -296,6 +306,8 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'staff.reset_authenticator': 'Reset someone’s authenticator',
   'mail_provider.switch': 'Switch the active email provider',
   'username.take_back': 'Take a username back from a page',
+  'business.verify': 'Verify a business',
+  'tip.reverse': 'Reverse a refunded or charged-back tip',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -312,4 +324,6 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'staff.reset_authenticator': 'staff.manage',
     'mail_provider.switch': 'providers.manage',
     'username.take_back': 'usernames.manage',
+    'business.verify': 'businesses.manage',
+    'tip.reverse': 'payments.repair',
   };

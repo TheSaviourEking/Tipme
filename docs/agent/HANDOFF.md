@@ -1,3 +1,11 @@
+# Current handoff: merge train 2, TipMe for businesses (6 November 2026)
+
+- `train/2` holds the 13 business PRs (release 1, and release 2's foundation, reversals, share agreement and business balance) on top of `train/1`. Merge #161 first; merging this marks each of the 13 merged.
+- Migrations after train 1's `0080_supporters`: `0081_business`, `0082_business_release2`, `0083_reversal_partner_keeps_fee`. All flags default off.
+- Integration fixes on the train: B5's manager note report resolves B7's note reference (`noteTipOf`); B3's `endMembership` ends the share (`endShareAgreements`); B4's `/b/` reads use B2's `business:<slug>` tag; the quote gate (train 1) is owner-aware (R2-B) and holds R2-A's below-zero pause; the bank-change email keeps M2's design with R2-B's business variant. The e2e stand-ins for other lanes' routes are gone.
+- Still open from the PRs: R2-B's live funds flow (business withdrawals are pretend-only), refunds and chargebacks (D-05), and the owner questions in each builder report.
+- Evidence and every conflict: `.superpowers/program/train2-report.md` (main checkout).
+
 # Current handoff: merge train 1 (6 November 2026)
 
 - `train/1` holds 11 reviewed PRs on top of dev `44fcd42c`. Merging it marks each of them merged.
@@ -72,6 +80,112 @@
 - Designs: three fieldsets, "Patterns", "Cards", "Photo", in the API's order; an unknown `kind` joins Patterns. All radios share one `name`, so arrow keys cross groups.
 - `drawQrCard` letters the Free card in the page's `--font-manrope` family (next/font names it `"manrope"`) after `document.fonts.load`, waiting at most 3 s, else Arial. Pro designs (server pictures) are unchanged. The code's pixels are unchanged: unit decode test plus the e2e scan of the free canvas.
 - Verified locally: format, lint, typecheck, `pnpm test` (web 352/352), `tests/e2e/qr.spec.ts` 9/9 on lane 4. The full e2e suite was not run locally (6 Nov overload rule); CI runs it.
+
+# Current handoff — TipMe for businesses, PR B1 (6 November 2026)
+
+- Branch `feat/business-b1`, lane 4, committed, not pushed, based on `feat/business-b0`. No migration; no money path touched.
+- API: `POST /v1/me/businesses` (needs a confirmed sign-in email: `EMAIL_VERIFICATION_REQUIRED`; opens `business_waiting` with subject `{ businessId, userId }`), `GET/PATCH …/:id`, `POST …/:id/locations`, `PATCH …/locations/:locationId`, `POST …/locations/:locationId/close`, `GET …/:id/managers`, `POST …/managers/:managerId/remove`. Slugs lock once the business is not pending. Removing a manager locks the business row so the last owner always stays.
+- Web: `/health/release` now has `business: boolean`; the web reads it per request (Suspense slot, cached a minute) for `/for-businesses` and the header. `sections.ts` cards take an optional `onChange` so a write updates the page. The dashboard re-reads business roles on the `tipme:business-roles-changed` event.
+- Verified: commands and counts in `.superpowers/program/b1-report.md` (main checkout). Only the touched e2e specs were run locally (overload ruling); CI runs the full suite.
+
+# Current handoff — TipMe for businesses, PR B2: the admin side (6 November 2026)
+
+- Branch `feat/business-b2`, lane 5, committed, not pushed; based on `feat/business-b0`. No migration.
+- Staff see contacts masked (`f•••@domain`, phone last 4). The full contact and managers' emails need `private.view` and a reason, audited as `business.reveal` in the same transaction.
+- Suspend/restore: `businesses.manage`, a reason, fresh code, audited. Suspending a waiting business is `BUSINESS_NOT_VERIFIED`; repeating either is a no-op. Attribution stops because B0's `tippableMember` reads the status; money is untouched.
+- `business.verify` is in `SERIOUS_ACTIONS` (count 11) and wired in the gating test. The business's own managers can't decide it. Verifying a business that isn't waiting is refused at asking (`INVALID_INPUT`, on the wire `VALIDATION_FAILED`).
+- Contract additions (additive): `opsBusinessListQuerySchema`, `OpsBusinessContact`. `ProfileRevalidator.revalidateBusiness(slug)`; the web's `/api/revalidate` accepts `{ business }`.
+- Evidence: `.superpowers/program/b2b-report.md` (main checkout).
+
+# Current handoff — TipMe for businesses, PR B3 (6 November 2026)
+
+- Branch `feat/business-b3`, lane 2, committed, not pushed. No migration (B0's tables); contracts gain `invitationAnswerSchema`, `MyInvitations`, `InvitationAccepted` and `NotificationView.invitationId` (additions only).
+- Invitations: email, one-time link, or a TipMe username (search shows a public card of live, public pages only). Codes are 16 base32 characters, kept only as sha256, sent in request bodies and in the email link's fragment (`/dashboard/work#join=`), single-use, 7 days, revocable; every bad answer is `INVITATION_INVALID`. A username or proven-email invitation also notifies in the app and can be answered by id on Work. A link is answered only with its code.
+- Blocking: the invited person can stop a business inviting them (declines what is open). By username the business gets `INVITATIONS_BLOCKED`; by email the invitation is made but nobody is told, so an address never reveals an account.
+- Membership: remove (manager) and leave (self) end the membership and its open shift at once; tips, balance and notes are untouched. Deleting an account ends memberships, shifts, manager seats and blocks, and is refused with `BUSINESS_LAST_OWNER` for the only owner of a verified or suspended business.
+- Shared files touched outside B3's own: `business.module.ts` (the mail sealing provider), `work-view.tsx` (invitations above the workplaces), `dashboard-shell.tsx` (keeps `#join=` through sign-in; Work link while one is kept), `notification-bell.tsx` (a link for invitation notices), `settings/sections/data.tsx` (the refusal's words).
+- Evidence: `.superpowers/program/b3-report.md` (main checkout). Full e2e not run locally (overload ruling); CI runs it.
+
+# Current handoff — TipMe for businesses, PR B4 (6 November 2026)
+
+- Branch `feat/business-b4`, lane 0, committed, not pushed. No migration. Money unchanged: the tip goes through today's quote, intent and posting; the member id is a label B0's `createPaymentIntent` checks.
+- Contract changes beyond the plan: `tipIntentRequestSchema.businessMemberId` drops a malformed value instead of refusing the intent (B0's test changed to match); `PublicStaffTipPage.profile` gains `tippingOpen`; new `StaffPageRedirect`, `BusinessPersonMatch`, `businessPeopleQuerySchema`. `searchBusinessPeople` takes `options` (the payment-account rule) before `now`.
+- `/v1/b/` is added to the API's uncredentialed cross-origin paths (the browser calls the search). The `people` route is declared before `:location`, so a location slugged `people` would be shadowed: B1 should refuse that slug.
+- Nothing in the API calls `/api/revalidate` with `{ business }` yet; business pages fall back to a 30 s cache. B3/B6 can call it on join, leave and shift changes.
+
+# Current handoff — TipMe for businesses, PR B5: notes after paying (6 November 2026)
+
+- Branch `feat/business-b5`, lane 7, committed, not pushed. Off B0 (`3888c8e6`); no migration.
+- The note never touches the tip: one `INSERT … SELECT` from the paid, attributed tip within 7 days (`ON CONFLICT DO NOTHING`), so a race writes one note; anything else is `NOTE_NOT_OPEN` (404). Text with links, emails or phone numbers is refused (400, `fields: ['body']`).
+- A report (member: any of their memberships, past or current; manager: owner or that location's manager) inserts the flag and opens `business_note_reported` in one transaction. A pending or removed flag hides the note from the business (`noteShownToBusiness`); restored shows it again. A decision is final: a later report of a restored note changes nothing.
+- Staff read the words only via `POST /v1/ops/business-notes/:tipId/reveal` (`private.view`, reason, audited `business_note.reveal`); review needs `issues.resolve` and resolves the issue. The generic issue reveal no longer offers the supporter's private message or name on this kind (`evidence.ts`).
+- Open: the Work page draws cards from B3's `GET /v1/me/work` (mocked in the e2e); a person with no current membership has no Work page, so their old notes are API-only until then. Evidence: `.superpowers/program/b5-report.md` (main checkout).
+
+# Current handoff — TipMe for businesses, PR B6 (6 November 2026)
+
+- Branch `feat/business-b6`, lane 8, committed, not pushed. No migration, no money change.
+- Contracts: `ShiftState` (`{ onShift, startedAt? }`), what each shift route answers. `startShift`/`endShift` also return `{ businessSlug, changed }` for the revalidation; the actor is `{ userId, as: 'self' } | { userId, as: 'manager', businessId }`.
+- Rulings: a start is refused at a business that is pending as well as suspended (`BUSINESS_NOT_VERIFIED`); ending is always allowed. A closed location answers 404 `NOT_FOUND`.
+- `BusinessModule` imports `ProfilesModule` for `ProfileRevalidator`; `revalidateBusiness` is byte-identical to B2's, so the two merge cleanly. The web route's `{ business }` branch is B2's/B4's; until one merges the call is refused (best effort, logged).
+- The Work and Business cards render once B3's `GET /v1/me/work` and members list and B1's detail are on the branch; the e2e answers those three reads from the database.
+
+# Current handoff — TipMe for businesses, PR B7: what the business sees (6 November 2026)
+
+- Branch `feat/business-b7` off `origin/feat/business-b0` (8e7a9752), lane 5, committed, not pushed. No migration, no money change.
+- API: `GET /v1/me/businesses/:id/insights` and `…/notes` (`?locationId&week`, a manager of that location; anything else 404), `PATCH /v1/me/work/:memberId/share-amounts` (the person, CSRF). Operations in `packages/database/src/operations/business-insights.ts`.
+- Privacy rules, each tested: counts through `shownCount` (1 and 2 read "Fewer than 3"); people with under 3 tips sort together by name; complementary suppression (`withheldCounts`): the smallest shown counts are withheld ("Hidden to protect a colleague's privacy") until no one's count follows by subtraction, else only the total (`peopleHidden`); naira only with `share_amounts` and 3+ tips; people who left count in the total and hours only; reported-unreviewed and removed notes hidden; top tag needs 3+ visible notes and the tag on 3+; busiest needs 3+ tips in the window; dates only.
+- Note references: the business gets `businessNoteRef(tipId)` in `BusinessNoteView.tipId`, never the tip id (UUIDv7 carries the time). **B5's manager report route must resolve it with `noteTipOf(db, businessId, ref)`** before calling `reportNoteAsManager`.
+- Web: Business sections `this-week` and `notes`, Work section `share`. The e2e spec answers B1's business detail and B3's Work list and B5's report route itself.
+- `setShareAmounts` builds `MyMembership` itself; swap to B3's `myMembership` when both are on dev.
+- Evidence: `.superpowers/program/b7-report.md` (main checkout).
+
+# Current handoff — TipMe for businesses, PR B8: codes (6 November 2026)
+
+- Branch `feat/business-b8`, lane 2, committed, not pushed. No migration. Contract change (additive, B8-only consumer): `BusinessCodes.business` `{ name, slug }` and `location[].slug`, `location[].name`.
+- Codes print only for a verified business; the API refuses otherwise and the web draws nothing. Badges are per active membership whose page is active; someone who left has none (their old badge leads to their own page through B4's redirect, M2, not on this branch).
+- Every code is `location.origin` + the API's path (which carries `?src=qr`), as `/dashboard/qr` does. `apps/web/test/business-sign.test.mjs` and `tests/e2e/business-codes.spec.ts` decode the drawn pixels back to that URL.
+- The e2e spec answers B1's `GET /v1/me/businesses/:id` and B3's `GET /v1/me/work` with fixed shapes, since neither route is on this branch; the codes route is real.
+- Verified: commands and counts in `.superpowers/program/b8-report.md` (main checkout). Full e2e suite not run locally (overload ruling); CI runs it.
+
+# Current handoff — TipMe for businesses, PR R2-B (6 November 2026)
+
+- Branch `feat/business-r2-b`, lane 2, off local `feat/business-r2-a` (`92dff2ec`), committed, not pushed. No migration.
+- Money: a business's balance is the sum of its `business_payable` less its payouts in flight (`businessBalanceIn`). Its withdrawals run the person's code path (`packages/database/src/operations/payouts.ts` `requestFor`): replay before any partner read, owner check, switch, foreign-provider check, route, one partner read outside the transaction, then the `businesses` row lock, replay, owner re-check, switch, holds, `BALANCE_BELOW_ZERO`, min(ledger, partner − queued), ₦2,000 minimum, the `payouts.start` job. Paid debits `business_payable`. Person payouts, payloads and fingerprints are byte-identical to before.
+- Holds: no business holds exist (would need a migration). `holdsOf` counts any owner's `account_takeover` hold (owners removed after the payout was requested included at start time); a takeover freeze also opens `payout_held` for the owner's businesses' unstarted payouts. An `in_debt` failure on a business payout opens the issue without a hold.
+- Live partner: no business payment account is created, so a live quote reads `setup_needed` and requests refuse `PAYOUT_SETUP_NEEDED`. Shares are collected into the person's own partner account, so a business account would hold none of them (open question in the report).
+- Verified: commands and counts in `.superpowers/program/r2b-report.md` (main checkout). Full e2e not run locally (overload ruling); touched specs ran on lane 2.
+
+# Current handoff — TipMe for businesses, PR R2-A (6 November 2026)
+
+- Branch `feat/business-r2-a`, lane 6, off `feat/business-r2-0` (`f13146bb`), committed, not pushed. No migration.
+- Money: with `BUSINESS_SHARES_ENABLED` off nothing writes a share row, so every payment posts exactly today's lines (golden test). A share row on a tip is posted as `business_payable` in the payment's own transaction, whatever the flags say later (the supporter was told). `reverseTip` (`packages/database/src/operations/reversals.ts`) locks the tip, then profiles, then businesses; posts one `reversal.<eventId>` transaction mirroring what is left of each payment line (in proportion for a partial refund, remainder kobo on the person's line); repeats are no-ops; more than what is left is `TIP_NOT_REVERSIBLE`. Below zero: `requestWithdrawal` refuses `BALANCE_BELOW_ZERO`, `withdrawalQuote` reads `paused/reversal`, one `balance_below_zero` issue per balance per reversal. Never automatic: only `tip.reverse` from an open `payment_reversed` issue.
+- Left for others: R2-B must lock the `businesses` row in business withdrawals and refuse `BALANCE_BELOW_ZERO` below zero (`businessBalanceIn`), and handle `account-mail.ts` `personOf` for business payouts. R2-C2 must update the release-1 readers that treat `recipient_net_minor` as the person's (dashboard, export, reports, notifications, `tip.succeeded` outbox payload); `balance.ts` confirming and the tip-list payout already subtract the share here. R2-D: `flagPaymentReversal` holds each split person of a team tip (untested until team tips exist).
+- Verified: commands and counts in `.superpowers/program/r2a-report.md` (main checkout). Full e2e not run locally (overload ruling); no UI changed.
+
+# Current handoff — TipMe for businesses, PR R2-C1 (6 November 2026)
+
+- Branch `feat/business-r2-c1`, lane 3, off `feat/business-r2-0` (`f13146bb`), committed, not pushed. No migration. No money moves: shares are only agreed here; R2-A posts them and R2-C2 snapshots them on tips.
+- Rules kept from R2-0: `proposed_at` is the database default; `accepted_at` is the database's `now()`; the start date is computed from the database's `now()`; accepting a change is one transaction (old agreement's `superseded_by` first, then the successor's `accepted_at`); "in force" is only `tipme_share_agreement_at`; agreements are never edited or deleted (a lapsed proposal is closed with `withdrawn_at`).
+- What the business sees (coordinator's ruling, 6 Nov): its own proposal reads `pending` until the start date whatever the staff member did (accepted, declined or unanswered); from then only the outcome (`in_force` with the split, or `no_change`). A staff counter-suggestion shows at once. Derived from the rows and the database's now() (`VISIBLE_PENDING` in the operations file), no schema change; a counter is told apart because it declines the proposal in the same transaction (`declined_at` = the counter's `proposed_at`). While a proposal reads pending, another is refused with the same `SHARE_NOT_ALLOWED`. The business can't withdraw a proposal (the route is gone): withdrawing one already answered would give the answer away. At most one change takes effect per Lagos calendar month (`SHARE_CHANGE_TOO_SOON`). A proposal lapses at its start date. A report opens a `share_report` issue (one a day per person, ids and fixed words only); the words stay in `share_reports`.
+- Leaving (M16): `endShareAgreements(tx, memberId)` is exported and tested, but B3's `endMembership` is not on this base, so the call is not wired yet (a recorded follow-up after B3 merges).
+- Verified: commands and counts in `.superpowers/program/r2c1-report.md` (main checkout). The full e2e suite was not run locally (machine overload ruling); CI runs it.
+
+# Current handoff — TipMe for businesses, PR R2-0 (6 November 2026)
+
+- Branch `feat/business-r2-0`, lane 6, off `feat/business-b0`, committed, not pushed. One migration, `0079_business_release2`: generated with drizzle-kit after rebuilding contracts and domain, with hand-written guard triggers appended (as 0078 appended its grant). No backfill. `profile_id` becomes nullable on `tip_quotes`, `payment_intents`, `tips` (team tips name `team_location_id` instead), and on `payment_accounts`, `payout_destinations`, `payouts` (a business owns them through `business_id`); each has an exactly-one check. `ledger_accounts_identity` is dropped and re-added with `business_id`; existing rows keep their identity (tested by replaying the two statements).
+- Money: unchanged with both flags off. Release 1 paths that read those `profile_id`s now go through `personOf()` (`packages/database/src/operations/owner.ts`), which stops with `NOT_A_PERSON` on a row with no person; no such row can exist until R2-B or R2-D writes one. `createPaymentIntent` answers a team quote as `QUOTE_NOT_FOUND`. The payout-destination sweep skips a business's destination. The ledger account lookup ignores business accounts.
+- Database guards for later lanes: a share row only on a tip made at the agreement's membership, in force at tip time, for the member's business, with the exact rounded-down share of the net (append-only); team splits only to members of the tip's location and their own page, adding up to the net at commit (append-only); a table assignment only to a member of the card's location on their own shift; a reversal names a payment of the same tip in its currency, and at commit all reversals of a payment mirror its sides and take back at most what it put on each account (a refund then a chargeback can't take the money twice); a share agreement's terms are frozen and it is never deleted, an answer, end or successor is set once, `proposed_at`/`accepted_at` take the database clock (fixtures backdate with `SET LOCAL tipme.allow_backdate = 'on'`), a successor is the same member's accepted agreement starting later; "in force at a time" is `tipme_share_agreement_at(member, at)` (the `share_agreements_latest_accepted` index means the newest accepted one, which may not have started); an entry's `business_id` matches its account's; only a business holds `business_payable`.
+- Not done here (by design): postings, reversals, routes and UI (R2-A..R2-E). The old tip-list payout (`requestPayout` with `payout_items`) is person-only; a business payout must use the balance path (R2-B).
+- Verified: commands and counts in `.superpowers/program/r20-report.md` (main checkout). The full e2e suite was not run locally (machine overload ruling); CI runs it.
+
+# Current handoff — TipMe for businesses, PR B0 (6 November 2026)
+
+- Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.
+- Money: unchanged. A tip made at a business still credits `tips.profile_id`; the member and location are a label no posting reads. A bad or stale `businessMemberId` is ignored. Fingerprints without a member are byte-identical to before; a retry after the membership ended replays the tip instead of conflicting.
+- Flag: `BUSINESS_ENABLED` is off by default (compose passes it as `false`). Off, every business route is 404 and the checkout drops `businessMemberId`. The e2e stack turns it on. The value is `true`, not `1`.
+- Lanes: each owns its controller file (registered empty in B0), its `sections.ts` lines, its `globals.css` markers (`business:B1` to `business:B8`) and its `apps/web/src/lib/business/<lane>-api.ts`. Seed with `packages/database/test/integration/business-fixtures.mjs` and `tests/e2e/business-fixtures.ts`.
+- Not done here (by design): `business.verify` is not in `SERIOUS_ACTIONS` yet, because the catalogue test needs every action wired; B2 adds it with its registration. `NotificationView` has no invitation id yet (B3 adds it with its notification writes).
+- Verified: commands and counts in `.superpowers/program/b0-report.md` (main checkout). The full e2e suite was not run locally (machine overload ruling); CI runs it.
 
 # Current handoff — animated covers (5 November 2026)
 

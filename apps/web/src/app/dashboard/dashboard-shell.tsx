@@ -21,17 +21,34 @@ import {
   RECOVERY_EMAIL_CHANGED,
 } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { businessLinks, loadBusinessRoles } from '@/lib/business/roles-api';
+import { BUSINESS_ROLES_CHANGED } from '@/lib/business/setup-api';
+import { keepJoinLink, takeJoinCode } from '@/lib/business/join-link';
 
 /**
  * The dashboard's navigation: a segmented control on a desktop, the fixed four-item tab bar on a
  * phone (My QR is not in the bar: Show QR sits beside Withdraw on Home).
  */
-const links = (handle: string | null) =>
+const links = (
+  handle: string | null,
+  business: { business: boolean; work: boolean } = {
+    business: false,
+    work: false,
+  },
+) =>
   [
     { href: '/dashboard', label: 'Home', phone: true },
     { href: '/dashboard/tips', label: 'Tips', phone: true },
     ...(handle ? [{ href: `/@${handle}`, label: 'My page', phone: true }] : []),
     { href: '/dashboard/qr', label: 'My QR', phone: false },
+    // TipMe for businesses: only for someone who manages one, or works at or is invited to one.
+    // Never in the phone's four-item bar.
+    ...(business.business
+      ? [{ href: '/dashboard/business', label: 'Business', phone: false }]
+      : []),
+    ...(business.work
+      ? [{ href: '/dashboard/work', label: 'Work', phone: false }]
+      : []),
     { href: '/dashboard/settings', label: 'Settings', phone: true },
   ] as const;
 
@@ -66,10 +83,30 @@ export function DashboardShell({
       if (result.ok) {
         setProfile(result.data);
         setLiveUpdates(result.data.liveUpdates === true);
-      } else if (result.status === 404) router.replace('/sign-up');
-      else router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
+      } else {
+        // A business invitation's link (`#join=`) is a fragment: it survives sign-in only in
+        // this tab's storage, and never in `next`.
+        keepJoinLink();
+        if (result.status === 404) router.replace('/sign-up');
+        else router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
+      }
     });
   }, [router, pathname]);
+
+  // Once per dashboard load: while BUSINESS_ENABLED is off the API answers 404 and no link shows.
+  const [business, setBusiness] = useState({ business: false, work: false });
+  useEffect(() => {
+    const refresh = () =>
+      void loadBusinessRoles().then((roles) => {
+        const links = businessLinks(roles);
+        // An invitation link kept through sign-in (or sign-up) leads to Work, where it is answered.
+        setBusiness(roles && takeJoinCode() ? { ...links, work: true } : links);
+      });
+    refresh();
+    // Again after creating a business (PR B1), so its Business link shows without a reload.
+    window.addEventListener(BUSINESS_ROLES_CHANGED, refresh);
+    return () => window.removeEventListener(BUSINESS_ROLES_CHANGED, refresh);
+  }, []);
 
   // Read on every page change too, so a finished setup clears its notice on the next click.
   const [payments, setPayments] = useState<
@@ -140,7 +177,7 @@ export function DashboardShell({
           {pathname !== '/dashboard/welcome' && (
             <div className="dashboard-bar">
               <nav aria-label="Dashboard" className="dashboard-nav">
-                {links(profile?.handle ?? null).map((link) => (
+                {links(profile?.handle ?? null, business).map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}

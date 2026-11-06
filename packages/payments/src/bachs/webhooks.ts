@@ -328,6 +328,22 @@ function normalizeReversal(
   )
     return undefined;
   const checkoutId = nullableString(event.data['checkout_id']);
+  const family = REFUND_EVENT.test(event.type) ? 'refund' : 'dispute';
+  // The partner's refund guide: the top-level `id` is the webhook event, the refund is
+  // `data.refund_id`. No dispute events are documented, so a dispute is keyed only by an explicit
+  // dispute or chargeback id, never a guess.
+  const objectId =
+    family === 'refund'
+      ? partnerId(event.data['refund_id'])
+      : (partnerId(event.data['dispute_id']) ??
+        partnerId(event.data['chargeback_id']));
+  const disputeWon =
+    family === 'dispute' &&
+    (/\.won$/.test(event.type) || event.data['status'] === 'won');
+  const refundState = REFUND_STATES[event.type] ?? null;
+  // Bachs collects naira only; an event that names its currency is read in it.
+  const currency = stringValue(event.data['currency']) ?? 'NGN';
+  const paid = refundState === 'paid';
   return {
     kind: 'reversal',
     eventId: event.id,
@@ -335,8 +351,35 @@ function normalizeReversal(
     accountReference,
     providerReference: checkoutId ? `${accountReference}:${checkoutId}` : null,
     operationReference: nullableString(event.data['reference']),
+    partnerReversalId: objectId ? `${family}.${objectId}` : null,
+    disputeWon,
+    refundState,
+    refundedMinor: paid
+      ? (amountOf(event.data['refunded_amount'], currency) ?? null)
+      : null,
+    refundFeeMinor: paid
+      ? (amountOf(event.data['refund_fee_amount'], currency) ?? null)
+      : null,
   };
 }
+
+const REFUND_STATES: Record<string, 'pending' | 'paid' | 'failed'> = {
+  'refund.created': 'pending',
+  'refund.paid': 'paid',
+  'refund.failed': 'failed',
+};
+/** An amount as a decimal string or a plain number, in minor units; undefined if unreadable. */
+const amountOf = (value: unknown, currency: string): bigint | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? safeMinor(String(value), currency)
+    : safeMinor(value, currency);
+
+const REFUND_EVENT = /^refund\.|^charge\.refund/;
+/** A partner object id we key a reversal on: plain characters only, never free text. */
+const partnerId = (value: unknown): string | null =>
+  typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value)
+    ? value
+    : null;
 
 export function verifyBachsWebhook(
   rawBody: Buffer,

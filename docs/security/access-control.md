@@ -58,22 +58,23 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | --- | --- |
 | `analytics.view` | GET `/v1/ops/market`<br>GET `/v1/ops/market/series`<br>GET `/v1/ops/metrics/health`<br>GET `/v1/ops/metrics/visibility` |
 | `audit.view` | GET `/v1/ops/audit`<br>GET `/v1/ops/staff-activity` |
+| `businesses.manage` | POST `/v1/ops/businesses/{id}/restore`<br>POST `/v1/ops/businesses/{id}/suspend`<br>POST `/v1/ops/businesses/{id}/verify` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
-| `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
+| `issues.resolve` | POST `/v1/ops/business-notes/{tipId}/review`<br>POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/database-budget`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
 | `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
-| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation` |
+| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
-| `private.view` | POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
+| `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
-| `search.view` | GET `/v1/ops/search` |
+| `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/search` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
 | `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>POST `/v1/ops/usernames/{name}/take-back`<br>GET `/v1/ops/usernames/check/{name}`<br>POST `/v1/ops/usernames/take-backs/{id}/cancel` |
 
@@ -105,6 +106,9 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/auth/recover/complete` | yes | `auth_verify` | – |
 | POST | `/v1/auth/verify` | yes | `auth_verify` | – |
 | GET | `/v1/avatars/{profileId}/{file}` | n/a (read) | – | – |
+| GET | `/v1/b/{business}/{location}` | n/a (read) | – | – |
+| GET | `/v1/b/{business}/{location}/{handle}` | n/a (read) | – | – |
+| GET | `/v1/b/{business}/people` | n/a (read) | `business_public` | – |
 | GET | `/v1/covers/{profileId}/{file}` | n/a (read) | – | – |
 | GET | `/v1/dev/inbox` | n/a (read) | – | yes |
 | POST | `/v1/dev/jobs/weekly-report` | – | – | yes |
@@ -127,6 +131,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
+| POST | `/v1/tips/{tipId}/business-note` | – | `business_note` | – |
 | POST | `/v1/tips/{tipId}/recognition/stop` | – | – | – |
 | GET | `/v1/tips/{tipId}/status` | n/a (read) | – | – |
 
@@ -154,6 +159,38 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/activity` | n/a (read) | – | – |
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
+| GET | `/v1/me/business-roles` | n/a (read) | – | – |
+| POST | `/v1/me/businesses` | yes | `business_apply` | – |
+| GET | `/v1/me/businesses/{businessId}/balance` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{businessId}/payout-destination` | n/a (read) | – | – |
+| PUT | `/v1/me/businesses/{businessId}/payout-destination` | yes | `auth_verify` | – |
+| POST | `/v1/me/businesses/{businessId}/payout-destination/code` | yes | `auth_code` | – |
+| POST | `/v1/me/businesses/{businessId}/payout-destination/resolve` | yes | `bank_resolve` | – |
+| GET | `/v1/me/businesses/{businessId}/withdrawal-quote` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{businessId}/withdrawals` | yes | – | – |
+| GET | `/v1/me/businesses/{id}` | n/a (read) | – | – |
+| PATCH | `/v1/me/businesses/{id}` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/codes` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{id}/insights` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{id}/invitations` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/invitations` | yes | `handles` | – |
+| POST | `/v1/me/businesses/{id}/invitations/{invitationId}/revoke` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/invitees` | n/a (read) | `handles` | – |
+| POST | `/v1/me/businesses/{id}/locations` | yes | – | – |
+| PATCH | `/v1/me/businesses/{id}/locations/{locationId}` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/locations/{locationId}/close` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/managers` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/managers/{managerId}/remove` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/members` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/members/{memberId}/remove` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/members/{memberId}/shift/end` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/members/{memberId}/shift/start` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/notes` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/notes/{tipId}/report` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/shares` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/shares` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/shares/{agreementId}/accept` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/shares/{agreementId}/decline` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
@@ -211,6 +248,24 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
 | GET | `/v1/me/withdrawals` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
+| GET | `/v1/me/work` | n/a (read) | – | – |
+| PATCH | `/v1/me/work/{memberId}` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/leave` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/report-business` | yes | – | – |
+| PATCH | `/v1/me/work/{memberId}/share-amounts` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/shift/end` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/shift/start` | yes | – | – |
+| PUT | `/v1/me/work/invitation-blocks/{businessId}` | yes | – | – |
+| GET | `/v1/me/work/invitations` | n/a (read) | – | – |
+| POST | `/v1/me/work/invitations/accept` | yes | – | – |
+| POST | `/v1/me/work/invitations/decline` | yes | – | – |
+| POST | `/v1/me/work/invitations/preview` | yes | – | – |
+| GET | `/v1/me/work/notes` | n/a (read) | – | – |
+| POST | `/v1/me/work/notes/{tipId}/report` | yes | – | – |
+| GET | `/v1/me/work/shares` | n/a (read) | – | – |
+| POST | `/v1/me/work/shares/{agreementId}/accept` | yes | – | – |
+| POST | `/v1/me/work/shares/{agreementId}/counter` | yes | – | – |
+| POST | `/v1/me/work/shares/{agreementId}/decline` | yes | – | – |
 | GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
 #### Signed-in staff, before an admin grant
@@ -234,6 +289,14 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/bachs/account-recovery` | `payments.repair` | yes | – | – |
 | POST | `/v1/ops/bachs/checkout-recovery` | `payments.repair` | yes | – | – |
 | POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.repair` | yes | – | – |
+| POST | `/v1/ops/business-notes/{tipId}/reveal` | `private.view` | yes | – | – |
+| POST | `/v1/ops/business-notes/{tipId}/review` | `issues.resolve` | yes | – | – |
+| GET | `/v1/ops/businesses` | `search.view` | n/a (read) | – | – |
+| GET | `/v1/ops/businesses/{id}` | `search.view` | n/a (read) | – | – |
+| POST | `/v1/ops/businesses/{id}/restore` | `businesses.manage` | yes | – | – |
+| POST | `/v1/ops/businesses/{id}/reveal` | `private.view` | yes | – | – |
+| POST | `/v1/ops/businesses/{id}/suspend` | `businesses.manage` | yes | – | – |
+| POST | `/v1/ops/businesses/{id}/verify` | `businesses.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/database-budget` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/email/export.csv` | `email.export` | n/a (read) | – | – |
 | GET | `/v1/ops/email/messages` | `issues.view,email.read,email.export` | n/a (read) | – | – |
@@ -251,6 +314,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/issues/{id}/payout-resume` | `payouts.resolve` | yes | – | – |
 | POST | `/v1/ops/issues/{id}/resolve` | `issues.resolve` | yes | `ops_request (money closes only)` | – |
 | POST | `/v1/ops/issues/{id}/reveal` | `private.view` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/reverse-tip` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/market` | `analytics.view` | n/a (read) | – | – |
 | POST | `/v1/ops/market` | `market.edit` | yes | – | – |
 | PATCH | `/v1/ops/market/{id}` | `market.edit` | yes | – | – |
@@ -322,22 +386,24 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 
 Reviewed one by one; the test lists them and fails when one is added.
 
-| Route                                                                                  | Why it is public                                                      | What limits it                                                                                                     |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `GET /health`, `/health/live`, `/health/ready`                                         | Load balancers and uptime checks                                      | Reveal only "up/down"                                                                                              |
-| `GET /health/release`                                                                  | The release check and the watcher read the deployed version and mode  | No secrets; says nothing about people                                                                              |
-| `GET /health/backups`                                                                  | The 15-minute watcher reads backup ages                               | Ages and counts only, no file names; cached 30 s                                                                   |
-| `GET /health/payments`                                                                 | The production watcher reads whether reserve checks have stopped      | Low, unreadable or stale, when read: no amount or name                                                             |
-| `GET /v1/profiles/{handle}`                                                            | The public tipping page                                               | Only live, active pages; nothing else answers differently from "not found"                                         |
-| `POST /v1/profiles/{handle}/report`                                                    | Anyone can report a page                                              | A reason from a fixed list; always answers the same; rate-limited                                                  |
-| `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                   | Rate-limited                                                                                                       |
-| `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                        | Only the current photo of a live, active page                                                                      |
-| `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                       | Only the current cover of a live, active page                                                                      |
-| `GET /v1/qr-art/previews/{file}`                                                       | The marked preview of a Pro QR design, the same for every Free page   | Encodes only the TipMe home page and carries the Preview mark; fixed list of designs; drawn once and kept          |
-| `POST /v1/tip-quotes`, `POST /v1/tip-intents`                                          | A supporter tips without an account                                   | Rate-limited; amounts and fees computed on the server; idempotency key                                             |
-| `GET`, `POST /v1/mail/unsubscribe`                                                     | One-click unsubscribe from a mail app, with no session                | A signed token naming one person and one optional email type; GET only shows a page; rate-limited                  |
-| `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                    | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07 |
-| `POST /v1/auth/code`, `/v1/auth/verify`, `/v1/auth/recover*`, `/v1/auth/email/confirm` | Signing in and recovering an account happen before there is a session | Per-address and per-number limits; lockouts; codes expire                                                          |
+| Route                                                                                  | Why it is public                                                                     | What limits it                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`, `/health/live`, `/health/ready`                                         | Load balancers and uptime checks                                                     | Reveal only "up/down"                                                                                                                                                                                                   |
+| `GET /health/release`                                                                  | The release check and the watcher read the deployed version and mode                 | No secrets; says nothing about people                                                                                                                                                                                   |
+| `GET /health/backups`                                                                  | The 15-minute watcher reads backup ages                                              | Ages and counts only, no file names; cached 30 s                                                                                                                                                                        |
+| `GET /health/payments`                                                                 | The production watcher reads whether reserve checks have stopped                     | Low, unreadable or stale, when read: no amount or name                                                                                                                                                                  |
+| `GET /v1/profiles/{handle}`                                                            | The public tipping page                                                              | Only live, active pages; nothing else answers differently from "not found"                                                                                                                                              |
+| `POST /v1/profiles/{handle}/report`                                                    | Anyone can report a page                                                             | A reason from a fixed list; always answers the same; rate-limited                                                                                                                                                       |
+| `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                                  | Rate-limited                                                                                                                                                                                                            |
+| `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                                       | Only the current photo of a live, active page                                                                                                                                                                           |
+| `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                                      | Only the current cover of a live, active page                                                                                                                                                                           |
+| `GET /v1/b/{business}/{location}`, `GET /v1/b/{business}/{location}/{handle}`          | A printed business code opens these pages for a supporter without an account (PR B4) | Only verified, not paused businesses and open locations; only people whose page is live and can take a tip; a chosen first name and photo, never a full name, bio, contact or link; 404 while `BUSINESS_ENABLED` is off |
+| `GET /v1/b/{business}/people`                                                          | "I don't see them": find someone at another location of the business                 | The same limits; at least 2 letters, at most 20 people; rate-limited (`business_public`), since a roster is what it could leak                                                                                          |
+| `GET /v1/qr-art/previews/{file}`                                                       | The marked preview of a Pro QR design, the same for every Free page                  | Encodes only the TipMe home page and carries the Preview mark; fixed list of designs; drawn once and kept                                                                                                               |
+| `POST /v1/tip-quotes`, `POST /v1/tip-intents`                                          | A supporter tips without an account                                                  | Rate-limited; amounts and fees computed on the server; idempotency key                                                                                                                                                  |
+| `GET`, `POST /v1/mail/unsubscribe`                                                     | One-click unsubscribe from a mail app, with no session                               | A signed token naming one person and one optional email type; GET only shows a page; rate-limited                                                                                                                       |
+| `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                                   | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07                                                                                                      |
+| `POST /v1/auth/code`, `/v1/auth/verify`, `/v1/auth/recover*`, `/v1/auth/email/confirm` | Signing in and recovering an account happen before there is a session                | Per-address and per-number limits; lockouts; codes expire                                                                                                                                                               |
 
 ## Where it is tested
 

@@ -47,6 +47,7 @@ export class ReleaseInfoController {
           this.config.ANALYTICS_ENABLED ??
           this.config.NODE_ENV !== 'production',
         paymentProvider: this.config.PAYMENT_PROVIDER,
+        business: this.config.BUSINESS_ENABLED,
       },
     };
   }

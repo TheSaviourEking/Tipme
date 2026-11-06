@@ -2,6 +2,7 @@ import { PAYOUT_START_EVENT, PLATFORM_REFUSAL_EVENT } from '@tipme/contracts';
 import { and, asc, eq, gte, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  businesses,
   issues,
   paymentAccounts,
   payoutDestinations,
@@ -17,12 +18,14 @@ import { enqueueOutbox } from './outbox.js';
 import { withdrawalsSwitchState } from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
 import {
+  holdsOf,
   holdWithdrawals,
   recordPayoutFee,
   recordPayoutOutcome,
   setPayoutReview,
   type PayoutFailure,
 } from './payouts.js';
+import { ownerOf, personOf } from './owner.js';
 
 /**
  * How long "the provider has no such payout" stays no proof after a start with no answer. The
@@ -449,7 +452,8 @@ async function claimStart(
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, payout.profileId),
+        // A business's: its owners' takeover holds, owners when it was requested included (R2-B).
+        holdsOf(ownerOf(payout), payout.createdAt),
         or(
           isNull(withdrawalHolds.releasedAt),
           gte(withdrawalHolds.createdAt, payout.createdAt),
@@ -517,11 +521,19 @@ function claimFeeCredit(
 ): Promise<string | null> {
   return guarded(() =>
     db.transaction(async (tx) => {
-      await tx
-        .select({ id: profiles.id })
-        .from(profiles)
-        .where(eq(profiles.id, payout.profileId))
-        .for('update');
+      // The lock a withdrawal takes: the person's profile, or the business (R2-B).
+      if (payout.businessId !== null)
+        await tx
+          .select({ id: businesses.id })
+          .from(businesses)
+          .where(eq(businesses.id, payout.businessId))
+          .for('update');
+      else
+        await tx
+          .select({ id: profiles.id })
+          .from(profiles)
+          .where(eq(profiles.id, personOf(payout.profileId)))
+          .for('update');
       const [credit] = await tx
         .select({ reference: providerFeeCredits.transferReference })
         .from(providerFeeCredits)
@@ -966,16 +978,19 @@ export function openUnexpectedPayout(
         dedupeKey: `payout_unexpected.${input.unmatchedId}`,
         kind: 'payout_unexpected',
         subject: {
-          profileId: account.profileId,
+          profileId: account.profileId ?? undefined,
           unmatchedId: input.unmatchedId,
         },
         now: input.now,
       });
-      await holdWithdrawals(tx, {
-        profileId: account.profileId,
-        reason: 'unexpected_payout',
-        issueId: issue.id,
-      });
+      // R2-B creates no business payment account, so none is met here; were one, the issue still
+      // opens, and a business has no holds of its own (that needs a migration).
+      if (account.profileId !== null)
+        await holdWithdrawals(tx, {
+          profileId: account.profileId,
+          reason: 'unexpected_payout',
+          issueId: issue.id,
+        });
     }),
   );
 }

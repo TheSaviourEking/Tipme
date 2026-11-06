@@ -28,6 +28,37 @@ export class DependencyUnavailableError extends Error {
 
 // Fixed messages: framework and parser messages can quote request input.
 const messages: Record<ApiErrorCode, string> = {
+  BUSINESS_NOT_FOUND: 'That business does not exist.',
+  BUSINESS_SLUG_TAKEN: 'That address is taken. Try another.',
+  LOCATION_SLUG_TAKEN:
+    'This business already has a location with that address.',
+  SLUG_LOCKED:
+    'The address can’t change once the business is verified, because printed codes use it.',
+  BUSINESS_NAME_LOCKED:
+    'Your name was checked by TipMe. To change it, contact TipMe.',
+  OWNER_REQUIRED: 'Only an owner of this business can do that.',
+  INVITATION_INVALID:
+    'That invitation isn’t valid any more. Ask the business for a new one.',
+  INVITATIONS_BLOCKED:
+    'This person isn’t taking invitations from your business.',
+  INVITEE_UNAVAILABLE: 'No TipMe page can be invited with that username.',
+  ALREADY_A_MEMBER: 'You’re already on the team at this location.',
+  MEMBER_NOT_TIPPABLE: 'Your TipMe page needs to be live first.',
+  NOTE_NOT_OPEN: 'A note can’t be added to this tip.',
+  BUSINESS_LAST_OWNER:
+    'Make someone else an owner of the business first, or close it.',
+  BUSINESS_NOT_VERIFIED: 'This business isn’t verified yet.',
+  SHARE_NOT_ALLOWED: 'A share isn’t possible here.',
+  SHARE_CHANGE_TOO_SOON:
+    'A share can change at most once a month. Try a later start date.',
+  SHARE_NOT_OPEN: 'This proposal can’t be answered any more.',
+  TEAM_NOBODY_ON_SHIFT:
+    'Nobody is on shift here right now. Tip someone from the list instead.',
+  CARD_NOT_FOUND: 'That table card does not exist.',
+  BALANCE_BELOW_ZERO:
+    'Withdrawals are paused until the balance is back above zero.',
+  TIP_NOT_REVERSIBLE:
+    'Nothing of this tip is left to take back, or the refund is more than what is left.',
   PERMISSION_NOT_HELD:
     'You can only give or take away access you hold yourself.',
   FRESH_CODE_REQUIRED: 'Enter a code from your authenticator to do this.',
@@ -297,6 +328,37 @@ const operationErrors: Partial<
   STAFF_CANNOT_DELETE: { status: 409, code: 'STAFF_CANNOT_DELETE' },
   STAFF_ALREADY_ENROLLED: { status: 409, code: 'STAFF_ALREADY_ENROLLED' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
+  // TipMe for businesses. Not a manager reads exactly like an unknown business (rule 2).
+  NOT_A_MANAGER: { status: 404, code: 'BUSINESS_NOT_FOUND' },
+  BUSINESS_NOT_FOUND: { status: 404, code: 'BUSINESS_NOT_FOUND' },
+  NO_MEMBERSHIP: { status: 404, code: 'NOT_FOUND' },
+  INVITATION_INVALID: { status: 404, code: 'INVITATION_INVALID' },
+  INVITEE_UNAVAILABLE: { status: 404, code: 'INVITEE_UNAVAILABLE' },
+  NOTE_NOT_OPEN: { status: 404, code: 'NOTE_NOT_OPEN' },
+  BUSINESS_SLUG_TAKEN: { status: 409, code: 'BUSINESS_SLUG_TAKEN' },
+  LOCATION_SLUG_TAKEN: { status: 409, code: 'LOCATION_SLUG_TAKEN' },
+  SLUG_LOCKED: { status: 409, code: 'SLUG_LOCKED' },
+  BUSINESS_NAME_LOCKED: { status: 409, code: 'BUSINESS_NAME_LOCKED' },
+  ALREADY_A_MEMBER: { status: 409, code: 'ALREADY_A_MEMBER' },
+  BUSINESS_LAST_OWNER: { status: 409, code: 'BUSINESS_LAST_OWNER' },
+  INVITATIONS_BLOCKED: { status: 409, code: 'INVITATIONS_BLOCKED' },
+  // Accepting needs a live page (owner's answer Q1): a state to fix, not bad input.
+  MEMBER_NOT_TIPPABLE: { status: 409, code: 'MEMBER_NOT_TIPPABLE' },
+  OWNER_REQUIRED: { status: 403, code: 'OWNER_REQUIRED' },
+  BUSINESS_NOT_VERIFIED: { status: 403, code: 'BUSINESS_NOT_VERIFIED' },
+  // Business release 2 (R2-0).
+  SHARE_NOT_ALLOWED: { status: 409, code: 'SHARE_NOT_ALLOWED' },
+  SHARE_CHANGE_TOO_SOON: { status: 409, code: 'SHARE_CHANGE_TOO_SOON' },
+  SHARE_NOT_OPEN: { status: 404, code: 'SHARE_NOT_OPEN' },
+  TEAM_NOBODY_ON_SHIFT: { status: 409, code: 'TEAM_NOBODY_ON_SHIFT' },
+  CARD_NOT_FOUND: { status: 404, code: 'CARD_NOT_FOUND' },
+  BALANCE_BELOW_ZERO: { status: 409, code: 'BALANCE_BELOW_ZERO' },
+  TIP_NOT_REVERSIBLE: { status: 409, code: 'TIP_NOT_REVERSIBLE' },
+  NOTE_TEXT_REFUSED: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['body'],
+  },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },
   QUOTE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   AMOUNT_OUT_OF_RANGE: {

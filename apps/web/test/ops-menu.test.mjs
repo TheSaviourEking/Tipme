@@ -77,6 +77,20 @@ test('Pages shows to a usernames.manage-only holder', () => {
   assert.ok(hrefs(['usernames.manage']).includes('/ops/pages'));
 });
 
+test('Businesses shows for search.view only while the business feature is on', () => {
+  assert.ok(!hrefs(['search.view']).includes('/ops/businesses'));
+  assert.ok(
+    opsMenu(['search.view'], { business: true })
+      .map((link) => link.href)
+      .includes('/ops/businesses'),
+  );
+  assert.ok(
+    !opsMenu(['analytics.view'], { business: true })
+      .map((link) => link.href)
+      .includes('/ops/businesses'),
+  );
+});
+
 const OWNER = [
   'issues.view',
   'analytics.view',
@@ -137,4 +151,13 @@ test('the open page is its own link, or the section it sits in', () => {
   assert.equal(opsMenuCurrent(links, '/ops/nowhere'), null);
   // A page the menu doesn't offer this person has no link.
   assert.equal(opsMenuCurrent(opsMenu([]), '/ops/issues/abc'), null);
+});
+
+test('Businesses joins the Work group while the business feature is on', () => {
+  assert.deepEqual(
+    opsMenuGroups(OWNER, { business: true })
+      .find((group) => group.label === 'Work')
+      ?.links.map((link) => link.label),
+    ['Issues', 'Search', 'Pages', 'Usernames', 'Businesses'],
+  );
 });

@@ -101,6 +101,18 @@ export const apiConfigSchema = z
       .default(30),
     RATE_LIMIT_BANK_READ_PER_MIN: z.coerce.number().int().min(1).default(30),
     // Live stream connects per address per minute, counted before the session check. Tests raise it.
+    // TipMe for businesses: public location reads and search (per address, a minute), and the
+    // supporter's note after paying (per address, an hour).
+    RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(120),
+    RATE_LIMIT_BUSINESS_NOTE_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(30),
     RATE_LIMIT_LIVE_CONNECT_PER_MIN: z.coerce.number().int().min(1).default(60),
     // How long every API copy reuses the provider's balance and fee for showing a withdrawal
     // quote. Its rate limit is shared with payouts. A withdrawal itself always asks fresh; 0 is off.
@@ -202,6 +214,14 @@ export const apiConfigSchema = z
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
     // Live updates (signals over text/event-stream). Off: both stream routes answer 204.
     LIVE_UPDATES_ENABLED: flag,
+    // TipMe for businesses (plan 2026-11-06-business). Off: every business route answers 404 and
+    // a tip intent's businessMemberId is dropped before it reaches the database.
+    BUSINESS_ENABLED: flag,
+    // Business release 2, each on top of BUSINESS_ENABLED and off by default. Off: the API ignores
+    // a share or team-tip field and every posting is today's. The owner turns each on only after
+    // its PR (R2-C2, R2-D) is on dev and the terms and privacy text is live.
+    BUSINESS_SHARES_ENABLED: flag,
+    TEAM_TIPS_ENABLED: flag,
     // Open streams per API process; beyond it a connect gets 503 and the page polls.
     LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
     // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.

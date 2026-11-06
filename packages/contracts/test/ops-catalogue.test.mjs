@@ -59,8 +59,15 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed eleven', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 11);
+test('the serious actions are the agreed thirteen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 13);
+  assert.ok(SERIOUS_ACTIONS.includes('business.verify'));
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['business.verify'],
+    'businesses.manage',
+  );
+  assert.ok(SERIOUS_ACTIONS.includes('tip.reverse'));
+  assert.equal(SERIOUS_ACTION_PERMISSIONS['tip.reverse'], 'payments.repair');
   assert.ok(SERIOUS_ACTIONS.includes('staff.grant_owner'));
   assert.ok(SERIOUS_ACTIONS.includes('username.take_back'));
   assert.equal(

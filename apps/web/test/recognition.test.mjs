@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readPendingTip } from '../src/lib/pending-tip.ts';
 import {
   forgetMyTips,
+  lastAtBusiness,
   readMyTips,
   recognitionMessage,
   rememberTip,
@@ -172,4 +174,65 @@ test('forgetting clears the record', () => {
   rememberTip(storage, tip('a', 'ada'));
   forgetMyTips(storage);
   assert.deepEqual(readMyTips(storage), { tips: [] });
+});
+
+// TipMe for businesses, PR B4 (M8): the last person tipped at a business, kept only when the
+// supporter ticked "Remember my tips on this phone", in this browser only.
+test('a tip made at a business remembers the business; lastAtBusiness names the latest person there', () => {
+  const storage = memoryStorage();
+  assert.equal(lastAtBusiness(storage, 'yellow-chilli'), null);
+  rememberTip(storage, { ...tip('a', 'tobi'), business: 'yellow-chilli' });
+  rememberTip(storage, tip('b', 'ada'));
+  rememberTip(storage, { ...tip('c', 'kemi'), business: 'other-place' });
+  assert.equal(lastAtBusiness(storage, 'yellow-chilli')?.handle, 'tobi');
+  rememberTip(storage, { ...tip('d', 'amaka'), business: 'yellow-chilli' });
+  assert.equal(lastAtBusiness(storage, 'yellow-chilli')?.handle, 'amaka');
+  assert.equal(lastAtBusiness(storage, 'Yellow-Chilli')?.handle, 'amaka');
+  assert.equal(lastAtBusiness(storage, 'nowhere'), null);
+  // Plain tips still read as before, and a record from before businesses still reads.
+  assert.equal(readMyTips(storage).tips.length, 4);
+  const old = memoryStorage();
+  old.setItem(KEY, JSON.stringify({ v: 1, tips: [tip('a', 'ada')] }));
+  assert.equal(readMyTips(old).tips.length, 1);
+  assert.equal(lastAtBusiness(old, 'yellow-chilli'), null);
+  // A tampered business slug makes the record foreign, as any bad field does.
+  const bad = memoryStorage();
+  bad.setItem(
+    KEY,
+    JSON.stringify({ v: 1, tips: [{ ...tip('a', 'ada'), business: 7 }] }),
+  );
+  assert.deepEqual(readMyTips(bad), { tips: [] });
+  assert.equal(lastAtBusiness(undefined, 'yellow-chilli'), null);
+});
+
+test('the pending tip carries the business it was made at, or none', () => {
+  const session = memoryStorage();
+  session.setItem(
+    'tipme.pending.t1',
+    JSON.stringify({ optIn: true, handle: 'tobi', business: 'yellow-chilli' }),
+  );
+  session.setItem(
+    'tipme.pending.t2',
+    JSON.stringify({ optIn: false, handle: 'ada' }),
+  );
+  session.setItem(
+    'tipme.pending.t3',
+    JSON.stringify({ optIn: true, handle: 'ada', business: 'Not A Slug!' }),
+  );
+  assert.deepEqual(readPendingTip(session, 't1'), {
+    optIn: true,
+    handle: 'tobi',
+    business: 'yellow-chilli',
+  });
+  assert.deepEqual(readPendingTip(session, 't2'), {
+    optIn: false,
+    handle: 'ada',
+    business: null,
+  });
+  assert.equal(readPendingTip(session, 't3').business, null);
+  assert.deepEqual(readPendingTip(session, 'none'), {
+    optIn: false,
+    handle: null,
+    business: null,
+  });
 });

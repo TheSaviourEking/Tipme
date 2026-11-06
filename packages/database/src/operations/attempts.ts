@@ -25,6 +25,7 @@ import {
   isScopedProviderReference,
   OPAQUE_PROVIDER_ID,
 } from './provider-ids.js';
+import { personOf } from './owner.js';
 
 /** `already`: same reference recorded before; `conflict`: a different reference (nothing changed). */
 export type InitiationResult =
@@ -480,6 +481,7 @@ export function getUnknownBachsAttemptForOperations(
     const { platformFeeMinor, providerFeeMinor, ...target } = row;
     return {
       ...target,
+      profileId: personOf(target.profileId),
       accountReference: row.accountReference,
       expectation: { platformFeeMinor: platformFeeMinor + providerFeeMinor },
     };

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TipMe for businesses, first sketch</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+.board{width:1840px;height:3400px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+h1{margin:0 0 6px;font:400 40px/1.08 'DM Serif Display',Georgia,serif}
+.lead{margin:0 0 26px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1260px}
+.sec{margin-top:34px}
+.sec h2{margin:0 0 4px;font:400 30px/1.1 'DM Serif Display',Georgia,serif}
+.sec .why{margin:0 0 16px;font-size:14px;line-height:1.5;color:#3b3934;max-width:1320px}
+.row{display:grid;gap:24px;align-items:start}
+.c2{grid-template-columns:1fr 1fr}.c3{grid-template-columns:1fr 1fr 1fr}.c4{grid-template-columns:repeat(4,1fr)}
+.paper{background:#fffefa;border-radius:20px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.45);padding:18px 20px}
+.paper h3{margin:0 0 6px;font:400 21px/1.15 'DM Serif Display',Georgia,serif}
+.paper p,.paper li{font-size:13.5px;line-height:1.5;color:#2c2a26}
+.paper p{margin:6px 0 0}.paper ul{margin:6px 0 0;padding-left:18px}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;vertical-align:middle}
+.ex{background:#dfeee0;color:#1d4d22}.pr{background:#f1e9ff;color:#4d16a8}.ow{background:#fde9c8;color:#6b3d00}.no{background:#f6dcdc;color:#7a1f1f}
+.src{margin-top:8px;font-size:11.5px;color:#5d5a54;line-height:1.45}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+th{text-align:left;font-size:11.5px;color:#5d5a54;font-weight:700;padding:7px 8px;border-bottom:1px solid rgba(20,18,16,.12)}
+td{padding:9px 8px;border-bottom:1px solid rgba(20,18,16,.08);vertical-align:top}
+.phone{width:330px;margin:0 auto;background:#f3f2ee;border-radius:30px;overflow:hidden;border:8px solid #141210;box-shadow:0 24px 48px -28px rgba(20,18,16,.45)}
+.ph{padding:16px;display:flex;flex-direction:column;gap:10px;min-height:560px}
+.step{text-align:center;font-size:12px;font-weight:800;color:#4d16a8;margin-bottom:8px;letter-spacing:.04em}
+.biz{display:flex;gap:10px;align-items:center}
+.logo{width:44px;height:44px;border-radius:12px;background:#141210;color:#fff;display:flex;align-items:center;justify-content:center;font:400 20px 'DM Serif Display',Georgia,serif}
+.bn{font:400 20px/1.1 'DM Serif Display',Georgia,serif}
+.loc{font-size:12px;color:#5d5a54;font-weight:700}
+.well{border-radius:12px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1);padding:10px 12px;font-size:13px;color:#5d5a54}
+.staff{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.st{background:#fffefa;border:1px solid rgba(20,18,16,.1);border-radius:14px;padding:10px 6px;text-align:center;font-size:12px;font-weight:700}
+.st i{display:block;width:42px;height:42px;border-radius:50%;margin:0 auto 6px;background:#d9cff3}
+.st.on{outline:3px solid #7a32f9}
+.amts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.amts span{height:40px;border-radius:10px;background:#eeede8;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;box-shadow:0 1px 0 rgba(20,18,16,.12),0 2px 0 rgba(20,18,16,.1)}
+.amts span.on{background:#000;color:#fff}
+.go{height:44px;border-radius:12px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.opt{font-size:12px;color:#5d5a54;font-weight:700}
+.split{display:flex;gap:6px;flex-wrap:wrap}
+.split span{padding:8px 12px;border-radius:10px;background:#eeede8;font-weight:800;font-size:13px}
+.split span.on{background:#7a32f9;color:#fff}
+.bar{height:10px;border-radius:6px;background:#eceae4;overflow:hidden}.bar i{display:block;height:100%;background:#7a32f9}
+.flow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:700}
+.flow .s{padding:9px 13px;border-radius:12px;background:#fffefa;border:1px solid rgba(20,18,16,.12)}
+.flow .a{color:#8a867e}
+.note{border-radius:14px;background:#fffefa;border:1px solid rgba(20,18,16,.1);padding:12px 14px;font-size:13px}
+.note b{font-weight:800}
+.qr{width:120px;height:120px;border-radius:12px;background:repeating-conic-gradient(#141210 0 25%,#fffefa 0 50%) 0 0/20px 20px;margin:8px auto}
+.sign{background:#141210;color:#fff;border-radius:18px;padding:18px;text-align:center}
+.sign .bn{color:#fff}
+</style>
+</helmet>
+<div class="board">
+  <h1>TipMe for businesses: a first sketch to react to</h1>
+  <p class="lead">Drawn from your words on 5–6 November 2026: a business has a code for each location; scanning it shows the staff working there; the supporter picks the person and tips them through the usual TipMe flow; a review is optional; the business can propose a share of staff tips, which the staff member has to accept; and the business sees who is tipped most and what customers say. Everything here is <span class="tag pr">Proposed</span>; nothing is built. Items marked <span class="tag ow">Owner to decide</span> need your answer. Nothing here is legal advice or implies a regulatory approval.</p>
+
+  <div class="sec">
+    <h2>1. Codes: one per location, staff codes optional</h2>
+    <p class="why">One code per location keeps printing simple: a table tent, a counter card or a sign at the till. Staff can still have their own card when the business wants it, for example a waiter’s badge.</p>
+    <div class="row c3">
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>Location code (the main one)</h3>
+        <div class="sign"><div class="bn">The Yellow Chilli</div><div style="font-size:12px;color:#cfcac0">Victoria Island</div><div class="qr"></div><div style="font-size:13px;font-weight:700">Scan to thank our team</div></div>
+        <p class="src">Opens usetipme.xyz/b/yellow-chilli/vi: that location’s staff, today. One printed code per location, never reprinted when staff change.</p>
+      </div>
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>Staff code (optional)</h3>
+        <p>A badge or card for one person: it opens straight onto their tip page at that business, skipping the list.</p>
+        <p class="src">Uses the staff member’s existing TipMe page and QR. When they leave, the business removes them and the badge stops showing the business.</p>
+      </div>
+      <div class="paper">
+        <span class="tag ow">Owner to decide</span>
+        <h3>Who can a code show?</h3>
+        <ul>
+          <li><b>Proposed:</b> staff “on today” at that location, set by the manager or by the staff member checking in.</li>
+          <li><b>Simpler first version:</b> everyone at that location, always.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>2. The supporter’s flow: scan, pick, tip</h2>
+    <p class="why">Three screens, then the usual payment. The review never blocks the tip.</p>
+    <div class="row c4">
+      <div><p class="step">1 · SCAN</p><div class="phone"><div class="ph">
+        <div class="biz"><span class="logo">Y</span><div><div class="bn">The Yellow Chilli</div><div class="loc">Victoria Island · on today</div></div></div>
+        <div class="well">Search a name</div>
+        <div class="staff">
+          <div class="st on"><i></i>Tobi</div><div class="st"><i></i>Amaka</div><div class="st"><i></i>Chidi</div>
+          <div class="st"><i></i>Kemi</div><div class="st"><i></i>Femi</div><div class="st"><i></i>Ada</div>
+        </div>
+        <p class="src" style="text-align:center">First names and photos only, as each person chooses.</p>
+      </div></div></div>
+      <div><p class="step">2 · TIP TOBI</p><div class="phone"><div class="ph">
+        <div class="biz"><span class="logo" style="background:#d9cff3;color:#000">T</span><div><div class="bn">Tobi</div><div class="loc">at The Yellow Chilli</div></div></div>
+        <div class="amts"><span>₦1,000</span><span class="on">₦2,000</span><span>₦5,000</span></div>
+        <div class="well">Your name (optional)</div>
+        <div class="go">Tip ₦2,000</div>
+        <p class="src">The usual TipMe tip form and payment page. Fee line as today.</p>
+      </div></div></div>
+      <div><p class="step">3 · OPTIONAL NOTE</p><div class="phone"><div class="ph">
+        <p class="bn" style="font-size:18px">Thanks for tipping Tobi</p>
+        <p class="opt">Want to say why? (optional)</p>
+        <div class="well" style="height:70px">He saved my night: the order was wrong and he fixed it in five minutes.</div>
+        <div class="split"><span class="on">Friendly</span><span>Fast</span><span class="on">Went the extra mile</span></div>
+        <div class="go">Send note</div>
+        <p class="opt" style="text-align:center">Skip</p>
+      </div></div></div>
+      <div class="paper">
+        <span class="tag ow">Owner to decide</span>
+        <h3>Note before or after paying?</h3>
+        <ul>
+          <li><b>After paying (drawn):</b> the tip is never slowed down; the note is asked once the money is sent.</li>
+          <li><b>Before paying:</b> one field on the tip form, as notes work today.</li>
+        </ul>
+        <p class="src">Recommendation: after paying, because tipping must stay fast. The tags (Friendly, Fast…) make a note one tap.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>3. The share agreement: business and staff agree</h2>
+    <p class="why">The business proposes a split; nothing changes until the staff member accepts. Either side can propose a change later, and it applies only to tips after both agree.</p>
+    <div class="row c3">
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>The business proposes</h3>
+        <p class="opt">Staff keeps / business takes</p>
+        <div class="split" style="margin-top:6px"><span>100/0</span><span class="on">90/10</span><span>80/20</span><span>70/30</span><span>50/50</span></div>
+        <p>To: Tobi · From: 1 December</p>
+        <div class="go" style="margin-top:10px">Send to Tobi</div>
+      </div>
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>The staff member decides</h3>
+        <div class="note">The Yellow Chilli asks to keep <b>10%</b> of the tips you get there, from 1 December. You keep <b>90%</b>.</div>
+        <div class="split" style="margin-top:10px"><span class="on">Accept</span><span>Decline</span><span>Suggest another split</span></div>
+        <p class="src">Declining keeps today’s split. Tips through the staff member’s own page, outside the business, are never shared.</p>
+      </div>
+      <div class="paper">
+        <span class="tag ow">Owner to decide</span>
+        <h3>Must the supporter be told?</h3>
+        <p>Drawn proposal: the tip page says “Tobi keeps 90% of your tip; 10% goes to The Yellow Chilli.”</p>
+        <p class="src">Being open about where the money goes is what supporters would expect, and it may be required. A share of staff tips is the part most likely to have legal and payment-partner rules: ask our payment partner before building it. Not legal advice.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>4. What the business sees</h2>
+    <div class="row c3">
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>Who’s thanked most, this month</h3>
+        <table>
+          <tr><th>Staff</th><th>Tips</th><th>Notes</th></tr>
+          <tr><td>Tobi</td><td>42</td><td>11</td></tr>
+          <tr><td>Amaka</td><td>35</td><td>9</td></tr>
+          <tr><td>Chidi</td><td>18</td><td>3</td></tr>
+        </table>
+        <p class="src">By location and by week. <span class="tag ow">Owner to decide</span> whether the business sees naira amounts per person or counts only: amounts are the staff member’s own money.</p>
+      </div>
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>What customers say</h3>
+        <div class="note"><b>Tobi</b> · Friendly, Went the extra mile<br>“He saved my night: the order was wrong and he fixed it in five minutes.”</div>
+        <div class="note" style="margin-top:8px"><b>Amaka</b> · Fast<br>“Quickest service I’ve had in Lagos.”</div>
+        <p class="src">The staff member sees their own notes too. Reported notes are hidden, as today.</p>
+      </div>
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>Insight</h3>
+        <p style="font-weight:700">Busiest hours for tips</p><div class="bar"><i style="width:80%"></i></div><p class="src">Fri 8–10 pm</p>
+        <p style="font-weight:700;margin-top:8px">Most-mentioned</p><div class="bar"><i style="width:60%"></i></div><p class="src">“Friendly” in 60% of notes</p>
+        <p class="src">Built from tips and notes only; no supporter’s name or contact details ever reach the business.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>5. How it fits TipMe today</h2>
+    <div class="row c2">
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>Staff are ordinary TipMe users</h3>
+        <ul>
+          <li>Each staff member keeps their own TipMe account, balance and withdrawals. Joining a business adds them to its location pages; leaving removes them.</li>
+          <li>The business is a new kind of account with managers, locations and staff invitations (the product document’s Phase 2, FR-08).</li>
+          <li>The business’s share, if any, goes to the business’s own balance.</li>
+        </ul>
+      </div>
+      <div class="paper">
+        <span class="tag ow">Before building</span>
+        <h3>What to settle first</h3>
+        <ul>
+          <li>Our payment partner’s view on paying a business a share of staff tips, and on business accounts.</li>
+          <li>Whether the business pays for TipMe (a plan), takes no share, or both.</li>
+          <li>The faster tipping flow you asked about applies here too: it gets its own board next.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3400}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

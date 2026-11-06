@@ -10533,3 +10533,1117 @@ p.tip-choice:focus-visible {
   outline: 2px solid var(--brand-primary);
   outline-offset: 4px;
 }
+
+/* TipMe for businesses (plan 2026-11-06-business). B0 owns the shell rules below; each lane B1 to
+   B8 writes only between its own markers, so parallel PRs never touch the same lines. */
+
+/* business:B0 start */
+.business-page__head,
+.work-page__head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.business-page__picker {
+  max-width: 24rem;
+}
+
+.work-page__places {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+/* business:B0 end */
+
+/* business:B1 start */
+/* PR B1: create a business, its details, locations and managers; the create card on
+   /for-businesses. Mobile-first: one column, keys wrap. */
+.business-card__create {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.business-card__create p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.business-card__create .business-card__big {
+  color: var(--text-primary);
+  font: 400 2.25rem / 1.05 var(--font-editorial);
+}
+
+.business-apply,
+.business-apply__form,
+.business-details,
+.business-details__form,
+.business-locations,
+.business-location__form,
+.business-managers {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 36rem;
+}
+
+.business-apply__group {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.business-apply__group legend {
+  padding: 0 var(--space-2) 0 0;
+  font-size: var(--text-base);
+}
+
+.business-apply__send,
+.business-details__send {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.business-standing {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.business-standing span {
+  color: var(--text-secondary);
+}
+
+.business-locations__list,
+.business-managers__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-location,
+.business-manager {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+}
+
+.business-location__text,
+.business-manager__text {
+  display: grid;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.business-location__keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-location__confirm,
+.business-manager__confirm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.business-location__confirm p,
+.business-manager__confirm p {
+  margin: 0;
+}
+
+.add-business-link {
+  margin: 0;
+}
+
+.business-details__locked {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.business-details__locked p {
+  margin: 0;
+}
+
+@media (min-width: 40rem) {
+  .business-manager {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
+/* business:B1 end */
+
+/* business:B2 start */
+/* Admin Businesses: the status badge. The words carry the meaning; the ink only echoes it. */
+.ops-business-status--verified {
+  background: var(--brand-primary);
+  color: var(--surface-base);
+}
+
+.ops-business-status--suspended {
+  background: var(--surface-base);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+/* business:B2 end */
+
+/* business:B3 start */
+.business-people,
+.work-invitations,
+.work-where,
+.work-where__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.business-people h3,
+.work-invitations h3 {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-base);
+}
+
+.business-people__list,
+.business-people__found,
+.work-invitations__list,
+.work-invitations__blocked ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-people__list > li,
+.work-invitations__blocked li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--edge-hairline);
+}
+
+.business-people__who {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.business-people__actions,
+.work-invitation__actions,
+.work-where__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.business-people__invite,
+.business-people__search {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+}
+
+.business-people__choice {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.business-people__choice legend {
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+
+.business-people__card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.business-people__card > span:last-child {
+  display: grid;
+}
+
+/* Chosen is said in words by aria-pressed, and shown by more than colour: a thicker edge. */
+.business-people__card[aria-pressed='true'] {
+  border: 2px solid var(--brand-primary);
+}
+
+.business-people__photo {
+  display: inline-grid;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-recessed);
+}
+
+.business-people__link {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+  padding: var(--space-4);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-recessed);
+}
+
+.business-people__link-title,
+.work-invitation__line {
+  margin: 0;
+  font-weight: 600;
+}
+
+.work-invitation {
+  display: grid;
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--edge-hairline);
+}
+
+.work-invitation p,
+.work-where__confirm p {
+  margin: 0;
+}
+
+.work-where__confirm {
+  display: grid;
+  gap: var(--space-3);
+}
+/* business:B3 end */
+
+/* business:B4 start */
+/* The supporter's flow (board section 2): drawn for a phone at 360px, one column at every width.
+   As on a person's page, the site's own navigation and footer links step aside. */
+body:has(.business-public) .site-nav,
+body:has(.business-public) .menu-toggle,
+body:has(.business-public) > .site-footer {
+  display: none;
+}
+
+.business-public {
+  min-height: 100%;
+  background: var(--canvas);
+  padding-bottom: var(--space-8);
+}
+
+.business-public__sheet {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 36rem;
+  margin-inline: auto;
+  padding: var(--space-4) var(--space-4) 0;
+  box-sizing: border-box;
+}
+
+/* Who, where and that TipMe checked them: it stays on screen while the list scrolls. */
+.business-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  gap: var(--space-2);
+  margin-inline: calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--edge-hairline);
+  background: var(--canvas);
+}
+
+.business-staff .business-header {
+  position: static;
+}
+
+.business-header__who {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.business-header__logo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-control);
+  background: var(--key-face-dark);
+  color: var(--surface-base);
+  font: 400 1.25rem/1 var(--font-editorial);
+}
+
+.business-header__names {
+  min-width: 0;
+}
+
+.business-header__name {
+  margin: 0;
+  font: 400 1.375rem/1.1 var(--font-editorial);
+  overflow-wrap: anywhere;
+}
+
+.business-header__where {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.business-header__verified {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: baseline;
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.business-header__badge {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  color: var(--state-success);
+  font-weight: 800;
+}
+
+.business-header__checked {
+  color: var(--text-secondary);
+}
+
+.business-public__ask {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.staff-picker {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.staff-section__title {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.staff-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.staff-card {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-1);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 1px 0 rgb(20 18 16 / 8%);
+}
+
+.staff-card:hover {
+  border-color: var(--border-control);
+}
+
+.staff-card:focus-visible,
+.staff-again:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.staff-card__picture {
+  display: inline-flex;
+}
+
+.staff-card__face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--brand-mid);
+  color: var(--text-primary);
+  font: 400 1.375rem/1 var(--font-editorial);
+}
+
+.staff-card__name {
+  max-width: 100%;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.staff-card__where {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+/* "Tip {name} again": the remembered person, first. */
+.staff-again {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--brand-primary);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.staff-again__words {
+  display: grid;
+}
+
+.staff-again__title {
+  font: 400 1.25rem/1.15 var(--font-editorial);
+}
+
+.staff-again__hint,
+.staff-picker__none {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.staff-picker__more {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.staff-picker__more > section {
+  width: 100%;
+}
+
+.staff-picker__look {
+  min-height: 44px;
+}
+
+.business-staff__title {
+  margin: 0;
+  font: 400 clamp(1.75rem, 6vw, 2.25rem) / 1.1 var(--font-editorial);
+}
+
+.business-staff__title span {
+  display: block;
+  color: var(--text-secondary);
+  font-family: var(--font-interface);
+  letter-spacing: normal;
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+/* The person's own tip panel, under the header instead of beside a cover. */
+.business-staff .business-staff__composer {
+  position: static;
+  margin-top: 0;
+}
+
+.business-public__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding-top: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.business-public__foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text-secondary);
+  text-underline-offset: 3px;
+}
+
+@media (forced-colors: active) {
+  .staff-again {
+    border-color: Highlight;
+  }
+}
+/* business:B4 end */
+
+/* business:B5 start */
+/* The note after paying (board screen 3): a paper slip under the thanks, on the purple canvas.
+   Dark text on paper, so every line is at least 4.5:1; the canvas's white hint rule is undone. */
+.business-note {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: 1.625rem;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.business-note h2 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.business-note form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.business-note__ask {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.tip-thanks .business-note .tm-hint {
+  color: var(--text-secondary);
+}
+
+.business-note__tags {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.business-note__tags legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-weight: 600;
+}
+
+.business-note__tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A one-tap toggle: pressed is a purple edge and a tick, so colour never stands alone. */
+.business-note__tag {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.business-note__tag[aria-pressed='true'] {
+  border-color: var(--brand-primary);
+  box-shadow: inset 0 0 0 1px var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.business-note__tag[aria-pressed='true']::before {
+  /* Decoration: aria-pressed already says it to a screen reader. */
+  content: '✓\00a0' / '';
+}
+
+.business-note__tag:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.business-note__actions,
+.work-note__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-note__actions .tm-button {
+  flex: 1 1 8rem;
+}
+
+/* The Work page's notes about you. */
+.work-notes__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-note {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-material);
+}
+
+.work-note__date {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.work-note__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-note__tags li {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.work-note__body {
+  margin: 0;
+  font-family: var(--font-editorial);
+  font-size: 1.0625rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.work-note__removed {
+  margin: 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.work-note__report fieldset {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.work-note__report legend {
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+/* business:B5 end */
+
+/* business:B6 start */
+.work-shift {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.work-shift__state {
+  margin: 0;
+  font-weight: 600;
+}
+
+.on-today {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.on-today__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: 44px;
+}
+
+.on-today__row .tm-state-line {
+  grid-column: 1 / -1;
+}
+
+.on-today__who {
+  display: grid;
+}
+
+.on-today__who small {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.on-today__switch {
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+}
+/* business:B6 end */
+
+/* business:B7 start */
+.insights {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.insights__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.insights__location {
+  min-width: 12rem;
+}
+
+.insights__week {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.insights__week-name {
+  margin: 0;
+  min-width: 10rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.insights__total {
+  margin: 0;
+}
+
+.insights__table-wrap {
+  overflow-x: auto;
+}
+
+.insights__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.insights__table caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: var(--space-2);
+}
+
+.insights__table th,
+.insights__table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.insights__table thead th {
+  font-size: 0.875rem;
+}
+
+.insights__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insights__tiles li {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-field);
+}
+
+.insights__tiles strong {
+  font-size: 1.125rem;
+}
+
+.insights__privacy {
+  margin: 0;
+}
+
+.insights__error {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.business-notes {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.business-notes__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-note {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.business-note__who,
+.business-note__date {
+  margin: 0;
+}
+
+.business-note__body {
+  margin: 0;
+  font-style: italic;
+}
+
+.business-note__report {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.business-note__report fieldset {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.business-note__report legend {
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.work-share {
+  display: grid;
+  gap: var(--space-2);
+}
+/* business:B7 end */
+
+/* business:B8 start */
+.business-codes {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.business-codes h3 {
+  margin: var(--space-2) 0 0;
+}
+
+.business-codes__signs,
+.business-codes__staff {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-codes__signs {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+}
+
+.business-codes__sign {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.business-codes__preview {
+  width: 100%;
+  max-width: 15rem;
+  height: auto;
+  border-radius: var(--radius-field);
+}
+
+.business-codes__badge {
+  width: 100%;
+  max-width: 22rem;
+  height: auto;
+  border-radius: var(--radius-field);
+}
+
+.business-codes__name {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.business-codes__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-codes__staff li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.business-print__sheets {
+  display: grid;
+  gap: var(--space-5);
+  width: 100%;
+}
+
+.business-print__sheet {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  max-width: 24rem;
+}
+
+.business-print__canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media print {
+  /* One code per page, at its real size: an A5 sign, an A6 table tent, an 85 × 55 mm badge. */
+  @page business-sign {
+    size: A5;
+    margin: 0;
+  }
+
+  @page business-tent {
+    size: A6;
+    margin: 0;
+  }
+
+  @page business-badge {
+    size: 85mm 55mm;
+    margin: 0;
+  }
+
+  .business-print,
+  .business-print__sheets {
+    display: block;
+  }
+
+  .business-print__sheet {
+    max-width: none;
+    break-after: page;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .business-print__sheet:last-child {
+    break-after: auto;
+  }
+
+  .business-print__sheet--sign {
+    page: business-sign;
+  }
+
+  .business-print__sheet--tent {
+    page: business-tent;
+  }
+
+  .business-print__sheet--badge {
+    page: business-badge;
+  }
+
+  .business-print__canvas {
+    width: 100%;
+    max-height: 100vh;
+    object-fit: contain;
+  }
+}
+/* business:B8 end */
+
+/* business:R2-C1 start */
+.business-shares,
+.work-share,
+.work-share__proposal,
+.work-share__report,
+.business-shares__propose {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.business-shares__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-share {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.business-share__name {
+  margin: 0;
+  font-weight: 600;
+}
+
+.business-shares__options,
+.work-share__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-shares__propose select {
+  max-width: 24rem;
+}
+
+.business-share__actions,
+.work-share__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* business:R2-C1 end */
