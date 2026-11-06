@@ -45,6 +45,7 @@ export * from './operations/changelog-admin.js';
 export * from './operations/balance.js';
 export * from './operations/reversals.js';
 export * from './operations/dashboard.js';
+export * from './operations/whats-new.js';
 export * from './operations/rewards.js';
 export * from './operations/notifications.js';
 export * from './operations/email.js';
