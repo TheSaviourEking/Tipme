@@ -333,3 +333,14 @@ the appreciation moment) is unchanged.
 - **Codes in cells stay one copyable string**, so copy, paste and code autofill still get the whole code.
 - **Nothing private in a subject or preview line.** No code, link, address, name, bank or device in a subject or the hidden preheader; the tip amount in the tip email's subject is the one existing exception.
 - **Plan:** `docs/superpowers/plans/2026-11-05-emails-and-admin.md` (PR M1 is the frame and blocks with today's words; PR M2 is the boards' compositions).
+
+## 2026-11-06 — Share cards
+
+- **Owner-approved board, 5 Nov 2026** (Share cards). A product and visual decision, not a regulatory approval; no D-item is affected.
+- **The general card** keeps its words ("A little thanks / goes a long way." and "For the people who make a difference.") in the new materials: the paper ground (`--canvas`), the headline in DM Serif Display, and the purple key with the white heart. It is still prerendered and the same for everyone.
+- **A card per person** for `/@handle` links, at `/people/<handle>/share-card`. It draws only what the public page shows: the display name, the public role, the handle and the cover's colour. Never the photo, phone, email, bio, links, tips, totals, balance or anything a supporter wrote.
+- **No photo (owner default, Q7).** The face is the person's initials on the cover's deeper tone.
+- **Colour (owner default, Q8).** A design with a colour uses that colour's base for the band and its tone for the face. A photo cover, a design without a colour, an animation without a colour, or no cover uses TipMe purple.
+- **Missing, paused and moved pages get the general card**, with status 200, so the card says nothing the page does not. Their metadata keeps advertising the general card.
+- **Fonts.** The cards are lettered in static TrueType copies of the two fonts already in the repo, because `next/og` cannot read WOFF2. DM Serif Display has no Ọ or Ẹ; those letters fall back to Manrope on the card, as they fall back on the page.
+- **The board file was not available to copy**; these rulings follow the plan's written design (`.superpowers/program/plans/2026-11-05-public-boards.md`, PR 2).
