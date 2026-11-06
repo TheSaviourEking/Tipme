@@ -197,3 +197,34 @@ test('an unreported note cannot be revealed (404); staff without the permission 
   );
   assert.deepEqual(rows, [{ outcome: null }]);
 });
+
+test("the note's issue never offers the supporter's private message or name", async () => {
+  const tipId = await reportedNote('Kind words.');
+  await database.pool.query(
+    `INSERT INTO tip_messages (tip_id, body) VALUES ($1, 'private words for Ada') ON CONFLICT DO NOTHING`,
+    [tipId],
+  );
+  await database.pool.query(
+    `UPDATE tips SET payer_display_label = 'Kemi' WHERE id = $1`,
+    [tipId],
+  );
+  const { rows } = await database.pool.query(
+    `SELECT id FROM issues WHERE kind = 'business_note_reported' AND subject->>'tipId' = $1`,
+    [tipId],
+  );
+  const evidence = await (
+    await fetch(`${stack.api}/v1/ops/issues/${rows[0].id}`, {
+      headers: { cookie: owner.cookie },
+    })
+  ).json();
+  assert.equal(evidence.data.private.message, false);
+  assert.equal(evidence.data.private.supporterLabel, false);
+  // The summary never carries the note's words either.
+  assert.doesNotMatch(JSON.stringify(evidence), /Kind words/);
+  const revealed = await (
+    await call('POST', `/v1/ops/issues/${rows[0].id}/reveal`, owner.cookie, {
+      reason: REASON,
+    })
+  ).json();
+  assert.doesNotMatch(JSON.stringify(revealed), /private words|Kemi/);
+});

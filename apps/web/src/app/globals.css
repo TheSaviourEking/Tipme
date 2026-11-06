@@ -9729,6 +9729,164 @@ body > .coming-soon-page {
 /* business:B4 end */
 
 /* business:B5 start */
+/* The note after paying (board screen 3): a paper slip under the thanks, on the purple canvas.
+   Dark text on paper, so every line is at least 4.5:1; the canvas's white hint rule is undone. */
+.business-note {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: 1.625rem;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.business-note h2 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.business-note form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.business-note__ask {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.tip-thanks .business-note .tm-hint {
+  color: var(--text-secondary);
+}
+
+.business-note__tags {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.business-note__tags legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-weight: 600;
+}
+
+.business-note__tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A one-tap toggle: pressed is a purple edge and a tick, so colour never stands alone. */
+.business-note__tag {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.business-note__tag[aria-pressed='true'] {
+  border-color: var(--brand-primary);
+  box-shadow: inset 0 0 0 1px var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.business-note__tag[aria-pressed='true']::before {
+  /* Decoration: aria-pressed already says it to a screen reader. */
+  content: '✓\00a0' / '';
+}
+
+.business-note__tag:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.business-note__actions,
+.work-note__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-note__actions .tm-button {
+  flex: 1 1 8rem;
+}
+
+/* The Work page's notes about you. */
+.work-notes__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-note {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-material);
+}
+
+.work-note__date {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.work-note__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-note__tags li {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.work-note__body {
+  margin: 0;
+  font-family: var(--font-editorial);
+  font-size: 1.0625rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.work-note__removed {
+  margin: 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.work-note__report fieldset {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.work-note__report legend {
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
 /* business:B5 end */
 
 /* business:B6 start */

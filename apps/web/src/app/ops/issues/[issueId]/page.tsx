@@ -21,6 +21,7 @@ import {
   outcomeOf,
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
+import { BusinessNoteReview } from '@/components/ops/business-note-review';
 import { PayoutIssueTools } from '@/components/ops/payout-issue-tools';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { ResolveMoneyIssue } from '@/components/ops/resolve-money-issue';
@@ -437,7 +438,9 @@ export default function IssuePage() {
             )}
           {open &&
             can(access, 'issues.resolve') &&
-            issue.severity !== 'money' && (
+            issue.severity !== 'money' &&
+            // A reported note is decided below (restore or remove), which also resolves this.
+            issue.kind !== 'business_note_reported' && (
               <ReasonAction
                 open="Resolve…"
                 variant="primary"
@@ -546,6 +549,17 @@ export default function IssuePage() {
           </Notice>
         )}
       </Section>
+
+      {issue.kind === 'business_note_reported' && issue.subject.tipId && (
+        <Section title="The reported note">
+          <BusinessNoteReview
+            tipId={issue.subject.tipId}
+            canReveal={can(access, 'private.view')}
+            canDecide={can(access, 'issues.resolve')}
+            onDecided={load}
+          />
+        </Section>
+      )}
 
       {open &&
         ['payout_unresolved', 'payout_conflict', 'payout_held'].includes(

@@ -1,3 +1,9 @@
+# Current task — TipMe for businesses, PR B5: the note after paying (6 November 2026)
+
+- Branch/worktree: `feat/business-b5` / `.worktrees/business-b5`, off `origin/feat/business-b0` `3888c8e6` (B0 not merged yet; rebase onto dev once it is), test lane 7. Not pushed. Plan Tasks 16–18.
+- Done: `POST /v1/tips/:tipId/business-note` (status token, no cookie, `business_note` rate limit), `businessNote` on the paid receipt, the note block on the receipt (tags, a few words, Skip), member and manager reports (hidden from the business at once, one issue), the ops reveal and restore/remove, the Work page's "Notes about you", `noteShownToBusiness` / `notesVisibleToBusiness` for B7. No migration; contracts gain `noteReviewSchema`, `WorkNoteView`, `OpsBusinessNote`.
+- Next: coordinator review, push as a draft PR, full e2e on CI. The Work page notes need B3's `GET /v1/me/work` to show outside tests.
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.

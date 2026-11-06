@@ -14,6 +14,7 @@ import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
 import { ThanksSlip } from '@/components/thanks-slip';
+import { BusinessNote } from './business-note';
 import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
 import { nextCheckDelay } from '@/lib/status-polling';
@@ -312,6 +313,16 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
       </div>
       {/* Outside the live region, so the announcement stays short. Older APIs send no line. */}
       {paid && tip.thanks && <ThanksSlip slip={tip.thanks} />}
+      {/* PR B5: a paid tip made at a business may take a kind note. Outside the live region, after
+          the thanks; the receipt below never waits on it. */}
+      {paid && token && tip.businessNote?.open && !tip.businessNote.written && (
+        <BusinessNote
+          tipId={tipId}
+          token={token}
+          person={tip.businessNote.person}
+          business={tip.businessNote.business}
+        />
+      )}
       {paid ? (
         <Surface
           material="paper"
