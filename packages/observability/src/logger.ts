@@ -12,6 +12,8 @@ const sensitiveKeys = [
   'cardNumber',
   'pan',
   'cvv',
+  // A supporter's recognition key (repeat supporters): never logged, even by mistake.
+  'supporterKey',
 ];
 const redactPaths = [
   ...sensitiveKeys,
