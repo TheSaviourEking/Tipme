@@ -12,16 +12,20 @@ export function QuietScreen({
   children,
   action,
   foot,
+  lead,
 }: {
   title: string;
   children: ReactNode;
   /** The one black continuation action. */
   action: ReactNode;
   foot?: ReactNode;
+  /** Above the card, inside the page's main region (a manager's note on a business page). */
+  lead?: ReactNode;
 }) {
   return (
     <main id="main" tabIndex={-1} className="quiet-page">
       <Container>
+        {lead}
         <Surface material="instrument" className="quiet-card">
           <Wordmark className="quiet-card__wordmark" />
           <h1>{title}</h1>

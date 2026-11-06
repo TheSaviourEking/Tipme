@@ -1,13 +1,14 @@
 import type {
   BusinessPersonMatch,
   PagePlan,
+  PublicBusiness,
   PublicLocation,
   PublicStaffTipPage,
   StaffCard,
   StaffPageRedirect,
 } from '@tipme/contracts';
 import { normaliseHandle, onShift } from '@tipme/domain';
-import { and, eq, ilike, isNull, type SQL } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNull, type SQL } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   businesses,
@@ -222,6 +223,53 @@ export function publicLocation(
       business: place.business,
       location: { slug: place.location.slug, name: place.location.name },
       people: [...on, ...off].map(({ card }) => card),
+    };
+  });
+}
+
+/**
+ * The business page (BusinessProfile board, Variant A): null unless the business is verified (not
+ * suspended) and has at least one open location. Open locations only, in the order they were
+ * added, with the address the business gave; no people, so no roster can be read from it.
+ */
+export function publicBusiness(
+  db: Database,
+  businessSlug: string,
+): Promise<PublicBusiness | null> {
+  const business = slugOf(businessSlug, 40);
+  if (!business) return Promise.resolve(null);
+  return guarded(async () => {
+    const rows = await db
+      .select({
+        businessSlug: businesses.slug,
+        businessName: businesses.name,
+        slug: businessLocations.slug,
+        name: businessLocations.name,
+        address: businessLocations.address,
+      })
+      .from(businessLocations)
+      .innerJoin(businesses, eq(businesses.id, businessLocations.businessId))
+      .where(
+        and(
+          eq(businesses.slug, business),
+          eq(businesses.status, 'verified'),
+          isNull(businessLocations.closedAt),
+        ),
+      )
+      .orderBy(asc(businessLocations.createdAt), asc(businessLocations.slug));
+    const [first] = rows;
+    if (!first) return null;
+    return {
+      business: {
+        slug: first.businessSlug,
+        name: first.businessName,
+        verified: true,
+      },
+      locations: rows.map(({ slug, name, address }) => ({
+        slug,
+        name,
+        address,
+      })),
     };
   });
 }

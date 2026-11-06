@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ActionLink } from '@tipme/ui';
 import { QuietScreen } from '@/components/quiet-screen';
 
@@ -5,9 +6,10 @@ import { QuietScreen } from '@/components/quiet-screen';
  * A business location or staff page that can't take tips (M11): unknown, waiting to be verified,
  * paused, closed, or the feature switched off. One screen for every case, so nothing is revealed.
  */
-export function BusinessUnavailable() {
+export function BusinessUnavailable({ lead }: { lead?: ReactNode } = {}) {
   return (
     <QuietScreen
+      lead={lead}
       title="This business isn’t taking tips on TipMe right now."
       action={
         <ActionLink variant="continue" href="/">

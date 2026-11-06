@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { previewServerKey } from '@tipme/domain';
+import { createSinglePlaceRedirect } from '@/lib/business/single-place';
 import { shortLinkTarget } from '@/lib/handle-redirect';
 import { gateDecision, PREVIEW_COOKIE } from '@/lib/preview-gate';
 import {
@@ -10,9 +12,44 @@ import {
 /**
  * Short links (/kemi → /@kemi; the example people are reserved, so they have none) are a real 308 before anything else. Then, on staging/preview only:
  * when PREVIEW_PASSWORD is set, every page needs the preview ticket. Without it the visitor is
- * sent to the password page (and back afterwards).
+ * sent to the password page (and back afterwards). A business page with one open place is a 307
+ * to that place, once the gate has let the visitor through.
  */
-export function proxy(request: NextRequest) {
+const API_ORIGIN =
+  process.env.API_INTERNAL_ORIGIN ??
+  process.env.NEXT_PUBLIC_API_ORIGIN ??
+  'http://localhost:4000';
+
+/** `/b/<business>` with one open place: a real 307 to it (BusinessProfile board). */
+const singlePlace = createSinglePlaceRedirect(async (slug) => {
+  const password = process.env.PREVIEW_PASSWORD;
+  const response = await fetch(
+    `${API_ORIGIN}/v1/b/${encodeURIComponent(slug)}`,
+    {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(2000),
+      ...(password
+        ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
+        : {}),
+    },
+  );
+  return {
+    status: response.status,
+    body: response.status === 200 ? await response.json() : null,
+  };
+});
+
+async function businessRedirect(
+  request: NextRequest,
+): Promise<NextResponse | null> {
+  const place = await singlePlace(
+    request.nextUrl.pathname,
+    request.nextUrl.searchParams,
+  );
+  return place ? NextResponse.redirect(new URL(place, request.url), 307) : null;
+}
+
+export async function proxy(request: NextRequest) {
   const launch = launchDecision({
     path: request.nextUrl.pathname,
     target: parseProductionLaunchAt(process.env.PRODUCTION_LAUNCH_AT),
@@ -42,7 +79,8 @@ export function proxy(request: NextRequest) {
   );
   if (short) return NextResponse.redirect(new URL(short, request.url), 308);
   const password = process.env.PREVIEW_PASSWORD;
-  if (!password) return NextResponse.next();
+  if (!password)
+    return (await businessRedirect(request)) ?? NextResponse.next();
   const { pathname, search } = request.nextUrl;
   const decision = gateDecision({
     path: pathname,
@@ -50,7 +88,7 @@ export function proxy(request: NextRequest) {
     password,
   });
   if (decision !== 'login') {
-    const response = NextResponse.next();
+    const response = (await businessRedirect(request)) ?? NextResponse.next();
     response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
     return response;
   }
