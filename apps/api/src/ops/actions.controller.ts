@@ -3,6 +3,7 @@ import {
   Controller,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Res,
@@ -67,6 +68,7 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { LOGGER } from '../tokens.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { FreshCode } from './fresh-code.guard.js';
@@ -97,6 +99,9 @@ export class OpsActionsController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
     @Inject(RateLimitGuard) private readonly rateLimit: RateLimitGuard,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Post('issues/:id/resolve')
@@ -640,6 +645,11 @@ export class OpsActionsController {
       reason,
     });
     this.revalidator.revalidate(handle);
+    // The owner's open dashboard shows (or drops) the paused-page notice.
+    void this.publishLive({
+      to: { profile: profileId },
+      type: 'profile.changed',
+    });
     return { data: { handle } };
   }
 

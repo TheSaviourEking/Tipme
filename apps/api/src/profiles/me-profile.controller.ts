@@ -85,6 +85,17 @@ export class MeProfileController {
     private readonly photos: PhotoStore | null = null,
   ) {}
 
+  /**
+   * After the write resolved: this person's other open tabs and devices re-read their profile.
+   * Never awaited and never thrown (the publisher resolves always).
+   */
+  private profileChanged(auth: AuthContext): void {
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'profile.changed',
+    });
+  }
+
   /** The editor needs to know whether OnlyFans and Fansly links can be added on this copy. */
   private mine(profile: MyProfile): MyProfile {
     return { ...profile, adultLinks: this.config.ADULT_PLATFORM_LINKS };
@@ -134,6 +145,7 @@ export class MeProfileController {
   ): Promise<ApiDataResponse<MyProfile>> {
     const updated = await updateMyProfile(this.database.db, auth.userId, body);
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: this.mine(updated) };
   }
 
@@ -150,6 +162,7 @@ export class MeProfileController {
       adultLinks: this.config.ADULT_PLATFORM_LINKS,
     });
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: this.mine(updated) };
   }
 
@@ -168,6 +181,7 @@ export class MeProfileController {
     if (previous !== handle) {
       this.revalidator.revalidateGone(previous);
       this.revalidator.revalidate(handle);
+      this.profileChanged(auth);
     }
     return {
       data: this.mine(await getMyProfile(this.database.db, auth.userId)),
@@ -204,6 +218,7 @@ export class MeProfileController {
       minTipMinor: BigInt(body.minMinor),
     });
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: this.mine(updated) };
   }
 
@@ -219,6 +234,7 @@ export class MeProfileController {
     const updated = await setThanks(this.database.db, auth.userId, body);
     // The public page does not show the line; kept so live updates' profile.changed has one place.
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: updated };
   }
 
@@ -235,9 +251,17 @@ export class MeProfileController {
     @Body(new ZodValidationPipe(notificationPrefsSchema))
     body: NotificationPrefs,
   ): Promise<ApiDataResponse<NotificationPrefsView>> {
-    return {
-      data: await setNotificationPrefs(this.database.db, auth.userId, body),
-    };
+    const saved = await setNotificationPrefs(
+      this.database.db,
+      auth.userId,
+      body,
+    );
+    // The person's other tabs and devices: the bell's pop-up switches and Settings re-read.
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'account.changed',
+    });
+    return { data: saved };
   }
 
   @Put('page/state')
@@ -252,6 +276,7 @@ export class MeProfileController {
       body.state,
     );
     this.revalidator.revalidate(handle);
+    this.profileChanged(auth);
     // Once per page, ever: the first time it goes live (PRD v1.1 §11).
     if (firstPublished)
       await this.events.record(

@@ -179,6 +179,11 @@ export class NotificationsController {
       throw new CodedHttpException(400, 'CODE_INVALID');
     // The change ended every other session: their open streams close too.
     void this.publishLive(sessionsChanged(auth.userId));
+    // This person's other tabs on this device re-read the email (Settings, the bell's notices).
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'account.changed',
+    });
     if (result.handle) this.revalidator.revalidate(result.handle);
     return { data: { email: result.email } };
   }
@@ -259,6 +264,15 @@ export class NotificationsController {
     });
     // The change ended every other session: their open streams close too.
     void this.publishLive(sessionsChanged(auth.userId));
+    // The number is on the profile and in Settings: the person's other tabs re-read both.
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'account.changed',
+    });
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'profile.changed',
+    });
     const profile = await getMyProfile(this.database.db, auth.userId);
     // A public phone number must change on the page at once.
     this.revalidator.revalidate(profile.handle);
@@ -281,13 +295,15 @@ export class NotificationsController {
   async cancelRecovery(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<{ cancelled: number }>> {
-    return {
-      data: {
-        cancelled:
-          (await cancelRecoveries(this.database.db, auth.userId)) +
-          (await cancelEmailRecoveries(this.database.db, auth.userId)),
-      },
-    };
+    const cancelled =
+      (await cancelRecoveries(this.database.db, auth.userId)) +
+      (await cancelEmailRecoveries(this.database.db, auth.userId));
+    if (cancelled > 0)
+      void this.publishLive({
+        to: { user: auth.userId },
+        type: 'account.changed',
+      });
+    return { data: { cancelled } };
   }
 
   /** Always 202: never reveals which addresses have accounts. */

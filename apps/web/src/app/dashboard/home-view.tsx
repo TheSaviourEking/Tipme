@@ -5,7 +5,6 @@ import type {
   ActivityRow,
   DashboardSummary,
   WeeklyReportData,
-  WithdrawalQuoteResponse,
 } from '@tipme/contracts';
 import { Button, Notice, Skeleton } from '@tipme/ui';
 import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';
@@ -15,6 +14,9 @@ import { Moments } from '@/components/dashboard/moments';
 import { PageCard } from '@/components/dashboard/page-card';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
+import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
+import { useWithdrawalInFlight } from '@/components/live/live-provider';
+import { withdrawalInFlight } from '@/lib/quote-merge';
 import { useArrivals, useBalanceRose } from '@/components/live/use-live-merge';
 import { updatedLabel } from '@/lib/live-merge';
 import { change, naira } from '@/lib/money';
@@ -58,15 +60,16 @@ export default function DashboardHome() {
   const balance = usePanel<DashboardSummary>('/v1/me/dashboard', {
     live: ['tips.changed', 'withdrawals.changed'],
   });
-  // The quote asks the payment partner: re-read on a withdrawal change only, never on every
-  // resync or tab focus (the same rule as the Withdraw page's panels).
-  const quote = usePanel<WithdrawalQuoteResponse>('/v1/me/withdrawal-quote', {
-    live: ['withdrawals.changed'],
-    resync: false,
-  });
+  // The full quote asks the payment partner: read once per visit. A withdrawal change re-reads
+  // only TipMe's side of it, never the partner (use-withdrawal-quote.ts).
+  const quote = useWithdrawalQuote(['withdrawals.changed']);
   const recent = usePanel<ActivityRow[]>('/v1/me/activity', {
     live: ['tips.changed', 'withdrawals.changed'],
   });
+  // A withdrawal of theirs on its way: its signals are re-read at once (live-refetch.ts).
+  useWithdrawalInFlight(() =>
+    withdrawalInFlight(recent.data?.filter((row) => row.kind === 'withdrawal')),
+  );
   const week = usePanel<{ week: string; data: WeeklyReportData }[]>(
     '/v1/me/reports',
     { live: ['reports.changed'] },
@@ -130,6 +133,7 @@ export default function DashboardHome() {
           availableMinor: summary.availableMinor,
           withdrawalsAvailable: summary.withdrawalsAvailable,
           quote: quote.data,
+          needsCheck: quote.needsCheck,
         })
       : BigInt(0);
 

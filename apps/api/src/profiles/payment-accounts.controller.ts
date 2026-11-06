@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Inject,
+  Optional,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -45,6 +46,7 @@ import { BACHS_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { LOGGER } from '../tokens.js';
 import { ProfileRevalidator } from './revalidate.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { MailSealing } from '@tipme/database';
 
@@ -60,6 +62,9 @@ export class PaymentAccountsController {
     @Inject(ProfileRevalidator)
     private readonly revalidator: Pick<ProfileRevalidator, 'revalidate'>,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Get()
@@ -226,6 +231,11 @@ export class PaymentAccountsController {
     // The public page says whether tips can be taken; this may have just changed the answer.
     // Webhook and staff updates rely on the page cache's 30-second backstop.
     this.revalidator.revalidate(recipient.handle);
+    // The person's other tabs: the payout account card and the setup notices re-read.
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'payments.changed',
+    });
     if (account.status === 'ACTIVE')
       return { data: { status: 'ACTIVE', chargesEnabled: true } };
     if (account.status !== 'ONBOARDING' && account.status !== 'RESTRICTED')

@@ -267,3 +267,58 @@ test('with "Hide who tipped and how much in pop-ups" on, the toast reads "You go
     page.getByRole('status').filter({ hasText: 'Bola' }),
   ).toHaveCount(0);
 });
+
+// Live updates, PR 2 (plan Task 15): the switch saved in one tab reaches the other open tab's
+// bell through account.changed, with no reload there.
+test('turning on hide-details in one tab changes the toast wording in another open tab', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByRole('button', { name: /^Notifications,/ }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    (window as unknown as { __noReload: number }).__noReload = 1;
+  });
+  const prefsRead = page.waitForResponse(
+    (response) =>
+      response.url().includes('/v1/me/notification-preferences') &&
+      response.request().method() === 'GET',
+  );
+
+  const settings = await page.context().newPage();
+  await settings.goto('/dashboard/settings#popups');
+  await settings
+    .locator('#popups')
+    .getByLabel('Hide who tipped and how much in pop-ups')
+    .check();
+  await settings
+    .locator('#popups')
+    .getByRole('button', { name: 'Save pop-ups and sound' })
+    .click();
+  await expect(settings.locator('#popups').getByRole('status')).toHaveText(
+    'Saved.',
+  );
+  await settings.close();
+  // The other tab's bell read its switches again, from the signal.
+  await prefsRead;
+
+  await tipAsVisitor(browser, handle, { name: 'Bola' });
+  await expect(page.locator('.toast')).toHaveText('You got a new tip', {
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Bola' }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __noReload?: number }).__noReload,
+    ),
+  ).toBe(1);
+});

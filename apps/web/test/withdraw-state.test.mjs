@@ -188,3 +188,33 @@ test('withdrawableNow is zero for a balance the quote refuses', () => {
   assert.equal(now(null), BigInt(0));
   assert.equal(now(ready(), '1000000', false), BigInt(0));
 });
+
+test('after a live change TipMe could not size, the page asks the person to check, and withdraws nothing', () => {
+  const state = withdrawState({
+    withdrawalsAvailable: true,
+    quote: null,
+    needsCheck: true,
+  });
+  assert.equal(state.kind, 'needs_check');
+  assert.equal(state.canWithdraw, false);
+  assert.equal(state.showForm, true);
+  assert.equal(state.notice.title, 'Check what you can withdraw');
+  assert.equal(
+    withdrawableNow({
+      availableMinor: '900000',
+      withdrawalsAvailable: true,
+      quote: null,
+      needsCheck: true,
+    }),
+    0n,
+  );
+  // Money collected elsewhere still comes first.
+  assert.equal(
+    withdrawState({
+      withdrawalsAvailable: false,
+      quote: null,
+      needsCheck: true,
+    }).kind,
+    'collected_elsewhere',
+  );
+});

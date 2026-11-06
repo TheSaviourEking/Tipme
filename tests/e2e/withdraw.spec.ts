@@ -630,3 +630,64 @@ test('@alone staff ask the provider first, and are offered only what its answer 
     page.locator('.ops-issue__status').getByText('Resolved', { exact: true }),
   ).toBeVisible();
 });
+
+// Live updates, PR 2 (plan Task 14): a second open Withdraw tab follows the payout. Its panels never
+// re-read on a resync or the fallback poll, so only a live signal can change it.
+test('a pretend payout paid changes the status in an open tab without a reload, with no celebration', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.' });
+  await expect(async () => {
+    await page.goto('/dashboard/withdraw');
+    await expect(page.getByText('Available: ₦1,800')).toBeVisible({
+      timeout: 1000,
+    });
+  }).toPass({ timeout: 15_000 });
+  const watching = await page.context().newPage();
+  await watching.goto('/dashboard/withdraw');
+  await expect(watching.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await watching.evaluate(() => {
+    (window as unknown as { __noReload: number }).__noReload = 1;
+  });
+  const quotes: string[] = [];
+  watching.on('request', (request) => {
+    if (request.url().includes('/v1/me/withdrawal-quote'))
+      quotes.push(new URL(request.url()).search);
+  });
+
+  await page.getByLabel('Amount (NGN)').fill('1800');
+  await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
+  await expect(page.getByText('Withdrawal requested')).toBeVisible();
+
+  const history = watching.getByRole('region', { name: 'Your withdrawals' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,800' });
+  // Requested, then paid: the pretend partner pays within seconds.
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await expect(row.getByText('Paid', { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(watching.getByText('Available: ₦0')).toBeVisible();
+  // Withdrawals never celebrate: the row changes colour and label, nothing moves.
+  expect(
+    await row.evaluate(
+      (el) =>
+        el
+          .getAnimations({ subtree: true })
+          .filter((a) => a.playState === 'running').length,
+    ),
+  ).toBe(0);
+  expect(
+    await watching.evaluate(
+      () => (window as unknown as { __noReload?: number }).__noReload,
+    ),
+  ).toBe(1);
+  // A signal never asks the payment partner: every quote this tab read after the load was local.
+  expect(quotes.length).toBeGreaterThan(0);
+  expect(quotes.every((search) => search === '?scope=local')).toBe(true);
+  await expectAccessible(watching);
+});

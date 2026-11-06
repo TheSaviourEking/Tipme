@@ -61,7 +61,8 @@ interface ArtState {
  * never blanks. Everything is tagged with the design it belongs to: a picture or an error is only
  * shown for its own design.
  */
-export function useArtImage(id: string | null, size: number) {
+/** `refresh`: drawn again when it changes (the plan, so a page that turns Pro loses the watermark). */
+export function useArtImage(id: string | null, size: number, refresh?: string) {
   const [state, setState] = useState<ArtState>({
     id: null,
     url: null,
@@ -99,7 +100,7 @@ export function useArtImage(id: string | null, size: number) {
     return () => {
       live = false;
     };
-  }, [id, size]);
+  }, [id, size, refresh]);
   useEffect(
     () => () => {
       if (current.current) URL.revokeObjectURL(current.current);

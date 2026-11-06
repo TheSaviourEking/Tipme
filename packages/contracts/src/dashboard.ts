@@ -143,6 +143,17 @@ export type WithdrawalQuote =
 /** The quote, and whether the provider itself is checking a withdrawal already under way. */
 export type WithdrawalQuoteResponse = WithdrawalQuote & { inReview: boolean };
 
+/**
+ * `GET /v1/me/withdrawal-quote?scope=local`, what a live update reads: only what TipMe's own
+ * records decide, so a signal never makes a call to the payment partner. `unchecked` means
+ * nothing on TipMe's side stops a withdrawal; how much can go needs the full quote.
+ */
+export const withdrawalQuoteQuerySchema = z
+  .object({ scope: z.enum(['local']).optional() })
+  .strict();
+export type WithdrawalQuoteLocalResponse =
+  WithdrawalQuoteResponse | { state: 'unchecked'; inReview: boolean };
+
 export interface NotificationView {
   id: string;
   kind: string;

@@ -4,6 +4,13 @@
 - Done: Tasks 5 to 13 of `docs/superpowers/plans/2026-11-04-username-reservation.md`: the take-back table and fixed words, the four emails, the `username.take_back` serious action with request and cancel routes, the dashboard banner and its seen-time, the user's choice during the notice, the worker sweep (notice, reminder, deadline, the 14-day never-reached path), the free change after an assigned username, take-backs on Usernames, Pages and Search, and the runbook and decisions note. Not PR 3 (no-notice take-backs).
 - Next: review; do not deploy to production before the terms' "Your username" section is on `main`. Evidence: `.superpowers/program/b2-report.md`.
 
+# Current task — live updates PR 2: plan, withdrawals and banners (5 November 2026)
+
+- Branch/worktree: `feat/live-updates-2` / `.worktrees/live-updates-2`, from `origin/dev` at `931a545`, test lane 5. Committed, not pushed. Plan `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 13-15. No migration.
+- Built: worker mappings (payout paid/failed, freeze opened/released, the switch to all, payout start, payout setup sweep, weekly reports); API publish points (profile, withdrawals, payments, account); `GET /v1/me/withdrawal-quote?scope=local` so a live re-read never calls the payment partner; the web side (shell, Withdraw, Home, Settings dirty-form rule, QR studio, reports, bell).
+- Evidence and rulings: `.superpowers/program/c2-report.md` (main checkout).
+- Next: review, then PR 3 (Task 16, staff stream).
+
 # Current task — states and feedback, PR B public (5 November 2026)
 
 - Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.

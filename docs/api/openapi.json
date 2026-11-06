@@ -4274,6 +4274,19 @@
         "tags": [
           "Dashboard"
         ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "local"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success.",

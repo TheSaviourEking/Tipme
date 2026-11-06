@@ -9,6 +9,7 @@ import {
   markPayoutInitiated,
   recordPayoutOutcome,
   recordProviderEvent,
+  localWithdrawalQuote,
   requestWithdrawal,
   withdrawalQuote,
 } from '../../dist/index.js';
@@ -418,4 +419,33 @@ test('partner quote cache', async (t) => {
       });
     },
   );
+});
+
+// Live updates: a signal re-reads only what TipMe's records decide. The partner is never asked,
+// even when a full quote would ask it, and even when it would fail.
+test('a local quote never calls the partner', async (t) => {
+  const database = await useDatabase(t);
+  await database.fresh();
+  const { db } = database;
+  const mock = countingProvider();
+  mock.state.fail = true;
+  assert.deepEqual(
+    await localWithdrawalQuote(db, { profileId: TOBI.id, provider: mock }),
+    { state: 'unchecked' },
+  );
+  // A provider with connected accounts and no account yet: the route blocks, from TipMe's rows.
+  const bachs = countingProvider({ bachs: true });
+  bachs.state.fail = true;
+  const local = await localWithdrawalQuote(db, {
+    profileId: TOBI.id,
+    provider: bachs,
+  });
+  assert.equal(local.state, 'setup_needed');
+  assert.deepEqual(
+    local,
+    await withdrawalQuote(db, { profileId: TOBI.id, provider: bachs }),
+    "the same answer a full quote gives when TipMe's side blocks",
+  );
+  assert.equal(mock.state.calls, 0);
+  assert.equal(bachs.state.calls, 0);
 });

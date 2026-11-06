@@ -5,7 +5,8 @@ import { formatNaira } from './demo-amount.ts';
 const SETTINGS = '/dashboard/settings';
 
 export interface WithdrawState {
-  kind: WithdrawalQuoteResponse['state'] | 'collected_elsewhere';
+  kind:
+    WithdrawalQuoteResponse['state'] | 'collected_elsewhere' | 'needs_check';
   canWithdraw: boolean;
   /** Keep the form in view, disabled: the balance is fine, only the check is not. */
   showForm: boolean;
@@ -34,6 +35,8 @@ const unavailable = {
 export function withdrawState(input: {
   withdrawalsAvailable: boolean;
   quote: WithdrawalQuoteResponse | null;
+  /** A live update changed something only a full quote can size (quote-merge.ts). */
+  needsCheck?: boolean;
 }): WithdrawState {
   const { quote } = input;
   const review = quote?.inReview
@@ -55,6 +58,18 @@ export function withdrawState(input: {
       body: 'Some of your tips were paid through a payment provider TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.',
       tone: 'neutral',
     });
+  if (input.needsCheck)
+    return {
+      kind: 'needs_check',
+      canWithdraw: false,
+      showForm: true,
+      notice: {
+        title: 'Check what you can withdraw',
+        body: 'Something changed since this page loaded. Check again to see what you can withdraw now.',
+        tone: 'neutral',
+      },
+      review,
+    };
   if (!quote || quote.state === 'provider_unavailable')
     return {
       kind: 'provider_unavailable',
@@ -189,6 +204,7 @@ export function withdrawableNow(input: {
   availableMinor: string;
   withdrawalsAvailable: boolean;
   quote: WithdrawalQuoteResponse | null;
+  needsCheck?: boolean;
 }): bigint {
   const state = withdrawState(input);
   const { quote } = input;

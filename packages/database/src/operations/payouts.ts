@@ -1193,6 +1193,55 @@ export function withdrawalInReview(
   });
 }
 
+/** A quote TipMe's own records already decide: never `ready`, which needs the partner. */
+export type WithdrawalQuoteBlock = Exclude<
+  WithdrawalQuoteResult,
+  { state: 'ready' }
+>;
+
+/**
+ * Everything a quote decides from TipMe's own records, before the payment partner: the switch,
+ * holds, money collected elsewhere and the payout route. `route` when nothing blocks.
+ */
+async function quoteGate(
+  db: Database,
+  input: { profileId: string; provider: PayoutReader },
+): Promise<
+  | { block: WithdrawalQuoteBlock }
+  | { route: Awaited<ReturnType<typeof payoutRoute>> }
+> {
+  if (await withdrawalsSwitchedOff(db))
+    return { block: { state: 'paused', reason: 'switched_off' } };
+  const { hold, route, foreign } = await guarded(async () => ({
+    hold: await activeHold(db, input.profileId),
+    route: await payoutRoute(db, input),
+    foreign: await collectedElsewhere(db, {
+      profileId: input.profileId,
+      provider: input.provider.name,
+    }),
+  }));
+  if (hold) return { block: { state: 'paused', reason: hold } };
+  // A request would be refused, so the quote must not say otherwise. The states have no word for
+  // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
+  if (foreign) return { block: { state: 'provider_unavailable' } };
+  const block = routeBlock(route);
+  if (block) return { block };
+  return { route };
+}
+
+/**
+ * The part of a quote TipMe's own records decide, for a live update (a signal, never a person
+ * asking): the payment partner is never called and its cache is not read. `unchecked` means
+ * nothing here stops a withdrawal, and only a full quote can say how much.
+ */
+export async function localWithdrawalQuote(
+  db: Database,
+  input: { profileId: string; provider: PayoutReader },
+): Promise<WithdrawalQuoteBlock | { state: 'unchecked' }> {
+  const gate = await quoteGate(db, input);
+  return 'block' in gate ? gate.block : { state: 'unchecked' };
+}
+
 /** What the recipient can withdraw right now and, if nothing, why. Never moves money. */
 export async function withdrawalQuote(
   db: Database,
@@ -1204,22 +1253,9 @@ export async function withdrawalQuote(
     cache?: PartnerQuoteCache;
   },
 ): Promise<WithdrawalQuoteResult> {
-  if (await withdrawalsSwitchedOff(db))
-    return { state: 'paused', reason: 'switched_off' };
-  const { hold, route, foreign } = await guarded(async () => ({
-    hold: await activeHold(db, input.profileId),
-    route: await payoutRoute(db, input),
-    foreign: await collectedElsewhere(db, {
-      profileId: input.profileId,
-      provider: input.provider.name,
-    }),
-  }));
-  if (hold) return { state: 'paused', reason: hold };
-  // A request would be refused, so the quote must not say otherwise. The states have no word for
-  // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
-  if (foreign) return { state: 'provider_unavailable' };
-  const block = routeBlock(route);
-  if (block) return block;
+  const gate = await quoteGate(db, input);
+  if ('block' in gate) return gate.block;
+  const { route } = gate;
   const { ledgerMinor, queuedMinor } = await guarded(async () => ({
     ledgerMinor: (await balanceIn(db, input.profileId)).availableMinor,
     queuedMinor: await queuedNotStarted(db, input.profileId),

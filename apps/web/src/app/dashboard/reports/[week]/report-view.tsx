@@ -62,6 +62,8 @@ export default function WeeklyReportPage() {
   // One loader: data, error and reload(). A failed refresh keeps the week on screen.
   const { data: report, error } = usePanel<WeeklyReportData>(
     `/v1/me/reports/${encodeURIComponent(week)}`,
+    // A week opened before its report was made shows it when the weekly job makes it.
+    { live: ['reports.changed'] },
   );
   const notes = useWeekNotes(week);
 
