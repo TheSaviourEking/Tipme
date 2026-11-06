@@ -136,3 +136,27 @@ export function splitEqually(totalMinor: bigint, people: number): bigint[] {
   parts[0] = each + (totalMinor - each * n);
   return parts;
 }
+
+// ---- PR R2-C1: the share agreement's dates ----
+
+/**
+ * When a split proposed at `now` starts: the first Lagos midnight at least SHARE_NOTICE_DAYS
+ * later. Callers pass the database's clock (`SELECT now()`), the same instant the database
+ * stores as `proposed_at`, so its 14-day notice check always holds.
+ */
+export function shareStartsAt(now: Date): Date {
+  const earliestLocal =
+    now.getTime() + SHARE_NOTICE_DAYS * DAY_MS + LAGOS_OFFSET_MS;
+  const midnightLocal = Math.ceil(earliestLocal / DAY_MS) * DAY_MS;
+  return new Date(midnightLocal - LAGOS_OFFSET_MS);
+}
+
+/** The Lagos date of an instant, `YYYY-MM-DD`. */
+export function lagosDateOf(at: Date): string {
+  return new Date(at.getTime() + LAGOS_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/** The Lagos calendar month of an instant, `YYYY-MM`: at most one share change takes effect in each (M15). */
+export function lagosMonthOf(at: Date): string {
+  return lagosDateOf(at).slice(0, 7);
+}

@@ -356,6 +356,43 @@ test('take-back emails cannot be turned off', () => {
   }
 });
 
+test('a share proposal names the business, the split and the start date, never an amount or the payment provider', () => {
+  const type = MAIL_TYPES.share_proposed;
+  assert.equal(type.category, 'account');
+  assert.equal(type.sender, 'notifications');
+  assert.equal(type.preference, null);
+  const out = renderMail(
+    'share_proposed',
+    {
+      businessName: 'The Yellow Chilli',
+      businessPercent: 10,
+      startsOn: '2026-12-01',
+    },
+    ctx,
+  );
+  assert.equal(
+    out.subject,
+    'The Yellow Chilli asks to keep 10% of the tips you get there',
+  );
+  assert.match(out.text, /You keep 90%/);
+  assert.match(out.text, /from 1 December 2026/);
+  assert.match(out.text, /Nothing changes unless you accept/);
+  assert.match(out.text, /never shared/);
+  assert.match(out.text, /The business isn’t told how you answered/);
+  for (const part of [out, out.snapshot])
+    assert.doesNotMatch(
+      `${part.subject} ${part.text} ${part.html}`,
+      /₦|NGN|kobo|bachs|paystack|flutterwave|provider/i,
+    );
+  assert.throws(() =>
+    renderMail(
+      'share_proposed',
+      { businessName: 'X', businessPercent: 60, startsOn: '2026-12-01' },
+      ctx,
+    ),
+  );
+});
+
 /** Every string in a sample, at any depth, long enough to mean something. */
 function sampleStrings(value, key = '') {
   if (typeof value === 'string')
@@ -433,6 +470,8 @@ test('no sample value reaches a subject or preheader', () => {
     provider_test: ['providerLabel'],
     // The inviting business's public name (shown on its own TipMe pages), so the invitee knows who asks.
     business_invitation: ['businessName'],
+    // The business's public name (shown on its own TipMe pages), so the person knows who asks.
+    share_proposed: ['businessName'],
   };
   for (const [id, type] of Object.entries(MAIL_TYPES)) {
     const out = renderMail(id, type.sample, ctx);
@@ -670,6 +709,7 @@ const PREVIOUS_SAMPLES = {
   // TipMe for businesses (merge train 2): new types that no earlier release queued, so the only
   // data they can meet is their own sample's shape.
   business_invitation: MAIL_TYPES.business_invitation.sample,
+  share_proposed: MAIL_TYPES.share_proposed.sample,
 };
 
 const settingsCtx = {

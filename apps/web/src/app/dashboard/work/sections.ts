@@ -5,12 +5,13 @@ import { NotesCard } from './sections/notes';
 import { ShiftCard } from './sections/shift';
 import { ShareCard } from './sections/share';
 import { MyCodeSection } from './sections/my-code';
+import { ShareAgreementCard } from './sections/share-agreement';
 
 /**
  * The Work page's sections, one card each per membership (PR B0 registry). Each lane adds its own
  * lines here and nothing else: B3 'invitations', 'where-you-work' · B5 'notes' · B6 'shift'
- * · B7 'share' · B8 'my-code'. B3's invitations are not per membership, so the page draws them
- * above the workplaces (`sections/invitations.tsx`).
+ * · B7 'share' · B8 'my-code' · R2-C1 'share-agreement'. B3's invitations are not per membership,
+ * so the page draws them above the workplaces (`sections/invitations.tsx`).
  */
 export type WorkSection = {
   id: string;
@@ -27,4 +28,5 @@ export const WORK_SECTIONS: readonly WorkSection[] = [
   { id: 'share', title: 'Your tip amounts', Card: ShareCard },
   // B8
   { id: 'my-code', title: 'My code', Card: MyCodeSection },
+  { id: 'share-agreement', title: 'Share of tips', Card: ShareAgreementCard },
 ];

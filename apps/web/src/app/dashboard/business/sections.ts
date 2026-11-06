@@ -8,11 +8,12 @@ import { OnTodayCard } from './sections/on-today';
 import { NotesCard } from './sections/notes';
 import { ThisWeekCard } from './sections/this-week';
 import { CodesSection } from './sections/codes';
+import { SharesSection } from './sections/shares';
 
 /**
  * The Business page's sections (PR B0 registry). Each lane adds its own lines here and nothing
  * else: B1 'details', 'locations', 'managers' · B3 'people' · B6 (inside people, or 'on-today')
- * · B7 'this-week', 'notes' · B8 'codes'.
+ * · B7 'this-week', 'notes' · B8 'codes' · R2-C1 'shares'.
  */
 export type BusinessSection = {
   id: string;
@@ -40,4 +41,5 @@ export const BUSINESS_SECTIONS: readonly BusinessSection[] = [
   { id: 'notes', title: 'What customers say', Card: NotesCard },
   // B8
   { id: 'codes', title: 'Codes', Card: CodesSection },
+  { id: 'shares', title: 'Share of tips', Card: SharesSection },
 ];

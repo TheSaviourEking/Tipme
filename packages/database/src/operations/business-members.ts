@@ -9,6 +9,7 @@ import { sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { managerOf, ownMembership } from './business-access.js';
 import { guarded, OperationError } from './errors.js';
+import { endShareAgreements } from './share-agreements.js';
 
 // TipMe for businesses, PR B3: who is on a location's team, and how a person shows there. Leaving
 // or being removed is instant and touches nothing of the person's own: their tips, balance and
@@ -109,7 +110,7 @@ export function myWork(
   return guarded(() => memberships(db, userId, now));
 }
 
-/** Ends a membership and its open shift, in the caller's transaction. */
+/** Ends a membership, its open shift and any share, in the caller's transaction. */
 async function endMembership(
   tx: Tx,
   memberId: string,
@@ -122,6 +123,9 @@ async function endMembership(
   await tx.execute(sql`
     UPDATE business_members SET left_at = ${now}, left_by = ${leftBy}
      WHERE id = ${memberId} AND left_at IS NULL`);
+  // M16 (R2-C1): a share ends with the membership, and an open proposal closes. After the member
+  // row's update, so the lock order matches the share operations (member, then agreement).
+  await endShareAgreements(tx, memberId);
 }
 
 /**

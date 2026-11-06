@@ -11600,3 +11600,50 @@ body:has(.business-public) > .site-footer {
   }
 }
 /* business:B8 end */
+
+/* business:R2-C1 start */
+.business-shares,
+.work-share,
+.work-share__proposal,
+.work-share__report,
+.business-shares__propose {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.business-shares__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-share {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.business-share__name {
+  margin: 0;
+  font-weight: 600;
+}
+
+.business-shares__options,
+.work-share__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-shares__propose select {
+  max-width: 24rem;
+}
+
+.business-share__actions,
+.work-share__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* business:R2-C1 end */

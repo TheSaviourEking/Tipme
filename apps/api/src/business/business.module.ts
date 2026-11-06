@@ -53,7 +53,7 @@ import {
     SessionGuard,
     CsrfGuard,
     RateLimitGuard,
-    // B3: invitation emails are sealed in the outbox as they are queued.
+    // B3 and R2-C1: invitation and share-proposal emails are sealed in the outbox as they are queued.
     mailSealingProvider,
   ],
   exports: [BusinessEnabledGuard],

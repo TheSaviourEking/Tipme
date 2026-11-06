@@ -114,6 +114,12 @@
 - Done: `buildPaymentPosting` with `businessShare` and `teamSplits` (golden-identical without them); `buildReversalPosting`; the share posted as its own `business_payable` line in the payment's transaction; `reverseTip` (proportional, works on what earlier reversals left, below zero allowed, `balance_below_zero` issue); `BALANCE_BELOW_ZERO` on withdrawals; `businessBalanceIn`; `tip.reverse` serious action and `POST /v1/ops/issues/:id/reverse-tip` behind `BUSINESS_ENABLED` + `BUSINESS_SHARES_ENABLED`; `flagPaymentReversal` names the business and no longer throws on a team tip.
 - Next: coordinator review; R2-C2 writes `tip_business_shares` at intent time (using `tipme_share_agreement_at`) and fixes the release-1 readers of `recipient_net_minor`; R2-B's business withdrawals lock the business row and refuse `BALANCE_BELOW_ZERO`; an ops UI button for `tip.reverse` (API only here).
 
+# Current task — TipMe for businesses, PR R2-C1: the share agreement (6 November 2026)
+
+- Branch/worktree: `feat/business-r2-c1` / `.worktrees/business-r2-c1`, off local `feat/business-r2-0` `f13146bb` (R2-0 with its review fix; B0, B1 and B3 not merged yet), test lane 3. Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-C1" (Task 31) and the owner's answers (Q9: a share of what the person receives after TipMe's fee).
+- Done: `packages/database/src/operations/share-agreements.ts` (propose, list, withdraw, accept, decline, suggest another split, the business answering a suggestion, report the business, `endShareAgreements` for leaving); routes in `share-agreements.controller.ts` behind `BUSINESS_ENABLED` and `BUSINESS_SHARES_ENABLED`; mail `share_proposed`; the Business page's "Share of tips" section and the Work page's card; domain `shareStartsAt`, `lagosDateOf`, `lagosMonthOf`.
+- Next: review; once B3 is on the base, call `endShareAgreements(tx, memberId)` from B3's `endMembership` (one line) and drop the two mocked reads in `tests/e2e/business-shares.spec.ts`.
+
 # Current task — TipMe for businesses, PR R2-0: release 2 foundation (6 November 2026)
 
 - Branch/worktree: `feat/business-r2-0` / `.worktrees/business-r2-0`, off local `feat/business-b0` `3888c8e6` (B0 not merged yet), test lane 6. Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-0" (Tasks 26–27) and the owner's answers at the end.
