@@ -287,6 +287,9 @@ test('a pretend tip produces tips.changed and then notifications.changed on the 
   );
   await ada.waitFor(/^data: \{"type":"tips.changed"\}$/);
   await ada.waitFor(/^data: \{"type":"notifications.changed"\}$/, 10_000);
+  // The hub writes the first new type in a 250 ms window at once and the rest at its end, so
+  // moments.changed can follow notifications.changed by a window.
+  await ada.waitFor(/^data: \{"type":"moments.changed"\}$/, 5000);
   const signals = ada.frames.filter(
     (f) => f.startsWith('data: ') && !READY.test(f),
   );
