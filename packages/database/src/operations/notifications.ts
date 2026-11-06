@@ -1,5 +1,6 @@
 import type { NotificationView } from '@tipme/contracts';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { FEE_POLICY_V1 } from '@tipme/domain';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   notifications,
@@ -44,6 +45,10 @@ export function notifyTipSucceeded(
           email: users.email,
           emailVerifiedAt: users.emailVerifiedAt,
           wantsEmail: profiles.notifyTipEmails,
+          // Whether the tip has a note the recipient can read (not hidden or reported), as the
+          // dashboard counts it. Only a yes or no: the note's words never leave tip_messages.
+          hasNote: sql<boolean>`exists (select 1 from tip_messages m where m.tip_id = ${tips.id}
+            and not exists (select 1 from message_flags f where f.tip_id = ${tips.id}))`,
         })
         .from(tips)
         .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
@@ -80,6 +85,8 @@ export function notifyTipSucceeded(
             netMinor: row.net.toString(),
             supporterLabel: row.label,
             pretendPayment: input.pretendPayment ?? false,
+            hasNote: row.hasNote,
+            minWithdrawalMinor: FEE_POLICY_V1.minWithdrawalMinor.toString(),
           },
           dedupeKey: `tip_received.${input.tipId}`,
           ...(input.now ? { now: input.now } : {}),

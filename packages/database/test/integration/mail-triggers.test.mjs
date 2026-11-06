@@ -9,8 +9,10 @@ import {
   deleteAccount,
   evaluateTipMoments,
   grantOwner,
+  hideMessage,
   mailForDomainEvent,
   mailSealing,
+  notifyTipSucceeded,
   setPageSuspension,
   staffRemovePageImage,
   updatePaymentAccountStatus,
@@ -43,7 +45,7 @@ async function fresh(t) {
 }
 
 /** A tip a verified provider event has settled, as the payouts tests make one. */
-async function paidTip(db, handle) {
+async function paidTip(db, handle, extra = {}) {
   const { quoteId } = await createQuote(db, {
     handle,
     tipMinor: 200000n,
@@ -52,6 +54,7 @@ async function paidTip(db, handle) {
   const intent = await createPaymentIntent(db, {
     quoteId,
     idempotencyKey: randomUUID(),
+    ...extra,
   });
   await recordProviderEvent(db, {
     provider: 'mock',
@@ -100,6 +103,18 @@ test('payment_account_ready is queued once when the account becomes ready', asyn
   const mails = await sent('payment_account_ready');
   assert.equal(mails.length, 1);
   assert.equal(mails[0].to, OWNER_EMAIL);
+});
+
+test('the ready email carries the handle; the action-needed email still carries nothing', async (t) => {
+  const { db, sent } = await fresh(t);
+  await paymentAccount(db);
+  await updatePaymentAccountStatus(db, account('ONBOARDING'));
+  await updatePaymentAccountStatus(db, account('ACTIVE'));
+  const [ready] = await sent('payment_account_ready');
+  assert.deepEqual(ready.data, { handle: 'ada' });
+  await updatePaymentAccountStatus(db, account('RESTRICTED'));
+  const [needed] = await sent('payment_account_action_needed');
+  assert.deepEqual(needed.data, {});
 });
 
 test('payment_account_action_needed: a restriction, or a ready account needing more, not setup', async (t) => {
@@ -322,4 +337,64 @@ test('fix: restoring a page that was never paused sends nothing', async (t) => {
     1,
     'a repeat changes nothing',
   );
+});
+
+test('a tip with a note queues hasNote true and no note text', async (t) => {
+  const { db, sent, rows } = await fresh(t);
+  const words = 'Thank you for the extra session before my exam';
+  const withNote = await paidTip(db, 'ada', {
+    message: words,
+    payerDisplayLabel: 'Dayo',
+  });
+  const plain = await paidTip(db, 'ada');
+  for (const { tipId } of [withNote, plain])
+    assert.equal(
+      await notifyTipSucceeded(db, { sealing, tipId, profileId: ADA }),
+      'created',
+    );
+  const mails = await sent('tip_received');
+  assert.equal(mails.length, 2);
+  const keys = [
+    'firstName',
+    'hasNote',
+    'minWithdrawalMinor',
+    'netMinor',
+    'pretendPayment',
+    'supporterLabel',
+  ];
+  for (const mail of mails)
+    assert.deepEqual(Object.keys(mail.data).sort(), keys);
+  assert.deepEqual(
+    mails.map((m) => m.data.hasNote).sort(),
+    [false, true],
+    'one with a note, one without',
+  );
+  assert.equal(mails.find((m) => m.data.hasNote).data.supporterLabel, 'Dayo');
+  // The words are nowhere in the queue: not in the sealed data, nor anywhere else in the rows.
+  assert.ok(!JSON.stringify(mails).includes(words));
+  assert.ok(
+    !JSON.stringify(await rows('SELECT * FROM mail_messages')).includes(words),
+  );
+});
+
+test('a hidden or reported note is not announced', async (t) => {
+  const { db, sent } = await fresh(t);
+  const { tipId } = await paidTip(db, 'ada', { message: 'Some words here' });
+  await hideMessage(db, { profileId: ADA, tipId });
+  await notifyTipSucceeded(db, { sealing, tipId, profileId: ADA });
+  const [mail] = await sent('tip_received');
+  assert.equal(mail.data.hasNote, false);
+});
+
+test('a tip email carries the policy minimum', async (t) => {
+  const { db, sent } = await fresh(t);
+  const { tipId } = await paidTip(db, 'ada');
+  await notifyTipSucceeded(db, { sealing, tipId, profileId: ADA });
+  const [mail] = await sent('tip_received');
+  const { FEE_POLICY_V1 } = await import('@tipme/domain');
+  assert.equal(
+    mail.data.minWithdrawalMinor,
+    FEE_POLICY_V1.minWithdrawalMinor.toString(),
+  );
+  assert.equal(mail.data.minWithdrawalMinor, '200000');
 });

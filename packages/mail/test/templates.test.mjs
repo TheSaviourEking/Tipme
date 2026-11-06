@@ -315,3 +315,252 @@ test('confirm and recovery links say how long they work, in a quiet line', () =>
     ),
   );
 });
+
+/**
+ * Every type's sample as the release before the board emails (M2) had it, verbatim. Mail queued
+ * before a deploy carries data like this and is rendered by the new templates.
+ */
+const PREVIOUS_SAMPLES = {
+  tip_received: {
+    firstName: 'Ada',
+    netMinor: '450000',
+    supporterLabel: 'Tobi',
+    pretendPayment: false,
+  },
+  weekly_report: { isoWeek: '2026-W43', totalNetMinor: '1250000', tipCount: 4 },
+  email_verification_link: {
+    token: 'sample-token-sample-token-sample-token-0001',
+  },
+  recovery_link: { token: 'sample-token-sample-token-sample-token-0002' },
+  staff_invitation: { code: 'SAMPLEC2DE', kind: 'invited' },
+  staff_invitation_declined: {
+    personHint: 'a•••@example.com',
+    roleName: 'Support',
+  },
+  staff_acted_alone: {
+    personHint: 'a•••@example.com',
+    action: 'Change a page’s fee',
+  },
+  staff_freeze_released: { personHint: 'a•••@example.com', stillHeld: false },
+  staff_approval_outcome: {
+    action: 'Change a page’s fee',
+    outcome: 'approved',
+  },
+  staff_approval_pending: {
+    personHint: 'a•••@example.com',
+    action: 'Change a page’s fee',
+  },
+  staff_last_approver_removed: {
+    personHint: 'a•••@example.com',
+    permissions: 'fees.manage,staff.manage',
+  },
+  phone_change_warning: { newPhoneHint: '•••4821' },
+  provider_test: {
+    providerLabel: 'ZeptoMail',
+    token: 'sample-token-sample-token-sample-token-0003',
+  },
+  sign_in_code: { code: '482915' },
+  email_change_code: { code: '482915' },
+  payout_destination_code: { code: '482915' },
+  payout_destination_changed: {
+    bankName: 'Guaranty Trust Bank',
+    last4: '1234',
+    previousBankName: 'Providus Bank',
+    previousLast4: '6789',
+  },
+  welcome: {},
+  new_sign_in_notice: { deviceLabel: 'Safari on iPhone' },
+  email_changed_notice: { newEmailHint: 'a•••@example.com' },
+  recovery_email_code: { code: '482915' },
+  recovery_change_code: { code: '482915' },
+  recovery_code: { code: '482915' },
+  recovery_new_email_code: { code: '482915' },
+  recovery_started_notice: { newEmailHint: 'a•••@example.com' },
+  recovery_cancelled_notice: { newEmailHint: 'a•••@example.com' },
+  recovery_completed_notice: { newEmailHint: 'a•••@example.com' },
+  staff_access_notice: { change: 'granted' },
+  account_deleted_notice: {},
+  payment_account_ready: {},
+  payment_account_action_needed: {},
+  page_paused: {},
+  page_image_removed: { image: 'cover' },
+  page_restored: {},
+  withdrawal_paid: { amountMinor: '250000' },
+  withdrawal_failed: { amountMinor: '250000' },
+  tip_reversed: {},
+  milestone: { copy: '10 tips! People keep coming back to thank you.' },
+};
+
+const settingsCtx = {
+  ...ctx,
+  unsubscribeUrl: 'https://usetipme.xyz/email-settings?u=abc&s=def',
+};
+
+test('last release’s samples still render', () => {
+  assert.deepEqual(
+    Object.keys(PREVIOUS_SAMPLES).sort(),
+    Object.keys(MAIL_TYPES).sort(),
+    'one previous sample per type',
+  );
+  for (const [id, data] of Object.entries(PREVIOUS_SAMPLES)) {
+    const out = renderMail(id, data, settingsCtx);
+    for (const part of [out.subject, out.text, visible(out.html)]) {
+      assert.doesNotMatch(part, /undefined|null|NaN|\[object/, id);
+    }
+    // No label left without its value, and no empty panel.
+    assert.doesNotMatch(out.text, /^[A-Z][a-z ]+:\s*$/m, `${id} empty row`);
+    assert.doesNotMatch(
+      out.html,
+      /class="tm-well"[^>]*>\s*<\/td>/,
+      `${id} well`,
+    );
+    assert.doesNotMatch(out.html, /border="0"><\/table>/, `${id} empty facts`);
+    for (const [, href] of out.html.matchAll(/href="([^"]*)"/g))
+      assert.match(
+        href,
+        /^(https:\/\/usetipme\.xyz\/|mailto:)/,
+        `${id} ${href}`,
+      );
+  }
+});
+
+const tip = (extra = {}) =>
+  renderMail(
+    'tip_received',
+    {
+      firstName: 'Ada',
+      netMinor: '405050',
+      supporterLabel: 'Chidi',
+      pretendPayment: false,
+      ...extra,
+    },
+    settingsCtx,
+  );
+
+test('the tip email puts the amount on the slab, exact to the kobo', () => {
+  const out = tip();
+  assert.equal(out.subject, 'You got a ₦4,050.50 tip on TipMe');
+  assert.match(out.html, /class="tm-slab"/);
+  assert.match(out.html, /class="tm-amount"[^>]*>₦4,050\.50</);
+  assert.ok(
+    out.text.startsWith(
+      'Ada, you got a tip.\n\n₦4,050.50\nFrom Chidi. Confirmed by our payment partner.\n\nSee your tips: https://usetipme.xyz/dashboard/tips?ml=see_tips\n\nIt is in your balance now.\n',
+    ),
+    out.text,
+  );
+  assert.doesNotMatch(out.text, /left you a note|payment provider/);
+  const guest = tip({ supporterLabel: null });
+  assert.ok(
+    guest.text.includes('From a guest. Confirmed by our payment partner.'),
+  );
+  // The preview line names nobody.
+  for (const out of [tip(), guest, tip({ hasNote: true })]) {
+    assert.equal(
+      preheaderOf(out.html),
+      'Confirmed by our payment partner. It is in your balance now.',
+    );
+  }
+  assert.ok(
+    tip({ pretendPayment: true }).text.includes(
+      'Pretend payment: no real money moved.',
+    ),
+  );
+});
+
+test('a tip with a note says so, and never carries its words', () => {
+  const out = tip({ hasNote: true });
+  assert.ok(out.text.includes('Chidi left you a note.'), out.text);
+  assert.ok(
+    out.text.includes(
+      'Read it on TipMe: https://usetipme.xyz/dashboard/tips?ml=see_tips',
+    ),
+  );
+  assert.doesNotMatch(out.text, /See your tips/);
+  assert.ok(
+    tip({ hasNote: true, supporterLabel: null }).text.includes(
+      'Your supporter left you a note.',
+    ),
+  );
+  assert.ok(visible(out.html).includes('Chidi left you a note.'));
+});
+
+test('no mail schema accepts a note', () => {
+  for (const [id, type] of Object.entries(MAIL_TYPES)) {
+    for (const key of ['message', 'note', 'body', 'noteText'])
+      assert.equal(
+        type.schema.safeParse({ ...type.sample, [key]: 'x' }).success,
+        false,
+        `${id} takes ${key}`,
+      );
+    for (const key of Object.keys(type.schema.shape ?? {}))
+      if (key !== 'hasNote')
+        assert.doesNotMatch(key, /message|note|body/i, `${id}.${key}`);
+  }
+});
+
+test('the withdraw line uses the amount it is given', () => {
+  const out = tip({ minWithdrawalMinor: '300000' });
+  assert.ok(
+    out.text.includes(
+      'It is in your balance now. You can withdraw from ₦3,000.',
+    ),
+    out.text,
+  );
+  assert.doesNotMatch(tip().text, /withdraw from/);
+});
+
+test('the new sign-in email shows the device and the Lagos time', () => {
+  const out = renderMail(
+    'new_sign_in_notice',
+    {
+      deviceLabel: 'Chrome on an Android phone',
+      at: '2026-11-05T13:32:00.000Z',
+    },
+    ctx,
+  );
+  assert.ok(
+    out.text.startsWith(
+      'Your account’s safety\n\nA new device signed in\n\nYour TipMe account was just signed in to from a device we haven’t seen before.\n\nDevice: Chrome on an Android phone\nWhen: 5 Nov 2026, 14:32\n\nIf this was you, there’s nothing to do.\n\nWasn’t you? Sign in and end that session in Settings.\n\nCheck your sign-ins: https://usetipme.xyz/dashboard/settings?ml=sessions#security',
+    ),
+    out.text,
+  );
+  assert.equal(
+    preheaderOf(out.html),
+    'If this was you, there’s nothing to do.',
+  );
+  // September is "Sep", whatever the runtime's locale data says; midnight is 00.
+  assert.ok(
+    renderMail(
+      'new_sign_in_notice',
+      { deviceLabel: '', at: '2026-09-05T23:05:00.000Z' },
+      ctx,
+    ).text.includes('\n\nWhen: 6 Sep 2026, 00:05\n\n'),
+  );
+  // Neither row known: no empty panel.
+  const bare = renderMail('new_sign_in_notice', { deviceLabel: '' }, ctx);
+  assert.doesNotMatch(bare.text, /Device:|When:/);
+  assert.doesNotMatch(bare.html, /class="tm-well"/);
+});
+
+test('the ready email shows the page link when it has the handle, and still reads without it', () => {
+  const out = renderMail('payment_account_ready', { handle: 'ada' }, ctx);
+  assert.ok(
+    out.text.startsWith(
+      'You can receive tips now\n\nYour payment account is ready, so people can tip you. Share your link to get your first one.\n\nusetipme.xyz/@ada\nPut it in your bio, or print your QR code.\nhttps://usetipme.xyz/@ada\n\nGo to your dashboard: ',
+    ),
+    out.text,
+  );
+  assert.match(
+    out.html,
+    /<a href="https:\/\/usetipme\.xyz\/@ada"[^>]*>usetipme\.xyz\/@ada</,
+  );
+  assert.ok(
+    out.text.includes(
+      'You get this email when your TipMe page is ready to take tips.',
+    ),
+  );
+  assert.doesNotMatch(out.text, /bank account/);
+  const without = renderMail('payment_account_ready', {}, ctx);
+  assert.doesNotMatch(without.text, /xyz\/@|Put it in your bio/);
+  assert.ok(without.text.includes('Go to your dashboard: '));
+});
