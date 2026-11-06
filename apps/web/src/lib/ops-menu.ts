@@ -16,7 +16,7 @@ type Group = (typeof GROUPS)[number];
 
 /**
  * Each entry names what its page reads, so nobody is offered a page that would refuse them, and the
- * group it is listed in. A new page is one line here (a Changelog would join 'Email and records').
+ * group it is listed in. A new page is one line here.
  */
 const LINKS: {
   href: string;
@@ -74,6 +74,13 @@ const LINKS: {
     label: 'Audit log',
     group: 'Email and records',
     needs: ['audit.view'],
+  },
+  {
+    // Editors and publishers both read it; the entry page offers Approve or Ask for approval.
+    href: '/ops/changelog',
+    label: 'Changelog',
+    group: 'Email and records',
+    needs: ['changelog.edit', 'changelog.publish'],
   },
   {
     href: '/ops/staff/people',

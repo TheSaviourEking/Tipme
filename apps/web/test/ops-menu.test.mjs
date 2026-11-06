@@ -138,3 +138,33 @@ test('the open page is its own link, or the section it sits in', () => {
   // A page the menu doesn't offer this person has no link.
   assert.equal(opsMenuCurrent(opsMenu([]), '/ops/issues/abc'), null);
 });
+
+test('Changelog sits in Email and records, after Audit log, for either changelog permission', () => {
+  for (const permission of ['changelog.edit', 'changelog.publish'])
+    assert.deepEqual(opsMenuGroups([permission]), [
+      {
+        label: null,
+        links: [
+          { href: '/ops', label: 'Overview' },
+          { href: '/ops/approvals', label: 'Approvals' },
+        ],
+      },
+      {
+        label: 'Email and records',
+        links: [{ href: '/ops/changelog', label: 'Changelog' }],
+      },
+      { label: 'Staff', links: [{ href: '/ops/staff', label: 'Your access' }] },
+    ]);
+  const records = opsMenuGroups([...OWNER, 'changelog.edit']).find(
+    (group) => group.label === 'Email and records',
+  );
+  assert.deepEqual(
+    records.links.map((link) => link.label),
+    ['Providers', 'Email', 'Audit log', 'Changelog'],
+  );
+  assert.ok(!hrefs(OWNER).includes('/ops/changelog'));
+  assert.equal(
+    opsMenuCurrent(opsMenu(['changelog.edit']), '/ops/changelog/42')?.label,
+    'Changelog',
+  );
+});
