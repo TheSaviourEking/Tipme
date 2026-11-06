@@ -96,3 +96,14 @@ test('with it off, the note routes (PR B5) are 404 like an unknown path', async 
     assert.equal((await response.json()).error.code, 'NOT_FOUND', path);
   }
 });
+
+// PR B8.
+test('with it off, GET /v1/me/businesses/:id/codes is 404, even for the owner', async () => {
+  const { businessId } = await seedBusiness(database);
+  const response = await fetch(
+    `${stack.api}/v1/me/businesses/${businessId}/codes`,
+    { headers: { cookie: ada.cookie } },
+  );
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error.code, 'NOT_FOUND');
+});

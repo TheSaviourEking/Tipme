@@ -102,6 +102,12 @@
 - Done: insights and notes for a manager (k ≥ 3, no naira by default, leavers folded into totals, opaque note references), share-my-amounts, the This week and Notes sections, the Work share switch.
 - Next: coordinator review; B5 resolves note references in its manager report route; rebase onto dev after B0 merges and rerun `pnpm api:openapi` and `pnpm docs:generate`.
 
+# Current task — TipMe for businesses, PR B8: printed location signs and staff badges (6 November 2026)
+
+- Branch/worktree: `feat/business-b8` / `.worktrees/business-b8`, off `origin/feat/business-b0` (`8e7a9752`), test lane 2. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Task 22 (B8 only).
+- Done: `GET /v1/me/businesses/:id/codes` (manager scope; `BUSINESS_NOT_VERIFIED` while pending or suspended, M12); `BusinessCodes` gains the business and location names; `apps/web/src/lib/business-sign.ts` draws the sign and badge with `qrMatrix` / `renderQrPixels`; Business → Codes, the print view `/dashboard/business/codes/print` (A5 sign, A6 table tent, 85 × 55 mm badge, one per page, black or purple), Work → My code.
+- Next: coordinator review, rebase onto dev once B0 merges, CI's full e2e suite. When B1 and B3 land, the e2e spec's stand-ins for their detail and work routes can go.
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.

@@ -534,8 +534,16 @@ export interface OpsBusinessNote {
     reviewedAt?: string;
   };
 }
+/**
+ * The codes a manager may print (PR B8), only once the business is verified (M12). Each `path`
+ * already carries `?src=qr`; the web puts its own origin in front. The names are what the printed
+ * sign and badge show, so the print view needs nothing else.
+ */
 export interface BusinessCodes {
-  location: { locationId: string; path: string }[];
+  business: { name: string; slug: string };
+  /** Open locations in the manager's scope, by name. */
+  location: { locationId: string; slug: string; name: string; path: string }[];
+  /** Active members at those locations whose page is live, by location then shown name. */
   staff: {
     memberId: string;
     locationId: string;

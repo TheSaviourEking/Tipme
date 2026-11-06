@@ -4,6 +4,7 @@ import { WhereYouWorkCard } from './sections/where-you-work';
 import { NotesCard } from './sections/notes';
 import { ShiftCard } from './sections/shift';
 import { ShareCard } from './sections/share';
+import { MyCodeSection } from './sections/my-code';
 
 /**
  * The Work page's sections, one card each per membership (PR B0 registry). Each lane adds its own
@@ -24,4 +25,6 @@ export const WORK_SECTIONS: readonly WorkSection[] = [
   { id: 'shift', title: 'On shift', Card: ShiftCard },
   // B7
   { id: 'share', title: 'Your tip amounts', Card: ShareCard },
+  // B8
+  { id: 'my-code', title: 'My code', Card: MyCodeSection },
 ];
