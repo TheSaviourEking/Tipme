@@ -5298,6 +5298,65 @@ html:has(.confirm-dialog[open]) {
   margin-right: auto;
 }
 
+/* Test mode as one calm pill in the header (WithdrawRedesign §3). It opens its sentence as a small
+   paper card under it, placed absolutely so the header doesn't grow. */
+.test-pill {
+  position: relative;
+}
+
+.test-pill summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px dashed var(--border-material);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font: 700 var(--text-xs) / 1.2 var(--font-interface);
+  list-style: none;
+  cursor: pointer;
+}
+
+.test-pill summary::-webkit-details-marker {
+  display: none;
+}
+
+.test-pill__sentence {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised-1);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+@media (max-width: 40rem) {
+  .test-pill__detail {
+    display: none;
+  }
+
+  .test-pill__sentence {
+    right: auto;
+    left: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .test-pill summary,
+  .test-pill__sentence {
+    border: 1px solid CanvasText;
+  }
+}
+
 /* The admin menu has many links: one row that scrolls sideways (the open page's link is scrolled
    into view by the shell), never a lone link wrapped onto a second line. */
 .dashboard-nav[aria-label='Admin'] {
