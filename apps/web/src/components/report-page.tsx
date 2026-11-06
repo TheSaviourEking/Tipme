@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { ProfileReportReason } from '@tipme/contracts';
-import { Button, Notice } from '@tipme/ui';
+import { Button, ResultKey, StateLine, useKeyResult } from '@tipme/ui';
 import { reportPage } from '@/lib/api-client';
 
 const REASONS: { value: ProfileReportReason; label: string }[] = [
@@ -16,23 +16,28 @@ export function ReportPage({ handle }: { handle: string }) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<ProfileReportReason>('impersonation');
-  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // A small refusal of one click: the Send key says it (Concept B), the reason is one plain line.
+  const key = useKeyResult({ onRetry: () => void send() });
   const thanks = useRef<HTMLParagraphElement>(null);
   // The form disappears once sent: keyboard focus moves to the confirmation, not the page top.
   useEffect(() => {
     if (done) thanks.current?.focus();
   }, [done]);
-  const send = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setFailed(false);
+  const send = async () => {
+    if (key.pending) return;
+    key.start();
     const result = await reportPage(handle, reason);
-    setBusy(false);
-    if (result.ok) setDone(true);
-    else setFailed(true);
+    if (result.ok) {
+      key.clear();
+      setDone(true);
+    } else key.failed({ label: 'Not sent', retryLabel: 'Try again' });
   };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void send();
+  };
+  const failed = key.result?.kind === 'failed';
   if (done)
     return (
       <p
@@ -53,7 +58,7 @@ export function ReportPage({ handle }: { handle: string }) {
       </p>
     );
   return (
-    <form className="settings-form report-page" onSubmit={(e) => void send(e)}>
+    <form className="settings-form report-page" onSubmit={submit}>
       <div className="tm-field">
         <label htmlFor={`${id}-reason`}>What’s wrong with this page?</label>
         <select
@@ -72,15 +77,13 @@ export function ReportPage({ handle }: { handle: string }) {
       <p className="tm-hint">
         TipMe reviews every report. We don’t tell the page who reported it.
       </p>
-      {failed && (
-        <Notice tone="error" title="Not sent">
-          We couldn’t send the report. Please try again.
-        </Notice>
-      )}
+      <StateLine tone="error">
+        {failed ? 'We couldn’t send the report. Please try again.' : ''}
+      </StateLine>
       <div className="ops-actions">
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <ResultKey type="submit" result={key.result} pending={key.pending}>
           Send report
-        </Button>
+        </ResultKey>
         <Button variant="quiet" onClick={() => setOpen(false)}>
           Cancel
         </Button>

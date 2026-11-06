@@ -9,7 +9,7 @@ import {
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { TipStatusView } from '@tipme/contracts';
-import { ActionLink, Button, Card, Notice, Skeleton, Surface } from '@tipme/ui';
+import { ActionLink, Button, Card, Skeleton, Slip, Surface } from '@tipme/ui';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
@@ -17,6 +17,9 @@ import { ThanksSlip } from '@/components/thanks-slip';
 import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
 import { nextCheckDelay } from '@/lib/status-polling';
+import { onReconnect } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
+import { useOnline } from '@/components/use-online';
 import {
   forgetMyTips,
   recognitionMessage,
@@ -53,7 +56,9 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
     () => undefined,
   );
   const [result, setResult] = useState<Screen>({ kind: 'loading' });
-  const [offline, setOffline] = useState(false);
+  // Online but the API didn't answer; told apart from the browser being offline (Task 16).
+  const [noAnswer, setNoAnswer] = useState(false);
+  const online = useOnline();
   const [stopped, setStopped] = useState(false);
   const [round, setRound] = useState(0);
   const [celebration, setCelebration] = useState<string | null>(null);
@@ -104,10 +109,11 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     const poll = async (attempt: number) => {
+      timer = undefined;
       const result = await tipStatus(tipId, token);
       if (cancelled) return;
       if (result.ok) {
-        setOffline(false);
+        setNoAnswer(false);
         setResult({ kind: 'tip', view: result.data });
         if (result.data.state === 'paid') celebrate(result.data);
         if (FINAL.has(result.data.state)) return;
@@ -115,19 +121,34 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
         setResult({ kind: 'not-found' });
         return;
       } else {
-        setOffline(true);
+        setNoAnswer(true);
       }
       const delay = nextCheckDelay(attempt, Date.now() - started);
       if (delay === null) {
         setStopped(true);
         return;
       }
-      timer = setTimeout(() => void poll(attempt + 1), delay);
+      next = attempt + 1;
+      timer = setTimeout(() => void poll(next), delay);
     };
+    // Back online: check at once instead of waiting out the timer.
+    let next = 0;
+    let disarm = () => {};
+    const arm = () => {
+      disarm = onReconnect(window, () => {
+        arm();
+        if (timer === undefined) return;
+        clearTimeout(timer);
+        timer = undefined;
+        void poll(next);
+      });
+    };
+    arm();
     void poll(0);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      disarm();
     };
     // celebrate only reads refs and storage; polling restarts on the token or "Check again".
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -158,7 +179,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
     setStopped(false);
     setRound((n) => n + 1);
   };
-  if (screen.kind === 'loading' && (offline || stopped))
+  if (screen.kind === 'loading' && (noAnswer || stopped))
     return (
       <Card className="tip-status-card">
         <h1>We can’t reach TipMe right now</h1>
@@ -208,10 +229,12 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
           Forgotten. This phone no longer remembers your tips.
         </p>
       )}
-      {offline && (
-        <Notice tone="error" title="Connection lost">
-          We’ll keep trying to reach TipMe.
-        </Notice>
+      {(noAnswer || (!online && !FINAL.has(tip.state))) && (
+        <Slip tone="error" title="Connection lost">
+          {online
+            ? CONNECTION_COPY.receiptNoAnswer
+            : CONNECTION_COPY.receiptOffline}
+        </Slip>
       )}
       {stopped && !FINAL.has(tip.state) && (
         <div className="tip-status-actions">

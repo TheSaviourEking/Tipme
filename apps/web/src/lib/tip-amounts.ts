@@ -72,6 +72,16 @@ export function keyLayout(labels: string[]) {
 const naira = (minor: number) =>
   new Intl.NumberFormat('en').format(Math.floor(minor / 100));
 
+/** A typed amount in kobo, or null when it isn't written as an amount. */
+function typedMinor(value: string): number | null {
+  // Plain digits, or digits with correctly grouped thousands separators (1,500).
+  const match = /^(\d{1,3}(?:,\d{3})+|\d{1,10})(?:\.(\d{1,2}))?$/.exec(value);
+  if (!match) return null;
+  const whole = (match[1] ?? '').replaceAll(',', '');
+  const minor = Number(whole) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
+  return Number.isSafeInteger(minor) ? minor : null;
+}
+
 export function amountOptions(amounts: TipAmounts | undefined) {
   // An API older than PR-012 sends none: the standard amounts apply there.
   const { presetsMinor, minMinor, startMinor } =
@@ -96,21 +106,28 @@ export function amountOptions(amounts: TipAmounts | undefined) {
     rangeText: `NGN ${naira(min)} or more`,
     /** An example for the typed amount: never below what this page accepts. */
     example: naira(min),
+    /** The minimum on its own, for the flag in the field ("below 2,000"). */
+    minLabel: naira(min),
+    /**
+     * The key that lights up when a typed amount is below the minimum: the smallest preset this page
+     * accepts (states plan, Task 9). Null with no presets.
+     */
+    suggestedMinor:
+      presetsMinor
+        .map(Number)
+        .filter((minor) => minor >= min)
+        .sort((a, b) => a - b)[0] ?? null,
     /** A typed amount in kobo, or null when it is not a number or below this page's minimum. */
     parse(value: string): number | null {
-      // Plain digits, or digits with correctly grouped thousands separators (1,500).
-      const match = /^(\d{1,3}(?:,\d{3})+|\d{1,10})(?:\.(\d{1,2}))?$/.exec(
-        value,
-      );
-      if (!match) return null;
-      const whole = (match[1] ?? '').replaceAll(',', '');
-      const minor =
-        Number(whole) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
-      return Number.isSafeInteger(minor) &&
-        minor >= min &&
-        minor <= LARGEST_INPUT_MINOR
+      const minor = typedMinor(value);
+      return minor !== null && minor >= min && minor <= LARGEST_INPUT_MINOR
         ? minor
         : null;
+    },
+    /** A well-formed amount that is only too small, as opposed to one that is mistyped. */
+    belowMinimum(value: string): boolean {
+      const minor = typedMinor(value);
+      return minor !== null && minor < min;
     },
   };
 }

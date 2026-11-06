@@ -149,3 +149,36 @@ test('a start that is not among the presets is ignored for the closest-to-₦2,0
     500000,
   );
 });
+
+test('the minimum has a short label, and a typed amount below it is told apart from a mistyped one', () => {
+  const options = amountOptions(undefined);
+  assert.equal(options.minLabel, '2,000');
+  assert.equal(options.belowMinimum('1500'), true);
+  assert.equal(options.belowMinimum('1,500.50'), true);
+  assert.equal(options.belowMinimum('0'), true);
+  assert.equal(options.belowMinimum('2000'), false);
+  assert.equal(options.belowMinimum('abc'), false);
+  assert.equal(options.belowMinimum(''), false);
+  assert.equal(options.belowMinimum('1,50'), false);
+  const pro = amountOptions({
+    presetsMinor: ['1000000', '2000000'],
+    minMinor: '1000000',
+  });
+  assert.equal(pro.minLabel, '10,000');
+  assert.equal(pro.belowMinimum('9999.99'), true);
+});
+
+test('the suggested key is the smallest preset at or above the minimum', () => {
+  assert.equal(amountOptions(undefined).suggestedMinor, 200000);
+  assert.equal(
+    amountOptions({
+      presetsMinor: ['500000', '250000', '900000'],
+      minMinor: '150000',
+    }).suggestedMinor,
+    250000,
+  );
+  assert.equal(
+    amountOptions({ presetsMinor: [], minMinor: '200000' }).suggestedMinor,
+    null,
+  );
+});

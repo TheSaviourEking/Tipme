@@ -2,7 +2,13 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
-import { ActionLink, Button, Notice } from '@tipme/ui';
+import {
+  ActionLink,
+  ResultKey,
+  Slip,
+  StateLine,
+  useKeyResult,
+} from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
 
 // Named as the settings page names them.
@@ -15,21 +21,28 @@ const NAMES: Record<string, string> = {
 /** Asks first: mail scanners open every link, and opening this one must change nothing. */
 export function UnsubscribeConfirm() {
   const token = useSearchParams().get('t') ?? '';
-  const [state, setState] = useState<
-    'ask' | 'busy' | 'done' | 'invalid' | 'failed'
-  >(token ? 'ask' : 'invalid');
+  const [state, setState] = useState<'ask' | 'done' | 'invalid'>(
+    token ? 'ask' : 'invalid',
+  );
   const [type, setType] = useState('');
+  // One click's refusal: the key says it (Concept B), with one plain line under it.
+  const key = useKeyResult({ onRetry: () => void turnOff() });
   const turnOff = async () => {
-    setState('busy');
+    if (key.pending) return;
+    key.start();
     const result = await apiFetch<{ type: string }>(
       `/v1/mail/unsubscribe?t=${encodeURIComponent(token)}`,
       { method: 'POST', body: {} },
     );
     if (result.ok) {
+      key.clear();
       setType(result.data.type);
       setState('done');
+    } else if (result.code === 'UNSUBSCRIBE_INVALID') {
+      key.clear();
+      setState('invalid');
     } else
-      setState(result.code === 'UNSUBSCRIBE_INVALID' ? 'invalid' : 'failed');
+      key.failed({ label: 'That didn’t go through', retryLabel: 'Try again' });
   };
   const settings = (
     <p className="auth-switch">
@@ -54,26 +67,25 @@ export function UnsubscribeConfirm() {
   if (state === 'invalid')
     return (
       <>
-        <Notice tone="error" title="This link doesn’t work">
+        <Slip tone="error" title="This link doesn’t work">
           It may have been copied wrongly.
-        </Notice>
+        </Slip>
         {settings}
       </>
     );
   return (
     <div className="auth-form">
-      {state === 'failed' && (
-        <Notice tone="error" title="That didn’t go through">
-          Please try again.
-        </Notice>
-      )}
-      <Button
+      <ResultKey
         variant="continue"
         onClick={() => void turnOff()}
-        disabled={state === 'busy'}
+        result={key.result}
+        pending={key.pending}
       >
         Turn off this email
-      </Button>
+      </ResultKey>
+      <StateLine tone="error">
+        {key.result?.kind === 'failed' ? 'Please try again.' : ''}
+      </StateLine>
       {settings}
     </div>
   );
