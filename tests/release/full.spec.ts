@@ -23,7 +23,11 @@ const runApi = (path: string) =>
  */
 async function openAdmin(page: Page) {
   const { totpAt } = await import('../../packages/domain/dist/index.js');
-  const nav = page.getByRole('navigation', { name: 'Admin' });
+  // On a phone (the release check runs as a Pixel 7) the admin links sit in the Menu sheet, so the
+  // granted frame shows the "Menu · …" button rather than a visible menu: either one means in.
+  const nav = page
+    .getByRole('navigation', { name: 'Admin' })
+    .or(page.getByRole('button', { name: /^Menu · / }));
   for (let attempt = 0; attempt < 3; attempt++) {
     const step = BigInt(Math.floor(Date.now() / 30_000)) + BigInt(1);
     await page
