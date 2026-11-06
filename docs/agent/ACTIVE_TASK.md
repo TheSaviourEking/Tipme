@@ -1,3 +1,10 @@
+# Current task — Pro additions PR 3, repeat supporters: the supporter's choice (6 November 2026)
+
+- Branch/worktree: `feat/repeat-supporters` / `.worktrees/repeat-supporters`, test lane 8, from `origin/dev` at `bf6629f8`. Not pushed. Plan: `docs/superpowers/plans/2026-11-05-pro-additions.md`, Tasks 3.1 to 3.5 only.
+- Built: the opt-in key store (`apps/web/src/lib/supporter-keys.ts`), `supporterKey` on the intent request, migration `0078_supporters` (`supporters`, `tip_supporters`; regenerate at merge if another migration lands first), recording inside `createPaymentIntent`'s transaction (Pro, a name, `SUPPORTER_RECOGNITION` on), the receipt's `recognised` and "Stop {name} recognising me" (`POST /v1/tips/{tipId}/recognition/stop`), the tick box, redaction in logs and Sentry, the runbook, the privacy outline line, the threat-model row P11 and the decisions entry.
+- Next: owner review; the controller pushes a draft PR and follows CI's full e2e suite. Then PR 4 (the recipient's list). Turning `SUPPORTER_RECOGNITION` on in production is the owner's call under D-07.
+- Evidence: `.superpowers/program/pro3-report.md` (main checkout).
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.
