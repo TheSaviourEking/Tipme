@@ -228,7 +228,7 @@ test('saving preferences publishes account.changed to the user', async (t) => {
   stream.close();
 });
 
-test('a local quote answers from TipMe’s records alone', async (t) => {
+test('a local quote answers from TipMe’s records alone', async () => {
   const ada = await owner('ada');
   const local = await call(
     'GET',
