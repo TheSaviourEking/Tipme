@@ -3,7 +3,10 @@
 // .github/workflows/changelog-draft.yml, which passes everything through env, never through
 // `${{ }}` in a shell line: the title and body are untrusted text.
 //
-//   PR_NUMBER, PR_TITLE, PR_BODY, PR_MERGE_SHA, PR_MERGED_AT   the merged PR (the merge event), or
+//   CHANGELOG_EVENT_FILE                                        the merge event's own file (github.event_path):
+//                                                               the body never travels through env, where Linux
+//                                                               caps one variable at 128 KiB, or
+//   PR_NUMBER, PR_TITLE, PR_BODY, PR_MERGE_SHA, PR_MERGED_AT   the merged PR by hand, or
 //   CHANGELOG_PR_FILE                                           `gh pr view --json number,title,body,mergeCommit,mergedAt,baseRefName,state` output (a resend)
 //   CHANGELOG_API_URL, CHANGELOG_SIGNING_SECRET                 where to send it, and the key
 //
@@ -15,7 +18,7 @@ import { draftPayload, post, settingsFrom } from './changelog-client.mjs';
 
 const SHA = /^[0-9a-f]{40}$/;
 
-/** The PR to send, from the resend file or the event's env. Throws a message on bad input. */
+/** The PR to send: the resend file, the event file, or env. Throws a message on bad input. */
 function pullRequestFrom(env) {
   if (env.CHANGELOG_PR_FILE) {
     const pr = JSON.parse(readFileSync(env.CHANGELOG_PR_FILE, 'utf8'));
@@ -32,6 +35,20 @@ function pullRequestFrom(env) {
       mergeCommitSha: pr.mergeCommit.oid,
       mergedAt: pr.mergedAt,
     };
+  }
+  if (env.CHANGELOG_EVENT_FILE) {
+    const pr = JSON.parse(
+      readFileSync(env.CHANGELOG_EVENT_FILE, 'utf8'),
+    ).pull_request;
+    if (pr) {
+      return {
+        number: pr.number,
+        title: pr.title,
+        body: pr.body,
+        mergeCommitSha: pr.merge_commit_sha,
+        mergedAt: pr.merged_at,
+      };
+    }
   }
   return {
     number: /^[0-9]+$/.test(env.PR_NUMBER ?? '') ? Number(env.PR_NUMBER) : NaN,

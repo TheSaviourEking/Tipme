@@ -175,9 +175,21 @@ test('the sync marks the draft on staging, then live, at a version containing it
 
 test('a long body of non-ASCII text is cut to fit and still accepted', async () => {
   // 65 536 characters at 3 bytes each: 192 KiB, over the API's 128 KiB, unless the client cuts it.
-  const result = await send(701, {
-    PR_BODY: `Naira.\n\n## For users\nYou can now see ₦ amounts.\n\n## Notes\n${'₦'.repeat(65_500)}`,
-  });
+  // Through the event file, as the workflow sends it: Linux refuses a variable this long.
+  const event = join(repo, 'event-701.json');
+  writeFileSync(
+    event,
+    JSON.stringify({
+      pull_request: {
+        number: 701,
+        title: 'feat: change 701',
+        body: `Naira.\n\n## For users\nYou can now see ₦ amounts.\n\n## Notes\n${'₦'.repeat(65_500)}`,
+        merge_commit_sha: shas.merged,
+        merged_at: '2026-11-05T10:00:00Z',
+      },
+    }),
+  );
+  const result = await run(SEND, [], { CHANGELOG_EVENT_FILE: event });
   assert.equal(result.code, 0, result.out);
   assert.equal((await row(701)).user_text, 'You can now see ₦ amounts.');
 });

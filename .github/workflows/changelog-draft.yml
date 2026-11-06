@@ -64,11 +64,9 @@ jobs:
 
       - name: Send the draft
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          PR_MERGED_AT: ${{ github.event.pull_request.merged_at }}
+          # The merged PR is read from the event's file: a body passed through env fails the step
+          # once it is over 128 KiB (Linux's limit on one variable).
+          CHANGELOG_EVENT_FILE: ${{ github.event_path }}
           CHANGELOG_API_URL: ${{ vars.CHANGELOG_API_URL }}
           CHANGELOG_SIGNING_SECRET: ${{ secrets.CHANGELOG_SIGNING_SECRET }}
         run: node scripts/changelog-send.mjs

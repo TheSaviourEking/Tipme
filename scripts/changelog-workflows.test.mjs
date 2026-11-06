@@ -177,12 +177,11 @@ test('the draft workflow runs on merged pull requests into dev, read-only, witho
   );
   const send = named(source, 'Send the draft');
   assert.equal(send.step.run, 'node scripts/changelog-send.mjs\n');
+  // The PR comes from the event's file, never env: Linux caps one variable at 128 KiB.
   assert.ok(
-    send.step.env.includes('PR_TITLE: ${{ github.event.pull_request.title }}'),
+    send.step.env.includes('CHANGELOG_EVENT_FILE: ${{ github.event_path }}'),
   );
-  assert.ok(
-    send.step.env.includes('PR_BODY: ${{ github.event.pull_request.body }}'),
-  );
+  assert.ok(!send.step.env.some((line) => /PR_BODY|PR_TITLE/.test(line)));
   // No dependency install: the scripts use Node only.
   assert.doesNotMatch(source, /pnpm install/);
 });

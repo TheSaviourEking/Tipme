@@ -119,6 +119,42 @@ test('an empty body is sent as null', async () => {
   assert.equal(JSON.parse(received[0].raw.toString('utf8')).body, null);
 });
 
+test('the merge event file is read, so a long body never travels through env', async () => {
+  reset();
+  // GitHub allows 65 536 characters; at 3 bytes each that is over Linux's 128 KiB per variable.
+  const body = `Naira.\n\n## For users\nYou can now see ₦ amounts.\n\n${'₦'.repeat(65_500)}`;
+  const file = join(
+    mkdtempSync(join(tmpdir(), 'changelog-event-')),
+    'event.json',
+  );
+  writeFileSync(
+    file,
+    JSON.stringify({
+      pull_request: {
+        number: 42,
+        title: 'feat: naira',
+        body,
+        merge_commit_sha: SHA,
+        merged_at: '2026-11-05T10:00:00Z',
+      },
+    }),
+  );
+  const result = await run({
+    CHANGELOG_API_URL: base,
+    CHANGELOG_SIGNING_SECRET: SECRET,
+    CHANGELOG_EVENT_FILE: file,
+  });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const sent = JSON.parse(received[0].raw.toString('utf8'));
+  assert.equal(sent.number, 42);
+  assert.equal(sent.title, 'feat: naira');
+  assert.equal(sent.mergeCommitSha, SHA);
+  assert.match(
+    sent.body,
+    /^Naira\.\n\n## For users\nYou can now see ₦ amounts\./,
+  );
+});
+
 test('a draft TipMe already has is a success', async () => {
   reset({ status: 200, body: { data: { created: false } } });
   const result = await run(prEnv());
