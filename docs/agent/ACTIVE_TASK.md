@@ -1,3 +1,9 @@
+# Current task — TipMe for businesses, PR B4: the supporter's flow (6 November 2026)
+
+- Branch/worktree: `feat/business-b4` / `.worktrees/business-b4`, off `feat/business-b0` (B0 not yet on dev), test lane 0. Not pushed. Plan: Tasks 14–15.
+- Done: public reads (`publicLocation`, `searchBusinessPeople`, `publicStaffTipPage`) and their routes under `/v1/b/`; `/b/<business>/<location>` with the header, picker, search, "I don't see them" and "Tip {name} again"; the staff page with today's tip form and `business` prop; remembered tips carry the business slug; `/api/revalidate` accepts `{ business }`.
+- Next: rebase onto dev once B0 merges; full e2e on CI. Evidence: `.superpowers/program/b4-report.md` (main checkout).
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.
