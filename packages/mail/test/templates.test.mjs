@@ -144,3 +144,63 @@ test('a takeover release tells owners whether withdrawals really resumed', () =>
   assert.match(held.text, /still holds/);
   assert.doesNotMatch(held.text, /can withdraw again/);
 });
+
+test('a business invitation carries its code only in the fragment, untracked, naming no payment provider', () => {
+  const type = MAIL_TYPES.business_invitation;
+  assert.equal(type.category, 'account');
+  assert.equal(type.sender, 'notifications');
+  assert.equal(type.preference, null);
+  // A rewritten (tracked) link would carry the code through a redirect.
+  assert.equal(type.tracking, false);
+  const code = 'ABCDEFGHJKMNPQ23';
+  const staff = renderMail(
+    'business_invitation',
+    {
+      code,
+      businessName: 'The Yellow Chilli',
+      locationName: 'Victoria Island',
+      kind: 'staff',
+    },
+    ctx,
+  );
+  assert.equal(
+    staff.subject,
+    'The Yellow Chilli invites you to receive tips there',
+  );
+  assert.match(
+    staff.text,
+    /Your tips go to your own TipMe balance, as always\./,
+  );
+  assert.match(staff.text, /This link works once, for 7 days\./);
+  const href = /href="([^"]+)"/.exec(
+    staff.html.slice(staff.html.indexOf('See the invitation') - 400),
+  )?.[1];
+  assert.ok(href, 'the button has a link');
+  const url = new URL(href.replaceAll('&amp;', '&'));
+  assert.equal(url.pathname, '/dashboard/work');
+  assert.equal(url.hash, `#join=${code}`);
+  assert.equal(url.search.includes(code), false, 'never in the query');
+  for (const out of [staff, staff.snapshot])
+    assert.doesNotMatch(
+      `${out.subject} ${out.text} ${out.html}`,
+      /bachs|paystack|flutterwave|provider/i,
+    );
+  assert.ok(!staff.snapshot.text.includes(code), 'the snapshot hides the code');
+  assert.ok(!staff.snapshot.html.includes(code));
+  const manager = renderMail(
+    'business_invitation',
+    { code, businessName: 'The Yellow Chilli', kind: 'manager', role: 'owner' },
+    ctx,
+  );
+  assert.equal(
+    manager.subject,
+    'The Yellow Chilli invites you to help manage it on TipMe',
+  );
+  assert.throws(() =>
+    renderMail(
+      'business_invitation',
+      { code: 'short', businessName: 'X', kind: 'staff' },
+      ctx,
+    ),
+  );
+});

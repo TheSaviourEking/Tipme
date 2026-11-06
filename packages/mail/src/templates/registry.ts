@@ -30,6 +30,7 @@ import {
   withdrawalFailed,
   withdrawalPaid,
 } from './types/account-events.js';
+import { businessInvitation } from './types/business-invitation.js';
 import { emailVerificationLink } from './types/email-verification-link.js';
 import { payoutDestinationChanged } from './types/payout-destination-changed.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
@@ -89,6 +90,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     withdrawalFailed,
     tipReversed,
     milestone,
+    businessInvitation,
   ].map((type) => [type.id, type]),
 );
 

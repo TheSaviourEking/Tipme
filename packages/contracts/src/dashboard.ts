@@ -149,6 +149,8 @@ export interface NotificationView {
   tipId: string | null;
   momentId: string | null;
   reportId: string | null;
+  /** A business invitation (kind `business_invitation`): it is answered on the Work page. */
+  invitationId: string | null;
   title: string;
   body: string;
   read: boolean;

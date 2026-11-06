@@ -192,6 +192,16 @@ export const invitationCodeSchema = z
   .strict();
 export type InvitationCode = z.infer<typeof invitationCodeSchema>;
 
+/**
+ * Answering an invitation on the Work page (PR B3): with the code from a link or an email, or, for
+ * one addressed to this account (its username or proven email), by the invitation's id.
+ */
+export const invitationAnswerSchema = z.union([
+  invitationCodeSchema,
+  z.object({ invitationId: z.uuid() }).strict(),
+]);
+export type InvitationAnswer = z.infer<typeof invitationAnswerSchema>;
+
 /** The invited person stops (or allows again) invitations from one business. */
 export const invitationBlockSchema = z
   .object({ blocked: z.boolean() })
@@ -377,6 +387,15 @@ export interface MyInvitation extends InvitationPreview {
   businessId: string;
   expiresAt: string;
 }
+/** The Work page's invitations, and the businesses this account stopped inviting it. */
+export interface MyInvitations {
+  invitations: MyInvitation[];
+  blocked: { businessId: string; name: string }[];
+}
+/** What accepting made: a place on a team, or a manager's seat at a business. */
+export type InvitationAccepted =
+  | { kind: 'staff'; membership: MyMembership }
+  | { kind: 'manager'; businessId: string };
 export interface MyMembership {
   memberId: string;
   business: { id: string; name: string; slug: string; status: BusinessStatus };
