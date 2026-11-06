@@ -181,6 +181,9 @@ test('a sign-in from a new device sends a notice', async (t) => {
   });
   const notice = (await mails(50)).find((m) => m.type === 'new_sign_in_notice');
   assert.equal(notice.data.deviceLabel, 'Safari on iPhone');
+  // When it happened, so the email can say so (an ISO time, a moment ago).
+  assert.match(notice.data.at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.ok(Math.abs(Date.parse(notice.data.at) - Date.now()) < 60_000);
 });
 
 test('the code mail expires with the code, and the code is the only thing sealed in it', async (t) => {

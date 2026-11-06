@@ -18,7 +18,7 @@ export const recoveryLink = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'Lost your phone number? Attach a new one with this link. It works for 30 minutes, and you will need a code sent to the new number.',
+            text: 'Lost your phone number? Attach a new one with this link. You will need a code sent to the new number.',
           },
           {
             kind: 'button',
@@ -26,12 +26,12 @@ export const recoveryLink = defineMailType({
             href: mailLink(ctx, `/recover#r=${data.token}`, 'recover', true),
           },
           {
-            kind: 'text',
-            text: 'If you didn’t ask for this, ignore this email.',
+            kind: 'quiet',
+            text: 'The link works for 30 minutes. If you didn’t ask for this, ignore this email: nothing changes.',
           },
         ],
         reason:
-          'You get this email because someone asked to recover this TipMe account.',
+          'You get this email because someone asked to recover the TipMe account at this address.',
       },
       ctx,
     ),

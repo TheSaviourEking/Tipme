@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { weekDays } from '../dates.js';
 import { defineMailType, mailLink } from '../define.js';
 import { letter } from '../layout.js';
-import { ngn } from '../money.js';
+import { naira } from '../money.js';
 
 export const weeklyReport = defineMailType({
   id: 'weekly_report',
@@ -16,16 +17,25 @@ export const weeklyReport = defineMailType({
     })
     .strict(),
   sample: { isoWeek: '2026-W43', totalNetMinor: '1250000', tipCount: 4 },
-  render: (data, ctx) => {
-    const summary = `${ngn(data.totalNetMinor)} from ${data.tipCount} ${data.tipCount === 1 ? 'tip' : 'tips'}`;
-    return letter(
+  render: (data, ctx) =>
+    letter(
       {
         subject: 'Your week on TipMe',
         heading: 'Your week on TipMe',
-        // The first text names someone or something private; the preview line must not.
+        // The first text is the week; the preview line says what to do instead.
         preheader: 'See the whole week.',
         blocks: [
-          { kind: 'text', text: `Your week (${data.isoWeek}): ${summary}.` },
+          { kind: 'text', text: `${weekDays(data.isoWeek)}.` },
+          {
+            kind: 'stats',
+            items: [
+              { value: naira(data.totalNetMinor), label: 'you received' },
+              {
+                value: String(data.tipCount),
+                label: data.tipCount === 1 ? 'tip' : 'tips',
+              },
+            ],
+          },
           {
             kind: 'button',
             label: 'See the whole week',
@@ -33,9 +43,8 @@ export const weeklyReport = defineMailType({
           },
         ],
         reason:
-          'You get a weekly report for weeks you were tipped. You can turn it off in your email settings.',
+          'You get this email every Monday when you were tipped last week.',
       },
       ctx,
-    );
-  },
+    ),
 });
