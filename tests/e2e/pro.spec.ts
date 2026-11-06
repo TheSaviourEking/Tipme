@@ -174,6 +174,13 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
     page.getByRole('link', { name: 'Contact the TipMe team' }),
   ).toHaveAttribute('href', 'mailto:support@usetipme.xyz');
   await expect(page.getByLabel('Handle')).toHaveCount(0);
+  // The Saved line fades in (motion is allowed here): check contrast once it has settled, not
+  // part-way through the fade.
+  await page
+    .locator('.handle-saved')
+    .evaluate((el) =>
+      Promise.all(el.getAnimations().map((animation) => animation.finished)),
+    );
   await expectAccessible(page);
 
   // Staff allow one more, with a reason.
