@@ -160,6 +160,36 @@ test('API: refusals carry the field and the code the form shows', async () => {
   assert.equal(bad.status, 400);
   assert.equal(bad.body.error.code, 'VALIDATION_FAILED');
 
+  // `people` is the public search's path (PR B4): no location may take it, at creation or rename.
+  const people = await call('POST', '/v1/me/businesses', {
+    cookie: ada.cookie,
+    body: {
+      ...application(),
+      location: { ...application().location, slug: 'people' },
+    },
+  });
+  assert.equal(people.status, 400);
+  assert.deepEqual(people.body.error.fields, ['location.slug']);
+  const mine = (
+    await call('POST', '/v1/me/businesses', {
+      cookie: ada.cookie,
+      body: application(),
+    })
+  ).body.data;
+  const added = await call('POST', `/v1/me/businesses/${mine.id}/locations`, {
+    cookie: ada.cookie,
+    body: { name: 'People', slug: 'people', address: '1 Broad St, Lagos' },
+  });
+  assert.equal(added.status, 400);
+  assert.deepEqual(added.body.error.fields, ['slug']);
+  const renamed = await call(
+    'PATCH',
+    `/v1/me/businesses/${mine.id}/locations/${mine.locations[0].id}`,
+    { cookie: ada.cookie, body: { slug: 'people' } },
+  );
+  assert.equal(renamed.status, 400);
+  assert.deepEqual(renamed.body.error.fields, ['slug']);
+
   // Tobi has no proven email: applying is refused until they add one.
   const unproven = await call('POST', '/v1/me/businesses', {
     cookie: tobi.cookie,

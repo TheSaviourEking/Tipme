@@ -80,23 +80,21 @@ test('homepage makes creating a recipient page a clear next step', async ({
   await expect(page.getByText(/examples, not real people/i)).toHaveCount(0);
 });
 
-test('business page registers interest and sends nothing until the visitor does', async ({
+// With TipMe for businesses on (the e2e stack): an invitation to create one, no interest form. The
+// interest form (flag off) is tested on a stand-in stack in business-setup.spec.ts.
+test('business page invites people to create a business when businesses are on', async ({
   page,
 }) => {
   await page.goto('/for-businesses');
   await expect(
-    page.getByRole('heading', { name: 'TipMe for businesses is on its way.' }),
+    page.getByRole('heading', { name: 'Let your customers thank your team.' }),
   ).toBeVisible();
-  await page.getByLabel('Work email').fill('business@example.com');
-  await page.getByRole('button', { name: "Tell me when it's ready" }).click();
-  const emailLink = page.getByRole('link', { name: 'Open email app' });
-  const href = await emailLink.getAttribute('href');
-  if (!href) throw new Error('The business interest email link has no URL.');
-  expect(href).toContain('mailto:usetipme@gmail.com?');
-  expect(decodeURIComponent(href.replaceAll('+', ' '))).toContain(
-    'business@example.com',
+  await expect(page.getByRole('main')).toContainText(
+    'TipMe staff check your business’s name, address and contact',
   );
-  await expect(page.getByRole('status')).toContainText('press Send');
+  await expect(
+    page.getByRole('button', { name: "Tell me when it's ready" }),
+  ).toHaveCount(0);
 });
 
 test('arrowing through amounts never pulls focus out of the radio group', async ({

@@ -1,3 +1,10 @@
+# Current handoff — TipMe for businesses, PR B1 (6 November 2026)
+
+- Branch `feat/business-b1`, lane 4, committed, not pushed, based on `feat/business-b0`. No migration; no money path touched.
+- API: `POST /v1/me/businesses` (needs a confirmed sign-in email: `EMAIL_VERIFICATION_REQUIRED`; opens `business_waiting` with subject `{ businessId, userId }`), `GET/PATCH …/:id`, `POST …/:id/locations`, `PATCH …/locations/:locationId`, `POST …/locations/:locationId/close`, `GET …/:id/managers`, `POST …/managers/:managerId/remove`. Slugs lock once the business is not pending. Removing a manager locks the business row so the last owner always stays.
+- Web: `/health/release` now has `business: boolean`; the web reads it per request (Suspense slot, cached a minute) for `/for-businesses` and the header. `sections.ts` cards take an optional `onChange` so a write updates the page. The dashboard re-reads business roles on the `tipme:business-roles-changed` event.
+- Verified: commands and counts in `.superpowers/program/b1-report.md` (main checkout). Only the touched e2e specs were run locally (overload ruling); CI runs the full suite.
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.

@@ -1,3 +1,9 @@
+# Current task — TipMe for businesses, PR B1: applying for a business, locations and managers (6 November 2026)
+
+- Branch/worktree: `feat/business-b1` / `.worktrees/business-b1`, off local `feat/business-b0` (not yet merged), test lane 4. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 6–7 plus the owner's answer Q3.
+- Done: `business-manage.ts` (apply, detail, edit, add/edit/close location, list/remove managers) and the eight `/v1/me/businesses` routes; `business_apply` rate limit (10 an hour per person); `/health/release` carries `business`; `/for-businesses` and the header's "Businesses" choice follow it (create a business when on, the coming-soon form when off); `/dashboard/business/apply`; the Details, Locations and Managers sections; Home's "Add your business".
+- Next: coordinator review; rebase onto dev once B0 merges; the full e2e suite on CI. Verifying a business is PR B2; inviting managers is PR B3.
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.
