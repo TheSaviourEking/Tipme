@@ -60,22 +60,24 @@ test('business release 2 schema', async (t) => {
         values.shareMinor ?? 18000,
       ],
     );
+  // A proposal as R2-C1 makes it: proposed_at from the database clock (its default), starting
+  // `noticeDays` later, accepted at once when asked.
   const agreement = (memberId, values = {}) => {
-    const proposedAt = values.proposedAt ?? new Date();
+    const id = values.id ?? randomUUID();
     return q(
       `INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
-         proposed_at, effective_from, accepted_at)
-       VALUES ($1, $2, $3, 'business', $4, $5, $6, $7)`,
+         effective_from, accepted_at)
+       VALUES ($1, $2, $3, 'business', $4, now() + make_interval(days => $5::int),
+         CASE WHEN $6 THEN now() END)`,
       [
-        randomUUID(),
+        id,
         memberId,
         values.bps ?? 1000,
         ADA_USER,
-        proposedAt,
-        values.effectiveFrom ?? new Date(proposedAt.getTime() + 14 * DAY_MS),
-        values.acceptedAt ?? null,
+        values.noticeDays ?? 14,
+        values.accepted ?? false,
       ],
-    );
+    ).then(() => id);
   };
   // Ada works at a verified business; her tips there carry her membership.
   const setUp = async () => {
@@ -170,7 +172,7 @@ test('business release 2 schema', async (t) => {
         share({ tipId: tip.tipId, agreementId: later.agreementId, businessId }),
         /tip_business_shares_in_force/,
       );
-      await q(`DELETE FROM share_agreements WHERE id = $1`, [
+      await q(`UPDATE share_agreements SET ended_at = now() WHERE id = $1`, [
         later.agreementId,
       ]);
       const open = await seedAgreement(database, { memberId, accepted: false });
@@ -179,7 +181,10 @@ test('business release 2 schema', async (t) => {
         /tip_business_shares_in_force/,
       );
       // A 0% agreement in force is "no share": no row can say so.
-      await q(`DELETE FROM share_agreements WHERE id = $1`, [open.agreementId]);
+      await q(
+        `UPDATE share_agreements SET withdrawn_at = now() WHERE id = $1`,
+        [open.agreementId],
+      );
       const none = await seedAgreement(database, { memberId, businessBps: 0 });
       const tipUnderNone = await tipAt(memberId);
       await refused(
@@ -202,24 +207,20 @@ test('business release 2 schema', async (t) => {
       for (const bps of [6000, 10000, 500, 4000, -1000])
         await refused(agreement(memberId, { bps }), /share_agreements_bps/);
       for (const bps of [0, 1000, 2000, 3000, 5000]) {
-        await agreement(memberId, { bps, acceptedAt: new Date() });
+        await agreement(memberId, { bps, accepted: true });
         await q(
-          `UPDATE share_agreements SET ended_at = now() WHERE member_id = $1`,
+          `UPDATE share_agreements SET ended_at = now() WHERE member_id = $1 AND ended_at IS NULL`,
           [memberId],
         );
       }
-      const now = new Date();
       await refused(
-        agreement(memberId, {
-          proposedAt: now,
-          effectiveFrom: new Date(now.getTime() + 13 * DAY_MS),
-        }),
+        agreement(memberId, { noticeDays: 13 }),
         /share_agreements_notice/,
       );
-      await agreement(memberId, { acceptedAt: now });
+      await agreement(memberId, { accepted: true });
       await refused(
-        agreement(memberId, { acceptedAt: now }),
-        /share_agreements_in_force/,
+        agreement(memberId, { accepted: true }),
+        /share_agreements_latest_accepted/,
       );
       await agreement(memberId);
       await refused(agreement(memberId), /share_agreements_open/);
@@ -229,8 +230,192 @@ test('business release 2 schema', async (t) => {
             WHERE member_id = $1 AND accepted_at IS NULL`,
           [memberId],
         ),
-        /share_agreements_answer|share_agreements_in_force/,
+        /share_agreements_answer|share_agreements_latest_accepted/,
       );
+    },
+  );
+
+  await t.test(
+    'an agreement’s terms are frozen: no edit of the split, the membership or the start, no delete',
+    async () => {
+      const { memberId } = await setUp();
+      const tobi = await seedMember(database, {
+        locationId: (
+          await q(`SELECT location_id FROM business_members WHERE id = $1`, [
+            memberId,
+          ])
+        )[0].location_id,
+        profileId: TOBI,
+      });
+      const accepted = await agreement(memberId, { accepted: true });
+      const open = await agreement(memberId);
+      for (const id of [accepted, open])
+        for (const change of [
+          `business_bps = 5000`,
+          `member_id = '${tobi.memberId}'`,
+          `effective_from = effective_from - interval '13 days'`,
+          `proposed_at = proposed_at - interval '30 days'`,
+          `proposed_by = 'member'`,
+        ])
+          await refused(
+            q(`UPDATE share_agreements SET ${change} WHERE id = $1`, [id]),
+            /share_agreements_frozen/,
+          );
+      // An answer, an end and a successor are each set once, and never moved or cleared.
+      await refused(
+        q(`UPDATE share_agreements SET accepted_at = NULL WHERE id = $1`, [
+          accepted,
+        ]),
+        /share_agreements_frozen/,
+      );
+      await refused(
+        q(
+          `UPDATE share_agreements SET accepted_at = now() - interval '1 day' WHERE id = $1`,
+          [open],
+        ),
+        /share_agreements_backdated/,
+      );
+      await q(`UPDATE share_agreements SET ended_at = now() WHERE id = $1`, [
+        accepted,
+      ]);
+      for (const change of [
+        `ended_at = NULL`,
+        `ended_at = now() + interval '1 day'`,
+      ])
+        await refused(
+          q(`UPDATE share_agreements SET ${change} WHERE id = $1`, [accepted]),
+          /share_agreements_frozen/,
+        );
+      for (const id of [accepted, open])
+        await refused(
+          q(`DELETE FROM share_agreements WHERE id = $1`, [id]),
+          /share_agreements_frozen/,
+        );
+    },
+  );
+
+  await t.test(
+    'the 14 days’ notice runs from the database clock: proposed_at defaults to now and is never backdated',
+    async () => {
+      const { memberId } = await setUp();
+      const id = await agreement(memberId);
+      const [row] = await q(
+        `SELECT abs(extract(epoch FROM now() - proposed_at)) < 60 AS just_now,
+                effective_from - proposed_at AS notice
+           FROM share_agreements WHERE id = $1`,
+        [id],
+      );
+      assert.equal(row.just_now, true);
+      assert.equal(row.notice.days, 14);
+      await q(
+        `UPDATE share_agreements SET withdrawn_at = now() WHERE id = $1`,
+        [id],
+      );
+      // Proposed "15 days ago" so it could start at once: refused.
+      await refused(
+        q(
+          `INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
+             proposed_at, effective_from)
+           VALUES ($1, $2, 1000, 'business', $3, now() - interval '15 days', now() - interval '1 day')`,
+          [randomUUID(), memberId, ADA_USER],
+        ),
+        /share_agreements_backdated/,
+      );
+      await refused(
+        q(
+          `INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
+             effective_from, accepted_at)
+           VALUES ($1, $2, 1000, 'business', $3, now() + interval '14 days', now() - interval '1 hour')`,
+          [randomUUID(), memberId, ADA_USER],
+        ),
+        /share_agreements_backdated/,
+      );
+    },
+  );
+
+  await t.test(
+    'a successor is accepted, the same member’s, and starts later; one agreement is in force at any time',
+    async () => {
+      const { memberId } = await setUp();
+      const first = (
+        await seedAgreement(database, { memberId, startedDaysAgo: 20 })
+      ).agreementId;
+      const supersede = (id, by) =>
+        q(`UPDATE share_agreements SET superseded_by = $2 WHERE id = $1`, [
+          id,
+          by,
+        ]);
+      // As R2-C1 accepts a change: in one transaction the old one names its successor and the
+      // successor is accepted (checked at commit). History is seeded with the test-only hatch.
+      const replace = async (id, by) => {
+        const client = await database.pool.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query(`SET LOCAL tipme.allow_backdate = 'on'`);
+          await client.query(
+            `UPDATE share_agreements SET superseded_by = $2 WHERE id = $1`,
+            [id, by],
+          );
+          await client.query(
+            `UPDATE share_agreements SET accepted_at = proposed_at + interval '1 day' WHERE id = $1`,
+            [by],
+          );
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          client.release();
+        }
+      };
+      // A proposal that is not (yet) accepted can't replace anything.
+      const open = await agreement(memberId, { bps: 2000 });
+      await refused(supersede(first, open), /share_agreements_successor/);
+      await q(
+        `UPDATE share_agreements SET withdrawn_at = now() WHERE id = $1`,
+        [open],
+      );
+      // Another member's agreement can't replace this one.
+      const tobi = await seedMember(database, {
+        locationId: (
+          await q(`SELECT location_id FROM business_members WHERE id = $1`, [
+            memberId,
+          ])
+        )[0].location_id,
+        profileId: TOBI,
+      });
+      const tobis = (await seedAgreement(database, { memberId: tobi.memberId }))
+        .agreementId;
+      await refused(supersede(first, tobis), /share_agreements_successor/);
+      // An accepted successor starting later: the first stays in force until it starts.
+      const second = (
+        await seedAgreement(database, {
+          memberId,
+          businessBps: 2000,
+          startedDaysAgo: 5,
+          supersedes: first,
+        })
+      ).agreementId;
+      const at = (daysAgo) =>
+        q(
+          `SELECT tipme_share_agreement_at($1, now() - make_interval(days => $2::int)) AS id`,
+          [memberId, daysAgo],
+        ).then((rows) => rows[0].id);
+      assert.equal(await at(25), null);
+      assert.equal(await at(10), first);
+      assert.equal(await at(1), second);
+      // A third that starts before the second would make two agreements apply at once.
+      const third = (
+        await seedAgreement(database, {
+          memberId,
+          businessBps: 3000,
+          startedDaysAgo: 8,
+          accepted: false,
+        })
+      ).agreementId;
+      await refused(replace(second, third), /share_agreements_successor/);
+      // An agreement is replaced once, by one successor.
+      await refused(supersede(first, third), /share_agreements_frozen/);
     },
   );
 
@@ -486,6 +671,51 @@ test('business release 2 schema', async (t) => {
     },
   );
 
+  // Posts one balanced two-line transaction (clearing and a business payable) in one SQL
+  // transaction: a payment debits clearing and credits the payable; `flip` mirrors it.
+  const poster = (clearing, payable, businessId) => async (values) => {
+    const client = await database.pool.connect();
+    const id = randomUUID();
+    const amount = values.amount ?? 100;
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO ledger_transactions (id, operation_type, operation_key, currency, tip_id, reverses_transaction_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          id,
+          values.type,
+          values.key ?? randomUUID(),
+          values.currency ?? 'NGN',
+          values.tipId,
+          values.reverses ?? null,
+        ],
+      );
+      for (const [accountId, side, entryBusiness] of [
+        [clearing, values.flip ? 'credit' : 'debit', null],
+        [
+          payable,
+          values.flip ? 'debit' : 'credit',
+          values.entryBusiness === undefined
+            ? businessId
+            : values.entryBusiness,
+        ],
+      ])
+        await client.query(
+          `INSERT INTO ledger_entries (id, transaction_id, account_id, business_id, side, amount_minor, currency)
+           VALUES ($1, $2, $3, $4, $5, $6, 'NGN')`,
+          [randomUUID(), id, accountId, entryBusiness, side, amount],
+        );
+      await client.query('COMMIT');
+      return id;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
   await t.test(
     'a reversal names a payment of the same tip; an entry names its account’s business',
     async () => {
@@ -494,48 +724,7 @@ test('business release 2 schema', async (t) => {
       const other = await tipAt(memberId);
       const clearing = await account('provider_clearing', { kind: 'asset' });
       const payable = await account('business_payable', { businessId });
-      // Posts one balanced two-line transaction inside a SQL transaction.
-      const post = async (values) => {
-        const client = await database.pool.connect();
-        const id = randomUUID();
-        try {
-          await client.query('BEGIN');
-          await client.query(
-            `INSERT INTO ledger_transactions (id, operation_type, operation_key, currency, tip_id, reverses_transaction_id)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              id,
-              values.type,
-              values.key ?? randomUUID(),
-              values.currency ?? 'NGN',
-              values.tipId,
-              values.reverses ?? null,
-            ],
-          );
-          for (const [accountId, side, entryBusiness] of [
-            [clearing, values.flip ? 'credit' : 'debit', null],
-            [
-              payable,
-              values.flip ? 'debit' : 'credit',
-              values.entryBusiness === undefined
-                ? businessId
-                : values.entryBusiness,
-            ],
-          ])
-            await client.query(
-              `INSERT INTO ledger_entries (id, transaction_id, account_id, business_id, side, amount_minor, currency)
-               VALUES ($1, $2, $3, $4, $5, 100, 'NGN')`,
-              [randomUUID(), id, accountId, entryBusiness, side],
-            );
-          await client.query('COMMIT');
-          return id;
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        } finally {
-          client.release();
-        }
-      };
+      const post = poster(clearing, payable, businessId);
       await refused(
         post({ type: 'payment', tipId: tip.tipId, entryBusiness: null }),
         /ledger_entries_business_account/,
@@ -587,6 +776,53 @@ test('business release 2 schema', async (t) => {
         }),
         /operation_key/,
       );
+      // A chargeback after the full refund is another provider event, so another key: it would
+      // take the same money back twice, and the database refuses it.
+      await refused(
+        post({
+          type: 'reversal',
+          tipId: tip.tipId,
+          reverses: payment,
+          key: `reversal.${randomUUID()}`,
+          flip: true,
+        }),
+        /ledger_reversal_within_payment/,
+      );
+    },
+  );
+
+  await t.test(
+    'reversals of a payment never take back more than it credited to each account, and only as its mirror',
+    async () => {
+      const { businessId, memberId } = await setUp();
+      const tip = await tipAt(memberId);
+      const clearing = await account('provider_clearing', { kind: 'asset' });
+      const payable = await account('business_payable', { businessId });
+      const post = poster(clearing, payable, businessId);
+      const payment = await post({
+        type: 'payment',
+        tipId: tip.tipId,
+        amount: 100,
+      });
+      const reverse = (amount, flip = true) =>
+        post({
+          type: 'reversal',
+          tipId: tip.tipId,
+          reverses: payment,
+          amount,
+          flip,
+        });
+      // The same sides as the payment would double the credit instead of taking it back.
+      await refused(reverse(10, false), /ledger_reversal_within_payment/);
+      // Partial refunds add up to the payment, and not a kobo more.
+      await reverse(60);
+      await reverse(40);
+      await refused(reverse(1), /ledger_reversal_within_payment/);
+      const [{ n }] = await q(
+        `SELECT count(*)::int AS n FROM ledger_transactions WHERE reverses_transaction_id = $1`,
+        [payment],
+      );
+      assert.equal(n, 2);
     },
   );
 

@@ -5,7 +5,7 @@ CREATE TABLE "share_agreements" (
 	"business_bps" integer NOT NULL,
 	"proposed_by" text NOT NULL,
 	"proposed_by_user" uuid NOT NULL,
-	"proposed_at" timestamp with time zone NOT NULL,
+	"proposed_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"effective_from" timestamp with time zone NOT NULL,
 	"accepted_at" timestamp with time zone,
 	"declined_at" timestamp with time zone,
@@ -107,9 +107,10 @@ ALTER TABLE "team_tip_splits" ADD CONSTRAINT "team_tip_splits_profile_id_profile
 ALTER TABLE "tip_business_shares" ADD CONSTRAINT "tip_business_shares_tip_id_tips_id_fk" FOREIGN KEY ("tip_id") REFERENCES "public"."tips"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tip_business_shares" ADD CONSTRAINT "tip_business_shares_agreement_id_share_agreements_id_fk" FOREIGN KEY ("agreement_id") REFERENCES "public"."share_agreements"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tip_business_shares" ADD CONSTRAINT "tip_business_shares_business_id_businesses_id_fk" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "share_agreements_in_force" ON "share_agreements" USING btree ("member_id") WHERE accepted_at IS NOT NULL AND ended_at IS NULL AND superseded_by IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "share_agreements_latest_accepted" ON "share_agreements" USING btree ("member_id") WHERE accepted_at IS NOT NULL AND ended_at IS NULL AND superseded_by IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "share_agreements_open" ON "share_agreements" USING btree ("member_id") WHERE accepted_at IS NULL AND declined_at IS NULL AND withdrawn_at IS NULL;--> statement-breakpoint
 CREATE INDEX "share_agreements_member" ON "share_agreements" USING btree ("member_id","effective_from");--> statement-breakpoint
+CREATE UNIQUE INDEX "share_agreements_one_predecessor" ON "share_agreements" USING btree ("superseded_by") WHERE superseded_by IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "share_reports_business" ON "share_reports" USING btree ("business_id","created_at");--> statement-breakpoint
 CREATE INDEX "share_reports_member" ON "share_reports" USING btree ("member_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "table_assignments_open" ON "table_assignments" USING btree ("card_id") WHERE ended_at IS NULL;--> statement-breakpoint
@@ -145,13 +146,119 @@ ALTER TABLE "payout_destinations" ADD CONSTRAINT "payout_destinations_owner" CHE
 ALTER TABLE "payouts" ADD CONSTRAINT "payouts_owner" CHECK ((profile_id IS NULL) <> (business_id IS NULL));--> statement-breakpoint
 ALTER TABLE "tip_quotes" ADD CONSTRAINT "tip_quotes_recipient" CHECK ((profile_id IS NULL) <> (team_location_id IS NULL));--> statement-breakpoint
 ALTER TABLE "tips" ADD CONSTRAINT "tips_recipient" CHECK ((profile_id IS NULL) <> (team_location_id IS NULL));--> statement-breakpoint
-ALTER TABLE "tips" ADD CONSTRAINT "tips_team_no_member" CHECK (team_location_id IS NULL OR business_member_id IS NULL);--> statement-breakpoint
+ALTER TABLE "tips" ADD CONSTRAINT "tips_team_no_member" CHECK (team_location_id IS NULL OR business_member_id IS NULL);
+--> statement-breakpoint
 -- Business release 2 (plan R2-0 Task 27): what the database itself refuses, so no lane can write
 -- a share, a split, an assignment or a reversal wrongly. Hand-written below the generated part.
 
+-- 0. A share agreement is a record of what was proposed and agreed, never edited (review A2, B2).
+--    Its terms (member, split, who proposed, when, the start) never change, and it is never deleted.
+--    An answer (accepted, declined, withdrawn), an end and a successor are each set once. The
+--    proposal and the acceptance take the database clock, so the 14 days' notice can't be
+--    backdated: proposed_at defaults to now() and neither may be earlier than the transaction's
+--    time. Test fixtures seed history with SET LOCAL tipme.allow_backdate = 'on', as test resets
+--    use tipme.allow_truncate.
+CREATE FUNCTION tipme_share_agreement_backdated(at_time timestamptz) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT at_time < now() AND current_setting('tipme.allow_backdate', true) IS DISTINCT FROM 'on';
+$$;
+--> statement-breakpoint
+CREATE FUNCTION tipme_share_agreement_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF tipme_share_agreement_backdated(NEW.proposed_at)
+     OR (NEW.accepted_at IS NOT NULL AND tipme_share_agreement_backdated(NEW.accepted_at)) THEN
+    RAISE EXCEPTION 'a share agreement is proposed and accepted at the database''s time, never earlier'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'share_agreements_backdated';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER share_agreements_insert BEFORE INSERT ON share_agreements
+  FOR EACH ROW EXECUTE FUNCTION tipme_share_agreement_insert();
+--> statement-breakpoint
+CREATE FUNCTION tipme_share_agreement_frozen() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'a share agreement is never deleted'
+      USING ERRCODE = 'restrict_violation', CONSTRAINT = 'share_agreements_frozen';
+  END IF;
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.member_id IS DISTINCT FROM OLD.member_id
+     OR NEW.business_bps IS DISTINCT FROM OLD.business_bps
+     OR NEW.proposed_by IS DISTINCT FROM OLD.proposed_by
+     OR NEW.proposed_by_user IS DISTINCT FROM OLD.proposed_by_user
+     OR NEW.proposed_at IS DISTINCT FROM OLD.proposed_at
+     OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+     OR (OLD.accepted_at IS NOT NULL AND NEW.accepted_at IS DISTINCT FROM OLD.accepted_at)
+     OR (OLD.declined_at IS NOT NULL AND NEW.declined_at IS DISTINCT FROM OLD.declined_at)
+     OR (OLD.withdrawn_at IS NOT NULL AND NEW.withdrawn_at IS DISTINCT FROM OLD.withdrawn_at)
+     OR (OLD.ended_at IS NOT NULL AND NEW.ended_at IS DISTINCT FROM OLD.ended_at)
+     OR (OLD.superseded_by IS NOT NULL AND NEW.superseded_by IS DISTINCT FROM OLD.superseded_by) THEN
+    RAISE EXCEPTION 'a share agreement''s terms are fixed; an answer, an end or a successor is set once'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'share_agreements_frozen';
+  END IF;
+  IF OLD.accepted_at IS NULL AND NEW.accepted_at IS NOT NULL
+     AND tipme_share_agreement_backdated(NEW.accepted_at) THEN
+    RAISE EXCEPTION 'a share agreement is accepted at the database''s time, never earlier'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'share_agreements_backdated';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER share_agreements_frozen BEFORE UPDATE OR DELETE ON share_agreements
+  FOR EACH ROW EXECUTE FUNCTION tipme_share_agreement_frozen();
+--> statement-breakpoint
+-- A successor is checked at commit, because accepting a change takes two statements: the old
+-- agreement names its successor, then the successor is accepted (the latest-accepted index allows
+-- only one accepted, unsuperseded agreement per member at any moment). The successor is the same
+-- member's, accepted, and starts after the agreement it replaces, so the chain is ordered and at
+-- most one agreement is in force at any time.
+CREATE FUNCTION tipme_share_agreement_successor() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  current record;
+  successor record;
+BEGIN
+  SELECT * INTO current FROM share_agreements WHERE id = NEW.id;
+  IF current.superseded_by IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT * INTO successor FROM share_agreements WHERE id = current.superseded_by;
+  IF successor.member_id IS DISTINCT FROM current.member_id
+     OR successor.accepted_at IS NULL
+     OR successor.effective_from <= current.effective_from THEN
+    RAISE EXCEPTION 'a share agreement is replaced only by the same member''s accepted agreement that starts later'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'share_agreements_successor';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER share_agreements_successor AFTER INSERT OR UPDATE ON share_agreements
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION tipme_share_agreement_successor();
+--> statement-breakpoint
+-- "In force" has one meaning, used by the share trigger and by any lane that needs it (review B1):
+-- accepted by then, started by then, not ended by then, and not replaced by a successor that had
+-- started by then. The latest-accepted index means something else: see schema.ts.
+CREATE FUNCTION tipme_share_agreement_at(member_ref uuid, at_time timestamptz) RETURNS uuid LANGUAGE sql STABLE AS $$
+  SELECT a.id FROM share_agreements a
+   WHERE a.member_id = member_ref
+     AND a.accepted_at IS NOT NULL AND a.accepted_at <= at_time
+     AND a.effective_from <= at_time
+     AND (a.ended_at IS NULL OR a.ended_at > at_time)
+     AND NOT EXISTS (
+       SELECT 1 FROM share_agreements s
+        WHERE s.id = a.superseded_by AND s.accepted_at IS NOT NULL AND s.effective_from <= at_time)
+   ORDER BY a.effective_from DESC
+   LIMIT 1;
+$$;
+--> statement-breakpoint
+
 -- 1. A share is fixed on a tip once (append-only) and only as agreed: the tip was made at the
 --    agreement's membership (so a tip through the person's own page, with no member, never can be),
---    the agreement was accepted and in force when the tip was made, the business is the member's,
+--    the agreement was the one in force when the tip was made (tipme_share_agreement_at), the
+--    business is the member's,
 --    and the amount is exactly the agreed share of the tip's net, rounded down (Q9).
 CREATE FUNCTION tipme_tip_business_share_valid() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -160,7 +267,6 @@ DECLARE
   net bigint;
   agreement record;
   member_business uuid;
-  successor_from timestamptz;
 BEGIN
   SELECT t.business_member_id, t.created_at, q.recipient_net_minor
     INTO tip_member, tip_made, net
@@ -180,11 +286,7 @@ BEGIN
     RAISE EXCEPTION 'a share goes only to the member''s own business'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'tip_business_shares_business';
   END IF;
-  SELECT effective_from INTO successor_from FROM share_agreements WHERE id = agreement.superseded_by;
-  IF agreement.accepted_at IS NULL OR agreement.accepted_at > tip_made
-     OR agreement.effective_from > tip_made
-     OR (agreement.ended_at IS NOT NULL AND agreement.ended_at <= tip_made)
-     OR (successor_from IS NOT NULL AND successor_from <= tip_made) THEN
+  IF tipme_share_agreement_at(agreement.member_id, tip_made) IS DISTINCT FROM NEW.agreement_id THEN
     RAISE EXCEPTION 'the agreement was not in force when the tip was made'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'tip_business_shares_in_force';
   END IF;
@@ -312,3 +414,45 @@ $$;
 --> statement-breakpoint
 CREATE TRIGGER ledger_entries_business BEFORE INSERT ON ledger_entries
   FOR EACH ROW EXECUTE FUNCTION tipme_entry_business();
+
+--> statement-breakpoint
+
+-- 6. A reversal takes back no more than the payment gave, and only as its mirror (review A1). For
+--    each account, every entry of a reversal is on the opposite side from the payment's entries
+--    there, and all reversals of that payment together take back at most what the payment put on
+--    it. A refund and a later chargeback of the same tip are two provider events with two keys, so
+--    this, not the operation key, stops the second from taking the money back twice; partial
+--    refunds still add up to the whole. Checked at commit, under a per-payment lock so two
+--    reversals committing at once are counted one after the other.
+CREATE FUNCTION tipme_reversal_within_payment() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  original uuid;
+  paid numeric;
+  taken numeric;
+BEGIN
+  SELECT reverses_transaction_id INTO original FROM ledger_transactions WHERE id = NEW.transaction_id;
+  IF original IS NULL THEN
+    RETURN NULL;
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('tipme.reversal.' || original::text, 0));
+  -- What the payment put on this account: credits positive, debits negative.
+  SELECT coalesce(sum(CASE side WHEN 'credit' THEN amount_minor ELSE -amount_minor END), 0)
+    INTO paid FROM ledger_entries WHERE transaction_id = original AND account_id = NEW.account_id;
+  -- What every reversal of the payment, this one included, has put on it.
+  SELECT coalesce(sum(CASE e.side WHEN 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
+    INTO taken
+    FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
+   WHERE t.reverses_transaction_id = original AND e.account_id = NEW.account_id;
+  IF paid = 0
+     OR NEW.side <> (CASE WHEN paid > 0 THEN 'debit' ELSE 'credit' END)::ledger_side
+     OR abs(taken) > abs(paid) OR sign(taken) = sign(paid) THEN
+    RAISE EXCEPTION 'a reversal takes back at most what the payment put on each account, as its mirror'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'ledger_reversal_within_payment';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER ledger_entries_reversal_within_payment AFTER INSERT ON ledger_entries
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION tipme_reversal_within_payment();

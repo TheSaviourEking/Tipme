@@ -1,5 +1,5 @@
 {
-  "id": "8ee61258-2ca5-44eb-a7b1-dc5bf4b64ae6",
+  "id": "8cbb4974-4126-4e02-9d5b-33ed11816ffe",
   "prevId": "930cdb40-7b6c-4565-ad17-7b67e2c207ec",
   "version": "7",
   "dialect": "postgresql",
@@ -7077,7 +7077,8 @@
           "name": "proposed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "now()"
         },
         "effective_from": {
           "name": "effective_from",
@@ -7117,8 +7118,8 @@
         }
       },
       "indexes": {
-        "share_agreements_in_force": {
-          "name": "share_agreements_in_force",
+        "share_agreements_latest_accepted": {
+          "name": "share_agreements_latest_accepted",
           "columns": [
             {
               "expression": "member_id",
@@ -7166,6 +7167,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "share_agreements_one_predecessor": {
+          "name": "share_agreements_one_predecessor",
+          "columns": [
+            {
+              "expression": "superseded_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "superseded_by IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

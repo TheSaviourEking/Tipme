@@ -1386,8 +1386,10 @@ export const ledgerTransactions = pgTable(
     tipId: uuid('tip_id').references(() => tips.id),
     payoutId: uuid('payout_id').references(() => payouts.id),
     // Business release 2 (R2-A): a reversal names the payment it takes back. The database checks
-    // that it is the same tip's payment, in its currency; the unique operation key
-    // (`reversal.<providerEventId>`) makes a repeat a no-op.
+    // that it is the same tip's payment, in its currency, and at commit that all reversals of a
+    // payment mirror it and take back at most what it put on each account (a refund and a later
+    // chargeback are two events). The unique operation key (`reversal.<providerEventId>`) makes a
+    // repeat of one event a no-op.
     reversesTransactionId: uuid('reverses_transaction_id').references(
       (): AnyPgColumn => ledgerTransactions.id,
     ),
@@ -2461,7 +2463,11 @@ export const shareAgreements = pgTable(
     proposedByUser: uuid('proposed_by_user')
       .notNull()
       .references(() => users.id),
-    proposedAt: timestamp('proposed_at', { withTimezone: true }).notNull(),
+    // The database clock: a caller can't backdate it (the migration's trigger refuses an earlier
+    // value), so the 14 days' notice is real.
+    proposedAt: timestamp('proposed_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     effectiveFrom: timestamp('effective_from', {
       withTimezone: true,
     }).notNull(),
@@ -2493,7 +2499,10 @@ export const shareAgreements = pgTable(
       'share_agreements_ended',
       sql`(ended_at IS NULL AND superseded_by IS NULL) OR accepted_at IS NOT NULL`,
     ),
-    uniqueIndex('share_agreements_in_force')
+    // The newest accepted agreement, which may not have started yet: during its notice the one it
+    // supersedes is still in force. "In force at a time" is tipme_share_agreement_at(member, at),
+    // the same rule the share trigger uses; read the agreement through it, not through this index.
+    uniqueIndex('share_agreements_latest_accepted')
       .on(table.memberId)
       .where(
         sql`accepted_at IS NOT NULL AND ended_at IS NULL AND superseded_by IS NULL`,
@@ -2504,6 +2513,10 @@ export const shareAgreements = pgTable(
         sql`accepted_at IS NULL AND declined_at IS NULL AND withdrawn_at IS NULL`,
       ),
     index('share_agreements_member').on(table.memberId, table.effectiveFrom),
+    // One successor replaces one agreement: agreements form a single ordered chain.
+    uniqueIndex('share_agreements_one_predecessor')
+      .on(table.supersededBy)
+      .where(sql`superseded_by IS NOT NULL`),
   ],
 );
 

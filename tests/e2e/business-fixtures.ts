@@ -145,12 +145,16 @@ export async function seedAgreement({
   startedDaysAgo?: number;
 }): Promise<{ agreementId: string }> {
   const agreementId = randomUUID();
+  // The database refuses a backdated proposal; seeded history uses the test-only setting, set
+  // for this one statement's transaction before the row is written.
   await sql(
-    `INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
+    `WITH hatch AS (SELECT set_config('tipme.allow_backdate', 'on', true))
+     INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
        proposed_at, effective_from, accepted_at)
-     VALUES ($1, $2, $3, 'business', $4,
+     SELECT $1::uuid, $2::uuid, $3::int, 'business', $4::uuid,
        now() - make_interval(days => $5::int + 14), now() - make_interval(days => $5::int),
-       CASE WHEN $6 THEN now() - make_interval(days => $5::int + 13) END)`,
+       CASE WHEN $6::boolean THEN now() - make_interval(days => $5::int + 13) END
+       FROM hatch`,
     [
       agreementId,
       memberId,
