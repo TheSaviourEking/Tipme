@@ -1,3 +1,4 @@
+import type { TipBusinessNote } from './business.js';
 import { z } from 'zod';
 import { SUPPORTER_KEY_PATTERN } from './supporters.js';
 import type { ThanksSlip } from './thanks.js';
@@ -57,6 +58,11 @@ export const tipIntentRequestSchema = z
      * SHA-256, and only for a Pro page while recognition is switched on; otherwise it is ignored.
      */
     supporterKey: z.string().regex(SUPPORTER_KEY_PATTERN).optional(),
+    /**
+     * The business membership the supporter's page named (TipMe for businesses). A label the
+     * server checks and ignores when it doesn't hold: it never refuses or redirects a tip.
+     */
+    businessMemberId: z.uuid().optional(),
   })
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;
@@ -105,4 +111,9 @@ export interface TipStatusView {
    * Pro. The receipt then offers "Stop {name} recognising me". Older APIs send nothing.
    */
   recognised?: true;
+  /**
+   * Only for a paid tip made at a business: whether the supporter's note about the person is still
+   * open (7 days, once). Never carries the note.
+   */
+  businessNote?: TipBusinessNote;
 }

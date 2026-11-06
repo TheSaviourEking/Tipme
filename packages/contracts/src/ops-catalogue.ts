@@ -24,6 +24,7 @@ export const OPS_PERMISSIONS = [
   'payments.repair',
   'staff.manage',
   'usernames.manage',
+  'businesses.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -44,6 +45,12 @@ export interface OpsCatalogueEntry {
 }
 
 export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
+  // Sensitive: verifying makes a business's codes live; suspending stops its pages at once.
+  'businesses.manage': {
+    description: 'Verify, suspend and restore businesses, with a reason',
+    group: 'people',
+    sensitive: true,
+  },
   'analytics.view': {
     description: 'See health, visibility and market numbers',
     group: 'numbers',

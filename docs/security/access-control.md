@@ -154,6 +154,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/activity` | n/a (read) | – | – |
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
+| GET | `/v1/me/business-roles` | n/a (read) | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |

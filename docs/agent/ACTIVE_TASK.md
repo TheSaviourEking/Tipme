@@ -61,6 +61,12 @@
 - Done: Tasks 4.0 to 4.4 of the public boards plan (PR 4): the code on a paper panel (`.qr-studio__panel`); the one status line directly under the Upgrade panel, before the style lists, at every width; designs in Patterns, Cards and Photo by the API's `kind` (`lib/qr-groups.ts`); the Free card lettered in Manrope (`lib/brand-font.ts`, `drawQrCard`'s `fontFamily`). The `QrStudio.dc.html` board was not on disk to copy.
 - Next: the controller pushes the branch as a draft PR; CI runs the full e2e suite. Then PR 5 (QR print) builds on `qr-card.ts` and the QR CSS block. Evidence: `.superpowers/program/pub4-report.md` (main checkout).
 
+# Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
+
+- Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.
+- Done: the decision entries; domain helpers (slugs, shifts, Lagos weeks); contracts (every shape the lanes share, invitations by email, link or username with a per-business block, `businesses.manage`, two issue kinds, two notification kinds, the error codes); migration `0078_business`; attribution in `createPaymentIntent` (ignored, never refused, when it doesn't hold); `BUSINESS_ENABLED` (off by default) with a 404 guard; empty lane controllers; `GET /v1/me/business-roles`; the Business and Work shells; `/b/*` placeholders; CSS marker blocks; fixtures for every lane.
+- Next: coordinator review, push, and the full e2e suite on CI. Then wave 1 (B1–B8) branches off dev after B0 merges. Regenerate `0078_business` if another migration lands first.
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.

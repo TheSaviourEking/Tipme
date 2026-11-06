@@ -99,6 +99,20 @@ export const apiErrorCodes = [
   'STAFF_PHONE_LOCKED',
   'STAFF_CANNOT_DELETE',
   'STAFF_ALREADY_ENROLLED',
+  // TipMe for businesses. Not being a manager is answered as BUSINESS_NOT_FOUND (rule 2).
+  'BUSINESS_NOT_FOUND',
+  'BUSINESS_SLUG_TAKEN',
+  'LOCATION_SLUG_TAKEN',
+  'SLUG_LOCKED',
+  'OWNER_REQUIRED',
+  'INVITATION_INVALID',
+  'INVITATIONS_BLOCKED',
+  'INVITEE_UNAVAILABLE',
+  'ALREADY_A_MEMBER',
+  'MEMBER_NOT_TIPPABLE',
+  'NOTE_NOT_OPEN',
+  'BUSINESS_LAST_OWNER',
+  'BUSINESS_NOT_VERIFIED',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];

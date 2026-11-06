@@ -246,6 +246,8 @@ export const ISSUE_KINDS = [
   'staff_last_approver_removed',
   'username_take_back_unnoticed',
   'username_take_back_overdue',
+  'business_waiting',
+  'business_note_reported',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -284,6 +286,8 @@ export interface OpsIssueSubject {
   recoveryId?: string;
   requestId?: string;
   providerEventRowId?: string;
+  /** TipMe for businesses: the business (business_waiting) or the noted tip's business. */
+  businessId?: string;
 }
 
 export interface OpsIssue {

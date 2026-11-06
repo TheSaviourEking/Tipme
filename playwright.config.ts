@@ -108,6 +108,10 @@ export default defineConfig({
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
         LIVE_UPDATES_ENABLED: 'true',
+        // TipMe for businesses: the e2e stack tests it on (it is off by default everywhere else).
+        BUSINESS_ENABLED: 'true',
+        RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN: '10000',
+        RATE_LIMIT_BUSINESS_NOTE_PER_HOUR: '10000',
         // Every page opens a stream from 127.0.0.1.
         RATE_LIMIT_LIVE_CONNECT_PER_MIN: '10000',
         // The Get paid card now checks a name on its own, so many tests check from 127.0.0.1.

@@ -21,17 +21,32 @@ import {
   RECOVERY_EMAIL_CHANGED,
 } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { businessLinks, loadBusinessRoles } from '@/lib/business/roles-api';
 
 /**
  * The dashboard's navigation: a segmented control on a desktop, the fixed four-item tab bar on a
  * phone (My QR is not in the bar: Show QR sits beside Withdraw on Home).
  */
-const links = (handle: string | null) =>
+const links = (
+  handle: string | null,
+  business: { business: boolean; work: boolean } = {
+    business: false,
+    work: false,
+  },
+) =>
   [
     { href: '/dashboard', label: 'Home', phone: true },
     { href: '/dashboard/tips', label: 'Tips', phone: true },
     ...(handle ? [{ href: `/@${handle}`, label: 'My page', phone: true }] : []),
     { href: '/dashboard/qr', label: 'My QR', phone: false },
+    // TipMe for businesses: only for someone who manages one, or works at or is invited to one.
+    // Never in the phone's four-item bar.
+    ...(business.business
+      ? [{ href: '/dashboard/business', label: 'Business', phone: false }]
+      : []),
+    ...(business.work
+      ? [{ href: '/dashboard/work', label: 'Work', phone: false }]
+      : []),
     { href: '/dashboard/settings', label: 'Settings', phone: true },
   ] as const;
 
@@ -70,6 +85,12 @@ export function DashboardShell({
       else router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
     });
   }, [router, pathname]);
+
+  // Once per dashboard load: while BUSINESS_ENABLED is off the API answers 404 and no link shows.
+  const [business, setBusiness] = useState({ business: false, work: false });
+  useEffect(() => {
+    void loadBusinessRoles().then((roles) => setBusiness(businessLinks(roles)));
+  }, []);
 
   // Read on every page change too, so a finished setup clears its notice on the next click.
   const [payments, setPayments] = useState<
@@ -140,7 +161,7 @@ export function DashboardShell({
           {pathname !== '/dashboard/welcome' && (
             <div className="dashboard-bar">
               <nav aria-label="Dashboard" className="dashboard-nav">
-                {links(profile?.handle ?? null).map((link) => (
+                {links(profile?.handle ?? null, business).map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}

@@ -85,7 +85,24 @@ export type OperationErrorCode =
   | 'USERNAME_NOT_RESERVED'
   | 'TAKE_BACK_OPEN'
   | 'TAKE_BACK_NOT_FOUND'
-  | 'TAKE_BACK_CLOSED';
+  | 'TAKE_BACK_CLOSED'
+  // TipMe for businesses (PR B0). NOT_A_MANAGER and NO_MEMBERSHIP answer as "not found".
+  | 'NOT_A_MANAGER'
+  | 'NO_MEMBERSHIP'
+  | 'BUSINESS_NOT_FOUND'
+  | 'BUSINESS_SLUG_TAKEN'
+  | 'LOCATION_SLUG_TAKEN'
+  | 'SLUG_LOCKED'
+  | 'OWNER_REQUIRED'
+  | 'INVITATION_INVALID'
+  | 'INVITATIONS_BLOCKED'
+  | 'INVITEE_UNAVAILABLE'
+  | 'ALREADY_A_MEMBER'
+  | 'MEMBER_NOT_TIPPABLE'
+  | 'NOTE_NOT_OPEN'
+  | 'NOTE_TEXT_REFUSED'
+  | 'BUSINESS_LAST_OWNER'
+  | 'BUSINESS_NOT_VERIFIED';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is
