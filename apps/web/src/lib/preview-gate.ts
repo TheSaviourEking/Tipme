@@ -9,6 +9,8 @@ const OPEN = [
   /^\/preview-login$/,
   /^\/api\/revalidate$/,
   /^\/(favicon\.ico|robots\.txt|icon\.svg)$/,
+  // The home-screen icons and their manifest, exact names only.
+  /^\/(apple-icon|manifest\.webmanifest|icons\/192\.png|icons\/512-maskable\.png)$/,
 ];
 
 export function gateDecision(input: {
