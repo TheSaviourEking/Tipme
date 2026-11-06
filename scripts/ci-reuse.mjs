@@ -31,9 +31,8 @@ export function gh(path, query) {
   const out = execFileSync(
     'gh',
     ['api', path, ...(query ? ['-q', query] : [])],
-    {
-      encoding: 'utf8',
-    },
+    // Room for long status lists; callers still ask for only the fields they use.
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );
   return out.trim();
 }
