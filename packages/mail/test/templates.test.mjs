@@ -175,3 +175,143 @@ test('no sample value reaches a subject or preheader', () => {
     }
   }
 });
+
+/** Text a reader would see or copy: tags gone, entities read. */
+const visible = (html) =>
+  html
+    .replace(/<style[\s\S]*?<\/style>/g, '')
+    .replace(/<div data-preheader[\s\S]*?<\/div>/, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+
+/** The visible text of every element whose opening tag matches `marker` (a class or style). */
+const inside = (html, marker) =>
+  [
+    ...html.matchAll(
+      new RegExp(`<(p|td)[^>]*${marker}[^>]*>([\\s\\S]*?)</\\1>`, 'g'),
+    ),
+  ].map((m) => visible(m[2]).trim());
+
+const CODE_TYPES = [
+  'sign_in_code',
+  'email_change_code',
+  'payout_destination_code',
+  'recovery_email_code',
+  'recovery_change_code',
+  'recovery_code',
+  'recovery_new_email_code',
+];
+const CODE_WARNING =
+  'It works for 10 minutes. Never share it. TipMe staff will never ask for it.';
+
+test('the sign-in code email reads as the board', () => {
+  const out = renderMail('sign_in_code', { code: '482913' }, ctx);
+  assert.equal(out.subject, 'Your TipMe sign-in code');
+  assert.ok(
+    out.text.startsWith(
+      'Your sign-in code\n\nType it on TipMe to sign in.\n\n482913\n\n' +
+        CODE_WARNING,
+    ),
+    out.text,
+  );
+  const code = /<!--code-->([\s\S]*?)<!--\/code-->/.exec(out.html);
+  assert.equal(visible(code[1]), '482913', 'the code is in cells');
+  assert.deepEqual(inside(out.html, 'tm-warn'), [CODE_WARNING]);
+  for (const id of CODE_TYPES) {
+    const mail = renderMail(id, { code: '482913' }, ctx);
+    assert.ok(!mail.subject.includes('482913'), `${id} subject`);
+    assert.equal(
+      preheaderOf(mail.html),
+      'Your code is inside. It works for 10 minutes.',
+      `${id} preheader`,
+    );
+    assert.deepEqual(inside(mail.html, 'tm-warn'), [CODE_WARNING], id);
+  }
+  // The other six keep their own intro.
+  assert.ok(
+    renderMail('recovery_code', { code: '482913' }, ctx).text.includes(
+      'Enter this code to move your TipMe account to a new sign-in email.',
+    ),
+  );
+});
+
+test('the welcome email lists the three steps in order, in html and text', () => {
+  const out = renderMail('welcome', {}, ctx);
+  const steps = [
+    'Claim your username and add your face.',
+    'Add the bank account your money goes to.',
+    'Share your link or your QR code.',
+  ];
+  assert.ok(
+    out.text.includes(
+      'One link people can use to thank you with a tip. Three steps and you are ready:\n\n' +
+        steps.map((s, i) => `${i + 1}. ${s}`).join('\n'),
+    ),
+    out.text,
+  );
+  const seen = visible(out.html);
+  const at = steps.map((s) => seen.indexOf(s));
+  assert.ok(at.every((i) => i > 0));
+  assert.deepEqual(
+    [...at].sort((a, b) => a - b),
+    at,
+    'in order',
+  );
+  assert.ok(seen.indexOf(steps[2]) < seen.indexOf('Create your page'));
+  assert.match(
+    out.text,
+    /Create your page: https:\/\/usetipme\.xyz\/sign-up\?/,
+  );
+});
+
+test('confirm and recovery links say how long they work, in a quiet line', () => {
+  const confirm = renderMail(
+    'email_verification_link',
+    MAIL_TYPES.email_verification_link.sample,
+    ctx,
+  );
+  assert.ok(
+    confirm.text.startsWith(
+      'Confirm your email\n\nConfirm this address for your TipMe account, so we can reach you about your tips and your money.\n\nConfirm my email: https://usetipme.xyz/verify-email?ml=verify#v=',
+    ),
+    confirm.text,
+  );
+  assert.deepEqual(
+    inside(confirm.html, 'tm-muted" style="margin:0;font-size:14px'),
+    [
+      'The link works for 24 hours. If you didn’t ask for this, ignore this email.',
+    ],
+  );
+  assert.ok(
+    confirm.text.includes(
+      'You get this email because this address was added to a TipMe account.',
+    ),
+  );
+  const recover = renderMail(
+    'recovery_link',
+    MAIL_TYPES.recovery_link.sample,
+    ctx,
+  );
+  assert.ok(
+    recover.text.startsWith(
+      'Get back into TipMe\n\nLost your phone number? Attach a new one with this link. You will need a code sent to the new number.\n\nAttach a new number: ',
+    ),
+    recover.text,
+  );
+  assert.deepEqual(
+    inside(recover.html, 'tm-muted" style="margin:0;font-size:14px'),
+    [
+      'The link works for 30 minutes. If you didn’t ask for this, ignore this email: nothing changes.',
+    ],
+  );
+  assert.ok(
+    recover.text.includes(
+      'You get this email because someone asked to recover the TipMe account at this address.',
+    ),
+  );
+});

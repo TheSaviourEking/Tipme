@@ -17,7 +17,15 @@ export const welcome = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'TipMe gives you one simple link people can use to appreciate you with a tip. Next, create your page and choose your handle.',
+            text: 'One link people can use to thank you with a tip. Three steps and you are ready:',
+          },
+          {
+            kind: 'steps',
+            items: [
+              'Claim your username and add your face.',
+              'Add the bank account your money goes to.',
+              'Share your link or your QR code.',
+            ],
           },
           {
             kind: 'button',

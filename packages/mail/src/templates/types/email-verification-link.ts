@@ -19,16 +19,16 @@ export const emailVerificationLink = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'Confirm this address for your TipMe account. The link works for 24 hours.',
+            text: 'Confirm this address for your TipMe account, so we can reach you about your tips and your money.',
           },
           { kind: 'button', label: 'Confirm my email', href: link },
           {
-            kind: 'text',
-            text: 'If you didn’t ask for this, ignore this email.',
+            kind: 'quiet',
+            text: 'The link works for 24 hours. If you didn’t ask for this, ignore this email.',
           },
         ],
         reason:
-          'You get this email because someone added this address to a TipMe account.',
+          'You get this email because this address was added to a TipMe account.',
       },
       ctx,
     );

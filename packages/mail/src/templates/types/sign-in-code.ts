@@ -25,12 +25,14 @@ function codeMail(input: {
           // The code never goes in the subject, which shows on lock screens and in logs.
           subject: input.subject,
           heading: input.heading,
+          // The preview line says a code is here, never the code.
+          preheader: 'Your code is inside. It works for 10 minutes.',
           blocks: [
             { kind: 'text', text: input.intro },
             { kind: 'code', code: data.code },
             {
-              kind: 'text',
-              text: 'It expires in 10 minutes. Never share it with anyone. TipMe staff will never ask for it.',
+              kind: 'warn',
+              text: 'It works for 10 minutes. Never share it. TipMe staff will never ask for it.',
             },
           ],
           reason: input.reason,
@@ -44,7 +46,7 @@ export const signInCode = codeMail({
   id: 'sign_in_code',
   subject: 'Your TipMe sign-in code',
   heading: 'Your sign-in code',
-  intro: 'Enter this code to sign in to TipMe.',
+  intro: 'Type it on TipMe to sign in.',
   reason:
     'You get this email because someone asked to sign in to TipMe with this address. If it wasn’t you, ignore it.',
 });
