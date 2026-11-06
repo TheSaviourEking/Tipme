@@ -1,3 +1,10 @@
+# Current handoff: username reservation PR 2, take-backs (6 November 2026)
+
+- Branch `feat/username-takebacks`, test lane 4, merged with `origin/dev` at `b86c7b99`, committed, not pushed. Additive migration `0078_handle_take_backs`: a new table, a foreign key from `handle_reservations.take_back_id` added `NOT VALID` then validated, and `issues_kind` widened the same way. Regenerate it with drizzle-kit if another migration lands first.
+- Deploy the web first (every new profile and ops field is optional), and not to production before the terms' "Your username" section is on `main`.
+- The worker now reads optional `WEB_REVALIDATE_URL` and `WEB_REVALIDATE_SECRET` (passed in both compose files); without the secret, cached pages refresh within 5 minutes.
+- Evidence and rulings: `.superpowers/program/b2-report.md` (main checkout).
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.

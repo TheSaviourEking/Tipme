@@ -7,6 +7,7 @@ import {
   HttpCode,
   Inject,
   Optional,
+  Param,
   Patch,
   Post,
   Put,
@@ -36,6 +37,7 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
+  markTakeBackSeen,
   getNotificationPrefs,
   setNotificationPrefs,
   renameHandle,
@@ -161,11 +163,31 @@ export class MeProfileController {
     const { previous, handle } = await renameHandle(this.database.db, {
       userId: auth.userId,
       handle: body.handle,
+      sealing: this.sealing,
     });
     if (previous !== handle) {
       this.revalidator.revalidateGone(previous);
       this.revalidator.revalidate(handle);
     }
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
+  }
+
+  /**
+   * The dashboard showed the take-back banner in a visible tab. The first call can start the notice
+   * clock; later calls change nothing. Someone else's take-back is not found.
+   */
+  @Post('handle/take-back/:id/seen')
+  @HttpCode(200)
+  async takeBackSeen(
+    @CurrentUser() auth: AuthContext,
+    @Param('id') id: string,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    await markTakeBackSeen(this.database.db, {
+      userId: auth.userId,
+      takeBackId: id,
+    });
     return {
       data: this.mine(await getMyProfile(this.database.db, auth.userId)),
     };

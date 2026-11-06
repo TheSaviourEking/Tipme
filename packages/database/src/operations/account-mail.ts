@@ -19,7 +19,8 @@ type Owner = { userId: string } | { profileId: string };
 
 /**
  * Queues an email to an account's verified address, in the caller's transaction, so it exists only
- * if the operation does. An account with no verified address simply gets no email.
+ * if the operation does. An account with no verified address simply gets no email: null. Otherwise
+ * the queued message's id (the existing one when the dedupe key was used before).
  */
 export async function mailOwner(
   tx: Tx | Database,
@@ -30,7 +31,7 @@ export async function mailOwner(
     dedupeKey: string;
     now?: Date;
   },
-): Promise<void> {
+): Promise<{ id: string } | null> {
   const [owner] =
     'userId' in input
       ? await tx
@@ -54,8 +55,8 @@ export async function mailOwner(
               isNull(users.deletedAt),
             ),
           );
-  if (!owner?.email) return;
-  await enqueueMail(tx as Tx, sealing, {
+  if (!owner?.email) return null;
+  const { id } = await enqueueMail(tx as Tx, sealing, {
     type: input.type,
     to: owner.email,
     userId: owner.userId,
@@ -63,6 +64,7 @@ export async function mailOwner(
     dedupeKey: input.dedupeKey,
     ...(input.now ? { now: input.now } : {}),
   });
+  return { id };
 }
 
 const UUID = /^[0-9a-f-]{36}$/;

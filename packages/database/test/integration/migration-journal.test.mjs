@@ -31,3 +31,7 @@ test('the journal lists each migration once, in order, with its file', () => {
 test('the handle rule migration is in the journal', () => {
   assert.ok(entries.some((entry) => entry.tag.endsWith('_handle_changes')));
 });
+
+test('the take-back migration is in the journal', () => {
+  assert.ok(entries.some((entry) => entry.tag.endsWith('_handle_take_backs')));
+});

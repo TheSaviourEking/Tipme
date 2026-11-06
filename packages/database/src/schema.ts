@@ -854,8 +854,8 @@ export const handleReservations = pgTable(
     id: uuid('id').primaryKey(),
     handleLower: text('handle_lower').notNull(),
     source: text('source').notNull(),
-    // The take-back this came from (PR 2 adds that table and the foreign key).
-    takeBackId: uuid('take_back_id'),
+    // The take-back this came from.
+    takeBackId: uuid('take_back_id').references(() => handleTakeBacks.id),
     reason: text('reason').notNull(),
     // Null only when the system completed a take-back.
     reservedBy: uuid('reserved_by').references(() => users.id),
@@ -875,6 +875,81 @@ export const handleReservations = pgTable(
     check(
       'handle_reservations_released',
       sql`${table.releasedAt} IS NULL OR (${table.releasedBy} IS NOT NULL AND ${table.releaseReason} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/**
+ * Usernames TipMe takes back from a page (username reservation spec, section 3.3). One row per
+ * take-back: approved (the notice is queued), noticed (a sent email or a seen banner started the
+ * clock), due, then done or cancelled. The reason is staff-only; the user only ever reads the
+ * category's fixed words, so there is no free text for them here (owner answer 3).
+ */
+export const handleTakeBacks = pgTable(
+  'handle_take_backs',
+  {
+    id: uuid('id').primaryKey(),
+    approvalRequestId: uuid('approval_request_id').references(
+      () => approvalRequests.id,
+    ),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    handleLower: text('handle_lower').notNull(),
+    kind: text('kind').notNull(),
+    category: text('category').notNull(),
+    noticeDays: integer('notice_days').notNull(),
+    reason: text('reason').notNull(),
+    state: text('state').notNull(),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id),
+    // Null when it ran alone, without a second person.
+    approvedBy: uuid('approved_by').references(() => users.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    noticedAt: timestamp('noticed_at', { withTimezone: true }),
+    noticedVia: text('noticed_via'),
+    bannerSeenAt: timestamp('banner_seen_at', { withTimezone: true }),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    remindedAt: timestamp('reminded_at', { withTimezone: true }),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    noticeMailId: uuid('notice_mail_id').references(() => mailMessages.id),
+    outcome: text('outcome'),
+    newHandle: text('new_handle'),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    cancelReason: text('cancel_reason'),
+    freeChangeUntil: timestamp('free_change_until', { withTimezone: true }),
+    freeChangeUsedAt: timestamp('free_change_used_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('handle_take_backs_open')
+      .on(table.handleLower)
+      .where(sql`state IN ('approved', 'noticed', 'due')`),
+    index('handle_take_backs_open_profile')
+      .on(table.profileId)
+      .where(sql`state IN ('approved', 'noticed', 'due')`),
+    index('handle_take_backs_state_due').on(table.state, table.dueAt),
+    check('handle_take_backs_kind', sql`${table.kind} IN ('current', 'old')`),
+    check(
+      'handle_take_backs_category',
+      sql`${table.category} IN ('ordinary', 'impersonation', 'trademark', 'legal')`,
+    ),
+    check(
+      'handle_take_backs_notice_days',
+      sql`(${table.category} = 'ordinary' AND ${table.noticeDays} BETWEEN 7 AND 30) OR (${table.category} <> 'ordinary' AND ${table.noticeDays} BETWEEN 0 AND 7)`,
+    ),
+    check(
+      'handle_take_backs_state',
+      sql`${table.state} IN ('approved', 'noticed', 'due', 'done', 'cancelled')`,
+    ),
+    check(
+      'handle_take_backs_noticed_via',
+      sql`${table.noticedVia} IS NULL OR ${table.noticedVia} IN ('email', 'banner', 'unreached')`,
+    ),
+    check(
+      'handle_take_backs_outcome',
+      sql`${table.outcome} IS NULL OR ${table.outcome} IN ('user_chose', 'assigned', 'page_deleted', 'old_removed')`,
     ),
   ],
 );

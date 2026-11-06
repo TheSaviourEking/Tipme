@@ -244,6 +244,8 @@ export const ISSUE_KINDS = [
   'staff_acted_alone',
   'staff_approval_pending',
   'staff_last_approver_removed',
+  'username_take_back_unnoticed',
+  'username_take_back_overdue',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -733,6 +735,8 @@ export interface OpsPage {
   handleChanges?: { used: number; allowed: number };
   /** Which images staff can review. Optional, as `handleChanges`. */
   images?: { hasCover: boolean; hasPhoto: boolean };
+  /** Search only: the name searched for was taken back from this page, on this date. */
+  takenBackOn?: string;
 }
 
 /** A page's image, as staff review and remove it. */

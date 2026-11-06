@@ -1,3 +1,4 @@
+import type { TakeBackKind } from './usernames.js';
 import { z } from 'zod';
 import type { ResolvedCover } from './covers.js';
 import { qrStyleSchema } from './qr.js';
@@ -126,6 +127,28 @@ export interface MyProfile {
    * Pro, so Settings can say they are kept. Optional: an older API sends none.
    */
   thanks?: ThanksChoice;
+  /**
+   * A username TipMe is taking back from this page, while it is open. `dueAt` is the deadline once
+   * noticed, before that the one seeing it now would set. `why` is the category's fixed sentence.
+   * Optional: the web deploys first.
+   */
+  usernameTakeBack?: {
+    id: string;
+    handle: string;
+    kind: TakeBackKind;
+    dueAt: string;
+    why: string;
+    current: string;
+  } | null;
+  /**
+   * After TipMe gave the page a username (owner answer 4): one change, free and not counted, until
+   * `until`. Optional: the web deploys first.
+   */
+  usernameFreeChange?: {
+    until: string;
+    assignedHandle: string;
+    old: string;
+  } | null;
 }
 
 /** The public page: each detail is present only when the recipient made it public. */

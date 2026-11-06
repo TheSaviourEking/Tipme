@@ -95,6 +95,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   staff_acted_alone: 'account',
   staff_approval_pending: 'info',
   staff_last_approver_removed: 'account',
+  username_take_back_unnoticed: 'account',
+  username_take_back_overdue: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -153,6 +155,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return 'A serious action is waiting for a second person. Decide it under Approvals.';
     case 'staff_last_approver_removed':
       return 'A staff change left nobody else to act as second person, so one person can now take serious actions alone.';
+    case 'username_take_back_unnoticed':
+      return `A username take-back for ${page} was approved 24 hours ago, but the notice hasn't reached them by email or on their dashboard. It goes ahead after 14 days if it never does. Cancel it under Usernames if needed.`;
+    case 'username_take_back_overdue':
+      return `A username take-back for ${page} is more than an hour past its deadline and hasn't completed. The worker retries every minute.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
@@ -481,6 +487,45 @@ export function runIssueDetectors(
         ).opened
       )
         opened += 1;
+    // Username take-backs (username reservation spec, 5.8): a notice that reached nobody in a day,
+    // and a deadline an hour past without completing.
+    const dayAgo = new Date(now.getTime() - 86_400_000).toISOString();
+    const hourAgo = new Date(now.getTime() - 3_600_000).toISOString();
+    const takeBacks = await db.execute<{
+      id: string;
+      profile_id: string;
+      handle_lower: string;
+      kind: string;
+      issue: 'username_take_back_unnoticed' | 'username_take_back_overdue';
+    }>(sql`
+      SELECT id, profile_id, handle_lower, kind, 'username_take_back_unnoticed' AS issue
+        FROM handle_take_backs
+       WHERE state = 'approved' AND noticed_at IS NULL
+         AND approved_at <= ${dayAgo}::timestamptz
+         AND NOT EXISTS (SELECT 1 FROM issues i WHERE i.dedupe_key = 'username_take_back_unnoticed.' || handle_take_backs.id)
+      UNION ALL
+      SELECT id, profile_id, handle_lower, kind, 'username_take_back_overdue'
+        FROM handle_take_backs
+       WHERE state NOT IN ('done', 'cancelled')
+         AND due_at <= ${hourAgo}::timestamptz
+         AND NOT EXISTS (SELECT 1 FROM issues i WHERE i.dedupe_key = 'username_take_back_overdue.' || handle_take_backs.id)
+       LIMIT 500`);
+    for (const row of takeBacks.rows)
+      if (
+        (
+          await openIssue(db, {
+            dedupeKey: `${row.issue}.${row.id}`,
+            kind: row.issue,
+            subject: { profileId: row.profile_id },
+            now,
+            // The summary names the page; an old username being taken back is named here.
+            ...(row.kind === 'old'
+              ? { note: `The old username is @${row.handle_lower}.` }
+              : {}),
+          })
+        ).opened
+      )
+        opened += 1;
     return { opened };
   });
 }
@@ -703,6 +748,16 @@ export function autoResolveIssues(
         FROM issues i JOIN approval_requests r ON r.id = (i.subject->>'requestId')::uuid
        WHERE i.status = 'open' AND i.kind = 'staff_approval_pending'
          AND r.status <> 'pending'
+      UNION ALL
+      SELECT i.id, 'The take-back notice reached them, or the take-back ended.'
+        FROM issues i JOIN handle_take_backs tb ON i.dedupe_key = 'username_take_back_unnoticed.' || tb.id
+       WHERE i.status = 'open' AND i.kind = 'username_take_back_unnoticed'
+         AND tb.state <> 'approved'
+      UNION ALL
+      SELECT i.id, 'The take-back completed or was cancelled.'
+        FROM issues i JOIN handle_take_backs tb ON i.dedupe_key = 'username_take_back_overdue.' || tb.id
+       WHERE i.status = 'open' AND i.kind = 'username_take_back_overdue'
+         AND tb.state IN ('done', 'cancelled')
       UNION ALL
       SELECT i.id, 'The recovery was completed or cancelled.'
         FROM issues i JOIN phone_recoveries r ON r.id = (i.subject->>'recoveryId')::uuid

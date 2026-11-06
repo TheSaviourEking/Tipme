@@ -61,6 +61,7 @@ test('Usernames appears only with usernames.manage, right after Pages', () => {
   assert.deepEqual(hrefs(['usernames.manage']), [
     '/ops',
     '/ops/approvals',
+    '/ops/pages',
     '/ops/usernames',
     '/ops/staff',
   ]);
@@ -69,6 +70,11 @@ test('Usernames appears only with usernames.manage, right after Pages', () => {
       .label,
     'Usernames',
   );
+});
+
+test('Pages shows to a usernames.manage-only holder', () => {
+  // Taking a username back starts from the page's card.
+  assert.ok(hrefs(['usernames.manage']).includes('/ops/pages'));
 });
 
 const OWNER = [

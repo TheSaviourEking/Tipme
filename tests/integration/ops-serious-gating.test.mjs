@@ -99,6 +99,8 @@ let seq = 0;
 
 beforeEach(async () => {
   reads.lockHeldDuringRead.length = 0;
+  // Take-backs name the request that approved them; the requests go below.
+  await q(`UPDATE handle_take_backs SET approval_request_id = NULL`);
   for (const table of [
     'ops_sessions',
     'ops_lockouts',
@@ -313,6 +315,33 @@ const wired = {
     payload: { profileId: await profileId(), feeBps: 250 },
     happened: async () => (await feeOf()) === 250,
   }),
+  'username.take_back': async () => {
+    const handle = `gate_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const [{ id }] = await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live') RETURNING id`,
+      [userId, handle],
+    );
+    return {
+      payload: {
+        profileId: id,
+        name: handle,
+        kind: 'current',
+        category: 'ordinary',
+        noticeDays: 7,
+      },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM handle_take_backs WHERE handle_lower = $1 AND state = 'approved'`,
+            [handle],
+          )
+        ).length > 0,
+    };
+  },
   'fee.free': async () => {
     const id = await profileId();
     await q(`DELETE FROM fee_free_credits WHERE profile_id = $1`, [id]);
@@ -646,6 +675,30 @@ test('I4: a page owner on staff cannot approve their own fee, by id or by mailbo
     });
   assert.equal((await approve(pending.requestId, third)).status, 'approved');
   assert.equal(await feeOf(), 222);
+});
+
+test("the page's owner can't approve a take-back of their own page", async () => {
+  const requester = await person();
+  const handle = `own_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+  const pageOwner = await person();
+  const [{ id }] = await q(
+    `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state)
+     VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live') RETURNING id`,
+    [pageOwner, handle],
+  );
+  const third = await person();
+  const pending = await ask(requester, 'username.take_back', {
+    profileId: id,
+    name: handle,
+    kind: 'current',
+    category: 'trademark',
+    noticeDays: 3,
+  });
+  assert.equal(pending.state, 'pending');
+  await assert.rejects(approve(pending.requestId, pageOwner), {
+    code: 'APPROVAL_SUBJECT',
+  });
+  assert.equal((await approve(pending.requestId, third)).status, 'approved');
 });
 
 test('I4: someone on a role cannot approve adding to it', async () => {

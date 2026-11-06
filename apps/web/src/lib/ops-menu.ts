@@ -6,6 +6,8 @@ const PAGE_CARDS = [
   'fees.manage',
   'payouts.resolve',
   'recoveries.manage',
+  // The page card offers "Take back this username".
+  'usernames.manage',
 ];
 
 /** The menu's groups, in the order the OpsShell board draws them; the first has no label. */

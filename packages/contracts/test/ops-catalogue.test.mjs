@@ -6,6 +6,8 @@ import {
   OPS_PERMISSIONS,
   OPS_PERMISSION_GROUPS,
   SERIOUS_ACTIONS,
+  SERIOUS_ACTION_PERMISSIONS,
+  SERIOUS_ACTION_WORDS,
 } from '../dist/index.js';
 
 const opsDir = new URL('../../../apps/api/src/ops/', import.meta.url);
@@ -57,9 +59,18 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed ten', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 10);
+test('the serious actions are the agreed eleven', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 11);
   assert.ok(SERIOUS_ACTIONS.includes('staff.grant_owner'));
+  assert.ok(SERIOUS_ACTIONS.includes('username.take_back'));
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['username.take_back'],
+    'usernames.manage',
+  );
+  assert.equal(
+    SERIOUS_ACTION_WORDS['username.take_back'],
+    'Take a username back from a page',
+  );
 });
 
 test('the runbook names every permission and serious action', () => {

@@ -74,6 +74,10 @@ export const workerConfigSchema = z
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })
       .default('http://localhost:3000'),
+    // Tells the web app a page changed username (the take-back sweep), as the API does. Optional:
+    // unset, cached pages refresh within 5 minutes on their own.
+    WEB_REVALIDATE_URL: z.url({ protocol: /^https?$/ }).optional(),
+    WEB_REVALIDATE_SECRET: z.string().min(32).optional(),
     // Provider, live switch and Bachs API keys: one definition with the API (no webhook secrets).
     ...paymentSettingsShape,
     // Anonymous analytics (PR-009). Unset: on in development and test, off in production (D-07).

@@ -52,6 +52,8 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   'payment.conflict': none,
   'payment.mismatch': none,
   'payment.reversed': none,
+  // A staff alert only. The owner's dashboard learns of the new username on its next profile read.
+  'username.take_back_done': none,
   [PAYOUT_START_EVENT]: none,
   [PLATFORM_REFUSAL_EVENT]: none,
   [WITHDRAWAL_FREEZE_OPENED_EVENT]: none,

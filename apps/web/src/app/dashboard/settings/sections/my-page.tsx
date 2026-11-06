@@ -202,6 +202,14 @@ export function HandleChange() {
   // Nor does an API older than the handle rule send the count: no number to show, but it can go on.
   const counted = profile.handleChanges;
   const left = counted ? Math.max(0, counted.allowed - counted.used) : null;
+  // TipMe is taking the current username back: any plan may choose, and it isn't counted.
+  const takeBack =
+    profile.usernameTakeBack?.kind === 'current'
+      ? profile.usernameTakeBack
+      : null;
+  // After TipMe gave the page a username: one free change, any plan (owner answer 4).
+  const freeChange = takeBack ? null : (profile.usernameFreeChange ?? null);
+  const special = takeBack !== null || freeChange !== null;
   const [handle, setHandle] = useState(profile.handle);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -312,7 +320,7 @@ export function HandleChange() {
     </p>
   );
 
-  if (profile.plan !== 'pro')
+  if (!special && profile.plan !== 'pro')
     return (
       <Card id="handle" className="settings-section settings-handle-row">
         <h3 ref={heading} tabIndex={-1} className="sr-only">
@@ -320,6 +328,8 @@ export function HandleChange() {
         </h3>
         <div>
           <p className="settings-handle-row__name">Handle: @{profile.handle}</p>
+          {/* A Free page lands here right after choosing during a take-back. */}
+          {savedNotice}
           <p className="tm-hint" role={error ? 'alert' : undefined}>
             Handle changes are part of TipMe Pro.
           </p>
@@ -329,9 +339,9 @@ export function HandleChange() {
       </Card>
     );
 
-  if (left === 0)
+  if (!special && left === 0)
     return (
-      <Card className="settings-section">
+      <Card id="handle" className="settings-section">
         <h3 ref={heading} tabIndex={-1}>
           Your handle
         </h3>
@@ -346,14 +356,25 @@ export function HandleChange() {
     );
 
   return (
-    <Card className="settings-section">
-      <h3>Your handle</h3>
-      <p className="tm-hint">
-        {left !== null && <strong>{changesLeft(left)}. </strong>}
-        Switching back to an old handle counts as a change. Your old links and
-        printed QR codes keep working: they lead to your new handle, and nobody
-        else can take them.
-      </p>
+    <Card id="handle" className="settings-section">
+      <h3>{takeBack ? 'Choose a new username' : 'Your handle'}</h3>
+      {takeBack ? (
+        <p className="tm-hint">
+          TipMe needs @{takeBack.handle} back. Choosing a new username won’t use
+          up any of your username changes.
+        </p>
+      ) : freeChange ? (
+        <p className="tm-hint">
+          This change is free and won’t use up any of your username changes.
+        </p>
+      ) : (
+        <p className="tm-hint">
+          {left !== null && <strong>{changesLeft(left)}. </strong>}
+          Switching back to an old handle counts as a change. Your old links and
+          printed QR codes keep working: they lead to your new handle, and
+          nobody else can take them.
+        </p>
+      )}
       <form
         className="settings-form"
         onSubmit={(event) => void review(event)}
@@ -381,23 +402,44 @@ export function HandleChange() {
           disabled={wanted === profile.handle}
           aria-busy={busy}
         >
-          Change handle
+          {takeBack ? 'Choose this username' : 'Change handle'}
         </Button>
       </form>
       {confirming && (
         <ConfirmDialog
-          title={`Change your handle to @${confirming}?`}
+          title={
+            takeBack
+              ? `Make @${confirming} your new username?`
+              : `Change your handle to @${confirming}?`
+          }
           confirm="Yes, change it"
           busy={busy}
           onConfirm={() => void save(confirming)}
           onCancel={closeConfirm}
         >
-          <p>
-            Your page moves to {host}/@{confirming}. Old links and printed QR
-            codes keep working.
-          </p>
-          {left !== null && (
-            <p>You’ll have {changesLeft(left - 1)} after this.</p>
+          {takeBack ? (
+            <p>
+              Your page will be at {host}/@{confirming}. Links and QR codes with
+              @{takeBack.handle} will stop working now. This won’t use up any of
+              your username changes.
+            </p>
+          ) : (
+            <>
+              <p>
+                Your page moves to {host}/@{confirming}. Old links and printed
+                QR codes keep working.
+              </p>
+              {freeChange ? (
+                <p>
+                  This change is free and won’t use up any of your username
+                  changes.
+                </p>
+              ) : (
+                left !== null && (
+                  <p>You’ll have {changesLeft(left - 1)} after this.</p>
+                )
+              )}
+            </>
           )}
         </ConfirmDialog>
       )}

@@ -203,3 +203,72 @@ test('fix: changing the phone number refreshes the public page', async () => {
     ['showsphone'],
   );
 });
+
+test('the take-back banner: the profile carries it, and seen answers the profile', async () => {
+  const { cookie } = await signIn(stack.api, '+2348031240091');
+  assert.equal(
+    (await call('POST', '/v1/me/page', cookie, { handle: 'tb_banner_api' }))
+      .status,
+    201,
+  );
+  const [{ id: profileId, user_id: userId }] = (
+    await database.pool.query(
+      `SELECT id, user_id FROM profiles WHERE handle_lower = 'tb_banner_api'`,
+    )
+  ).rows;
+  const [{ id }] = (
+    await database.pool.query(
+      `INSERT INTO handle_take_backs (id, profile_id, handle_lower, kind, category, notice_days, reason, state, requested_by, approved_at)
+       VALUES (gen_random_uuid(), $1, 'tb_banner_api', 'current', 'ordinary', 7, 'Internal staff words here', 'approved', $2, now())
+       RETURNING id`,
+      [profileId, userId],
+    )
+  ).rows;
+  const profile = (await (await call('GET', '/v1/me/profile', cookie)).json())
+    .data;
+  assert.equal(profile.usernameTakeBack.id, id);
+  assert.ok(!JSON.stringify(profile).includes('Internal staff words'));
+  const seen = await call('POST', `/v1/me/handle/take-back/${id}/seen`, cookie);
+  assert.equal(seen.status, 200, await seen.clone().text());
+  assert.equal((await seen.json()).data.usernameTakeBack.id, id);
+  const [row] = (
+    await database.pool.query(
+      `SELECT noticed_via FROM handle_take_backs WHERE id = $1`,
+      [id],
+    )
+  ).rows;
+  assert.equal(row.noticed_via, 'banner');
+  const other = await signIn(stack.api, '+2348031240092');
+  await call('POST', '/v1/me/page', other.cookie, { handle: 'tb_banner_two' });
+  const refused = await call(
+    'POST',
+    `/v1/me/handle/take-back/${id}/seen`,
+    other.cookie,
+  );
+  assert.equal(refused.status, 404);
+  assert.equal((await refused.json()).error.code, 'TAKE_BACK_NOT_FOUND');
+});
+
+test('choosing a new username during a take-back refreshes both pages', async () => {
+  const { cookie } = await signIn(stack.api, '+2348031240093');
+  await call('POST', '/v1/me/page', cookie, { handle: 'tb_reval_old' });
+  await call('PUT', '/v1/me/page/state', cookie, { state: 'live' });
+  const [{ id: profileId, user_id: userId }] = (
+    await database.pool.query(
+      `SELECT id, user_id FROM profiles WHERE handle_lower = 'tb_reval_old'`,
+    )
+  ).rows;
+  await database.pool.query(
+    `INSERT INTO handle_take_backs (id, profile_id, handle_lower, kind, category, notice_days, reason, state, requested_by, approved_at)
+     VALUES (gen_random_uuid(), $1, 'tb_reval_old', 'current', 'ordinary', 7, 'Brand protection', 'approved', $2, now())`,
+    [profileId, userId],
+  );
+  revalidations = [];
+  const moved = await call('PUT', '/v1/me/handle', cookie, {
+    handle: 'tb_reval_new',
+  });
+  assert.equal(moved.status, 200, await moved.clone().text());
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const handles = revalidations.map((r) => r.handle).sort();
+  assert.deepEqual(handles, ['tb_reval_new', 'tb_reval_old']);
+});

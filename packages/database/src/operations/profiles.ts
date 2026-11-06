@@ -36,13 +36,25 @@ import {
   normaliseHandle,
   tipAmountsProblem,
 } from '@tipme/domain';
-import { and, asc, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   emailTokens,
   handleAliases,
   handleHolds,
   handleReservations,
+  handleTakeBacks,
   profileAvatars,
   profileCovers,
   emailRecoveries,
@@ -65,12 +77,18 @@ import {
   lockedActiveStaff,
   lockStaffAdmin,
   revokeUnenrolled,
+  withAuditChange,
 } from './staff.js';
 import { mailOwner } from './account-mail.js';
 import { removeObjects } from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
+import {
+  completeTakeBack,
+  myFreeChange,
+  myTakeBack,
+} from './username-take-backs.js';
 import { publicCelebration } from './moments.js';
 import {
   getReadyPaymentAccount,
@@ -136,7 +154,8 @@ export async function activeReservation(
   return row ?? null;
 }
 
-async function isTaken(
+/** A page, an old handle, a deletion hold or a staff reservation has the name. */
+export async function isTaken(
   db: Database | Tx,
   handle: string,
   now: Date,
@@ -494,6 +513,8 @@ const toMine = async (
     style: row.profile.thanksStyle,
     signed: row.profile.thanksSigned,
   }),
+  usernameTakeBack: await myTakeBack(db, row.profile.id),
+  usernameFreeChange: await myFreeChange(db, row.profile.id),
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
@@ -677,11 +698,15 @@ export function setPageState(
  * both take the last one. The old handle becomes an alias that keeps pointing here, so printed QR
  * codes still work. Going back to one of its own old handles swaps the two, and counts. A change of
  * case alone changes nothing and counts nothing.
+ *
+ * While TipMe is taking the current handle back, any change (the take-back form or an ordinary one)
+ * completes the take-back instead: any plan, not counted, and no alias for the taken name, whose
+ * links stop working. An old handle under a take-back can't be switched back to.
  */
 export function renameHandle(
   db: Database,
-  input: { userId: string; handle: string; now?: Date },
-): Promise<{ previous: string; handle: string }> {
+  input: { userId: string; handle: string; now?: Date; sealing?: MailSealing },
+): Promise<{ previous: string; handle: string; takeBack?: true }> {
   const now = input.now ?? new Date();
   const wanted = normaliseHandle(input.handle);
   return guarded(async () => {
@@ -706,10 +731,53 @@ export function renameHandle(
         // Handles are stored normalised (as when claimed), so a change of case is no change.
         if (wanted === row.handleLower)
           return { previous: row.handleLower, handle: wanted };
-        if (row.plan !== 'pro')
-          throw new OperationError('HANDLE_CHANGE_PRO_REQUIRED');
+        // After the profile lock, as everywhere: then the take-back row.
+        const [takeBack] = await tx
+          .select({ id: handleTakeBacks.id })
+          .from(handleTakeBacks)
+          .where(
+            and(
+              eq(handleTakeBacks.profileId, row.id),
+              eq(handleTakeBacks.kind, 'current'),
+              inArray(handleTakeBacks.state, ['approved', 'noticed', 'due']),
+            ),
+          )
+          .for('update');
+        // After TipMe assigned a username: one change, any plan, not counted (owner answer 4).
+        const [freeChange] = takeBack
+          ? []
+          : await tx
+              .select({ id: handleTakeBacks.id })
+              .from(handleTakeBacks)
+              .where(
+                and(
+                  eq(handleTakeBacks.profileId, row.id),
+                  eq(handleTakeBacks.state, 'done'),
+                  isNull(handleTakeBacks.freeChangeUsedAt),
+                  gt(handleTakeBacks.freeChangeUntil, now),
+                ),
+              )
+              .orderBy(desc(handleTakeBacks.doneAt))
+              .limit(1)
+              .for('update');
         const { used, allowed } = handleChangesOf(row);
-        if (used >= allowed) throw new OperationError('HANDLE_CHANGE_LIMIT');
+        if (!takeBack && !freeChange) {
+          if (row.plan !== 'pro')
+            throw new OperationError('HANDLE_CHANGE_PRO_REQUIRED');
+          if (used >= allowed) throw new OperationError('HANDLE_CHANGE_LIMIT');
+        }
+        // An old handle TipMe is taking back is not this page's to return to.
+        const [oldTakenBack] = await tx
+          .select({ id: handleTakeBacks.id })
+          .from(handleTakeBacks)
+          .where(
+            and(
+              eq(handleTakeBacks.profileId, row.id),
+              eq(handleTakeBacks.handleLower, wanted),
+              inArray(handleTakeBacks.state, ['approved', 'noticed', 'due']),
+            ),
+          );
+        if (oldTakenBack) throw new OperationError('HANDLE_TAKEN');
         // A reserved name is refused unless it is this page's own old handle: someone who
         // renamed away from a name that was later reserved can come back to it.
         const reclaimed = await tx
@@ -726,6 +794,18 @@ export function renameHandle(
           (isReservedHandle(wanted) || (await isTaken(tx, wanted, now)))
         )
           throw new OperationError('HANDLE_TAKEN');
+        if (takeBack) {
+          if (!input.sealing) throw new OperationError('INVALID_INPUT');
+          await completeTakeBack(tx, {
+            takeBackId: takeBack.id,
+            outcome: 'user_chose',
+            chosenHandle: wanted,
+            sealing: input.sealing,
+            now,
+            actorUserId: input.userId,
+          });
+          return { previous: row.handleLower, handle: wanted, takeBack: true };
+        }
         await tx
           .insert(handleAliases)
           .values({ handleLower: row.handleLower, profileId: row.id });
@@ -734,9 +814,30 @@ export function renameHandle(
           .set({
             handle: wanted,
             handleLower: wanted,
-            handleChangesUsed: used + 1,
+            handleChangesUsed: freeChange ? used : used + 1,
           })
           .where(eq(profiles.id, row.id));
+        if (freeChange) {
+          await tx
+            .update(handleTakeBacks)
+            .set({ freeChangeUsedAt: now })
+            .where(eq(handleTakeBacks.id, freeChange.id));
+          await recordAudit(tx, {
+            staffUserId: input.userId,
+            action: 'username.free_change_used',
+            subjectType: 'profile',
+            subjectId: row.id,
+            reason: withAuditChange(
+              'The free change after an assigned username',
+              {
+                takeBackId: freeChange.id,
+                from: row.handleLower,
+                to: wanted,
+              },
+            ),
+            now,
+          });
+        }
         return { previous: row.handleLower, handle: wanted };
       });
     } catch (error) {
@@ -1037,6 +1138,25 @@ export function deleteAccount(
               target: handleHolds.handleLower,
               set: { until: new Date(now.getTime() + HANDLE_HOLD_MS) },
             });
+        // A take-back under way ends here: the page has left the name, so it is reserved for good
+        // (the hold stays too). No done email: the account is going.
+        const open = await tx
+          .select({ id: handleTakeBacks.id })
+          .from(handleTakeBacks)
+          .where(
+            and(
+              eq(handleTakeBacks.profileId, row.id),
+              inArray(handleTakeBacks.state, ['approved', 'noticed', 'due']),
+            ),
+          );
+        for (const takeBack of open)
+          await completeTakeBack(tx, {
+            takeBackId: takeBack.id,
+            outcome: 'page_deleted',
+            sealing: input.sealing,
+            now,
+            actorUserId: input.userId,
+          });
       }
       // Erase what identifies the person, including codes, lockouts and pending links.
       const [person] = await tx

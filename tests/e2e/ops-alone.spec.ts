@@ -169,6 +169,41 @@ test('@alone a stale session can freeze and end sessions at once, and releasing 
   await expect(page.getByTestId('action-outcome')).toBeFocused();
 });
 
+test('@alone a single admin’s take-back runs alone and says so', async ({
+  page,
+  browser,
+}, testInfo) => {
+  // A recipient and an admin both sign in first.
+  test.slow();
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  await enrolOwner(page, testInfo);
+  await page.goto(`/ops/pages?handle=${handle}`);
+  const card = page
+    .locator('.settings-section')
+    .filter({ has: page.getByRole('heading', { name: 'Username' }) });
+  await card.getByRole('button', { name: 'Take back this username…' }).click();
+  await card.getByLabel('Impersonation').check();
+  await card.getByLabel('Days of notice').fill('2');
+  await card.getByLabel('Internal reason').fill(REASON);
+  await card.getByRole('button', { name: 'Ask to take it back' }).click();
+  await expect(card.getByText('Done alone')).toBeVisible();
+  await expect(card.getByText('Notice being sent')).toBeVisible();
+  const [row] = await sql<{ state: string; approved_by: string | null }>(
+    `SELECT state, approved_by FROM handle_take_backs WHERE handle_lower = $1`,
+    [handle],
+  );
+  expect(row).toEqual({ state: 'approved', approved_by: null });
+  await page.goto('/ops');
+  const activity = page.getByRole('region', { name: 'Staff activity' });
+  await expect(
+    activity.getByText('Acted alone, with nobody else to approve').first(),
+  ).toBeVisible();
+  await expectAccessible(page);
+});
+
 // Alone, because every other owner in a parallel run could decide this person's requests too, and
 // their requests would show in the count.
 test('@alone a request a second owner can decide shows a count of one on their menu, and none on the asker’s', async ({

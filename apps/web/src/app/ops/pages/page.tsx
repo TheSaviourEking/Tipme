@@ -3,7 +3,7 @@ import {
   freezeView,
   type FreezeRead,
 } from '../../../lib/withdrawal-freeze-view';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -11,6 +11,7 @@ import {
   MAX_HANDLE_CHANGE_GRANT,
   OPS_PAGE_LOOKUP_PERMISSIONS,
   type OpsPage,
+  type OpsUsernameCheck,
   type OpsWithdrawalFreeze,
   type OpsWithdrawalFreezeState,
 } from '@tipme/contracts';
@@ -30,11 +31,14 @@ import {
 import { PageImages } from '@/components/ops/page-images';
 import { PagePricing, ValueWithReason } from '@/components/ops/page-pricing';
 import { ReasonAction } from '@/components/ops/reason-action';
+import { TakeBackForm } from '@/components/ops/take-back-form';
+import { takeBackStateWords } from '@/lib/take-back-words';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import { apiFetch } from '@/lib/session-client';
 
 const STATE_LABELS: Record<OpsPage['pageState'], string> = {
   live: 'Live',
@@ -290,6 +294,82 @@ function FreezeWithdrawals({
 }
 
 /** Free and Pro (PR-012): find a page by handle and change its plan. No billing; audited. */
+/**
+ * Taking this page's username back (usernames.manage). What the server says about the name: any
+ * take-back under way, or one waiting for approval, or the form. Old usernames are under Usernames.
+ */
+function UsernameCard({ handle }: { handle: string }) {
+  const [answer, setAnswer] = useState<OpsUsernameCheck | null>(null);
+  const [needsCode, setNeedsCode] = useState(false);
+  const [said, setSaid] = useState('');
+  const path = `/v1/ops/usernames/check/${encodeURIComponent(handle)}`;
+  // Opening the page must never raise the code prompt: it would sit over the stopping actions,
+  // which take no code. So the first read doesn't ask; a stale code offers a button that does.
+  const read = useCallback(
+    async (ask: boolean) => {
+      const result = ask
+        ? await opsFetch<OpsUsernameCheck>(path)
+        : await apiFetch<OpsUsernameCheck>(path);
+      setNeedsCode(!result.ok && result.code === 'FRESH_CODE_REQUIRED');
+      setAnswer(result.ok ? result.data : null);
+    },
+    [path],
+  );
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is set before the await
+    void read(false);
+  }, [read]);
+  if (needsCode)
+    return (
+      <Card className="settings-section">
+        <h2>Username</h2>
+        <Button variant="secondary" onClick={() => void read(true)}>
+          Show username options
+        </Button>
+      </Card>
+    );
+  if (!answer || answer.state !== 'page') return null;
+  return (
+    <Card className="settings-section">
+      <h2>Username</h2>
+      {said && (
+        <Notice tone="success" title={said}>
+          See Usernames for where it stands.
+        </Notice>
+      )}
+      {answer.openTakeBack ? (
+        <p>
+          <strong>Take-back of @{answer.name}:</strong>{' '}
+          {takeBackStateWords(answer.openTakeBack)}.{' '}
+          <Link href="/ops/usernames">Open Usernames</Link>
+        </p>
+      ) : answer.pendingRequestId ? (
+        <p>
+          <strong>Take-back of @{answer.name}:</strong> Waiting for approval.{' '}
+          <Link href="/ops/approvals">Open Approvals</Link>
+        </p>
+      ) : (
+        <TakeBackForm
+          name={answer.name}
+          kind={answer.kind}
+          page={answer.page}
+          facts={answer.facts}
+          onDone={(outcome) => {
+            setSaid(
+              outcome.kind === 'waiting'
+                ? 'Waiting for approval'
+                : outcome.actedAlone
+                  ? 'Done alone'
+                  : 'Take-back started',
+            );
+            void read(true);
+          }}
+        />
+      )}
+    </Card>
+  );
+}
+
 export default function OpsPagesPage() {
   const id = useId();
   const copy = paymentModeCopy(usePaymentMode());
@@ -452,6 +532,9 @@ export default function OpsPagesPage() {
           userId={page.userId}
           mayEndSessions={can(access, 'recoveries.manage')}
         />
+      )}
+      {page && can(access, 'usernames.manage') && (
+        <UsernameCard key={page.handle} handle={page.handle} />
       )}
       {page && can(access, 'fees.manage') && (
         <PagePricing key={page.profileId} profileId={page.profileId} />

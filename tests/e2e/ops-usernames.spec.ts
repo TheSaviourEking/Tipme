@@ -1,6 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectAccessible, identity, signInWithEmail } from './helpers';
-import { enrolOwner, sql, withDatabase } from './ops-helpers';
+import {
+  expectAccessible,
+  identity,
+  signInWithEmail,
+  signUpRecipient,
+} from './helpers';
+import {
+  codeFor,
+  enrolOwner,
+  secondOwner,
+  sql,
+  withDatabase,
+} from './ops-helpers';
+import { API_ORIGIN } from './stack';
 
 // Staff reserve and release usernames at /ops/usernames (usernames.manage). Names carry the test's
 // own digits, so parallel projects never reserve the same one.
@@ -179,4 +191,113 @@ test('a refusal on the Check card is shown, and never looks like your own succes
     page.getByRole('status').filter({ hasText: 'is free again' }),
   ).toHaveCount(0);
   await expect(checkCard(page).getByText('Free.')).toBeVisible();
+});
+
+test('two staff request and approve a take-back; the user sees the banner, chooses a new name, and the old link stops working', async ({
+  page,
+  browser,
+}, testInfo) => {
+  // Three people sign in (two staff and the page's owner): slower than the default allows.
+  test.slow();
+  const owner = await (await browser.newContext()).newPage();
+  const { handle } = await signUpRecipient(owner, testInfo);
+  await enrolOwner(page, testInfo);
+  const other = await secondOwner(browser, testInfo);
+
+  await nav(page).getByRole('link', { name: 'Usernames' }).click();
+  await checkName(page, handle);
+  const card = checkCard(page);
+  await card.getByRole('button', { name: 'Take back this username…' }).click();
+  await expect(card.getByText('Verified address on file')).toBeVisible();
+  await card.getByLabel('Trademark').check();
+  await card.getByLabel('Days of notice').fill('3');
+  await card.getByLabel('Internal reason').fill(REASON);
+  await expect(
+    card.getByText('The username infringes a trademark.'),
+  ).toBeVisible();
+  await expectAccessible(page);
+  await card.getByRole('button', { name: 'Ask to take it back' }).click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Waiting for approval' }),
+  ).toBeVisible();
+  expect(
+    await sql(`SELECT 1 FROM handle_take_backs WHERE handle_lower = $1`, [
+      handle,
+    ]),
+  ).toHaveLength(0);
+
+  // The second person approves it with their own code.
+  await other.page.goto('/ops/approvals');
+  const request = other.page
+    .getByRole('article')
+    .filter({ hasText: `@${handle}` });
+  await request.getByRole('button', { name: 'Approve…' }).click();
+  await request.getByLabel('Authenticator code').fill(await codeFor(other));
+  await request.getByRole('button', { name: 'Approve and run' }).click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await sql<{ state: string }>(
+            `SELECT state FROM handle_take_backs WHERE handle_lower = $1`,
+            [handle],
+          )
+        )[0]?.state,
+    )
+    .toBe('approved');
+
+  // The owner sees the banner; seeing it starts the clock.
+  await owner.goto('/dashboard');
+  await expect(
+    owner.getByText(`TipMe needs your username @${handle} back.`, {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    owner.getByText('The username infringes a trademark.'),
+  ).toBeVisible();
+  await expect(owner.getByText(REASON)).toHaveCount(0);
+  await expect
+    .poll(
+      async () =>
+        (
+          await sql<{ noticed_via: string | null }>(
+            `SELECT noticed_via FROM handle_take_backs WHERE handle_lower = $1`,
+            [handle],
+          )
+        )[0]?.noticed_via,
+    )
+    .toBe('banner');
+  await expectAccessible(owner);
+
+  // They choose a new one: on Free, and it isn't counted.
+  await owner.getByRole('link', { name: 'Choose a new username' }).click();
+  await owner.waitForURL(/\/dashboard\/settings/);
+  const form = owner.locator('.settings-section').filter({
+    has: owner.getByRole('heading', { name: 'Choose a new username' }),
+  });
+  const chosen = `${handle}n`;
+  await form.getByLabel('Handle').fill(chosen);
+  await form.getByRole('button', { name: 'Choose this username' }).click();
+  await expect(
+    owner.getByText(`will stop working now`, { exact: false }),
+  ).toBeVisible();
+  await owner.getByRole('button', { name: 'Yes, change it' }).click();
+  await expect(
+    owner.getByText(`Your page is now at`, { exact: false }),
+  ).toContainText(`@${chosen}`);
+
+  // The old link no longer leads anywhere, and the name is reserved.
+  const old = await page.request.get(`${API_ORIGIN}/v1/profiles/${handle}`, {
+    maxRedirects: 0,
+  });
+  expect(old.status()).toBe(404);
+  const [row] = await sql<{ state: string; outcome: string }>(
+    `SELECT state, outcome FROM handle_take_backs WHERE handle_lower = $1`,
+    [handle],
+  );
+  expect(row).toEqual({ state: 'done', outcome: 'user_chose' });
+  await checkName(page, handle);
+  await expect(checkCard(page).getByText('Reserved.')).toBeVisible();
+  await other.context.close();
 });
