@@ -239,9 +239,17 @@ export default function OpsBusinessPage() {
                 {location.closed && <Badge>Closed</Badge>}
               </span>
               <span>{location.address}</span>
-              <span className="tm-hint">
-                usetipme.xyz/b/{business.slug}/{location.slug}
-              </span>
+              {/* What supporters see at this location, today: before verification, or while
+                  paused or closed, it shows the "isn't taking tips" state. */}
+              <a
+                className="tm-hint"
+                href={`/b/${business.slug}/${location.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`/b/${business.slug}/${location.slug}: ${location.name}’s public page (opens in a new tab)`}
+              >
+                /b/{business.slug}/{location.slug}
+              </a>
             </li>
           ))}
         </ul>
