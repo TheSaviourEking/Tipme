@@ -241,10 +241,21 @@ export function TextareaField({
 export function Choice({
   children,
   className,
+  suggested = false,
   ...props
-}: Omit<ComponentPropsWithRef<'input'>, 'type'> & { children: ReactNode }) {
+}: Omit<ComponentPropsWithRef<'input'>, 'type'> & {
+  children: ReactNode;
+  /**
+   * The key a problem points to (the nearest amount below the minimum): a purple outline. The
+   * error line beside the field says it in words, so this is decoration only.
+   */
+  suggested?: boolean;
+}) {
   return (
-    <label className={classes('tm-choice', className)}>
+    <label
+      className={classes('tm-choice', className)}
+      data-suggested={suggested ? 'true' : undefined}
+    >
       <input type="radio" {...props} />
       <span>{children}</span>
     </label>
@@ -253,6 +264,7 @@ export function Choice({
 export function AmountChoice(
   props: Omit<ComponentPropsWithRef<'input'>, 'type'> & {
     children: ReactNode;
+    suggested?: boolean;
   },
 ) {
   return (
