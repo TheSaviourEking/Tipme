@@ -106,7 +106,9 @@
     face: string;
   };
   export function GeneralCard(): JSX.Element; // headline, line, purple key with the heart
-  export function PersonCard(p: PersonCardInput & { host: string }): JSX.Element;
+  export function PersonCard(
+    p: PersonCardInput & { host: string },
+  ): JSX.Element;
   export function ogFonts(): Promise<ImageResponseOptions['fonts']>;
   ```
 
@@ -147,10 +149,19 @@
 
   ```ts
   export const CLAIM_MOMENT_MS = 1600;
-  export function markClaimed(handle: string, storage?: Pick<Storage, 'setItem'>): void; // never throws
-  export function takeClaimed(handle: string, storage?: Pick<Storage, 'getItem' | 'removeItem'>): boolean; // never throws
+  export function markClaimed(
+    handle: string,
+    storage?: Pick<Storage, 'setItem'>,
+  ): void; // never throws
+  export function takeClaimed(
+    handle: string,
+    storage?: Pick<Storage, 'getItem' | 'removeItem'>,
+  ): boolean; // never throws
   /** Vibrate about 30 ms where the device allows it; never on reduced motion. */
-  export function claimBuzz(nav: Pick<Navigator, 'vibrate'> | undefined, reducedMotion: boolean): void;
+  export function claimBuzz(
+    nav: Pick<Navigator, 'vibrate'> | undefined,
+    reducedMotion: boolean,
+  ): void;
   ```
 
 - **`apps/web/src/components/account/claim-moment.tsx`:** an overlay above the hello step (which is already rendered underneath). The page card (initial, the handle as the name, `host/@handle`, the three standard keys and "Tip ₦2,000", all `aria-hidden`) falls in, lands, the stamp "@ada · YOURS" presses down, six to eight hearts rise once in TipMe purple (the board's "purple until they pick one"; a new page has picked nothing), and "@ada is yours." fades in. At 1.6 s, or on any tap, any key, "Continue" or Escape, it hands over; focus then goes to the hello heading.
@@ -172,7 +183,10 @@
   /** "5 November 2026", in Lagos time. */
   export function memberSinceLabel(iso: string): string;
   /** Older API (undefined) never; never shown (null) yes; otherwise within 7 days of the first showing. */
-  export function keepsakeOnHome(p: Pick<MyProfile, 'welcomedAt' | 'memberSince'>, now: number): boolean;
+  export function keepsakeOnHome(
+    p: Pick<MyProfile, 'welcomedAt' | 'memberSince'>,
+    now: number,
+  ): boolean;
   ```
 
 - **Done step:** the ✓ circle becomes `KeepsakeCard` (TipMe wordmark, `@handle`, "Member since {date}", "Save card"). It settles in with today's `welcome-settle`; nothing bursts. Showing it calls `POST /v1/me/welcomed` once.
@@ -241,18 +255,18 @@ All rules are scoped to `.profile-composer` (the public page). **Ruling:** the h
 
 ## PR boundaries and order
 
-| PR | Branch | Tasks | Migration | Depends on |
-| --- | --- | --- | --- | --- |
-| **1. App icons and manifest** | `feat/app-icons` | 1.0–1.4 | none | none |
-| **2. Share cards** | `feat/share-cards` | 2.0–2.4 | none | none (PR 1's `HEART_MARK` if merged first; otherwise add it here and PR 1 rebases) |
-| **3. Coming soon** | `feat/coming-soon-restyle` | 3.0–3.3 | none | none |
-| **4. QR studio** | `feat/qr-studio-restyle` | 4.0–4.4 | none | none |
-| **5. QR printing** | `feat/qr-print-restyle` | 5.0–5.3 | none | 4 (shares `qr-card.ts` and the QR CSS block) |
-| **6. The claim moment** | `feat/claim-moment` | 6.0–6.3 | none | none |
-| **7. The keepsake** | `feat/keepsake` | 7.0–7.5 | `NNNN_welcomed_at` | 6 (same welcome files) |
-| **8. Tip form restyle** | `feat/tip-form-restyle` | 8.0–8.3 | none | **states PR B merged**, **make-it-yours PR B merged** |
-| **9. Tip form proposals** | `feat/tip-form-proposals` | 9.1–9.2 | none | 8 |
-| **10. Stamp sound** | `feat/claim-sound` | 10.1–10.2 | none | 6 + owner yes (Q5) |
+| PR                            | Branch                     | Tasks     | Migration          | Depends on                                                                         |
+| ----------------------------- | -------------------------- | --------- | ------------------ | ---------------------------------------------------------------------------------- |
+| **1. App icons and manifest** | `feat/app-icons`           | 1.0–1.4   | none               | none                                                                               |
+| **2. Share cards**            | `feat/share-cards`         | 2.0–2.4   | none               | none (PR 1's `HEART_MARK` if merged first; otherwise add it here and PR 1 rebases) |
+| **3. Coming soon**            | `feat/coming-soon-restyle` | 3.0–3.3   | none               | none                                                                               |
+| **4. QR studio**              | `feat/qr-studio-restyle`   | 4.0–4.4   | none               | none                                                                               |
+| **5. QR printing**            | `feat/qr-print-restyle`    | 5.0–5.3   | none               | 4 (shares `qr-card.ts` and the QR CSS block)                                       |
+| **6. The claim moment**       | `feat/claim-moment`        | 6.0–6.3   | none               | none                                                                               |
+| **7. The keepsake**           | `feat/keepsake`            | 7.0–7.5   | `NNNN_welcomed_at` | 6 (same welcome files)                                                             |
+| **8. Tip form restyle**       | `feat/tip-form-restyle`    | 8.0–8.3   | none               | **states PR B merged**, **make-it-yours PR B merged**                              |
+| **9. Tip form proposals**     | `feat/tip-form-proposals`  | 9.1–9.2   | none               | 8                                                                                  |
+| **10. Stamp sound**           | `feat/claim-sound`         | 10.1–10.2 | none               | 6 + owner yes (Q5)                                                                 |
 
 PRs 1, 2, 3, 4 and 6 can be built in parallel. 8 waits on two other builders, so it is last in line but not blocked by this plan's own PRs.
 
