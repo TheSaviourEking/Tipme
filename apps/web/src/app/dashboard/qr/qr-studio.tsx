@@ -18,6 +18,7 @@ import { useRecipient } from '@/components/account/recipient-context';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { drawQrCard } from '@/lib/qr-card';
+import { groupDesigns } from '@/lib/qr-groups';
 import { frameCss, QR_STYLES, styleById } from '@/lib/qr-render';
 import { track } from '@/lib/analytics';
 import { apiFetch } from '@/lib/session-client';
@@ -343,42 +344,44 @@ export function QrStudio() {
               </label>
             ))}
           </fieldset>
-          {designs && (
-            <fieldset className="qr-styles qr-designs">
-              <legend>Designs</legend>
-              {designs.map((option) => (
-                <label
-                  key={option.id}
-                  className="qr-style qr-style--design"
-                  htmlFor={`${id}-${option.id}`}
-                >
-                  <input
-                    id={`${id}-${option.id}`}
-                    type="radio"
-                    name={`${id}-style`}
-                    value={option.id}
-                    checked={viewing === option.id}
-                    onChange={() => pick(option.id)}
-                  />
-                  {/* eslint-disable-next-line @next/next/no-img-element -- a private image from the API */}
-                  <img
-                    className="qr-style__thumb"
-                    src={artSrc(option.thumb)}
-                    alt=""
-                    loading="lazy"
-                    width={40}
-                    height={40}
-                  />
-                  <span>
-                    {option.name}
-                    {option.locked && (
-                      <small className="qr-style__premium">Pro design</small>
-                    )}
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-          )}
+          {/* Three lists, one radio group: arrow keys move through every design. */}
+          {designs &&
+            groupDesigns(designs).map((group) => (
+              <fieldset key={group.id} className="qr-styles qr-designs">
+                <legend>{group.legend}</legend>
+                {group.items.map((option) => (
+                  <label
+                    key={option.id}
+                    className="qr-style qr-style--design"
+                    htmlFor={`${id}-${option.id}`}
+                  >
+                    <input
+                      id={`${id}-${option.id}`}
+                      type="radio"
+                      name={`${id}-style`}
+                      value={option.id}
+                      checked={viewing === option.id}
+                      onChange={() => pick(option.id)}
+                    />
+                    {/* eslint-disable-next-line @next/next/no-img-element -- a private image from the API */}
+                    <img
+                      className="qr-style__thumb"
+                      src={artSrc(option.thumb)}
+                      alt=""
+                      loading="lazy"
+                      width={40}
+                      height={40}
+                    />
+                    <span>
+                      {option.name}
+                      {option.locked && (
+                        <small className="qr-style__premium">Pro design</small>
+                      )}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            ))}
           {designsFailed && (
             <p role="alert" className="tm-hint">
               The Pro designs couldn’t be loaded, so only your free styles are

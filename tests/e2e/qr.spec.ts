@@ -317,3 +317,31 @@ test('saving a free style still says "Style saved" in the same live region', asy
   await expect(status).toHaveAttribute('data-test-region', 'kept');
   await expectAccessible(page);
 });
+
+test('the designs list as Patterns (17), Cards (12) and Photo (1); arrows move across groups', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/qr');
+  const group = (name: string) =>
+    page.getByRole('group', { name, exact: true });
+  await expect(group('Patterns').getByRole('radio')).toHaveCount(17);
+  await expect(group('Cards').getByRole('radio')).toHaveCount(12);
+  await expect(group('Photo').getByRole('radio')).toHaveCount(1);
+  await expect(page.getByRole('group', { name: 'Designs' })).toHaveCount(0);
+  // One radio group across the lists: the last Pattern's next design is the first Card.
+  await group('Patterns')
+    .getByRole('radio', { name: /Naira centre/ })
+    .check();
+  await expect(
+    page.getByRole('img', { name: /Preview of the Naira centre/ }),
+  ).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  const first = group('Cards').getByRole('radio', { name: /Indigo Grid/ });
+  await expect(first).toBeChecked();
+  await expect(first).toBeFocused();
+  await expect(
+    page.getByRole('img', { name: /Preview of the Indigo Grid/ }),
+  ).toBeVisible();
+  await expectAccessible(page);
+});
