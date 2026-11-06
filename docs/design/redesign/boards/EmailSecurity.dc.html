@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Emails: security notices</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{width:1400px;height:1560px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:48px 56px;align-content:start}
+.label{margin:0 0 12px;font-size:13px;font-weight:700;color:#5d5a54}
+.client{background:#f3f2ee;border-radius:18px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4);overflow:hidden}
+.bar{display:flex;flex-direction:column;gap:4px;padding:14px 20px;background:#fffefa;border-bottom:1px solid rgba(20,18,16,.08);font-size:13px;color:#5d5a54}
+.bar strong{color:#000;font-size:15px}
+.mail{padding:28px 40px 34px}
+.mark{display:flex;align-items:center;gap:6px;margin:0 4px 18px;font:800 22px Manrope,Arial,sans-serif;letter-spacing:-.02em}
+.mark svg{width:20px;height:20px}
+.card{background:#fffefa;border-radius:24px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.45);padding:26px 28px 30px}
+.tag{display:inline-flex;align-items:center;gap:8px;margin:0 0 14px;font-size:13px;font-weight:700;color:#4d16a8}
+.tag svg{width:18px;height:18px}
+.card h1{margin:0;font:400 31px/1.1 'DM Serif Display',Georgia,serif}
+.card p{margin:14px 0 0;font-size:16px;line-height:1.55}
+.well{margin:18px 0 0;display:grid;grid-template-columns:auto 1fr;gap:10px 16px;padding:16px 18px;border-radius:14px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1);font-size:15px}
+.well dt{color:#5d5a54;font-weight:600}
+.well dd{margin:0;font-weight:700}
+.well .old{font-weight:600;color:#5d5a54;text-decoration:line-through}
+.alarm{margin:18px 0 0;padding:16px 18px;border-radius:14px;background:#141210;color:#fff;font-size:15px;line-height:1.5}
+.alarm b{display:block;margin-bottom:4px;font-size:15px}
+.go{display:block;margin:20px 0 0;height:54px;line-height:54px;border-radius:14px;background:#000;color:#fff;text-align:center;text-decoration:none;font-weight:700;font-size:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.quiet{margin:16px 0 0;font-size:14px;line-height:1.55;color:#5d5a54}
+.foot{margin:26px 4px 0;padding-top:16px;border-top:1px solid rgba(20,18,16,.12);font-size:12.5px;line-height:1.6;color:#5d5a54}
+.foot a{color:#5d5a54}
+</style>
+</helmet>
+<div class="board">
+  <div>
+    <p class="label">Bank account changed</p>
+    <div class="client">
+      <div class="bar"><strong>Your TipMe bank account changed</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <p class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path></svg>Your account’s safety</p>
+          <h1>Your bank account changed</h1>
+          <p>Your next withdrawal goes to the new account. One already under way still goes to the account it started with.</p>
+          <dl class="well"><dt>Now</dt><dd>GTBank ••4821</dd><dt>Before</dt><dd class="old">Access Bank ••0937</dd></dl>
+          <p class="alarm"><b>Wasn’t you?</b>Contact support@usetipme.xyz straight away. We can stop withdrawals while we look.</p>
+        </section>
+        <p class="foot">You get this email whenever the bank account on your TipMe page changes. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">New sign-in</p>
+    <div class="client">
+      <div class="bar"><strong>New sign-in to your TipMe account</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <p class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path></svg>Your account’s safety</p>
+          <h1>A new device signed in</h1>
+          <p>Your TipMe account was just signed in to from a device we haven’t seen before.</p>
+          <dl class="well"><dt>Device</dt><dd>Chrome on an Android phone</dd><dt>When</dt><dd>Today, 14:32</dd></dl>
+          <p class="quiet">If this was you, there’s nothing to do.</p>
+          <a class="go" href="#">Check your sign-ins</a>
+        </section>
+        <p class="foot">You get this email to help keep your account safe. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Number about to change</p>
+    <div class="client">
+      <div class="bar"><strong>Your TipMe number is about to change</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <p class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path></svg>Your account’s safety</p>
+          <h1>Your number changes in 24 hours</h1>
+          <p>Someone asked to move your TipMe account to a new number ending 47.</p>
+          <p class="alarm"><b>Wasn’t you?</b>Sign in and cancel it in Settings before it happens.</p>
+          <a class="go" href="#">Sign in to cancel</a>
+        </section>
+        <p class="foot">You get this email because a number change was requested on your TipMe account. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Account deleted</p>
+    <div class="client">
+      <div class="bar"><strong>Your TipMe account was deleted</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>Your account was deleted</h1>
+          <p>Your TipMe account and page are gone. This is the last email we’ll send you.</p>
+          <p class="alarm"><b>Didn’t do this?</b>Reply to this email straight away.</p>
+        </section>
+        <p class="foot">You get this email because your TipMe account was deleted. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

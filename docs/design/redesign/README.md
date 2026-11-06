@@ -17,6 +17,8 @@ Where a board and a newer owner decision disagree, the decision wins:
 | "Tipping opens soon", "no bank details needed yet"    | Tipping is live for named pages (`LIVE_CHECKOUT_HANDLES`); copy follows payment mode  |
 | Home hero "global payments (USD, EUR, GBP, NGN, …)"   | Shipped as on the board: the owner's decision, 3 Nov 2026 (DECISION-LOG) |
 | `[PRICE SET BY STAFF]` on Pro                         | "Ask for Pro" with no amount until staff can set a price (a later plan)               |
+| Email boards: DM Serif Display and Manrope, a heart SVG | Georgia and the system sans; the heart is a text glyph; emails load nothing remote (DECISION-LOG, 5 Nov 2026) |
+| Email boards: the supporter's note on a slip, a code box in the staff invitation | No note text in any email; the invitation's code stays inside its one-time link (DECISION-LOG, 5 Nov 2026) |
 
 | Board                       | Screen                                                     |
 | --------------------------- | ---------------------------------------------------------- |
@@ -40,5 +42,10 @@ Where a board and a newer owner decision disagree, the decision wins:
 | `StatesMap`                 | States: every message on every screen and the pattern it becomes        |
 | `FeedbackMoments`           | Feedback: press, settle, shake and the withdrawal's step lamps           |
 | `SocialLinks`               | Social links: the editor in Settings and the public row (version 97, approved by the owner 5 Nov 2026) |
+| `EmailTip`                  | Email: you got a tip, in a desktop inbox and on a phone (approved by the owner 5 Nov 2026) |
+| `EmailAccount`              | Emails: sign-in code, confirm an email address, getting back in, welcome (approved by the owner 5 Nov 2026) |
+| `EmailSecurity`             | Emails: bank account changed, new sign-in, number about to change, account deleted (approved by the owner 5 Nov 2026) |
+| `EmailReports`              | Emails: weekly report, ready for tips, staff invitation, a username taken back (approved by the owner 5 Nov 2026) |
+
 | `WithdrawRedesign`          | Withdraw in every state (approved 5 Nov 2026)              |
 | `ScreenAudit`               | Every screen graded against the design rules (5 Nov 2026)  |

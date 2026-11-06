@@ -43,6 +43,8 @@ export const newSignInNotice = defineMailType({
       {
         subject: 'New sign-in to your TipMe account',
         heading: 'A new device signed in',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'If this was you, there’s nothing to do.',
         blocks: [
           {
             kind: 'text',
@@ -71,6 +73,8 @@ export const emailChangedNotice = defineMailType({
       {
         subject: 'Your TipMe sign-in email changed',
         heading: 'Your sign-in email changed',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'Your sign-in email changed.',
         blocks: [
           {
             kind: 'text',
@@ -100,6 +104,9 @@ export const recoveryStartedNotice = defineMailType({
       {
         subject: 'Your TipMe account is being moved to a new email',
         heading: 'Someone is moving your account',
+        // The first text names someone or something private; the preview line must not.
+        preheader:
+          'It happens in 24 hours. If this wasn’t you, sign in now and cancel it in Settings.',
         blocks: [
           {
             kind: 'text',
@@ -133,6 +140,8 @@ export const recoveryCompletedNotice = defineMailType({
       {
         subject: 'Your TipMe account moved to a new email',
         heading: 'Your account moved',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'Every device was signed out.',
         blocks: [
           {
             kind: 'text',
@@ -163,6 +172,8 @@ export const recoveryCancelledNotice = defineMailType({
       {
         subject: 'Your TipMe account recovery was cancelled',
         heading: 'Recovery cancelled',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'Its sign-in details stay as they were.',
         blocks: [
           {
             kind: 'text',
