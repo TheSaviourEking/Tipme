@@ -1,3 +1,11 @@
+# Current handoff — TipMe for businesses, PR R2-C1 (6 November 2026)
+
+- Branch `feat/business-r2-c1`, lane 3, off `feat/business-r2-0` (`f13146bb`), committed, not pushed. No migration. No money moves: shares are only agreed here; R2-A posts them and R2-C2 snapshots them on tips.
+- Rules kept from R2-0: `proposed_at` is the database default; `accepted_at` is the database's `now()`; the start date is computed from the database's `now()`; accepting a change is one transaction (old agreement's `superseded_by` first, then the successor's `accepted_at`); "in force" is only `tipme_share_agreement_at`; agreements are never edited or deleted (a lapsed proposal is closed with `withdrawn_at`).
+- The business reads only `in_force`, `pending` or `no_change`: a declined, withdrawn or lapsed proposal is `no_change`, and its withdraw answers `SHARE_NOT_OPEN` like any closed proposal. A proposal lapses at its start date (the plan's 30 days was a minor call; see the comment in the operations file). At most one change takes effect per Lagos calendar month (`SHARE_CHANGE_TOO_SOON`). A report opens a `share_report` issue (one a day per person, ids and fixed words only); the words stay in `share_reports`.
+- Leaving (M16): `endShareAgreements(tx, memberId)` is exported and tested, but B3's `endMembership` is not on this base, so the call is not wired yet.
+- Verified: commands and counts in `.superpowers/program/r2c1-report.md` (main checkout). The full e2e suite was not run locally (machine overload ruling); CI runs it.
+
 # Current handoff — TipMe for businesses, PR R2-0 (6 November 2026)
 
 - Branch `feat/business-r2-0`, lane 6, off `feat/business-b0`, committed, not pushed. One migration, `0079_business_release2`: generated with drizzle-kit after rebuilding contracts and domain, with hand-written guard triggers appended (as 0078 appended its grant). No backfill. `profile_id` becomes nullable on `tip_quotes`, `payment_intents`, `tips` (team tips name `team_location_id` instead), and on `payment_accounts`, `payout_destinations`, `payouts` (a business owns them through `business_id`); each has an exactly-one check. `ledger_accounts_identity` is dropped and re-added with `business_id`; existing rows keep their identity (tested by replaying the two statements).
