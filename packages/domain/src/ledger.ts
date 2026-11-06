@@ -186,13 +186,21 @@ export function buildReversalPosting(
 export function buildPayoutPosting({
   amountMinor,
   profileId,
+  businessId,
 }: {
   amountMinor: bigint;
-  profileId: string;
+  /** A person's withdrawal takes their `recipient_payable`. */
+  profileId?: string;
+  /** A business's withdrawal (release 2, R2-B) takes its own `business_payable`, never a person's. */
+  businessId?: string;
 }): LedgerLine[] {
   if (amountMinor <= 0n) throw new RangeError('payout amount must be positive');
+  if (Boolean(profileId) === Boolean(businessId))
+    throw new RangeError('a payout belongs to exactly one person or business');
   return [
-    line('recipient_payable', 'debit', amountMinor, profileId),
+    businessId
+      ? line('business_payable', 'debit', amountMinor, undefined, businessId)
+      : line('recipient_payable', 'debit', amountMinor, profileId),
     line('provider_clearing', 'credit', amountMinor),
   ];
 }

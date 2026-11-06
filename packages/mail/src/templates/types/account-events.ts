@@ -206,27 +206,41 @@ export const pageRestored = defineMailType({
     ),
 });
 
+/** A business's own withdrawal (R2-B) names the business, in the body only: it is its owners'. */
+const withdrawalSchema = z
+  .object({
+    amountMinor: minor,
+    businessName: z.string().min(1).max(80).optional(),
+  })
+  .strict();
+
 export const withdrawalPaid = defineMailType({
   id: 'withdrawal_paid',
   category: 'transactional',
   sender: 'payments',
   preference: null,
-  schema: z.object({ amountMinor: minor }).strict(),
+  schema: withdrawalSchema,
   sample: { amountMinor: '250000' },
   render: (data, ctx) =>
     letter(
       {
-        subject: 'Your TipMe withdrawal was paid',
+        subject: data.businessName
+          ? 'Your business’s TipMe withdrawal was paid'
+          : 'Your TipMe withdrawal was paid',
         heading: 'Your withdrawal was paid',
         // The first text names someone or something private; the preview line must not.
         preheader: 'The payment provider confirmed it.',
         blocks: [
           {
             kind: 'text',
-            text: `We paid out ${ngn(data.amountMinor)}. The payment provider confirmed it.`,
+            text: data.businessName
+              ? `We paid out ${ngn(data.amountMinor)} from ${data.businessName}’s balance. The payment provider confirmed it.`
+              : `We paid out ${ngn(data.amountMinor)}. The payment provider confirmed it.`,
           },
         ],
-        reason: 'You get this email for each withdrawal from your balance.',
+        reason: data.businessName
+          ? 'You get this email for each withdrawal from a business you own.'
+          : 'You get this email for each withdrawal from your balance.',
       },
       ctx,
     ),
@@ -237,27 +251,41 @@ export const withdrawalFailed = defineMailType({
   category: 'transactional',
   sender: 'payments',
   preference: null,
-  schema: z.object({ amountMinor: minor }).strict(),
+  schema: withdrawalSchema,
   sample: { amountMinor: '250000' },
   render: (data, ctx) =>
     letter(
       {
-        subject: 'Your TipMe withdrawal didn’t go through',
+        subject: data.businessName
+          ? 'Your business’s TipMe withdrawal didn’t go through'
+          : 'Your TipMe withdrawal didn’t go through',
         heading: 'Your withdrawal didn’t go through',
         // The first text names someone or something private; the preview line must not.
-        preheader: 'The money is back in your balance, so you can try again.',
+        preheader: data.businessName
+          ? 'The money is back in the business’s balance, so you can try again.'
+          : 'The money is back in your balance, so you can try again.',
         blocks: [
           {
             kind: 'text',
-            text: `Your withdrawal of ${ngn(data.amountMinor)} failed. The money is back in your balance, so you can try again.`,
+            text: data.businessName
+              ? `A withdrawal of ${ngn(data.amountMinor)} from ${data.businessName}’s balance failed. The money is back in the business’s balance, so you can try again.`
+              : `Your withdrawal of ${ngn(data.amountMinor)} failed. The money is back in your balance, so you can try again.`,
           },
-          {
-            kind: 'button',
-            label: 'Go to your dashboard',
-            href: mailLink(ctx, '/dashboard', 'dashboard'),
-          },
+          data.businessName
+            ? {
+                kind: 'button',
+                label: 'Go to the business',
+                href: mailLink(ctx, '/dashboard/business', 'business'),
+              }
+            : {
+                kind: 'button',
+                label: 'Go to your dashboard',
+                href: mailLink(ctx, '/dashboard', 'dashboard'),
+              },
         ],
-        reason: 'You get this email for each withdrawal from your balance.',
+        reason: data.businessName
+          ? 'You get this email for each withdrawal from a business you own.'
+          : 'You get this email for each withdrawal from your balance.',
       },
       ctx,
     ),

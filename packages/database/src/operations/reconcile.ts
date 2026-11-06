@@ -501,9 +501,15 @@ export async function reconcilePayouts(input: {
             isNull(payouts.platformWaitSince),
             isNotNull(payouts.provider),
             lte(payouts.createdAt, notFoundBefore),
+            // A business's payout: its owners' takeover holds (R2-B, `holdsOf`).
             sql`NOT EXISTS (
           SELECT 1 FROM withdrawal_holds h
-           WHERE h.profile_id = ${payouts.profileId} AND h.released_at IS NULL)`,
+           WHERE h.released_at IS NULL
+             AND (h.profile_id = ${payouts.profileId}
+                  OR (h.reason = 'account_takeover' AND h.profile_id IN (
+                        SELECT p.id FROM profiles p JOIN business_managers m ON m.user_id = p.user_id
+                         WHERE m.business_id = ${payouts.businessId} AND m.role = 'owner'
+                           AND (m.removed_at IS NULL OR m.removed_at > ${payouts.createdAt})))))`,
             sql`NOT EXISTS (
           SELECT 1 FROM issues i WHERE i.dedupe_key = 'payout_unresolved.' || ${payouts.id})`,
           ),

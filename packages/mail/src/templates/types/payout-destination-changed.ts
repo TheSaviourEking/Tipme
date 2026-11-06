@@ -17,6 +17,8 @@ export const payoutDestinationChanged = defineMailType({
       last4,
       previousBankName: bankName,
       previousLast4: last4,
+      /** A business's own bank (R2-B), told to each of its owners. */
+      businessName: z.string().min(1).max(80).optional(),
     })
     .strict(),
   sample: {
@@ -28,23 +30,28 @@ export const payoutDestinationChanged = defineMailType({
   render: (data, ctx) =>
     letter(
       {
-        subject: 'Your TipMe bank account changed',
-        heading: 'Your bank account changed',
+        subject: data.businessName
+          ? 'Your business’s TipMe bank account changed'
+          : 'Your TipMe bank account changed',
+        heading: data.businessName
+          ? 'The business’s bank account changed'
+          : 'Your bank account changed',
         // The first text names someone or something private; the preview line must not.
         preheader:
           'A withdrawal already under way still goes to the account it started with.',
         blocks: [
           {
             kind: 'text',
-            text: `Your next TipMe withdrawal will go to ${data.bankName} ••${data.last4}, not ${data.previousBankName} ••${data.previousLast4}. A withdrawal already under way still goes to the account it started with.`,
+            text: `${data.businessName ? `${data.businessName}’s` : 'Your'} next TipMe withdrawal will go to ${data.bankName} ••${data.last4}, not ${data.previousBankName} ••${data.previousLast4}. A withdrawal already under way still goes to the account it started with.`,
           },
           {
             kind: 'text',
             text: 'If this wasn’t you, contact support@usetipme.xyz straight away.',
           },
         ],
-        reason:
-          'You get this email because the bank account on your TipMe account was changed.',
+        reason: data.businessName
+          ? 'You get this email because the bank account of a business you own on TipMe was changed.'
+          : 'You get this email because the bank account on your TipMe account was changed.',
       },
       ctx,
     ),

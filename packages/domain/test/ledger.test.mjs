@@ -51,6 +51,44 @@ test('payout postings balance and move the payable to provider clearing', () => 
   );
 });
 
+test("a business's payout takes its own business_payable, never a person's (R2-B)", () => {
+  const lines = buildPayoutPosting({ amountMinor: 93500n, businessId: 'b1' });
+  assert.ok(isBalanced(lines));
+  assert.deepEqual(lines, [
+    {
+      account: 'business_payable',
+      side: 'debit',
+      amountMinor: 93500n,
+      businessId: 'b1',
+    },
+    { account: 'provider_clearing', side: 'credit', amountMinor: 93500n },
+  ]);
+  // A person's payout is byte-identical to before.
+  assert.deepEqual(
+    buildPayoutPosting({ amountMinor: 93500n, profileId: 'p1' }),
+    [
+      {
+        account: 'recipient_payable',
+        side: 'debit',
+        amountMinor: 93500n,
+        profileId: 'p1',
+      },
+      { account: 'provider_clearing', side: 'credit', amountMinor: 93500n },
+    ],
+  );
+  // Exactly one owner.
+  assert.throws(() => buildPayoutPosting({ amountMinor: 1n }), RangeError);
+  assert.throws(
+    () =>
+      buildPayoutPosting({
+        amountMinor: 1n,
+        profileId: 'p1',
+        businessId: 'b1',
+      }),
+    RangeError,
+  );
+});
+
 test('an inconsistent breakdown is refused', () => {
   assert.throws(() =>
     buildPaymentPosting({

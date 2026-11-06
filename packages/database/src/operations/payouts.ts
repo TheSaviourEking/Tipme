@@ -14,9 +14,19 @@ import {
   WITHDRAWAL_FREEZE_OPENED_EVENT,
   recordedProviderName,
 } from '@tipme/contracts';
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  businesses,
   issues,
   paymentAccounts,
   paymentAttempts,
@@ -33,7 +43,8 @@ import {
   tips,
   withdrawalHolds,
 } from '../schema.js';
-import { balanceIn } from './balance.js';
+import { balanceIn, businessBalanceIn } from './balance.js';
+import { managerOf } from './business-access.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { recordAudit } from './audit.js';
 import {
@@ -46,7 +57,46 @@ import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { recordTransition } from './transitions.js';
-import { personOf } from './owner.js';
+import { ownerColumns, ownerOf, type MoneyOwner } from './owner.js';
+
+export type { MoneyOwner } from './owner.js';
+
+/**
+ * The withdrawal holds that stop an owner's payouts. A person's are their own. A business has no
+ * holds of its own (that needs a migration, so R2-B asks rather than adds one); its money stops
+ * when any of its owners' accounts is frozen as taken over, since that owner may be the thief.
+ * `ownersSince` also counts owners removed after that time: one removed after a payout was
+ * requested is still the person who may have requested it.
+ */
+export function holdsOf(owner: MoneyOwner, ownersSince?: Date): SQL {
+  if ('profileId' in owner)
+    return sql`${withdrawalHolds.profileId} = ${owner.profileId}`;
+  const removed = ownersSince
+    ? sql`(m.removed_at IS NULL OR m.removed_at > ${ownersSince.toISOString()}::timestamptz)`
+    : sql`m.removed_at IS NULL`;
+  return sql`(${withdrawalHolds.reason} = 'account_takeover' AND ${withdrawalHolds.profileId} IN (
+    SELECT p.id FROM profiles p JOIN business_managers m ON m.user_id = p.user_id
+     WHERE m.business_id = ${owner.businessId} AND m.role = 'owner' AND ${removed}))`;
+}
+
+/** Rows of `table` that belong to the owner. */
+const ownedBy = (
+  table: typeof payouts | typeof payoutDestinations | typeof paymentAccounts,
+  owner: MoneyOwner,
+): SQL =>
+  'businessId' in owner
+    ? eq(table.businessId, owner.businessId)
+    : eq(table.profileId, owner.profileId);
+
+/** What TipMe owes the owner from the ledger, less payouts in flight; may be below zero (Q8). */
+async function ownerAvailable(
+  tx: Database | Tx,
+  owner: MoneyOwner,
+): Promise<bigint> {
+  return 'businessId' in owner
+    ? (await businessBalanceIn(tx, owner.businessId)).availableMinor
+    : (await balanceIn(tx, owner.profileId)).availableMinor;
+}
 
 export interface PayoutResult {
   payoutId: string;
@@ -217,7 +267,12 @@ export async function holdWithdrawals(
     .from(payouts)
     .where(
       and(
-        eq(payouts.profileId, input.profileId),
+        // A takeover also stops the businesses this person owns (R2-B, `holdsOf`).
+        input.reason === 'account_takeover'
+          ? sql`(${payouts.profileId} = ${input.profileId} OR ${payouts.businessId} IN (
+              SELECT m.business_id FROM business_managers m JOIN profiles p ON p.user_id = m.user_id
+               WHERE p.id = ${input.profileId} AND m.role = 'owner'))`
+          : eq(payouts.profileId, input.profileId),
         eq(payouts.status, 'REQUESTED'),
         isNull(payouts.providerReference),
         isNull(payouts.startStep),
@@ -551,7 +606,7 @@ const STATUS: Record<'processing' | 'paid' | 'failed', PayoutStatus> = {
 /** What a payout's failure releases, whoever decided it: its tips, and the recipient is told. */
 async function releaseFailedPayout(
   tx: Tx,
-  payout: { id: string; profileId: string },
+  payout: { id: string; profileId: string | null; businessId: string | null },
 ): Promise<void> {
   // Release the tips so they can be paid out again.
   await tx
@@ -561,7 +616,7 @@ async function releaseFailedPayout(
   await enqueueOutbox(tx, {
     eventType: 'payout.failed',
     aggregateId: payout.id,
-    payload: { payoutId: payout.id, profileId: payout.profileId },
+    payload: { payoutId: payout.id, ...ownerOf(payout) },
   });
 }
 
@@ -572,7 +627,12 @@ async function releaseFailedPayout(
  */
 export async function failPayoutByStaff(
   tx: Tx,
-  payout: { id: string; profileId: string; status: string },
+  payout: {
+    id: string;
+    profileId: string | null;
+    businessId: string | null;
+    status: string;
+  },
 ): Promise<void> {
   await tx
     .update(payouts)
@@ -677,7 +737,7 @@ async function recordPayoutOutcomeIn(
         eventType: 'payout.conflict',
         aggregateId: payout.id,
         dedupeSuffix: eventRowId,
-        payload: { payoutId: payout.id, profileId: payout.profileId },
+        payload: { payoutId: payout.id, ...ownerOf(payout) },
       });
       return finish('conflict', payout.status);
     }
@@ -716,9 +776,10 @@ async function recordPayoutOutcomeIn(
       currency: payout.currency,
       payoutId: payout.id,
       traceId,
+      // A business's payout takes its own business_payable (R2-B), a person's their recipient_payable.
       lines: buildPayoutPosting({
         amountMinor: payout.amountMinor,
-        profileId: personOf(payout.profileId),
+        ...ownerOf(payout),
       }),
     });
     await enqueueOutbox(tx, {
@@ -726,7 +787,7 @@ async function recordPayoutOutcomeIn(
       aggregateId: payout.id,
       payload: {
         payoutId: payout.id,
-        profileId: payout.profileId,
+        ...ownerOf(payout),
         currency: payout.currency,
         amountMinor: formatMinor(payout.amountMinor),
       },
@@ -762,10 +823,7 @@ async function recordPayoutOutcomeIn(
     }
   }
   if (to === 'FAILED') {
-    await releaseFailedPayout(tx, {
-      ...payout,
-      profileId: personOf(payout.profileId),
-    });
+    await releaseFailedPayout(tx, payout);
     if (input.failureReason === 'in_debt') {
       const issue = await openIssue(tx, {
         dedupeKey: `provider_in_debt.${payout.id}`,
@@ -773,11 +831,14 @@ async function recordPayoutOutcomeIn(
         subject: { payoutId: payout.id },
         now,
       });
-      await holdWithdrawals(tx, {
-        profileId: personOf(payout.profileId),
-        reason: 'in_debt',
-        issueId: issue.id,
-      });
+      // A business has no holds of its own (that needs a migration): staff get the issue, and the
+      // provider refuses further payouts from an account in debt anyway.
+      if (payout.profileId !== null)
+        await holdWithdrawals(tx, {
+          profileId: payout.profileId,
+          reason: 'in_debt',
+          issueId: issue.id,
+        });
     }
   }
   return finish('applied', to);
@@ -834,14 +895,21 @@ export type WithdrawalQuoteResult =
 // out twice. Attempts record the stored name ('bachs'), so the adapter's name is converted first.
 async function collectedElsewhere(
   db: Pick<Database, 'execute'>,
-  input: { profileId: string; provider: string },
+  input: { owner: MoneyOwner; provider: string },
 ): Promise<boolean> {
   const stored = recordedProviderName(input.provider);
+  const { owner } = input;
+  // A business's money is its share of tips made to its people (R2-B).
+  const whose =
+    'businessId' in owner
+      ? sql`EXISTS (SELECT 1 FROM tip_business_shares s
+                     WHERE s.tip_id = t.id AND s.business_id = ${owner.businessId})`
+      : sql`t.profile_id = ${owner.profileId}`;
   const foreign = await db.execute<{ found: boolean }>(sql`
     SELECT EXISTS (
       SELECT 1 FROM tips t
         JOIN payment_attempts a ON a.intent_id = t.intent_id
-       WHERE t.profile_id = ${input.profileId} AND t.status = 'SUCCEEDED'
+       WHERE ${whose} AND t.status = 'SUCCEEDED'
          AND a.status = 'VERIFIED_SUCCEEDED' AND a.provider IS DISTINCT FROM ${stored}
     ) AS found`);
   return Boolean(foreign.rows[0]?.found);
@@ -852,13 +920,19 @@ export function withdrawalsAvailable(
   db: Database,
   input: { profileId: string; provider: string },
 ): Promise<boolean> {
-  return guarded(async () => !(await collectedElsewhere(db, input)));
+  return guarded(
+    async () =>
+      !(await collectedElsewhere(db, {
+        owner: { profileId: input.profileId },
+        provider: input.provider,
+      })),
+  );
 }
 
 /** Where a withdrawal would go, from TipMe's own records; the provider is not asked here. */
 async function payoutRoute(
   db: Database,
-  input: { profileId: string; provider: PayoutReader },
+  input: { owner: MoneyOwner; provider: PayoutReader },
 ): Promise<{
   /** Whether this provider pays through a connected account at all. */
   accountless: boolean;
@@ -889,7 +963,7 @@ async function payoutRoute(
           .from(paymentAccounts)
           .where(
             and(
-              eq(paymentAccounts.profileId, input.profileId),
+              ownedBy(paymentAccounts, input.owner),
               eq(paymentAccounts.provider, stored),
               eq(paymentAccounts.environment, environment),
             ),
@@ -904,7 +978,7 @@ async function payoutRoute(
     .from(payoutDestinations)
     .where(
       and(
-        eq(payoutDestinations.profileId, input.profileId),
+        ownedBy(payoutDestinations, input.owner),
         eq(payoutDestinations.provider, stored),
         isNull(payoutDestinations.replacedAt),
       ),
@@ -953,11 +1027,11 @@ export type ProviderReadFailureLog = (
  */
 export interface PartnerQuoteCache {
   /** The account's entries as of now (the current version), or null when the store is unusable. */
-  open(scope: {
-    provider: string;
-    profileId: string;
-  }): Promise<PartnerQuoteEntries | null>;
+  open(scope: PartnerQuoteScope): Promise<PartnerQuoteEntries | null>;
 }
+
+/** The account a cache entry is about: a person's, or a business's own (R2-B). */
+export type PartnerQuoteScope = { provider: string } & MoneyOwner;
 
 export interface PartnerQuoteEntries {
   get(part: string): Promise<string | null>;
@@ -974,7 +1048,7 @@ export interface PartnerQuoteEntries {
 async function partnerStamp(
   db: Pick<Database, 'execute'>,
   input: {
-    profileId: string;
+    owner: MoneyOwner;
     route: Awaited<ReturnType<typeof payoutRoute>>;
     ledgerMinor: bigint;
   },
@@ -984,7 +1058,7 @@ async function partnerStamp(
     SELECT md5(string_agg(
              ${payouts.id} || ':' || ${payouts.status} || ':' || COALESCE(${payouts.providerReference}, ''),
              ',' ORDER BY ${payouts.id})) AS digest
-      FROM ${payouts} WHERE ${payouts.profileId} = ${input.profileId}`);
+      FROM ${payouts} WHERE ${ownedBy(payouts, input.owner)}`);
   const { route } = input;
   return createHash('sha256')
     .update(
@@ -1170,7 +1244,7 @@ async function readProvider(
  */
 async function queuedNotStarted(
   db: Pick<Database, 'select'>,
-  profileId: string,
+  owner: MoneyOwner,
 ): Promise<bigint> {
   const [row] = await db
     .select({
@@ -1179,7 +1253,7 @@ async function queuedNotStarted(
     .from(payouts)
     .where(
       and(
-        eq(payouts.profileId, profileId),
+        ownedBy(payouts, owner),
         eq(payouts.status, 'REQUESTED'),
         isNull(payouts.providerReference),
       ),
@@ -1192,17 +1266,12 @@ const notNegative = (a: bigint) => (a < 0n ? 0n : a);
 
 async function activeHold(
   db: Pick<Database, 'select'>,
-  profileId: string,
+  owner: MoneyOwner,
 ): Promise<'reversal' | 'in_debt' | 'unexpected_payout' | 'review' | null> {
   const [hold] = await db
     .select({ reason: withdrawalHolds.reason })
     .from(withdrawalHolds)
-    .where(
-      and(
-        eq(withdrawalHolds.profileId, profileId),
-        isNull(withdrawalHolds.releasedAt),
-      ),
-    )
+    .where(and(holdsOf(owner), isNull(withdrawalHolds.releasedAt)))
     .orderBy(asc(withdrawalHolds.createdAt))
     .limit(1);
   if (!hold) return null;
@@ -1214,15 +1283,16 @@ async function activeHold(
 /** Whether the provider itself is checking one of the recipient's unfinished payouts. */
 export function withdrawalInReview(
   db: Database,
-  profileId: string,
+  owner: string | MoneyOwner,
 ): Promise<boolean> {
+  const whose = typeof owner === 'string' ? { profileId: owner } : owner;
   return guarded(async () => {
     const [row] = await db
       .select({ id: payouts.id })
       .from(payouts)
       .where(
         and(
-          eq(payouts.profileId, profileId),
+          ownedBy(payouts, whose),
           inArray(payouts.status, ['REQUESTED', 'PROCESSING']),
           isNotNull(payouts.providerReviewAt),
         ),
@@ -1232,30 +1302,51 @@ export function withdrawalInReview(
   });
 }
 
+type QuoteInput = {
+  provider: PayoutReader;
+  onReadFailure?: ProviderReadFailureLog;
+  /** Only for showing the quote; a request takes none and always asks the provider. */
+  cache?: PartnerQuoteCache;
+};
+
 /** What the recipient can withdraw right now and, if nothing, why. Never moves money. */
-export async function withdrawalQuote(
+export function withdrawalQuote(
   db: Database,
-  input: {
-    profileId: string;
-    provider: PayoutReader;
-    onReadFailure?: ProviderReadFailureLog;
-    /** Only for showing the quote; `requestWithdrawal` takes none and always asks the provider. */
-    cache?: PartnerQuoteCache;
-  },
+  input: QuoteInput & { profileId: string },
+): Promise<WithdrawalQuoteResult> {
+  return quoteFor(db, { profileId: input.profileId }, input);
+}
+
+/**
+ * What a business can withdraw from its own balance (R2-B), the same quote as a person's: TipMe's
+ * ledger (its `business_payable`) and the provider's balance of the business's own account. Only
+ * an owner may ask; the caller checks that. Never moves money.
+ */
+export function businessWithdrawalQuote(
+  db: Database,
+  input: QuoteInput & { businessId: string },
+): Promise<WithdrawalQuoteResult> {
+  return quoteFor(db, { businessId: input.businessId }, input);
+}
+
+async function quoteFor(
+  db: Database,
+  owner: MoneyOwner,
+  input: QuoteInput,
 ): Promise<WithdrawalQuoteResult> {
   if (await withdrawalsSwitchedOff(db))
     return { state: 'paused', reason: 'switched_off' };
   const { hold, route, foreign } = await guarded(async () => ({
-    hold: await activeHold(db, input.profileId),
-    route: await payoutRoute(db, input),
+    hold: await activeHold(db, owner),
+    route: await payoutRoute(db, { owner, provider: input.provider }),
     foreign: await collectedElsewhere(db, {
-      profileId: input.profileId,
+      owner,
       provider: input.provider.name,
     }),
   }));
   if (hold) return { state: 'paused', reason: hold };
   // Q8: below zero after a reversal, withdrawals wait until it is back above zero.
-  if ((await guarded(() => balanceIn(db, input.profileId))).availableMinor < 0n)
+  if ((await guarded(() => ownerAvailable(db, owner))) < 0n)
     return { state: 'paused', reason: 'reversal' };
   // A request would be refused, so the quote must not say otherwise. The states have no word for
   // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
@@ -1263,30 +1354,25 @@ export async function withdrawalQuote(
   const block = routeBlock(route);
   if (block) return block;
   const { ledgerMinor, queuedMinor } = await guarded(async () => ({
-    ledgerMinor: (await balanceIn(db, input.profileId)).availableMinor,
-    queuedMinor: await queuedNotStarted(db, input.profileId),
+    ledgerMinor: await ownerAvailable(db, owner),
+    queuedMinor: await queuedNotStarted(db, owner),
   }));
   const { cache } = input;
   const entries = cache
     ? await safely(() =>
-        cache.open({
-          provider: input.provider.name,
-          profileId: input.profileId,
-        }),
+        cache.open({ provider: input.provider.name, ...owner }),
       )
     : null;
   const reader = entries
     ? cachedReader(
         input.provider,
         entries,
-        await guarded(() =>
-          partnerStamp(db, { profileId: input.profileId, route, ledgerMinor }),
-        ),
+        await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
       )
     : input.provider;
   const read = await readProvider(
     reader,
-    route.accountReference ?? input.profileId,
+    route.accountReference ?? ownerReference(owner),
     (available) => notNegative(lower(ledgerMinor, available - queuedMinor)),
     input.onReadFailure,
   );
@@ -1305,6 +1391,20 @@ export async function withdrawalQuote(
   };
 }
 
+/** What stands in for an account reference with the pretend provider, which has none. */
+const ownerReference = (owner: MoneyOwner) =>
+  'businessId' in owner ? owner.businessId : owner.profileId;
+
+type RequestInput = {
+  amountMinor: bigint;
+  idempotencyKey: string;
+  provider: PayoutReader;
+  traceId?: string | null;
+  onReadFailure?: ProviderReadFailureLog;
+};
+
+type RequestResult = { payoutId: string; status: string; replayed: boolean };
+
 /**
  * A recipient withdraws any amount up to what both TipMe's ledger and the provider's balance allow
  * (PR-008). The provider is read first, outside any transaction; then the profile row is locked so
@@ -1314,33 +1414,53 @@ export async function withdrawalQuote(
  * to move money here: the `payouts.start` job, committed with the payout, makes the worker do that.
  * A replay returns the original payout whatever has changed since, and queues nothing.
  */
-export async function requestWithdrawal(
+export function requestWithdrawal(
   db: Database,
-  input: {
-    profileId: string;
-    amountMinor: bigint;
-    idempotencyKey: string;
-    provider: PayoutReader;
-    traceId?: string | null;
-    onReadFailure?: ProviderReadFailureLog;
-  },
-): Promise<{
-  payoutId: string;
-  status: string;
-  replayed: boolean;
-}> {
+  input: RequestInput & { profileId: string },
+): Promise<RequestResult> {
+  return requestFor(db, { profileId: input.profileId }, input);
+}
+
+/**
+ * A business's own withdrawal (R2-B), from its `business_payable` balance to its own bank, through
+ * exactly the person's path: the same states, idempotency, switch, holds and start job, with no new
+ * kind of partner call. The business row is the lock (as `reverseTip` takes it), so two at once
+ * can never overdraw and a reversal is seen; below zero refuses `BALANCE_BELOW_ZERO` (Q8). Only an
+ * owner of the business may ask, checked again under that lock.
+ */
+export function requestBusinessWithdrawal(
+  db: Database,
+  input: RequestInput & { businessId: string; userId: string },
+): Promise<RequestResult> {
+  return requestFor(db, { businessId: input.businessId }, input, input.userId);
+}
+
+async function requestFor(
+  db: Database,
+  owner: MoneyOwner,
+  input: RequestInput,
+  actingUserId?: string,
+): Promise<RequestResult> {
   const traceId = input.traceId ?? activeTraceId();
-  const route = await guarded(() => payoutRoute(db, input));
+  const route = await guarded(() =>
+    payoutRoute(db, { owner, provider: input.provider }),
+  );
   const destinationId = route.destination?.id ?? null;
   // Not the bank account: a retry after a bank change replays the payout in flight, which keeps the
-  // destination it recorded. The new account is for the next withdrawal.
+  // destination it recorded. The new account is for the next withdrawal. A person's stays as it
+  // always was; a business's names the business, so a key can never cross between the two.
   const fingerprint = createHash('sha256')
     .update(
-      JSON.stringify([
-        'withdrawal',
-        input.profileId,
-        input.amountMinor.toString(),
-      ]),
+      JSON.stringify(
+        'businessId' in owner
+          ? [
+              'withdrawal',
+              'business',
+              owner.businessId,
+              input.amountMinor.toString(),
+            ]
+          : ['withdrawal', owner.profileId, input.amountMinor.toString()],
+      ),
     )
     .digest('hex');
   const replayIn = async (reader: Pick<Database, 'select'>) => {
@@ -1361,15 +1481,22 @@ export async function requestWithdrawal(
   const earlier = await guarded(() => replayIn(db));
   if (earlier) return earlier;
   if (input.amountMinor <= 0n) throw new OperationError('INVALID_INPUT');
+  // Only an owner of the business acts for it: asked before any provider read, and under the lock.
+  const ownerCheck = (reader: Database | Tx) =>
+    'businessId' in owner
+      ? actingUserId
+        ? managerOf(reader, actingUserId, owner.businessId, { owner: true })
+        : Promise.reject(new OperationError('NOT_A_MANAGER'))
+      : null;
+  await guarded(async () => {
+    await ownerCheck(db);
+  });
   // Before any provider read: while off nothing about this request needs one.
   if ((await withdrawalsSwitchState(db)).paused)
     throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
   const providerName = input.provider.name;
   const isForeign = () =>
-    collectedElsewhere(db, {
-      profileId: input.profileId,
-      provider: providerName,
-    });
+    collectedElsewhere(db, { owner, provider: providerName });
   if (await guarded(isForeign))
     throw new OperationError('WITHDRAWAL_UNAVAILABLE');
   const block = routeBlock(route);
@@ -1378,7 +1505,7 @@ export async function requestWithdrawal(
   if (block) throw new OperationError('PAYOUT_DESTINATION_NEEDED');
   const read = await readProvider(
     input.provider,
-    route.accountReference ?? input.profileId,
+    route.accountReference ?? ownerReference(owner),
     () => input.amountMinor,
     input.onReadFailure,
   );
@@ -1389,27 +1516,35 @@ export async function requestWithdrawal(
 
   return guarded(() =>
     db.transaction(async (tx) => {
-      await tx
-        .select({ id: profiles.id })
-        .from(profiles)
-        .where(eq(profiles.id, input.profileId))
-        .for('update');
+      if ('businessId' in owner) {
+        const [business] = await tx
+          .select({ id: businesses.id })
+          .from(businesses)
+          .where(eq(businesses.id, owner.businessId))
+          .for('update');
+        if (!business) throw new OperationError('NOT_A_MANAGER');
+      } else
+        await tx
+          .select({ id: profiles.id })
+          .from(profiles)
+          .where(eq(profiles.id, owner.profileId))
+          .for('update');
       const afterLock = await replayIn(tx);
       if (afterLock) return afterLock;
+      // Under the lock: an owner removed meanwhile can no longer take the business's money.
+      await ownerCheck(tx);
       // Under the lock too, and read for real: a switch that can't be read refuses here.
       if ((await withdrawalsSwitchState(tx)).paused)
         throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
-      if (await activeHold(tx, input.profileId))
+      if (await activeHold(tx, owner))
         throw new OperationError('WITHDRAWALS_PAUSED');
-      const { availableMinor } = await balanceIn(tx, input.profileId);
+      const availableMinor = await ownerAvailable(tx, owner);
       // Q8: a reversal after the money left can take the balance below zero. Nothing more leaves
       // until it is back; nothing is collected automatically. Under the lock reverseTip also takes.
       if (availableMinor < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
       const withdrawable = lower(
         availableMinor,
-        notNegative(
-          read.availableMinor - (await queuedNotStarted(tx, input.profileId)),
-        ),
+        notNegative(read.availableMinor - (await queuedNotStarted(tx, owner))),
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
@@ -1420,12 +1555,7 @@ export async function requestWithdrawal(
         input.amountMinor !== withdrawable
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
-      if (
-        await collectedElsewhere(tx, {
-          profileId: input.profileId,
-          provider: providerName,
-        })
-      )
+      if (await collectedElsewhere(tx, { owner, provider: providerName }))
         throw new OperationError('WITHDRAWAL_UNAVAILABLE');
       if (destinationId) {
         // Held until commit: a bank change waits, and the payout never records a replaced account.
@@ -1447,7 +1577,7 @@ export async function requestWithdrawal(
         .insert(payouts)
         .values({
           id: payoutId,
-          profileId: input.profileId,
+          ...ownerColumns(owner),
           currency: 'NGN',
           amountMinor: input.amountMinor,
           status: 'REQUESTED',
@@ -1476,7 +1606,7 @@ export async function requestWithdrawal(
       await enqueueOutbox(tx, {
         eventType: PAYOUT_START_EVENT,
         aggregateId: payoutId,
-        payload: { payoutId, profileId: input.profileId },
+        payload: { payoutId, ...owner },
       });
       return { payoutId, status: 'REQUESTED', replayed: false };
     }),

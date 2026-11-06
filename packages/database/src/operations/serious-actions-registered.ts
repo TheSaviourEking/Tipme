@@ -131,6 +131,22 @@ const pageOwner = async (db: Database | Tx, profileId: string) => {
   return page?.userId ? [page.userId] : [];
 };
 
+/**
+ * Who a withdrawal's money belongs to, as people: the page's owner, or (R2-B) everyone who runs
+ * the business, past managers included. None of them may decide their own withdrawal's case.
+ */
+const payoutOwners = async (
+  db: Database | Tx,
+  owner: { profileId: string } | { businessId: string },
+) => {
+  if ('profileId' in owner) return pageOwner(db, owner.profileId);
+  const managers = await db
+    .select({ userId: businessManagers.userId })
+    .from(businessManagers)
+    .where(eq(businessManagers.businessId, owner.businessId));
+  return managers.map(({ userId }) => userId);
+};
+
 const handleOf = async (db: Database | Tx, profileId: string) => {
   const [page] = await db
     .select({ handle: profiles.handle })
@@ -296,7 +312,7 @@ const payoutSettle = acting<SettlePayload>({
   },
   subjects: async ({ issueId }, db) => {
     const facts = await payoutCaseFacts(db, issueId);
-    return facts ? pageOwner(db, facts.profileId) : [];
+    return facts ? payoutOwners(db, facts.owner) : [];
   },
   target: ({ issueId }) => issueId,
   current: async (tx, { issueId }) =>
@@ -418,7 +434,7 @@ const moneyIssueClose = acting<{
     return [
       ...(userId ? [userId] : []),
       ...(profileId ? await pageOwner(db, profileId) : []),
-      ...(payout ? await pageOwner(db, payout.profileId) : []),
+      ...(payout ? await payoutOwners(db, payout.owner) : []),
     ];
   },
   target: ({ issueId }) => issueId,

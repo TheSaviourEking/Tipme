@@ -175,3 +175,47 @@ test('no sample value reaches a subject or preheader', () => {
     }
   }
 });
+
+test("a business's withdrawal names the business in the body only, and links to its page (R2-B)", () => {
+  for (const id of ['withdrawal_paid', 'withdrawal_failed']) {
+    const out = renderMail(
+      id,
+      { amountMinor: '250000', businessName: 'The Yellow Chilli' },
+      ctx,
+    );
+    assert.match(out.text, /The Yellow Chilli/, id);
+    assert.match(out.subject, /business/, id);
+    assert.doesNotMatch(out.subject, /Yellow Chilli/, id);
+    assert.doesNotMatch(preheaderOf(out.html), /Yellow Chilli/, id);
+    assert.doesNotMatch(out.text, /your balance/, id);
+    // A person's own withdrawal reads as it always has.
+    const own = renderMail(id, { amountMinor: '250000' }, ctx);
+    assert.doesNotMatch(own.subject, /business/, id);
+  }
+  const failed = renderMail(
+    'withdrawal_failed',
+    { amountMinor: '250000', businessName: 'The Yellow Chilli' },
+    ctx,
+  );
+  assert.match(failed.text, /\/dashboard\/business/);
+});
+
+test("a business's bank change tells its owners which business, in the body only (R2-B)", () => {
+  const data = {
+    bankName: 'Guaranty Trust Bank',
+    last4: '1234',
+    previousBankName: 'Providus Bank',
+    previousLast4: '6789',
+  };
+  const out = renderMail(
+    'payout_destination_changed',
+    { ...data, businessName: 'The Yellow Chilli' },
+    ctx,
+  );
+  assert.match(out.text, /The Yellow Chilli’s next TipMe withdrawal/);
+  assert.doesNotMatch(out.subject, /Yellow Chilli/);
+  assert.match(out.subject, /business/);
+  const own = renderMail('payout_destination_changed', data, ctx);
+  assert.match(own.text, /Your next TipMe withdrawal/);
+  assert.equal(own.subject, 'Your TipMe bank account changed');
+});
