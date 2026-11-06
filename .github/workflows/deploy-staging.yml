@@ -12,6 +12,9 @@
 #              RELEASE_CHECK_TOKEN, RELEASE_OPS_EMAIL, RELEASE_OPS_TOTP_SECRET,
 #              SLACK_WEBHOOK_URL (optional; posts deploy status and fix summaries to Slack)
 #   variables: STAGING_SSH (deploy@<server>), STAGING_WEB_URL, STAGING_API_URL
+# Changelog (optional; docs/runbooks/changelog.md): the repository secret CHANGELOG_SIGNING_SECRET
+# and the repository variable CHANGELOG_API_URL (production's API: "on staging" is recorded in
+# production's changelog). Unset, the changelog step only notes "Changelog not set up".
 name: Deploy staging
 on:
   workflow_dispatch:
@@ -129,6 +132,17 @@ jobs:
           else echo "::warning::Release-check staff not set up yet: running the read-only check only."; fi
           pnpm release:check --web "$WEB" --api "$API" --expect-version "$VERSION" "${mode[@]}"
           echo "full=$full" >> "$GITHUB_OUTPUT"
+      # Marks the changelog entries this version carries as on staging (scripts/changelog-sync.mjs).
+      # Before the staging pass is recorded, never between it and the check; it cannot stop that
+      # record or fail the deploy. A miss is caught up by the next deploy or Changelog sync.
+      - name: 'Changelog: what is now on staging'
+        if: success()
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          CHANGELOG_API_URL: ${{ vars.CHANGELOG_API_URL }}
+          CHANGELOG_SIGNING_SECRET: ${{ secrets.CHANGELOG_SIGNING_SECRET }}
+        run: node scripts/changelog-sync.mjs --environment staging --version "$VERSION"
       # Only a passed --full check counts; the read-only fallback records nothing. Production
       # refuses a main commit whose tree has no such pass. The deployed commit is the checked-out
       # one (dev), not GITHUB_SHA, so it is passed explicitly.
