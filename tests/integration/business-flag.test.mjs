@@ -68,3 +68,14 @@ test('with it off, a tip intent carrying businessMemberId is made and not labell
     business_location_id: null,
   });
 });
+
+// PR B8.
+test('with it off, GET /v1/me/businesses/:id/codes is 404, even for the owner', async () => {
+  const { businessId } = await seedBusiness(database);
+  const response = await fetch(
+    `${stack.api}/v1/me/businesses/${businessId}/codes`,
+    { headers: { cookie: ada.cookie } },
+  );
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error.code, 'NOT_FOUND');
+});

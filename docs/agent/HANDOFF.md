@@ -1,3 +1,11 @@
+# Current handoff — TipMe for businesses, PR B8: codes (6 November 2026)
+
+- Branch `feat/business-b8`, lane 2, committed, not pushed. No migration. Contract change (additive, B8-only consumer): `BusinessCodes.business` `{ name, slug }` and `location[].slug`, `location[].name`.
+- Codes print only for a verified business; the API refuses otherwise and the web draws nothing. Badges are per active membership whose page is active; someone who left has none (their old badge leads to their own page through B4's redirect, M2, not on this branch).
+- Every code is `location.origin` + the API's path (which carries `?src=qr`), as `/dashboard/qr` does. `apps/web/test/business-sign.test.mjs` and `tests/e2e/business-codes.spec.ts` decode the drawn pixels back to that URL.
+- The e2e spec answers B1's `GET /v1/me/businesses/:id` and B3's `GET /v1/me/work` with fixed shapes, since neither route is on this branch; the codes route is real.
+- Verified: commands and counts in `.superpowers/program/b8-report.md` (main checkout). Full e2e suite not run locally (overload ruling); CI runs it.
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.
