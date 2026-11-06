@@ -18,6 +18,33 @@ test('a lamp is decoration: hidden from screen readers, one class per tone', () 
   }
 });
 
+test('a stamp is read aloud, in its own words, one class per tone', () => {
+  for (const tone of ['wait', 'ok', 'bad', 'ink']) {
+    const html = renderToStaticMarkup(h(ui.Stamp, { tone }, 'Paid'));
+    assert.equal(html, `<span class="tm-stamp tm-stamp--${tone}">Paid</span>`);
+  }
+  assert.equal(
+    renderToStaticMarkup(h(ui.Stamp, { tone: 'ok', className: 'x' }, 'Paid')),
+    '<span class="tm-stamp tm-stamp--ok x">Paid</span>',
+  );
+  // It doesn't move, and the word reads as a stamp in capitals only through CSS.
+  const rule = css.match(/\.tm-stamp\s*\{[^}]*\}/)?.[0] ?? '';
+  assert.match(rule, /text-transform: uppercase/);
+  assert.match(rule, /border: 1\.5px solid currentColor/);
+  assert.doesNotMatch(rule, /animation|transition/);
+  for (const [tone, colour] of [
+    ['wait', '--brand-ink'],
+    ['ok', '--stamp-ok'],
+    ['bad', '--state-danger'],
+    ['ink', '--stamp-ink'],
+  ])
+    assert.match(
+      css,
+      new RegExp(`\\.tm-stamp--${tone}\\s*\\{[^}]*color: var\\(${colour}\\)`),
+      tone,
+    );
+});
+
 test('an error or unsure slip is an alert; waiting, done and neutral are status', () => {
   for (const [tone, role] of [
     ['error', 'alert'],
@@ -340,6 +367,7 @@ test('state CSS: the red edge, one shake that reduced motion stops, edges in for
     '.tm-key-result__face',
     '.tm-empty-well',
     '.tm-empty-slip',
+    '.tm-stamp',
   ])
     assert.ok(forced.includes(s), `forced colours miss ${s}`);
 });
