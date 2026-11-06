@@ -25,6 +25,8 @@ const CROSS_ORIGIN_PATHS = [
   '/v1/vitals',
   // Reporting a page from its public page (PR-013); profile reads are public data anyway.
   '/v1/profiles/',
+  // A business location page's "I don't see them" search (PR B4): public, never credentialed.
+  '/v1/b/',
 ];
 // Recipient routes carry the session cookie, so the browser must send credentials.
 const CREDENTIALED_PATHS = [

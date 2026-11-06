@@ -281,12 +281,37 @@ export interface PublicStaffTipPage {
   business: PublicLocation['business'];
   location: PublicLocation['location'];
   person: StaffCard;
-  /** Exactly what the person's own page gives the tip form. */
+  /** Exactly what the person's own page gives the tip form, its "opens soon" state included. */
   profile: Pick<
     PublicProfile,
-    'handle' | 'displayName' | 'tipAmounts' | 'acceptingTips' | 'plan'
+    | 'handle'
+    | 'displayName'
+    | 'tipAmounts'
+    | 'acceptingTips'
+    | 'plan'
+    | 'tippingOpen'
   >;
 }
+/**
+ * A staff code that no longer names someone working here (they left, the business is paused or
+ * the location closed): their own page instead, and the tip is not labelled (M2).
+ */
+export interface StaffPageRedirect {
+  redirectTo: string;
+}
+/** "I don't see them": a person anywhere at the business, with where they work. */
+export interface BusinessPersonMatch extends StaffCard {
+  locationSlug: string;
+  locationName: string;
+}
+/**
+ * The search's query: the start of a shown name. Under 2 characters is no search and answers an
+ * empty list rather than an error (the operation decides), so only its length is bounded here.
+ */
+export const businessPeopleQuerySchema = z.object({
+  q: z.string().trim().max(60).default(''),
+});
+export type BusinessPeopleQuery = z.infer<typeof businessPeopleQuerySchema>;
 
 /** A username's public card, for a manager inviting by username: never contact details. */
 export interface InviteeCard {
