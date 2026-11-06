@@ -324,3 +324,12 @@ the appreciation moment) is unchanged.
 - **Freeze rules.** The cover pauses on the first use of the tip form and stays paused for that view; it also pauses off screen. Reduced motion, forced colours and print show the still frame.
 - **Lock.** The server refuses Pro-only choices from Free pages. A page that leaves Pro shows the still frame and keeps its choice.
 - **Performance.** Transform and opacity only; profile LCP stays under 2000ms in `pnpm perf:lab`.
+
+## 2026-11-05 — Emails
+
+- **Owner decision, 5 Nov 2026.** The four email boards (`EmailTip`, `EmailAccount`, `EmailSecurity`, `EmailReports` in `docs/design/redesign/boards/`) are approved for building: every email TipMe sends moves into the new paper-and-slab frame. A visual and copy decision, not a legal, regulatory or provider approval; no D-item changes and nothing about fees, payouts or the ledger changes.
+- **Emails load nothing remote.** The serif is Georgia, not DM Serif Display, and the heart is a text glyph. A remote font or image would tell a third party when an email, security mail included, is opened.
+- **Tip notes never appear in email** (`schema.ts`: tip messages are never copied elsewhere). The boards' quoted notes are not built; the tip email may only say that a note exists.
+- **Codes in cells stay one copyable string**, so copy, paste and code autofill still get the whole code.
+- **Nothing private in a subject or preview line.** No code, link, address, name, bank or device in a subject or the hidden preheader; the tip amount in the tip email's subject is the one existing exception.
+- **Plan:** `docs/superpowers/plans/2026-11-05-emails-and-admin.md` (PR M1 is the frame and blocks with today's words; PR M2 is the boards' compositions).
