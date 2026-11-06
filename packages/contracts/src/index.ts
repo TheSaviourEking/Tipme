@@ -20,3 +20,4 @@ export * from './qr.js';
 export * from './thanks.js';
 export * from './live.js';
 export * from './usernames.js';
+export * from './supporters.js';

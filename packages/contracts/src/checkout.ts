@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SUPPORTER_KEY_PATTERN } from './supporters.js';
 import type { ThanksSlip } from './thanks.js';
 
 /** Guest checkout wire shapes. Amounts travel as decimal strings of minor units; NGN only (illustrative). */
@@ -50,6 +51,12 @@ export const tipIntentRequestSchema = z
      * consent is never a default, and a request without a message stores none.
      */
     noteMayShow: z.literal(true).optional(),
+    /**
+     * "Let {recipient} recognise me next time": a random key this browser keeps for this recipient
+     * only. Sent only when the supporter ticked the box and gave a name. The server stores its
+     * SHA-256, and only for a Pro page while recognition is switched on; otherwise it is ignored.
+     */
+    supporterKey: z.string().regex(SUPPORTER_KEY_PATTERN).optional(),
   })
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;
@@ -93,4 +100,9 @@ export interface TipStatusView {
    * it is now, not as it was when the tip was made (owner's answer, 5 Nov 2026).
    */
   thanks?: ThanksSlip;
+  /**
+   * Present (true) only when this paid tip is recognised: the supporter opted in and the page was
+   * Pro. The receipt then offers "Stop {name} recognising me". Older APIs send nothing.
+   */
+  recognised?: true;
 }

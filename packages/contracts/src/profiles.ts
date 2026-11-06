@@ -161,6 +161,11 @@ export interface PublicProfile {
    * limited to named pages). Checkout enforces the same rule. Older APIs send nothing.
    */
   tippingOpen?: boolean;
+  /**
+   * Present (true) only when this page is Pro and supporter recognition is switched on: the tip form
+   * may then offer "Let {name} recognise me next time". Older APIs send nothing (no tick box).
+   */
+  recognition?: true;
 }
 
 /** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */
