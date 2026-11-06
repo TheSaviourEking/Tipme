@@ -137,6 +137,13 @@ test('every operation says who may call it, whether it needs CSRF, and its rate 
     false,
     null,
   ]);
+  // CI's changelog requests: a signature over the raw body with the changelog secret.
+  for (const path of ['drafts', 'pending', 'releases'])
+    assert.deepEqual(access('post', `/v1/webhooks/changelog/${path}`), [
+      'ci-signature',
+      false,
+      'changelog_ingest',
+    ]);
   assert.deepEqual(access('post', '/v1/release/runs'), [
     'release-token',
     false,

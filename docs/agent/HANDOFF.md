@@ -1,3 +1,55 @@
+# Current handoff: merge train 3, the changelog and What's new (6 November 2026)
+
+- `train/3` holds the six changelog PRs (#160, #164, #166, #162, #169, #163) on top of dev with trains 1 and 2. Merging it marks each of them merged.
+- One migration after `0083_reversal_partner_keeps_fee`: `0084_changelog` (two new tables, the permission checks re-added with the two new names, and the owner and editor grants). Additive.
+- Resolutions worth knowing: the serious-action catalogue has fourteen actions; the dashboard menu reads Home, Tips, My page, My QR, Business, Work, What's new, Settings (Business and Work only when they apply); the phone's What's new link sits after the test-mode pill and before the bell; `deleteAccount` ends business roles and deletes `changelog_reads`.
+- Switching it on (owner, after production has the train): `docs/runbooks/changelog.md`. Users see nothing until an entry is approved and live.
+- Evidence and every conflict: `.superpowers/program/train3-report.md` (main checkout).
+
+# Current handoff: changelog PR 6, What's new (`feat/whats-new`, #163) (6 November 2026)
+
+- Built on PR 1: the DB reads and the seen marker, the three `/v1/me/whats-new` routes, the menu item, the phone link, the Home slip and the page, and the public-pages guard test. `deleteAccount` now removes `changelog_reads`.
+- Unit and the touched integration tests pass. E2E did not run on the builder's lane (lane 8 was in use by `preview`); merge train 3 ran `whats-new.spec.ts` and `dashboard.spec.ts` on lane 3.
+- Users see nothing until entries are ingested, approved and live. Evidence: `.superpowers/program/cl6-report.md` (main checkout).
+
+# Current handoff: changelog PR 5, the admin screens (`feat/changelog-ops-web`, #169) (6 November 2026)
+
+- Built on PR 4: "Changelog" sits in the admin menu's Email and records group, for `changelog.edit` or `changelog.publish`.
+- `/ops/changelog` has the All / Drafts / For users / Staff only filters (`?view=`), state stamps, "Waiting in Approvals" and "Edited since asking".
+- `/ops/changelog/[number]` edits the staff text, the user text and who sees it, previews the exact user line, flags provider names and regulatory claims by the field, and offers Approve (publish) or Ask for approval (edit), plus Withdraw.
+- `OpsChangelogRow.editedSinceAsking?` is added to PR 4's admin operation.
+- Verified by the builder: lint, typecheck, format, `pnpm test`, 130 touched integration tests, and e2e `ops-changelog` (7) with `ops-screens`, `ops` and `ops-usernames` (27/27 on a clean lane database). Evidence: `.superpowers/program/cl5-report.md` (main checkout).
+
+# Current handoff: changelog PR 4, the admin API and approval (`feat/changelog-ops-api`, #162) (6 November 2026)
+
+- Admin operations in `operations/changelog-admin.ts`: list, read, edit, approve and withdraw.
+- `askPermission` on serious actions, so editors ask with `changelog.edit` and publishers decide with `changelog.publish`. An editor never runs it alone: with nobody to approve they get `APPROVAL_NO_APPROVER`. A requester must still hold the ask permission at approval.
+- `changelog.publish` was the twelfth serious action on its branch; on dev after merge train 3 it is the fourteenth (after train 2's `business.verify` and `tip.reverse`).
+- Six `/v1/ops/changelog` routes, plus the 409/404/422 error mappings. Evidence: `.superpowers/program/cl4-report.md` (main checkout).
+
+# Current handoff: changelog PR 3, the CI sender and sync (`feat/changelog-ci`, #166) (6 November 2026)
+
+- `scripts/changelog-client.mjs`: signing matches the API's pinned fixture; the body is cut by UTF-8 bytes to stay under 128 KiB; one retry on a network error or 5xx.
+- `scripts/changelog-send.mjs` and `.github/workflows/changelog-draft.yml`: PRs merged into dev, plus a hand-run resend.
+- `scripts/changelog-sync.mjs` and `.github/workflows/changelog-sync.yml`: git ancestry, and a 14-day stuck warning by commit date.
+- "Changelog" steps in `deploy-production.yml` and `deploy-staging.yml`, with `continue-on-error`; the staging one comes before the staging-pass record.
+- The PR template gains `## For users`; `docs/runbooks/changelog.md`.
+- Nothing is switched on until `CHANGELOG_SIGNING_SECRET` and `CHANGELOG_API_URL` are set (runbook). Evidence: `.superpowers/program/cl3-report.md` (main checkout).
+
+# Current handoff: changelog PR 2, signed ingest (`feat/changelog-ingest`, #164) (6 November 2026)
+
+- `recordChangelogDraft`, `pendingForRelease` and `markReleased` in `packages/database/src/operations/changelog.ts`.
+- The HMAC signature check (`apps/api/src/changelog/changelog-signature.ts`; 300 s window, constant time).
+- `POST /v1/webhooks/changelog/{drafts,pending,releases}`: 404 without `CHANGELOG_SIGNING_SECRET`, 401 `CHANGELOG_SIGNATURE_INVALID` before parsing, 128 KiB raw body, `changelog_ingest` 60/min.
+- The new access kind `ci-signature`; threat model A12; the secret is passed blank in the production and staging composes and env examples.
+- The builder's full local integration suite passed except the docker-only backup and base-backup tests (environmental). Evidence: `.superpowers/program/cl2-report.md` (main checkout).
+
+# Current handoff: changelog PR 1, schema (`feat/changelog-schema`, #160) (6 November 2026)
+
+- Contracts: `changelog.ts`, the `changelog.edit`/`changelog.publish` permissions and five error codes.
+- Migration `0079_changelog` (renumbered `0084_changelog` in merge train 3): `changelog_entries` and `changelog_reads`, the permission checks, and the grants (owner both, every role but release_check gets edit).
+- The `changelog.publish` serious action moved to PR 4. Evidence: `.superpowers/program/cl1-report.md` (main checkout).
+
 # Current handoff: merge train 2, TipMe for businesses (6 November 2026)
 
 - `train/2` holds the 13 business PRs (release 1, and release 2's foundation, reversals, share agreement and business balance) on top of `train/1`. Merge #161 first; merging this marks each of the 13 merged.

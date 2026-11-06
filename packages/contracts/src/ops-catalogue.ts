@@ -25,6 +25,8 @@ export const OPS_PERMISSIONS = [
   'staff.manage',
   'usernames.manage',
   'businesses.manage',
+  'changelog.edit',
+  'changelog.publish',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -59,6 +61,18 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
   'audit.view': {
     description: 'Read the audit log',
     group: 'numbers',
+    sensitive: true,
+  },
+  // Changelog plan (5 Nov 2026), Design §4. Publishing is sensitive because its serious action
+  // needs that; editing and asking is staff work every role holds.
+  'changelog.edit': {
+    description: 'Edit changelog entries and ask for one to be shown to users',
+    group: 'content',
+    sensitive: false,
+  },
+  'changelog.publish': {
+    description: 'Approve what users read in What’s new',
+    group: 'content',
     sensitive: true,
   },
   'email.export': {
@@ -290,6 +304,7 @@ export const SERIOUS_ACTIONS = [
   // TipMe for businesses (PR B2): verifying makes a business's printed codes live.
   'business.verify',
   'tip.reverse',
+  'changelog.publish',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -308,6 +323,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'username.take_back': 'Take a username back from a page',
   'business.verify': 'Verify a business',
   'tip.reverse': 'Reverse a refunded or charged-back tip',
+  'changelog.publish': 'Show users a What’s new entry',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -326,4 +342,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'username.take_back': 'usernames.manage',
     'business.verify': 'businesses.manage',
     'tip.reverse': 'payments.repair',
+    'changelog.publish': 'changelog.publish',
   };

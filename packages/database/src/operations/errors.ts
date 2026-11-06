@@ -114,7 +114,12 @@ export type OperationErrorCode =
   // R2-A: nothing (more) of this tip's payment to take back, or a refund larger than what is left.
   | 'TIP_NOT_REVERSIBLE'
   // A release 1 path met a team tip or a business's row (see owner.ts personOf).
-  | 'NOT_A_PERSON';
+  | 'NOT_A_PERSON'
+  // Changelog plan (PR 4): the admin approval flow.
+  | 'APPROVAL_NO_APPROVER'
+  | 'CHANGELOG_EDITED_ELSEWHERE'
+  | 'CHANGELOG_TEXT_NOT_ALLOWED'
+  | 'CHANGELOG_NOT_FOUND';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is

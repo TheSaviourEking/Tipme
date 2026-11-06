@@ -125,6 +125,8 @@ x-api-env: &api-env
   WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
   WEB_REVALIDATE_URL: ${WEB_REVALIDATE_URL:-}
   OPS_TOTP_KEY: ${OPS_TOTP_KEY:?}
+  # CI signs changelog drafts and deploy syncs with this; blank means those routes are off (404).
+  CHANGELOG_SIGNING_SECRET: ${CHANGELOG_SIGNING_SECRET:-}
   MAIL_SEAL_KEY: ${MAIL_SEAL_KEY:?}
   OPS_TRACE_URL_TEMPLATE: ${OPS_TRACE_URL_TEMPLATE:-}
   SENTRY_DSN: ${SENTRY_DSN:-}

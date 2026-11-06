@@ -7746,6 +7746,21 @@ body > .coming-soon-page {
   overflow-wrap: anywhere;
 }
 
+/* The changelog (changelog plan, Design §5): the number heads each row at row-heading size. */
+.ops-row .ops-changelog__number {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.ops-changelog__audience {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ops-changelog__audience:disabled {
+  opacity: 0.6;
+}
+
 .ops-row .ops-summary {
   overflow-wrap: anywhere;
 }
@@ -8718,12 +8733,16 @@ html:has(.ops-frame__sheet[open]) {
 
 .business-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 30rem);
-  gap: clamp(2rem, 5vw, 4rem);
+  /* The text and the card sit as one block in the middle of the window, not pinned to its sides. */
+  grid-template-columns: minmax(0, 34rem) minmax(0, 30rem);
+  justify-content: center;
+  align-content: center;
+  gap: clamp(2rem, 6vw, 5rem);
   align-items: center;
   max-width: 75rem;
+  min-height: calc(100svh - 5rem);
   margin: 0 auto;
-  padding-block: var(--space-12) var(--space-16);
+  padding-block: var(--space-8);
 }
 
 .business-hero__lede {
@@ -8801,6 +8820,12 @@ html:has(.ops-frame__sheet[open]) {
   .creators-uses__grid,
   .creators-band {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked on a phone: it starts below the header, as before. */
+  .business-hero {
+    min-height: 0;
+    padding-block: var(--space-12) var(--space-16);
   }
 
   .creators-uses__grid {
@@ -11647,3 +11672,90 @@ body:has(.business-public) > .site-footer {
   gap: var(--space-2);
 }
 /* business:R2-C1 end */
+
+/*
+ * What's new (changelog plan, Design §6). On a desktop it is a menu item; on a phone the tab bar
+ * stays four items and this quiet link sits beside the bell instead (owner's answer, 6 Nov 2026).
+ */
+.dashboard-bar__whats-new {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .dashboard-bar__whats-new {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 var(--space-2);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .dashboard-bar__whats-new[aria-current='page'] {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-decoration-color: var(--brand-primary);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 5px;
+  }
+}
+
+/* One slip on Home after an update goes live; it sits after the take-back notice. */
+.whats-new-slip {
+  margin-bottom: var(--space-6);
+}
+
+.whats-new-slip p {
+  margin: 0;
+}
+
+.whats-new {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 40rem;
+}
+
+.whats-new h1 {
+  margin: 0;
+}
+
+.whats-new__date {
+  margin: 0 0 var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.whats-new__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.whats-new__entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--edge-hairline);
+}
+
+.whats-new__entry p {
+  flex: 1 1 16rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A text label, not a pill: the line itself already says "On Pro". */
+.whats-new__pro {
+  color: var(--brand-ink);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

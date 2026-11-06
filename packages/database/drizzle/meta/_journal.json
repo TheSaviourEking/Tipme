@@ -589,6 +589,13 @@
       "when": 1793985330719,
       "tag": "0083_reversal_partner_keeps_fee",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793991767761,
+      "tag": "0084_changelog",
+      "breakpoints": true
     }
   ]
 }

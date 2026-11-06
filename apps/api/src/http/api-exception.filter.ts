@@ -5,7 +5,11 @@ import {
   type ExceptionFilter,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import type { ApiErrorCode, ApiErrorResponse } from '@tipme/contracts';
+import type {
+  ApiErrorCode,
+  ApiErrorResponse,
+  ChangelogTextProblem,
+} from '@tipme/contracts';
 import {
   databaseFailureOf,
   isDatabaseAvailabilityFailure,
@@ -83,6 +87,14 @@ const messages: Record<ApiErrorCode, string> = {
     'Things have changed since this was asked for, so it stopped and nothing ran. Ask again if it is still needed.',
   APPROVAL_ALREADY_PENDING:
     'You already have this same request waiting. Cancel it first, then you can act.',
+  // Changelog (plan 2026-11-05). The routes that return these arrive in later PRs.
+  APPROVAL_NO_APPROVER: 'Nobody who can approve this is set up yet.',
+  CHANGELOG_SIGNATURE_INVALID: 'The request signature was not accepted.',
+  CHANGELOG_EDITED_ELSEWHERE:
+    'Someone else changed this entry since you opened it. Reload to see their change.',
+  CHANGELOG_TEXT_NOT_ALLOWED:
+    'This text can’t be shown to users as it is. Change it and try again.',
+  CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   USERNAME_BUILT_IN:
@@ -314,6 +326,18 @@ const operationErrors: Partial<
   TAKE_BACK_OPEN: { status: 409, code: 'TAKE_BACK_OPEN' },
   TAKE_BACK_NOT_FOUND: { status: 404, code: 'TAKE_BACK_NOT_FOUND' },
   TAKE_BACK_CLOSED: { status: 409, code: 'TAKE_BACK_CLOSED' },
+  // Changelog plan (5 Nov 2026), Task 4.3. CHANGELOG_SIGNATURE_INVALID is the ingest PR's (401).
+  APPROVAL_NO_APPROVER: { status: 409, code: 'APPROVAL_NO_APPROVER' },
+  CHANGELOG_EDITED_ELSEWHERE: {
+    status: 409,
+    code: 'CHANGELOG_EDITED_ELSEWHERE',
+  },
+  CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  CHANGELOG_TEXT_NOT_ALLOWED: {
+    status: 422,
+    code: 'CHANGELOG_TEXT_NOT_ALLOWED',
+    fields: ['userText'],
+  },
   ROLE_IN_USE: { status: 409, code: 'ROLE_IN_USE' },
   ROLE_PROTECTED: { status: 409, code: 'ROLE_PROTECTED' },
   STAFF_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
@@ -436,6 +460,29 @@ function classify(exception: unknown): {
   return { status: 500, code: 'INTERNAL_ERROR' };
 }
 
+const CHANGELOG_PROBLEMS: ReadonlySet<string> = new Set<ChangelogTextProblem>([
+  'provider_name',
+  'regulatory_claim',
+  'too_long',
+]);
+
+/**
+ * Why a changelog text can't be shown, for the field: the problem names, comma-separated. The one
+ * OperationError detail an answer carries, so it is re-checked here against the fixed names.
+ */
+function changelogProblemsOf(exception: unknown): string | undefined {
+  if (
+    !(exception instanceof OperationError) ||
+    exception.code !== 'CHANGELOG_TEXT_NOT_ALLOWED' ||
+    !exception.detail
+  )
+    return undefined;
+  const names = exception.detail.split(',');
+  return names.every((name) => CHANGELOG_PROBLEMS.has(name))
+    ? names.join(',')
+    : undefined;
+}
+
 /** Fixed words and codes only: what the next person needs to tell one 503 from another. */
 function dependencyFields(failure: DatabaseFailure | null) {
   if (!failure) return { cause: 'not_database' };
@@ -500,6 +547,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     else if (fields) body.error.fields = fields;
     if (exception instanceof CodedHttpException && exception.reason)
       body.error.reason = exception.reason;
+    const problems = changelogProblemsOf(exception);
+    if (problems) body.error.reason = problems;
     if (
       exception instanceof RateLimitedException ||
       (exception instanceof CodedHttpException && exception.retryAfterSeconds)
