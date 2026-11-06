@@ -36,12 +36,24 @@ export class ProfileRevalidator {
     setTimeout(() => this.revalidate(handle), 2000).unref();
   }
 
-  private send(handle: string): Promise<boolean> {
+  /**
+   * TipMe for businesses (PR B2): a business's public `/b/<slug>/…` pages, after it is verified,
+   * suspended or restored. The same best-effort call, naming the business instead of a handle.
+   */
+  revalidateBusiness(slug: string): void {
+    if (!slug) return;
+    void this.send({ business: slug }).then((ok) => {
+      if (!ok)
+        setTimeout(() => void this.send({ business: slug }), 1000).unref();
+    });
+  }
+
+  private send(target: string | { business: string }): Promise<boolean> {
     return fetch(this.url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        handle,
+        ...(typeof target === 'string' ? { handle: target } : target),
         secret: this.config.WEB_REVALIDATE_SECRET,
       }),
       signal: AbortSignal.timeout(2000),
