@@ -8,6 +8,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { paymentAttempts, profiles, tipMessages, tips } from '../schema.js';
 import { guarded } from './errors.js';
+import { tipIsRecognised } from './supporters.js';
 
 /** After this long without an answer the supporter is told we are still checking. */
 export const CHECKING_AFTER_MS = 2 * 60 * 1000;
@@ -91,6 +92,9 @@ export function tipStatusView(
         .where(eq(tipMessages.tipId, tipId));
       noteMayShow = note?.mayShow === true;
     }
+    // Whether the supporter chose to be recognised and it is still on: the receipt then offers the
+    // stop. Never the key, its hash or the supporter's id.
+    const recognised = state === 'paid' && (await tipIsRecognised(db, tipId));
     // The recipient's line as it is now, not as it was when the tip was made (owner's answer,
     // 5 Nov 2026): an edit, or a page leaving Pro, also changes what older receipts show.
     // A page TipMe suspended shows no line, so an abusive one stops at once; staff cannot edit it.
@@ -113,6 +117,7 @@ export function tipStatusView(
       reference,
       ...(noteMayShow ? { noteMayShow: true as const } : {}),
       ...(thanks ? { thanks } : {}),
+      ...(recognised ? { recognised: true as const } : {}),
     };
   });
 }

@@ -547,6 +547,13 @@
       "when": 1793888404420,
       "tag": "0077_cover_animation",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793968556966,
+      "tag": "0078_supporters",
+      "breakpoints": true
     }
   ]
 }

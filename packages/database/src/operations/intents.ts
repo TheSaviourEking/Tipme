@@ -13,6 +13,7 @@ import {
 } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
+import { recordSupporter, supporterKeyHash } from './supporters.js';
 import { recordTransition } from './transitions.js';
 
 /** Only a moment this recipient actually shared can label a tip; anything else is ignored. */
@@ -46,6 +47,13 @@ export interface CreatePaymentIntentInput {
   message?: string;
   /** The supporter agreed the recipient may show their note. Ignored when there is no message. */
   noteMayShow?: true;
+  /**
+   * "Let {recipient} recognise me next time": the browser's key for this recipient. Honoured only
+   * with a name, on a Pro page, while `recognitionOn`; otherwise ignored, never an error.
+   */
+  supporterKey?: string;
+  /** The API's SUPPORTER_RECOGNITION switch. Off unless passed. */
+  recognitionOn?: boolean;
   traceId?: string | null;
   now?: Date;
   /** Test-only: throw after the named step to prove the transaction rolls back. Ignored unless NODE_ENV=test. */
@@ -89,6 +97,8 @@ export async function createPaymentIntent(
     throw new OperationError('INVALID_INPUT');
   // Consent only counts with a note to consent for; without one it is stored nowhere.
   const mayShow = message !== null && input.noteMayShow === true;
+  // A key counts only with a name to recognise; without one it is ignored and stored nowhere.
+  const keyHash = label === null ? null : supporterKeyHash(input.supporterKey);
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify([
@@ -99,6 +109,9 @@ export async function createPaymentIntent(
         // Appended only with consent, so every fingerprint made without it (in-flight replays
         // included) stays byte-identical, and adding consent to a replayed key is a conflict.
         ...(mayShow ? [true] : []),
+        // The same trick for a supporter key: only its hash, and only when it can be recorded, so a
+        // request without one hashes exactly as before and adding one to a replayed key conflicts.
+        ...(keyHash ? ['s', keyHash.toString('hex')] : []),
       ]),
     )
     .digest('hex');
@@ -154,7 +167,11 @@ export async function createPaymentIntent(
         throw new OperationError('QUOTE_EXPIRED');
       // A page that went not live (or was deleted) after the quote can no longer be tipped.
       const [page] = await tx
-        .select({ pageState: profiles.pageState, status: profiles.status })
+        .select({
+          pageState: profiles.pageState,
+          status: profiles.status,
+          plan: profiles.plan,
+        })
         .from(profiles)
         .where(eq(profiles.id, quote.profileId));
       if (page?.pageState !== 'live' || page.status !== 'active')
@@ -207,6 +224,20 @@ export async function createPaymentIntent(
         cause: 'system',
         traceId,
       });
+      // Pro only, read in this transaction: a page that left Pro records no new supporter.
+      if (
+        keyHash &&
+        label !== null &&
+        input.recognitionOn === true &&
+        page.plan === 'pro'
+      )
+        await recordSupporter(tx, {
+          profileId: quote.profileId,
+          keyHash,
+          label,
+          tipId,
+          now,
+        });
       if (input.__testFailAfter === 'tip' && process.env['NODE_ENV'] === 'test')
         throw new Error('test failure');
       if (message !== null)
