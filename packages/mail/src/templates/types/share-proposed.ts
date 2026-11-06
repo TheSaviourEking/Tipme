@@ -41,6 +41,8 @@ export const shareProposed = defineMailType({
     letter(
       {
         subject: `${data.businessName} asks to keep ${data.businessPercent}% of the tips you get there`,
+        // Fixed and data-free, like every other type's preview line.
+        preheader: 'Nothing changes unless you accept.',
         heading: 'A business asks to share your tips',
         blocks: [
           {
