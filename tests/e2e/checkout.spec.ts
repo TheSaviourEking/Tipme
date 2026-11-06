@@ -492,7 +492,15 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
 test('a receipt that loses the API while waiting shows the Connection lost slip, and recovers', async ({
   page,
 }) => {
-  // "No reply": paid, but the provider never tells TipMe, so the receipt keeps checking.
+  // "No reply": paid, but the provider never tells TipMe, so the receipt keeps checking. TipMe's
+  // reconcile soon learns it was paid, sometimes before the card shows: keep the receipt checking,
+  // as the reconnect test below does.
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { data?: { state?: string } };
+    if (body.data) body.data.state = 'waiting';
+    return route.fulfill({ response, json: body });
+  });
   await tip(page, { outcome: /^No reply/ });
   await expect(page.locator('.tip-status-card')).toBeVisible();
   await page.route('**/v1/tips/*/status', (route) => route.abort());
