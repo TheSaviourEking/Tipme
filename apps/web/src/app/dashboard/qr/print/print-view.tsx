@@ -10,6 +10,7 @@ import {
 import { FREE_QR_STYLES } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { interfaceFont, interfaceFontWhenReady } from '@/lib/brand-font';
 import { drawQrCard } from '@/lib/qr-card';
 import { track } from '@/lib/analytics';
 import { styleById } from '@/lib/qr-render';
@@ -39,16 +40,42 @@ export default function PrintCardPage() {
     !(FREE_QR_STYLES as readonly string[]).includes(profile.qrStyle);
   const [format, setFormat] = useState<QrFormatId>('counter');
   const art = useArtImage(proDesign ? profile.qrStyle : null, 1400);
+  // The Free card is lettered in the page's own font once it has loaded (Arial if it never does).
+  const [font, setFont] = useState<{ family?: string } | null>(null);
   useEffect(() => {
-    if (!proDesign && origin && canvas.current)
+    let live = true;
+    void interfaceFont().then((family) => {
+      if (!live) return;
+      setFont({ family });
+      // A slow font: the card is drawn in Arial now and redrawn in the page's font once it arrives.
+      if (!family)
+        void interfaceFontWhenReady().then((late) => {
+          if (live && late) setFont({ family: late });
+        });
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!proDesign && origin && canvas.current && font)
       drawQrCard(canvas.current, {
         url,
         label,
         name: profile.displayName,
         style: styleById(profile.qrStyle),
         size: 1240,
+        fontFamily: font.family,
       });
-  }, [proDesign, origin, url, label, profile.displayName, profile.qrStyle]);
+  }, [
+    proDesign,
+    origin,
+    url,
+    label,
+    profile.displayName,
+    profile.qrStyle,
+    font,
+  ]);
   const print = () => {
     track('qr_printed', { surface: 'qr' });
     window.print();

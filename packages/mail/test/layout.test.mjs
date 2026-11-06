@@ -56,7 +56,6 @@ const everyKind = (s) => ({
       href: 'https://usetipme.xyz/@ada',
     },
     { kind: 'deadline', label: `Deadline ${s}`, date: `12 November ${s}` },
-    { kind: 'note', text: `Note ${s}`, by: `By ${s}` },
   ],
 });
 

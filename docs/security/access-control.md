@@ -127,6 +127,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
+| POST | `/v1/tips/{tipId}/recognition/stop` | – | – | – |
 | GET | `/v1/tips/{tipId}/status` | n/a (read) | – | – |
 
 #### The payment provider (signed request body)

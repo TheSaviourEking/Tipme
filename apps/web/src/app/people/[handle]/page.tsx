@@ -44,6 +44,10 @@ export async function generateMetadata({ params }: Props) {
         `${profile.displayName} on TipMe`,
         `${profile.role ?? 'A TipMe recipient'}.${copy.profileMetaSuffix}`,
         `/@${profile.handle}`,
+        {
+          url: `/people/${profile.handle}/share-card`,
+          alt: `${profile.displayName} on TipMe`,
+        },
       )
     : { title: 'Page unavailable', robots: { index: false, follow: false } };
 }
@@ -120,6 +124,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                   : {})}
                 recipient={firstName}
                 handle={profile.handle}
+                recognition={profile.recognition === true}
                 {...(profile.tipAmounts
                   ? { tipAmounts: profile.tipAmounts }
                   : {})}

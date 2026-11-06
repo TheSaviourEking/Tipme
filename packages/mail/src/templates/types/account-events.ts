@@ -28,8 +28,16 @@ export const staffAccessNotice = defineMailType({
             kind: 'text',
             text:
               data.change === 'granted'
-                ? 'This account can now use the TipMe admin area. If you weren’t expecting this, reply to this email straight away.'
-                : 'This account can no longer use the TipMe admin area, and any admin session was ended. If you weren’t expecting this, reply to this email.',
+                ? 'This account can now use the TipMe admin area.'
+                : 'This account can no longer use the TipMe admin area, and any admin session was ended.',
+          },
+          {
+            kind: 'alarm',
+            title: 'Didn’t expect this?',
+            text:
+              data.change === 'granted'
+                ? 'If you weren’t expecting this, reply to this email straight away.'
+                : 'If you weren’t expecting this, reply to this email.',
           },
         ],
         reason:
@@ -54,7 +62,12 @@ export const accountDeletedNotice = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'Your TipMe account and page are gone. This is the last email we’ll send you. If you didn’t do this, reply to this email straight away.',
+            text: 'Your TipMe account and page are gone. This is the last email we’ll send you.',
+          },
+          {
+            kind: 'alarm',
+            title: 'Didn’t do this?',
+            text: 'Reply to this email straight away.',
           },
         ],
         reason: 'You get this email because your TipMe account was deleted.',
@@ -68,10 +81,19 @@ export const paymentAccountReady = defineMailType({
   category: 'account',
   sender: 'payments',
   preference: null,
-  schema: z.object({}).strict(),
-  sample: {},
-  render: (_data, ctx) =>
-    letter(
+  schema: z
+    .object({
+      /** The page's handle, for its link. Optional: mail queued before it existed has none. */
+      handle: z.string().min(1).max(60).optional(),
+    })
+    .strict(),
+  sample: { handle: 'ada' },
+  render: (data, ctx) => {
+    // The page's own address, to share: not a tracked link.
+    const page = data.handle
+      ? new URL(`/@${encodeURIComponent(data.handle)}`, ctx.webOrigin)
+      : null;
+    return letter(
       {
         subject: 'You can receive tips on TipMe now',
         heading: 'You can receive tips now',
@@ -80,16 +102,28 @@ export const paymentAccountReady = defineMailType({
             kind: 'text',
             text: 'Your payment account is ready, so people can tip you. Share your link to get your first one.',
           },
+          ...(page
+            ? [
+                {
+                  kind: 'signature' as const,
+                  title: `${page.host}${page.pathname}`,
+                  text: 'Put it in your bio, or print your QR code.',
+                  href: page.toString(),
+                },
+              ]
+            : []),
           {
             kind: 'button',
             label: 'Go to your dashboard',
             href: mailLink(ctx, '/dashboard', 'dashboard'),
           },
         ],
-        reason: 'You get this email when your payment account becomes ready.',
+        reason:
+          'You get this email when your TipMe page is ready to take tips.',
       },
       ctx,
-    ),
+    );
+  },
 });
 
 export const paymentAccountActionNeeded = defineMailType({

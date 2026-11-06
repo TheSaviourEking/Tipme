@@ -52,12 +52,9 @@ export type Block =
   /** A purple panel; its title is a link when `href` is set. */
   | { kind: 'signature'; title: string; text: string; href?: string }
   /** A black bar: what happens, and the date it happens. */
-  | { kind: 'deadline'; label: string; date: string }
-  /**
-   * The boards' paper slip with a quote. TipMe's own mail never uses it: tip notes are never
-   * copied into mail (docs/design/DECISION-LOG.md, 5 Nov 2026). Drop it if nothing uses it.
-   */
-  | { kind: 'note'; text: string; by: string | null };
+  | { kind: 'deadline'; label: string; date: string };
+// The boards' paper slip with a supporter's quote is not a block: tip notes are never copied into
+// mail (docs/design/DECISION-LOG.md, 5 Nov 2026).
 
 export interface Letter {
   subject: string;
@@ -209,13 +206,6 @@ function blockHtml(block: Block): [string, number] {
         ),
         18,
       ];
-    case 'note':
-      return [
-        table(
-          `<tr><td class="tm-card" bgcolor="${CARD}" style="background:${CARD};border:1px solid ${LINE};border-radius:16px;padding:22px 24px;color:${INK};"><div style="height:22px;font-family:${SERIF};font-size:52px;line-height:0.75;color:${BRAND};">&#8220;</div><div class="tm-ink" style="font-family:${SERIF};font-size:23px;line-height:1.25;color:${INK};">${e(block.text)}</div>${block.by ? `<div class="tm-ink" style="margin-top:12px;font-size:14px;font-weight:700;color:${INK};">${e(block.by)}</div>` : ''}</td></tr>`,
-        ),
-        16,
-      ];
   }
 }
 
@@ -252,8 +242,6 @@ function blockText(block: Block): string {
       ].join('\n');
     case 'deadline':
       return `${block.label} ${block.date}`;
-    case 'note':
-      return [`“${block.text}”`, ...(block.by ? [block.by] : [])].join('\n');
   }
 }
 

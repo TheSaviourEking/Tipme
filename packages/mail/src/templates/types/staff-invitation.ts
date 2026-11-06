@@ -18,7 +18,7 @@ export const staffInvitation = defineMailType({
   render: (data, ctx) => {
     const invited = data.kind === 'invited';
     const title = invited
-      ? 'You’ve been added to the TipMe admin area'
+      ? 'You’re invited to TipMe’s admin area'
       : 'Set up your TipMe admin authenticator again';
     return letter(
       {
@@ -28,7 +28,7 @@ export const staffInvitation = defineMailType({
           {
             kind: 'text',
             text: invited
-              ? 'Sign in with this email address, then set up an authenticator app to finish. This link works once, for 30 minutes.'
+              ? 'Sign in with this email address, then set up an authenticator app to finish. The link works once, for 30 minutes.'
               : 'Your authenticator was reset, so your admin access is paused until you set up a new one. This link works once, for 30 minutes.',
           },
           {
@@ -36,8 +36,9 @@ export const staffInvitation = defineMailType({
             label: 'Set up your authenticator',
             href: mailLink(ctx, `/ops#enrol=${data.code}`, 'staff_enrol', true),
           },
+          // No code box: the code is the link's secret, and no screen takes it typed.
           {
-            kind: 'text',
+            kind: 'quiet',
             text: invited
               ? 'Don’t want this? Open the link, sign in, and choose Decline. If you weren’t expecting it at all, tell the person who runs your TipMe admin area.'
               : 'If you weren’t expecting this, tell the person who runs your TipMe admin area.',
@@ -76,14 +77,24 @@ export const staffInvitationDeclined = defineMailType({
         heading: 'Invitation declined',
         // The first text names someone or something private; the preview line must not.
         preheader: 'Invitation declined.',
-        blocks: [
-          {
-            kind: 'text',
-            text: data.own
-              ? `You declined your invitation to the admin area (role: ${data.roleName}). You have no admin access. If this wasn’t you, someone else may be signed in to your account: tell whoever invited you.`
-              : `${data.personHint} declined their invitation to the admin area (role: ${data.roleName}). They have no admin access, and they can be invited again.`,
-          },
-        ],
+        blocks: data.own
+          ? [
+              {
+                kind: 'text',
+                text: `You declined your invitation to the admin area (role: ${data.roleName}). You have no admin access.`,
+              },
+              {
+                kind: 'alarm',
+                title: 'Wasn’t you?',
+                text: 'If this wasn’t you, someone else may be signed in to your account: tell whoever invited you.',
+              },
+            ]
+          : [
+              {
+                kind: 'text',
+                text: `${data.personHint} declined their invitation to the admin area (role: ${data.roleName}). They have no admin access, and they can be invited again.`,
+              },
+            ],
         reason: data.own
           ? 'You get this email because a TipMe admin invitation to this address was declined.'
           : 'You get this email because you invited this person or you are a TipMe owner.',
@@ -116,7 +127,12 @@ export const staffActedAlone = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: `${data.personHint} took a serious admin action (${data.action}) on their own, because nobody else was available to approve it. The admin audit log has their reason. If you didn’t expect this, check it now.`,
+            text: `${data.personHint} took a serious admin action (${data.action}) on their own, because nobody else was available to approve it. The admin audit log has their reason.`,
+          },
+          {
+            kind: 'alarm',
+            title: 'Didn’t expect this?',
+            text: 'If you didn’t expect this, check it now.',
           },
         ],
         reason: 'You get this email because you are a TipMe owner.',
@@ -153,7 +169,12 @@ export const staffFreezeReleased = defineMailType({
               data.stillHeld
                 ? 'Another open issue still holds this recipient’s withdrawals.'
                 : 'This recipient can withdraw again.'
-            } The admin audit log has their reason. If you didn’t expect this, check it now.`,
+            } The admin audit log has their reason.`,
+          },
+          {
+            kind: 'alarm',
+            title: 'Didn’t expect this?',
+            text: 'If you didn’t expect this, check it now.',
           },
         ],
         reason: 'You get this email because you are a TipMe owner.',
@@ -223,7 +244,12 @@ export const staffLastApproverRemoved = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: `A staff change by ${data.personHint} left nobody else to approve serious admin actions under these permissions: ${data.permissions}. One person can now take those actions alone. The admin audit log has their reason. If you didn’t expect this, check it now.`,
+            text: `A staff change by ${data.personHint} left nobody else to approve serious admin actions under these permissions: ${data.permissions}. One person can now take those actions alone. The admin audit log has their reason.`,
+          },
+          {
+            kind: 'alarm',
+            title: 'Didn’t expect this?',
+            text: 'If you didn’t expect this, check it now.',
           },
         ],
         reason: 'You get this email because you are a TipMe owner.',

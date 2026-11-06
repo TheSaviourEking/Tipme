@@ -6,6 +6,7 @@ import {
   Headers,
   Inject,
   NotFoundException,
+  Optional,
   Param,
   HttpCode,
   Post,
@@ -27,7 +28,9 @@ import {
   type MyTipRow,
   type TipTotals,
   type WeeklyReportData,
+  type WithdrawalQuoteLocalResponse,
   type WithdrawalQuoteResponse,
+  withdrawalQuoteQuerySchema,
   type WithdrawalsPage,
 } from '@tipme/contracts';
 import {
@@ -37,6 +40,7 @@ import {
   listMyTips,
   listMyWithdrawals,
   listWeeklyReports,
+  localWithdrawalQuote,
   myProfileId,
   hideMessage,
   myTipDetail,
@@ -67,6 +71,7 @@ import {
   type RedisPartnerQuoteCache,
 } from '../infra/partner-quote-cache.js';
 import { LOGGER } from '../tokens.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 
 const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
 
@@ -81,6 +86,9 @@ export class DashboardController {
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(PARTNER_QUOTE_CACHE)
     private readonly partnerCache: RedisPartnerQuoteCache,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   /** A wrong key looks like an outage to the recipient; this is how staff tell them apart. */
@@ -241,8 +249,23 @@ export class DashboardController {
   @Header('Cache-Control', 'private, no-store')
   async quoteWithdrawal(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<WithdrawalQuoteResponse>> {
+    @Query(new ZodValidationPipe(withdrawalQuoteQuerySchema))
+    query: z.infer<typeof withdrawalQuoteQuerySchema>,
+  ): Promise<
+    ApiDataResponse<WithdrawalQuoteResponse | WithdrawalQuoteLocalResponse>
+  > {
     const profileId = await this.profile(auth);
+    // A live update's re-read: TipMe's records only, never the payment partner or its cache.
+    if (query.scope === 'local') {
+      const [local, inReview] = await Promise.all([
+        localWithdrawalQuote(this.database.db, {
+          profileId,
+          provider: this.provider,
+        }),
+        withdrawalInReview(this.database.db, profileId),
+      ]);
+      return { data: { ...local, inReview } };
+    }
     const [quote, inReview] = await Promise.all([
       withdrawalQuote(this.database.db, {
         profileId,
@@ -318,6 +341,11 @@ export class DashboardController {
     } finally {
       await this.partnerCache.invalidate(scope);
     }
+    // The request committed: the person's other open tabs show it (this tab reloads itself).
+    void this.publishLive({
+      to: { profile: profileId },
+      type: 'withdrawals.changed',
+    });
     await this.events.record(
       'payout_requested',
       `payout_requested.${result.payoutId}`,

@@ -552,6 +552,9 @@ export const profiles = pgTable(
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
     tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
     minTipMinor: minor('min_tip_minor'),
+    // The preset a Pro page's tip form starts on ("Make it yours"); NULL starts on the closest to
+    // ₦2,000. Kept when the page goes back to Free, used again if it returns to Pro.
+    tipStartMinor: minor('tip_start_minor'),
     // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
     customFeeBps: integer('custom_fee_bps'),
     // Handle changes made so far (never reset), and how many staff have allowed beyond the
@@ -602,6 +605,12 @@ export const profiles = pgTable(
     check(
       'profiles_tip_presets_range',
       sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
+    ),
+    // The start is one of the page's own presets. `= ANY (NULL)` is NULL, which a CHECK lets
+    // through, hence the coalesce: no own amounts means no start.
+    check(
+      'profiles_tip_start_in_presets',
+      sql`tip_start_minor IS NULL OR coalesce(tip_start_minor = ANY (tip_presets_minor), false)`,
     ),
     // char_length counts code points, as THANKS_LINE_LIMIT does, so an emoji counts once.
     check(
@@ -2079,4 +2088,45 @@ export const messageFlags = pgTable(
       sql`report_reason IS NULL OR report_reason IN ('abusive', 'spam', 'other')`,
     ),
   ],
+);
+
+/**
+ * Repeat supporters (Pro additions, option (a)): a supporter who ticked "Let {recipient} recognise
+ * me next time". One row per recipient and browser key; only the key's SHA-256 is stored, never
+ * the key, and never a card, IP, device or browser fingerprint. Keys are per recipient, so these
+ * rows cannot link one supporter's tips across recipients. Kept apart from the money tables:
+ * deleting a row ("Stop {name} recognising me") never touches a tip.
+ */
+export const supporters = pgTable(
+  'supporters',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    keyHash: bytea('key_hash').notNull(),
+    // The name they typed most recently with this key (cleaned like tips.payer_display_label).
+    label: text('label').notNull(),
+    firstAt: timestamp('first_at', { withTimezone: true }).notNull(),
+    lastAt: timestamp('last_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('supporters_key_hash_length', sql`octet_length(key_hash) = 32`),
+    check('supporters_label_length', sql`char_length(label) BETWEEN 1 AND 60`),
+    unique('supporters_profile_key').on(table.profileId, table.keyHash),
+  ],
+);
+
+/** Which tips an opted-in supporter made. Unpaid rows are harmless: only paid tips are counted. */
+export const tipSupporters = pgTable(
+  'tip_supporters',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => tips.id),
+    supporterId: uuid('supporter_id')
+      .notNull()
+      .references(() => supporters.id, { onDelete: 'cascade' }),
+  },
+  (table) => [index('tip_supporters_supporter').on(table.supporterId)],
 );

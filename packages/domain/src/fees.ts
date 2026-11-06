@@ -108,3 +108,14 @@ export function tipAmountsProblem(
     return 'presetsMinor';
   return null;
 }
+
+/**
+ * True when a Pro page's chosen starting amount is one of its own presets ("Make it yours").
+ * It only picks which key the tip form starts on: nothing about fees or the minimum changes.
+ */
+export function tipStartAllowed(
+  presetsMinor: readonly bigint[],
+  startMinor: bigint,
+): boolean {
+  return presetsMinor.includes(startMinor);
+}

@@ -368,3 +368,52 @@ the appreciation moment) is unchanged.
 - **Codes in cells stay one copyable string**, so copy, paste and code autofill still get the whole code.
 - **Nothing private in a subject or preview line.** No code, link, address, name, bank or device in a subject or the hidden preheader; the tip amount in the tip email's subject is the one existing exception.
 - **Plan:** `docs/superpowers/plans/2026-11-05-emails-and-admin.md` (PR M1 is the frame and blocks with today's words; PR M2 is the boards' compositions).
+
+## 2026-11-06 — App icons
+
+- **Owner-approved board, 5 Nov 2026** (App icons). A product and visual decision, not a regulatory approval; no D-item is affected.
+- **The tab icon stays flat.** `icon.svg` (the purple tile and the white heart) is unchanged. Depth (a soft top light and a darker lower edge) appears only on the home-screen sizes, 180 px and up.
+- **Files.** `apple-icon` (180 × 180, full bleed; iOS rounds it), `/icons/192.png` (rounded tile, corner 28/120, transparent corners, purpose `any`) and `/icons/512-maskable.png` (full bleed, the heart inside the centre safe circle, purpose `maskable`). All drawn by TipMe with `next/og`; one heart path (`HEART_MARK`) shared with `icon.svg`.
+- **Manifest.** `/manifest.webmanifest`, name and short name "TipMe", `start_url` "/", `display: browser`, theme `#7A32F9`, background `#FFFFFF`. `browser` because the manifest adds no offline or app features, and it keeps the address bar, including on the payment partner's page.
+- **Gates.** The launch gate and the preview password leave exactly these four paths open, as they do `icon.svg`.
+
+## 2026-11-06 — The claim moment
+
+- **Owner-approved board, 5 Nov 2026** (Sign-up celebration). A product and visual decision, not a regulatory approval; no D-item is affected and nothing about payments changes.
+- **Trigger.** The moment follows the server's 2xx for `POST /v1/me/page` and nothing else. The claim leaves a one-time marker (the handle only) in this tab's session storage; the welcome reads and deletes it on mount. A reload, another tab or another device finds nothing, so the moment plays once and needs no "seen" record. Without session storage there is no moment.
+- **No name.** No name is known at claim time, so the copy is "@handle is yours." and "Welcome to TipMe. People can start thanking you the moment your page is online." The card shows the handle as the name.
+- **Purple hearts.** Six hearts rise once in TipMe purple: a new page has picked no colour yet. No confetti (FeedbackMoments).
+- **Timeline.** 1600ms in all (`CLAIM_MOMENT_MS`): the card falls (0–350ms) and lands (350–550ms), the stamp presses (550–800ms), the hearts rise and the heading fades in (800–1200ms), then the scene rises away (1200–1600ms). An exception to the acknowledgement duration in EXPERIENCE-AND-MOTION §3, as the claim is the first-day milestone. Any tap, any key, "Continue" or Escape hands over at once; focus goes to the hello heading.
+- **Vibration.** One 30ms buzz as the card lands, where the device allows it; never with reduced motion. An exception to the 10ms tick in EXPERIENCE-AND-MOTION §4, for this one moment.
+- **Reduced motion.** The still scene (card on the table, stamp in place, three hearts beside it), no vibration, the same hand-over.
+- **No sound** in this change. The stamp sound is a separate change, held for the owner.
+
+## 2026-11-05 — Withdraw, redesigned
+
+- **Owner's approval, 5 Nov 2026.** A visual and copy decision, not a legal, regulatory or provider approval; no D-item in `docs/00-DECISIONS.md` changes, and nothing about fees, the ₦2,000 minimum, payouts, the ledger or the partner quote cache changes. Boards: `docs/design/redesign/boards/WithdrawRedesign.dc.html` and `ScreenAudit.dc.html`. Plan: `docs/superpowers/plans/2026-11-05-withdraw-and-audit.md` (PRs W1 and W2).
+- **The dark instrument.** "Available" leads as a dark face (`--key-face-dark`, not purple) with editorial numerals and one lamp line for the state ("Ready to withdraw ₦X", from `withdrawableNow()`), the bank as a chip with Change. It carries no reassurance line.
+- **One slip or one standing warning** replaces the three stacked notice boxes: no bank is a slip stamped "Needs a bank" (ink, not purple: a slip's purple stamp stays for a confirmed outcome); a pause is a standing warning. The recovery-email reminder shows on Home and Settings only.
+- **Test mode is one pill in the header**, which opens its sentence ("No real money moves in test mode. The test bank pays straight away.").
+- **"Too small." before pressing.** An amount under the minimum that isn't the whole balance gets the field's red edge and "Too small. The smallest withdrawal is ₦2,000, or your whole balance if it’s less." when the field is left or submitted. Nothing is sent and the request key is untouched.
+- **The unconfirmed slip has no money words.** "We couldn’t confirm your withdrawal" (stamp "Not confirmed") and "This withdrawal may already be on its way" say nothing about money or the balance: the request may have arrived, and the key stays so the same amount again can't withdraw twice.
+- **Ledger stamps and "Back in your balance: ₦X"** (W2) only on rows the API reports as `failed`. Proof: a payout's ledger debit is posted only when it is paid, and a failed payout is released and no longer reserved (`packages/database/src/operations/payouts.ts`, `balance.ts`).
+- **The states plan's Task 12 (PR E, Withdraw) moved here**, to W1 and W2, with its money-line tests and key-keeping rules.
+
+## 2026-11-06 — Share cards
+
+- **Owner-approved board, 5 Nov 2026** (Share cards). A product and visual decision, not a regulatory approval; no D-item is affected.
+- **The general card** keeps its words ("A little thanks / goes a long way." and "For the people who make a difference.") in the new materials: the paper ground (`--canvas`), the headline in DM Serif Display, and the purple key with the white heart. It is still prerendered and the same for everyone.
+- **A card per person** for `/@handle` links, at `/people/<handle>/share-card`. It draws only what the public page shows: the display name, the public role, the handle and the cover's colour. Never the photo, phone, email, bio, links, tips, totals, balance or anything a supporter wrote.
+- **No photo (owner default, Q7).** The face is the person's initials on the cover's deeper tone.
+- **Colour (owner default, Q8).** A design with a colour uses that colour's base for the band and its tone for the face. A photo cover, a design without a colour, an animation without a colour, or no cover uses TipMe purple.
+- **Missing, paused and moved pages get the general card**, with status 200, so the card says nothing the page does not. Their metadata keeps advertising the general card.
+- **Fonts.** The cards are lettered in static TrueType copies of the two fonts already in the repo, because `next/og` cannot read WOFF2. DM Serif Display has no Ọ or Ẹ. A name (or its initials) with a letter DM Serif Display cannot draw is set wholly in Manrope Bold, which has them: `next/og` falls back word by word and loses the space after a fallback word, so mixing fonts would run words together.
+- **The board file was not available to copy**; these rulings follow the plan's written design (`.superpowers/program/plans/2026-11-05-public-boards.md`, PR 2).
+
+## 2026-11-06 — QR studio
+
+- **Owner approval, 5 Nov 2026.** The QR studio board is approved; the two proposals it does not draw (three design groups, Manrope lettering) ship with the owner's default yes (public boards plan, Q12). A visual decision, not a regulatory or payment-partner approval; no D-item changes. The board file was not available to copy, so these rulings follow the plan's written design (`docs/superpowers/plans/2026-11-05-public-boards.md`, PR 4).
+- **The code sits on paper.** The free card's canvas and a Pro design's plate sit in one `Surface material="paper"` panel (`.qr-studio__panel`), with a `CanvasText` edge in forced colours.
+- **One place for the status line.** The studio's only `role="status"` line sits directly under the Upgrade panel's slot, before the style lists, at every width. One DOM order for every width (no CSS `order`), so reading order and focus order match, and a phone sees "… is a Pro design" next to the Upgrade link. It stays mounted, so screen readers keep listening to the same element.
+- **Designs in three groups by the API's `kind`.** "Patterns" (`style`), "Cards" (`card`), "Photo" (`photo`), each in the API's order; an unknown `kind` from a newer API joins Patterns and an empty group is not drawn. Every radio keeps one `name`, so arrow keys still move through all designs across the groups.
+- **The free card is lettered in Manrope.** `drawQrCard` uses the page's own `--font-manrope` family once `document.fonts.load` has it, else Arial as before. Only the browser-drawn Free card changes (studio, share image, print); Pro designs are server pictures and do not change. The code's modules, quiet zone and colours are unchanged, so it scans as before.

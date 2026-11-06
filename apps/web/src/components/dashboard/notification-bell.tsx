@@ -103,6 +103,7 @@ function useNotifications(onFresh: (fresh: NotificationView[]) => void) {
 
 const NOTIFICATIONS_CHANGED = ['notifications.changed'] as const;
 const NO_SIGNALS = [] as const;
+const ACCOUNT_CHANGED = ['account.changed'] as const;
 
 /**
  * The pop-up switches, read on mount and whenever Settings saves them (same tab). Hidden details
@@ -125,6 +126,8 @@ function usePopupPrefs(): PopupPrefs {
   }, [loader]);
   // A failed read is tried again on the next ready (or other resync): only then does it ask.
   useLiveEvents(NO_SIGNALS, () => loader.retryIfFailed());
+  // Saved on another tab or device (live updates): read them again.
+  useLiveEvents(ACCOUNT_CHANGED, () => loader.load(), { resync: false });
   return prefs;
 }
 
@@ -132,6 +135,11 @@ function usePopupPrefs(): PopupPrefs {
 export function NotificationBell() {
   const pathname = usePathname();
   const [needsRecoveryEmail, setNeedsRecoveryEmail] = useState(false);
+  // The recovery email changed on another tab or device: its reminder is read again.
+  const [accountRound, setAccountRound] = useState(0);
+  useLiveEvents(ACCOUNT_CHANGED, async () => setAccountRound((n) => n + 1), {
+    resync: false,
+  });
   useEffect(() => {
     const refresh = () =>
       void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then(
@@ -140,7 +148,7 @@ export function NotificationBell() {
     refresh();
     window.addEventListener(RECOVERY_EMAIL_CHANGED, refresh);
     return () => window.removeEventListener(RECOVERY_EMAIL_CHANGED, refresh);
-  }, [pathname]);
+  }, [pathname, accountRound]);
   const [all, setAll] = useState<NotificationView[] | null>(null);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);

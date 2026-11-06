@@ -107,9 +107,13 @@ test('with withdrawals switched off the Withdraw page says so plainly, before an
     }),
   );
   await page.goto('/dashboard/withdraw');
-  await expect(
-    page.getByText('Withdrawals are paused for now. Your balance is safe.'),
-  ).toBeVisible();
+  // A standing warning, before any amount; the instrument says it in two words.
+  await expect(page.locator('.tm-warning')).toContainText(
+    'Withdrawals are paused for now. Your balance is safe.',
+  );
+  await expect(page.locator('.withdraw__meter')).toContainText(
+    'Paused for now',
+  );
   await expect(page.getByLabel(/amount/i)).toHaveCount(0);
   await expectAccessible(page);
 });

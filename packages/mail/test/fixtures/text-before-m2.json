@@ -1,0 +1,203 @@
+[
+  {
+    "id": "staff_invitation_declined",
+    "data": {
+      "personHint": "a•••@example.com",
+      "roleName": "Support"
+    },
+    "text": "Invitation declined\n\na•••@example.com declined their invitation to the admin area (role: Support). They have no admin access, and they can be invited again.\n\n—\nYou get this email because you invited this person or you are a TipMe owner.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_acted_alone",
+    "data": {
+      "personHint": "a•••@example.com",
+      "action": "Change a page’s fee"
+    },
+    "text": "Done without a second person\n\na•••@example.com took a serious admin action (Change a page’s fee) on their own, because nobody else was available to approve it. The admin audit log has their reason. If you didn’t expect this, check it now.\n\n—\nYou get this email because you are a TipMe owner.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_freeze_released",
+    "data": {
+      "personHint": "a•••@example.com",
+      "stillHeld": false
+    },
+    "text": "A withdrawal freeze was released\n\na•••@example.com closed a reported account takeover, which releases its freeze. This recipient can withdraw again. The admin audit log has their reason. If you didn’t expect this, check it now.\n\n—\nYou get this email because you are a TipMe owner.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_approval_outcome",
+    "data": {
+      "action": "Change a page’s fee",
+      "outcome": "approved"
+    },
+    "text": "Your request has an outcome\n\nYour request (Change a page’s fee) was approved and has run.\n\n—\nYou get this email because you asked for this admin action.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_approval_pending",
+    "data": {
+      "personHint": "a•••@example.com",
+      "action": "Change a page’s fee"
+    },
+    "text": "Waiting for a second person\n\na•••@example.com asked for a serious admin action (Change a page’s fee). Nothing has happened yet. Open Approvals in the admin area to see exactly what would change, and approve or reject it. It closes by itself after 24 hours.\n\n—\nYou get this email because you hold the permission this action needs.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_last_approver_removed",
+    "data": {
+      "personHint": "a•••@example.com",
+      "permissions": "fees.manage,staff.manage"
+    },
+    "text": "No second person left\n\nA staff change by a•••@example.com left nobody else to approve serious admin actions under these permissions: fees.manage,staff.manage. One person can now take those actions alone. The admin audit log has their reason. If you didn’t expect this, check it now.\n\n—\nYou get this email because you are a TipMe owner.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "provider_test",
+    "data": {
+      "providerLabel": "ZeptoMail",
+      "token": "sample-token-sample-token-sample-token-0003"
+    },
+    "text": "This email came through ZeptoMail\n\nOpen the link while signed in to TipMe ops to confirm the provider delivers mail.\n\nConfirm this test: https://usetipme.xyz/ops/providers/confirm?ml=confirm_test#t=sample-token-sample-token-sample-token-0003\n\n—\nA TipMe staff member sent this test from the Providers page.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "email_changed_notice",
+    "data": {
+      "newEmailHint": "a•••@example.com"
+    },
+    "text": "Your sign-in email changed\n\nYour TipMe account now signs in with a•••@example.com. This address no longer works for it.\n\nIf this wasn’t you, contact support@usetipme.xyz straight away.\n\n—\nYou get this email because this was the sign-in address of a TipMe account.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "recovery_started_notice",
+    "data": {
+      "newEmailHint": "a•••@example.com"
+    },
+    "text": "Someone is moving your account\n\nA recovery was started to move your TipMe account to a•••@example.com. It happens in 24 hours.\n\nIf this wasn’t you, sign in now and cancel it in Settings.\n\nSign in and cancel: https://usetipme.xyz/dashboard/settings?ml=cancel_recovery\n\n—\nYou get this email to help keep your account safe.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "recovery_completed_notice",
+    "data": {
+      "newEmailHint": "a•••@example.com"
+    },
+    "text": "Your account moved\n\nYour TipMe account now signs in with a•••@example.com. Every device was signed out.\n\nIf this wasn’t you, contact support@usetipme.xyz straight away.\n\n—\nYou get this email because a recovery of this TipMe account just finished.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "recovery_cancelled_notice",
+    "data": {
+      "newEmailHint": "a•••@example.com"
+    },
+    "text": "Recovery cancelled\n\nA request to move this TipMe account to a•••@example.com was cancelled, because the account’s access changed. Its sign-in details stay as they were.\n\nIf you still need to recover it, contact support@usetipme.xyz.\n\n—\nYou get this email because a recovery of this TipMe account was waiting.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_access_notice",
+    "data": {
+      "change": "granted"
+    },
+    "text": "You have staff access\n\nThis account can now use the TipMe admin area. If you weren’t expecting this, reply to this email straight away.\n\n—\nYou get this email when the staff access on your account changes.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "payment_account_action_needed",
+    "data": {},
+    "text": "Your payment account needs attention\n\nOur payment provider needs something from you. You may not be able to receive tips until it’s sorted.\n\nCheck your payment account: https://usetipme.xyz/dashboard/settings?ml=settings\n\n—\nYou get this email when your payment account is restricted or needs information.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "page_paused",
+    "data": {},
+    "text": "Your page was paused\n\nTipMe staff paused your page, so it isn’t taking new tips. Tips already on their way still settle. Reply to this email to find out more.\n\n—\nYou get this email when staff pause your page.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "page_image_removed",
+    "data": {
+      "image": "cover"
+    },
+    "text": "We removed your page’s cover\n\nTipMe staff removed the cover from your page. Your page is still up and can take tips. You can choose another in Settings. Reply to this email to find out more.\n\nGo to Settings: https://usetipme.xyz/dashboard/settings?ml=settings\n\n—\nYou get this email when staff remove an image from your page.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "page_restored",
+    "data": {},
+    "text": "Your page is back\n\nTipMe staff restored your page, and it can take tips again.\n\nGo to your dashboard: https://usetipme.xyz/dashboard?ml=dashboard\n\n—\nYou get this email when staff restore your page.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "withdrawal_paid",
+    "data": {
+      "amountMinor": "250000"
+    },
+    "text": "Your withdrawal was paid\n\nWe paid out NGN 2,500.00. The payment provider confirmed it.\n\n—\nYou get this email for each withdrawal from your balance.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "withdrawal_failed",
+    "data": {
+      "amountMinor": "250000"
+    },
+    "text": "Your withdrawal didn’t go through\n\nYour withdrawal of NGN 2,500.00 failed. The money is back in your balance, so you can try again.\n\nGo to your dashboard: https://usetipme.xyz/dashboard?ml=dashboard\n\n—\nYou get this email for each withdrawal from your balance.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "tip_reversed",
+    "data": {},
+    "text": "A tip was refunded or disputed\n\nThe payment provider reported a refund or dispute on a tip you received. Our team is looking at it, and your TipMe balance hasn’t changed. We’ll contact you if we need anything.\n\n—\nYou get this email when a tip you received is refunded or disputed.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "milestone",
+    "data": {
+      "copy": "10 tips! People keep coming back to thank you."
+    },
+    "text": "You reached a milestone\n\n10 tips! People keep coming back to thank you.\n\nSee your tips: https://usetipme.xyz/dashboard/tips?ml=see_tips\n\n—\nYou get this email when you reach a milestone on TipMe.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_invitation_declined",
+    "data": {
+      "personHint": "a•••@example.com",
+      "roleName": "Support",
+      "own": true
+    },
+    "text": "Invitation declined\n\nYou declined your invitation to the admin area (role: Support). You have no admin access. If this wasn’t you, someone else may be signed in to your account: tell whoever invited you.\n\n—\nYou get this email because a TipMe admin invitation to this address was declined.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_freeze_released",
+    "data": {
+      "personHint": "a•••@example.com",
+      "stillHeld": true
+    },
+    "text": "A withdrawal freeze was released\n\na•••@example.com closed a reported account takeover, which releases its freeze. Another open issue still holds this recipient’s withdrawals. The admin audit log has their reason. If you didn’t expect this, check it now.\n\n—\nYou get this email because you are a TipMe owner.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_access_notice",
+    "data": {
+      "change": "removed"
+    },
+    "text": "Your staff access was removed\n\nThis account can no longer use the TipMe admin area, and any admin session was ended. If you weren’t expecting this, reply to this email.\n\n—\nYou get this email when the staff access on your account changes.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "recovery_cancelled_notice",
+    "data": {
+      "newEmailHint": null
+    },
+    "text": "Recovery cancelled\n\nA request to recover this TipMe account was cancelled, because the account’s access changed. Its sign-in details stay as they were.\n\nIf you still need to recover it, contact support@usetipme.xyz.\n\n—\nYou get this email because a recovery of this TipMe account was waiting.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "page_image_removed",
+    "data": {
+      "image": "photo"
+    },
+    "text": "We removed your page’s profile photo\n\nTipMe staff removed the profile photo from your page. Your page is still up and can take tips. You can choose another in Settings. Reply to this email to find out more.\n\nGo to Settings: https://usetipme.xyz/dashboard/settings?ml=settings\n\n—\nYou get this email when staff remove an image from your page.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_approval_outcome",
+    "data": {
+      "action": "Change a page’s fee",
+      "outcome": "rejected"
+    },
+    "text": "Your request has an outcome\n\nYour request (Change a page’s fee) was rejected. Nothing ran. The admin area shows who decided, and why.\n\n—\nYou get this email because you asked for this admin action.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_approval_outcome",
+    "data": {
+      "action": "Change a page’s fee",
+      "outcome": "stale"
+    },
+    "text": "Your request has an outcome\n\nYour request (Change a page’s fee) stopped when someone tried to approve it, because things had changed. Nothing ran. Ask again if it is still needed.\n\n—\nYou get this email because you asked for this admin action.\nQuestions? support@usetipme.xyz"
+  },
+  {
+    "id": "staff_approval_outcome",
+    "data": {
+      "action": "Change a page’s fee",
+      "outcome": "expired"
+    },
+    "text": "Your request has an outcome\n\nYour request (Change a page’s fee) passed its 24 hours with no decision, so it closed. Nothing ran. Ask again if it is still needed.\n\n—\nYou get this email because you asked for this admin action.\nQuestions? support@usetipme.xyz"
+  }
+]

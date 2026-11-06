@@ -174,6 +174,13 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
     page.getByRole('link', { name: 'Contact the TipMe team' }),
   ).toHaveAttribute('href', 'mailto:support@usetipme.xyz');
   await expect(page.getByLabel('Handle')).toHaveCount(0);
+  // The Saved line fades in (motion is allowed here): check contrast once it has settled, not
+  // part-way through the fade.
+  await page
+    .locator('.handle-saved')
+    .evaluate((el) =>
+      Promise.all(el.getAnimations().map((animation) => animation.finished)),
+    );
   await expectAccessible(page);
 
   // Staff allow one more, with a reason.
@@ -321,8 +328,20 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   await page.unroute(handleUrl);
 
   // Pro ended elsewhere, likewise.
+  // The dashboard reads the profile on load and again when its live stream connects (the
+  // resync): both must be done before the faked profile below, or the card turns Free first.
+  let profileReads = 0;
+  const countRead = (response: { url(): string }) => {
+    if (response.url() === profileUrl) profileReads += 1;
+  };
+  page.on('response', countRead);
   await page.reload();
   await expect(field).toBeVisible();
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await expect.poll(() => profileReads).toBeGreaterThanOrEqual(2);
+  page.off('response', countRead);
   await refuse('HANDLE_CHANGE_PRO_REQUIRED', 403);
   await profileWith({ plan: 'free' });
   await field.fill(`${handle}_z`);
@@ -347,4 +366,86 @@ test('the Plan section lists card styles and a signature among Pro features', as
     'Card styles and your signature on your thank-you',
   ]);
   await expect(pro).not.toContainText('₦');
+});
+
+// Live updates, PR 2 (plan Task 13): an open dashboard follows a change made elsewhere. 5 s is
+// well under the 20 s fallback poll, so passing within it means the stream did it.
+const LIVE_BOUND_MS = 5000;
+
+const markNoReload = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => {
+    (window as unknown as { __noReload: number }).__noReload = 1;
+  });
+const noReload = (page: import('@playwright/test').Page) =>
+  page.evaluate(
+    () => (window as unknown as { __noReload?: number }).__noReload,
+  );
+
+test('staff turn on Pro in another context and the recipient’s QR studio and amounts unlock without a reload', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const { handle } = await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  await expect(
+    page.getByText(
+      /Choosing your own amounts and minimum is part of TipMe Pro/,
+    ),
+  ).toBeVisible();
+  const qr = await page.context().newPage();
+  await qr.goto('/dashboard/qr');
+  await expect(qr.getByText('Pro design').first()).toBeVisible();
+  for (const open of [page, qr]) {
+    await expect(open.locator('[data-live="connected"]')).toBeAttached({
+      timeout: 15_000,
+    });
+    await markNoReload(open);
+  }
+
+  await makePagePro(browser, handle, testInfo);
+
+  await expect(
+    page.getByRole('heading', { name: 'Tip amounts (Pro)' }),
+  ).toBeVisible({ timeout: LIVE_BOUND_MS });
+  await expect(qr.getByText('Pro design')).toHaveCount(0, {
+    timeout: LIVE_BOUND_MS,
+  });
+  expect(await noReload(page)).toBe(1);
+  expect(await noReload(qr)).toBe(1);
+});
+
+test('an edited, unsaved display name is kept and "This changed on another device." shows with "Show the latest"', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/settings');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await markNoReload(page);
+  const name = page.getByLabel('Display name');
+  await name.fill('Typed here, not saved');
+
+  // The same person saves from somewhere else.
+  const saved = await page.request.patch(`${API_ORIGIN}/v1/me/profile`, {
+    headers: { origin: WEB_ORIGIN, 'x-tipme-csrf': '1' },
+    data: { displayName: 'Saved elsewhere', role: 'Barber' },
+  });
+  expect(saved.status()).toBe(200);
+
+  await expect(page.getByText('This changed on another device.')).toBeVisible({
+    timeout: LIVE_BOUND_MS,
+  });
+  await expect(name).toHaveValue('Typed here, not saved');
+  // A field nobody was editing follows the saved value.
+  await expect(page.getByLabel('What you do')).toHaveValue('Barber');
+  await expectAccessible(page);
+  await page.getByRole('button', { name: 'Show the latest' }).click();
+  await expect(name).toHaveValue('Saved elsewhere');
+  await expect(page.getByText('This changed on another device.')).toHaveCount(
+    0,
+  );
+  expect(await noReload(page)).toBe(1);
 });

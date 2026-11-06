@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { HandleStatus } from '@tipme/contracts';
 import { Button, InputField } from '@tipme/ui';
+import { markClaimed } from '@/lib/claim-moment';
 import { apiFetch } from '@/lib/session-client';
 import { useSiteHost } from '@/lib/site-host';
 
@@ -66,6 +67,8 @@ export function HandleClaim({
     });
     setBusy(false);
     if (result.ok) {
+      // The server confirmed the claim: leave the one-time marker the welcome celebrates.
+      markClaimed(available);
       onClaimed();
       return;
     }

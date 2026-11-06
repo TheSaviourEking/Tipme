@@ -1043,6 +1043,8 @@ export function resolveIssue(
           outcome: withdrawals,
           targetId: input.issueId,
           requestedBy: input.staffUserId,
+          // The page, so the relay can tell that page's open dashboards (live updates).
+          ...(profileId ? { profileId } : {}),
         },
       });
       return { withdrawals, stillOpen };

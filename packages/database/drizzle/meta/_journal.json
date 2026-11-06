@@ -554,6 +554,20 @@
       "when": 1793893012077,
       "tag": "0078_handle_take_backs",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793982547520,
+      "tag": "0079_tip_start",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793982584812,
+      "tag": "0080_supporters",
+      "breakpoints": true
     }
   ]
 }

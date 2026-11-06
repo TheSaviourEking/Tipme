@@ -7,7 +7,10 @@ import type {
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { useLiveEvents } from '@/components/live/live-provider';
 import { apiFetch } from '@/lib/session-client';
+
+const PAYMENTS_CHANGED = ['payments.changed'] as const;
 import {
   needsBankAccount,
   onboardingRequirements,
@@ -45,16 +48,22 @@ export function PaymentAccountCard() {
   const [error, setError] = useState('');
   const { refreshAttention } = useRecipient();
 
-  const refresh = useCallback(async () => {
+  const readCard = useCallback(async () => {
     const result = await apiFetch<BachsPaymentAccountStatus>(
       '/v1/me/payment-account',
     );
     setLoad(
       result.ok ? { kind: 'ready', account: result.data } : { kind: 'failed' },
     );
+  }, []);
+  const refresh = useCallback(async () => {
+    await readCard();
     // The dashboard's "needs your attention" notice reads the same account.
     refreshAttention();
-  }, [refreshAttention]);
+  }, [readCard, refreshAttention]);
+  // Changed by our payment partner's update or another tab (live updates). The shell re-reads the
+  // notice itself, so only the card is read here.
+  useLiveEvents(PAYMENTS_CHANGED, readCard, { resync: false });
 
   useEffect(() => {
     const returning =

@@ -48,3 +48,22 @@ test('fix (final review): whitespace or control characters cannot turn the retur
   ])
     assert.equal(safeReturnPath(bad), '/', JSON.stringify(bad));
 });
+
+test('the preview password does not hold the manifest or the icons', () => {
+  for (const path of [
+    '/manifest.webmanifest',
+    '/icons/192.png',
+    '/icons/512-maskable.png',
+    '/apple-icon',
+  ])
+    assert.equal(decide(path, undefined), 'exempt', path);
+  for (const path of [
+    '/icons/64.png',
+    '/icons/../dashboard',
+    '/icons/%2e%2e/x',
+    '/manifest.webmanifest/x',
+    '/icons/192.png/x',
+    '/apple-icon/x',
+  ])
+    assert.equal(decide(path, undefined), 'login', path);
+});

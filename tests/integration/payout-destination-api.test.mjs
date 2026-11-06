@@ -301,12 +301,19 @@ test('the sweep reaches a quiet account; a failure leaves it null and the next r
   const first = await sweepPayoutSetup(database.db, { provider: failing });
   assert.equal(first.failed, 1);
   assert.equal(await manualAt(database), null);
+  // Live updates: only an account the sweep changed is named, for payments.changed.
+  assert.deepEqual(first.changedProfileIds, []);
   const provider = fakeBachs();
   const second = await sweepPayoutSetup(database.db, { provider });
   assert.equal(second.failed, 0);
   assert.ok(await manualAt(database));
-  await sweepPayoutSetup(database.db, { provider });
+  const [account] = await database.rows(
+    `SELECT profile_id FROM payment_accounts WHERE manual_payouts_at IS NOT NULL`,
+  );
+  assert.deepEqual(second.changedProfileIds, [account.profile_id]);
+  const third = await sweepPayoutSetup(database.db, { provider });
   assert.equal(provider.named('setManualPayouts').length, 1);
+  assert.deepEqual(third.changedProfileIds, []);
 });
 
 test('the sweep asks for payout capabilities only on an account without them', async (t) => {
@@ -1706,6 +1713,8 @@ test('dead accounts stop the account phase, and a bank under review still settle
   });
   assert.equal(swept.stoppedEarly, true);
   assert.equal(swept.destinationsSettled, 1);
+  // The settled bank's page is named once (live updates' payments.changed).
+  assert.deepEqual(swept.changedProfileIds, [TOBI]);
   const [row] = await database.rows(
     `SELECT status FROM payout_destinations WHERE profile_id = $1`,
     [TOBI],

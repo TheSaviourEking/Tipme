@@ -315,7 +315,10 @@ export function verifyEmailSignInCode(
               type: 'new_sign_in_notice',
               to: email,
               userId: owner.id,
-              data: { deviceLabel: (input.deviceLabel ?? '').slice(0, 80) },
+              data: {
+                deviceLabel: (input.deviceLabel ?? '').slice(0, 80),
+                at: now.toISOString(),
+              },
               dedupeKey: `new_sign_in_notice.${owner.id}.${newId()}`,
               now,
             });

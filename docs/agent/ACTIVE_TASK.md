@@ -1,8 +1,34 @@
+# Current task: merge train 1 (6 November 2026)
+
+- Branch `train/1` from `origin/dev` at `44fcd42c`: #158, #137, #142, #141, #139, #151, #134, #138, #153, #155 and #156 merged in that order with `--no-ff`, so each PR's head commit is in it. One PR into `dev`.
+- Migrations regenerated with drizzle-kit at merge time: `0079_tip_start` (#134, was 0078) and `0080_supporters` (#138, was 0078); SQL identical to the branches'.
+- Next: CI on the train PR, then the owner merges it. Evidence: `.superpowers/program/train1-report.md` (main checkout).
+
 # Current task: username reservation PR 2, take-backs (6 November 2026)
 
 - Branch/worktree: `feat/username-takebacks` / `.worktrees/username-takebacks`, test lane 4, with `origin/dev` at `b86c7b99` (#128) merged, not pushed. One migration, `0078_handle_take_backs`.
 - Done: Tasks 5 to 13 of `docs/superpowers/plans/2026-11-04-username-reservation.md`: the take-back table and fixed words, the four emails, the `username.take_back` serious action with request and cancel routes, the dashboard banner and its seen-time, the user's choice during the notice, the worker sweep (notice, reminder, deadline, the 14-day never-reached path), the free change after an assigned username, take-backs on Usernames, Pages and Search, and the runbook and decisions note. Not PR 3 (no-notice take-backs).
 - Next: review; do not deploy to production before the terms' "Your username" section is on `main`. Evidence: `.superpowers/program/b2-report.md`.
+
+# Current task — live updates PR 2: plan, withdrawals and banners (5 November 2026)
+
+- Branch/worktree: `feat/live-updates-2` / `.worktrees/live-updates-2`, from `origin/dev` at `931a545`, test lane 5. Committed, not pushed. Plan `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 13-15. No migration.
+- Built: worker mappings (payout paid/failed, freeze opened/released, the switch to all, payout start, payout setup sweep, weekly reports); API publish points (profile, withdrawals, payments, account); `GET /v1/me/withdrawal-quote?scope=local` so a live re-read never calls the payment partner; the web side (shell, Withdraw, Home, Settings dirty-form rule, QR studio, reports, bell).
+- Evidence and rulings: `.superpowers/program/c2-report.md` (main checkout).
+- Next: review, then PR 3 (Task 16, staff stream).
+
+# Current task — Make it yours, PR B: the Pro starting amount (5 November 2026)
+
+- Branch/worktree: `feat/miy-start-amount` / `.worktrees/miy-start-amount`, test lane 2, off `origin/dev` `931a545` (#125, #127 merged). Not pushed.
+- Built: Tasks B1-B4 of `docs/superpowers/plans/2026-11-05-make-it-yours.md`. `tipStartAllowed`; `TipAmounts.startMinor?` and `tipAmountsSchema.startMinor` (nullable, optional); migration `0078_tip_start` (renumbered `0079_tip_start` in merge train 1) (`profiles.tip_start_minor`, check `profiles_tip_start_in_presets`); `setTipAmounts` takes `startMinor` (null clears, omitted keeps it while still offered, `INVALID_TIP_START` is 400 `fields: ['startMinor']`); `tipAmountsOf` sends it only for a Pro page's own payable amounts; `amountOptions().defaultMinor` uses it; Settings > Tip amounts (Pro) has "Your page starts on".
+- Next: review, then push and open the PR into dev. Then PR D (pinned note and accent).
+
+# Current task — Pro additions PR 3, repeat supporters: the supporter's choice (6 November 2026)
+
+- Branch/worktree: `feat/repeat-supporters` / `.worktrees/repeat-supporters`, test lane 8, from `origin/dev` at `bf6629f8`. Not pushed. Plan: `docs/superpowers/plans/2026-11-05-pro-additions.md`, Tasks 3.1 to 3.5 only.
+- Built: the opt-in key store (`apps/web/src/lib/supporter-keys.ts`), `supporterKey` on the intent request, migration `0078_supporters` (renumbered `0080_supporters` in merge train 1) (`supporters`, `tip_supporters`; regenerate at merge if another migration lands first), recording inside `createPaymentIntent`'s transaction (Pro, a name, `SUPPORTER_RECOGNITION` on), the receipt's `recognised` and "Stop {name} recognising me" (`POST /v1/tips/{tipId}/recognition/stop`), the tick box, redaction in logs and Sentry, the runbook, the privacy outline line, the threat-model row P11 and the decisions entry.
+- Next: owner review; the controller pushes a draft PR and follows CI's full e2e suite. Then PR 4 (the recipient's list). Turning `SUPPORTER_RECOGNITION` on in production is the owner's call under D-07.
+- Evidence: `.superpowers/program/pro3-report.md` (main checkout).
 
 # Current task — states and feedback, PR B public (5 November 2026)
 
@@ -10,6 +36,30 @@
 - Built: Task 9 (public places: tip form Not sent slip with the proven safe line, amount flag and lit key, report page and unsubscribe keys, page slips on unsubscribe, mock checkout and receipt; `states-migration` and `money-safety-lines` guards). By the coordinator's scope change: Task 16 (connection mechanism, `lib/connection.ts`, `useOnline`) and Task 17 (connection copy in `lib/connection-copy.ts`, owner-approved 5 Nov 2026, `docs/design/DECISION-LOG.md`).
 - Evidence: `.superpowers/program/states-b-report.md`.
 - Next: review, push and PR into dev. Tasks 16 and 17 touch sign-in and welcome, which PRs C and D restyle: expect small conflicts there.
+
+# Current task — public boards PR 1, app icons (6 November 2026)
+
+- Branch/worktree: `feat/app-icons` / `.worktrees/app-icons`, test lane 9, from `origin/dev` at `246bebb2`. Committed, not pushed. Front end only: no API, contract, database or payment change.
+- Plan: `docs/superpowers/plans/2026-11-05-public-boards.md` (on `feat/claim-moment`), PR 1, Tasks 1.0 to 1.4. `apple-icon` (180), `/icons/192.png`, `/icons/512-maskable.png` and `/manifest.webmanifest` (display `browser`), all open in both gates; the tab icon stays `icon.svg`.
+- Next: CI's full e2e run (only `app-icons.spec.ts` and `quality.spec.ts` ran locally, per the 6 Nov overload rule).
+
+# Current task — public boards PR 6, the claim moment (6 November 2026)
+
+- Branch/worktree: `feat/claim-moment` / `.worktrees/claim-moment`, test lane 9, from `origin/dev` at `bf6629f8`. Committed, not pushed. Front end only: no API, contract, database or payment change.
+- Plan: `docs/superpowers/plans/2026-11-05-public-boards.md`, PR 6 (Tasks 6.0 to 6.3). "@handle is yours." plays once after the server confirms a claim (a one-time session-storage marker), with a 30 ms vibration where allowed, a still scene under reduced motion and no sound.
+- Next: CI's full e2e run (only `welcome.spec.ts` and `accounts.spec.ts` ran locally, per the 6 Nov overload rule); then PR 7 (keepsake) builds on the same welcome files. PR 10 (the stamp sound) waits for the owner (Q5).
+
+# Current task — public boards PR 2, share cards (6 November 2026)
+
+- Branch/worktree: `feat/share-cards` / `.worktrees/share-cards`, test lane 8, from `origin/dev` at `246bebb2`. Committed, not pushed. Front end only: no API, contract, database or payment change.
+- Plan: `.superpowers/program/plans/2026-11-05-public-boards.md`, PR 2, Tasks 2.0 to 2.4. The general card in the new materials; `/@handle` advertises `/people/<handle>/share-card` (name, role, handle, cover colour; initials, no photo; TipMe purple for photo and colourless covers); anything else answers the general card with 200.
+- Next: CI's full e2e run (only `share-cards.spec.ts` and `quality.spec.ts` ran locally, per the 6 Nov overload rule).
+
+# Current task — public boards PR 4, QR studio (6 November 2026)
+
+- Branch/worktree: `feat/qr-studio-restyle` / `.worktrees/qr-studio`, test lane 4, from `origin/dev` at `246bebb`. Committed, not pushed. Front end only: no API, contract, migration or payment change.
+- Done: Tasks 4.0 to 4.4 of the public boards plan (PR 4): the code on a paper panel (`.qr-studio__panel`); the one status line directly under the Upgrade panel, before the style lists, at every width; designs in Patterns, Cards and Photo by the API's `kind` (`lib/qr-groups.ts`); the Free card lettered in Manrope (`lib/brand-font.ts`, `drawQrCard`'s `fontFamily`). The `QrStudio.dc.html` board was not on disk to copy.
+- Next: the controller pushes the branch as a draft PR; CI runs the full e2e suite. Then PR 5 (QR print) builds on `qr-card.ts` and the QR CSS block. Evidence: `.superpowers/program/pub4-report.md` (main checkout).
 
 # Current task — animated covers (5 November 2026)
 

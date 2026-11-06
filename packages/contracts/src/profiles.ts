@@ -184,6 +184,11 @@ export interface PublicProfile {
    * limited to named pages). Checkout enforces the same rule. Older APIs send nothing.
    */
   tippingOpen?: boolean;
+  /**
+   * Present (true) only when this page is Pro and supporter recognition is switched on: the tip form
+   * may then offer "Let {name} recognise me next time". Older APIs send nothing (no tick box).
+   */
+  recognition?: true;
 }
 
 /** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */
@@ -197,12 +202,22 @@ export type PagePlan = 'free' | 'pro';
 export interface TipAmounts {
   presetsMinor: string[];
   minMinor: string;
+  /**
+   * The preset the tip form starts on, chosen by a Pro page ("Make it yours"). Sent only when the
+   * page is Pro and it is one of `presetsMinor`; otherwise the form starts on the closest to ₦2,000.
+   */
+  startMinor?: string;
 }
 
 const kobo = z.string().regex(/^\d{1,12}$/);
 /** Shape only; the amounts themselves are checked by the domain rule on the server. */
 export const tipAmountsSchema = z
-  .object({ presetsMinor: z.array(kobo).max(8), minMinor: kobo })
+  .object({
+    presetsMinor: z.array(kobo).max(8),
+    minMinor: kobo,
+    // Null chooses the automatic start; omitted keeps the saved one while it is still offered.
+    startMinor: kobo.nullable().optional(),
+  })
   .strict();
 export type TipAmountsRequest = z.infer<typeof tipAmountsSchema>;
 

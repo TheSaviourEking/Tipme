@@ -88,6 +88,11 @@ export function launchDecision({
     path === '/sitemap.xml' ||
     path === '/favicon.ico' ||
     path === '/icon.svg' ||
+    // The home-screen icons and their manifest (exact paths only).
+    path === '/apple-icon' ||
+    path === '/manifest.webmanifest' ||
+    path === '/icons/192.png' ||
+    path === '/icons/512-maskable.png' ||
     path === '/opengraph-image' ||
     path.startsWith('/coming-soon/opengraph-image')
   )

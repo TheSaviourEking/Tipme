@@ -263,16 +263,25 @@ export function updatePaymentAccountStatus(
         .returning();
       if (!updated) throw new OperationError('NO_PAGE');
       const day = now.toISOString().slice(0, 10);
-      const mail = (type: string) =>
+      const mail = (type: string, data: Record<string, unknown> = {}) =>
         mailOwner(tx, input.sealing, {
           profileId: input.profileId,
           type,
-          data: {},
+          data,
           dedupeKey: `${type}.${account.id}.${input.status}.${day}`,
           now,
         });
-      if (input.status === 'ACTIVE' && account.status !== 'ACTIVE')
-        await mail('payment_account_ready');
+      if (input.status === 'ACTIVE' && account.status !== 'ACTIVE') {
+        // The ready email shows the page's link.
+        const [page] = await tx
+          .select({ handle: profiles.handle })
+          .from(profiles)
+          .where(eq(profiles.id, input.profileId));
+        await mail(
+          'payment_account_ready',
+          page ? { handle: page.handle } : {},
+        );
+      }
       // Setting up always needs information, so only a change after that is news.
       const newlyRestricted =
         input.status === 'RESTRICTED' && account.status !== 'RESTRICTED';

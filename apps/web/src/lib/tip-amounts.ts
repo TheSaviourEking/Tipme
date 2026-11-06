@@ -84,16 +84,25 @@ function typedMinor(value: string): number | null {
 
 export function amountOptions(amounts: TipAmounts | undefined) {
   // An API older than PR-012 sends none: the standard amounts apply there.
-  const { presetsMinor, minMinor } = amounts ?? STANDARD_TIP_AMOUNTS;
+  const { presetsMinor, minMinor, startMinor } =
+    amounts ?? STANDARD_TIP_AMOUNTS;
   const min = Number(minMinor);
+  // A Pro page's chosen start ("Make it yours"), used only when it is one of the presets shown.
+  const chosen =
+    startMinor !== undefined && presetsMinor.includes(startMinor)
+      ? Number(startMinor)
+      : null;
   return {
     presets: presetsMinor.map((value) => ({
       label: naira(Number(value)),
       minor: Number(value),
     })),
     minMinor: min,
-    /** The preset the picker starts on: NGN 2,000 or the closest to it. Null with no presets. */
-    defaultMinor: closestToDefault(presetsMinor.map(Number)),
+    /**
+     * The preset the picker starts on: the page's chosen one, or NGN 2,000 or the closest to it.
+     * Null with no presets.
+     */
+    defaultMinor: chosen ?? closestToDefault(presetsMinor.map(Number)),
     rangeText: `NGN ${naira(min)} or more`,
     /** An example for the typed amount: never below what this page accepts. */
     example: naira(min),

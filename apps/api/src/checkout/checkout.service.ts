@@ -173,6 +173,8 @@ export class CheckoutService {
       purpose: request.purpose,
       celebrationMomentId: request.celebrationMomentId,
       noteMayShow: request.noteMayShow,
+      supporterKey: request.supporterKey,
+      recognitionOn: this.config.SUPPORTER_RECOGNITION,
     });
     const start = await findAttemptStart(db, intent.attemptId);
     if (!start) throw new OperationError('ATTEMPT_NOT_FOUND');

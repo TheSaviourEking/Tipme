@@ -319,6 +319,12 @@ const operationErrors: Partial<
     code: 'VALIDATION_FAILED',
     fields: ['minMinor'],
   },
+  // The starting amount ("Make it yours") is not one of the page's own presets.
+  INVALID_TIP_START: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['startMinor'],
+  },
   // The thank-you line (PUT /v1/me/thanks): its own code, as INVALID_INPUT points at `message`.
   INVALID_THANKS_LINE: {
     status: 400,

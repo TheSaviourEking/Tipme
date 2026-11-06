@@ -310,3 +310,49 @@ test('a long unbroken name fits at 320px', async ({ page }, testInfo) => {
   await expect(page.getByText(UNBROKEN_NAME).first()).toBeVisible();
   expect(await fitsViewport(page)).toBe(true);
 });
+
+test('test mode is one pill in the header that opens its sentence', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard/withdraw');
+  // Settled: the page and its reminders have loaded, so nothing re-renders the bar under the key.
+  await expect(page.locator('.withdraw__meter')).toBeVisible();
+  const pill = page.locator('.test-pill');
+  await expect(pill.locator('summary')).toContainText('Test mode');
+  const sentence = page.getByText(
+    'No real money moves in test mode. The test bank pays straight away.',
+  );
+  await expect(sentence).toBeHidden();
+  await pill.locator('summary').press('Enter');
+  await expect(pill).toHaveAttribute('open', '');
+  await expect(sentence).toBeVisible();
+  // The old notice box is gone from Withdraw.
+  await expect(
+    page
+      .locator('.withdraw .tm-notice, .withdraw .tm-slip')
+      .filter({ hasText: 'Test withdrawal' }),
+  ).toHaveCount(0);
+  await expectAccessible(page);
+});
+
+test('the recovery-email reminder shows on Home and Settings, not on Withdraw or Tips', async ({
+  page,
+}, testInfo) => {
+  // A new recipient has no confirmed recovery email.
+  await signUpRecipient(page, testInfo);
+  const attention = page.getByRole('region', { name: 'Needs your attention' });
+  for (const path of ['/dashboard', '/dashboard/settings']) {
+    await page.goto(path);
+    await expect(attention.getByText('Add a recovery email')).toBeVisible();
+  }
+  for (const path of ['/dashboard/withdraw', '/dashboard/tips']) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByText('Add a recovery email')).toHaveCount(0);
+  }
+  // The Settings tab still carries its dot: the reminder isn't lost, only kept to its pages.
+  await expect(
+    page.getByRole('link', { name: 'Settings (needs your attention)' }),
+  ).toBeVisible();
+});

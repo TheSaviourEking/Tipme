@@ -33,3 +33,14 @@ export const WORDMARK_PATHS = [
     fill: '#7A32F9',
   },
 ] as const;
+
+/**
+ * The heart alone, as the tab icon (`app/icon.svg`) draws it on the purple tile: the wordmark's
+ * heart path, centred and scaled in a 120-unit square. Every icon draws this one heart; a unit test
+ * fails if `icon.svg` drifts from it.
+ */
+export const HEART_MARK = {
+  viewBox: '668 -13 120 120',
+  d: 'M701.259 76.9553L701.236 77.167C737.151 92.0868 770.727 77.7807 769.62 56.2653C768.512 34.7487 741.619 36.1332 741.619 36.1332L741.525 36.0404C741.525 36.0404 742.479 9.12833 720.948 8.36497C699.419 7.60052 685.767 41.2835 701.259 76.9553Z',
+  transform: 'translate(728 47) scale(0.78) translate(-732.13 -45.83)',
+} as const;

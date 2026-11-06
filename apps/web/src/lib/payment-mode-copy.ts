@@ -26,6 +26,8 @@ export type PaymentModeCopy = {
   homeClarity: string;
   signUpLede: string;
   dashboardBadge: string | null;
+  /** After the badge on a wide screen: what the mode means, in a few words. */
+  dashboardBadgeDetail: string | null;
   dashboardPaymentStep: string;
   qrHint: string;
   withdrawNotice: string | null;
@@ -77,6 +79,7 @@ const TEST: PaymentModeCopy = {
   homeClarity: `${CLARITY} Payments are still in test mode; real payments are not available yet.`,
   signUpLede: `${SIGN_UP} Payments are in test mode.`,
   dashboardBadge: 'Test mode',
+  dashboardBadgeDetail: 'no real money moves',
   dashboardPaymentStep:
     'Supporters can tip you. No real money moves in test mode.',
   qrHint: 'Anyone who scans it lands on your page. Test mode.',
@@ -108,6 +111,7 @@ const LIVE: PaymentModeCopy = {
   homeClarity: CLARITY,
   signUpLede: SIGN_UP,
   dashboardBadge: null,
+  dashboardBadgeDetail: null,
   dashboardPaymentStep: 'Supporters can tip you.',
   qrHint: 'Anyone who scans it lands on your page.',
   withdrawNotice: null,

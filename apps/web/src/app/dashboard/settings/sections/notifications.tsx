@@ -1,17 +1,22 @@
 'use client';
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   NOTIFICATION_PREFS_CHANGED,
   type NotificationPrefsView,
 } from '@tipme/contracts';
 import { Button, Card, Notice } from '@tipme/ui';
+import { ChangedElsewhere } from '@/components/dashboard/changed-elsewhere';
+import { useLiveForm } from '@/components/dashboard/use-live-form';
+import { useLiveEvents } from '@/components/live/live-provider';
 import { apiFetch } from '@/lib/session-client';
 import { SettingsChapter } from './section';
 
 // Notifications (ScreenSettings).
 
 type PrefKey = keyof NotificationPrefsView;
+
+const ACCOUNT_CHANGED = ['account.changed'] as const;
 
 const EMAIL_LABELS = {
   tipEmails: 'Email me about each tip (when my email is verified)',
@@ -69,6 +74,14 @@ function PrefsForm<K extends PrefKey>({
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const live = useLiveForm(
+    Object.fromEntries(keys.map((key) => [key, saved[key]])) as Pick<
+      NotificationPrefsView,
+      K
+    >,
+    draft,
+    setDraft,
+  );
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -90,6 +103,9 @@ function PrefsForm<K extends PrefKey>({
     <Card id={id} className="settings-section">
       <h3>{title}</h3>
       {intro && <p className="tm-hint">{intro}</p>}
+      {live.changedElsewhere && (
+        <ChangedElsewhere onShowLatest={live.showLatest} />
+      )}
       <form className="settings-form" onSubmit={save} noValidate>
         {keys.map((key) =>
           hint ? (
@@ -151,13 +167,18 @@ function PrefsForm<K extends PrefKey>({
  */
 export function NotificationsSection() {
   const [saved, setSaved] = useState<NotificationPrefsView | null>(null);
-  useEffect(() => {
-    void apiFetch<NotificationPrefsView>(
-      '/v1/me/notification-preferences',
-    ).then((result) => {
-      if (result.ok) setSaved(result.data);
-    });
-  }, []);
+  const read = useCallback(
+    () =>
+      apiFetch<NotificationPrefsView>('/v1/me/notification-preferences').then(
+        (result) => {
+          if (result.ok) setSaved(result.data);
+        },
+      ),
+    [],
+  );
+  useEffect(() => void read(), [read]);
+  // Saved on another tab or device: the forms follow, keeping any switch being changed here.
+  useLiveEvents(ACCOUNT_CHANGED, read, { resync: false });
   return (
     <SettingsChapter id="notifications">
       {/* An API older than PR-013 has no preferences: say nothing rather than show a broken form. */}

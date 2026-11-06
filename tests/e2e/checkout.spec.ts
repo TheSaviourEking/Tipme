@@ -116,13 +116,23 @@ test('an opted-in supporter is celebrated after each confirmed tip', async ({
   for (const entry of stored.tips)
     expect(Object.keys(entry).sort()).toEqual(['at', 'handle', 'id']);
 
+  // A recognition key from an earlier tip elsewhere goes too (repeat supporters).
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'tipme.supporters.v1',
+      JSON.stringify({ v: 1, keys: { tobi: 'A'.repeat(43) } }),
+    ),
+  );
   await page
-    .getByRole('button', { name: 'Forget my tips on this phone' })
+    .getByRole('button', { name: 'Forget my tips and keys on this phone' })
     .click();
   await expect(page.getByText(/This phone no longer remembers/)).toBeVisible();
   expect(
-    await page.evaluate(() => localStorage.getItem('tipme.myTips.v1')),
-  ).toBeNull();
+    await page.evaluate(() => [
+      localStorage.getItem('tipme.myTips.v1'),
+      localStorage.getItem('tipme.supporters.v1'),
+    ]),
+  ).toEqual([null, null]);
 });
 
 test('a supporter who did not opt in is never remembered', async ({ page }) => {
@@ -492,7 +502,15 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
 test('a receipt that loses the API while waiting shows the Connection lost slip, and recovers', async ({
   page,
 }) => {
-  // "No reply": paid, but the provider never tells TipMe, so the receipt keeps checking.
+  // "No reply": paid, but the provider never tells TipMe, so the receipt keeps checking. TipMe's
+  // reconcile soon learns it was paid, sometimes before the card shows: keep the receipt checking,
+  // as the reconnect test below does.
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { data?: { state?: string } };
+    if (body.data) body.data.state = 'waiting';
+    return route.fulfill({ response, json: body });
+  });
   await tip(page, { outcome: /^No reply/ });
   await expect(page.locator('.tip-status-card')).toBeVisible();
   await page.route('**/v1/tips/*/status', (route) => route.abort());

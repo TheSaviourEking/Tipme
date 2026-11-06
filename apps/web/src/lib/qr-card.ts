@@ -1,5 +1,5 @@
 'use client';
-import { qrMatrix, renderQrPixels, type QrStyle } from './qr-render';
+import { qrMatrix, renderQrPixels, type QrStyle } from './qr-render.ts';
 
 /** Draws the square share card: frame, "Scan to thank", the code on its light square, name, link. */
 export function drawQrCard(
@@ -10,9 +10,14 @@ export function drawQrCard(
     name: string;
     style: QrStyle;
     size: number;
+    /** The lettering's family (`interfaceFont()`), with Arial behind it; Arial alone when absent. */
+    fontFamily?: string;
   },
 ): void {
   const { size, style } = input;
+  const family = input.fontFamily
+    ? `${input.fontFamily}, Arial, sans-serif`
+    : 'Arial, sans-serif';
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -48,10 +53,10 @@ export function drawQrCard(
   ctx.putImageData(image, x, y);
   ctx.fillStyle = style.frameText;
   ctx.textAlign = 'center';
-  ctx.font = `600 ${Math.round(size * 0.045)}px Arial, sans-serif`;
+  ctx.font = `600 ${Math.round(size * 0.045)}px ${family}`;
   ctx.fillText('Scan to thank', size / 2, size * 0.12);
-  ctx.font = `700 ${Math.round(size * 0.06)}px Arial, sans-serif`;
+  ctx.font = `700 ${Math.round(size * 0.06)}px ${family}`;
   ctx.fillText(input.name, size / 2, y + pixels.width + size * 0.11);
-  ctx.font = `400 ${Math.round(size * 0.038)}px Arial, sans-serif`;
+  ctx.font = `400 ${Math.round(size * 0.038)}px ${family}`;
   ctx.fillText(input.label, size / 2, y + pixels.width + size * 0.17);
 }
