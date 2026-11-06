@@ -324,3 +324,9 @@ the appreciation moment) is unchanged.
 - **Freeze rules.** The cover pauses on the first use of the tip form and stays paused for that view; it also pauses off screen. Reduced motion, forced colours and print show the still frame.
 - **Lock.** The server refuses Pro-only choices from Free pages. A page that leaves Pro shows the still frame and keeps its choice.
 - **Performance.** Transform and opacity only; profile LCP stays under 2000ms in `pnpm perf:lab`.
+
+## 2026-11-06 — TipMe for businesses: the verified badge and the business header
+
+- **Owner direction, 6 Nov 2026** (board `redesign/boards/Business.dc.html`). A product and visual decision, not a regulatory approval.
+- **Badge copy.** "Verified business", with the line "TipMe checked this business's name, address and contact." It never says approved, licensed or regulated.
+- **The business header is always above the people list** on a location page and a staff tip page (business initial, name, location, the verified line), so a sticker that leads somewhere else is easy to spot (QR-sticker fraud). It is never scrolled away on the list.
