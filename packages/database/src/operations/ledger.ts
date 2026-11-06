@@ -18,7 +18,7 @@ const KIND: Record<AccountCode, 'asset' | 'liability' | 'revenue' | 'expense'> =
     // Contra-expense: the provider fee recovered from the tip.
     provider_fee_recovered: 'revenue',
     promotions_expense: 'expense',
-    // What TipMe owes a business (release 2): R2-A posts it, on the business's own account.
+    // What TipMe owes a business (release 2), on the business's own account.
     business_payable: 'liability',
   };
 
@@ -27,10 +27,18 @@ async function accountId(
   code: AccountCode,
   currency: string,
   profileId: string | null,
+  businessId: string | null,
 ): Promise<string> {
   await tx
     .insert(ledgerAccounts)
-    .values({ id: newId(), code, kind: KIND[code], currency, profileId })
+    .values({
+      id: newId(),
+      code,
+      kind: KIND[code],
+      currency,
+      profileId,
+      businessId,
+    })
     .onConflictDoNothing();
   const [row] = await tx
     .select({ id: ledgerAccounts.id })
@@ -42,8 +50,10 @@ async function accountId(
         profileId === null
           ? isNull(ledgerAccounts.profileId)
           : eq(ledgerAccounts.profileId, profileId),
-        // Release 2 adds business accounts, which also have no profile: never pick one up here.
-        isNull(ledgerAccounts.businessId),
+        // A business account has no profile either: the identity includes the business.
+        businessId === null
+          ? isNull(ledgerAccounts.businessId)
+          : eq(ledgerAccounts.businessId, businessId),
       ),
     );
   if (!row) throw new Error('ledger account could not be created');
@@ -57,11 +67,13 @@ async function accountId(
 export async function postLedgerTransaction(
   tx: Tx,
   input: {
-    operationType: 'payment' | 'payout' | 'reward';
+    operationType: 'payment' | 'payout' | 'reward' | 'reversal';
     operationKey: string;
     currency: string;
     tipId?: string;
     payoutId?: string;
+    /** A reversal names the payment it takes back (the database checks it is this tip's). */
+    reversesTransactionId?: string;
     lines: LedgerLine[];
     traceId: string | null;
   },
@@ -78,6 +90,7 @@ export async function postLedgerTransaction(
       currency: input.currency,
       tipId: input.tipId ?? null,
       payoutId: input.payoutId ?? null,
+      reversesTransactionId: input.reversesTransactionId ?? null,
       traceId: input.traceId,
     })
     .onConflictDoNothing({ target: ledgerTransactions.operationKey })
@@ -92,11 +105,19 @@ export async function postLedgerTransaction(
   }
   for (const line of input.lines) {
     const profileId = line.profileId ?? null;
+    const businessId = line.businessId ?? null;
     await tx.insert(ledgerEntries).values({
       id: newId(),
       transactionId,
-      accountId: await accountId(tx, line.account, input.currency, profileId),
+      accountId: await accountId(
+        tx,
+        line.account,
+        input.currency,
+        profileId,
+        businessId,
+      ),
       profileId,
+      businessId,
       side: line.side,
       amountMinor: line.amountMinor,
       currency: input.currency,

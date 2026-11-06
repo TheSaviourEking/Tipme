@@ -10,6 +10,7 @@ import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
 import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
 import { staffAlertPoster } from '../../apps/worker/dist/handlers/domain-events.js';
 import * as contracts from '../../packages/contracts/dist/index.js';
+import { GROSS, reportedReversal } from './reversal-fixtures.mjs';
 import {
   MAIL_SEAL_KEY,
   OPS_TOTP_KEY,
@@ -367,6 +368,22 @@ const wired = {
       happened: async () =>
         (await q(`SELECT 1 FROM staff_totp WHERE user_id = $1`, [userId]))
           .length === 0,
+    };
+  },
+  'tip.reverse': async () => {
+    // No hold: beforeEach deletes payment_reversed issues, which a hold would still name.
+    const { tipId, issueId, eventId, reversals } = await reportedReversal(
+      database,
+      { bps: 1000, keepHold: false },
+    );
+    return {
+      payload: {
+        issueId,
+        tipId,
+        providerEventId: eventId,
+        refundedMinor: GROSS.toString(),
+      },
+      happened: async () => (await reversals()) === 1,
     };
   },
   'mail_provider.switch': async () => {

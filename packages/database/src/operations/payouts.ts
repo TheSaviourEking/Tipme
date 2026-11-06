@@ -28,6 +28,8 @@ import {
   providerEvents,
   providerFeeCredits,
   tipQuotes,
+  teamTipSplits,
+  tipBusinessShares,
   tips,
   withdrawalHolds,
 } from '../schema.js';
@@ -100,10 +102,16 @@ export async function createPayout(
           status: tips.status,
           currency: tips.currency,
           net: tipQuotes.recipientNetMinor,
+          // Business release 2: the business's share of the net is never the person's to withdraw.
+          share: tipBusinessShares.shareMinor,
+          // ...and a tip a refund or chargeback took back (in part) is not paid out tip by tip.
+          reversed: sql<boolean>`EXISTS (SELECT 1 FROM ledger_transactions r
+            WHERE r.tip_id = ${tips.id} AND r.operation_type = 'reversal')`,
         })
         .from(tips)
         .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
         .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
+        .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
         .where(inArray(tips.id, ids))
         .for('update', { of: tips });
       // The same request may have committed while this one waited for the tips' locks.
@@ -120,7 +128,9 @@ export async function createPayout(
         claimed.length > 0 ||
         rows.some(
           (row) =>
-            row.profileId !== input.profileId || row.status !== 'SUCCEEDED',
+            row.profileId !== input.profileId ||
+            row.status !== 'SUCCEEDED' ||
+            row.reversed,
         )
       ) {
         throw new OperationError('TIP_NOT_PAYABLE');
@@ -129,7 +139,10 @@ export async function createPayout(
       const [currency] = currencies;
       if (currencies.size !== 1 || !currency)
         throw new OperationError('CURRENCY_MISMATCH');
-      const amountMinor = rows.reduce((sum, row) => sum + row.net, 0n);
+      const amountMinor = rows.reduce(
+        (sum, row) => sum + row.net - (row.share ?? 0n),
+        0n,
+      );
 
       const payoutId = newId();
       const inserted = await tx
@@ -411,20 +424,42 @@ export function flagPaymentReversal(
         dedupeSuffix: suffix,
         payload: { attemptId: input.attemptId, eventType: input.eventType },
       });
+      const [tip] = await tx
+        .select({
+          id: tips.id,
+          profileId: tips.profileId,
+          businessId: tipBusinessShares.businessId,
+        })
+        .from(paymentAttempts)
+        .innerJoin(tips, eq(tips.intentId, paymentAttempts.intentId))
+        .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
+        .where(eq(paymentAttempts.id, input.attemptId));
+      // Business release 2: a shared tip's issue names the business too, as its part is reversed
+      // with the person's (tip.reverse); a business's withdrawals stop below zero (R2-B).
       const issue = await openIssue(tx, {
         dedupeKey: `event.payment.reversed.${input.attemptId}.${suffix}`,
         kind: 'payment_reversed',
-        subject: { attemptId: input.attemptId },
+        subject: {
+          attemptId: input.attemptId,
+          ...(tip?.businessId ? { businessId: tip.businessId } : {}),
+        },
         now: input.now ?? new Date(),
       });
-      const [tip] = await tx
-        .select({ profileId: tips.profileId })
-        .from(paymentAttempts)
-        .innerJoin(tips, eq(tips.intentId, paymentAttempts.intentId))
-        .where(eq(paymentAttempts.id, input.attemptId));
-      if (tip)
+      // Everyone the tip paid waits: the person, or each person of a team tip (R2-D). Never a
+      // throw here, which would roll back the alert itself.
+      const people = !tip
+        ? []
+        : tip.profileId !== null
+          ? [tip.profileId]
+          : (
+              await tx
+                .select({ profileId: teamTipSplits.profileId })
+                .from(teamTipSplits)
+                .where(eq(teamTipSplits.tipId, tip.id))
+            ).map((split) => split.profileId);
+      for (const profileId of people)
         await holdWithdrawals(tx, {
-          profileId: personOf(tip.profileId),
+          profileId,
           reason: 'reversal',
           issueId: issue.id,
         });
@@ -1219,6 +1254,9 @@ export async function withdrawalQuote(
     }),
   }));
   if (hold) return { state: 'paused', reason: hold };
+  // Q8: below zero after a reversal, withdrawals wait until it is back above zero.
+  if ((await guarded(() => balanceIn(db, input.profileId))).availableMinor < 0n)
+    return { state: 'paused', reason: 'reversal' };
   // A request would be refused, so the quote must not say otherwise. The states have no word for
   // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
   if (foreign) return { state: 'provider_unavailable' };
@@ -1364,6 +1402,9 @@ export async function requestWithdrawal(
       if (await activeHold(tx, input.profileId))
         throw new OperationError('WITHDRAWALS_PAUSED');
       const { availableMinor } = await balanceIn(tx, input.profileId);
+      // Q8: a reversal after the money left can take the balance below zero. Nothing more leaves
+      // until it is back; nothing is collected automatically. Under the lock reverseTip also takes.
+      if (availableMinor < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
       const withdrawable = lower(
         availableMinor,
         notNegative(

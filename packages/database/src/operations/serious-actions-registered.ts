@@ -8,12 +8,15 @@ import type { MailProviderName } from '@tipme/mail';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  businessManagers,
   issues,
   payouts,
   profiles,
   providerSettings,
   roles,
   staff,
+  tipBusinessShares,
+  tips,
   users,
 } from '../schema.js';
 import {
@@ -24,7 +27,7 @@ import {
 import { startStaffRecovery } from './email-recovery.js';
 import { guarded, OperationError } from './errors.js';
 import { grantFeeFreeTips, setAccountFee } from './fees.js';
-import { resolveIssue } from './issues.js';
+import { addIssueNote, resolveIssue } from './issues.js';
 import { openPayoutConflict } from './payout-start.js';
 import {
   applyAfterRead,
@@ -37,6 +40,7 @@ import {
   type PreparedPayoutRead,
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
+import { reversedMinorOf, reverseTip } from './reversals.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -490,6 +494,111 @@ const feeFree = acting<{ profileId: string; count: number }>({
     }),
 });
 
+/* Business release 2: reversals (Q7, Q8) */
+
+export interface TipReversePayload {
+  /** The open `payment_reversed` issue the partner's refund or chargeback raised. */
+  issueId: string;
+  tipId: string;
+  /** The partner's event id, as the issue keeps it: one reversal per event. */
+  providerEventId: string;
+  /** Minor units, as a decimal string (JSON has no bigint). */
+  refundedMinor: string;
+}
+
+const naira = (minor: bigint) =>
+  `NGN ${(minor / 100n).toLocaleString('en-NG')}.${(minor % 100n).toString().padStart(2, '0')}`;
+
+/** Why a reversal was refused, in words for the issue's notes (never a balance or a name). */
+const REVERSAL_REFUSALS: Record<string, string> = {
+  already_reversed:
+    'Reversal refused: everything this tip paid was already taken back by an earlier refund or chargeback. Nothing was posted.',
+  more_than_left:
+    'Reversal refused: the amount is more than what is left of this tip after earlier refunds or chargebacks. Nothing was posted. Check the partner’s dashboard for what this event took back.',
+  not_paid:
+    'Reversal refused: this tip has no payment in the ledger. Nothing was posted.',
+};
+
+/**
+ * Staff take back a refunded or charged-back tip, every line of it: the person's part and any
+ * business's part (Q7). Never automatic: only from the partner's own `payment_reversed` issue, after
+ * checking the partner's dashboard, because the event doesn't say whether a refund is partial. It
+ * posts even after the money was withdrawn (Q8). It moves no money at the partner: TipMe records it.
+ */
+const tipReverse = acting<TipReversePayload>({
+  name: 'tip.reverse',
+  permission: 'payments.repair',
+  // Neither the person tipped nor anyone running the business can decide their own reversal.
+  subjects: async ({ tipId }, db) => {
+    const [tip] = await db
+      .select({
+        profileId: tips.profileId,
+        businessId: tipBusinessShares.businessId,
+      })
+      .from(tips)
+      .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
+      .where(eq(tips.id, tipId));
+    const managers = tip?.businessId
+      ? await db
+          .select({ userId: businessManagers.userId })
+          .from(businessManagers)
+          .where(eq(businessManagers.businessId, tip.businessId))
+      : [];
+    return [
+      ...(tip?.profileId ? await pageOwner(db, tip.profileId) : []),
+      ...managers.map(({ userId }) => userId),
+    ];
+  },
+  target: ({ tipId }) => tipId,
+  // Pinned to the tip's status and to how much of it was already taken back.
+  current: async (tx, { tipId }) => {
+    const [tip] = await tx
+      .select({ status: tips.status })
+      .from(tips)
+      .where(eq(tips.id, tipId));
+    return {
+      status: tip?.status ?? null,
+      reversedMinor: (await reversedMinorOf(tx, tipId)).toString(),
+    };
+  },
+  describe: async (_tx, { tipId, refundedMinor }) =>
+    `Reverse ${naira(BigInt(refundedMinor))} of the tip ending ${tipId.slice(-6)}, as the payment partner refunded or charged it back: the person's part and any business's part, in proportion`,
+  act: async (tx, payload, context) => {
+    const [issue] = await tx
+      .select({
+        kind: issues.kind,
+        status: issues.status,
+        subject: issues.subject,
+      })
+      .from(issues)
+      .where(eq(issues.id, payload.issueId));
+    if (!issue) throw new OperationError('ISSUE_NOT_FOUND');
+    if (issue.status !== 'open') throw new OperationError('ISSUE_RESOLVED');
+    if (
+      issue.kind !== 'payment_reversed' ||
+      issue.subject.tipId !== payload.tipId
+    )
+      throw new OperationError('INVALID_INPUT');
+    const result = await reverseTip(tx, {
+      tipId: payload.tipId,
+      providerEventId: payload.providerEventId,
+      refundedMinor: BigInt(payload.refundedMinor),
+      now: context.now,
+    });
+    return {
+      reversed: true as const,
+      posted: result.created,
+      belowZero: result.belowZero.length > 0,
+    };
+  },
+  // A refusal says why on the issue, so the next person sees it was tried (and nothing posted).
+  afterRefusal: async (db, { issueId }, { detail }, check) => {
+    const text = detail ? REVERSAL_REFUSALS[detail] : undefined;
+    if (!text) return;
+    await addIssueNote(db, { issueId, staffUserId: check.actorId, text });
+  },
+});
+
 /* Staff access */
 
 export type GrantPayload =
@@ -810,6 +919,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(roleAddSensitive);
   registerSeriousAction(staffResetAuthenticator);
   registerSeriousAction(mailProviderSwitch);
+  registerSeriousAction(tipReverse);
 }
 
 /* Routes whose seriousness depends on what is being done */

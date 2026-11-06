@@ -8,6 +8,7 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { totpAt } from '../../packages/domain/dist/index.js';
 import { Redis } from './helpers.mjs';
+import { reportedReversal } from './reversal-fixtures.mjs';
 import {
   REDIS_URL,
   WEB,
@@ -58,6 +59,9 @@ before(async () => {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
+      // tip.reverse (business release 2) is behind both flags.
+      BUSINESS_ENABLED: 'true',
+      BUSINESS_SHARES_ENABLED: 'true',
     },
   });
   limited = await startStack({
@@ -359,6 +363,23 @@ const routes = {
       path: `/v1/ops/issues/${issueId}/payout-apply`,
       body: { reason: REASON, reported: 'paid' },
       happened: async () => (await payoutStatus(payoutId)) === 'PAID',
+    };
+  },
+  'reverse a refunded tip': async () => {
+    const { issueId, reversals } = await reportedReversal(database, {
+      // Not Tobi: the freeze test below needs Tobi with no other open hold issue.
+      handle: 'ada',
+      keepHold: false,
+    });
+    return {
+      method: 'POST',
+      path: `/v1/ops/issues/${issueId}/reverse-tip`,
+      body: {
+        reason: REASON,
+        refundedMinor: '100000',
+        dashboardVerified: true,
+      },
+      happened: async () => (await reversals()) === 1,
     };
   },
   'close money as written off': resolving('written_off'),
