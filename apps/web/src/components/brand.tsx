@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
+import { HEART_MARK, WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
 
-export { WORDMARK_PATHS, WORDMARK_VIEWBOX };
+export { HEART_MARK, WORDMARK_PATHS, WORDMARK_VIEWBOX };
 
 export function Wordmark({ className }: { className?: string }) {
   return (
