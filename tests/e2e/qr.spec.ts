@@ -283,12 +283,19 @@ test('the code sits on a raised paper panel, lettered in Manrope, and the free c
   await expect
     .poll(() => scan(card))
     .toBe(`http://${WEB_HOST}/@${handle}?src=qr`);
-  // The page's own Manrope (next/font names it "manrope"), with Arial only behind it.
-  const fonts = await page.evaluate(
-    () => (window as unknown as { canvasFonts: string[] }).canvasFonts,
-  );
-  expect(fonts.length).toBeGreaterThan(0);
-  for (const font of fonts)
+  // The page's own Manrope (next/font names it "manrope"), with Arial only behind it. A slow font
+  // may give one first draw in Arial; the card is then redrawn in Manrope, and nothing after that
+  // goes back to Arial.
+  const fonts = () =>
+    page.evaluate(
+      () => (window as unknown as { canvasFonts: string[] }).canvasFonts,
+    );
+  await expect
+    .poll(async () => (await fonts()).at(-1))
+    .toMatch(/^\d00 \d+px "manrope".*, Arial, sans-serif$/);
+  const seen = await fonts();
+  const first = seen.findIndex((font) => font.includes('"manrope"'));
+  for (const font of seen.slice(first))
     expect(font).toMatch(/^\d00 \d+px "manrope".*, Arial, sans-serif$/);
   // A Pro design's plate is on the same panel.
   await page.getByRole('radio', { name: /Heart modules/ }).check();

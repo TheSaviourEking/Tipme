@@ -10,7 +10,7 @@ import {
 import { FREE_QR_STYLES } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
-import { interfaceFont } from '@/lib/brand-font';
+import { interfaceFont, interfaceFontWhenReady } from '@/lib/brand-font';
 import { drawQrCard } from '@/lib/qr-card';
 import { track } from '@/lib/analytics';
 import { styleById } from '@/lib/qr-render';
@@ -45,7 +45,13 @@ export default function PrintCardPage() {
   useEffect(() => {
     let live = true;
     void interfaceFont().then((family) => {
-      if (live) setFont({ family });
+      if (!live) return;
+      setFont({ family });
+      // A slow font: the card is drawn in Arial now and redrawn in the page's font once it arrives.
+      if (!family)
+        void interfaceFontWhenReady().then((late) => {
+          if (live && late) setFont({ family: late });
+        });
     });
     return () => {
       live = false;

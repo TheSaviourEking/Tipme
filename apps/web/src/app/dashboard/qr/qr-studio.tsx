@@ -17,7 +17,7 @@ import { Button, Surface } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { interfaceFont } from '@/lib/brand-font';
+import { interfaceFont, interfaceFontWhenReady } from '@/lib/brand-font';
 import { drawQrCard } from '@/lib/qr-card';
 import { groupDesigns } from '@/lib/qr-groups';
 import { frameCss, QR_STYLES, styleById } from '@/lib/qr-render';
@@ -79,7 +79,13 @@ export function QrStudio() {
   useEffect(() => {
     let live = true;
     void interfaceFont().then((family) => {
-      if (live) setFont({ family });
+      if (!live) return;
+      setFont({ family });
+      // A slow font: the card is drawn in Arial now and redrawn in the page's font once it arrives.
+      if (!family)
+        void interfaceFontWhenReady().then((late) => {
+          if (live && late) setFont({ family: late });
+        });
     });
     return () => {
       live = false;
