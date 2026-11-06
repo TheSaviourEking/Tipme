@@ -16,6 +16,7 @@ export default function PrivacyPlaceholder() {
         'What is collected from payers and recipients, including page photos and covers, and why',
         'How long data is kept and how deletion works',
         'Which service providers process data, and where',
+        'Recognising a returning supporter, only if they choose it, and how to stop',
         'Consent for analytics, and your rights',
       ]}
     />

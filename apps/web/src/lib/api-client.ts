@@ -72,6 +72,44 @@ export const tipStatus = (tipId: string, token: string) =>
     headers: { authorization: `Bearer ${token}` },
   });
 
+/**
+ * "Stop {name} recognising me", with the receipt's token. 204 whether or not anything was left to
+ * stop; a wrong token is 404, like the receipt itself.
+ */
+export async function stopRecognition(
+  tipId: string,
+  token: string,
+): Promise<{ ok: true } | ApiFailure> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_ORIGIN}/v1/tips/${encodeURIComponent(tipId)}/recognition/stop`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+        cache: 'no-store',
+        credentials:
+          process.env.NEXT_PUBLIC_PREVIEW_GATE === 'on'
+            ? 'include'
+            : API_ORIGIN === ''
+              ? 'same-origin'
+              : 'omit',
+      },
+    );
+  } catch {
+    return { ok: false, status: 0, code: 'NETWORK' };
+  }
+  if (response.status === 204) return { ok: true };
+  const body = (await response.json().catch(() => null)) as {
+    error?: { code?: string };
+  } | null;
+  return {
+    ok: false,
+    status: response.status,
+    code: body?.error?.code ?? 'INTERNAL_ERROR',
+  };
+}
+
 export const mockCheckoutSummary = (reference: string) =>
   call<{ amountMinor: string; currency: string; recipientDisplayName: string }>(
     `/v1/mock-provider/checkout/${encodeURIComponent(reference)}`,

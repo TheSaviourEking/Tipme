@@ -64,3 +64,11 @@ test('sensitive fields never reach the log stream', () => {
     assert.ok(!output.includes(secret), `leaked ${secret}`);
   }
 });
+
+test("a supporter's recognition key never reaches the log stream", () => {
+  const { lines, stream } = collect();
+  const log = createLogger({ service: 'tipme-test', destination: stream });
+  const key = 'k'.repeat(42) + 'Q';
+  log.info({ supporterKey: key, request: { supporterKey: key } }, 'tip');
+  assert.ok(!JSON.stringify(lines).includes(key));
+});

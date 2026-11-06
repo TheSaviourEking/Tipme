@@ -2089,3 +2089,44 @@ export const messageFlags = pgTable(
     ),
   ],
 );
+
+/**
+ * Repeat supporters (Pro additions, option (a)): a supporter who ticked "Let {recipient} recognise
+ * me next time". One row per recipient and browser key; only the key's SHA-256 is stored, never
+ * the key, and never a card, IP, device or browser fingerprint. Keys are per recipient, so these
+ * rows cannot link one supporter's tips across recipients. Kept apart from the money tables:
+ * deleting a row ("Stop {name} recognising me") never touches a tip.
+ */
+export const supporters = pgTable(
+  'supporters',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    keyHash: bytea('key_hash').notNull(),
+    // The name they typed most recently with this key (cleaned like tips.payer_display_label).
+    label: text('label').notNull(),
+    firstAt: timestamp('first_at', { withTimezone: true }).notNull(),
+    lastAt: timestamp('last_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('supporters_key_hash_length', sql`octet_length(key_hash) = 32`),
+    check('supporters_label_length', sql`char_length(label) BETWEEN 1 AND 60`),
+    unique('supporters_profile_key').on(table.profileId, table.keyHash),
+  ],
+);
+
+/** Which tips an opted-in supporter made. Unpaid rows are harmless: only paid tips are counted. */
+export const tipSupporters = pgTable(
+  'tip_supporters',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => tips.id),
+    supporterId: uuid('supporter_id')
+      .notNull()
+      .references(() => supporters.id, { onDelete: 'cascade' }),
+  },
+  (table) => [index('tip_supporters_supporter').on(table.supporterId)],
+);

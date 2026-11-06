@@ -67,6 +67,7 @@ import {
   emailCodes,
   signInCodes,
   signInLockouts,
+  supporters,
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
@@ -964,6 +965,8 @@ export function publicProfile(
     };
     /** False while ADULT_PLATFORM_LINKS is off: OnlyFans and Fansly links don't show. */
     adultLinks?: boolean;
+    /** True while SUPPORTER_RECOGNITION is on: a Pro page then offers the recognition tick box. */
+    recognition?: boolean;
   } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
@@ -1015,6 +1018,9 @@ export function publicProfile(
       acceptingTips,
       cover: resolveCover(profile),
       plan: profile.plan as PagePlan,
+      ...(options.recognition === true && profile.plan === 'pro'
+        ? { recognition: true as const }
+        : {}),
     };
   });
 }
@@ -1122,6 +1128,8 @@ export function deleteAccount(
             thanksSigned: false,
           })
           .where(eq(profiles.id, row.id));
+        // Opted-in supporters of this page go with it (their tip links cascade); the tips stay.
+        await tx.delete(supporters).where(eq(supporters.profileId, row.id));
         // The photo is personal data too: its bytes go with the page (PR-013).
         await tx
           .delete(profileAvatars)

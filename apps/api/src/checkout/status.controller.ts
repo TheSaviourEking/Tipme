@@ -2,15 +2,18 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   Inject,
   NotFoundException,
   Param,
+  Post,
   Res,
 } from '@nestjs/common';
 import type { ApiDataResponse, TipStatusView } from '@tipme/contracts';
 import {
   claimReceiptCheck,
   reconcileAttempts,
+  stopRecognition,
   tipStatusView,
 } from '@tipme/database';
 import type { BachsProvider } from '@tipme/payments';
@@ -45,6 +48,33 @@ export class StatusController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<ApiDataResponse<TipStatusView>> {
     response.setHeader('Cache-Control', 'private, no-store');
+    this.requireToken(tipId, authorization);
+    await this.askBachs(tipId);
+    const view = await tipStatusView(this.database.db, tipId, new Date());
+    if (!view) throw new NotFoundException();
+    return { data: view };
+  }
+
+  /**
+   * "Stop {name} recognising me" (repeat supporters), from any receipt with its status token. The
+   * tip's supporter goes, and with it the grouping of all their past tips to this recipient; the
+   * tips stay. 204 whether or not there was anything to stop, so it is safe to repeat. It works
+   * whatever SUPPORTER_RECOGNITION says: stopping is always the supporter's to do.
+   */
+  @Post(':tipId/recognition/stop')
+  @HttpCode(204)
+  async stopRecognition(
+    @Param('tipId') tipId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    response.setHeader('Cache-Control', 'private, no-store');
+    this.requireToken(tipId, authorization);
+    await stopRecognition(this.database.db, tipId);
+  }
+
+  /** A wrong or missing token is indistinguishable from an unknown tip: 404 either way. */
+  private requireToken(tipId: string, authorization: string | undefined) {
     const token = /^Bearer ([A-Za-z0-9_-]{1,128})$/.exec(
       authorization ?? '',
     )?.[1];
@@ -54,10 +84,6 @@ export class StatusController {
       !verifyStatusToken(this.config.STATUS_TOKEN_SECRET, tipId, token)
     )
       throw new NotFoundException();
-    await this.askBachs(tipId);
-    const view = await tipStatusView(this.database.db, tipId, new Date());
-    if (!view) throw new NotFoundException();
-    return { data: view };
   }
 
   /**

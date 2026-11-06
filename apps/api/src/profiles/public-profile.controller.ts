@@ -53,6 +53,7 @@ export class PublicProfileController {
     const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
     const page = await publicProfile(this.database.db, handle, {
       adultLinks: this.config.ADULT_PLATFORM_LINKS,
+      recognition: this.config.SUPPORTER_RECOGNITION,
       ...(environment
         ? { requiredAccount: { provider: 'bachs', environment } }
         : {}),

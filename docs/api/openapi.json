@@ -10513,6 +10513,10 @@
                   "noteMayShow": {
                     "type": "boolean",
                     "const": true
+                  },
+                  "supporterKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
                   }
                 },
                 "required": [
@@ -10610,6 +10614,40 @@
         },
         "x-tipme-access": "public",
         "x-tipme-rate-limit": "quotes"
+      }
+    },
+    "/v1/tips/{tipId}/recognition/stop": {
+      "post": {
+        "operationId": "Status.stopRecognition",
+        "tags": [
+          "Status"
+        ],
+        "parameters": [
+          {
+            "name": "tipId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done; no body."
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "status-token"
       }
     },
     "/v1/tips/{tipId}/status": {

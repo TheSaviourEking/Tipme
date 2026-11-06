@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import type { TipStatusView } from '@tipme/contracts';
+import { firstNameOf, type TipStatusView } from '@tipme/contracts';
 import { ActionLink, Button, Card, Skeleton, Slip, Surface } from '@tipme/ui';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
@@ -17,6 +17,8 @@ import { ThanksSlip } from '@/components/thanks-slip';
 import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
 import { nextCheckDelay } from '@/lib/status-polling';
+import { forgetSupporterKeys } from '@/lib/supporter-keys';
+import { RecognitionChoice } from './recognition-choice';
 import { onReconnect } from '@/lib/connection';
 import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { useOnline } from '@/components/use-online';
@@ -168,6 +170,9 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
   const forget = () => {
     try {
       forgetMyTips(localStorage);
+      // Only this browser's copy: a recipient keeps seeing past tips grouped until the supporter
+      // uses "Stop {name} recognising me".
+      forgetSupporterKeys(localStorage);
     } catch {
       // Nothing stored.
     }
@@ -226,7 +231,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
     <>
       {forgotten && (
         <p className="tm-hint" role="status">
-          Forgotten. This phone no longer remembers your tips.
+          Forgotten. This phone no longer remembers your tips or keys.
         </p>
       )}
       {(noAnswer || (!online && !FINAL.has(tip.state))) && (
@@ -366,9 +371,20 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
           <ActionLink variant="continue" href={profile}>
             Done
           </ActionLink>
-          {celebration && (
+          {/* The supporter's choices about this tip. Older APIs send no `recognised`. */}
+          {tip.recognised && token && (
+            <section className="tip-choices" aria-label="Your choices">
+              <RecognitionChoice
+                tipId={tipId}
+                token={token}
+                handle={tip.recipient.handle}
+                name={firstNameOf(name)}
+              />
+            </section>
+          )}
+          {(celebration || tip.recognised) && !forgotten && (
             <Button variant="quiet" onClick={forget}>
-              Forget my tips on this phone
+              Forget my tips and keys on this phone
             </Button>
           )}
         </Surface>

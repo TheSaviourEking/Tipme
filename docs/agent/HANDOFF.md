@@ -40,6 +40,15 @@
 - No fee, minimum, quote, checkout or ledger change. No regulatory decision is implied.
 - Evidence: `.superpowers/program/miy-b-report.md` (main checkout).
 
+# Current handoff — repeat supporters PR 3 (6 November 2026)
+
+- Branch `feat/repeat-supporters`, test lane 8, not pushed. Additive migration `0078_supporters` (two new tables, no column on any money table), generated with drizzle-kit after rebuilding `@tipme/contracts`. If another migration merges first, regenerate it as the next number; never rename it.
+- Deploy order: the web reads `recognition` and `recognised` as optional, so the web can go first. The intent request is `.strict()`: after an API rollback to a version without `supporterKey`, a tab that ticked the box gets a 400 (untick and retry works), as with `noteMayShow`.
+- Fingerprints of requests without a key (or without a name) are byte-identical to dev's (test). A key adds `'s', sha256hex` to the fingerprint, so adding or changing a key on a replayed idempotency key is a conflict.
+- `SUPPORTER_RECOGNITION` (default `on`) is wired into both compose files and the env examples. D-07 is open: whether production keeps it on is the owner's call (`docs/runbooks/supporter-recognition.md`).
+- Not done here: the recipient's "Your supporters" list (PR 4); the Pro additions board copy and its PR 1 decisions parts (PR 1, Task 1.0).
+- Verified: commands and counts in `.superpowers/program/pro3-report.md`.
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.
