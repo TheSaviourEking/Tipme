@@ -6,6 +6,7 @@ import { Button, InputField } from '@tipme/ui';
 import { CodeField } from '@/components/account/code-field';
 import { apiFetch, deviceLabel } from '@/lib/session-client';
 import { onReconnect, sendWithOneRetry } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
 
 /** a•••@example.com: enough to recognise the address, not to read it over a shoulder. */
 const maskEmail = (email: string) => {
@@ -107,11 +108,15 @@ export function EmailCodeForm({
     const used = firstWasNetwork && result.code === 'CODE_INVALID';
     setCodeUsed(used);
     setError(
-      result.code === 'SIGN_IN_LOCKED'
-        ? 'Too many wrong codes. Please wait 15 minutes and try again.'
-        : result.code === 'CODE_INVALID'
-          ? 'That code isn’t right or has expired. Check it, or send a new one.'
-          : 'We couldn’t check the code. Please try again.',
+      used
+        ? CONNECTION_COPY.signInCodeUsed
+        : result.code === 'SIGN_IN_LOCKED'
+          ? 'Too many wrong codes. Please wait 15 minutes and try again.'
+          : result.code === 'CODE_INVALID'
+            ? 'That code isn’t right or has expired. Check it, or send a new one.'
+            : result.code === 'NETWORK'
+              ? CONNECTION_COPY.signInDropped
+              : CONNECTION_COPY.ourSide,
     );
   };
 

@@ -48,9 +48,10 @@ test('on the tip form the safe line is tied to a tip that never reached TipMe', 
     join(src, 'components/appreciation-form.tsx'),
     'utf8',
   );
+  // Shown unless the tip reached TipMe, or the words already say it (CONNECTION_COPY.tipDropped).
   assert.match(
     form,
-    /safe=\{reachedUs \? undefined : 'You haven’t paid anything\.'\}/,
+    /safe=\{\s*reachedUs \|\| notice === CONNECTION_COPY\.tipDropped\s*\? undefined\s*: 'You haven’t paid anything\.'\s*\}/,
   );
   assert.match(form, /setReachedUs\(result\.code !== 'NETWORK'\)/);
 });

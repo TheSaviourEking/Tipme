@@ -18,6 +18,7 @@ import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
 import { nextCheckDelay } from '@/lib/status-polling';
 import { onReconnect } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { useOnline } from '@/components/use-online';
 import {
   forgetMyTips,
@@ -230,7 +231,9 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
       )}
       {(noAnswer || (!online && !FINAL.has(tip.state))) && (
         <Slip tone="error" title="Connection lost">
-          We’ll keep trying to reach TipMe.
+          {online
+            ? CONNECTION_COPY.receiptNoAnswer
+            : CONNECTION_COPY.receiptOffline}
         </Slip>
       )}
       {stopped && !FINAL.has(tip.state) && (

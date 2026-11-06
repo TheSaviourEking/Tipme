@@ -6,6 +6,7 @@ import {
   signInWithEmail,
   signUpRecipient,
 } from './helpers';
+import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 
 test('a new recipient signs up, claims a handle and controls whether the page is live', async ({
   page,
@@ -294,7 +295,7 @@ test('a recovery code pasted with spaces or dashes still fills all six cells', a
 });
 
 // States plan, Task 16: one quiet retry for the code check, never for sending a code.
-const SIGN_IN_CODE_USED = /send a new/i;
+const SIGN_IN_CODE_USED = CONNECTION_COPY.signInCodeUsed;
 
 test('a dropped code check is retried once quietly and signs in', async ({
   page,
@@ -355,4 +356,22 @@ test('sending a code is never retried quietly', async ({ page }, testInfo) => {
   ).toBeVisible();
   await page.waitForTimeout(1500);
   expect(sends).toBe(1);
+});
+
+test('a code check dropped twice says the connection dropped', async ({
+  page,
+}, testInfo) => {
+  const { email } = identity(testInfo);
+  let checks = 0;
+  await page.route('**/v1/auth/verify', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    checks += 1;
+    return route.abort();
+  });
+  await signInWithEmail(page, email, '/sign-up');
+  await expect(
+    page.getByRole('alert').filter({ hasText: CONNECTION_COPY.signInDropped }),
+  ).toBeVisible();
+  await expect(page.getByText(/your code still works/i)).toHaveCount(0);
+  expect(checks).toBe(2);
 });

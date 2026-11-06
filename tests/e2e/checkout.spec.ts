@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { enrolOwner } from './ops-helpers';
+import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 async function expectAccessible(page: Page) {
@@ -497,7 +498,7 @@ test('a receipt that loses the API while waiting shows the Connection lost slip,
   await page.route('**/v1/tips/*/status', (route) => route.abort());
   const slip = page.locator('.tm-slip').filter({ hasText: 'Connection lost' });
   await expect(slip).toBeVisible();
-  await expect(slip).toContainText('We’ll keep trying to reach TipMe.');
+  await expect(slip).toContainText(CONNECTION_COPY.receiptNoAnswer);
   await expect(slip).toHaveAttribute('role', 'alert');
   await expect(page.locator('.tm-notice')).toHaveCount(0);
   await expectAccessible(page);
@@ -525,6 +526,7 @@ test('offline on the receipt: it checks again at once on reconnect', async ({
   await context.setOffline(true);
   const slip = page.locator('.tm-slip').filter({ hasText: 'Connection lost' });
   await expect(slip).toBeVisible();
+  await expect(slip).toContainText(CONNECTION_COPY.receiptOffline);
   await page.waitForTimeout(2500);
   let checks = 0;
   page.on('request', (request) => {
@@ -642,11 +644,7 @@ test('minor: a failed refresh after an expired quote is reported as a failure', 
   );
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await expect(
-    page
-      .locator('.tip-quote')
-      .getByText(
-        'We couldn’t reach TipMe. Check your connection and try again.',
-      ),
+    page.locator('.tip-quote').getByText(CONNECTION_COPY.tipDropped),
   ).toBeVisible();
   await expect(page.getByText(/Please tap Tip again/)).toHaveCount(0);
 });

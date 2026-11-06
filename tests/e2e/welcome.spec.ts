@@ -7,6 +7,7 @@ import {
   identity,
   signInWithEmail,
 } from './helpers';
+import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 
 async function claimNewPage(
   page: import('@playwright/test').Page,
@@ -166,7 +167,7 @@ test('a welcome save that fails keeps its error line red', async ({
   await page.getByRole('button', { name: 'Continue' }).click();
   const line = page
     .getByRole('alert')
-    .filter({ hasText: 'We couldn’t save that.' });
+    .filter({ hasText: CONNECTION_COPY.ourSide });
   await expect(line).toBeVisible();
   expect(await errorColour(line)).toBe(DANGER_TEXT);
 });
@@ -189,4 +190,19 @@ test('a dropped save is retried once quietly', async ({ page }, testInfo) => {
   // No failure was shown (Next's route announcer is an alert region too, so look for the line).
   await expect(page.locator('.tm-field-error')).toHaveCount(0);
   expect(patches).toBe(2);
+});
+
+test('a save dropped twice says to tap Continue', async ({
+  page,
+}, testInfo) => {
+  await claimNewPage(page, testInfo);
+  await page.route('**/v1/me/profile', (route) =>
+    route.request().method() === 'PATCH' ? route.abort() : route.fallback(),
+  );
+  await page.getByRole('button', { name: 'Let’s set up your page' }).click();
+  await page.getByLabel('Your name').fill('Kemi Bello');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(
+    page.getByRole('alert').filter({ hasText: CONNECTION_COPY.welcomeDropped }),
+  ).toBeVisible();
 });

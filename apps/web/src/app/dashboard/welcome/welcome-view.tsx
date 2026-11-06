@@ -17,6 +17,7 @@ import { Arrow } from '@/components/brand';
 import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
 import { onReconnect, sendWithOneRetry } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { useSiteHost } from '@/lib/site-host';
 
 type Step = 'hello' | 'about' | 'bio' | 'live' | 'done';
@@ -141,7 +142,9 @@ export function WelcomeView() {
       setError(
         result.fields?.includes('displayName')
           ? 'Add the name people know you by.'
-          : 'We couldn’t save that. Check your connection and try again.',
+          : result.code === 'NETWORK'
+            ? CONNECTION_COPY.welcomeDropped
+            : CONNECTION_COPY.ourSide,
       );
       return;
     }

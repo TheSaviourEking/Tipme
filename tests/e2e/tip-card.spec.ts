@@ -7,6 +7,7 @@ import {
   type Stack,
 } from './profile-fixtures';
 import { DANGER_TEXT, PLAIN_TEXT, errorColour, hasRedEdge } from './helpers';
+import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 
 // The owner-approved compact tip card (2 Nov 2026), on the built web app against the stand-in API.
 // Calls the browser makes for prices and tips are answered here: nothing reaches any provider.
@@ -761,11 +762,7 @@ test('a quote that fails on the tap offers a retry, and the retry pays once', as
   );
   await tipButton(page).click();
   await expect(
-    page
-      .locator('.tip-quote')
-      .getByText(
-        'We couldn’t reach TipMe. Check your connection and try again.',
-      ),
+    page.locator('.tip-quote').getByText(CONNECTION_COPY.tipDropped),
   ).toBeVisible();
   // No field edge beside this line, so it keeps its red until the public batch.
   expect(
@@ -900,12 +897,9 @@ test('a tip that could not reach TipMe shows the Not sent slip under Tip, keeps 
   const slip = page.locator('.appreciation-card .tm-slip');
   await expect(slip).toHaveAttribute('role', 'alert');
   await expect(slip).toContainText('Not sent yet');
-  await expect(slip).toContainText(
-    'We couldn’t reach TipMe. Check your connection and try again.',
-  );
-  await expect(slip.locator('.tm-slip__safe')).toHaveText(
-    'You haven’t paid anything.',
-  );
+  // Both tries dropped: the words carry the safe line themselves, so the slip doesn't repeat it.
+  await expect(slip).toContainText(CONNECTION_COPY.tipDropped);
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(0);
   await expect(page.locator('.appreciation-card .tm-notice')).toHaveCount(0);
   // It comes out from under the Tip button.
   const slipBox = await slip.boundingBox();
@@ -1057,9 +1051,9 @@ test('at 320px the flag and the slip fit, with long and unbroken names @mobile',
 });
 
 // States plan, Task 16: one quiet retry where it is safe, and a send on reconnect.
-const OFFLINE = 'We couldn’t reach TipMe. Check your connection and try again.';
-const DROPPED = OFFLINE;
-const DROPPED_SAFE_LINES = 1;
+const OFFLINE = CONNECTION_COPY.tipOffline;
+const DROPPED = CONNECTION_COPY.tipDropped;
+const DROPPED_SAFE_LINES = 0;
 /** Counts tip intents by idempotency key; `plan` says what each attempt does. */
 async function intentsBy(
   page: Page,
@@ -1100,7 +1094,7 @@ test('a dropped connection is retried once quietly with the same key, and the ti
   );
 });
 
-test('two dropped connections show the Not sent slip with the safe line; Try again replays the same key', async ({
+test('two dropped connections show the Not sent slip saying nothing was paid; Try again replays the same key', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1164,4 +1158,29 @@ test('changing the amount while offline cancels the send on reconnect', async ({
   expect(sent.quotes).toBe(0);
   expect(sent.intents).toHaveLength(0);
   expect(page.url()).toMatch(/\/@kemi$/);
+});
+
+// States plan, Task 17 (owner's answer to Q2): TipMe's own fault on the tip form.
+test('a fault on our side says so, and that nothing was paid', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  await page.route('**/v1/tip-intents', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    return route.fulfill({
+      status: 500,
+      headers: { 'access-control-allow-origin': origin },
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'INTERNAL_ERROR' } }),
+    });
+  });
+  await tipButton(page).click();
+  const slip = page.locator('.appreciation-card .tm-slip');
+  await expect(slip).toContainText(CONNECTION_COPY.ourSideTip);
+  await expect(slip).not.toContainText(/your money/i);
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(0);
 });

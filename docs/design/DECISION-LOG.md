@@ -1,5 +1,32 @@
 # Design decision log
 
+## 2026-11-05 — States: the connection-failure copy
+
+The owner approved changing the connection-failure wording (states plan
+`docs/superpowers/plans/2026-11-05-states.md`, Task 17) with the plan's proposed
+answers to its questions 1 to 4. The strings live in one file,
+`apps/web/src/lib/connection-copy.ts`. A copy decision, not a regulatory approval.
+
+1. **"Your code still works." is dropped** (it can't be proven: a first try that
+   reached TipMe has used the code). Sign-in, both tries dropped: "That didn’t go
+   through. The connection dropped before your code reached us. Tap Continue
+   again."
+2. **No "Your account and your money are safe."** TipMe's own faults say "This is
+   on our side. Try again in a minute." on sign-in and welcome. On the tip form,
+   before the redirect to the payment partner (the only way to pay), the line
+   also says "You haven’t paid anything.": "This is on our side. You haven’t paid
+   anything. Try again in a minute." Never on withdraw.
+3. **Welcome says "Tap Continue"**, as its buttons read: "That didn’t save. The
+   connection dropped. Tap Continue to try again."
+4. **A code used by a dropped first try:** "That code can’t be used now. Tap Send
+   a new code.", with the "Send a new code" key lit.
+
+Unchanged from the plan: "You’re offline. Connect to the internet and we’ll send
+your tip." (tip form, offline at the tap), "Your tip didn’t go through. The
+connection dropped before it reached us. You haven’t paid anything. Tap Tip to
+send it again." (tip form, both tries dropped), and on the receipt's "Connection
+lost" slip "We’ll check again in a moment." or "You’re offline.".
+
 ## 2026-11-05 — Bank picker: search your bank (A) and the name check on its own (C)
 
 The owner approved sections A and C of the `BankPicker` board

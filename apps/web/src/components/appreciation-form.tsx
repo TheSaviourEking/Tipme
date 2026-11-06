@@ -20,6 +20,7 @@ import { amountOptions, keyLayout } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
 import { onReconnect, sendWithOneRetry } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
@@ -42,8 +43,7 @@ const MESSAGE_LIMIT = 280;
 const NAME_LIMIT = 60;
 
 const failureMessage = (failure: ApiFailure, rangeText: string): string => {
-  if (failure.code === 'NETWORK')
-    return 'We couldn’t reach TipMe. Check your connection and try again.';
+  if (failure.code === 'NETWORK') return CONNECTION_COPY.tipDropped;
   if (failure.code === 'RATE_LIMITED')
     return 'That was a lot of tries. Please wait a minute, then try again.';
   if (failure.code === 'VALIDATION_FAILED')
@@ -60,7 +60,8 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
     return 'We couldn’t confirm whether your payment started. Please don’t tip again yet: wait a few minutes, and TipMe will check. Nothing is shown as paid until it is confirmed.';
   if (failure.code === 'DEPENDENCY_UNAVAILABLE')
     return 'The payment provider is unavailable right now. Nothing was charged. Please try again in a moment.';
-  return 'Something went wrong on our side. Please try again.';
+  // TipMe's own fault, before any redirect to the payment partner: nothing was paid (Q2).
+  return CONNECTION_COPY.ourSideTip;
 };
 
 export function AppreciationForm({
@@ -204,7 +205,7 @@ export function AppreciationForm({
   const waitForConnection = () => {
     disarm();
     setReachedUs(false);
-    setNotice(failureMessage({ ok: false, status: 0, code: 'NETWORK' }, ''));
+    setNotice(CONNECTION_COPY.tipOffline);
     armed.current = onReconnect(window, () => {
       armed.current = null;
       form.current?.requestSubmit();
@@ -759,7 +760,12 @@ export function AppreciationForm({
             tone="error"
             stamp={'Not\nsent'}
             title="Not sent yet"
-            safe={reachedUs ? undefined : 'You haven’t paid anything.'}
+            // tipDropped says it itself; the offline words don't, and nothing was sent.
+            safe={
+              reachedUs || notice === CONNECTION_COPY.tipDropped
+                ? undefined
+                : 'You haven’t paid anything.'
+            }
             actions={
               <Button
                 variant="continue"
