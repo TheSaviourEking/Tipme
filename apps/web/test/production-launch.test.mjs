@@ -85,3 +85,27 @@ test('legacy profile redirects run after launch and retain only the QR source ma
   );
   assert.equal(legacyProfileTarget('/@ada', new URLSearchParams()), null);
 });
+
+const ICON_PATHS = [
+  '/manifest.webmanifest',
+  '/icons/192.png',
+  '/icons/512-maskable.png',
+  // Next links it as /apple-icon?<hash>; the gate sees the path only.
+  '/apple-icon',
+];
+const ICON_LOOKALIKES = [
+  '/icons/64.png',
+  '/icons/../dashboard',
+  '/icons/%2e%2e/x',
+  '/manifest.webmanifest/x',
+  '/icons',
+  '/icons/192.png/x',
+  '/apple-icon/x',
+];
+
+test('before launch the manifest and the home-screen icons are exempt', () => {
+  const decide = (path) => launchDecision({ path, target, now: target - 1 });
+  for (const path of ICON_PATHS) assert.equal(decide(path), 'exempt', path);
+  for (const path of ICON_LOOKALIKES)
+    assert.equal(decide(path), 'rewrite', path);
+});

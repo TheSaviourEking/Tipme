@@ -12,6 +12,15 @@
 - Evidence and rulings: `.superpowers/program/c2-report.md` (main checkout).
 - Next: review, then PR 3 (Task 16, staff stream).
 
+# Current handoff — public boards PR 1, app icons (6 November 2026)
+
+- Branch `feat/app-icons`, test lane 9, from `origin/dev` at `246bebb2`, committed, not pushed.
+- `HEART_MARK` lives in `apps/web/src/lib/wordmark.ts` (so a node test can load it) and is re-exported by `brand.tsx`; `apps/web/test/brand-heart.test.mjs` fails if `icon.svg` drifts.
+- The icon route answers 404 itself for unknown names: `dynamicParams` is not compatible with `cacheComponents`. Both files prerender (`●` in the build output).
+- `next/og` ignores the CSS `inset` shorthand: absolutely placed layers need `top`, `left`, `width` and `height`.
+- Next links the Apple icon as `/apple-icon?<hash>`; the gates exempt the path `/apple-icon` exactly.
+- Evidence: `.superpowers/program/pub6-report.md`, PR 1 section (main checkout); PNGs in `.superpowers/program/pub1-icons/`.
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.
