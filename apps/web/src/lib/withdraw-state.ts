@@ -1,5 +1,6 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
 import { FEE_POLICY_V1 } from '@tipme/domain';
+import type { LampTone } from '@tipme/ui';
 import { formatNaira } from './demo-amount.ts';
 
 const SETTINGS = '/dashboard/settings';
@@ -17,9 +18,18 @@ export interface WithdrawState {
     href?: string;
     linkLabel?: string;
   };
-  /** The provider itself is checking a withdrawal already under way. */
+  /** Our payment partner is checking a withdrawal already under way. */
   review: string | null;
+  /**
+   * Where the notice's words go (WithdrawRedesign): on the instrument (one line, no box), in a
+   * slip, or a standing warning.
+   */
+  place: 'instrument' | 'slip' | 'warning';
+  /** The ink stamp on the slip, when there is one. */
+  stamp?: string;
 }
+
+const NOTHING_NOW = 'Nothing to withdraw right now';
 
 const unavailable = {
   title: 'We can’t check your balance',
@@ -39,18 +49,19 @@ export function withdrawState(input: {
   needsCheck?: boolean;
 }): WithdrawState {
   const { quote } = input;
-  const review = quote?.inReview
-    ? 'Your withdrawal is being checked by the payment provider.'
-    : null;
+  // The same words as an open row in the ledger (WithdrawRedesign, "Copy to settle").
+  const review = quote?.inReview ? 'Our payment partner is checking it.' : null;
   const blocked = (
     kind: WithdrawState['kind'],
     notice: WithdrawState['notice'],
+    place: WithdrawState['place'] = 'instrument',
   ): WithdrawState => ({
     kind,
     canWithdraw: false,
     showForm: false,
     notice,
     review,
+    place,
   });
   if (!input.withdrawalsAvailable)
     return blocked('collected_elsewhere', {
@@ -69,6 +80,7 @@ export function withdrawState(input: {
         tone: 'neutral',
       },
       review,
+      place: 'instrument',
     };
   if (!quote || quote.state === 'provider_unavailable')
     return {
@@ -77,20 +89,29 @@ export function withdrawState(input: {
       showForm: true,
       notice: unavailable,
       review,
+      place: 'instrument',
     };
   switch (quote.state) {
     case 'paused':
       if (quote.reason === 'switched_off')
-        return blocked('paused', {
+        return blocked(
+          'paused',
+          {
+            title: 'Withdrawals are paused',
+            body: 'Withdrawals are paused for now. Your balance is safe.',
+            tone: 'neutral',
+          },
+          'warning',
+        );
+      return blocked(
+        'paused',
+        {
           title: 'Withdrawals are paused',
-          body: 'Withdrawals are paused for now. Your balance is safe.',
+          body: 'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
           tone: 'neutral',
-        });
-      return blocked('paused', {
-        title: 'Withdrawals are paused',
-        body: 'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
-        tone: 'neutral',
-      });
+        },
+        'warning',
+      );
     case 'setup_needed':
       return blocked('setup_needed', {
         title: 'Finish your setup',
@@ -100,13 +121,20 @@ export function withdrawState(input: {
         linkLabel: 'Continue setup',
       });
     case 'no_destination':
-      return blocked('no_destination', {
-        title: 'Add your bank account',
-        body: 'Add the bank account you want to be paid to.',
-        tone: 'neutral',
-        href: `${SETTINGS}#get-paid`,
-        linkLabel: 'Go to Get paid',
-      });
+      return {
+        ...blocked(
+          'no_destination',
+          {
+            title: 'Add your bank account',
+            body: 'Add the bank account you want to be paid to.',
+            tone: 'neutral',
+            href: `${SETTINGS}#get-paid`,
+            linkLabel: 'Go to Get paid',
+          },
+          'slip',
+        ),
+        stamp: 'Needs\na bank',
+      };
     case 'destination_pending':
       return blocked('destination_pending', {
         title: 'Your bank account is being checked',
@@ -120,8 +148,9 @@ export function withdrawState(input: {
           canWithdraw: false,
           showForm: true,
           review,
+          place: 'instrument',
           notice: {
-            title: 'Nothing to withdraw right now',
+            title: NOTHING_NOW,
             body:
               quote.ledgerMinor === '0'
                 ? 'You have nothing to withdraw yet.'
@@ -129,22 +158,62 @@ export function withdrawState(input: {
             tone: 'neutral',
           },
         };
-      const fee =
-        quote.feeMinor === '0'
-          ? ''
-          : ` TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee.`;
+      const fee = withdrawFee(quote);
       return {
         kind: 'ready',
         canWithdraw: true,
         showForm: true,
         review,
+        place: 'instrument',
         notice: {
           title: 'Ready to withdraw',
-          body: `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.${fee}`,
+          body: `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.${fee ? ` ${fee}` : ''}`,
           tone: 'neutral',
         },
       };
     }
+  }
+}
+
+/**
+ * Who pays the transfer fee, when the quote has one: TipMe does (buildPayoutFeePosting books it as
+ * TipMe's expense), so it is never taken from the recipient. Null for no fee or no ready quote.
+ */
+export function withdrawFee(
+  quote: WithdrawalQuoteResponse | null,
+): string | null {
+  if (quote?.state !== 'ready' || quote.feeMinor === '0') return null;
+  return `TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee.`;
+}
+
+/**
+ * The one lamp line on the instrument (WithdrawRedesign §1–2), only from the state and what can go
+ * now (withdrawableNow()). It states a figure or a condition, never a money reassurance.
+ */
+export function withdrawLamp(
+  state: WithdrawState,
+  withdrawableMinor: bigint,
+): { tone: LampTone; text: string } {
+  switch (state.kind) {
+    case 'ready':
+      return withdrawableMinor > BigInt(0)
+        ? {
+            tone: 'purple',
+            text: `Ready to withdraw ${formatNaira(withdrawableMinor)}`,
+          }
+        : { tone: 'off', text: NOTHING_NOW };
+    case 'provider_unavailable':
+    case 'destination_pending':
+    // A live update changed something only a full quote can size: the person checks again.
+    case 'needs_check':
+      return { tone: 'amber', text: state.notice.title };
+    case 'no_destination':
+      return { tone: 'off', text: 'Add a bank to withdraw' };
+    case 'paused':
+      return { tone: 'amber', text: 'Paused for now' };
+    case 'setup_needed':
+    case 'collected_elsewhere':
+      return { tone: 'off', text: state.notice.title };
   }
 }
 
@@ -196,6 +265,32 @@ export function withdrawRefusal(code: string | undefined): {
 }
 
 /**
+ * The refusals whose words go to a "not confirmed" slip instead of the amount field: they may have
+ * followed a request that arrived, so they say nothing about money or the balance. Null for the
+ * refusals the field or the page itself explains. The words are withdrawRefusal's, split at the
+ * full stop.
+ */
+export function withdrawUnsure(
+  code: string | undefined,
+): { title: string; body: string } | null {
+  if (code === 'IDEMPOTENCY_CONFLICT')
+    return {
+      title: 'This withdrawal may already be on its way',
+      body: 'Check your dashboard before asking again.',
+    };
+  if (
+    (code !== undefined && SHOWN_BY_PAGE.has(code)) ||
+    code === 'INSUFFICIENT_BALANCE' ||
+    code === 'WITHDRAWAL_TOO_SMALL'
+  )
+    return null;
+  return {
+    title: 'We couldn’t confirm your withdrawal',
+    body: 'Check your dashboard before trying again.',
+  };
+}
+
+/**
  * The most that can be withdrawn right now: the ledger balance, and no more than the quote allows.
  * Zero whenever the quote refuses (paused, setup needed, tips still settling, no quote at all).
  * Withdraw and the dashboard both use this, so neither shows more as ready than the quote allows.
@@ -212,4 +307,23 @@ export function withdrawableNow(input: {
   const available = BigInt(input.availableMinor);
   const allowed = BigInt(quote.withdrawableMinor);
   return allowed < available ? allowed : available;
+}
+
+/** What the field says for an amount below the smallest withdrawal (WithdrawRedesign §2). */
+export const TOO_SMALL = `Too small. The smallest withdrawal is ${formatNaira(FEE_POLICY_V1.minWithdrawalMinor)}, or your whole balance if it’s less.`;
+
+/**
+ * The amount is below the smallest withdrawal and isn't the whole of what can go now
+ * (FEE_POLICY_V1): the server would refuse it, so the field says so before anything is sent.
+ */
+export function belowMinimum(
+  chosen: bigint | null,
+  withdrawable: bigint,
+): boolean {
+  return (
+    chosen !== null &&
+    chosen > BigInt(0) &&
+    chosen < FEE_POLICY_V1.minWithdrawalMinor &&
+    chosen !== withdrawable
+  );
 }

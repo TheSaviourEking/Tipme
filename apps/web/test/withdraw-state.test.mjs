@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  TOO_SMALL,
+  belowMinimum,
   withdrawableNow,
+  withdrawFee,
+  withdrawLamp,
   withdrawRefusal,
   withdrawState,
+  withdrawUnsure,
 } from '../src/lib/withdraw-state.ts';
 
 const ready = (over = {}) => ({
@@ -83,7 +88,7 @@ test('every other state has its own words and no Withdraw', () => {
 });
 
 test('a payout in review is said in any state, without stopping another', () => {
-  const review = 'Your withdrawal is being checked by the payment provider.';
+  const review = 'Our payment partner is checking it.';
   assert.equal(of(ready({ inReview: true })).review, review);
   assert.equal(of(ready({ inReview: true })).canWithdraw, true);
   assert.equal(
@@ -216,5 +221,159 @@ test('after a live change TipMe could not size, the page asks the person to chec
       needsCheck: true,
     }).kind,
     'collected_elsewhere',
+  );
+});
+
+/** One view per row of the plan's mapping (W1 Task 2). */
+const allStates = () => [
+  of(ready()),
+  of(ready({ withdrawableMinor: '0', ledgerMinor: '0', providerMinor: '0' })),
+  of({ state: 'provider_unavailable', inReview: false }),
+  of(null),
+  of({ state: 'no_destination', inReview: false }),
+  of({ state: 'setup_needed', requirementsDue: [], inReview: false }),
+  of({ state: 'destination_pending', inReview: false }),
+  of({ state: 'paused', reason: 'switched_off', inReview: false }),
+  of({ state: 'paused', reason: 'held', inReview: false }),
+  of({ state: 'provider_unavailable', inReview: false }, false),
+];
+
+test('the lamp line follows the state, and ready says what can go now', () => {
+  const r = of(ready({ withdrawableMinor: '540000' }));
+  assert.deepEqual(withdrawLamp(r, 540000n), {
+    tone: 'purple',
+    text: 'Ready to withdraw ₦5,400',
+  });
+  // The most that can go now, not the quote: withdrawableNow() is passed in.
+  assert.equal(withdrawLamp(r, 300000n).text, 'Ready to withdraw ₦3,000');
+  assert.equal(r.place, 'instrument');
+  assert.deepEqual(withdrawLamp(r, 0n), {
+    tone: 'off',
+    text: 'Nothing to withdraw right now',
+  });
+});
+
+test('no bank is a stamped slip; a pause is a standing warning; the rest stay on the instrument', () => {
+  const bank = of({ state: 'no_destination', inReview: false });
+  assert.equal(bank.place, 'slip');
+  assert.equal(bank.stamp, 'Needs\na bank');
+  assert.deepEqual(withdrawLamp(bank, 0n), {
+    tone: 'off',
+    text: 'Add a bank to withdraw',
+  });
+  for (const reason of ['switched_off', 'held']) {
+    const paused = of({ state: 'paused', reason, inReview: false });
+    assert.equal(paused.place, 'warning');
+    assert.equal(paused.stamp, undefined);
+    assert.deepEqual(withdrawLamp(paused, 0n), {
+      tone: 'amber',
+      text: 'Paused for now',
+    });
+  }
+  for (const quote of [
+    { state: 'provider_unavailable' },
+    { state: 'setup_needed', requirementsDue: [] },
+    { state: 'destination_pending' },
+  ])
+    assert.equal(of({ inReview: false, ...quote }).place, 'instrument');
+  assert.deepEqual(
+    withdrawLamp(of({ state: 'provider_unavailable', inReview: false }), 0n),
+    { tone: 'amber', text: 'We can’t check your balance' },
+  );
+  assert.deepEqual(withdrawLamp(of(null), 0n), {
+    tone: 'amber',
+    text: 'We can’t check your balance',
+  });
+  assert.deepEqual(
+    withdrawLamp(
+      of({ state: 'setup_needed', requirementsDue: [], inReview: false }),
+      0n,
+    ),
+    { tone: 'off', text: 'Finish your setup' },
+  );
+  assert.deepEqual(
+    withdrawLamp(of({ state: 'destination_pending', inReview: false }), 0n),
+    { tone: 'amber', text: 'Your bank account is being checked' },
+  );
+  const elsewhere = of(
+    { state: 'provider_unavailable', inReview: false },
+    false,
+  );
+  assert.equal(elsewhere.place, 'instrument');
+  assert.deepEqual(withdrawLamp(elsewhere, 0n), {
+    tone: 'off',
+    text: 'Withdrawals aren’t available yet',
+  });
+});
+
+test('a lamp line never carries a money reassurance', () => {
+  for (const view of allStates())
+    for (const withdrawable of [0n, 540000n])
+      assert.doesNotMatch(
+        withdrawLamp(view, withdrawable).text,
+        /safe|protected|guarantee/i,
+      );
+});
+
+test('the review line names our payment partner, never the provider', () => {
+  const view = of(ready({ withdrawableMinor: '180000', inReview: true }));
+  assert.equal(view.review, 'Our payment partner is checking it.');
+});
+
+test('only the answers that may have followed a request are unsure, and they say nothing about money', () => {
+  assert.deepEqual(withdrawUnsure('IDEMPOTENCY_CONFLICT'), {
+    title: 'This withdrawal may already be on its way',
+    body: 'Check your dashboard before asking again.',
+  });
+  for (const code of [
+    undefined,
+    'INTERNAL_ERROR',
+    'NETWORK',
+    'DEPENDENCY_UNAVAILABLE',
+  ])
+    assert.deepEqual(withdrawUnsure(code), {
+      title: 'We couldn’t confirm your withdrawal',
+      body: 'Check your dashboard before trying again.',
+    });
+  for (const code of [
+    'INSUFFICIENT_BALANCE',
+    'WITHDRAWAL_TOO_SMALL',
+    'WITHDRAWALS_PAUSED',
+    'WITHDRAWALS_SWITCHED_OFF',
+    'PAYOUT_SETUP_NEEDED',
+    'PAYOUT_DESTINATION_NEEDED',
+    'PAYOUT_PROVIDER_UNAVAILABLE',
+    'WITHDRAWAL_UNAVAILABLE',
+  ])
+    assert.equal(withdrawUnsure(code), null);
+  for (const code of ['IDEMPOTENCY_CONFLICT', 'INTERNAL_ERROR']) {
+    const { title, body } = withdrawUnsure(code);
+    assert.doesNotMatch(`${title} ${body}`, /money|balance|paid|safe/i);
+  }
+});
+
+test('the unsure words are today’s sentence, split at the full stop', () => {
+  for (const code of ['IDEMPOTENCY_CONFLICT', 'INTERNAL_ERROR']) {
+    const { title, body } = withdrawUnsure(code);
+    assert.equal(`${title}. ${body}`, withdrawRefusal(code).message);
+  }
+});
+
+test('the fee line says who pays the transfer fee, and nothing when there is none', () => {
+  assert.equal(withdrawFee(ready()), 'TipMe pays the ₦50 transfer fee.');
+  assert.equal(withdrawFee(ready({ feeMinor: '0' })), null);
+  assert.equal(withdrawFee({ state: 'no_destination', inReview: false }), null);
+  assert.equal(withdrawFee(null), null);
+});
+
+test('below the minimum is only an amount under ₦2,000 that is not everything that can go', () => {
+  assert.equal(belowMinimum(150000n, 540000n), true);
+  assert.equal(belowMinimum(150000n, 150000n), false); // the whole of it, under the minimum: allowed
+  assert.equal(belowMinimum(200000n, 540000n), false);
+  assert.equal(belowMinimum(null, 540000n), false);
+  assert.equal(belowMinimum(0n, 540000n), false);
+  assert.equal(
+    TOO_SMALL,
+    'Too small. The smallest withdrawal is ₦2,000, or your whole balance if it’s less.',
   );
 });

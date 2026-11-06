@@ -145,5 +145,24 @@ export function ownerAttention({
 export const isPaymentAttention = (item: AttentionItem) =>
   item.id !== 'page_offline' && item.id !== 'add_recovery_email';
 
+/**
+ * The reminders this page shows (WithdrawRedesign, "What changes"). The recovery-email one shows
+ * on Home and Settings only: it protects the account, but nothing is stopping tips. Every other
+ * item stops the owner earning, so it shows everywhere. The nav dots keep the full list.
+ */
+export function attentionHere(
+  items: AttentionItem[] | null,
+  pathname: string,
+): AttentionItem[] | null {
+  if (items === null) return null;
+  const home =
+    pathname === '/dashboard' ||
+    pathname === SETTINGS ||
+    pathname.startsWith(`${SETTINGS}/`);
+  return home
+    ? items
+    : items.filter((item) => item.id !== 'add_recovery_email');
+}
+
 /** Fired after the recovery email changes, so the reminders update without navigating. */
 export const RECOVERY_EMAIL_CHANGED = 'tipme:recovery-email-changed';

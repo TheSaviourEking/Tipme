@@ -1,13 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  PLAIN_TEXT,
-  errorColour,
   expectAccessible,
   fitsViewport,
-  hasRedEdge,
   signUpRecipient,
   tipAsVisitor,
 } from './helpers';
+import { LONG_NAME, UNBROKEN_NAME } from './profile-fixtures';
 import {
   enrolOwner,
   noOtherStaff,
@@ -28,6 +26,31 @@ const fakeQuote = (page: Page, quote: Record<string, unknown>) =>
     route.fulfill({ json: { data: { inReview: false, ...quote } } }),
   );
 
+/** The dashboard's real answer, with the available balance set (no tips needed). */
+const fakeBalance = (page: Page, availableMinor: string) =>
+  page.route('**/v1/me/dashboard', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { data: { ...body.data, availableMinor } },
+    });
+  });
+
+const readyQuote = (over: Record<string, unknown> = {}) => ({
+  state: 'ready',
+  withdrawableMinor: '540000',
+  ledgerMinor: '540000',
+  providerMinor: '540000',
+  feeMinor: '0',
+  destination: { bankName: 'GTBank', last4: '1234' },
+  ...over,
+});
+
+const meter = (page: Page) => page.locator('.withdraw__meter');
+const TOO_SMALL =
+  'Too small. The smallest withdrawal is ₦2,000, or your whole balance if it’s less.';
+
 test('the withdraw page: ready, nothing yet, and a real pause', async ({
   page,
   browser,
@@ -41,11 +64,14 @@ test('the withdraw page: ready, nothing yet, and a real pause', async ({
 
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.reload();
-  await expect(
-    page.getByText(
-      /You can withdraw ₦1,800 to .+ ••\d{4}\. TipMe pays the ₦50 transfer fee\./,
-    ),
-  ).toBeVisible();
+  await expect(meter(page)).toContainText('Ready to withdraw ₦1,800');
+  await expect(meter(page)).toContainText('TipMe pays the ₦50 transfer fee.');
+  const chip = meter(page).locator('.withdraw__chip');
+  await expect(chip).toContainText(/to .+ ••\d{4}/);
+  await expect(chip.getByRole('link', { name: 'Change' })).toHaveAttribute(
+    'href',
+    '/dashboard/settings#get-paid',
+  );
   await expect(page.getByRole('button', { name: 'Withdraw' })).toBeEnabled();
   await expectAccessible(page);
 
@@ -70,11 +96,12 @@ test('the withdraw page: ready, nothing yet, and a real pause', async ({
     );
   });
   await page.reload();
-  await expect(
-    page.getByText(
-      'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
-    ),
-  ).toBeVisible();
+  const warning = page.locator('.tm-warning');
+  await expect(warning).toContainText(
+    'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
+  );
+  await expect(warning).toHaveAttribute('role', 'status');
+  await expect(meter(page)).toContainText('Paused for now');
   await expect(page.getByLabel('Amount (NGN)')).toHaveCount(0);
   await expectAccessible(page);
 });
@@ -122,6 +149,7 @@ test('the withdraw page says every state the provider can put it in', async ({
     await fakeQuote(page, quote);
     await page.goto('/dashboard/withdraw');
     await expect(page.getByText(copy)).toBeVisible();
+    await expect(page.locator('.tm-notice')).toHaveCount(0);
     if (form)
       await expect(
         page.getByRole('button', { name: 'Withdraw' }),
@@ -133,8 +161,12 @@ test('the withdraw page says every state the provider can put it in', async ({
   await page.unroute('**/v1/me/withdrawal-quote');
   await fakeQuote(page, { state: 'no_destination' });
   await page.goto('/dashboard/withdraw');
+  const slip = page.locator('.tm-slip');
+  await expect(slip).toContainText('Add your bank account');
+  await expect(slip).toHaveAttribute('role', 'status');
+  await expect(meter(page)).toContainText('Add a bank to withdraw');
   await expect(
-    page.getByRole('link', { name: 'Go to Get paid' }),
+    slip.getByRole('link', { name: 'Go to Get paid' }),
   ).toHaveAttribute('href', '/dashboard/settings#get-paid');
 
   await page.unroute('**/v1/me/withdrawal-quote');
@@ -148,9 +180,9 @@ test('the withdraw page says every state the provider can put it in', async ({
     destination: { bankName: 'GTBank', last4: '1234' },
   });
   await page.goto('/dashboard/withdraw');
-  await expect(
-    page.getByText('Your withdrawal is being checked by the payment provider.'),
-  ).toBeVisible();
+  await expect(meter(page)).toContainText(
+    'Our payment partner is checking it.',
+  );
 });
 
 test('an idempotency conflict never says to simply try again', async ({
@@ -170,11 +202,17 @@ test('an idempotency conflict never says to simply try again', async ({
   await page.goto('/dashboard/withdraw');
   await page.getByLabel('Amount (NGN)').fill('1800');
   await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
-  await expect(
-    page.getByText(
-      'This withdrawal may already be on its way. Check your dashboard before asking again.',
-    ),
-  ).toBeVisible();
+  const slip = page.locator('.tm-slip--unsure');
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(slip.locator('.tm-slip__title')).toHaveText(
+    'This withdrawal may already be on its way',
+  );
+  await expect(slip).toContainText('Check your dashboard before asking again.');
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(0);
+  await expect(page.getByLabel('Amount (NGN)')).not.toHaveAttribute(
+    'aria-invalid',
+    'true',
+  );
   await expect(page.getByText(/please try again/i)).toHaveCount(0);
 });
 
@@ -191,7 +229,7 @@ for (const [code, message] of [
     const { handle } = await signUpRecipient(page, testInfo);
     await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
     await page.goto('/dashboard/withdraw');
-    await expect(page.getByText(/You can withdraw ₦1,800 to /)).toBeVisible();
+    await expect(meter(page)).toContainText('Ready to withdraw ₦1,800');
     // What a fresh quote says by the time the request is refused.
     await fakeQuote(page, {
       state: 'ready',
@@ -217,11 +255,13 @@ for (const [code, message] of [
     await page.getByLabel('Amount (NGN)').fill('1800');
     await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
     await reloaded;
-    await expect(page.getByText(message)).toBeVisible();
-    await expect(
-      page.getByText(/You can withdraw ₦1,000 to GTBank ••1234/),
-    ).toBeVisible();
-    await expect(page.getByText(/You can withdraw ₦1,800/)).toHaveCount(0);
+    // Still the field's own line, beside the amount.
+    await expect(page.locator('.tm-field-error')).toHaveText(message);
+    await expect(meter(page)).toContainText('Ready to withdraw ₦1,000');
+    await expect(meter(page).locator('.withdraw__chip')).toContainText(
+      'GTBank ••1234',
+    );
+    await expect(page.getByText('Ready to withdraw ₦1,800')).toHaveCount(0);
   });
 }
 
@@ -232,7 +272,10 @@ test('the withdraw screen writes every amount one way, and the minimum comes fro
   const { handle } = await signUpRecipient(page, testInfo);
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.goto('/dashboard/withdraw');
-  await expect(page.getByText('Available:')).toHaveText('Available: ₦1,800');
+  await expect(
+    meter(page).getByRole('heading', { name: 'Available' }),
+  ).toBeVisible();
+  await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,800');
   // The minimum in the hint is the policy's, written in the same format.
   await expect(
     page.getByText(/The smallest withdrawal is ₦2,000, or your whole balance/),
@@ -278,12 +321,14 @@ test('the summary says where it goes, what arrives and what is left', async ({
   await page.goto('/dashboard/withdraw');
   await page.getByRole('button', { name: 'Everything' }).click();
   const summary = page.getByRole('region', { name: 'Summary' });
-  await expect(summary.getByText('Going to')).toBeVisible();
-  await expect(summary.getByText(/••\d{4}/)).toBeVisible();
-  await expect(summary.getByRole('link', { name: 'Change' })).toHaveAttribute(
+  // Where it goes is the instrument's bank chip, with Change beside it.
+  const chip = meter(page).locator('.withdraw__chip');
+  await expect(chip.getByText(/••\d{4}/)).toBeVisible();
+  await expect(chip.getByRole('link', { name: 'Change' })).toHaveAttribute(
     'href',
     '/dashboard/settings#get-paid',
   );
+  await expect(summary.getByText('Going to')).toHaveCount(0);
   await expect(summary.getByText('You receive')).toBeVisible();
   // Withdrawing is free (TipMe pays the transfer fee), so what arrives is the amount.
   await expect(summary.getByTestId('you-receive')).toHaveText('₦1,800');
@@ -486,6 +531,41 @@ test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   const end = (await button.boundingBox())!;
   expect(end.y + end.height).toBeLessThanOrEqual(bar.y);
+
+  // Every state at 320px, with long bank names: the instrument, then the slip or the form, then
+  // the ledger, in that order, and nothing wider than the screen.
+  await page.setViewportSize({ width: 320, height: 720 });
+  await fakeBalance(page, '540000');
+  const states: [string, Record<string, unknown>, string | null][] = [
+    [
+      'ready',
+      readyQuote({ destination: { bankName: LONG_NAME, last4: '1234' } }),
+      '.withdraw__panel',
+    ],
+    [
+      'ready, unbroken bank',
+      readyQuote({ destination: { bankName: UNBROKEN_NAME, last4: '1234' } }),
+      '.withdraw__panel',
+    ],
+    ['no bank', { state: 'no_destination' }, '.withdraw__money .tm-slip'],
+    ['paused', { state: 'paused', reason: 'switched_off' }, null],
+  ];
+  for (const [name, quote, middle] of states) {
+    await page.unroute('**/v1/me/withdrawal-quote');
+    await fakeQuote(page, quote);
+    await page.goto('/dashboard/withdraw');
+    await expect(meter(page)).toBeVisible();
+    expect(await fitsViewport(page), name).toBe(true);
+    const top = async (selector: string) =>
+      (await page.locator(selector).first().boundingBox())!.y;
+    const ledger = await top('.withdraw__history');
+    const instrument = await top('.withdraw__meter');
+    if (middle) {
+      const between = await top(middle);
+      expect(instrument, name).toBeLessThan(between);
+      expect(between, name).toBeLessThan(ledger);
+    } else expect(instrument, name).toBeLessThan(ledger);
+  }
 });
 
 // Every withdrawal request from a page, with the key it carried. The first answers are ambiguous
@@ -502,8 +582,12 @@ async function failingRequests(page: Page) {
   });
   return keys;
 }
-const COULDNT_CONFIRM =
-  'We couldn’t confirm your withdrawal. Check your dashboard before trying again.';
+// The answer that may follow a request that arrived: a Not confirmed slip, not a field error.
+const couldntConfirm = (page: Page) =>
+  page
+    .locator('.tm-slip--unsure')
+    .filter({ hasText: 'We couldn’t confirm your withdrawal' })
+    .filter({ hasText: 'Check your dashboard before trying again.' });
 
 test('tapping the amount already chosen keeps the request key and the warning', async ({
   page,
@@ -516,14 +600,15 @@ test('tapping the amount already chosen keeps the request key and the warning', 
   await page.goto('/dashboard/withdraw');
   await page.getByRole('button', { name: 'Everything' }).click();
   await page.getByRole('button', { name: /^Withdraw ₦/ }).click();
-  await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
-  // The amount keeps the red edge over the withdraw form's own input rules; the line is black.
-  const amountField = page.getByLabel('Amount (NGN)');
-  await expect(amountField).toHaveAttribute('aria-invalid', 'true');
-  expect(await hasRedEdge(amountField)).toBe(true);
-  expect(await errorColour(page.getByText(COULDNT_CONFIRM))).toBe(PLAIN_TEXT);
+  await expect(couldntConfirm(page)).toBeVisible();
+  // The words are on the slip, an alert; the amount itself was not wrong.
+  await expect(couldntConfirm(page)).toHaveAttribute('role', 'alert');
+  await expect(page.getByLabel('Amount (NGN)')).toHaveAttribute(
+    'aria-invalid',
+    'false',
+  );
   await page.getByRole('button', { name: 'Everything' }).click();
-  await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
+  await expect(couldntConfirm(page)).toBeVisible();
   await page.getByRole('button', { name: /^Withdraw ₦/ }).click();
   await expect.poll(() => keys.length).toBe(2);
   expect(keys[1]).toBe(keys[0]);
@@ -541,9 +626,9 @@ test('changing the amount makes a new request key', async ({
   await page.goto('/dashboard/withdraw');
   await page.getByRole('button', { name: 'Everything' }).click();
   await page.getByRole('button', { name: /^Withdraw ₦/ }).click();
-  await expect(page.getByText(COULDNT_CONFIRM)).toBeVisible();
+  await expect(couldntConfirm(page)).toBeVisible();
   await page.getByLabel('Amount (NGN)').fill('2000');
-  await expect(page.getByText(COULDNT_CONFIRM)).toHaveCount(0);
+  await expect(couldntConfirm(page)).toHaveCount(0);
   await page.getByRole('button', { name: 'Withdraw ₦2,000' }).click();
   await expect.poll(() => keys.length).toBe(2);
   expect(keys[1]).not.toBe(keys[0]);
@@ -642,7 +727,7 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await expect(async () => {
     await page.goto('/dashboard/withdraw');
-    await expect(page.getByText('Available: ₦1,800')).toBeVisible({
+    await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,800', {
       timeout: 1000,
     });
   }).toPass({ timeout: 15_000 });
@@ -671,7 +756,7 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
   await expect(row.getByText('Paid', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(watching.getByText('Available: ₦0')).toBeVisible();
+  await expect(watching.getByTestId('withdraw-available')).toHaveText('₦0');
   // Withdrawals never celebrate: the row changes colour and label, nothing moves.
   expect(
     await row.evaluate(
@@ -690,4 +775,158 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
   expect(quotes.length).toBeGreaterThan(0);
   expect(quotes.every((search) => search === '?scope=local')).toBe(true);
   await expectAccessible(watching);
+});
+
+test('a withdrawal we could not confirm is a Not confirmed slip with no money line, and Withdraw again sends the same key', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '540000');
+  await fakeQuote(page, readyQuote());
+  const keys: string[] = [];
+  await page.route('**/v1/me/withdrawals', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    keys.push(route.request().headers()['idempotency-key'] ?? '');
+    return route.fulfill({
+      status: 502,
+      json: { error: { code: 'INTERNAL_ERROR', message: 'x' } },
+    });
+  });
+  await page.goto('/dashboard/withdraw');
+  // ₦1,800 is under the minimum against ₦5,400; ₦2,500 can go.
+  await page.getByLabel('Amount (NGN)').fill('2500');
+  await page.getByRole('button', { name: 'Withdraw ₦2,500' }).click();
+  const slip = page.locator('.tm-slip--unsure');
+  await expect(slip.locator('.tm-slip__title')).toHaveText(
+    'We couldn’t confirm your withdrawal',
+  );
+  await expect(slip).toContainText('Check your dashboard before trying again.');
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(0);
+  await expect(slip).not.toContainText(/money|balance|paid|safe/i);
+  await expectAccessible(page);
+  await page.getByRole('button', { name: 'Withdraw ₦2,500' }).click();
+  await expect.poll(() => keys.length).toBe(2);
+  expect(keys[1]).toBe(keys[0]);
+  // A different amount is a new request: the slip goes, and the next key is new.
+  await page.getByLabel('Amount (NGN)').fill('2700');
+  await expect(slip).toHaveCount(0);
+  await page.getByRole('button', { name: 'Withdraw ₦2,700' }).click();
+  await expect.poll(() => keys.length).toBe(3);
+  expect(keys[2]).not.toBe(keys[0]);
+});
+
+test('withdrawal requested is a done slip, and the instrument shows what the API says after', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
+  await page.goto('/dashboard/withdraw');
+  await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,800');
+  await page.getByLabel('Amount (NGN)').fill('1800');
+  // The figure changes only from the dashboard's own answer, re-read after the request.
+  const reread = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/v1/me/dashboard') &&
+      response.request().method() === 'GET',
+  );
+  await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
+  const done = page.locator('.tm-slip--done');
+  await expect(done).toHaveAttribute('role', 'status');
+  await expect(done.locator('.tm-slip__title')).toHaveText(
+    'Withdrawal requested',
+  );
+  await expect(done).toContainText('₦1,800 is on its way to your test bank.');
+  await expect(
+    done.getByRole('link', { name: 'Back to your dashboard' }),
+  ).toHaveAttribute('href', '/dashboard');
+  const after = (await (await reread).json()) as {
+    data: { availableMinor: string };
+  };
+  expect(after.data.availableMinor).toBe('0');
+  await expect(page.getByTestId('withdraw-available')).toHaveText('₦0');
+  await expectAccessible(page);
+});
+
+test('below the minimum: a red edge and Too small when leaving the field, nothing sent, and the key unchanged', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '540000');
+  await fakeQuote(page, readyQuote());
+  let posts = 0;
+  await page.route('**/v1/me/withdrawals', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    posts += 1;
+    return route.fulfill({
+      status: 502,
+      json: { error: { code: 'INTERNAL_ERROR', message: 'x' } },
+    });
+  });
+  await page.goto('/dashboard/withdraw');
+  const field = page.getByLabel('Amount (NGN)');
+  await field.fill('1500');
+  // Typing announces nothing (the router's own announcer is outside the page).
+  await expect(page.locator('.withdraw').getByRole('alert')).toHaveCount(0);
+  await expect(field).toHaveAttribute('aria-invalid', 'false');
+  await field.press('Tab');
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('.tm-field-error')).toHaveText(TOO_SMALL);
+  await expect(
+    page.getByRole('button', { name: 'Withdraw ₦1,500' }),
+  ).toBeDisabled();
+  await expect(page.getByTestId('you-receive')).toHaveText('—');
+  await expect(page.getByTestId('balance-afterwards')).toHaveText('—');
+  await field.focus();
+  await field.press('Enter');
+  await expect(page.locator('.tm-field-error')).toHaveText(TOO_SMALL);
+  expect(posts).toBe(0);
+  await expectAccessible(page);
+  await field.fill('2000');
+  await expect(field).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.locator('.tm-field-error')).toHaveCount(0);
+  expect(posts).toBe(0);
+});
+
+test('a visit reads the quote once, and a refusal over the amount reads it once more', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '540000');
+  await fakeQuote(page, readyQuote());
+  let reads = 0;
+  page.on('request', (request) => {
+    if (
+      request.method() === 'GET' &&
+      new URL(request.url()).pathname === '/v1/me/withdrawal-quote'
+    )
+      reads += 1;
+  });
+  await page.route('**/v1/me/withdrawals', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({
+          status: 409,
+          json: { error: { code: 'INSUFFICIENT_BALANCE', message: 'x' } },
+        })
+      : route.continue(),
+  );
+  await page.goto('/dashboard/withdraw');
+  await expect(meter(page)).toContainText('Ready to withdraw ₦5,400');
+  expect(reads).toBe(1);
+  // ₦1,800 is under the minimum against ₦5,400; ₦2,500 can go.
+  await page.getByLabel('Amount (NGN)').fill('2500');
+  await page.getByRole('button', { name: 'Withdraw ₦2,500' }).click();
+  await expect(page.locator('.tm-field-error')).toHaveText(
+    'That is more than your available balance.',
+  );
+  await expect.poll(() => reads).toBe(2);
+  // Nothing else on the page reads it: the pill, the quick amounts, leaving the field.
+  await page.locator('.test-pill summary').click();
+  await page.getByRole('button', { name: '₦5,000' }).click();
+  await page.getByRole('button', { name: 'Everything' }).click();
+  await page.getByLabel('Amount (NGN)').focus();
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(1500);
+  expect(reads).toBe(2);
 });

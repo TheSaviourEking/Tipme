@@ -121,3 +121,12 @@ test('preview pages and the demo pay form are for test copies only', () => {
   assert.equal(paymentModeCopy('closed').homeDemo, 'closed');
   assert.equal(paymentModeCopy('live').homeDemo, 'example');
 });
+
+test('the pill has a detail only in test mode', () => {
+  assert.equal(
+    paymentModeCopy('test').dashboardBadgeDetail,
+    'no real money moves',
+  );
+  assert.equal(paymentModeCopy('live').dashboardBadgeDetail, null);
+  assert.equal(paymentModeCopy('closed').dashboardBadgeDetail, null);
+});

@@ -5596,6 +5596,65 @@ html:has(.confirm-dialog[open]) {
   margin-right: auto;
 }
 
+/* Test mode as one calm pill in the header (WithdrawRedesign §3). It opens its sentence as a small
+   paper card under it, placed absolutely so the header doesn't grow. */
+.test-pill {
+  position: relative;
+}
+
+.test-pill summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px dashed var(--border-material);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font: 700 var(--text-xs) / 1.2 var(--font-interface);
+  list-style: none;
+  cursor: pointer;
+}
+
+.test-pill summary::-webkit-details-marker {
+  display: none;
+}
+
+.test-pill__sentence {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised-1);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+@media (max-width: 40rem) {
+  .test-pill__detail {
+    display: none;
+  }
+
+  .test-pill__sentence {
+    right: auto;
+    left: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .test-pill summary,
+  .test-pill__sentence {
+    border: 1px solid CanvasText;
+  }
+}
+
 .dashboard-nav a,
 .filter-row .tm-button {
   display: inline-flex;
@@ -9470,20 +9529,120 @@ html:has(.ops-frame__sheet[open]) {
   }
 }
 
-/* Withdraw (ScreenWithdraw): an instrument for the amount, and a ledger of what is on its way. */
+/* Withdraw (WithdrawRedesign): money leads as a dark instrument, then the slip or the form; the
+   ledger of what is on its way beside it. One column, in that order, below 56rem. */
 .withdraw {
-  max-width: 68rem;
+  max-width: 74rem;
 }
 
-.withdraw > .tm-notice {
+.withdraw__warning,
+.withdraw__done {
   max-width: 40rem;
+  margin-bottom: var(--space-4);
 }
 
 .withdraw__layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
-  gap: var(--space-8);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--space-6);
   align-items: start;
+}
+
+.withdraw__money {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.withdraw__history {
+  align-self: start;
+  min-width: 0;
+}
+
+/* The instrument: the dark key face, not purple. The balance never animates. */
+.withdraw__meter {
+  min-width: 0;
+  padding: clamp(1.25rem, 4vw, 1.5rem);
+  border-radius: var(--radius-card);
+  background: var(--key-face-dark);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    var(--shadow-instrument);
+  color: var(--text-on-night);
+  overflow-wrap: anywhere;
+}
+
+.withdraw__cap {
+  margin: 0;
+  color: var(--text-on-night-quiet);
+  font: 700 0.8125rem / 1.3 var(--font-interface);
+  letter-spacing: 0;
+}
+
+.withdraw__figure {
+  margin: var(--space-2) 0 0;
+  font: 400 clamp(3rem, 8vw, 4rem) / 1 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.withdraw__lamp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  color: var(--text-on-night);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* A purple lamp keeps a ring that shows on the dark face. */
+.withdraw__meter .tm-lamp--purple {
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--link-on-night) 32%, transparent);
+}
+
+.withdraw__fine,
+.withdraw__meter .pilot-notice {
+  margin: var(--space-2) 0 0;
+  color: var(--text-on-night-quiet);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.withdraw__meter a {
+  color: var(--link-on-night);
+  font-weight: 800;
+  text-underline-offset: 3px;
+}
+
+.withdraw__chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--space-4) 0 0;
+  padding: 0 0 0 var(--space-3);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 8%);
+  font-size: 0.84375rem;
+  font-weight: 700;
+}
+
+/* "to GTBank ••1234" reads "To GTBank ••1234" on the chip; the words stay as written. */
+.withdraw__chip > span::first-letter {
+  text-transform: uppercase;
+}
+
+/* Change: a 44px hit area from padding. */
+.withdraw__chip a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--space-3);
 }
 
 .withdraw__panel {
@@ -9569,11 +9728,6 @@ html:has(.ops-frame__sheet[open]) {
   margin: 0;
   font-weight: 700;
   text-align: right;
-}
-
-.withdraw__summary dd a {
-  margin-left: 0.375rem;
-  font-weight: 600;
 }
 
 .withdraw__form .tm-hint {
@@ -9698,6 +9852,15 @@ html:has(.ops-frame__sheet[open]) {
   }
 
   .withdraw__row {
+    border: 1px solid CanvasText;
+  }
+
+  .withdraw__meter {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+
+  .withdraw__chip {
     border: 1px solid CanvasText;
   }
 }

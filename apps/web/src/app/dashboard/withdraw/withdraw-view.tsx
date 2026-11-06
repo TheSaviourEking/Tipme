@@ -8,7 +8,15 @@ import type {
   WithdrawalsPage,
 } from '@tipme/contracts';
 import { FEE_POLICY_V1 } from '@tipme/domain';
-import { Button, InputField, Notice, Skeleton, Surface } from '@tipme/ui';
+import {
+  Button,
+  InputField,
+  Lamp,
+  Skeleton,
+  Slip,
+  StandingWarning,
+  Surface,
+} from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
 import { useWithdrawalInFlight } from '@/components/live/live-provider';
@@ -21,9 +29,14 @@ import { apiFetch } from '@/lib/session-client';
 import { bankLine } from '@/lib/withdrawal-bank';
 import { withdrawalInFlight } from '@/lib/quote-merge';
 import {
+  belowMinimum,
+  TOO_SMALL,
   withdrawableNow,
+  withdrawFee,
+  withdrawLamp,
   withdrawRefusal,
   withdrawState,
+  withdrawUnsure,
 } from '@/lib/withdraw-state';
 
 /**
@@ -192,6 +205,13 @@ export default function WithdrawPage({
   } | null>(null);
   const [raw, setRaw] = useState('');
   const [error, setError] = useState('');
+  // Whether the amount has been checked against the minimum: on leaving the field or a submit
+  // attempt, never per keystroke, so typing "1", "15", "150" announces nothing.
+  const [checked, setChecked] = useState(false);
+  // A refusal that may have followed a request that arrived: said on a slip, not at the field.
+  const [unsure, setUnsure] = useState<{ title: string; body: string } | null>(
+    null,
+  );
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per request, so a double tap never withdraws twice.
@@ -204,41 +224,12 @@ export default function WithdrawPage({
     ]);
 
   const amount = parseNaira(raw.replace(/^₦\s*/, '').trim());
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!amount) {
-      setError('Enter an amount, like 1000 or 1,000.50.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    key.current ??= crypto.randomUUID();
-    const result = await apiFetch<{ payoutId: string }>('/v1/me/withdrawals', {
-      method: 'POST',
-      body: { amountMinor: String(amount) },
-      headers: { 'idempotency-key': key.current },
-    });
-    setBusy(false);
-    if (result.ok) {
-      setDone(formatNaira(amount));
-      setRaw('');
-      key.current = null;
-      reloadAll();
-      return;
-    }
-    const refusal = withdrawRefusal(result.code);
-    // Refused before anything was recorded, so a new key is safe.
-    if (refusal.message === null) key.current = null;
-    if (refusal.reload) void Promise.all([balance.reload(), latest.reload()]);
-    if (refusal.message) setError(refusal.message);
-  };
-
   const summary = balance.data;
   if (balance.error === 'load')
     return (
-      <Notice tone="error" title="We couldn’t load your balance">
+      <Slip tone="error" title="We couldn’t load your balance">
         Please reload the page.
-      </Notice>
+      </Slip>
     );
   // A quote that failed to refresh is no quote: it is never read as a yes.
   if (!summary || (!latest.data && !latest.error && !latest.needsCheck))
@@ -259,6 +250,47 @@ export default function WithdrawPage({
     needsCheck: latest.needsCheck,
   });
   const chosen = amount === null ? null : BigInt(amount);
+  // Only while a withdrawal could go: with nothing to withdraw, the instrument already says why.
+  const tooSmall = state.canWithdraw && belowMinimum(chosen, withdrawable);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!amount) {
+      setError('Enter an amount, like 1000 or 1,000.50.');
+      return;
+    }
+    // The server would refuse it: say so at the field. Nothing is sent and the key is untouched.
+    if (tooSmall) {
+      setChecked(true);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setUnsure(null);
+    key.current ??= crypto.randomUUID();
+    const result = await apiFetch<{ payoutId: string }>('/v1/me/withdrawals', {
+      method: 'POST',
+      body: { amountMinor: String(amount) },
+      headers: { 'idempotency-key': key.current },
+    });
+    setBusy(false);
+    if (result.ok) {
+      setDone(formatNaira(amount));
+      setRaw('');
+      setChecked(false);
+      key.current = null;
+      reloadAll();
+      return;
+    }
+    const refusal = withdrawRefusal(result.code);
+    // Refused before anything was recorded, so a new key is safe.
+    if (refusal.message === null) key.current = null;
+    if (refusal.reload) void Promise.all([balance.reload(), latest.reload()]);
+    const maybeSent = withdrawUnsure(result.code);
+    if (maybeSent) setUnsure(maybeSent);
+    else if (refusal.message) setError(refusal.message);
+  };
+
   // Tapping the amount already chosen changes nothing: the request key and any warning stay.
   // Only a different amount starts a new request. (Typing is different: onChange starts a new
   // request on any change of the text, even to the same amount.)
@@ -266,6 +298,8 @@ export default function WithdrawPage({
     setRaw(formatNaira(minor));
     if (chosen === minor) return;
     setError('');
+    setUnsure(null);
+    setChecked(false);
     key.current = null;
   };
   const shortcuts = SHORTCUTS_MINOR.filter((minor) => minor < withdrawable);
@@ -301,122 +335,191 @@ export default function WithdrawPage({
   // books it as TipMe's expense). The quote's feeMinor is that TipMe-paid cost, never taken from
   // the recipient, so what arrives is the amount asked for.
   const covered = sendable;
+  const lamp = withdrawLamp(state, withdrawable);
+  const feeLine = withdrawFee(quote);
+  // Ready with money to send: the lamp line and the bank chip say what the notice used to.
+  const readyWithMoney = state.kind === 'ready' && withdrawable > BigInt(0);
+  const notice = state.notice;
+  const noticeLink = notice.href && notice.linkLabel && (
+    <Link href={notice.href}>{notice.linkLabel}</Link>
+  );
   return (
     <div className="dashboard-section withdraw">
       <h1>Withdraw</h1>
-      <p>
-        Available: <strong>{formatNaira(summary.availableMinor)}</strong>
-      </p>
-      {pilotNotice}
-      {state.kind !== 'collected_elsewhere' && copy.withdrawNotice && (
-        <Notice title="Test withdrawal">{copy.withdrawNotice}</Notice>
+      {state.place === 'warning' && (
+        <StandingWarning title={notice.title} className="withdraw__warning">
+          {notice.body}
+        </StandingWarning>
       )}
-      {/* Said before an amount is typed, not after the owner presses Withdraw. */}
-      <Notice title={state.notice.title} tone={state.notice.tone}>
-        {state.notice.body}
-        {state.notice.href && state.notice.linkLabel && (
-          <>
-            {' '}
-            <Link href={state.notice.href}>{state.notice.linkLabel}</Link>
-          </>
-        )}
-        {state.kind === 'needs_check' && (
-          <>
-            {' '}
-            <Button variant="secondary" onClick={() => void latest.reload()}>
-              Check again
-            </Button>
-          </>
-        )}
-      </Notice>
-      {state.review && <Notice title="Being checked">{state.review}</Notice>}
       {done && (
-        <Notice tone="success" title="Withdrawal requested">
+        <Slip
+          tone="done"
+          title="Withdrawal requested"
+          className="withdraw__done"
+        >
           {done}
           {copy.withdrawDoneSuffix}{' '}
           <Link href="/dashboard">Back to your dashboard</Link>
-        </Notice>
+        </Slip>
       )}
       <div className="withdraw__layout">
-        {state.showForm && (
-          <Surface material="instrument" className="withdraw__panel">
-            <form className="withdraw__form" onSubmit={submit} noValidate>
-              <InputField
-                id={`${id}-amount`}
-                label="Amount (NGN)"
-                inputMode="decimal"
-                autoComplete="off"
-                value={raw}
-                onChange={(event) => {
-                  setRaw(event.target.value);
-                  setError('');
-                  key.current = null;
-                }}
-                error={error || undefined}
-              />
-              {withdrawable > BigInt(0) && (
-                <div
-                  role="group"
-                  aria-label="Quick amounts"
-                  className="withdraw__keys"
-                >
-                  {shortcuts.map((minor) => (
+        <div className="withdraw__money">
+          <section
+            className="withdraw__meter"
+            aria-labelledby={`${id}-available`}
+          >
+            <h2 id={`${id}-available`} className="withdraw__cap">
+              Available
+            </h2>
+            <p className="withdraw__figure" data-testid="withdraw-available">
+              {formatNaira(summary.availableMinor)}
+            </p>
+            <p className="withdraw__lamp">
+              <Lamp tone={lamp.tone} />
+              {lamp.text}
+            </p>
+            {readyWithMoney && feeLine && (
+              <p className="withdraw__fine">{feeLine}</p>
+            )}
+            {state.place === 'instrument' && !readyWithMoney && (
+              <p className="withdraw__fine">
+                {notice.body}
+                {noticeLink && <> {noticeLink}</>}
+                {state.kind === 'needs_check' && (
+                  <>
+                    {' '}
+                    <Button
+                      variant="secondary"
+                      onClick={() => void latest.reload()}
+                    >
+                      Check again
+                    </Button>
+                  </>
+                )}
+              </p>
+            )}
+            {state.review && (
+              <p className="withdraw__lamp">
+                <Lamp tone="amber" />
+                Being checked. {state.review}
+              </p>
+            )}
+            {ready && (
+              <p className="withdraw__chip">
+                <span>{bankLine(ready.destination)}</span>
+                <Link href="/dashboard/settings#get-paid">Change</Link>
+              </p>
+            )}
+            {pilotNotice}
+          </section>
+          {state.place === 'slip' && (
+            <Slip
+              tone="neutral"
+              stamp={state.stamp}
+              title={notice.title}
+              actions={
+                notice.href &&
+                notice.linkLabel && (
+                  <Link
+                    className="tm-button tm-button--continue"
+                    href={notice.href}
+                  >
+                    {notice.linkLabel}
+                  </Link>
+                )
+              }
+            >
+              {notice.body}
+            </Slip>
+          )}
+          {unsure && (
+            <Slip tone="unsure" stamp={'Not\nconfirmed'} title={unsure.title}>
+              {unsure.body}
+            </Slip>
+          )}
+          {state.showForm && (
+            <Surface material="instrument" className="withdraw__panel">
+              <form className="withdraw__form" onSubmit={submit} noValidate>
+                <InputField
+                  id={`${id}-amount`}
+                  label="Amount (NGN)"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={raw}
+                  onChange={(event) => {
+                    setRaw(event.target.value);
+                    setError('');
+                    setUnsure(null);
+                    setChecked(false);
+                    key.current = null;
+                  }}
+                  onBlur={() => setChecked(true)}
+                  onKeyDown={(event) => {
+                    // The Withdraw key is disabled for an amount that can't go, so Enter doesn't
+                    // submit: it still checks the amount, as leaving the field does.
+                    if (event.key === 'Enter') setChecked(true);
+                  }}
+                  error={error || (checked && tooSmall ? TOO_SMALL : undefined)}
+                />
+                {withdrawable > BigInt(0) && (
+                  <div
+                    role="group"
+                    aria-label="Quick amounts"
+                    className="withdraw__keys"
+                  >
+                    {shortcuts.map((minor) => (
+                      <button
+                        key={minor.toString()}
+                        type="button"
+                        className="withdraw__key"
+                        aria-pressed={chosen === minor}
+                        onClick={() => choose(minor)}
+                      >
+                        {formatNaira(minor)}
+                      </button>
+                    ))}
                     <button
-                      key={minor.toString()}
                       type="button"
                       className="withdraw__key"
-                      aria-pressed={chosen === minor}
-                      onClick={() => choose(minor)}
+                      aria-pressed={chosen === withdrawable}
+                      onClick={() => choose(withdrawable)}
                     >
-                      {formatNaira(minor)}
+                      Everything
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="withdraw__key"
-                    aria-pressed={chosen === withdrawable}
-                    onClick={() => choose(withdrawable)}
-                  >
-                    Everything
-                  </button>
-                </div>
-              )}
-              {ready && (
-                <section aria-label="Summary">
-                  <dl className="withdraw__summary">
-                    <dt>Going to</dt>
-                    <dd>
-                      {ready.destination.bankName} ••{ready.destination.last4}{' '}
-                      <Link href="/dashboard/settings#get-paid">Change</Link>
-                    </dd>
-                    <dt>You receive</dt>
-                    <dd data-testid="you-receive">
-                      {covered ? formatNaira(chosen) : '—'}
-                    </dd>
-                    <dt>Balance afterwards</dt>
-                    <dd data-testid="balance-afterwards">
-                      {covered ? formatNaira(available - chosen) : '—'}
-                    </dd>
-                  </dl>
-                </section>
-              )}
-              <Button
-                type="submit"
-                variant="continue"
-                disabled={
-                  busy || !state.canWithdraw || (amount !== null && !sendable)
-                }
-                aria-busy={busy}
-              >
-                {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
-              </Button>
-              <p className="tm-hint">
-                Once sent, a withdrawal can’t be cancelled. The smallest
-                withdrawal is {smallest}, or your whole balance if it’s less.
-              </p>
-            </form>
-          </Surface>
-        )}
+                  </div>
+                )}
+                {ready && (
+                  <section aria-label="Summary">
+                    <dl className="withdraw__summary">
+                      <dt>You receive</dt>
+                      <dd data-testid="you-receive">
+                        {covered ? formatNaira(chosen) : '—'}
+                      </dd>
+                      <dt>Balance afterwards</dt>
+                      <dd data-testid="balance-afterwards">
+                        {covered ? formatNaira(available - chosen) : '—'}
+                      </dd>
+                    </dl>
+                  </section>
+                )}
+                <Button
+                  type="submit"
+                  variant="continue"
+                  disabled={
+                    busy || !state.canWithdraw || (amount !== null && !sendable)
+                  }
+                  aria-busy={busy}
+                >
+                  {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
+                </Button>
+                <p className="tm-hint">
+                  Once sent, a withdrawal can’t be cancelled. The smallest
+                  withdrawal is {smallest}, or your whole balance if it’s less.
+                </p>
+              </form>
+            </Surface>
+          )}
+        </div>
         <History
           rows={withdrawals}
           failed={withdrawalsPanel.error === 'load'}

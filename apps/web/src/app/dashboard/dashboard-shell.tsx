@@ -7,14 +7,19 @@ import type {
   MyProfile,
   RecoveryEmailStatus,
 } from '@tipme/contracts';
-import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
+import { Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
+import { TestModePill } from '@/components/dashboard/test-mode-pill';
 import { LiveProvider, useLiveEvents } from '@/components/live/live-provider';
 import { liveProviderEnabled } from '@/lib/live-enabled';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
+import {
+  attentionHere,
+  ownerAttention,
+  RECOVERY_EMAIL_CHANGED,
+} from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
 /**
@@ -102,7 +107,9 @@ export function DashboardShell({
     profile && payments !== undefined
       ? ownerAttention({ profile, payments, needsRecoveryEmail })
       : null;
+  // The nav dots keep the full list; the reminders shown are this page's own.
   const needsFix = new Set(attention?.map((item) => item.navHref));
+  const shown = attentionHere(attention, pathname);
 
   const signOut = async () => {
     await apiFetch('/v1/auth/sign-out', { method: 'POST', body: {} });
@@ -151,7 +158,13 @@ export function DashboardShell({
                   </Link>
                 ))}
               </nav>
-              {copy.dashboardBadge && <Badge>{copy.dashboardBadge}</Badge>}
+              {copy.dashboardBadge && (
+                <TestModePill
+                  label={copy.dashboardBadge}
+                  detail={copy.dashboardBadgeDetail}
+                  sentence={copy.withdrawNotice}
+                />
+              )}
               {profile && <NotificationBell />}
               {profile && (
                 <Button variant="quiet" onClick={() => void signOut()}>
@@ -179,31 +192,29 @@ export function DashboardShell({
             </Notice>
           )}
           {/* Not on the welcome, which walks through the same steps itself. */}
-          {attention &&
-            attention.length > 0 &&
-            pathname !== '/dashboard/welcome' && (
-              <section
-                className="owner-attention"
-                aria-label="Needs your attention"
-              >
-                {attention.map((item) => (
-                  <Notice key={item.id} tone="neutral" title={item.title}>
-                    {item.body}
-                    {item.action && (
-                      <>
-                        {' '}
-                        <Link
-                          className="tm-button tm-button--primary owner-attention__action"
-                          href={item.action.href}
-                        >
-                          {item.action.label}
-                        </Link>
-                      </>
-                    )}
-                  </Notice>
-                ))}
-              </section>
-            )}
+          {shown && shown.length > 0 && pathname !== '/dashboard/welcome' && (
+            <section
+              className="owner-attention"
+              aria-label="Needs your attention"
+            >
+              {shown.map((item) => (
+                <Notice key={item.id} tone="neutral" title={item.title}>
+                  {item.body}
+                  {item.action && (
+                    <>
+                      {' '}
+                      <Link
+                        className="tm-button tm-button--primary owner-attention__action"
+                        href={item.action.href}
+                      >
+                        {item.action.label}
+                      </Link>
+                    </>
+                  )}
+                </Notice>
+              ))}
+            </section>
+          )}
           {profile ? (
             <RecipientContext.Provider
               value={{

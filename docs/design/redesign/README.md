@@ -47,5 +47,7 @@ Where a board and a newer owner decision disagree, the decision wins:
 | `EmailSecurity`             | Emails: bank account changed, new sign-in, number about to change, account deleted (approved by the owner 5 Nov 2026) |
 | `EmailReports`              | Emails: weekly report, ready for tips, staff invitation, a username taken back (approved by the owner 5 Nov 2026) |
 
+| `WithdrawRedesign`          | Withdraw in every state (approved 5 Nov 2026)              |
+| `ScreenAudit`               | Every screen graded against the design rules (5 Nov 2026)  |
 | `OpsShell`                  | Admin: the frame (grouped sidebar, phone Menu sheet, staff strip), the Overview and the shared patterns (approved 5 Nov 2026; the frame is built, the patterns follow) |
 | `OpsPages`                  | Admin: every other admin page in the patterns (approved 5 Nov 2026; not built yet) |
