@@ -75,6 +75,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
 | `search.view` | GET `/v1/ops/search` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
+| `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>GET `/v1/ops/usernames/check/{name}` |
 
 <!-- /generated:permissions -->
 <!-- prettier-ignore-end -->
@@ -161,8 +162,10 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
 | POST | `/v1/me/email/code` | yes | `auth_code` | – |
 | POST | `/v1/me/email/confirm` | yes | `auth_verify` | – |
+| GET | `/v1/me/events` | n/a (read) | `live_connect` | – |
 | GET | `/v1/me/exports/tips.csv` | n/a (read) | – | – |
 | PUT | `/v1/me/handle` | yes | – | – |
+| PUT | `/v1/me/links` | yes | – | – |
 | GET | `/v1/me/moments` | n/a (read) | – | – |
 | POST | `/v1/me/moments/{id}/share` | yes | – | – |
 | GET | `/v1/me/notification-preferences` | n/a (read) | – | – |
@@ -196,12 +199,15 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/sessions` | n/a (read) | – | – |
 | DELETE | `/v1/me/sessions/{id}` | yes | – | – |
 | POST | `/v1/me/sessions/sign-out-others` | yes | – | – |
+| PUT | `/v1/me/thanks` | yes | – | – |
 | PUT | `/v1/me/tip-amounts` | yes | – | – |
+| GET | `/v1/me/tip-totals` | n/a (read) | – | – |
 | GET | `/v1/me/tips` | n/a (read) | – | – |
 | GET | `/v1/me/tips/{tipId}` | n/a (read) | – | – |
 | POST | `/v1/me/tips/{tipId}/message/hide` | yes | – | – |
 | POST | `/v1/me/tips/{tipId}/message/report` | yes | – | – |
 | GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
+| GET | `/v1/me/withdrawals` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
 | GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
@@ -285,6 +291,10 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | PATCH | `/v1/ops/staff/roles/{roleId}` | `staff.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/staff/roles/{roleId}/delete` | `staff.manage` | yes | – | – |
 | POST | `/v1/ops/staff/roles/{roleId}/impact` | `staff.manage` | yes | – | – |
+| GET | `/v1/ops/usernames` | `usernames.manage` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/usernames` | `usernames.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/usernames/{name}/release` | `usernames.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/usernames/check/{name}` | `usernames.manage` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
 | GET | `/v1/ops/withdrawals-switch` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/withdrawals-switch` | `payouts.resolve` | yes | – | – |

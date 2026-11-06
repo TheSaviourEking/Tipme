@@ -103,7 +103,7 @@ test('the Pro explanation lists QR designs, three handle changes and no footer l
   await expect(pro).toContainText(
     'No “Get your own TipMe page” link at the foot of your page',
   );
-  await expect(pro).toContainText('Covers are free on every plan');
+  await expect(pro).toContainText('Photos and designs are free on every plan');
   await expect(pro).not.toContainText(
     /₦|NGN|\$|£|€|per month|\/month|monthly|price/i,
   );

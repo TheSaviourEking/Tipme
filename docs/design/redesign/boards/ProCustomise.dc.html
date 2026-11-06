@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Make it yours: what people can customise</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:56px 56px 64px}
+.h1{margin:0;font:400 64px/1 'DM Serif Display',Georgia,serif}
+.lede{margin:14px 0 0;max-width:900px;font-size:18px;line-height:1.5;color:#3b3934}
+.h2{margin:56px 0 6px;font:400 38px/1.05 'DM Serif Display',Georgia,serif}
+.sub{margin:0 0 22px;max-width:980px;font-size:15px;line-height:1.5;color:#5d5a54}
+.paper{background:#fffefa;border-radius:24px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.45)}
+.well{background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1);border-radius:14px}
+.key{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 16px;border-radius:12px;background:#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.1),0 3px 0 rgba(20,18,16,.12);font-weight:700;font-size:14px}
+.key.on{background:#7a32f9;color:#fff;border-color:#4d16a8;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 3px 0 #4d16a8}
+.go{display:flex;align-items:center;justify-content:center;height:52px;border-radius:14px;background:#000;color:#fff;font-weight:700;font-size:15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.01em;white-space:nowrap}
+.t-ex{background:#141210;color:#fff}
+.t-pr{background:#fffefa;color:#4d16a8;box-shadow:inset 0 0 0 1.5px #7a32f9}
+.t-de{background:#f1e9ff;color:#2d0b66}
+.t-no{background:#f3e3e0;color:#7a2a1d}
+.src{font-size:12px;color:#5d5a54;font-weight:600}
+.muted{color:#5d5a54}
+.lever{display:inline-flex;align-items:center;width:52px;height:30px;border-radius:999px;background:#eceae4;box-shadow:inset 0 2px 3px rgba(20,18,16,.15);padding:3px;box-sizing:border-box}
+.lever i{width:24px;height:24px;border-radius:50%;background:#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.2),0 2px 0 rgba(20,18,16,.12);display:block}
+.lever.on{background:#7a32f9;justify-content:flex-end}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+
+.legend{display:flex;gap:18px;align-items:center;margin:0 0 14px;font-size:13px;color:#5d5a54;font-weight:600}
+.legend span{display:inline-flex;gap:8px;align-items:center}
+.map{padding:8px 0}
+.mrow{display:grid;grid-template-columns:420px 190px 300px 170px 1fr;gap:18px;align-items:center;padding:12px 26px;border-top:1px solid rgba(20,18,16,.08);font-size:14.5px;line-height:1.4}
+.mrow:first-child{border-top:0}
+.mhead{font-size:12.5px;font-weight:800;color:#5d5a54;padding-top:16px;padding-bottom:10px}
+.mwhat{font-weight:700}
+.mfree,.mpro{font-weight:600}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.ctl{padding:28px 30px 30px}
+.ctl h3{margin:0;font:400 30px/1.05 'DM Serif Display',Georgia,serif;display:flex;align-items:center;gap:12px}
+.ctl .hint{margin:8px 0 0;font-size:14.5px;line-height:1.5;color:#5d5a54}
+.ctl .row{display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding:14px 16px}
+.ctl .row b{font-size:15px}
+.ctl .row small{display:block;font-size:13px;color:#5d5a54;font-weight:600;margin-top:2px}
+.sounds{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.snd{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.08),0 3px 0 rgba(20,18,16,.1);position:relative}
+.snd b{display:block;font-size:14.5px}
+.snd small{display:block;font-size:12px;color:#5d5a54;font-weight:600}
+.snd.on{box-shadow:inset 0 0 0 2px #7a32f9,0 3px 0 #4d16a8}
+.play{width:34px;height:34px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#000;color:#fff}
+.snd.on .play{background:#7a32f9}
+.tick{position:absolute;right:12px;top:12px;font-size:11.5px;font-weight:800;color:#4d16a8}
+.wave{display:flex;gap:3px;align-items:center;height:26px;margin-left:auto}
+.wave i{width:3px;border-radius:2px;background:#7a32f9;display:block}
+.cks{margin-top:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.ck{padding:12px;border-radius:14px;background:#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.08),0 3px 0 rgba(20,18,16,.1)}
+.ck.on{box-shadow:inset 0 0 0 2px #7a32f9,0 3px 0 #4d16a8}
+.ck b{display:block;margin-top:10px;font-size:14px}
+.ck small{display:block;margin-top:2px;font-size:12px;line-height:1.35;color:#5d5a54;font-weight:600}
+.cp{position:relative;height:62px;border-radius:10px;background:#eceae4;box-shadow:inset 0 2px 3px rgba(20,18,16,.1);display:flex;align-items:flex-end;padding:0 10px 8px;overflow:hidden}
+.cpnum{font:400 22px 'DM Serif Display',Georgia,serif}
+.ty{display:grid;grid-template-columns:1fr 300px;gap:22px;margin-top:18px;align-items:start}
+.ta{padding:14px 16px;min-height:96px;font-size:15px;line-height:1.5}
+.count{margin-top:6px;font-size:12.5px;color:#5d5a54;font-weight:600;text-align:right}
+.styles{display:flex;gap:8px;margin-top:12px}
+.styles span{flex:1;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;border:1px solid rgba(20,18,16,.12)}
+.receipt{padding:18px 18px 20px;border-radius:20px}
+.receipt h4{margin:0;font:400 26px/1.05 'DM Serif Display',Georgia,serif}
+.slip{margin-top:12px;padding:14px 16px;border-radius:14px;background:#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.08),0 10px 18px -14px rgba(20,18,16,.45)}
+.slip q{display:block;quotes:none;font:400 18px/1.3 'DM Serif Display',Georgia,serif}
+.slip q:before{content:'\201C';display:block;height:16px;font-size:40px;line-height:.75;color:#7a32f9}
+.slip p{margin:8px 0 0;font-size:13px;font-weight:700}
+.sws{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
+.sw{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#5d5a54}
+.sw i{width:44px;height:44px;border-radius:12px;display:block;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 3px 0 rgba(20,18,16,.25)}
+.sw.on i{outline:3px solid #000;outline-offset:3px}
+.mini{margin-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mini span{height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;background:#eceae4}
+.pinned{margin-top:18px;padding:16px 18px;border-radius:16px;background:#fffefa;border:1px solid rgba(20,18,16,.12);position:relative}
+.pin{position:absolute;right:14px;top:-10px;padding:3px 10px;border-radius:999px;background:#141210;color:#fff;font-size:11.5px;font-weight:800}
+.rank{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+.rk{padding:20px 20px 22px}
+.rk .n{font:400 44px/1 'DM Serif Display',Georgia,serif;color:#7a32f9}
+.rk b{display:block;margin-top:8px;font-size:16px;line-height:1.3}
+.rk p{margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#3b3934}
+.rk .ie{margin-top:12px;display:flex;gap:6px;flex-wrap:wrap}
+.decide{margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.decide .paper{padding:24px 28px}
+.decide h3{margin:0 0 10px;font:400 26px 'DM Serif Display',Georgia,serif}
+.decide ol,.decide ul{margin:0;padding-left:20px;font-size:14.5px;line-height:1.6}
+.decide li{margin:4px 0}
+.cut{font-size:14px;line-height:1.6;color:#3b3934}
+</style>
+</helmet>
+<div class="board" style="width:1840px;height:3960px">
+
+<h1 class="h1">Make it yours</h1>
+<p class="lede">What a person can shape on TipMe, Free and Pro: what exists on dev today, what you have already decided, and what I propose. The idea: Free feels complete and warm; Pro lets people make TipMe sound, move and read like them.</p>
+
+<h2 class="h2">What can be customised, today and proposed</h2>
+<p class="sub">Every “Exists” row was read on origin/dev at the file and line shown. “Decided” rows are your past decisions. “Proposed” rows are new and need your yes.</p>
+<div class="legend"><span><span class="tag t-ex">Exists</span> on dev now</span><span><span class="tag t-de">Decided, being built</span> / <span class="tag t-de">Decided, not built</span> your decision</span><span><span class="tag t-pr">Proposed</span> new, needs your yes</span></div>
+<div class="paper map">
+<div class="mrow mhead"><div>What</div><div>Free</div><div>Pro</div><div>Status</div><div>Where, or why</div></div>
+<div class="mrow"><div class="mwhat">Photo, name, what you do, bio, Facebook / Instagram / X links</div><div class="mfree">Yes</div><div class="mpro">Yes</div><div><span class="tag t-ex">Exists</span></div><div class="src">settings/sections/my-page.tsx:80-125, 574-710 (name and role 60 characters, bio 280)</div></div>
+<div class="mrow"><div class="mwhat">Cover: 24 designs in 7 colours, or your own photo</div><div class="mfree">Yes</div><div class="mpro">Yes</div><div><span class="tag t-ex">Exists</span></div><div class="src">packages/contracts/src/covers.ts:23-106; components/account/cover-settings.tsx:284-394. No Pro gate on covers.</div></div>
+<div class="mrow"><div class="mwhat">Animated cover</div><div class="mfree">3 choices, play once</div><div class="mpro">More, every colour; Slow loop or Plays once</div><div><span class="tag t-de">Decided, being built</span></div><div class="src">Owner, 2 Nov 2026 (memory: animated-covers-decision). Lane 2 is building it.</div></div>
+<div class="mrow"><div class="mwhat">QR code look</div><div class="mfree">Purple, Night, Clean</div><div class="mpro">+ 30 Pro designs</div><div><span class="tag t-ex">Exists</span></div><div class="src">lib/qr-render.ts:21; apps/api/src/qr/catalogue.ts:5-36; packages/contracts/src/qr.ts:56</div></div>
+<div class="mrow"><div class="mwhat">Print formats</div><div class="mfree">A6 card</div><div class="mpro">+ 8 formats (counter card, poster, sticker…)</div><div><span class="tag t-ex">Exists</span></div><div class="src">dashboard/qr/print/print-view.tsx:38; formats.tsx:16-25</div></div>
+<div class="mrow"><div class="mwhat">Tip amounts on your page</div><div class="mfree">₦2,000 · ₦5,000 · ₦10,000</div><div class="mpro">1–4 of your own, whole naira, and your own smallest tip (never below ₦2,000, no maximum)</div><div><span class="tag t-ex">Exists</span></div><div class="src">packages/domain/src/fees.ts:94-108; database/operations/profiles.ts:203-222; my-page.tsx:415-530</div></div>
+<div class="mrow"><div class="mwhat">Change your handle</div><div class="mfree">No</div><div class="mpro">3 changes</div><div><span class="tag t-ex">Exists</span></div><div class="src">database/operations/profiles.ts:67 (PRO_HANDLE_CHANGES = 3)</div></div>
+<div class="mrow"><div class="mwhat">“Get your own TipMe page” link at the foot of your page</div><div class="mfree">Shown</div><div class="mpro">Removed</div><div><span class="tag t-ex">Exists</span></div><div class="src">app/people/[handle]/page.tsx:141-143</div></div>
+<div class="mrow"><div class="mwhat">Pro badge next to your name</div><div class="mfree">—</div><div class="mpro">Yes</div><div><span class="tag t-ex">Exists</span></div><div class="src">components/profile/recipient-card.tsx:155</div></div>
+<div class="mrow"><div class="mwhat">Share a milestone on your page for 14 days (1st, 10th, 50th, 100th tip; best week; best month)</div><div class="mfree">Yes</div><div class="mpro">Yes</div><div><span class="tag t-ex">Exists</span></div><div class="src">packages/domain/src/rewards.ts:16-27; components/dashboard/moments.tsx:11-42</div></div>
+<div class="mrow"><div class="mwhat">Which emails you get (each tip, weekly report, milestones, guides)</div><div class="mfree">Yes</div><div class="mpro">Yes</div><div><span class="tag t-ex">Exists</span></div><div class="src">settings/sections/notifications.tsx:12-15</div></div>
+<div class="mrow"><div class="mwhat">Hide or report a supporter’s message</div><div class="mfree">Yes</div><div class="mpro">Yes</div><div><span class="tag t-ex">Exists</span></div><div class="src">database/schema.ts:1910-1930 (message_flags)</div></div>
+<div class="mrow"><div class="mwhat">Soft sound when a tip arrives in a background tab, with mute</div><div class="mfree">Yes</div><div class="mpro">Yes</div><div><span class="tag t-de">Decided, not built</span></div><div class="src">Owner, 5 Nov 2026, part of live updates (memory: live-updates-design). Not on dev: no audio in apps/web/src.</div></div>
+<div class="mrow"><div class="mwhat">Choose the tip sound from six</div><div class="mfree">1 sound + mute</div><div class="mpro">All six + mute</div><div><span class="tag t-pr">Proposed</span></div><div class="src">New.</div></div>
+<div class="mrow"><div class="mwhat">Celebration when a tip lands on your dashboard</div><div class="mfree">Hearts or Off</div><div class="mpro">Hearts, Confetti hearts, Calm glow, Off</div><div><span class="tag t-pr">Proposed</span></div><div class="src">New. Needs live updates first: today nothing on the dashboard reacts until the page loads again.</div></div>
+<div class="mrow"><div class="mwhat">Your own thank-you line on the supporter’s receipt</div><div class="mfree">Yes, 140 characters</div><div class="mpro">+ card style and your signature</div><div><span class="tag t-pr">Proposed</span></div><div class="src">New. Today the receipt says “{name} got your thanks.” (tip/[tipId]/status-view.tsx:289).</div></div>
+<div class="mrow"><div class="mwhat">Accent colour on your page follows your cover colour</div><div class="mfree">TipMe purple</div><div class="mpro">Any of the 7 cover colours</div><div><span class="tag t-pr">Proposed</span></div><div class="src">New. The 7 colours exist (covers.ts:54-106). The Tip button stays black.</div></div>
+<div class="mrow"><div class="mwhat">Pin a supporter’s note to your page</div><div class="mfree">—</div><div class="mpro">1 pinned note</div><div><span class="tag t-pr">Proposed</span></div><div class="src">New. Notes are private today, so the supporter must agree first (see “Needs your decision”).</div></div>
+<div class="mrow"><div class="mwhat">Your weekly share card colour</div><div class="mfree">Standard</div><div class="mpro">Your cover colour</div><div><span class="tag t-pr">Proposed</span></div><div class="src">New. The card exists (reports/[week]/report-view.tsx:84).</div></div>
+</div>
+
+<h2 class="h2">The new controls, as they would sit in Settings</h2>
+<p class="sub">A new chapter in Settings called “Make it yours”, after “My page”. Every sound and motion here follows the phone’s reduce-motion setting and TipMe’s mute switch; nothing plays before the person has touched the page (browsers block it anyway).</p>
+<div class="controls">
+  <section class="paper ctl">
+    <h3>Tip sound <span class="tag t-pr">Proposed</span></h3>
+    <p class="hint">Plays when a tip arrives while TipMe is open in another tab. Your decision of 5 Nov gives everyone one soft sound and a mute switch; Pro chooses from six.</p>
+    <div class="sounds"><div class="snd on"><span class="play" aria-label="Play Soft chime"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg></span><span><b>Soft chime</b><small>Free and Pro</small></span><span class="tick">Chosen</span></div><div class="snd"><span class="play" aria-label="Play Kalimba"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg></span><span><b>Kalimba</b><small>Pro</small></span></div><div class="snd"><span class="play" aria-label="Play Talking drum tap"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg></span><span><b>Talking drum tap</b><small>Pro</small></span></div><div class="snd"><span class="play" aria-label="Play Shekere shake"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg></span><span><b>Shekere shake</b><small>Pro</small></span></div><div class="snd"><span class="play" aria-label="Play Glass bell"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg></span><span><b>Glass bell</b><small>Pro</small></span></div><div class="snd"><span class="play" aria-label="Play Heartbeat"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg></span><span><b>Heartbeat</b><small>Pro</small></span></div></div>
+    <div class="well row"><span><b>Play a sound for new tips</b><small>Off means silent everywhere in TipMe</small></span><span class="lever on"><i></i></span></div>
+    <div class="well row" style="margin-top:10px"><span><b>Now playing: Soft chime</b><small>About one second, gentle, never loops</small></span><span class="wave" aria-hidden="true"><i style="height:8px"></i><i style="height:16px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:18px"></i><i style="height:9px"></i><i style="height:14px"></i><i style="height:20px"></i><i style="height:11px"></i><i style="height:6px"></i></span></div>
+  </section>
+
+  <section class="paper ctl">
+    <h3>When a tip lands <span class="tag t-pr">Proposed</span></h3>
+    <p class="hint">What your dashboard does as the balance goes up. Free picks Hearts or Off; Pro gets all four. With reduce motion on, every choice becomes “Off” and the number simply changes.</p>
+    <div class="cks"><div class="ck on"><div class="cp"><span class="cpnum">₦12,500</span><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="flex:none;position:absolute;left:30px;top:10px;opacity:.9"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"/></svg><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true" style="flex:none;position:absolute;left:58px;top:2px"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#b38cff"/></svg><svg viewBox="0 0 24 24" width="9" height="9" aria-hidden="true" style="flex:none;position:absolute;left:80px;top:14px;opacity:.7"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"/></svg></div><b>Hearts</b><small>A few hearts rise from the amount</small></div><div class="ck"><div class="cp"><span class="cpnum">₦12,500</span><svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true" style="flex:none;position:absolute;left:14px;top:6px;transform:rotate(-20deg)"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"/></svg><svg viewBox="0 0 24 24" width="9" height="9" aria-hidden="true" style="flex:none;position:absolute;left:40px;top:2px;transform:rotate(15deg)"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#e3b23c"/></svg><svg viewBox="0 0 24 24" width="8" height="8" aria-hidden="true" style="flex:none;position:absolute;left:66px;top:10px;transform:rotate(30deg)"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#2f7d5b"/></svg><svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true" style="flex:none;position:absolute;left:92px;top:4px;transform:rotate(-10deg)"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#d9467a"/></svg><svg viewBox="0 0 24 24" width="8" height="8" aria-hidden="true" style="flex:none;position:absolute;left:116px;top:12px;transform:rotate(20deg)"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#1c4e8a"/></svg><svg viewBox="0 0 24 24" width="9" height="9" aria-hidden="true" style="flex:none;position:absolute;left:136px;top:0px;transform:rotate(-30deg)"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#b38cff"/></svg></div><b>Confetti hearts</b><small>A short burst, only for tips</small></div><div class="ck"><div class="cp"><span class="cpnum" style="box-shadow:0 0 0 6px rgba(122,50,249,.14),0 0 22px rgba(122,50,249,.35);border-radius:10px;padding:2px 8px">₦12,500</span></div><b>Calm glow</b><small>The balance glows once</small></div><div class="ck"><div class="cp"><span class="cpnum">₦12,500</span></div><b>Off</b><small>Just the number changes</small></div></div>
+    <div class="well row"><span><b>Bigger celebration for milestones</b><small>Your 1st, 10th, 50th and 100th tip, and a best week or month</small></span><span class="lever on"><i></i></span></div>
+    <p class="hint" style="margin-top:12px">Needs live updates, which you approved but are not built: today the balance only changes when the page loads again.</p>
+  </section>
+
+  <section class="paper ctl">
+    <h3>Your thank-you <span class="tag t-pr">Proposed</span></h3>
+    <p class="hint">A line every supporter reads right after paying, in your words. Free: the line. Pro: also the card style and your signature.</p>
+    <div class="ty">
+      <div>
+        <div class="well ta">Thank you for backing my channel. Every tip goes into better gear for the next video.</div>
+        <div class="count">93 of 140</div>
+        <div class="styles"><span style="background:#fffefa;box-shadow:inset 0 0 0 2px #7a32f9">Paper</span><span style="background:#7a32f9;color:#fff">Violet</span><span style="background:#141210;color:#fff">Night</span></div>
+        <div class="well row" style="margin-top:12px"><span><b>Sign it “Ada”</b><small>Pro</small></span><span class="lever on"><i></i></span></div>
+      </div>
+      <div class="paper receipt">
+        <p class="src" style="margin:0 0 8px">The supporter’s receipt</p>
+        <h4>Ada got your thanks.</h4>
+        <div class="slip"><q>Thank you for backing my channel. Every tip goes into better gear for the next video.</q><p>Ada</p></div>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:12px">“Ada got your thanks.” is today’s heading (status-view.tsx:289). The line is checked like a bio: no links, 140 characters.</p>
+  </section>
+
+  <section class="paper ctl">
+    <h3>Your colour <span class="tag t-pr">Proposed</span></h3>
+    <p class="hint">On a Pro page, the chosen amount key and small accents take your cover colour instead of TipMe purple. The Tip button stays black, so paying always looks the same.</p>
+    <div class="sws"><span class="sw" title="Violet"><i style="background:#7a32f9"></i><small>Violet</small></span><span class="sw" title="Lilac"><i style="background:#b38cff"></i><small>Lilac</small></span><span class="sw" title="Forest"><i style="background:#2f6b4f"></i><small>Forest</small></span><span class="sw on" title="Ocean"><i style="background:#1c4e8a"></i><small>Ocean</small></span><span class="sw" title="Sun"><i style="background:#d99a1e"></i><small>Sun</small></span><span class="sw" title="Rose"><i style="background:#c2436e"></i><small>Rose</small></span><span class="sw" title="Neutral"><i style="background:#5d5a54"></i><small>Neutral</small></span></div>
+    <div class="mini"><span>₦2,000</span><span style="background:#1c4e8a;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 3px 0 #123660">₦5,000</span><span>₦10,000</span></div>
+    <div class="go" style="margin-top:10px">Tip ₦5,000</div>
+    <p class="hint" style="margin-top:12px">The seven colours are the cover colours you already have (covers.ts:54-106). Colours with weak contrast against white text get dark text automatically.</p>
+  </section>
+
+  <section class="paper ctl">
+    <h3>A pinned note <span class="tag t-pr">Proposed</span></h3>
+    <p class="hint">Pro can pin one supporter’s note to the top of their page. Notes are private today, so a note can only be pinned if its writer ticked “Ada may show this on her page” when tipping.</p>
+    <div class="pinned"><span class="pin">Pinned by Ada</span><div class="slip" style="margin:0;border:0;box-shadow:none;padding:0"><q>Your edits saved my channel. Thank you.</q><p>Chidi</p></div></div>
+    <div class="well row"><span><b>New tick box on the tip form</b><small>“Ada may show this note on her page”, off by default</small></span><span class="lever"><i></i></span></div>
+  </section>
+
+  <section class="paper ctl">
+    <h3>Covers that move, QR codes that are yours</h3>
+    <p class="hint">Already decided or built, shown here so “Make it yours” lists everything in one place.</p>
+    <div class="well row"><span><b>Animated cover</b><small>Free: 3, plays once. Pro: more, every colour, Slow loop or Plays once</small></span><span class="tag t-de">Decided, being built</span></div>
+    <div class="well row" style="margin-top:10px"><span><b>QR design and print formats</b><small>Free: 3 looks, A6 card. Pro: 30 designs, 8 formats</small></span><span class="tag t-ex">Exists</span></div>
+    <div class="well row" style="margin-top:10px"><span><b>Your own tip amounts</b><small>Pro: 1–4 amounts and your own smallest tip, from ₦2,000</small></span><span class="tag t-ex">Exists</span></div>
+    <div class="well row" style="margin-top:10px"><span><b>Weekly share card in your colour</b><small>Pro: the “My week on TipMe” image takes your cover colour</small></span><span class="tag t-pr">Proposed</span></div>
+  </section>
+</div>
+
+<h2 class="h2">My top five, by what people feel against what it costs</h2>
+<p class="sub">Ranked by impact first, then effort. Impact: how often a person meets it and how much it says “we see you”. Effort: rough build size.</p>
+<div class="rank">
+  <div class="paper rk"><span class="n">1</span><b>Your thank-you on the receipt</b><p>Every supporter reads it, every time. Turns a payment into a reply from the person.</p><div class="ie"><span class="tag t-ex">High impact</span><span class="tag t-pr">Small: one field, one line on the receipt</span></div></div>
+  <div class="paper rk"><span class="n">2</span><b>Choose your tip sound</b><p>The moment a tip arrives becomes theirs. Rides on live updates, which you already approved.</p><div class="ie"><span class="tag t-ex">High impact</span><span class="tag t-pr">Medium: needs live updates and six sounds</span></div></div>
+  <div class="paper rk"><span class="n">3</span><b>When a tip lands</b><p>Hearts, confetti hearts, a glow or nothing. Small, personal, and it respects calm people.</p><div class="ie"><span class="tag t-ex">High impact</span><span class="tag t-pr">Small once live updates exist</span></div></div>
+  <div class="paper rk"><span class="n">4</span><b>Your colour</b><p>A Pro page that matches its cover, from the amount keys to the share card.</p><div class="ie"><span class="tag t-ex">Medium impact</span><span class="tag t-pr">Medium: colour tokens per page</span></div></div>
+  <div class="paper rk"><span class="n">5</span><b>A pinned note</b><p>Public proof that people love your work, with the writer’s consent.</p><div class="ie"><span class="tag t-ex">Medium impact</span><span class="tag t-pr">Medium: new consent tick box and pinning</span></div></div>
+</div>
+
+<div class="decide">
+  <div class="paper">
+    <h3>Needs your decision</h3>
+    <ol>
+      <li><b>Thank-you line for Free too?</b> I propose yes: it is the warmest thing on the list, and Pro still gets styles and a signature.</li>
+      <li><b>Sounds:</b> six new sounds must be commissioned or licensed. The names here are placeholders for the feel I mean.</li>
+      <li><b>Pinned notes:</b> adds a new tick box to the tip form so the writer agrees. Without it, no pinning.</li>
+      <li><b>Celebration for Free:</b> Hearts or Off only, or all four for everyone?</li>
+    </ol>
+  </div>
+  <div class="paper">
+    <h3>Ideas I cut, and why</h3>
+    <ul class="cut">
+      <li><b>Reordering page sections:</b> the page is short and the order is designed around tipping; moving things would mostly break it.</li>
+      <li><b>A custom share card per page:</b> the proposed per-person card on the Link previews board already uses the person’s cover and name.</li>
+      <li><b>Custom fonts:</b> hurts reading and page speed, and makes TipMe pages look unrelated.</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

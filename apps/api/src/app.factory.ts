@@ -13,6 +13,8 @@ import { requestContext } from './http/request-context.middleware.js';
 import { previewGate } from './http/preview-gate.middleware.js';
 import { SERVICE_NAME, type ApiConfig } from './config.js';
 import { mailWebhookBody } from './mail/raw-body.middleware.js';
+import { liveGate } from './live/live-gate.middleware.js';
+import { LiveHubService } from './live/live-hub.service.js';
 
 const CROSS_ORIGIN_PATHS = [
   '/v1/tip-quotes',
@@ -93,6 +95,13 @@ export async function createApp(
       credentials: credentialed,
     });
   });
+  // After CORS (a 204 the browser can read ends EventSource for good) and before any guard.
+  app.use(
+    liveGate({
+      enabled: config.LIVE_UPDATES_ENABLED,
+      metrics: app.get(LiveHubService).metrics,
+    }),
+  );
   app.use(mailWebhookBody);
   app.useBodyParser('json', { limit: '16kb' });
   app.useGlobalFilters(

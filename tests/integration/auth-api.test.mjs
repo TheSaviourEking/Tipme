@@ -4,7 +4,14 @@ import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { seedDemoProfiles } from '../../packages/database/dist/index.js';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  REDIS_URL,
+  Redis,
+  WEB,
+  browserHeaders,
+  signIn,
+  startStack,
+} from './helpers.mjs';
 
 startTelemetry({
   serviceName: 'tipme-integration',
@@ -159,6 +166,30 @@ test('other sessions can be signed out', async () => {
     ).status,
     200,
   );
+});
+
+test('sign out others publishes sessions.changed for that user', async (t) => {
+  const subscriber = new Redis(REDIS_URL);
+  t.after(() => subscriber.quit());
+  const messages = [];
+  subscriber.on('message', (_channel, raw) => messages.push(JSON.parse(raw)));
+  await subscriber.subscribe(`${stack.prefix}:live:v1`);
+  const phone = '+2348031110014';
+  const one = await signIn(stack.api, phone);
+  await signIn(stack.api, phone);
+  messages.length = 0;
+  const out = await post(
+    '/v1/me/sessions/sign-out-others',
+    {},
+    browserHeaders(one.cookie),
+  );
+  assert.equal(out.status, 204);
+  const deadline = Date.now() + 3000;
+  while (messages.length === 0 && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(messages, [
+    { to: { user: one.body.data.userId }, type: 'sessions.changed' },
+  ]);
 });
 
 test('auth routes allow credentials only for the web origin; checkout stays without', async () => {

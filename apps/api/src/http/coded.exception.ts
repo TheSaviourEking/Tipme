@@ -8,6 +8,8 @@ export class CodedHttpException extends HttpException {
     readonly code: ApiErrorCode,
     /** A fixed code to add to the response, never request data. */
     readonly reason?: string,
+    /** Sent as Retry-After, in seconds. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(code, status);
   }

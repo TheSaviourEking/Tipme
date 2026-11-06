@@ -1,7 +1,12 @@
-import type { TipStatusState, TipStatusView } from '@tipme/contracts';
+import {
+  shownThanks,
+  type PagePlan,
+  type TipStatusState,
+  type TipStatusView,
+} from '@tipme/contracts';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { paymentAttempts, profiles, tips } from '../schema.js';
+import { paymentAttempts, profiles, tipMessages, tips } from '../schema.js';
 import { guarded } from './errors.js';
 
 /** After this long without an answer the supporter is told we are still checking. */
@@ -28,6 +33,11 @@ export function tipStatusView(
         createdAt: tips.createdAt,
         handle: profiles.handle,
         displayName: profiles.displayName,
+        plan: profiles.plan,
+        pageStatus: profiles.status,
+        thanksLine: profiles.thanksLine,
+        thanksStyle: profiles.thanksStyle,
+        thanksSigned: profiles.thanksSigned,
       })
       .from(tips)
       .innerJoin(profiles, eq(profiles.id, tips.profileId))
@@ -72,6 +82,28 @@ export function tipStatusView(
         ? paidAttempt.providerReference.slice(-6).toUpperCase()
         : null;
     }
+    // Only whether consent was given; the note's text is never read here.
+    let noteMayShow = false;
+    if (state === 'paid') {
+      const [note] = await db
+        .select({ mayShow: tipMessages.mayShow })
+        .from(tipMessages)
+        .where(eq(tipMessages.tipId, tipId));
+      noteMayShow = note?.mayShow === true;
+    }
+    // The recipient's line as it is now, not as it was when the tip was made (owner's answer,
+    // 5 Nov 2026): an edit, or a page leaving Pro, also changes what older receipts show.
+    // A page TipMe suspended shows no line, so an abusive one stops at once; staff cannot edit it.
+    const thanks =
+      state === 'paid' && tip.pageStatus === 'active'
+        ? shownThanks({
+            line: tip.thanksLine,
+            style: tip.thanksStyle,
+            signed: tip.thanksSigned,
+            plan: tip.plan as PagePlan,
+            displayName: tip.displayName,
+          })
+        : null;
     return {
       state,
       recipient: { handle: tip.handle, displayName: tip.displayName },
@@ -79,6 +111,8 @@ export function tipStatusView(
       currency: tip.currency,
       completedAt: tip.completedAt?.toISOString() ?? null,
       reference,
+      ...(noteMayShow ? { noteMayShow: true as const } : {}),
+      ...(thanks ? { thanks } : {}),
     };
   });
 }

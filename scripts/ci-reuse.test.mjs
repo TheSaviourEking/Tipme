@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { candidateHeads, testedTree, TESTED_CONTEXT } from './ci-reuse.mjs';
+import {
+  candidateHeads,
+  commitTree,
+  testedTree,
+  TESTED_CONTEXT,
+} from './ci-reuse.mjs';
 
 // When a merge into dev or main can reuse a pull request's green run: only if a PR run that
 // passed every job recorded exactly this file tree on one of the merged commits.
@@ -10,6 +15,18 @@ const status = (state, description, context = TESTED_CONTEXT) => ({
   state,
   description,
   context,
+});
+
+test('commitTree requests only the tree sha', () => {
+  const calls = [];
+  assert.equal(
+    commitTree('o/r', TREE, (path, query) => {
+      calls.push([path, query]);
+      return TREE;
+    }),
+    TREE,
+  );
+  assert.deepEqual(calls, [[`repos/o/r/commits/${TREE}`, '.commit.tree.sha']]);
 });
 
 test('the newest tested-tree status, success, for exactly this tree: reuse', () => {

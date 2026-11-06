@@ -31,12 +31,21 @@ export function ProPlan() {
         <li>
           Three changes to your handle. Free pages keep the handle they claimed.
         </li>
+        <li>
+          Every animated cover, in any colour, and you choose how it plays
+        </li>
         <li>Your own tip amounts</li>
+        <li>Card styles and your signature on your thank-you</li>
+        <li>
+          Up to 8 links in your own order, one of them featured, including your
+          website, Telegram, LinkedIn and more. Free pages show 3.
+        </li>
         <li>No “Get your own TipMe page” link at the foot of your page</li>
       </ul>
       <p className="tm-hint">
-        Covers are free on every plan, so choosing one under My page costs
-        nothing.
+        Photos and designs are free on every plan, and Free includes three
+        animated covers that play once. Pro adds every animated cover in any
+        colour, and you choose Slow loop or Plays once.
       </p>
       {!pro && (
         <>

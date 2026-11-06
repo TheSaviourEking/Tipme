@@ -1,3 +1,65 @@
+# Current handoff — animated covers (5 November 2026)
+
+- Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.
+- Free: Drifting, Rising, Ripple, played once. Pro: all six, any colour, "Plays once" or "Slow loop". The server refuses Pro-only choices (`COVER_DESIGN_PRO_REQUIRED`); a page leaving Pro shows the still frame and keeps its choice.
+- The Pro page's sample is the real `ProfileCover` (Drifting on Free, Night sky on Pro), so it follows the reduced-motion and forced-colours rules.
+- Perf, cold (fresh context per sample, lane 3, throttled phone, Tobi on Pro with Night sky on a loop, motion allowed): `/@tobi` 1112, 1088, 1092 ms; LCP element `p.profile-bio`. Not a field measurement.
+- Evidence: `.superpowers/program/e-merge-report.md` (main checkout).
+
+# Current handoff — Make it yours: consent and the thank-you line (5 November 2026)
+
+- Branch `feat/make-it-yours`, test lane 2, one PR into `dev`. One migration, 0076, regenerated with drizzle-kit against the merged schema; `migration-journal.test` passes. Animated covers regenerates as 0077 after this merges.
+- Consent never makes a note public by itself: only the receipt flag reads `may_show` until PR D.
+- Rollback: the intent request is `.strict()`. After a rollback to a version without `noteMayShow`, a tab already showing the new form gets a 400 when the supporter ticks the box (untick and retry works). Blue/green moves web and API together, so only a rollback hits it.
+- The thank-you field has no native `maxLength`: the browser counts UTF-16 units, so 140 would stop an emoji line at 70. The counter (on the cleaned line), the check and the server all use code points.
+- Invisible format characters are removed from the line, keeping a zero-width joiner only inside joined emoji; tag characters go too, so a subdivision flag (Scotland) shows as a plain black flag.
+- Not done, for the owner: staff have no route to clear an abusive line (a suspended page's line is hidden from receipts); the bio still has no link check; the receipt slip has no entrance animation (the receipt rises in, the slip is there at once).
+- Verified: commands and counts in `.superpowers/program/miy-build-report.md` and the PR body.
+
+# Previous handoff — states PR A, primitives (5 November 2026): merged in #124
+
+- Branch `feat/states`, test lane 1, merged in #124. Front end only: `packages/ui`, the design-system page, `preview-states`, review screens. No API, contract, database or payment change.
+- `Notice` and `EmptyState` still exist; nothing new imports them. The Linux design-system baselines came from CI's render (43e3cf0).
+- `.tm-field-error` is now black text with the red in the field's edge, and invalid fields shake once (not with reduced motion): this reaches every form, not just the specimen.
+- Evidence: `.superpowers/program/states-a-build-report.md` in the main checkout.
+
+# Current handoff — live updates PR 1 (5 November 2026)
+
+- Branch/worktree: `feat/live-updates` / `.worktrees/live-updates`, merged with `origin/dev` at `527bce9` and pushed with a PR to dev. Nothing ran against staging or production; the Caddyfile and flag are the owner's deploy steps (`docs/runbooks/production.md` §10). No regulatory decision is implied (D-03, D-08, D-11 stay open).
+- Signals only: the browser receives `{type}` and re-reads its existing endpoints. The heartbeat is a `: hb` comment plus a named `hb` event, because EventSource never shows comments to the page.
+- Migration 0075 was regenerated against dev; the strict journal test passes.
+- Verified results and untested areas: `.superpowers/program/c-build-report.md`.
+
+# Current handoff — partner quote cache (5 November 2026)
+
+- Branch `fix/partner-quote-cache`, lane 3, merged into dev as PR #118. Review: `.superpowers/program/quote-cache-review.md`; build report: `.superpowers/program/quote-cache-report.md`.
+- The ledger, holds, the switch and the route are read fresh on every quote; only the partner's answer is cached. A failed invalidation can't serve stale data, because the stamp covers every recorded change. A Redis outage means a direct partner call. The Withdraw page reloads its figures after `INSUFFICIENT_BALANCE` or `WITHDRAWAL_TOO_SMALL`.
+- CI follow-up: `e2e (4)` failed its recovery-page axe audit on a social-link chip narrower than the 44px touch target. `apps/web/src/app/globals.css` now sets both minimum dimensions to 44px; the focused desktop recovery test passed on E2E lane 1.
+- Open: changes the partner makes that TipMe hasn't recorded last up to 30 s (the withdrawal still checks fresh). No operation sets `REVERSED` yet (TODO in the test). Use a version counter if a recipient's payout count grows large.
+
+# Current handoff — social links (5 November 2026)
+
+- Branch/worktree: `feat/social-links` / `.worktrees/social-links`, not pushed. Lane 0 used for e2e and review:screens.
+- Verified: format, lint, typecheck, every unit test, the touched integration files, e2e social-links, accounts and profile-page specs, and review:screens (82 shots). Evidence: `.superpowers/program/social-build-report.md`.
+- Open for the owner: the payment partner's written position on adult-platform links, and the Terms' acceptable-use section. Nothing here is legal or regulatory approval.
+
+# Current handoff — bank picker (5 November 2026)
+
+- Branch `feat/bank-picker`, test lane 3, not pushed. Web only: `apps/web/src/lib/bank-{aliases,directory,search}.ts`, `listbox-navigation.ts`, `name-check.ts`, `components/account/bank-picker.tsx`, `get-paid-card.tsx`, a `.bank-picker` block in `globals.css`.
+- Popular keys show by code only. The fintech codes (OPay, Moniepoint, PalmPay, Kuda) were not checked against the partner's live list (staging is behind the preview password, which is not to be used), so a key whose code the partner doesn't use simply hides; a unit test pins that.
+- The e2e API now lifts the per-IP name-check limit (`RATE_LIMIT_BANK_RESOLVE_PER_HOUR`), as it lifts the others; the 10-a-day limit per person is unchanged.
+- The web tsconfig allows `.ts` import extensions, so `node --test` can load lib modules that import each other.
+- Verified (commands and counts in `.superpowers/program/bank-build-report.md`): format:check, lint, typecheck, all unit tests, scripts tests, the bank-picker, get-paid, withdraw and cover-settings e2e specs on lane 3, and review:screens.
+- Known differences from the board: "fir" doesn't list Fidelity Bank (no fuzzy matching); the no-match sentence uses a curly apostrophe; option B is not built.
+
+# Current handoff — dashboard data (5 November 2026)
+
+- Branch `feat/dashboard-data`, test lane 1, not pushed. Migration 0071 is `CREATE INDEX payouts_profile_created` only.
+- A withdrawal records a bank only if the recipient had saved one when asking. The pretend provider needs none, so a pretend payout with no saved bank shows no bank line, while the withdraw form still says "Pretend bank ••0000". That is the rule "never the current bank", not a bug.
+- Totals are lifetime and paid-only; "tips", not "people" (no supporter identity is kept).
+- Verified (commands in the build report `.superpowers/program/d-build-report.md`): format:check, lint, typecheck, unit tests, the four changed integration files, and the withdraw, dashboard, reports, gaps and tips-list e2e specs. See the report for pass counts.
+- Follow-ups: a stored running total if the totals p95 grows; the board's "people" copy; the tips list `at` is still shown to the millisecond (only the cursor keeps microseconds).
+
 # Current handoff — database connection budget (2 November 2026)
 
 - Branch/worktree: `fix/db-connection-budget` / `.worktrees/db-budget`, from `origin/dev`. Pushed; PR to dev open. No migration. Nothing ran against staging or production.

@@ -172,6 +172,7 @@ export class CheckoutService {
       payerDisplayLabel: request.payerDisplayLabel,
       purpose: request.purpose,
       celebrationMomentId: request.celebrationMomentId,
+      noteMayShow: request.noteMayShow,
     });
     const start = await findAttemptStart(db, intent.attemptId);
     if (!start) throw new OperationError('ATTEMPT_NOT_FOUND');

@@ -32,7 +32,9 @@ export default function TipDetailPage() {
     data: tip,
     error,
     reload,
-  } = usePanel<MyTipDetail>(`/v1/me/tips/${encodeURIComponent(tipId)}`);
+  } = usePanel<MyTipDetail>(`/v1/me/tips/${encodeURIComponent(tipId)}`, {
+    live: ['tips.changed'],
+  });
 
   if (error === 'load' && !tip)
     return (

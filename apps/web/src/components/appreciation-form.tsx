@@ -109,6 +109,9 @@ export function AppreciationForm({
   const choseAmount = useRef(false);
   const [custom, setCustom] = useState('');
   const [message, setMessage] = useState('');
+  // Whether the recipient may show this note on their page. Off by default, offered only while there
+  // is a note, and dropped when the note is emptied, so a new note always asks again.
+  const [noteMayShow, setNoteMayShow] = useState(false);
   const [payerName, setPayerName] = useState('');
   const [purpose, setPurpose] = useState<TipPurpose | ''>('');
   const [remember, setRemember] = useState(false);
@@ -246,6 +249,7 @@ export function AppreciationForm({
     const result = await createTip(draftKey.current, {
       quoteId: current.quoteId,
       ...(trimmed ? { message: trimmed } : {}),
+      ...(trimmed && noteMayShow ? { noteMayShow: true as const } : {}),
       ...(purpose ? { purpose } : {}),
       ...(payerName.trim() ? { payerDisplayLabel: payerName.trim() } : {}),
       ...(joining && celebration
@@ -426,6 +430,7 @@ export function AppreciationForm({
           if (!message && event.target.value)
             track('message_started', { surface: 'profile', handle });
           setMessage(event.target.value);
+          if (!event.target.value.trim()) setNoteMayShow(false);
           setMessageError('');
           draftKey.current = null;
         }}
@@ -433,6 +438,27 @@ export function AppreciationForm({
         hint={`${message.length}/${MESSAGE_LIMIT} characters. Sent privately with your tip.`}
         error={messageError || undefined}
       />
+      {message.trim() && (
+        <label className="tip-remember" htmlFor={`${id}-note-may-show`}>
+          <input
+            id={`${id}-note-may-show`}
+            type="checkbox"
+            checked={noteMayShow}
+            disabled={submitting}
+            onChange={(event) => {
+              setNoteMayShow(event.target.checked);
+              draftKey.current = null;
+            }}
+          />
+          <span>
+            {recipient} may show this note on their page
+            <small>
+              With your name, if you gave one. Without this, your note stays
+              private.
+            </small>
+          </span>
+        </label>
+      )}
       <InputField
         id={`${id}-name`}
         label="Your name (optional)"

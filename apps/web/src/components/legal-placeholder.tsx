@@ -18,7 +18,7 @@ export function LegalPlaceholder({
   children?: ReactNode;
 }) {
   return (
-    <main id="main" tabIndex={-1} className="legal-page">
+    <main id="main" tabIndex={-1} className="legal-page marketing-page">
       <Container>
         <Surface material="paper" className="legal-page__column">
           <p className="eyebrow">Coming soon</p>

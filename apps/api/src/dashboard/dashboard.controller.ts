@@ -17,24 +17,30 @@ import type { Logger } from '@tipme/observability';
 import type { Response } from 'express';
 import {
   messageReportSchema,
+  myTipsNoteSchema,
+  myWithdrawalsQuerySchema,
   withdrawalRequestSchema,
   type ActivityRow,
   ApiDataResponse,
   type DashboardSummary,
   type MyTipDetail,
   type MyTipRow,
+  type TipTotals,
   type WeeklyReportData,
   type WithdrawalQuoteResponse,
+  type WithdrawalsPage,
 } from '@tipme/contracts';
 import {
   dashboardSummary,
   exportMyTipsCsv,
   getWeeklyReport,
   listMyTips,
+  listMyWithdrawals,
   listWeeklyReports,
   myProfileId,
   hideMessage,
   myTipDetail,
+  myTipTotals,
   recentActivity,
   reportMessage,
   requestWithdrawal,
@@ -56,6 +62,10 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ServerEvents } from '../analytics/server-events.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import {
+  PARTNER_QUOTE_CACHE,
+  type RedisPartnerQuoteCache,
+} from '../infra/partner-quote-cache.js';
 import { LOGGER } from '../tokens.js';
 
 const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
@@ -69,6 +79,8 @@ export class DashboardController {
     @Inject(WITHDRAWAL_PROVIDER_TOKEN) private readonly provider: PayoutReader,
     @Inject(ServerEvents) private readonly events: ServerEvents,
     @Inject(LOGGER) private readonly logger: Logger,
+    @Inject(PARTNER_QUOTE_CACHE)
+    private readonly partnerCache: RedisPartnerQuoteCache,
   ) {}
 
   /** A wrong key looks like an outage to the recipient; this is how staff tell them apart. */
@@ -110,10 +122,16 @@ export class DashboardController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
     @Query('q') q?: string,
+    @Query('note') note?: string,
   ): Promise<
     ApiDataResponse<{ items: MyTipRow[]; nextCursor: string | null }>
   > {
     if (q !== undefined && (typeof q !== 'string' || q.length > 100))
+      throw new CodedHttpException(400, 'VALIDATION_FAILED');
+    // Absent means no filter; anything but "with" is refused rather than ignored.
+    const noteFilter =
+      note === undefined ? undefined : myTipsNoteSchema.safeParse(note);
+    if (noteFilter && !noteFilter.success)
       throw new CodedHttpException(400, 'VALIDATION_FAILED');
     return {
       data: await listMyTips(this.database.db, await this.profile(auth), {
@@ -121,7 +139,19 @@ export class DashboardController {
         ...(cursor ? { cursor: cursor.slice(0, 200) } : {}),
         limit: Number.parseInt(limit ?? '20', 10) || 20,
         ...(q ? { q } : {}),
+        ...(noteFilter?.success ? { note: noteFilter.data } : {}),
       }),
+    };
+  }
+
+  /** What the recipient has received from paid tips. Tips still being confirmed are not counted. */
+  @Get('tip-totals')
+  @Header('Cache-Control', 'private, no-store')
+  async tipTotals(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<TipTotals>> {
+    return {
+      data: await myTipTotals(this.database.db, await this.profile(auth)),
     };
   }
 
@@ -218,6 +248,8 @@ export class DashboardController {
         profileId,
         provider: this.provider,
         onReadFailure: this.logReadFailure('quote'),
+        // Only the provider's side, briefly; TipMe's ledger is read fresh on every quote.
+        cache: this.partnerCache,
       }),
       withdrawalInReview(this.database.db, profileId),
     ]);
@@ -233,6 +265,23 @@ export class DashboardController {
               feeMinor: quote.feeMinor.toString(),
             }
           : { ...quote, inReview },
+    };
+  }
+
+  /** The recipient's withdrawals, newest request first, each with the bank it went to. */
+  @Get('withdrawals')
+  @Header('Cache-Control', 'private, no-store')
+  async withdrawals(
+    @CurrentUser() auth: AuthContext,
+    @Query(new ZodValidationPipe(myWithdrawalsQuerySchema))
+    query: z.infer<typeof myWithdrawalsQuerySchema>,
+  ): Promise<ApiDataResponse<WithdrawalsPage>> {
+    return {
+      data: await listMyWithdrawals(
+        this.database.db,
+        await this.profile(auth),
+        query,
+      ),
     };
   }
 
@@ -252,13 +301,23 @@ export class DashboardController {
       data: 'idempotency-key',
     });
     const profileId = await this.profile(auth);
-    const result = await requestWithdrawal(this.database.db, {
-      profileId,
-      amountMinor: BigInt(body.amountMinor),
-      idempotencyKey: key,
-      provider: this.provider,
-      onReadFailure: this.logReadFailure('request'),
-    });
+    // Before and after: the request itself always asks the provider (it takes no cache), and a
+    // quote shown meanwhile or next must too. A failed invalidation is covered by the stamp of
+    // TipMe's records in every key, which the new payout changes.
+    const scope = { provider: this.provider.name, profileId };
+    await this.partnerCache.invalidate(scope);
+    let result: Awaited<ReturnType<typeof requestWithdrawal>>;
+    try {
+      result = await requestWithdrawal(this.database.db, {
+        profileId,
+        amountMinor: BigInt(body.amountMinor),
+        idempotencyKey: key,
+        provider: this.provider,
+        onReadFailure: this.logReadFailure('request'),
+      });
+    } finally {
+      await this.partnerCache.invalidate(scope);
+    }
     await this.events.record(
       'payout_requested',
       `payout_requested.${result.payoutId}`,

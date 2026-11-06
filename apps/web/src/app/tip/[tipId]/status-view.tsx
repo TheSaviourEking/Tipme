@@ -13,6 +13,7 @@ import { ActionLink, Button, Card, Notice, Skeleton, Surface } from '@tipme/ui';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
+import { ThanksSlip } from '@/components/thanks-slip';
 import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
 import { nextCheckDelay } from '@/lib/status-polling';
@@ -309,6 +310,8 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
           </>
         )}
       </div>
+      {/* Outside the live region, so the announcement stays short. Older APIs send no line. */}
+      {paid && tip.thanks && <ThanksSlip slip={tip.thanks} />}
       {paid ? (
         <Surface
           material="paper"

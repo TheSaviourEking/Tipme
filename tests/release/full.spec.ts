@@ -138,9 +138,9 @@ test('the whole story works together, and leaves nothing visible behind', async 
 
       // The recipient sees it, with a notification, and withdraws everything.
       await recipient.goto('/dashboard');
-      await expect(
-        recipient.getByText(/NGN 1,9\d\d\.\d\d|NGN [\d,]+\.\d\d/).first(),
-      ).toBeVisible({ timeout: 30_000 });
+      await expect(recipient.getByText(/₦1,9\d\d|₦[\d,]+/).first()).toBeVisible(
+        { timeout: 30_000 },
+      );
       await expect
         .poll(
           async () =>

@@ -4,6 +4,7 @@ import {
   E2E_MAIL_SEAL_KEY,
   E2E_OPS_TOTP_KEY,
   E2E_REVALIDATE_SECRET,
+  LANE,
   WEB_ORIGIN,
   stackEnv,
 } from './tests/e2e/stack';
@@ -16,6 +17,7 @@ const env = (extra: Record<string, string>) => ({
 
 export default defineConfig({
   testDir: './tests/e2e',
+  outputDir: `./${LANE.outputDir}`,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
@@ -66,8 +68,8 @@ export default defineConfig({
       // Built by test:e2e with NEXT_PUBLIC_API_ORIGIN pointing at the API below.
       // Next prints Ready and then never answers the homepage request Playwright
       // uses as a health check, so wait until the port accepts a connection.
-      command: 'pnpm --filter @tipme/web start --port 3100',
-      port: 3100,
+      command: `pnpm --filter @tipme/web start --port ${LANE.webPort}`,
+      port: LANE.webPort,
       stdout: 'pipe',
       timeout: 300_000,
       env: {
@@ -89,7 +91,7 @@ export default defineConfig({
       timeout: 300_000,
       env: env({
         HOST: '127.0.0.1',
-        PORT: '4100',
+        PORT: String(LANE.apiPort),
         WEB_ORIGIN,
         STATUS_TOKEN_SECRET: 'e2e-only-status-token-secret-32-characters',
         AUTH_CODE_SECRET: 'e2e-only-auth-code-secret-32-characters!!',
@@ -105,6 +107,12 @@ export default defineConfig({
         RATE_LIMIT_ANALYTICS_PER_MIN: '10000',
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
+        LIVE_UPDATES_ENABLED: 'true',
+        // Every page opens a stream from 127.0.0.1.
+        RATE_LIMIT_LIVE_CONNECT_PER_MIN: '10000',
+        // The Get paid card now checks a name on its own, so many tests check from 127.0.0.1.
+        // The 10-a-day limit per person still applies (every test is a new person).
+        RATE_LIMIT_BANK_RESOLVE_PER_HOUR: '10000',
       }),
     },
     {

@@ -1595,6 +1595,24 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "animation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "motion": {
+                    "type": "string",
+                    "enum": [
+                      "once",
+                      "loop"
+                    ]
                   }
                 },
                 "required": [
@@ -1893,6 +1911,43 @@
         ]
       }
     },
+    "/v1/me/events": {
+      "get": {
+        "operationId": "Live.me",
+        "tags": [
+          "Live"
+        ],
+        "responses": {
+          "200": {
+            "description": "A text/event-stream of change signals for the signed-in recipient: `retry: 5000`, then `data: {\"type\":\"ready\"}`, then `data: {\"type\":\"<signal>\"}` lines and a heartbeat (a `: hb` comment and an `hb` event) every 20 s. Signals carry only a type, never data; on one, re-read the matching endpoints. 204 while live updates are off. 429 LIVE_LIMIT past 8 streams for one person; 503 LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "live_connect",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/exports/tips.csv": {
       "get": {
         "operationId": "Dashboard.exportTips",
@@ -1950,6 +2005,121 @@
                 },
                 "required": [
                   "handle"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/links": {
+      "put": {
+        "operationId": "MeProfile.links",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "links": {
+                    "maxItems": 11,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "platform": {
+                          "type": "string",
+                          "enum": [
+                            "tiktok",
+                            "facebook",
+                            "instagram",
+                            "youtube",
+                            "x",
+                            "snapchat",
+                            "whatsapp",
+                            "twitch",
+                            "kick",
+                            "audiomack",
+                            "boomplay",
+                            "spotify",
+                            "applemusic",
+                            "soundcloud",
+                            "website",
+                            "telegram",
+                            "linkedin",
+                            "threads",
+                            "patreon",
+                            "selar",
+                            "substack",
+                            "onlyfans",
+                            "fansly"
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "featured": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "platform",
+                        "url"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "show": {
+                    "type": "boolean"
+                  },
+                  "hidden": {
+                    "maxItems": 11,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  }
+                },
+                "required": [
+                  "links",
+                  "show"
                 ],
                 "additionalProperties": false
               }
@@ -2120,6 +2290,12 @@
                     "type": "boolean"
                   },
                   "guideEmails": {
+                    "type": "boolean"
+                  },
+                  "hideTipDetailsInPopups": {
+                    "type": "boolean"
+                  },
+                  "tipSound": {
                     "type": "boolean"
                   }
                 },
@@ -3668,6 +3844,81 @@
         ]
       }
     },
+    "/v1/me/thanks": {
+      "put": {
+        "operationId": "MeProfile.thanks",
+        "tags": [
+          "MeProfile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "line": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1120
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "style": {
+                    "type": "string",
+                    "enum": [
+                      "paper",
+                      "violet",
+                      "night"
+                    ]
+                  },
+                  "signed": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "line"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/tip-amounts": {
       "put": {
         "operationId": "MeProfile.tipAmounts",
@@ -3727,6 +3978,42 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/tip-totals": {
+      "get": {
+        "operationId": "Dashboard.tipTotals",
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -3971,6 +4258,61 @@
       }
     },
     "/v1/me/withdrawals": {
+      "get": {
+        "operationId": "Dashboard.withdrawals",
+        "tags": [
+          "Dashboard"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
       "post": {
         "operationId": "Dashboard.withdraw",
         "tags": [
@@ -8419,7 +8761,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8442,7 +8784,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -8526,7 +8869,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8549,7 +8892,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -8688,7 +9032,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8711,7 +9055,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -8830,7 +9175,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8853,12 +9198,13 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 19,
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8881,7 +9227,8 @@
                         "email.read",
                         "email.export",
                         "payments.repair",
-                        "staff.manage"
+                        "staff.manage",
+                        "usernames.manage"
                       ]
                     }
                   }
@@ -9211,6 +9558,247 @@
           }
         ],
         "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/usernames": {
+      "get": {
+        "operationId": "OpsUsernames.list",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 30
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "staff",
+                "take_back"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      },
+      "post": {
+        "operationId": "OpsUsernames.reserve",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/check/{name}": {
+      "get": {
+        "operationId": "OpsUsernames.check",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/release": {
+      "post": {
+        "operationId": "OpsUsernames.release",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
       }
     },
     "/v1/ops/users/{userId}/cancel-recovery": {
@@ -9688,6 +10276,10 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "noteMayShow": {
+                    "type": "boolean",
+                    "const": true
                   }
                 },
                 "required": [
@@ -10077,6 +10669,10 @@
                   "PAYOUT_PROVIDER_UNAVAILABLE",
                   "PRO_REQUIRED",
                   "QR_DESIGN_PRO_REQUIRED",
+                  "COVER_DESIGN_PRO_REQUIRED",
+                  "THANKS_PRO_REQUIRED",
+                  "SOCIAL_LINKS_PRO_REQUIRED",
+                  "SOCIAL_LINK_UNAVAILABLE",
                   "QR_ART_PHOTO_REQUIRED",
                   "QR_ART_PHOTO_TOO_LARGE",
                   "INVALID_IMAGE",
@@ -10092,6 +10688,8 @@
                   "PREVIEW_REQUIRED",
                   "PROFILE_NOT_FOUND",
                   "RATE_LIMITED",
+                  "LIVE_LIMIT",
+                  "LIVE_UNAVAILABLE",
                   "DEPENDENCY_UNAVAILABLE",
                   "EMAIL_VERIFICATION_REQUIRED",
                   "PAYMENT_ACCOUNT_REQUIRED",
@@ -10122,6 +10720,10 @@
                   "PAYOUT_CHANGED",
                   "SELF_ACCESS_CHANGE",
                   "ROLE_NAME_TAKEN",
+                  "USERNAME_BUILT_IN",
+                  "USERNAME_RESERVED",
+                  "USERNAME_HELD_BY_PAGE",
+                  "USERNAME_NOT_RESERVED",
                   "ROLE_IN_USE",
                   "ROLE_PROTECTED",
                   "STAFF_PROTECTED",

@@ -23,6 +23,7 @@ import { ReadinessService } from './health/readiness.service.js';
 import { InfraModule } from './infra/infra.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
+import { LiveModule } from './live/live.module.js';
 
 import { LOGGER } from './tokens.js';
 
@@ -36,6 +37,7 @@ export class AppModule {
       // Diagnostics routes only exist when explicitly enabled (never in production).
       imports: [
         InfraModule,
+        LiveModule,
         CheckoutModule,
         AuthModule,
         ProfilesModule,
@@ -64,7 +66,7 @@ export class AppModule {
         { provide: API_CONFIG, useValue: config },
         { provide: LOGGER, useValue: logger },
       ],
-      exports: [API_CONFIG, LOGGER],
+      exports: [API_CONFIG, LOGGER, ReadinessService],
       global: true,
     };
   }

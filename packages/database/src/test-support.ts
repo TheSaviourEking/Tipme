@@ -40,6 +40,21 @@ async function asAdmin<T>(work: (admin: pg.Client) => Promise<T>): Promise<T> {
   }
 }
 
+const LANE_DATABASE = /^tipme_test(_lane[0-9])?$/;
+
+/**
+ * The shared test database, or the e2e lane's (TIPME_TEST_DATABASE). reset() truncates every table,
+ * so a name from the environment must be one of ours, never a developer's real database.
+ */
+export function testDatabaseName(fromEnv: string | undefined): string {
+  if (fromEnv === undefined || fromEnv === '') return TEST_DATABASE;
+  if (!LANE_DATABASE.test(fromEnv))
+    throw new Error(
+      'TIPME_TEST_DATABASE must be tipme_test or tipme_test_laneN',
+    );
+  return fromEnv;
+}
+
 function checkedName(name: string): string {
   if (!DATABASE_NAME.test(name))
     throw new Error(`not a test database name: ${name}`);
@@ -125,14 +140,15 @@ export interface TestDatabase {
 }
 
 /**
- * A migrated test database on the local server. Test-only. Normally the shared `tipme_test`;
+ * A migrated test database on the local server. Test-only. Normally the shared `tipme_test`
+ * (or TIPME_TEST_DATABASE, which e2e lanes set so worktrees don't share one);
  * with TIPME_TEST_TEMPLATE set, this process's own copy of that template.
  */
 export async function openTestDatabase(): Promise<TestDatabase> {
   const template = process.env['TIPME_TEST_TEMPLATE'];
   const name = template
     ? checkedName(`${checkedName(template)}_${process.pid}`)
-    : TEST_DATABASE;
+    : testDatabaseName(process.env['TIPME_TEST_DATABASE']);
   await asAdmin(async (admin) => {
     const exists = await admin.query(
       'SELECT 1 FROM pg_database WHERE datname = $1',

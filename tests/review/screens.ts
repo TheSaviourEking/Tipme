@@ -1,4 +1,7 @@
 import type { Page } from '@playwright/test';
+import { sql } from '../e2e/ops-helpers';
+import { standInBanks } from '../e2e/bank-fixtures';
+import { API_ORIGIN } from '../e2e/stack';
 
 /** What a screen needs before it can be shown: a signed-in recipient, with or without tips. */
 export interface ReviewContext {
@@ -47,6 +50,50 @@ function afterTip(held: string | null) {
   };
 }
 
+/**
+ * The paid receipt with a recipient's thank-you slip in one card style ("Make it yours"). The demo
+ * page has no line, so the status answer gets one for this page only, as a Pro page would send it.
+ */
+function afterTipWithThanks(style: 'paper' | 'violet' | 'night') {
+  return async (page: Page) => {
+    await page.route('**/v1/tips/*/status', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          data: {
+            ...body.data,
+            thanks: {
+              line: 'Thank you for backing my channel. Every tip goes into better gear for the next video.',
+              style,
+              ...(style === 'paper' ? {} : { signature: 'Ada' }),
+            },
+          },
+        },
+      });
+    });
+    await afterTip(null)(page);
+    await page.locator('.thanks-slip').waitFor();
+  };
+}
+
+/** Settings opened at "Make it yours" for a new page, named Ada Okafor, on the given plan. */
+async function makeItYours(
+  page: Page,
+  ctx: ReviewContext,
+  plan: 'free' | 'pro',
+) {
+  const { handle } = await ctx.recipient();
+  await sql(
+    `UPDATE profiles SET display_name = 'Ada Okafor', plan = $2 WHERE handle_lower = $1`,
+    [handle, plan],
+  );
+  await page.goto('/dashboard/settings#yours');
+  await page.reload();
+  await page.getByLabel('Your thank-you line').waitFor();
+}
+
 /** Asks for a sign-in code for a new address and waits for the code step. */
 async function atCodeStep(page: Page, path: string) {
   await page.goto(path);
@@ -54,6 +101,85 @@ async function atCodeStep(page: Page, path: string) {
   await page.getByRole('button', { name: 'Send code' }).click();
   await page.getByLabel('6-digit code').waitFor();
 }
+
+/** Three links on a Free page, saved: TikTok, Instagram and YouTube. */
+async function addLinks(page: Page) {
+  const section = page.locator('.settings-section', {
+    has: page.getByRole('heading', { name: 'Your links' }),
+  });
+  for (const url of [
+    'https://www.tiktok.com/@ada.edits',
+    'https://instagram.com/ada.edits',
+    'https://youtube.com/@adaedits',
+  ]) {
+    await section.getByLabel('Add a link').fill(url);
+    await section.getByRole('button', { name: 'Add', exact: true }).click();
+  }
+  await section.getByRole('button', { name: 'Save links' }).click();
+  await section.getByRole('status').getByText('Saved').waitFor();
+}
+
+/** The Get paid card with the stand-in bank list, for the bank picker screens. */
+async function getPaid(page: Page, ctx: ReviewContext) {
+  await ctx.recipient();
+  await standInBanks(page);
+  await page.goto('/dashboard/settings#get-paid');
+  // Sign-up ends on settings, so the goto only moved to the anchor: load the stand-in list.
+  await page.reload();
+  const card = page.locator('#get-paid');
+  await card.getByLabel('Account number').waitFor();
+  return card;
+}
+
+/** Opens the picker: the popup on a desktop, the full-screen sheet on a phone. */
+async function openPicker(page: Page) {
+  const card = page.locator('#get-paid');
+  const phone = await page.evaluate(
+    () => matchMedia('(max-width: 40rem)').matches,
+  );
+  if (phone) await card.getByRole('button', { name: 'Bank' }).click();
+  else await card.getByRole('combobox', { name: 'Bank' }).focus();
+  return card.getByRole('combobox').first();
+}
+
+/** Bank picker screens: open, then optionally type into the search. */
+const picker = (typed?: string) => async (page: Page, ctx: ReviewContext) => {
+  await getPaid(page, ctx);
+  const search = await openPicker(page);
+  if (typed) await search.fill(typed);
+  // The live count waits for typing to pause.
+  await page.waitForTimeout(400);
+};
+
+/** Name check screens: GTBank by its key, then a number; `stub` answers the check. */
+const nameCheck =
+  (number: string, stub?: 'held' | 'failed') =>
+  async (page: Page, ctx: ReviewContext) => {
+    const card = await getPaid(page, ctx);
+    if (stub === 'held')
+      // Never answered, so the check stays in progress for the picture.
+      await page.route('**/v1/me/payout-destination/resolve', () => {});
+    if (stub === 'failed')
+      await page.route('**/v1/me/payout-destination/resolve', (route) =>
+        route.fulfill({
+          status: 503,
+          json: { error: { code: 'PAYOUT_PROVIDER_UNAVAILABLE' } },
+        }),
+      );
+    await openPicker(page);
+    await card
+      .getByRole('group', { name: 'Popular' })
+      .getByRole('option', { name: 'GTBank' })
+      .click();
+    await card.getByLabel('Account number').fill(number);
+    await (
+      stub === 'held'
+        ? card.getByText('Checking the name at your bank…')
+        : stub === 'failed'
+          ? card.getByRole('button', { name: 'Check again' })
+          : card.getByLabel('Name on the account')
+    ).waitFor();
+  };
 
 /** Each task of the redesign adds the screens it rebuilds, in the order of the plan. */
 export const SCREENS: ReviewScreen[] = [
@@ -127,6 +253,12 @@ export const SCREENS: ReviewScreen[] = [
     board: 'ScreenThanks',
     open: afterTip(null),
   },
+  ...(['paper', 'violet', 'night'] as const).map((style): ReviewScreen => ({
+    group: 'Tipping',
+    name: `Thank you, with a ${style} thank-you card`,
+    board: 'ProCustomise',
+    open: afterTipWithThanks(style),
+  })),
   {
     group: 'Tipping',
     name: "Didn't go through",
@@ -139,6 +271,35 @@ export const SCREENS: ReviewScreen[] = [
     name: 'Design system',
     board: 'TipJourney',
     open: visit('/design-system'),
+  },
+  // The states specimen alone (StatesConcepts, FeedbackMoments), with the field made invalid and
+  // the save key split by a failed save, so every pattern shows in one shot.
+  {
+    group: 'Foundations',
+    name: 'States',
+    board: 'StatesConcepts',
+    async open(page) {
+      await page.goto('/design-system');
+      const states = page.getByTestId('states-specimen');
+      await states.getByRole('button', { name: 'Check', exact: true }).click();
+      await states
+        .getByRole('button', { name: 'Make the next save fail' })
+        .click();
+      await states.getByRole('button', { name: 'Save notifications' }).click();
+      await states.locator('.tm-key-result__again').waitFor();
+      await page.evaluate(() => {
+        const specimen = document.querySelector(
+          '[data-testid="states-specimen"]',
+        );
+        const container = specimen?.parentElement;
+        if (!specimen || !container) return;
+        for (const child of Array.from(container.children))
+          if (child !== specimen) child.remove();
+        // The clicks scrolled the page; a full-page shot draws fixed parts (the hidden skip link)
+        // at that offset, so start from the top.
+        window.scrollTo(0, 0);
+      });
+    },
   },
   // No board shows this notice; TipJourney shows the materials it uses (a raised card, one black
   // action). The server is made to answer with a newer build and the tab to come back.
@@ -255,7 +416,7 @@ export const SCREENS: ReviewScreen[] = [
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
       await page.goto('/dashboard');
-      await page.getByRole('heading', { name: 'Ready to withdraw' }).waitFor();
+      await page.getByRole('heading', { name: 'Your balance' }).waitFor();
     },
   },
   {
@@ -318,12 +479,9 @@ export const SCREENS: ReviewScreen[] = [
         );
         return `${day.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
       });
-      await page.request.post(
-        'http://127.0.0.1:4100/v1/dev/jobs/weekly-report',
-        {
-          data: { handle, isoWeek },
-        },
-      );
+      await page.request.post(`${API_ORIGIN}/v1/dev/jobs/weekly-report`, {
+        data: { handle, isoWeek },
+      });
       await page.goto(`/dashboard/reports/${isoWeek}`);
       await page.getByRole('heading', { level: 1 }).waitFor();
     },
@@ -345,23 +503,59 @@ export const SCREENS: ReviewScreen[] = [
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
       // Only the withdrawal list is stubbed; the balance and the quote are the real ones.
-      await page.route('**/v1/me/activity', (route) =>
-        route.fulfill({
-          json: {
-            data: [
-              ['w1', new Date().toISOString(), '2000000', 'processing'],
-              ['w2', '2026-10-24T09:00:00.000Z', '3500000', 'sent'],
-              ['w3', '2026-10-17T09:00:00.000Z', '1250000', 'failed'],
-            ].map(([id, at, amountMinor, state]) => ({
-              kind: 'withdrawal',
-              id,
-              at,
-              amountMinor,
-              state,
-              supporterLabel: null,
-            })),
-          },
-        }),
+      await page.route('**/v1/me/withdrawals*', (route) =>
+        route.request().method() !== 'GET'
+          ? route.continue()
+          : route.fulfill({
+              json: {
+                data: {
+                  nextCursor: null,
+                  items: [
+                    [
+                      'w1',
+                      new Date().toISOString(),
+                      null,
+                      '2000000',
+                      'processing',
+                      null,
+                    ],
+                    [
+                      'w2',
+                      '2026-10-24T08:00:00.000000Z',
+                      '2026-10-24T09:00:00.000000Z',
+                      '3500000',
+                      'sent',
+                      { bankName: 'GTBank', last4: '6789' },
+                    ],
+                    [
+                      'w3',
+                      '2026-10-17T09:00:00.000000Z',
+                      null,
+                      '1250000',
+                      'failed',
+                      null,
+                    ],
+                  ].map(
+                    ([
+                      payoutId,
+                      requestedAt,
+                      paidAt,
+                      amountMinor,
+                      state,
+                      bank,
+                    ]) => ({
+                      payoutId,
+                      requestedAt,
+                      paidAt,
+                      currency: 'NGN',
+                      amountMinor,
+                      state,
+                      bank,
+                    }),
+                  ),
+                },
+              },
+            }),
       );
       await page.goto('/dashboard/withdraw');
       await page.getByRole('list', { name: 'Progress' }).waitFor();
@@ -372,6 +566,7 @@ export const SCREENS: ReviewScreen[] = [
   ...(
     [
       ['My page', 'page'],
+      ['Make it yours', 'yours'],
       ['Getting paid', 'paid'],
       ['Notifications', 'notifications'],
       ['Sign-in and security', 'security'],
@@ -398,6 +593,124 @@ export const SCREENS: ReviewScreen[] = [
         .waitFor();
     },
   })),
+  // Make it yours (ProCustomise): the thank-you card on Pro with a signed Night card, and a line
+  // refused for its link.
+  {
+    group: 'Dashboard',
+    name: 'Make it yours, Pro: Night, signed',
+    board: 'ProCustomise',
+    async open(page, ctx) {
+      await makeItYours(page, ctx, 'pro');
+      await page
+        .getByLabel('Your thank-you line')
+        .fill(
+          'Thank you for backing my channel. Every tip goes into better gear for the next video.',
+        );
+      await page
+        .getByRole('group', { name: 'Card style' })
+        .getByRole('radio', { name: 'Night' })
+        .check();
+      await page.getByRole('checkbox', { name: /^Sign it/ }).check();
+      await page.locator('#thanks').scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    group: 'Dashboard',
+    name: 'Make it yours, a line with a link',
+    board: 'ProCustomise',
+    async open(page, ctx) {
+      await makeItYours(page, ctx, 'free');
+      await page
+        .getByLabel('Your thank-you line')
+        .fill('Thanks! Find more at www.ada.ng');
+      await page.getByRole('button', { name: 'Save thank-you' }).click();
+      await page
+        .getByText('Keep it to 140 characters, with no links.')
+        .waitFor();
+    },
+  },
+  // SocialLinks: a Free page's three links in Settings, then the same links on its public page.
+  {
+    group: 'Dashboard',
+    name: 'Settings, your links',
+    board: 'SocialLinks',
+    async open(page, ctx) {
+      await ctx.recipient();
+      await page.goto('/dashboard/settings');
+      await addLinks(page);
+      await page
+        .getByRole('heading', { name: 'Your links' })
+        .scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    group: 'Public',
+    name: 'Tip page with links',
+    board: 'SocialLinks',
+    async open(page, ctx) {
+      const { handle } = await ctx.recipient();
+      await page.goto('/dashboard/settings');
+      await addLinks(page);
+      // The page is rebuilt after the save: reload until it has the links.
+      const links = page.getByRole('list', { name: /elsewhere$/ });
+      for (let tries = 0; tries < 20; tries++) {
+        await page.goto(`/@${handle}`);
+        if ((await links.count()) > 0) break;
+        await page.waitForTimeout(500);
+      }
+      await links.waitFor();
+    },
+  },
+  {
+    group: 'Get paid',
+    name: 'Bank picker, open',
+    board: 'BankPicker',
+    open: picker(),
+  },
+  {
+    group: 'Get paid',
+    name: 'Bank picker, typed gtb',
+    board: 'BankPicker',
+    open: picker('gtb'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Bank picker, no match',
+    board: 'BankPicker',
+    open: picker('gtbnk zz'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, checking',
+    board: 'BankPicker',
+    open: nameCheck('0123456789', 'held'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, found',
+    board: 'BankPicker',
+    open: nameCheck('0123456789'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, not found',
+    board: 'BankPicker',
+    open: nameCheck('1234560000'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Name check, failed',
+    board: 'BankPicker',
+    open: nameCheck('0123456789', 'failed'),
+  },
+  {
+    group: 'Get paid',
+    name: 'Bank sheet, typed fir',
+    board: 'BankPicker',
+    // On a phone the sheet fills the screen, so it is shot one screen tall.
+    viewport: true,
+    open: picker('fir'),
+  },
   {
     group: 'Small screens',
     name: 'Page not found',

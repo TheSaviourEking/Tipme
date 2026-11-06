@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type { CoverDesignChoice, MyProfile } from '@tipme/contracts';
+import {
+  coverChoiceNeedsPro,
+  type CoverDesignChoice,
+  type MyProfile,
+} from '@tipme/contracts';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import { profileCovers, profiles } from '../schema.js';
-import { guarded } from './errors.js';
+import { guarded, OperationError } from './errors.js';
 import { lockLivePage, myPageId, removeObjects } from './page-images.js';
 import { getMyProfile } from './profiles.js';
 
@@ -105,10 +109,16 @@ export function removeCover(
 }
 
 /**
- * Records the chosen design and colour, already checked against the catalogue by
- * `coverDesignChoiceSchema`. An uploaded cover is left alone: it keeps winning until it's removed,
- * and then this choice shows. `design: null` clears the choice. Choosing what's already chosen
- * writes nothing, and `changed` tells the caller there is nothing to refresh.
+ * Records the chosen design or animation, with its colour and motion, already checked against
+ * the catalogue by `coverDesignChoiceSchema`. An uploaded cover is left alone: it keeps winning
+ * until it's removed, and then this choice shows. `design: null` with no animation clears the
+ * choice; choosing an animation clears the design and the other way round, in one UPDATE.
+ * Choosing what's already chosen writes nothing, and `changed` tells the caller there is nothing
+ * to refresh.
+ *
+ * A Pro-only choice (`coverChoiceNeedsPro`) is refused for a page that is not Pro, checked
+ * before the write and again in the UPDATE's WHERE, because staff may move the page to Free
+ * between the two.
  */
 export function setCoverDesign(
   db: Database,
@@ -117,18 +127,39 @@ export function setCoverDesign(
 ): Promise<{ profile: MyProfile; changed: boolean }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
-    const design = choice.design;
+    const animation = choice.animation ?? null;
+    const design = animation ? null : choice.design;
     const colour = choice.colour ?? null;
+    const motion = animation ? (choice.motion ?? null) : null;
+    const needsPro = coverChoiceNeedsPro(choice);
+    const isPro = async () => {
+      const [row] = await db
+        .select({ plan: profiles.plan })
+        .from(profiles)
+        .where(eq(profiles.id, profileId));
+      return row?.plan === 'pro';
+    };
+    if (needsPro && !(await isPro()))
+      throw new OperationError('COVER_DESIGN_PRO_REQUIRED');
     const updated = await db
       .update(profiles)
-      .set({ coverDesign: design, coverColour: colour })
+      .set({
+        coverDesign: design,
+        coverColour: colour,
+        coverAnimation: animation,
+        coverMotion: motion,
+      })
       .where(
         and(
           eq(profiles.id, profileId),
-          sql`(${profiles.coverDesign} IS DISTINCT FROM ${design} OR ${profiles.coverColour} IS DISTINCT FROM ${colour})`,
+          needsPro ? eq(profiles.plan, 'pro') : undefined,
+          sql`(${profiles.coverDesign} IS DISTINCT FROM ${design} OR ${profiles.coverColour} IS DISTINCT FROM ${colour} OR ${profiles.coverAnimation} IS DISTINCT FROM ${animation} OR ${profiles.coverMotion} IS DISTINCT FROM ${motion})`,
         ),
       )
       .returning({ id: profiles.id });
+    // Zero rows means unchanged, or the page lost Pro after the check: only the plan tells.
+    if (updated.length === 0 && needsPro && !(await isPro()))
+      throw new OperationError('COVER_DESIGN_PRO_REQUIRED');
     return {
       profile: await getMyProfile(db, userId),
       changed: updated.length > 0,

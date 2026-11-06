@@ -186,6 +186,10 @@ pnpm release:check --web https://staging.<domain> --api https://api.staging.<dom
 
 Then run the restore drill ([backup-and-restore](backup-and-restore.md)) and one rollback ([deploy-and-rollback](deploy-and-rollback.md)).
 
+### Live updates
+
+Staging turns live updates on first: `LIVE_UPDATES_ENABLED=true` in `staging.env`, then the `curl -N` check in [production §10](production.md#10-live-updates-the-edge-and-the-flag-owner).
+
 ## Move an existing staging server to the edge Caddy (one-off)
 
 **When:** once, on a server whose staging project still runs its own Caddy (any version before the edge). Plan about a minute of staging downtime: only one Caddy can hold ports 80/443, so there is a short gap while one stops and the other starts. Postgres, Redis, the worker and the API keep running.

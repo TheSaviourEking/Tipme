@@ -41,9 +41,20 @@ test('every catalogue entry has a description and group; money and private ones 
     'email.read',
     'email.export',
     'staff.manage',
+    'usernames.manage',
   ]) {
     assert.equal(OPS_CATALOGUE[name].sensitive, true, name);
   }
+});
+
+// Reserving and releasing usernames is staff work on people (username reservation spec, section 4).
+test('usernames.manage is a sensitive people permission', () => {
+  assert.deepEqual(OPS_CATALOGUE['usernames.manage'], {
+    description:
+      'Reserve and release usernames, and ask to take one back from a page',
+    group: 'people',
+    sensitive: true,
+  });
 });
 
 test('the serious actions are the agreed ten', () => {

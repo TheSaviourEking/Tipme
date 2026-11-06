@@ -1,13 +1,14 @@
 'use client';
 import Image from 'next/image';
 import { useState } from 'react';
-import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
+import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { ActionLink, Lever, ProBadge, Surface } from '@tipme/ui';
+import { ProfileCover } from '@/components/profile/cover';
 import { formatNaira } from '@/lib/demo-amount';
+import { TIPME_SHARE_PERCENT } from '@/lib/fee-share';
 
 type Plan = 'free' | 'pro';
 
-const TIPME_SHARE_PERCENT = Number(FEE_POLICY_V1.tipmeShareBps) / 100;
 // Ada's handle on Free, then the three changes Pro allows. The sample never touches a real page.
 const HANDLES = ['ada', 'adacuts', 'adaedits', 'adaokafor'] as const;
 const MAX_CHANGES = HANDLES.length - 1;
@@ -18,23 +19,13 @@ const STANDARD_AMOUNTS = STANDARD_TIP_PRESETS_MINOR.map((minor) =>
 const OWN_AMOUNTS = ['₦3,000', '₦6,000', '₦12,000'];
 export const ASK_FOR_PRO = 'mailto:support@usetipme.xyz?subject=TipMe%20Pro';
 
-const HEART =
-  'M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z';
-const HEARTS = [
-  { x: '8%', size: '34px', delay: '0s' },
-  { x: '30%', size: '22px', delay: '0.5s' },
-  { x: '52%', size: '44px', delay: '0.2s' },
-  { x: '74%', size: '26px', delay: '0.9s' },
-  { x: '88%', size: '36px', delay: '0.4s' },
-];
-
 /** Ada's sample page beside what each plan changes, built to the PagePro board. */
 export function PlanPreview() {
   const [plan, setPlan] = useState<Plan>('free');
   const [motion, setMotion] = useState<'once' | 'loop'>('once');
   const [changes, setChanges] = useState(0);
   const [own, setOwn] = useState(false);
-  // A new key replays the hearts: the cover starts again when a choice changes how it plays.
+  // A new key replays the cover: it starts again when a choice changes how it plays.
   const [coverKey, setCoverKey] = useState(0);
 
   const pro = plan === 'pro';
@@ -46,6 +37,10 @@ export function PlanPreview() {
 
   const choosePlan = (next: Plan) => {
     setPlan(next);
+    setCoverKey((key) => key + 1);
+  };
+  const chooseMotion = (next: 'once' | 'loop') => {
+    setMotion(next);
     setCoverKey((key) => key + 1);
   };
 
@@ -67,24 +62,18 @@ export function PlanPreview() {
       </section>
       <section className="pro-body">
         <Surface material="instrument" className="pro-sample">
-          <div className="pro-cover" key={coverKey} data-motion={playing}>
-            {HEARTS.map((heart) => (
-              <span
-                key={heart.x}
-                className="pro-heart"
-                style={
-                  {
-                    '--x': heart.x,
-                    '--s': heart.size,
-                    '--d': heart.delay,
-                  } as React.CSSProperties
-                }
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d={HEART} />
-                </svg>
-              </span>
-            ))}
+          {/* The real cover, so the sample is exactly what ships: Free's Drifting plays once, Pro's
+              Night sky plays as chosen. It inherits the reduced-motion and forced-colours rules. */}
+          <div className="pro-cover" aria-hidden="true">
+            <ProfileCover
+              key={coverKey}
+              cover={{
+                kind: 'animated',
+                animation: pro ? 'night' : 'drift',
+                play: playing,
+              }}
+              animate
+            />
           </div>
           <div className="pro-sample__body">
             <Image
@@ -131,20 +120,17 @@ export function PlanPreview() {
               <strong>Animated cover</strong>
               <br />
               {pro
-                ? 'More designs, and you choose how they play.'
-                : '3 designs that play once.'}
+                ? 'Every design in every colour. Slow loop or Plays once.'
+                : '3 animated covers that play once.'}
             </div>
             <div className="pro-row__controls">
               <button
                 type="button"
                 className="pro-mini"
                 aria-pressed={playing === 'once'}
-                onClick={() => {
-                  setMotion('once');
-                  setCoverKey((key) => key + 1);
-                }}
+                onClick={() => chooseMotion('once')}
               >
-                Play once
+                Plays once
               </button>
               {/* A picture of the Pro option: on Free it is shown, and cannot be used. */}
               <button
@@ -153,7 +139,7 @@ export function PlanPreview() {
                 aria-pressed={playing === 'loop'}
                 aria-disabled={!pro}
                 onClick={() => {
-                  if (pro) setMotion('loop');
+                  if (pro) chooseMotion('loop');
                 }}
               >
                 Slow loop
@@ -199,6 +185,15 @@ export function PlanPreview() {
             >
               Try yours
             </button>
+          </div>
+          <div className="pro-row">
+            <div>
+              <strong>Links</strong>
+              <br />
+              {pro
+                ? 'Up to 8, in your order, with one featured. Add your website, Telegram, LinkedIn and more.'
+                : 'Up to 3, from TikTok, Instagram, YouTube and more.'}
+            </div>
           </div>
           <div className="pro-row pro-row--last">
             <div>

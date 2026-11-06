@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>States: two concepts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+
+.lamp{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.lamp.red{background:#c2382c;box-shadow:0 0 0 3px rgba(194,56,44,.16)}
+.lamp.purple{background:#7a32f9;box-shadow:0 0 0 3px rgba(122,50,249,.18)}
+.lamp.amber{background:#d08a16;box-shadow:0 0 0 3px rgba(208,138,22,.18)}
+.lamp.off{background:#cfcbc2}
+body{margin:0}
+.board{box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:56px 64px}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.intro h1{margin:0;font:400 54px/1.02 'DM Serif Display',Georgia,serif;max-width:1100px}
+.intro p{margin:14px 0 0;font-size:17px;line-height:1.55;max-width:1000px;color:#2f2d29}
+.src{font:600 11.5px/1.4 Manrope,Arial,sans-serif;color:#7a766d}
+.prop{display:inline-block;padding:3px 9px;border-radius:999px;background:#f1e9ff;color:#4d16a8;font-size:11.5px;font-weight:800}
+.real{display:inline-block;padding:3px 9px;border-radius:999px;background:#e4e1d8;color:#3b3934;font-size:11.5px;font-weight:800}
+.paper{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 30px 56px -30px rgba(20,18,16,.32)}
+.key{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:14px;font-weight:700;box-sizing:border-box;white-space:nowrap}
+.key.on{border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28)}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:15px;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45);box-sizing:border-box}
+.well{display:flex;align-items:center;min-height:48px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#3b3934}
+
+.board{width:1840px;min-height:3220px}
+
+.heads{display:grid;grid-template-columns:300px 1fr 1fr;gap:28px;margin-top:40px;align-items:end}
+.chead h2{margin:0;font:400 36px/1.05 'DM Serif Display',Georgia,serif}
+.chead p{margin:8px 0 0;font-size:14.5px;line-height:1.5;color:#3b3934}
+.chead .tagline{font-weight:800;color:#4d16a8;font-size:13px;margin:0 0 6px}
+.row{display:grid;grid-template-columns:300px 1fr 1fr;gap:28px;margin-top:26px;padding-top:26px;border-top:1px solid rgba(20,18,16,.12)}
+.ex h3{margin:0;font:400 25px/1.1 'DM Serif Display',Georgia,serif}
+.ex p{margin:8px 0 0;font-size:13.5px;line-height:1.5;color:#3b3934}
+.ex .src{margin-top:10px}
+.stage{position:relative;padding:22px;border-radius:24px;background:#f3f2ee;min-height:250px;box-sizing:border-box}
+.note{margin:12px 2px 0;font-size:12.5px;line-height:1.5;color:#5d5a54}
+/* Concept A: the slip */
+.slip{position:relative;margin-top:-6px;padding:18px 18px 16px;background:#fffefa;border-radius:4px 4px 16px 16px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 14px 22px -16px rgba(20,18,16,.45)}
+.slip::before{content:"";position:absolute;left:10px;right:10px;top:-5px;height:10px;background:radial-gradient(circle at 5px 5px,#f3f2ee 3.2px,transparent 3.6px) 0 0/12px 10px repeat-x}
+.slip h4{margin:0;font:400 23px/1.1 'DM Serif Display',Georgia,serif}
+.slip.st{padding-right:104px}
+.slip p{margin:6px 0 0;font-size:14px;line-height:1.5}
+.stamp{position:absolute;right:16px;top:14px;width:76px;height:76px;border-radius:50%;border:2.5px solid currentColor;display:flex;align-items:center;justify-content:center;text-align:center;font:800 11.5px/1.15 Manrope,Arial,sans-serif;transform:rotate(-9deg);opacity:.9}
+.stamp::after{content:"";position:absolute;inset:4px;border-radius:50%;border:1px solid currentColor;opacity:.5}
+.stamp.red{color:#9b2820}.stamp.ink{color:#3b3934}.stamp.purple{color:#7a32f9}
+.safe{margin-top:12px;display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.1);font-size:13.5px;font-weight:700}
+.safe svg{width:16px;height:16px;flex:none}
+.slip .actions{margin-top:14px;display:flex;gap:10px}
+.fieldnote{position:relative;margin-top:8px;padding:10px 12px 10px 14px;background:#fffefa;border-radius:12px;border:1px solid rgba(155,40,32,.35);font-size:13.5px;line-height:1.45;font-weight:600;color:#000}
+.fieldnote::before{content:"";position:absolute;left:22px;top:-6px;width:10px;height:10px;background:#fffefa;border-left:1px solid rgba(155,40,32,.35);border-top:1px solid rgba(155,40,32,.35);transform:rotate(45deg)}
+.fieldnote b{color:#9b2820}
+/* Concept B: the key tells you */
+.lamp{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.lamp.red{background:#c2382c;box-shadow:0 0 0 3px rgba(194,56,44,.16)}
+.lamp.purple{background:#7a32f9;box-shadow:0 0 0 3px rgba(122,50,249,.18)}
+.lamp.amber{background:#d08a16;box-shadow:0 0 0 3px rgba(208,138,22,.18)}
+.lamp.off{background:#cfcbc2}
+.split{display:grid;grid-template-columns:1fr auto;gap:0;border-radius:14px;overflow:hidden;border:1px solid #000;box-shadow:0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45)}
+.split .face{display:flex;align-items:center;gap:10px;padding:0 16px;min-height:52px;background:#141210;color:#fff;font-size:14.5px;font-weight:700;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
+.split .face small{font-weight:600;color:#c9c4ba}
+.split .again{display:flex;align-items:center;padding:0 18px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-weight:800;font-size:14.5px;border-left:1px solid #3a3733}
+.line{margin:10px 2px 0;font-size:13.5px;line-height:1.5;color:#2f2d29}
+.line b{color:#000}
+.pressed{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 1px rgba(20,18,16,.3)!important}
+.wellerr{border-color:rgba(194,56,44,.55);box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 3px 0 0 #c2382c}
+.empty-well{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:150px;border-radius:18px;border:1.5px dashed rgba(20,18,16,.22);background:#eeede8;box-shadow:inset 0 2px 4px rgba(20,18,16,.08)}
+.mini{font-size:12px;font-weight:700;color:#5d5a54}
+.rec{margin-top:40px;display:grid;grid-template-columns:1.2fr 1fr;gap:28px}
+.rec .paper{padding:24px 28px}
+.rec h3{margin:0 0 10px;font:400 28px 'DM Serif Display',Georgia,serif}
+.rec ul{margin:0;padding-left:18px;font-size:14.5px;line-height:1.6}
+
+</style>
+</helmet>
+<div class="board">
+<div class="intro"><p class="src">States, for your choice · built from origin/dev 607db5b · nothing here is built yet</p>
+<h1>When something goes wrong, or right, it should still feel like TipMe.</h1>
+<p>Today every message is the same tinted box with a “!” or “✓” in front. That covers 105 messages: 71 errors, 15 neutral notes, 8 successes, and 11 that take the default tone or get theirs as the page runs. Below are two ways to give them TipMe’s own materials, applied to the same six real messages. The words are today’s text unless a purple <span class="prop">Proposed</span> tag says otherwise.</p></div>
+<div class="heads"><div></div>
+<div class="chead"><p class="tagline">Concept A</p><h2>The slip</h2><p>A message is a paper slip that comes out from under the thing it’s about, like the receipt from a till. A small ink stamp says what happened, and the way out is a real key on the slip.</p></div>
+<div class="chead"><p class="tagline">Concept B</p><h2>The key tells you</h2><p>The state lives in the control itself. The key you pressed shows the result on its own face, with a small lamp (red, amber or purple) and the way out built into it. The explanation is one plain line, with no box.</p></div></div>
+<div class="row"><div class="ex"><h3>“Not sent yet” on the tip form</h3><p>Pressing Tip couldn’t reach TipMe. Today: the pink box.</p><p class="src">appreciation-form.tsx:44 (message), :288 (set), :648 (shown)</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px 18px;border-radius:20px">
+   <div style="display:flex;gap:8px"><span class="key">₦2,000</span><span class="key on">₦5,000</span><span class="key">₦10,000</span></div>
+   <div class="go" style="margin-top:12px">Tip ₦5,000</div>
+   <div class="slip st" style="margin-top:4px">
+     <span class="stamp red">Not<br>sent</span>
+     <h4>Not sent yet</h4>
+     <p>We couldn’t reach TipMe. Check your connection and try again.</p>
+     <div class="safe"><svg viewBox="0 0 24 24" fill="none" stroke="#3b3934" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>You haven’t paid anything. <span class="prop" style="margin-left:auto">Proposed copy</span></div>
+     <div class="actions"><span class="key" style="background:#000;color:#fff;border-color:#000">Try again</span><span class="prop" style="align-self:center">Proposed key</span></div>
+   </div></div></div><p class="note">The slip comes out from under the Tip button it belongs to. The amount stays chosen.</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px 18px;border-radius:20px">
+   <div style="display:flex;gap:8px"><span class="key">₦2,000</span><span class="key on">₦5,000</span><span class="key">₦10,000</span></div>
+   <div class="split" style="margin-top:12px"><div class="face"><span class="lamp red"></span>Not sent yet <small>· ₦5,000</small></div><div class="again">Try again</div></div>
+   <p class="line">We couldn’t reach TipMe. Check your connection and try again. <b>You haven’t paid anything.</b> <span class="prop">Proposed copy</span></p>
+   </div></div><p class="note">The Tip key itself shows the result: its face sinks into a dark window with a red lamp, and its right half becomes Try again.</p></div></div>
+<div class="row"><div class="ex"><h3>A field error: below the minimum</h3><p>Typed ₦1,500 in Other amount, then pressed Tip.</p><p class="src">appreciation-form.tsx:198–206 (text), :590 (label); tip-amounts.ts:87 (range)</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px 18px;border-radius:20px">
+   <p style="margin:0 0 8px;font-size:13px;font-weight:700">Other amount (NGN 2,000 or more)</p>
+   <div class="well">1,500</div>
+   <div class="fieldnote"><b>Too small.</b> Enter an amount of NGN 2,000 or more, like 2,000 or 2,500.50.</div>
+   <p class="src" style="margin-top:8px"><span class="prop">Proposed copy</span> adds “Too small.” in front; the rest is today’s text.</p>
+   </div></div><p class="note">A small paper tag pinned to the field, pointing at it. The error text is never only colour.</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px 18px;border-radius:20px">
+   <p style="margin:0 0 8px;font-size:13px;font-weight:700">Other amount (NGN 2,000 or more)</p>
+   <div class="well wellerr">1,500<span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#9b2820"><span class="lamp red"></span>below 2,000</span></div>
+   <p class="line">Enter an amount of NGN 2,000 or more, like 2,000 or 2,500.50.</p>
+   <div style="display:flex;gap:8px;margin-top:10px"><span class="key" style="outline:2px solid rgba(122,50,249,.4);outline-offset:2px">₦2,000</span><span class="mini" style="align-self:center">the nearest amount lights up as a way out <span class="prop">Proposed</span></span></div>
+   </div></div><p class="note">The well carries the problem: a red edge and a lamp inside it, with the reason beside the number.</p></div></div>
+<div class="row"><div class="ex"><h3>A save confirmed in Settings</h3><p>Notifications saved. Today: plain text “Saved.” under the form.</p><p class="src">settings/sections/notifications.tsx:79–84</p></div>
+<div><div class="stage"><div class="paper" style="padding:18px;border-radius:20px">
+   <p style="margin:0;font-weight:700;font-size:14px">Notifications</p>
+   <div style="display:flex;gap:12px;align-items:center;margin-top:14px"><span class="key" style="background:#000;color:#fff;border-color:#000">Save notifications</span>
+   <span style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:2px solid #7a32f9;color:#7a32f9;font-weight:800;font-size:13px;transform:rotate(-3deg)"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"/></svg>Saved.</span></div>
+   <p class="note">A small purple stamp lands beside the key and fades after a few seconds. The words “Saved.” stay for screen readers.</p></div></div><p class="note">Quiet: a stamp, no slip, no box.</p></div>
+<div><div class="stage"><div class="paper" style="padding:18px;border-radius:20px">
+   <p style="margin:0;font-weight:700;font-size:14px">Notifications</p>
+   <div style="display:flex;gap:16px;align-items:center;margin-top:14px">
+   <span class="key pressed" style="gap:10px;background:#141210;color:#fff;border-color:#000"><span class="lamp purple"></span>Saved.</span>
+   <span class="mini">→ about 2 seconds later</span>
+   <span class="key" style="background:#000;color:#fff;border-color:#000">Save notifications</span></div>
+   <p class="note">The key settles in, its lamp lights purple and its label reads “Saved.”, then it springs back.</p></div></div><p class="note">The key is the confirmation. Nothing appears anywhere else.</p></div></div>
+<div class="row"><div class="ex"><h3>A withdrawal that failed</h3><p>A row in the withdrawal history. And the one case where we can’t be sure.</p><p class="src">withdraw-view.tsx:50–55 (Failed row), :206 (couldn’t confirm)</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px;border-radius:20px">
+   <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="serif" style="font-size:26px">₦15,000</span><span class="src">GTBank ••4821</span></div>
+   <div class="slip st" style="margin-top:12px">
+     <span class="stamp red" style="width:66px;height:66px">Failed</span>
+     <h4 style="font-size:20px">Failed</h4>
+     <p>3 Nov 2026. It didn’t go through, so the money is back in your balance.</p>
+     <div class="safe"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"/></svg>Back in your balance: ₦15,000 <span class="prop" style="margin-left:auto">Proposed line</span></div>
+   </div>
+   <div class="slip st" style="margin-top:14px;border-color:rgba(208,138,22,.5)">
+     <span class="stamp ink" style="width:66px;height:66px">Check<br>first</span>
+     <h4 style="font-size:20px">Not confirmed <span class="prop" style="vertical-align:middle">Proposed title</span></h4>
+     <p>We couldn’t confirm your withdrawal. Check your dashboard before trying again.</p>
+     <p class="src" style="margin-top:8px">No safety line here: the request may have arrived (withdraw-view.tsx:204–206).</p>
+   </div></div></div><p class="note">Same slip, two stamps. Only the one the code proves gets the reassuring line.</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px;border-radius:20px">
+   <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="serif" style="font-size:26px">₦15,000</span><span class="src">GTBank ••4821</span></div>
+   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px">
+     <div class="well" style="min-height:40px;font-size:12.5px;gap:8px"><span class="lamp red"></span>Requested</div>
+     <div class="well" style="min-height:40px;font-size:12.5px;gap:8px"><span class="lamp off"></span>Sent</div>
+     <div class="well" style="min-height:40px;font-size:12.5px;gap:8px"><span class="lamp off"></span>Paid</div></div>
+   <p class="line"><b>Failed.</b> 3 Nov 2026. It didn’t go through, so the money is back in your balance.</p>
+   <div class="split" style="margin-top:14px;border-color:#000"><div class="face" style="min-height:46px"><span class="lamp amber"></span>Not confirmed <span class="prop">Proposed</span></div><div class="again" style="font-size:13.5px">Check dashboard</div></div>
+   <p class="line">We couldn’t confirm your withdrawal. Check your dashboard before trying again.</p></div></div><p class="note">The three steps are lamps in wells (requested, sent, paid). A failure lights the first lamp red and leaves the others dark.</p></div></div>
+<div class="row"><div class="ex"><h3>An empty state: no tips yet</h3><p>The tips list before the first tip. Today: a plain line of text.</p><p class="src">dashboard/tips/tips-view.tsx:171–174</p></div>
+<div><div class="stage"><div class="paper" style="padding:22px;border-radius:20px;text-align:center">
+   <div style="margin:0 auto;width:220px;padding:16px;border-radius:6px 6px 14px 14px;border:1.5px dashed rgba(20,18,16,.25);background:#fffefa">
+     <p class="serif" style="margin:0;font-size:22px;color:#7a766d">“ … ”</p>
+     <p style="margin:6px 0 0;font-size:12px;color:#7a766d;font-weight:600">Your first note lands here</p></div>
+   <p class="serif" style="margin:14px 0 0;font-size:24px">No tips here yet.</p>
+   <div style="margin-top:12px;display:flex;justify-content:center;gap:10px"><span class="key">Copy your link</span><span class="prop" style="align-self:center">Proposed key</span></div></div></div><p class="note">A blank slip waiting to be written on, with one key to fill it.</p></div>
+<div><div class="stage"><div class="paper" style="padding:22px;border-radius:20px">
+   <div class="empty-well"><span class="lamp off" style="width:12px;height:12px"></span><span class="serif" style="font-size:24px">No tips here yet.</span></div>
+   <div style="margin-top:12px;display:flex;gap:10px;align-items:center"><span class="key">Copy your link</span><span class="prop">Proposed key</span></div></div></div><p class="note">An unlit well: the instrument is on and ready, there’s just nothing in it yet.</p></div></div>
+<div class="row"><div class="ex"><h3>An admin action outcome</h3><p>A serious action that needs a second person, and one done alone.</p><p class="src">components/ops/action-outcome.tsx:41–48, :53–61</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px;border-radius:20px">
+   <div class="slip st"><span class="stamp ink" style="width:70px;height:70px">On<br>hold</span>
+   <h4 style="font-size:20px">Waiting for a second person</h4>
+   <p>Nothing has changed yet. Someone else who holds this permission has to approve it, and they’ve been told. <u>See it in Approvals</u></p></div>
+   <div class="slip st" style="margin-top:14px"><span class="stamp purple" style="width:70px;height:70px">Done<br>alone</span>
+   <h4 style="font-size:20px">Done, without a second person</h4>
+   <p>… Nobody else can approve this right now, so it ran straight away. The log and the alert say you acted alone.</p></div></div></div><p class="note">Staff get the same slips, denser. The stamp says what happened at a glance.</p></div>
+<div><div class="stage"><div class="paper" style="padding:16px 18px;border-radius:20px">
+   <div class="split"><div class="face"><span class="lamp amber"></span>Waiting for a second person</div><div class="again" style="font-size:13.5px">Approvals</div></div>
+   <p class="line">Nothing has changed yet. Someone else who holds this permission has to approve it, and they’ve been told.</p>
+   <div class="split" style="margin-top:14px"><div class="face"><span class="lamp purple"></span>Done, without a second person</div><div class="again" style="font-size:13.5px">Audit log</div></div>
+   <p class="line">… Nobody else can approve this right now, so it ran straight away. The log and the alert say you acted alone.</p></div></div><p class="note">The action key stays half-pressed with an amber lamp while it waits. “Audit log” as a key is proposed.</p></div></div>
+<div class="rec"><div class="paper"><h3>My recommendation: both, each where it fits</h3><ul>
+<li><b>The key tells you</b> for quick results right at a button: saves, copy link, “Saved.”, Try again on a dropped connection. Nothing to read, the key you pressed answers.</li>
+<li><b>The slip</b> when there’s something to explain or check: money (withdrawals, tips not sent), account safety, and staff actions. The stamp is readable at a glance, and the slip has room for what’s safe and what to do.</li>
+<li>Field errors use B’s red edge inside the well, with the reason beside the number.</li>
+<li>Empty states use A’s blank slip on public and recipient pages, and B’s unlit well in the admin area.</li></ul></div>
+<div class="paper"><h3>Rules for both</h3><ul>
+<li>No tinted alert boxes, no “!” or “✓” in front of words.</li>
+<li>Colour is never the only signal: every state has words.</li>
+<li>A reassuring line (“You haven’t paid anything”, “the money is back in your balance”) appears only where the code proves it.</li>
+<li>Errors are still announced (role alert) and successes politely (role status), as today.</li></ul></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3220}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

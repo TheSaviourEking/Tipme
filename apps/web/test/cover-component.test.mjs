@@ -159,3 +159,78 @@ test('the site config allows the quality the covers ask for', () => {
     /qualities: \[75, 85\]/,
   );
 });
+
+const animatedHtml = (cover, animate) =>
+  renderToStaticMarkup(onSite(createElement(ProfileCover, { cover, animate })));
+const night = { kind: 'animated', animation: 'night', play: 'loop' };
+
+test('an animated cover renders five decorative layers in the server HTML', () => {
+  const markup = animatedHtml(night, true);
+  assert.equal(markup.match(/class="cover-fx cover-fx--night"/g)?.length, 5);
+  assert.equal(markup.match(/<span[^>]*aria-hidden="true"/g)?.length, 5);
+  assert.match(markup, /data-profile-cover="animated:night"/);
+  assert.match(markup, /style="background:#101a3a"/);
+  assert.doesNotMatch(markup, /<script|<img|href=/);
+  assert.doesNotMatch(markup, /will-change/);
+});
+
+test('play once, loop and still are carried to the markup', () => {
+  for (const play of ['once', 'loop', 'still'])
+    assert.match(
+      animatedHtml({ ...night, play }, true),
+      new RegExp(`data-cover-play="${play}"`),
+    );
+});
+
+test('without animate, an animated cover renders still (thumbnails, stamps, staff screens)', () => {
+  assert.match(animatedHtml(night, false), /data-cover-play="still"/);
+  assert.match(animatedHtml(night), /data-cover-play="still"/);
+});
+
+test('a Pro colour replaces the palette; no colour uses the palette', () => {
+  const ocean = animatedHtml({ ...night, colour: 'ocean' }, true);
+  assert.match(ocean, /background:#1d4e89/);
+  assert.match(ocean, /color:#3a79c2/);
+  const own = animatedHtml(night, true);
+  assert.match(own, /color:#3e5aa8/);
+});
+
+test('an unknown cover kind draws the automatic cover', () => {
+  const markup = animatedHtml({ kind: 'hologram' }, true);
+  assert.match(markup, /data-profile-cover="scattered"/);
+  assert.doesNotMatch(markup, /cover-fx/);
+});
+
+test('the stylesheet animates only transform and opacity, and stills cover-fx under reduced motion, forced colours and print', () => {
+  const css = readFileSync(new URL('app/globals.css', src), 'utf8');
+  const frames = [...css.matchAll(/@keyframes (cover-fx-[a-z]+)\s*\{/g)];
+  assert.equal(frames.length, 6);
+  for (const match of frames) {
+    let depth = 0;
+    let i = css.indexOf('{', match.index);
+    const start = i;
+    do {
+      if (css[i] === '{') depth += 1;
+      if (css[i] === '}') depth -= 1;
+      i += 1;
+    } while (depth > 0);
+    const body = css.slice(start, i);
+    const properties = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
+    assert.ok(properties.length > 0, match[1]);
+    for (const property of properties)
+      assert.ok(
+        ['transform', 'opacity'].includes(property),
+        `${match[1]}: ${property}`,
+      );
+  }
+  for (const query of [
+    '@media (prefers-reduced-motion: reduce)',
+    '@media (forced-colors: active)',
+    '@media print',
+  ]) {
+    const at = css.indexOf(query, css.indexOf('.cover-fx {'));
+    assert.ok(at > 0, query);
+    const block = css.slice(at, css.indexOf('\n}\n', at));
+    assert.match(block, /\.cover-fx\s*\{[^}]*animation:\s*none/, query);
+  }
+});

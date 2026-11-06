@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { DataSection } from './sections/data';
 import { GettingPaidSection } from './sections/getting-paid';
+import { MakeItYoursSection } from './sections/make-it-yours';
 import { MyPageSection } from './sections/my-page';
 import { NotificationsSection } from './sections/notifications';
 import { PlanSection } from './sections/plan';
@@ -13,7 +14,7 @@ const isSection = (id: string): id is SettingsSection =>
   SETTINGS_SECTIONS.some((section) => section.id === id);
 
 /**
- * The six section links (ScreenSettings). Each is a plain hash link; with motion welcome the page
+ * The seven section links (ScreenSettings). Each is a plain hash link; with motion welcome the page
  * glides there instead of jumping. The current one follows the hash and, as you read, the scroll.
  */
 function SettingsNav() {
@@ -89,6 +90,7 @@ export function SettingsView() {
       <SettingsNav />
       <div className="settings-chapters">
         <MyPageSection />
+        <MakeItYoursSection />
         <GettingPaidSection />
         <NotificationsSection />
         <SecuritySection />
