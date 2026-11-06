@@ -9695,3 +9695,47 @@ body > .coming-soon-page {
     outline-offset: 2px;
   }
 }
+
+/* TipMe for businesses (plan 2026-11-06-business). B0 owns the shell rules below; each lane B1 to
+   B8 writes only between its own markers, so parallel PRs never touch the same lines. */
+
+/* business:B0 start */
+.business-page__head,
+.work-page__head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.business-page__picker {
+  max-width: 24rem;
+}
+
+.work-page__places {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+/* business:B0 end */
+
+/* business:B1 start */
+/* business:B1 end */
+
+/* business:B2 start */
+/* business:B2 end */
+
+/* business:B3 start */
+/* business:B3 end */
+
+/* business:B4 start */
+/* business:B4 end */
+
+/* business:B5 start */
+/* business:B5 end */
+
+/* business:B6 start */
+/* business:B6 end */
+
+/* business:B7 start */
+/* business:B7 end */
+
+/* business:B8 start */
+/* business:B8 end */
