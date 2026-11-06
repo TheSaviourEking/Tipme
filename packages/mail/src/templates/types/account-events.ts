@@ -218,6 +218,8 @@ export const withdrawalPaid = defineMailType({
       {
         subject: 'Your TipMe withdrawal was paid',
         heading: 'Your withdrawal was paid',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'The payment provider confirmed it.',
         blocks: [
           {
             kind: 'text',
@@ -242,6 +244,8 @@ export const withdrawalFailed = defineMailType({
       {
         subject: 'Your TipMe withdrawal didn’t go through',
         heading: 'Your withdrawal didn’t go through',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'The money is back in your balance, so you can try again.',
         blocks: [
           {
             kind: 'text',
@@ -296,6 +300,8 @@ export const milestone = defineMailType({
       {
         subject: 'A TipMe milestone',
         heading: 'You reached a milestone',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'You reached a milestone.',
         blocks: [
           { kind: 'text', text: data.copy },
           {
