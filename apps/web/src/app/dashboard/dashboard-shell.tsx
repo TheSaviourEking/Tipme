@@ -10,16 +10,24 @@ import type {
 import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
+import {
+  useWhatsNewLoader,
+  WhatsNewContext,
+} from '@/components/dashboard/whats-new-context';
 import { LiveProvider } from '@/components/live/live-provider';
 import { liveProviderEnabled } from '@/lib/live-enabled';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { hasNewUpdates } from '@/lib/whats-new';
+
+const WHATS_NEW = '/dashboard/whats-new';
 
 /**
  * The dashboard's navigation: a segmented control on a desktop, the fixed four-item tab bar on a
- * phone (My QR is not in the bar: Show QR sits beside Withdraw on Home).
+ * phone (My QR is not in the bar: Show QR sits beside Withdraw on Home; What's new is a small link
+ * beside the bell instead, owner's answer of 6 Nov 2026).
  */
 const links = (handle: string | null) =>
   [
@@ -27,8 +35,16 @@ const links = (handle: string | null) =>
     { href: '/dashboard/tips', label: 'Tips', phone: true },
     ...(handle ? [{ href: `/@${handle}`, label: 'My page', phone: true }] : []),
     { href: '/dashboard/qr', label: 'My QR', phone: false },
+    { href: WHATS_NEW, label: 'What’s new', phone: false },
     { href: '/dashboard/settings', label: 'Settings', phone: true },
   ] as const;
+
+/** The dot after an update goes live, with words for screen readers. */
+const newUpdatesDot = (
+  <span className="dashboard-nav__dot">
+    <span className="sr-only"> (new updates)</span>
+  </span>
+);
 
 const isCurrent = (pathname: string, href: string) =>
   href === '/dashboard'
@@ -91,6 +107,9 @@ export function DashboardShell({
       ? ownerAttention({ profile, payments, needsRecoveryEmail })
       : null;
   const needsFix = new Set(attention?.map((item) => item.navHref));
+  // Read once the profile has loaded (the person is known), and again after a seen call.
+  const whatsNew = useWhatsNewLoader(profile?.handle ?? null);
+  const newUpdates = hasNewUpdates(whatsNew.status);
 
   const signOut = async () => {
     await apiFetch('/v1/auth/sign-out', { method: 'POST', body: {} });
@@ -131,10 +150,24 @@ export function DashboardShell({
                         <span className="sr-only"> (needs your attention)</span>
                       </span>
                     )}
+                    {link.href === WHATS_NEW && newUpdates && newUpdatesDot}
                   </Link>
                 ))}
               </nav>
               {copy.dashboardBadge && <Badge>{copy.dashboardBadge}</Badge>}
+              {/* Phones only: the tab bar stays four items, so What's new sits beside the bell. */}
+              {profile && (
+                <Link
+                  href={WHATS_NEW}
+                  className="dashboard-bar__whats-new"
+                  aria-current={
+                    isCurrent(pathname, WHATS_NEW) ? 'page' : undefined
+                  }
+                >
+                  What’s new
+                  {newUpdates && newUpdatesDot}
+                </Link>
+              )}
               {profile && <NotificationBell />}
               {profile && (
                 <Button variant="quiet" onClick={() => void signOut()}>
@@ -188,18 +221,20 @@ export function DashboardShell({
               </section>
             )}
           {profile ? (
-            <RecipientContext.Provider
-              value={{
-                profile,
-                setProfile,
-                attention,
-                refreshAttention,
-                paymentsNeedSetup:
-                  payments === undefined ? null : Boolean(payments?.enabled),
-              }}
-            >
-              {children}
-            </RecipientContext.Provider>
+            <WhatsNewContext.Provider value={whatsNew}>
+              <RecipientContext.Provider
+                value={{
+                  profile,
+                  setProfile,
+                  attention,
+                  refreshAttention,
+                  paymentsNeedSetup:
+                    payments === undefined ? null : Boolean(payments?.enabled),
+                }}
+              >
+                {children}
+              </RecipientContext.Provider>
+            </WhatsNewContext.Provider>
           ) : (
             <Skeleton label="Loading your dashboard" />
           )}
