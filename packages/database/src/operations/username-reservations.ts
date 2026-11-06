@@ -23,12 +23,18 @@ import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { newId } from './ids.js';
 import { activeReservation, opsPageByHandle } from './profiles.js';
 import { checkedReason, withAuditChange } from './staff.js';
+import {
+  listTakeBacks,
+  openTakeBackView,
+  pendingTakeBacks,
+  takeBackFacts,
+} from './username-take-backs.js';
 
 /*
  * Staff reservations of usernames (username reservation spec, sections 3 to 5). Instant for anyone
  * holding `usernames.manage`, with a reason, audited. A reservation only blocks a name: the
  * built-in list stays in code and is never a row, and a name a page holds is never reserved here
- * (taking it from the page is PR 2's take-back). The database triggers of migration 0072 back every
+ * (taking it from the page is a take-back, username-take-backs.ts). The database triggers of migration 0072 back every
  * refusal, under the same per-handle lock this module takes.
  */
 
@@ -214,13 +220,24 @@ export function checkUsername(
     const reservation = await activeRow(db, key);
     if (reservation) return { name: key, state: 'reserved', reservation };
     const page = await opsPageByHandle(db, key);
-    if (page)
+    if (page) {
+      const pending = (await pendingTakeBacks(db, now)).find(
+        (request) => request.name === key,
+      );
       return {
         name: key,
         state: 'page',
         kind: page.handle.toLowerCase() === key ? 'current' : 'old',
         page,
+        // The API adds liveCheckoutListed, from its own settings.
+        facts: {
+          ...(await takeBackFacts(db, page.profileId)),
+          liveCheckoutListed: false,
+        },
+        openTakeBack: await openTakeBackView(db, key),
+        pendingRequestId: pending?.requestId ?? null,
       };
+    }
     const [hold] = await db
       .select({ until: handleHolds.until })
       .from(handleHolds)
@@ -262,6 +279,8 @@ export function listUsernames(
       reservations: rows.slice(0, LIST_LIMIT).map(toReservation),
       more: rows.length > LIST_LIMIT,
       builtIn: RESERVED_HANDLES,
+      takeBacks: await listTakeBacks(db),
+      pending: await pendingTakeBacks(db),
     };
   });
 }

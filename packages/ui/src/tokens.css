@@ -39,6 +39,14 @@
   --edge-warning: rgb(208 138 22 / 50%);
   /* The pressed face of a key that shows its result (StatesConcepts .split .face). */
   --key-face-dark: #141210;
+  /* Ink on that dark face (WithdrawRedesign's instrument): #c9c4ba is about 10.8:1 and the link
+     about 9.8:1 on #141210. The link is one step off the board's lilac, which is the Pro QR
+     renderer's own literal and must never reach the web build (scripts/web-bundle.test.mjs). */
+  --text-on-night: #ffffff;
+  --text-on-night-quiet: #c9c4ba;
+  --link-on-night: #c8aeff;
+  /* A ledger stamp for a confirmed outcome (WithdrawRedesign .s-ok). */
+  --stamp-ok: var(--state-success);
   /* Type roles; actual faces are supplied by the app */
   --font-interface: var(--font-manrope), 'Avenir Next', Arial, sans-serif;
   --font-body: var(--font-interface);

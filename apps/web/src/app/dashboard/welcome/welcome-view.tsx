@@ -1,6 +1,13 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { FormEvent } from 'react';
 import type { MyProfile, ProfilePatch } from '@tipme/contracts';
 import {
@@ -12,10 +19,14 @@ import {
   TextareaField,
 } from '@tipme/ui';
 import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
+import { ClaimMoment } from '@/components/account/claim-moment';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Arrow } from '@/components/brand';
+import { takeClaimed } from '@/lib/claim-moment';
 import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
+import { onReconnect, sendWithOneRetry } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { useSiteHost } from '@/lib/site-host';
 
 type Step = 'hello' | 'about' | 'bio' | 'live' | 'done';
@@ -90,6 +101,26 @@ export function WelcomeView() {
   const [copied, setCopied] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
+  // The claim moment plays over the hello step once, when the claim just left its marker. The
+  // ref keeps a second effect run (React's development double-run) from reading it again.
+  const [moment, setMoment] = useState(false);
+  const took = useRef(false);
+  const celebrated = useRef(false);
+  useLayoutEffect(() => {
+    if (took.current) return;
+    took.current = true;
+    if (takeClaimed(profile.handle)) {
+      celebrated.current = true;
+      // Before paint, so the hello step never flashes ahead of the moment.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMoment(true);
+    }
+  }, [profile.handle]);
+  const endMoment = useCallback(() => setMoment(false), []);
+  // Hand-over: focus goes to the hello heading.
+  useEffect(() => {
+    if (!moment && celebrated.current) heading.current?.focus();
+  }, [moment]);
 
   // Each step change moves focus to its heading so screen readers hear where they are.
   useEffect(() => {
@@ -100,24 +131,49 @@ export function WelcomeView() {
     heading.current?.focus();
   }, [step]);
 
+  // A save tapped offline goes when the connection is back (states plan, Task 16). Moving to
+  // another step, or leaving, cancels it.
+  const armed = useRef<(() => void) | null>(null);
+  const disarm = () => {
+    armed.current?.();
+    armed.current = null;
+  };
+  useEffect(() => disarm, []);
+  const whenOnline = (run: () => void) => {
+    disarm();
+    armed.current = onReconnect(window, () => {
+      armed.current = null;
+      run();
+    });
+  };
+
   const go = (next: Step) => {
+    disarm();
     setError('');
     setStep(next);
   };
 
   const save = async (patch: ProfilePatch, next: Step) => {
+    disarm();
+    if (!navigator.onLine) {
+      setError('We couldn’t save that. Check your connection and try again.');
+      whenOnline(() => void save(patch, next));
+      return;
+    }
     setBusy(true);
     setError('');
-    const result = await apiFetch<MyProfile>('/v1/me/profile', {
-      method: 'PATCH',
-      body: patch,
-    });
+    // The same PATCH twice leaves the same profile, so a dropped one is tried once more, quietly.
+    const { result } = await sendWithOneRetry('welcome-profile', () =>
+      apiFetch<MyProfile>('/v1/me/profile', { method: 'PATCH', body: patch }),
+    );
     setBusy(false);
     if (!result.ok) {
       setError(
         result.fields?.includes('displayName')
           ? 'Add the name people know you by.'
-          : 'We couldn’t save that. Check your connection and try again.',
+          : result.code === 'NETWORK'
+            ? CONNECTION_COPY.welcomeDropped
+            : CONNECTION_COPY.ourSide,
       );
       return;
     }
@@ -139,12 +195,22 @@ export function WelcomeView() {
   };
 
   const goLive = async () => {
+    disarm();
+    if (!navigator.onLine) {
+      setError(
+        'We couldn’t put your page online. You can try again, or do it later in Settings.',
+      );
+      whenOnline(() => void goLive());
+      return;
+    }
     setBusy(true);
     setError('');
-    const result = await apiFetch<MyProfile>('/v1/me/page/state', {
-      method: 'PUT',
-      body: { state: 'live' },
-    });
+    const { result } = await sendWithOneRetry('welcome-live', () =>
+      apiFetch<MyProfile>('/v1/me/page/state', {
+        method: 'PUT',
+        body: { state: 'live' },
+      }),
+    );
     setBusy(false);
     if (!result.ok) {
       setError(
@@ -178,42 +244,49 @@ export function WelcomeView() {
 
   if (step === 'hello')
     return (
-      <section
-        className="welcome welcome--hello"
-        aria-labelledby={`${id}-title`}
-      >
-        <p className="welcome-pill">You’re in</p>
-        <h1
-          id={`${id}-title`}
-          className="welcome-title"
-          ref={heading}
-          tabIndex={-1}
+      <>
+        {moment && (
+          <ClaimMoment handle={profile.handle} host={host} onDone={endMoment} />
+        )}
+        <section
+          className="welcome welcome--hello"
+          aria-labelledby={`${id}-title`}
+          inert={moment}
         >
-          Welcome to TipMe.
-        </h1>
-        <p className="welcome-lede">
-          <strong>@{profile.handle}</strong> is yours now. Let’s make your page
-          feel like you. It takes about a minute, and you can skip anything.
-        </p>
-        <Surface material="instrument" className="welcome-card welcome-plan">
-          <ol>
-            <li className="is-done">Claim your handle</li>
-            <li>Tell people your name and what you do</li>
-            <li>Add a line about you</li>
-            <li>Put your page online and share it</li>
-          </ol>
-          <Button
-            variant="continue"
-            className="welcome-continue"
-            onClick={() => go('about')}
+          <p className="welcome-pill">You’re in</p>
+          <h1
+            id={`${id}-title`}
+            className="welcome-title"
+            ref={heading}
+            tabIndex={-1}
           >
-            Let’s set up your page <Arrow />
-          </Button>
-          <Link className="welcome-later" href="/dashboard">
-            I’ll do this later
-          </Link>
-        </Surface>
-      </section>
+            Welcome to TipMe.
+          </h1>
+          <p className="welcome-lede">
+            <strong>@{profile.handle}</strong> is yours now. Let’s make your
+            page feel like you. It takes about a minute, and you can skip
+            anything.
+          </p>
+          <Surface material="instrument" className="welcome-card welcome-plan">
+            <ol>
+              <li className="is-done">Claim your handle</li>
+              <li>Tell people your name and what you do</li>
+              <li>Add a line about you</li>
+              <li>Put your page online and share it</li>
+            </ol>
+            <Button
+              variant="continue"
+              className="welcome-continue"
+              onClick={() => go('about')}
+            >
+              Let’s set up your page <Arrow />
+            </Button>
+            <Link className="welcome-later" href="/dashboard">
+              I’ll do this later
+            </Link>
+          </Surface>
+        </section>
+      </>
     );
 
   if (step === 'done')

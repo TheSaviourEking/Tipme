@@ -56,6 +56,7 @@ import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { sendPrivateImage } from '../profiles/image-upload.js';
 import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { OpsAnyStaff, OpsPermission } from './permission.decorator.js';
@@ -89,6 +90,9 @@ export class OpsPagesController {
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Get(':handle')
@@ -123,8 +127,14 @@ export class OpsPagesController {
         reason: body.reason,
       },
     );
-    // The public page's amounts change with the plan.
-    if (changed) this.revalidator.revalidate(handleLower);
+    // The public page's amounts change with the plan, and so does the owner's open dashboard.
+    if (changed) {
+      this.revalidator.revalidate(handleLower);
+      void this.publishLive({
+        to: { profile: profileId },
+        type: 'profile.changed',
+      });
+    }
     return { data: page };
   }
 
@@ -173,7 +183,13 @@ export class OpsPagesController {
       sealing: this.sealing,
       store: this.photos ?? undefined,
     });
-    if (changed) this.revalidator.revalidate(handle);
+    if (changed) {
+      this.revalidator.revalidate(handle);
+      void this.publishLive({
+        to: { profile: profileId },
+        type: 'profile.changed',
+      });
+    }
     return { data: { removed: changed } };
   }
 

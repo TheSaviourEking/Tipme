@@ -1,3 +1,78 @@
+# Current handoff: merge train 1 (6 November 2026)
+
+- `train/1` holds 11 reviewed PRs on top of dev `44fcd42c`. Merging it marks each of them merged.
+- Migrations after dev's `0078_handle_take_backs`: `0079_tip_start`, `0080_supporters`. Both additive.
+- Resolutions worth knowing: Withdraw keeps live updates' "Check what you can withdraw" state inside W1's instrument (amber lamp, `Check again` button); Settings > Tip amounts keeps the start amount inside the live form; the threat model's share-card row is P12.
+- Evidence and every conflict: `.superpowers/program/train1-report.md` (main checkout).
+
+# Current handoff: username reservation PR 2, take-backs (6 November 2026)
+
+- Branch `feat/username-takebacks`, test lane 4, merged with `origin/dev` at `b86c7b99`, committed, not pushed. Additive migration `0078_handle_take_backs`: a new table, a foreign key from `handle_reservations.take_back_id` added `NOT VALID` then validated, and `issues_kind` widened the same way. Regenerate it with drizzle-kit if another migration lands first.
+- Deploy the web first (every new profile and ops field is optional), and not to production before the terms' "Your username" section is on `main`.
+- The worker now reads optional `WEB_REVALIDATE_URL` and `WEB_REVALIDATE_SECRET` (passed in both compose files); without the secret, cached pages refresh within 5 minutes.
+- Evidence and rulings: `.superpowers/program/b2-report.md` (main checkout).
+
+# Current handoff — live updates PR 2: plan, withdrawals and banners (5 November 2026)
+
+- Branch/worktree: `feat/live-updates-2` / `.worktrees/live-updates-2`, from `origin/dev` at `931a545`, test lane 5. Committed, not pushed. Plan `docs/superpowers/plans/2026-11-04-live-updates.md` Tasks 13-15. No migration.
+- Built: worker mappings (payout paid/failed, freeze opened/released, the switch to all, payout start, payout setup sweep, weekly reports); API publish points (profile, withdrawals, payments, account); `GET /v1/me/withdrawal-quote?scope=local` so a live re-read never calls the payment partner; the web side (shell, Withdraw, Home, Settings dirty-form rule, QR studio, reports, bell).
+- Evidence and rulings: `.superpowers/program/c2-report.md` (main checkout).
+- Next: review, then PR 3 (Task 16, staff stream).
+
+# Current handoff — public boards PR 1, app icons (6 November 2026)
+
+- Branch `feat/app-icons`, test lane 9, from `origin/dev` at `246bebb2`, committed, not pushed.
+- `HEART_MARK` lives in `apps/web/src/lib/wordmark.ts` (so a node test can load it) and is re-exported by `brand.tsx`; `apps/web/test/brand-heart.test.mjs` fails if `icon.svg` drifts.
+- The icon route answers 404 itself for unknown names: `dynamicParams` is not compatible with `cacheComponents`. Both files prerender (`●` in the build output).
+- `next/og` ignores the CSS `inset` shorthand: absolutely placed layers need `top`, `left`, `width` and `height`.
+- Next links the Apple icon as `/apple-icon?<hash>`; the gates exempt the path `/apple-icon` exactly.
+- Evidence: `.superpowers/program/pub6-report.md`, PR 1 section (main checkout); PNGs in `.superpowers/program/pub1-icons/`.
+
+# Current handoff — public boards PR 6, the claim moment (6 November 2026)
+
+- Branch `feat/claim-moment`, test lane 9, from `origin/dev` at `bf6629f8`, committed, not pushed. No migration, no contract change.
+- `HandleClaim` calls `markClaimed(handle)` after the 2xx from `POST /v1/me/page`; `WelcomeView` calls `takeClaimed` once (layout effect, ref-guarded against React's development double-run) and draws `ClaimMoment` over the hello step, which is `inert` meanwhile. The marker holds the handle only and is deleted on first read, so a reload, another tab or another device never replays it.
+- Hand-over: 1600 ms, or any tap, any key, Continue or Escape; focus goes to the hello heading one task later (so a tap's mousedown cannot steal it).
+- The `SignUpCelebration.dc.html` board was not on disk to copy into `docs/design/redesign/boards/`; the decision log records the rulings from the plan's written design.
+- Lane 9's API port is 4190, on the Fetch spec's blocked-port list: server-side fetches from Next to the API fail with `bad port`, so public-page checks fail on lane 9 only (`tests/lane.ts`).
+- `pnpm test` builds the web without the e2e settings, and `node scripts/build-e2e.mjs` then replays that turbo cache entry (the hash does not include the e2e API origin): the e2e web calls `localhost:4000` and every sign-in fails. After `pnpm test`, rebuild with `rm -rf apps/web/.next && TURBO_FORCE=1 node scripts/build-e2e.mjs`.
+- Evidence: `.superpowers/program/pub6-report.md` (main checkout).
+
+# Current handoff — Make it yours, PR B: the Pro starting amount (5 November 2026)
+
+- Branch `feat/miy-start-amount`, test lane 2, not pushed. Additive migration `0078_tip_start` (renumbered `0079_tip_start` in merge train 1) (one nullable column and a check, no backfill), generated with drizzle-kit after rebuilding `@tipme/contracts`; regenerate if another branch takes 0078 first.
+- The check uses `coalesce(tip_start_minor = ANY (tip_presets_minor), false)`: `= ANY (NULL)` is NULL, which a CHECK would let through.
+- Lapse: a page that leaves Pro keeps `tip_start_minor`; the API sends no `startMinor`, so the form starts on ₦2,000. It comes back with Pro. A start whose amount fell under the floor is not sent either.
+- Deploy the API with or before the web: an older API's strict `tipAmountsSchema` refuses `startMinor` with a 400. The web sends it only when a start is or was chosen, so only those saves fail in between. An old web against the new API omits `startMinor`, which keeps the saved start while it is still offered.
+- No fee, minimum, quote, checkout or ledger change. No regulatory decision is implied.
+- Evidence: `.superpowers/program/miy-b-report.md` (main checkout).
+
+# Current handoff — repeat supporters PR 3 (6 November 2026)
+
+- Branch `feat/repeat-supporters`, test lane 8, not pushed. Additive migration `0078_supporters` (renumbered `0080_supporters` in merge train 1) (two new tables, no column on any money table), generated with drizzle-kit after rebuilding `@tipme/contracts`. If another migration merges first, regenerate it as the next number; never rename it.
+- Deploy order: the web reads `recognition` and `recognised` as optional, so the web can go first. The intent request is `.strict()`: after an API rollback to a version without `supporterKey`, a tab that ticked the box gets a 400 (untick and retry works), as with `noteMayShow`.
+- Fingerprints of requests without a key (or without a name) are byte-identical to dev's (test). A key adds `'s', sha256hex` to the fingerprint, so adding or changing a key on a replayed idempotency key is a conflict.
+- `SUPPORTER_RECOGNITION` (default `on`) is wired into both compose files and the env examples. D-07 is open: whether production keeps it on is the owner's call (`docs/runbooks/supporter-recognition.md`).
+- Not done here: the recipient's "Your supporters" list (PR 4); the Pro additions board copy and its PR 1 decisions parts (PR 1, Task 1.0).
+- Verified: commands and counts in `.superpowers/program/pro3-report.md`.
+
+# Current handoff — public boards PR 2, share cards (6 November 2026)
+
+- Branch `feat/share-cards`, test lane 8, from `origin/dev` at `246bebb2`, committed, not pushed.
+- `HEART_MARK` is added to `lib/wordmark.ts` and `brand.tsx` exactly as `feat/app-icons` adds it (and its `brand-heart.test.mjs`), so whichever PR lands second rebases with identical hunks.
+- Fonts: static TTF subsets in `apps/web/src/fonts/og/` (pinned commits and sizes in `docs/third-party-component-register.md`). Turbopack emits them as server assets from `new URL('../fonts/og/…', import.meta.url)`; checked under `next start` (the e2e server).
+- `next/og` falls back to another font word by word and drops the space after a fallback word. DM Serif Display has no Ọ or Ẹ, so `lib/font-cmap.ts` reads its character map and a name it cannot draw whole is set in Manrope Bold. Combining accents (Ẹ̀, ọ́) are drawn without mark positioning, so they sit slightly off their letter.
+- The general card's bytes are drawn once per process in the route and match the prerendered `/opengraph-image` byte for byte (asserted in `share-cards.spec.ts`).
+- Evidence: `.superpowers/program/pub2-report.md` (main checkout); PNGs in `.superpowers/program/pub2-cards/`.
+
+# Current handoff — public boards PR 4, QR studio (6 November 2026)
+
+- Branch `feat/qr-studio-restyle`, lane 4, committed, not pushed. Web only; nothing about payments, plans or the QR link changes.
+- The studio's only `role="status"` line now sits under the Upgrade panel and before every list, at every width (one DOM order); it stays mounted.
+- Designs: three fieldsets, "Patterns", "Cards", "Photo", in the API's order; an unknown `kind` joins Patterns. All radios share one `name`, so arrow keys cross groups.
+- `drawQrCard` letters the Free card in the page's `--font-manrope` family (next/font names it `"manrope"`) after `document.fonts.load`, waiting at most 3 s, else Arial. Pro designs (server pictures) are unchanged. The code's pixels are unchanged: unit decode test plus the e2e scan of the free canvas.
+- Verified locally: format, lint, typecheck, `pnpm test` (web 352/352), `tests/e2e/qr.spec.ts` 9/9 on lane 4. The full e2e suite was not run locally (6 Nov overload rule); CI runs it.
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.

@@ -7,14 +7,19 @@ import type {
   MyProfile,
   RecoveryEmailStatus,
 } from '@tipme/contracts';
-import { Badge, Button, Container, Notice, Skeleton } from '@tipme/ui';
+import { Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
-import { LiveProvider } from '@/components/live/live-provider';
+import { TestModePill } from '@/components/dashboard/test-mode-pill';
+import { LiveProvider, useLiveEvents } from '@/components/live/live-provider';
 import { liveProviderEnabled } from '@/lib/live-enabled';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
+import {
+  attentionHere,
+  ownerAttention,
+  RECOVERY_EMAIL_CHANGED,
+} from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 
 /**
@@ -70,13 +75,20 @@ export function DashboardShell({
   const [payments, setPayments] = useState<
     BachsPaymentAccountStatus | null | undefined
   >(undefined);
-  const refreshAttention = useCallback(() => {
-    void apiFetch<BachsPaymentAccountStatus>('/v1/me/payment-account').then(
-      (result) => setPayments(result.ok ? result.data : null),
-    );
-  }, []);
+  const readPayments = useCallback(
+    () =>
+      apiFetch<BachsPaymentAccountStatus>('/v1/me/payment-account').then(
+        (result) => setPayments(result.ok ? result.data : null),
+      ),
+    [],
+  );
+  const refreshAttention = useCallback(
+    () => void readPayments(),
+    [readPayments],
+  );
   useEffect(refreshAttention, [refreshAttention, pathname]);
   const [needsRecoveryEmail, setNeedsRecoveryEmail] = useState(false);
+  const [accountRound, setAccountRound] = useState(0);
   useEffect(() => {
     const refresh = () =>
       void apiFetch<RecoveryEmailStatus>('/v1/me/recovery-email').then(
@@ -85,12 +97,19 @@ export function DashboardShell({
     refresh();
     window.addEventListener(RECOVERY_EMAIL_CHANGED, refresh);
     return () => window.removeEventListener(RECOVERY_EMAIL_CHANGED, refresh);
-  }, [pathname]);
+  }, [pathname, accountRound]);
+  // Plan, suspension and page edits from staff, another tab or another device (live updates).
+  const readProfile = useCallback(async () => {
+    const result = await apiFetch<MyProfile>('/v1/me/profile');
+    if (result.ok) setProfile(result.data);
+  }, []);
   const attention =
     profile && payments !== undefined
       ? ownerAttention({ profile, payments, needsRecoveryEmail })
       : null;
+  // The nav dots keep the full list; the reminders shown are this page's own.
   const needsFix = new Set(attention?.map((item) => item.navHref));
+  const shown = attentionHere(attention, pathname);
 
   const signOut = async () => {
     await apiFetch('/v1/auth/sign-out', { method: 'POST', body: {} });
@@ -111,6 +130,11 @@ export function DashboardShell({
         enabled={liveProviderEnabled({ profile, liveUpdates })}
         onSignedOut={signedOutElsewhere}
       >
+        <LiveShellSync
+          onProfile={readProfile}
+          onPayments={readPayments}
+          onAccount={() => setAccountRound((n) => n + 1)}
+        />
         <Container>
           {/* The welcome is a moment of its own: no dashboard toolbar around it. */}
           {pathname !== '/dashboard/welcome' && (
@@ -134,7 +158,13 @@ export function DashboardShell({
                   </Link>
                 ))}
               </nav>
-              {copy.dashboardBadge && <Badge>{copy.dashboardBadge}</Badge>}
+              {copy.dashboardBadge && (
+                <TestModePill
+                  label={copy.dashboardBadge}
+                  detail={copy.dashboardBadgeDetail}
+                  sentence={copy.withdrawNotice}
+                />
+              )}
               {profile && <NotificationBell />}
               {profile && (
                 <Button variant="quiet" onClick={() => void signOut()}>
@@ -162,31 +192,29 @@ export function DashboardShell({
             </Notice>
           )}
           {/* Not on the welcome, which walks through the same steps itself. */}
-          {attention &&
-            attention.length > 0 &&
-            pathname !== '/dashboard/welcome' && (
-              <section
-                className="owner-attention"
-                aria-label="Needs your attention"
-              >
-                {attention.map((item) => (
-                  <Notice key={item.id} tone="neutral" title={item.title}>
-                    {item.body}
-                    {item.action && (
-                      <>
-                        {' '}
-                        <Link
-                          className="tm-button tm-button--primary owner-attention__action"
-                          href={item.action.href}
-                        >
-                          {item.action.label}
-                        </Link>
-                      </>
-                    )}
-                  </Notice>
-                ))}
-              </section>
-            )}
+          {shown && shown.length > 0 && pathname !== '/dashboard/welcome' && (
+            <section
+              className="owner-attention"
+              aria-label="Needs your attention"
+            >
+              {shown.map((item) => (
+                <Notice key={item.id} tone="neutral" title={item.title}>
+                  {item.body}
+                  {item.action && (
+                    <>
+                      {' '}
+                      <Link
+                        className="tm-button tm-button--primary owner-attention__action"
+                        href={item.action.href}
+                      >
+                        {item.action.label}
+                      </Link>
+                    </>
+                  )}
+                </Notice>
+              ))}
+            </section>
+          )}
           {profile ? (
             <RecipientContext.Provider
               value={{
@@ -207,4 +235,28 @@ export function DashboardShell({
       </LiveProvider>
     </main>
   );
+}
+
+const PROFILE_CHANGED = ['profile.changed'] as const;
+const PAYMENTS_CHANGED = ['payments.changed'] as const;
+const ACCOUNT_CHANGED = ['account.changed'] as const;
+
+/**
+ * The shell's own reads, inside the live provider. The profile is also read on every resync: the
+ * paused-page notice and the plan must not stay wrong after a dropped signal. The payment account
+ * and recovery email only on their signals: they are read again on every page change anyway.
+ */
+function LiveShellSync({
+  onProfile,
+  onPayments,
+  onAccount,
+}: {
+  onProfile: () => Promise<void>;
+  onPayments: () => Promise<void>;
+  onAccount: () => void;
+}) {
+  useLiveEvents(PROFILE_CHANGED, onProfile);
+  useLiveEvents(PAYMENTS_CHANGED, onPayments, { resync: false });
+  useLiveEvents(ACCOUNT_CHANGED, async () => onAccount(), { resync: false });
+  return null;
 }

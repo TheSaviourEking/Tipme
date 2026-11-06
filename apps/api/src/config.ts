@@ -117,6 +117,14 @@ export const apiConfigSchema = z
       .enum(['on', 'off'])
       .default('on')
       .transform((value) => value === 'on'),
+    // Repeat supporters (Pro additions, option (a)): "Let {name} recognise me next time" on Pro
+    // pages. `off` hides the tick box, stops recording and (later) hides the recipient's list,
+    // deleting nothing: the lever if the D-07 privacy review says to wait
+    // (docs/runbooks/supporter-recognition.md). Default on.
+    SUPPORTER_RECOGNITION: z
+      .enum(['on', 'off'])
+      .default('on')
+      .transform((value) => value === 'on'),
     // Anonymous analytics collection. Unset: on in development and test, off in production until
     // the privacy decision (D-07) is made.
     ANALYTICS_ENABLED: z

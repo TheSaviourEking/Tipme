@@ -23,6 +23,7 @@ export type OperationErrorCode =
   | 'SOCIAL_LINK_UNAVAILABLE'
   | 'INVALID_TIP_PRESETS'
   | 'INVALID_TIP_MINIMUM'
+  | 'INVALID_TIP_START'
   | 'WITHDRAWAL_TOO_SMALL'
   | 'WITHDRAWAL_UNAVAILABLE'
   | 'WITHDRAWALS_PAUSED'
@@ -81,7 +82,10 @@ export type OperationErrorCode =
   | 'USERNAME_BUILT_IN'
   | 'USERNAME_RESERVED'
   | 'USERNAME_HELD_BY_PAGE'
-  | 'USERNAME_NOT_RESERVED';
+  | 'USERNAME_NOT_RESERVED'
+  | 'TAKE_BACK_OPEN'
+  | 'TAKE_BACK_NOT_FOUND'
+  | 'TAKE_BACK_CLOSED';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is

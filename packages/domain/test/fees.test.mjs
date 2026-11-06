@@ -164,3 +164,12 @@ test('the standard amounts all clear the minimum', () => {
     1_000_000n,
   ]);
 });
+
+test("tipStartAllowed: only one of the page's own presets", async () => {
+  const { tipStartAllowed } = await import('../dist/index.js');
+  const presets = [500000n, 1000000n, 2000000n];
+  assert.equal(tipStartAllowed(presets, 1000000n), true);
+  assert.equal(tipStartAllowed(presets, 500000n), true);
+  assert.equal(tipStartAllowed(presets, 300000n), false, 'not one of them');
+  assert.equal(tipStartAllowed([], 1000000n), false, 'no presets');
+});

@@ -457,3 +457,26 @@ test('with live payments on, production will not start without an alert route; w
     /very-secret-token/,
   );
 });
+
+test('the revalidation settings are optional, and checked when given', () => {
+  const base = {
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    NODE_ENV: 'test',
+  };
+  const without = loadWorkerConfig(base);
+  assert.equal(without.WEB_REVALIDATE_SECRET, undefined);
+  assert.equal(without.WEB_REVALIDATE_URL, undefined);
+  const withThem = loadWorkerConfig({
+    ...base,
+    WEB_REVALIDATE_SECRET: 's'.repeat(32),
+    WEB_REVALIDATE_URL: 'https://usetipme.xyz/api/revalidate',
+  });
+  assert.equal(withThem.WEB_REVALIDATE_SECRET, 's'.repeat(32));
+  assert.throws(
+    () => loadWorkerConfig({ ...base, WEB_REVALIDATE_SECRET: 'short' }),
+    /WEB_REVALIDATE_SECRET/,
+  );
+});

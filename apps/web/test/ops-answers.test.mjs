@@ -197,3 +197,32 @@ test('each username refusal has plain words, with no em dash', () => {
   // Without the page's handle it still says what to do, never "@undefined".
   assert.ok(!words('USERNAME_HELD_BY_PAGE').includes('@'));
 });
+
+test('each take-back refusal and activity has plain words, with no em dash', async () => {
+  const { STAFF_ACTIVITY_WORDS } = await import('../src/lib/ops-answers.ts');
+  const words = (code) => refusalWords({ status: 409, code });
+  assert.equal(
+    words('TAKE_BACK_OPEN'),
+    'This username already has a take-back under way',
+  );
+  assert.equal(
+    words('TAKE_BACK_CLOSED'),
+    'This take-back has already finished',
+  );
+  assert.equal(
+    refusalWords({ status: 404, code: 'TAKE_BACK_NOT_FOUND' }),
+    'We couldn’t find that take-back',
+  );
+  for (const action of [
+    'username.take_back_started',
+    'username.take_back_done',
+    'username.released',
+  ])
+    assert.ok(STAFF_ACTIVITY_WORDS[action], action);
+  for (const text of [
+    words('TAKE_BACK_OPEN'),
+    words('TAKE_BACK_CLOSED'),
+    STAFF_ACTIVITY_WORDS['username.take_back_started'],
+  ])
+    assert.equal(/[\u2013\u2014]/.test(text), false);
+});

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  attentionHere,
   isPaymentAttention,
   ownerAttention,
   requirementWords,
@@ -189,4 +190,31 @@ test("a business name is a business detail, not the person's name", () => {
   assert.deepEqual(requirementWords(['business_name']), ['business details']);
   assert.deepEqual(requirementWords(['company.name']), ['business details']);
   assert.deepEqual(requirementWords(['individual.first_name']), ['your name']);
+});
+
+test('the recovery reminder shows on Home and Settings only; the rest show everywhere', () => {
+  const items = ownerAttention({
+    profile: { emailVerified: true, pageState: 'not_live', suspended: false },
+    payments: null,
+    needsRecoveryEmail: true,
+  });
+  for (const path of [
+    '/dashboard',
+    '/dashboard/settings',
+    '/dashboard/settings/page',
+  ])
+    assert.deepEqual(ids(attentionHere(items, path)), [
+      'page_offline',
+      'add_recovery_email',
+    ]);
+  for (const path of [
+    '/dashboard/withdraw',
+    '/dashboard/tips',
+    '/dashboard/tips/t1',
+    '/dashboard/reports/2026-W44',
+    '/dashboard/qr',
+    '/dashboard/settingsx',
+  ])
+    assert.deepEqual(ids(attentionHere(items, path)), ['page_offline']);
+  assert.equal(attentionHere(null, '/dashboard'), null);
 });

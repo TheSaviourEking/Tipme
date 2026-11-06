@@ -328,3 +328,171 @@ test('staff can find a renamed page by one of its old handles', async () => {
   assert.equal(found.status, 200);
   assert.equal((await json(found)).handle, 'new_name');
 });
+
+// The starting amount ("Make it yours", PR B): a Pro page picks which of its own amounts the tip
+// form starts on. Nothing about fees, the minimum or quotes changes.
+async function proPage(phone, handle) {
+  const cookie = await livePage(phone, handle);
+  const { profileId } = await json(
+    await call('GET', `/v1/ops/pages/${handle}`, staff.cookie),
+  );
+  await setPlan(profileId, 'pro');
+  return { cookie, profileId };
+}
+const startColumn = async (handle) =>
+  (
+    await database.pool.query(
+      `SELECT tip_start_minor::text AS start FROM profiles WHERE handle_lower = $1`,
+      [handle],
+    )
+  ).rows[0].start;
+const OWN = {
+  presetsMinor: ['500000', '1000000', '2000000'],
+  minMinor: '500000',
+};
+
+test('a Pro page chooses its starting amount; one outside its amounts is 400 with fields ["startMinor"]', async () => {
+  const { cookie } = await proPage('+2348031260009', 'start_pick');
+  const set = (body) => call('PUT', '/v1/me/tip-amounts', cookie, body);
+
+  const outside = await set({ ...OWN, startMinor: '700000' });
+  assert.equal(outside.status, 400);
+  const error = (await outside.json()).error;
+  assert.equal(error.code, 'VALIDATION_FAILED');
+  assert.deepEqual(error.fields, ['startMinor']);
+  assert.equal(await startColumn('start_pick'), null, 'nothing written');
+  // Shape is checked before anything else: a number, or naira with kobo, is not kobo.
+  assert.equal((await set({ ...OWN, startMinor: 1000000 })).status, 400);
+
+  const saved = await set({ ...OWN, startMinor: '1000000' });
+  assert.equal(saved.status, 200);
+  const withStart = { ...OWN, startMinor: '1000000' };
+  assert.deepEqual((await json(saved)).tipAmounts, withStart);
+  assert.deepEqual(
+    (await json(await call('GET', '/v1/profiles/start_pick'))).tipAmounts,
+    withStart,
+  );
+  assert.equal(await startColumn('start_pick'), '1000000');
+
+  // Null goes back to the automatic start.
+  const cleared = await set({ ...OWN, startMinor: null });
+  assert.deepEqual((await json(cleared)).tipAmounts, OWN);
+  assert.equal(await startColumn('start_pick'), null);
+});
+
+test('re-saving amounts without the start keeps it if still offered, and clears it if removed', async () => {
+  const { cookie } = await proPage('+2348031260010', 'start_keep');
+  const set = (body) => call('PUT', '/v1/me/tip-amounts', cookie, body);
+  await set({ ...OWN, startMinor: '1000000' });
+
+  // An older client that does not know about the start: the start is kept while still offered.
+  const kept = await set({
+    presetsMinor: ['1000000', '3000000'],
+    minMinor: '500000',
+  });
+  assert.equal(kept.status, 200);
+  assert.equal((await json(kept)).tipAmounts.startMinor, '1000000');
+
+  const removed = await set({
+    presetsMinor: ['500000', '2000000'],
+    minMinor: '500000',
+  });
+  assert.equal(removed.status, 200);
+  assert.equal((await json(removed)).tipAmounts.startMinor, undefined);
+  const mine = await json(await call('GET', '/v1/me/profile', cookie));
+  assert.equal(mine.tipAmounts.startMinor, undefined);
+  assert.equal(await startColumn('start_keep'), null);
+});
+
+test('a Free page sending a start is refused PRO_REQUIRED; leaving Pro shows the standard amounts with no start, and returning brings it back', async () => {
+  const free = await livePage('+2348031260011', 'start_free');
+  const refused = await call('PUT', '/v1/me/tip-amounts', free, {
+    ...STANDARD,
+    startMinor: '500000',
+  });
+  assert.equal(refused.status, 403);
+  assert.equal(await code(refused), 'PRO_REQUIRED');
+  assert.equal(await startColumn('start_free'), null);
+
+  const { cookie, profileId } = await proPage('+2348031260012', 'start_lapse');
+  await call('PUT', '/v1/me/tip-amounts', cookie, {
+    ...OWN,
+    startMinor: '2000000',
+  });
+  await setPlan(profileId, 'free');
+  assert.deepEqual(
+    (await json(await call('GET', '/v1/profiles/start_lapse'))).tipAmounts,
+    STANDARD,
+  );
+  assert.deepEqual(
+    (await json(await call('GET', '/v1/me/profile', cookie))).tipAmounts,
+    STANDARD,
+  );
+  assert.equal(
+    await startColumn('start_lapse'),
+    '2000000',
+    'kept, not deleted',
+  );
+  await setPlan(profileId, 'pro');
+  assert.deepEqual(
+    (await json(await call('GET', '/v1/profiles/start_lapse'))).tipAmounts,
+    { ...OWN, startMinor: '2000000' },
+  );
+});
+
+test('a page moved to Free between the read and the write saves no start', async () => {
+  const { cookie, profileId } = await proPage('+2348031260013', 'start_race');
+  await call('PUT', '/v1/me/tip-amounts', cookie, OWN);
+  // Hold the row lock, so the save reads Pro and then waits on its UPDATE while staff move it to Free.
+  const holder = await database.pool.connect();
+  try {
+    await holder.query('BEGIN');
+    await holder.query(`UPDATE profiles SET plan = 'free' WHERE id = $1`, [
+      profileId,
+    ]);
+    const saving = call('PUT', '/v1/me/tip-amounts', cookie, {
+      ...OWN,
+      startMinor: '1000000',
+    });
+    // Let the save reach its UPDATE before the plan change commits.
+    for (let i = 0; i < 50; i++) {
+      const { rows } = await database.pool.query(
+        `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+      );
+      if (rows[0].n > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await holder.query('COMMIT');
+    const response = await saving;
+    assert.equal(response.status, 403);
+    assert.equal(await code(response), 'PRO_REQUIRED');
+  } finally {
+    holder.release();
+  }
+  assert.equal(await startColumn('start_race'), null);
+});
+
+test('the database refuses a start that is not one of the presets', async () => {
+  await livePage('+2348031260014', 'start_guard');
+  const update = (sql) =>
+    database.pool.query(
+      `UPDATE profiles SET ${sql} WHERE handle_lower = 'start_guard'`,
+    );
+  const refused = async (sql) =>
+    assert.rejects(
+      update(sql),
+      (error) =>
+        error.code === '23514' &&
+        error.constraint === 'profiles_tip_start_in_presets',
+      sql,
+    );
+  // No own amounts at all: there is nothing to start on.
+  await refused(`tip_start_minor = 500000`);
+  await update(
+    `tip_presets_minor = '{500000,1000000}', min_tip_minor = 500000`,
+  );
+  await refused(`tip_start_minor = 300000`);
+  await update(`tip_start_minor = 1000000`);
+  // Removing the chosen amount by hand is refused too, while the start points at it.
+  await refused(`tip_presets_minor = '{500000}'`);
+});

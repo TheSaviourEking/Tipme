@@ -241,10 +241,21 @@ export function TextareaField({
 export function Choice({
   children,
   className,
+  suggested = false,
   ...props
-}: Omit<ComponentPropsWithRef<'input'>, 'type'> & { children: ReactNode }) {
+}: Omit<ComponentPropsWithRef<'input'>, 'type'> & {
+  children: ReactNode;
+  /**
+   * The key a problem points to (the nearest amount below the minimum): a purple outline. The
+   * error line beside the field says it in words, so this is decoration only.
+   */
+  suggested?: boolean;
+}) {
   return (
-    <label className={classes('tm-choice', className)}>
+    <label
+      className={classes('tm-choice', className)}
+      data-suggested={suggested ? 'true' : undefined}
+    >
       <input type="radio" {...props} />
       <span>{children}</span>
     </label>
@@ -253,6 +264,7 @@ export function Choice({
 export function AmountChoice(
   props: Omit<ComponentPropsWithRef<'input'>, 'type'> & {
     children: ReactNode;
+    suggested?: boolean;
   },
 ) {
   return (
@@ -557,6 +569,28 @@ export function EmptyWell({
       {given(children) && <div className="tm-empty-well__body">{children}</div>}
       {given(action) && <div className="tm-empty-well__action">{action}</div>}
     </div>
+  );
+}
+
+export type StampTone = 'wait' | 'ok' | 'bad' | 'ink';
+
+/**
+ * A state's word as an ink stamp beside a row (WithdrawRedesign ledger). Unlike a slip's stamp,
+ * its word IS the state, so it is read aloud: capitals come from CSS, never the text.
+ */
+export function Stamp({
+  tone,
+  children,
+  className,
+}: {
+  tone: StampTone;
+  children: string;
+  className?: string;
+}) {
+  return (
+    <span className={classes('tm-stamp', `tm-stamp--${tone}`, className)}>
+      {children}
+    </span>
   );
 }
 

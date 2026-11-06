@@ -46,6 +46,7 @@ import {
 } from './image-upload.js';
 import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 
 // Page covers: 2240×600, twice the widest the page shows. The safeguards every upload gets are in
 // image-upload.ts, and uploads share the photo upload's rate limit and re-encoding slots.
@@ -60,6 +61,9 @@ export class CoverController {
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   /** The owner's preview, which has to work before the page is live and while it's paused. */
@@ -92,6 +96,10 @@ export class CoverController {
       this.photos ?? undefined,
     );
     this.revalidator.revalidate(updated.handle);
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'profile.changed',
+    });
     return { data: updated };
   }
 
@@ -105,7 +113,13 @@ export class CoverController {
       auth.userId,
       this.photos ?? undefined,
     );
-    if (changed) this.revalidator.revalidate(profile.handle);
+    if (changed) {
+      this.revalidator.revalidate(profile.handle);
+      void this.publishLive({
+        to: { user: auth.userId },
+        type: 'profile.changed',
+      });
+    }
     return { data: profile };
   }
 
@@ -122,7 +136,13 @@ export class CoverController {
       auth.userId,
       body,
     );
-    if (changed) this.revalidator.revalidate(profile.handle);
+    if (changed) {
+      this.revalidator.revalidate(profile.handle);
+      void this.publishLive({
+        to: { user: auth.userId },
+        type: 'profile.changed',
+      });
+    }
     return { data: profile };
   }
 

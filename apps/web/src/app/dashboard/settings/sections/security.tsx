@@ -11,6 +11,9 @@ import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { CodeField } from '@/components/account/code-field';
 import { useRecipient } from '@/components/account/recipient-context';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
+import { useLiveEvents } from '@/components/live/live-provider';
+
+const ACCOUNT_CHANGED = ['account.changed'] as const;
 import { apiFetch } from '@/lib/session-client';
 import { SettingsChapter } from './section';
 
@@ -25,6 +28,10 @@ export function PendingRecovery() {
     { id: string; newPhoneHint: string; effectiveAt: string }[]
   >([]);
   const [round, setRound] = useState(0);
+  // Changed on another tab or device (live updates): read again. Not on a resync: settings.
+  useLiveEvents(ACCOUNT_CHANGED, async () => setRound((n) => n + 1), {
+    resync: false,
+  });
   useEffect(() => {
     void apiFetch<{ id: string; newPhoneHint: string; effectiveAt: string }[]>(
       '/v1/me/recovery',
@@ -57,6 +64,10 @@ export function EmailMoveNotice() {
   const [pending, setPending] = useState<PendingEmailRecovery[]>([]);
   const [failed, setFailed] = useState(false);
   const [round, setRound] = useState(0);
+  // Changed on another tab or device (live updates): read again. Not on a resync: settings.
+  useLiveEvents(ACCOUNT_CHANGED, async () => setRound((n) => n + 1), {
+    resync: false,
+  });
   useEffect(() => {
     void apiFetch<PendingEmailRecovery[]>('/v1/me/email-recoveries').then(
       (result) => {
@@ -145,6 +156,10 @@ export function RecoveryEmailCard() {
   const id = useId();
   const [status, setStatus] = useState<RecoveryEmailStatus | null>(null);
   const [round, setRound] = useState(0);
+  // Changed on another tab or device (live updates): read again. Not on a resync: settings.
+  useLiveEvents(ACCOUNT_CHANGED, async () => setRound((n) => n + 1), {
+    resync: false,
+  });
   const [address, setAddress] = useState('');
   const [code, setCode] = useState('');
   const [signInCode, setSignInCode] = useState('');
@@ -441,6 +456,10 @@ export function ContactDetails() {
 export function Devices() {
   const [sessions, setSessions] = useState<SessionView[] | null>(null);
   const [round, setRound] = useState(0);
+  // Changed on another tab or device (live updates): read again. Not on a resync: settings.
+  useLiveEvents(ACCOUNT_CHANGED, async () => setRound((n) => n + 1), {
+    resync: false,
+  });
   useEffect(() => {
     void apiFetch<SessionView[]>('/v1/me/sessions').then((result) => {
       if (result.ok) setSessions(result.data);

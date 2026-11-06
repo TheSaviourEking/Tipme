@@ -85,6 +85,8 @@ export interface SeriousActionContext {
   now: Date;
   /** The second person, or null when it ran alone. */
   approverId: string | null;
+  /** The approved request, or null when it ran alone. */
+  requestId?: string | null;
   services?: SeriousActionServices | undefined;
   /** What `prepare` found, before the transaction. Never stored. */
   facts?: unknown;
@@ -993,6 +995,7 @@ export function approveRequest(
         reason: request.reason,
         now,
         approverId: actorId,
+        requestId: request.id,
         services: input.services,
         facts,
       });

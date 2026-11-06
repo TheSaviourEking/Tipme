@@ -30,18 +30,31 @@ export const payoutDestinationChanged = defineMailType({
       {
         subject: 'Your TipMe bank account changed',
         heading: 'Your bank account changed',
+        tag: 'safety',
         blocks: [
           {
             kind: 'text',
-            text: `Your next TipMe withdrawal will go to ${data.bankName} ••${data.last4}, not ${data.previousBankName} ••${data.previousLast4}. A withdrawal already under way still goes to the account it started with.`,
+            text: 'Your next withdrawal goes to the new account. One already under way still goes to the account it started with.',
           },
           {
-            kind: 'text',
-            text: 'If this wasn’t you, contact support@usetipme.xyz straight away.',
+            kind: 'facts',
+            rows: [
+              { label: 'Now', value: `${data.bankName} ••${data.last4}` },
+              {
+                label: 'Before',
+                value: `${data.previousBankName} ••${data.previousLast4}`,
+                before: true,
+              },
+            ],
+          },
+          {
+            kind: 'alarm',
+            title: 'Wasn’t you?',
+            text: 'Contact support@usetipme.xyz straight away. We can stop withdrawals while we look.',
           },
         ],
         reason:
-          'You get this email because the bank account on your TipMe account was changed.',
+          'You get this email whenever the bank account on your TipMe page changes.',
       },
       ctx,
     ),

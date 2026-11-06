@@ -7,6 +7,7 @@ import {
   HttpCode,
   Inject,
   Optional,
+  Param,
   Patch,
   Post,
   Put,
@@ -36,6 +37,7 @@ import {
   claimHandle,
   deleteAccount,
   getMyProfile,
+  markTakeBackSeen,
   getNotificationPrefs,
   setNotificationPrefs,
   renameHandle,
@@ -82,6 +84,17 @@ export class MeProfileController {
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
   ) {}
+
+  /**
+   * After the write resolved: this person's other open tabs and devices re-read their profile.
+   * Never awaited and never thrown (the publisher resolves always).
+   */
+  private profileChanged(auth: AuthContext): void {
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'profile.changed',
+    });
+  }
 
   /** The editor needs to know whether OnlyFans and Fansly links can be added on this copy. */
   private mine(profile: MyProfile): MyProfile {
@@ -132,6 +145,7 @@ export class MeProfileController {
   ): Promise<ApiDataResponse<MyProfile>> {
     const updated = await updateMyProfile(this.database.db, auth.userId, body);
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: this.mine(updated) };
   }
 
@@ -148,6 +162,7 @@ export class MeProfileController {
       adultLinks: this.config.ADULT_PLATFORM_LINKS,
     });
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: this.mine(updated) };
   }
 
@@ -161,17 +176,41 @@ export class MeProfileController {
     const { previous, handle } = await renameHandle(this.database.db, {
       userId: auth.userId,
       handle: body.handle,
+      sealing: this.sealing,
     });
     if (previous !== handle) {
       this.revalidator.revalidateGone(previous);
       this.revalidator.revalidate(handle);
+      this.profileChanged(auth);
     }
     return {
       data: this.mine(await getMyProfile(this.database.db, auth.userId)),
     };
   }
 
-  /** A Pro page's own preset amounts and minimum (PR-012); refused on Free (PRO_REQUIRED). */
+  /**
+   * The dashboard showed the take-back banner in a visible tab. The first call can start the notice
+   * clock; later calls change nothing. Someone else's take-back is not found.
+   */
+  @Post('handle/take-back/:id/seen')
+  @HttpCode(200)
+  async takeBackSeen(
+    @CurrentUser() auth: AuthContext,
+    @Param('id') id: string,
+  ): Promise<ApiDataResponse<MyProfile>> {
+    await markTakeBackSeen(this.database.db, {
+      userId: auth.userId,
+      takeBackId: id,
+    });
+    return {
+      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+    };
+  }
+
+  /**
+   * A Pro page's own preset amounts and minimum (PR-012), and the one its page starts on ("Make
+   * it yours"); refused on Free (PRO_REQUIRED).
+   */
   @Put('tip-amounts')
   async tipAmounts(
     @CurrentUser() auth: AuthContext,
@@ -180,8 +219,14 @@ export class MeProfileController {
     const updated = await setTipAmounts(this.database.db, auth.userId, {
       presetsMinor: body.presetsMinor.map(BigInt),
       minTipMinor: BigInt(body.minMinor),
+      // Left out keeps the saved start (while still offered); null clears it.
+      startMinor:
+        body.startMinor === undefined || body.startMinor === null
+          ? body.startMinor
+          : BigInt(body.startMinor),
     });
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: this.mine(updated) };
   }
 
@@ -197,6 +242,7 @@ export class MeProfileController {
     const updated = await setThanks(this.database.db, auth.userId, body);
     // The public page does not show the line; kept so live updates' profile.changed has one place.
     this.revalidator.revalidate(updated.handle);
+    this.profileChanged(auth);
     return { data: updated };
   }
 
@@ -213,9 +259,17 @@ export class MeProfileController {
     @Body(new ZodValidationPipe(notificationPrefsSchema))
     body: NotificationPrefs,
   ): Promise<ApiDataResponse<NotificationPrefsView>> {
-    return {
-      data: await setNotificationPrefs(this.database.db, auth.userId, body),
-    };
+    const saved = await setNotificationPrefs(
+      this.database.db,
+      auth.userId,
+      body,
+    );
+    // The person's other tabs and devices: the bell's pop-up switches and Settings re-read.
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'account.changed',
+    });
+    return { data: saved };
   }
 
   @Put('page/state')
@@ -230,6 +284,7 @@ export class MeProfileController {
       body.state,
     );
     this.revalidator.revalidate(handle);
+    this.profileChanged(auth);
     // Once per page, ever: the first time it goes live (PRD v1.1 §11).
     if (firstPublished)
       await this.events.record(

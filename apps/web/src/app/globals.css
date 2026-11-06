@@ -4582,6 +4582,304 @@ body:has(.profile-page) .brand__mark {
   }
 }
 
+/*
+ * The claim moment: "@handle is yours.", once, over the hello step, after the server confirmed the
+ * claim (DECISION-LOG 2026-11-06). 1600ms in all: the card falls (0-350ms) and lands (350-550ms),
+ * the stamp presses (550-800ms), the hearts rise and the words arrive (800-1200ms), then the scene
+ * rises away (1200-1600ms). Reduced motion gets the still scene.
+ */
+.claim-moment {
+  --claim-land: 550ms;
+  --claim-stamp: 550ms;
+  --claim-words: 800ms;
+  --claim-away: 1200ms;
+
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-4);
+  overflow: hidden auto;
+  background: var(--canvas);
+  text-align: center;
+  animation: claim-away var(--duration-spatial) var(--ease-physical)
+    var(--claim-away) forwards;
+}
+
+.claim-moment__scene {
+  position: relative;
+  width: min(17rem, 100%);
+  padding: var(--space-6) var(--space-5) 0;
+}
+
+.claim-moment__card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+  overflow: hidden;
+  border: 1px solid var(--border-material);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+  animation: claim-fall var(--claim-land) var(--ease-physical) both;
+}
+
+.claim-moment__cover {
+  justify-self: stretch;
+  height: 3.25rem;
+  background: var(--surface-recessed);
+}
+
+.claim-moment__avatar {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin-top: -1.75rem;
+  border: 3px solid var(--surface-raised);
+  border-radius: 50%;
+  background: var(--brand-primary);
+  color: var(--surface-base);
+  font-weight: 800;
+}
+
+.claim-moment__name {
+  max-width: 100%;
+  padding-inline: var(--space-3);
+  overflow-wrap: anywhere;
+  font: 400 1.375rem / 1.1 var(--font-editorial);
+}
+
+.claim-moment__link {
+  max-width: 100%;
+  padding-inline: var(--space-3);
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.claim-moment__keys {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.claim-moment__keys > span {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.claim-moment__tip {
+  justify-self: stretch;
+  margin-inline: var(--space-4);
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  background: var(--text-primary);
+  box-shadow: var(--shadow-raised-continue);
+  color: var(--surface-base);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+/*
+ * The stamp: purple ink pressed across the card's keys, a signature mark rather than a wash. It
+ * sits below the name and link so the card still says whose page it is.
+ */
+.claim-moment__stamp {
+  position: absolute;
+  top: 70%;
+  left: 54%;
+  max-width: 80%;
+  padding: 0.3rem 0.6rem;
+  overflow-wrap: anywhere;
+  border: 3px solid var(--brand-primary);
+  border-radius: 0.5rem;
+  background: var(--surface-raised);
+  color: var(--brand-primary);
+  font: 800 0.8125rem / 1.15 var(--font-interface);
+  letter-spacing: 0.06em;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  animation: claim-stamp var(--duration-component) var(--ease-spring)
+    var(--claim-stamp) both;
+}
+
+.claim-moment__heart {
+  --i: 0;
+
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--brand-primary);
+  animation: claim-heart 600ms var(--ease-physical)
+    calc(var(--claim-words) + var(--i) * 40ms) both;
+}
+
+.claim-moment__heart--1 {
+  top: 34%;
+  left: 0;
+}
+
+.claim-moment__heart--2 {
+  --i: 1;
+
+  top: 4%;
+  right: 6%;
+  width: 1.25rem;
+}
+
+.claim-moment__heart--3 {
+  --i: 2;
+
+  bottom: 18%;
+  right: 0;
+  width: 1.75rem;
+}
+
+.claim-moment__heart--4 {
+  --i: 3;
+
+  top: 0;
+  left: 14%;
+  width: 1rem;
+}
+
+.claim-moment__heart--5 {
+  --i: 4;
+
+  bottom: 6%;
+  left: 2%;
+  width: 1.125rem;
+}
+
+.claim-moment__heart--6 {
+  --i: 5;
+
+  top: 52%;
+  right: 2%;
+  width: 1rem;
+}
+
+.claim-moment__title {
+  max-width: 32rem;
+  margin: var(--space-2) 0 0;
+  overflow-wrap: anywhere;
+  font: 400 clamp(2rem, 8vw, 3.25rem) / 1.05 var(--font-editorial);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  animation: claim-words var(--duration-spatial) var(--ease-physical)
+    var(--claim-words) both;
+}
+
+.claim-moment__lede {
+  max-width: 26rem;
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  animation: claim-words var(--duration-spatial) var(--ease-physical)
+    var(--claim-words) both;
+}
+
+.claim-moment__continue {
+  min-height: 2.75rem;
+}
+
+@keyframes claim-fall {
+  from {
+    opacity: 0;
+    transform: translateY(-60vh) rotate(-8deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  64% {
+    transform: translateY(0) rotate(2deg) scale(1.02, 0.97);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes claim-stamp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-8deg) scale(1.9);
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(-8deg) scale(1);
+  }
+}
+
+@keyframes claim-heart {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.6);
+  }
+  40% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-48px) scale(1);
+  }
+}
+
+@keyframes claim-words {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes claim-away {
+  to {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+
+/* The still scene: the card on the table, the stamp in place, three hearts beside it. */
+.claim-moment--still,
+.claim-moment--still * {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .claim-moment,
+  .claim-moment * {
+    animation: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .claim-moment {
+    background: Canvas;
+  }
+
+  .claim-moment__card,
+  .claim-moment__stamp,
+  .claim-moment__tip {
+    border: 2px solid CanvasText;
+  }
+
+  .claim-moment__heart {
+    color: CanvasText;
+  }
+}
+
 .welcome-share__label {
   margin: 0;
   color: var(--text-secondary);
@@ -5184,6 +5482,61 @@ html:has(.confirm-dialog[open]) {
   font-weight: 700;
 }
 
+/* "Make it yours": which of a Pro page's amounts its tip form starts on. One row per choice, in a
+   shallow well as on the board; "Starts here" is text, so colour never stands alone. */
+.tip-start {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tip-start legend {
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
+.tip-start__option {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.tip-start__option:has(input:checked) {
+  border-color: var(--text-primary);
+}
+
+.tip-start__option input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--brand-primary);
+}
+
+.tip-start__amount {
+  flex: 1;
+  font-weight: 700;
+}
+
+.tip-start__here {
+  color: var(--brand-ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+@media (forced-colors: active) {
+  .tip-start__option:has(input:checked) {
+    border-color: Highlight;
+  }
+}
+
 .settings-saved {
   margin: 0;
   min-height: 1.2em;
@@ -5298,23 +5651,63 @@ html:has(.confirm-dialog[open]) {
   margin-right: auto;
 }
 
-/* The admin menu has many links: one row that scrolls sideways (the open page's link is scrolled
-   into view by the shell), never a lone link wrapped onto a second line. */
-.dashboard-nav[aria-label='Admin'] {
-  flex-wrap: nowrap;
-  max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
+/* Test mode as one calm pill in the header (WithdrawRedesign §3). It opens its sentence as a small
+   paper card under it, placed absolutely so the header doesn't grow. */
+.test-pill {
+  position: relative;
 }
 
-.dashboard-nav[aria-label='Admin']::-webkit-scrollbar {
+.test-pill summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px dashed var(--border-material);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font: 700 var(--text-xs) / 1.2 var(--font-interface);
+  list-style: none;
+  cursor: pointer;
+}
+
+.test-pill summary::-webkit-details-marker {
   display: none;
 }
 
-.dashboard-nav[aria-label='Admin'] a {
-  flex: none;
-  white-space: nowrap;
+.test-pill__sentence {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised-1);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+@media (max-width: 40rem) {
+  .test-pill__detail {
+    display: none;
+  }
+
+  .test-pill__sentence {
+    right: auto;
+    left: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .test-pill summary,
+  .test-pill__sentence {
+    border: 1px solid CanvasText;
+  }
 }
 
 .dashboard-nav a,
@@ -6048,6 +6441,8 @@ html:has(.confirm-dialog[open]) {
 
 /* QR studio (PR-008 Task 8). */
 .qr-studio {
+  /* The paper panel: a 22rem code plus the panel's own padding. */
+  --qr-panel: calc(22rem + 2 * var(--space-4));
   display: grid;
   gap: var(--space-4);
 }
@@ -6060,8 +6455,19 @@ html:has(.confirm-dialog[open]) {
 
 @media (min-width: 52rem) {
   .qr-studio__layout {
-    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, var(--qr-panel)) minmax(0, 1fr);
   }
+}
+
+/* The code is held on a raised paper panel (public boards, QR studio): the free card's canvas and a
+   Pro design's plate alike. Forced colours keep the panel's CanvasText edge (.tm-surface). */
+.qr-studio__panel {
+  display: grid;
+  gap: var(--space-3);
+  align-self: start;
+  width: 100%;
+  max-width: var(--qr-panel);
+  padding: var(--space-4);
 }
 
 .qr-preview {
@@ -7342,6 +7748,273 @@ body > .coming-soon-page {
 
 .ops-row .ops-summary {
   overflow-wrap: anywhere;
+}
+
+/*
+ * The admin frame (OpsShell board), once access is granted: a grouped sidebar from 1024px; below
+ * it, the staff strip, a bar with "Menu · {page}" and a sheet. It replaces the one-row menu (#126):
+ * the sidebar scrolls on its own and the sheet scrolls inside itself, so every link stays reachable
+ * and nothing scrolls the page sideways. The 1024px breakpoint is WIDE in ops-frame.tsx.
+ */
+html[data-ops-frame] .site-header,
+html[data-ops-frame] .site-footer {
+  display: none;
+}
+
+.ops-frame {
+  min-height: 100dvh;
+}
+
+.ops-frame__column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ops-frame .ops-banner {
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: 0;
+  background: var(--key-face-dark);
+  font-size: 0.8125rem;
+}
+
+.ops-frame .ops-banner strong {
+  padding: 0.125rem var(--space-3);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.ops-frame__wordmark {
+  display: block;
+  width: auto;
+  height: 1.75rem;
+}
+
+.ops-frame__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+.ops-frame__bar .tm-button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Content: the page's own column, denser than the dashboard's. */
+.ops-frame__content.dashboard-page {
+  width: 100%;
+  max-width: calc(1100px + 2 * var(--space-8));
+  padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.ops-frame__content:focus {
+  outline: none;
+}
+
+/* The menu, in the sidebar and in the sheet. */
+.ops-frame__side {
+  display: none;
+}
+
+.ops-frame__group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ops-frame__label {
+  margin: var(--space-3) 10px 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.ops-frame__links {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ops-frame__links a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: 0.9063rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ops-frame__links a:hover {
+  color: var(--text-primary);
+}
+
+.ops-frame__links a[aria-current='page'] {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-weight: 700;
+  box-shadow:
+    0 1px 1px rgb(20 18 16 / 10%),
+    0 5px 14px rgb(20 18 16 / 7%);
+}
+
+/* What is waiting for this person, on Approvals: purple as a material, with its words for readers. */
+.ops-frame__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-primary);
+  color: var(--surface-base);
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-frame__leave {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.ops-frame__leave .tm-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+@media (min-width: 1024px) {
+  .ops-frame {
+    display: grid;
+    grid-template-columns: 236px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  /* Sticky, and scrolls on its own when it is taller than the window. */
+  .ops-frame__side {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 22px var(--space-4);
+    border-right: 1px solid var(--edge-hairline);
+  }
+
+  .ops-frame__mark {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-1) var(--space-2) var(--space-3);
+  }
+
+  .ops-frame__pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: var(--radius-pill);
+    background: var(--text-primary);
+    color: var(--surface-base);
+    font-size: 0.7188rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  .ops-frame .ops-banner {
+    padding: 10px var(--space-8);
+  }
+
+  .ops-frame__bar {
+    display: none;
+  }
+
+  .ops-frame__content.dashboard-page {
+    padding: 26px var(--space-8) var(--space-8);
+  }
+}
+
+/* The phone menu: a sheet from the bottom, the confirm dialog's sheet motion and scroll lock. */
+.ops-frame__sheet {
+  width: 100%;
+  max-width: 100%;
+  max-height: 85dvh;
+  margin: auto 0 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 -20px 40px -10px rgb(20 18 16 / 35%);
+  animation: confirm-dialog-sheet 180ms var(--ease-physical);
+}
+
+.ops-frame__sheet::backdrop {
+  background: rgb(20 18 16 / 35%);
+  animation: confirm-dialog-dim 180ms var(--ease-physical);
+}
+
+html:has(.ops-frame__sheet[open]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+.ops-frame__sheet-body {
+  padding: 10px var(--space-4)
+    calc(var(--space-4) + env(safe-area-inset-bottom));
+}
+
+.ops-frame__grab {
+  width: 40px;
+  height: 5px;
+  margin: 0 auto var(--space-3);
+  border-radius: 3px;
+  background: var(--border-subtle);
+}
+
+.ops-frame__nav {
+  display: grid;
+  gap: 2px;
+}
+
+.ops-frame__nav .ops-frame__links a {
+  min-height: 44px;
+}
+
+.ops-frame__links--split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-2);
+}
+
+.ops-frame__nav .ops-frame__leave {
+  padding-top: var(--space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-frame__sheet,
+  .ops-frame__sheet::backdrop {
+    animation: none;
+  }
 }
 
 /*
@@ -8924,20 +9597,125 @@ body > .coming-soon-page {
   }
 }
 
-/* Withdraw (ScreenWithdraw): an instrument for the amount, and a ledger of what is on its way. */
+/* Withdraw (WithdrawRedesign): money leads as a dark instrument, then the slip or the form; the
+   ledger of what is on its way beside it. One column, in that order, below 56rem. */
 .withdraw {
-  max-width: 68rem;
+  max-width: 74rem;
 }
 
-.withdraw > .tm-notice {
+.withdraw__warning,
+.withdraw__done {
   max-width: 40rem;
+  margin-bottom: var(--space-4);
 }
 
 .withdraw__layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
-  gap: var(--space-8);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--space-6);
   align-items: start;
+}
+
+.withdraw__money {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+/* The ledger (WithdrawRedesign): one paper card, rows divided by hairlines, not cards of their own. */
+.withdraw__history {
+  align-self: start;
+  min-width: 0;
+  padding: clamp(1.25rem, 4vw, 1.5rem);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
+/* The instrument: the dark key face, not purple. The balance never animates. */
+.withdraw__meter {
+  min-width: 0;
+  padding: clamp(1.25rem, 4vw, 1.5rem);
+  border-radius: var(--radius-card);
+  background: var(--key-face-dark);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    var(--shadow-instrument);
+  color: var(--text-on-night);
+  overflow-wrap: anywhere;
+}
+
+.withdraw__cap {
+  margin: 0;
+  color: var(--text-on-night-quiet);
+  font: 700 0.8125rem / 1.3 var(--font-interface);
+  letter-spacing: 0;
+}
+
+.withdraw__figure {
+  margin: var(--space-2) 0 0;
+  font: 400 clamp(3rem, 8vw, 4rem) / 1 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.withdraw__lamp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  color: var(--text-on-night);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* A purple lamp keeps a ring that shows on the dark face. */
+.withdraw__meter .tm-lamp--purple {
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--link-on-night) 32%, transparent);
+}
+
+.withdraw__fine,
+.withdraw__meter .pilot-notice {
+  margin: var(--space-2) 0 0;
+  color: var(--text-on-night-quiet);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.withdraw__meter a {
+  color: var(--link-on-night);
+  font-weight: 800;
+  text-underline-offset: 3px;
+}
+
+.withdraw__chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--space-4) 0 0;
+  padding: 0 0 0 var(--space-3);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 8%);
+  font-size: 0.84375rem;
+  font-weight: 700;
+}
+
+/* "to GTBank ••1234" reads "To GTBank ••1234" on the chip; the words stay as written. */
+.withdraw__chip > span::first-letter {
+  text-transform: uppercase;
+}
+
+/* Change: a 44px hit area from padding. */
+.withdraw__chip a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--space-3);
 }
 
 .withdraw__panel {
@@ -9025,88 +9803,107 @@ body > .coming-soon-page {
   text-align: right;
 }
 
-.withdraw__summary dd a {
-  margin-left: 0.375rem;
-  font-weight: 600;
-}
-
 .withdraw__form .tm-hint {
   margin: 0;
   line-height: 1.5;
 }
 
 .withdraw__history h2 {
-  margin: 0.5rem 0 var(--space-4);
-  font: 400 1.875rem / 1.1 var(--font-editorial);
+  margin: 0 0 0.25rem;
+  font: 400 1.625rem / 1.1 var(--font-editorial);
 }
 
-.withdraw__history ol {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.withdraw__rows {
+  display: grid;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .withdraw__row {
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--edge-hairline);
-  border-radius: 1.25rem;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-card-subtle);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 0.75rem;
+  align-items: center;
+  padding: 0.875rem 0;
+  border-top: 1px solid var(--edge-hairline);
 }
 
-.withdraw__row[data-open='true'] {
-  padding-block: 1.25rem;
+.withdraw__row:first-child {
+  border-top: 0;
 }
 
-.withdraw__row-head {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
+.withdraw__amount {
+  min-width: 0;
+  font: 400 1.5rem / 1 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+  overflow-wrap: anywhere;
 }
 
-.withdraw__row p {
-  margin: 0.25rem 0 0;
+.withdraw__row > .tm-stamp {
+  justify-self: end;
+}
+
+.withdraw__row > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.withdraw__note {
   color: var(--text-secondary);
-  font-size: 0.84375rem;
-  line-height: 1.4;
+  font-size: 0.8125rem;
 }
 
-.withdraw__state {
-  font-size: 0.875rem;
+/* The failed row's one proven line: a plain line in primary ink, no box. */
+.withdraw__back {
+  color: var(--text-primary);
+  font-size: 0.8125rem;
   font-weight: 700;
 }
 
-.withdraw__state--ok {
-  color: var(--state-success);
+.withdraw__bank {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
-.withdraw__state--wait {
-  color: var(--state-warning);
+/* "to GTBank ••6789" reads "To GTBank ••6789"; the text itself is unchanged. */
+.withdraw__bank::first-letter {
+  text-transform: uppercase;
 }
 
-.withdraw__state--bad {
-  color: var(--state-danger);
-}
-
-.withdraw__steps {
-  flex-direction: row !important;
+/* Compact step lamps: no wells, and the three labels read as one line, joined by dots. */
+.withdraw__row > .withdraw__steps {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.375rem;
   align-items: center;
-  gap: 0.375rem !important;
-  margin: 0.875rem 0 0.5rem !important;
+  margin: 0.25rem 0 0.125rem;
 }
 
-.withdraw__steps li {
-  flex: 1;
-  height: 5px;
-  border-radius: 3px;
-  background: var(--surface-recessed);
+.withdraw__steps .tm-steps__step {
+  gap: 0.375rem;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
-.withdraw__steps li[data-filled='true'] {
-  background: var(--surface-signature);
+/* Visual joiner only: the alt text is empty, so screen readers hear the steps, not the dots. */
+.withdraw__steps .tm-steps__step + .tm-steps__step::before {
+  content: '·';
+  content: '·' / '';
+}
+
+.withdraw__history > .withdraw__more {
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--space-2);
 }
 
 @media (max-width: 56rem) {
@@ -9143,15 +9940,26 @@ body > .coming-soon-page {
     color: HighlightText;
   }
 
-  .withdraw__steps li {
+  .withdraw__history {
     border: 1px solid CanvasText;
-  }
-
-  .withdraw__steps li[data-filled='true'] {
-    background: Highlight;
+    box-shadow: none;
   }
 
   .withdraw__row {
+    border-top-color: CanvasText;
+  }
+
+  /* The base forced-colours rule gives every step a box; in the ledger they stay one line. */
+  .withdraw__steps .tm-steps__step {
+    border: 0;
+  }
+
+  .withdraw__meter {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+
+  .withdraw__chip {
     border: 1px solid CanvasText;
   }
 }
@@ -9694,4 +10502,34 @@ body > .coming-soon-page {
     outline: 2px solid Highlight;
     outline-offset: 2px;
   }
+}
+
+/* The supporter's choices about a paid tip (repeat supporters; note consent joins later): quiet
+   lines under the receipt's keys, never louder than the receipt itself. */
+.tip-choices {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tip-choice {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.tip-choice p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+p.tip-choice {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+p.tip-choice:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 4px;
 }

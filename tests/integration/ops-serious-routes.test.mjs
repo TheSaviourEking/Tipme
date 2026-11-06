@@ -441,6 +441,8 @@ test('releasing a freeze is one person with a fresh code, audited and alerted, w
     [issueId],
   );
   assert.equal(alert?.payload.requestedBy, firstId);
+  // For live updates: the page whose withdrawals changed (an id, never shown to anyone).
+  assert.equal(alert?.payload.profileId, id);
 });
 
 test('a takeover can only close as released, and other money closes still wait with a second person', async () => {
@@ -542,6 +544,90 @@ test('reserving and releasing a username apply at once, with a second person ava
       .length,
     0,
   );
+});
+
+test('the take-back route goes through requestSeriousAction', async () => {
+  const handle = `route_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+  const [{ id: userId }] = await q(
+    `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+  );
+  const [{ id: profileId }] = await q(
+    `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state)
+     VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live') RETURNING id`,
+    [userId, handle],
+  );
+  const check = await call(
+    stack.api,
+    'GET',
+    `/v1/ops/usernames/check/${handle}`,
+    first.cookie,
+  );
+  const checked = (await check.json()).data;
+  assert.equal(checked.state, 'page');
+  assert.equal(checked.facts.liveCheckoutListed, false);
+  assert.equal(checked.facts.verifiedEmail, false);
+  const asked = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/usernames/${handle}/take-back`,
+    first.cookie,
+    { profileId, category: 'ordinary', noticeDays: 7, reason: REASON },
+  );
+  assert.equal(asked.status, 202, await asked.clone().text());
+  const { requestId } = (await asked.json()).data;
+  assert.equal(
+    (
+      await q(`SELECT 1 FROM handle_take_backs WHERE handle_lower = $1`, [
+        handle,
+      ])
+    ).length,
+    0,
+    'nothing happens before approval',
+  );
+  const approved = await approveThroughApi(requestId);
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const [row] = await q(
+    `SELECT id, state FROM handle_take_backs WHERE handle_lower = $1`,
+    [handle],
+  );
+  assert.equal(row.state, 'approved');
+  const listed = await call(
+    stack.api,
+    'GET',
+    '/v1/ops/usernames',
+    first.cookie,
+  );
+  const list = (await listed.json()).data;
+  const view = list.takeBacks.find((t) => t.id === row.id);
+  assert.equal(view.name, handle);
+  assert.equal(view.state, 'approved');
+  assert.ok(!JSON.stringify(list).includes(REASON), 'no internal reason');
+  const cancelled = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/usernames/take-backs/${row.id}/cancel`,
+    first.cookie,
+    { reason: 'The brand withdrew its request' },
+  );
+  assert.equal(cancelled.status, 200, await cancelled.clone().text());
+  assert.equal((await cancelled.json()).data.state, 'cancelled');
+  const again = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/usernames/take-backs/${row.id}/cancel`,
+    first.cookie,
+    { reason: 'The brand withdrew its request' },
+  );
+  assert.equal(again.status, 409);
+  assert.equal((await again.json()).error.code, 'TAKE_BACK_CLOSED');
+  const unknown = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/usernames/take-backs/${randomUUID()}/cancel`,
+    first.cookie,
+    { reason: 'The brand withdrew its request' },
+  );
+  assert.equal(unknown.status, 404);
 });
 
 test('I2: stopping needs no fresh code; switching back on does, and refuses until given', async () => {

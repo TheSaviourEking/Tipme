@@ -130,7 +130,11 @@ const ngn = (minor: bigint) =>
 export function runWeeklyReports(
   db: Database,
   input: { sealing: MailSealing; isoWeek: string; onlyHandle?: string },
-): Promise<{ created: number }> {
+): Promise<{
+  created: number;
+  /** The pages that got a new report, for live updates. Never logged. */
+  profileIds: string[];
+}> {
   const monday = mondayOf(input.isoWeek);
   return guarded(async () => {
     const tipped = await db.execute<{ profile_id: string }>(sql`
@@ -139,6 +143,7 @@ export function runWeeklyReports(
          ${input.onlyHandle ? sql`AND p.handle_lower = ${input.onlyHandle.toLowerCase()}` : sql``}
          AND ${netOfDay} BETWEEN ${monday}::date AND ${monday}::date + 6`);
     let created = 0;
+    const profileIds: string[] = [];
     for (const { profile_id: profileId } of tipped.rows) {
       const data = await buildWeeklyReport(db, profileId, input.isoWeek);
       const made = await db.transaction(async (tx) => {
@@ -184,9 +189,12 @@ export function runWeeklyReports(
           });
         return true;
       });
-      if (made) created += 1;
+      if (made) {
+        created += 1;
+        profileIds.push(profileId);
+      }
     }
-    return { created };
+    return { created, profileIds };
   });
 }
 

@@ -42,6 +42,7 @@ export const RESERVED_HANDLES = [
   'home',
   'how_it_works',
   'icon',
+  'icons',
   'illustrations',
   'jobs',
   'legal',

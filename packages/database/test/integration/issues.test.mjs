@@ -8,6 +8,7 @@ import {
   issueById,
   listAudit,
   listIssues,
+  openIssue,
   openIssueFromEvent,
   recordProviderEvent,
   recordUnmatchedEvent,
@@ -47,6 +48,44 @@ test('issues', async (t) => {
       message: 'Private words xyzzy',
     });
   };
+
+  await t.test(
+    'the two take-back issue kinds open with account severity and a handle-only summary',
+    async () => {
+      await database.fresh();
+      for (const kind of [
+        'username_take_back_unnoticed',
+        'username_take_back_overdue',
+      ]) {
+        const { id, opened } = await openIssue(database.db, {
+          dedupeKey: `${kind}.${randomUUID()}`,
+          kind,
+          subject: { profileId: ADA },
+          now: new Date(),
+        });
+        assert.equal(opened, true);
+        const issue = await issueById(database.db, id);
+        assert.equal(issue.kind, kind);
+        assert.equal(issue.severity, 'account');
+        assert.match(issue.summary, /@ada\b/);
+        assert.equal(/[\u2013\u2014]/.test(issue.summary), false);
+      }
+      const [unnoticed] = await q(
+        `SELECT summary FROM issues WHERE kind = 'username_take_back_unnoticed'`,
+      );
+      assert.equal(
+        unnoticed.summary,
+        "A username take-back for @ada was approved 24 hours ago, but the notice hasn't reached them by email or on their dashboard. It goes ahead after 14 days if it never does. Cancel it under Usernames if needed.",
+      );
+      const [overdue] = await q(
+        `SELECT summary FROM issues WHERE kind = 'username_take_back_overdue'`,
+      );
+      assert.equal(
+        overdue.summary,
+        "A username take-back for @ada is more than an hour past its deadline and hasn't completed. The worker retries every minute.",
+      );
+    },
+  );
 
   await t.test(
     'an outbox alert opens one issue; delivering it again changes nothing',

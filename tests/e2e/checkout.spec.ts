@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { enrolOwner } from './ops-helpers';
+import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 
 const wcag = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 async function expectAccessible(page: Page) {
@@ -115,13 +116,23 @@ test('an opted-in supporter is celebrated after each confirmed tip', async ({
   for (const entry of stored.tips)
     expect(Object.keys(entry).sort()).toEqual(['at', 'handle', 'id']);
 
+  // A recognition key from an earlier tip elsewhere goes too (repeat supporters).
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'tipme.supporters.v1',
+      JSON.stringify({ v: 1, keys: { tobi: 'A'.repeat(43) } }),
+    ),
+  );
   await page
-    .getByRole('button', { name: 'Forget my tips on this phone' })
+    .getByRole('button', { name: 'Forget my tips and keys on this phone' })
     .click();
   await expect(page.getByText(/This phone no longer remembers/)).toBeVisible();
   expect(
-    await page.evaluate(() => localStorage.getItem('tipme.myTips.v1')),
-  ).toBeNull();
+    await page.evaluate(() => [
+      localStorage.getItem('tipme.myTips.v1'),
+      localStorage.getItem('tipme.supporters.v1'),
+    ]),
+  ).toEqual([null, null]);
 });
 
 test('a supporter who did not opt in is never remembered', async ({ page }) => {
@@ -488,6 +499,63 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
   await expect(paidHeading(page)).toBeVisible();
 });
 
+test('a receipt that loses the API while waiting shows the Connection lost slip, and recovers', async ({
+  page,
+}) => {
+  // "No reply": paid, but the provider never tells TipMe, so the receipt keeps checking. TipMe's
+  // reconcile soon learns it was paid, sometimes before the card shows: keep the receipt checking,
+  // as the reconnect test below does.
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { data?: { state?: string } };
+    if (body.data) body.data.state = 'waiting';
+    return route.fulfill({ response, json: body });
+  });
+  await tip(page, { outcome: /^No reply/ });
+  await expect(page.locator('.tip-status-card')).toBeVisible();
+  await page.route('**/v1/tips/*/status', (route) => route.abort());
+  const slip = page.locator('.tm-slip').filter({ hasText: 'Connection lost' });
+  await expect(slip).toBeVisible();
+  await expect(slip).toContainText(CONNECTION_COPY.receiptNoAnswer);
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(page.locator('.tm-notice')).toHaveCount(0);
+  await expectAccessible(page);
+  await page.unroute('**/v1/tips/*/status');
+  await expect(slip).toHaveCount(0);
+});
+
+test('offline on the receipt: it checks again at once on reconnect', async ({
+  page,
+  context,
+}) => {
+  // The receipt must still be checking after the wait below, and TipMe soon learns a "No reply"
+  // tip was paid: so this receipt is always told the tip is still being checked.
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { data?: { state?: string } };
+    if (body.data) body.data.state = 'waiting';
+    return route.fulfill({ response, json: body });
+  });
+  await tip(page, { outcome: /^No reply/ });
+  await expect(page.locator('.tip-status-card')).toBeVisible();
+  // Past the first ten checks the receipt waits 2 s between them, so a check within a moment of
+  // reconnecting is the reconnect's own.
+  await page.waitForTimeout(11_000);
+  await context.setOffline(true);
+  const slip = page.locator('.tm-slip').filter({ hasText: 'Connection lost' });
+  await expect(slip).toBeVisible();
+  await expect(slip).toContainText(CONNECTION_COPY.receiptOffline);
+  await page.waitForTimeout(2500);
+  let checks = 0;
+  page.on('request', (request) => {
+    if (/\/v1\/tips\/[^/]+\/status/.test(request.url())) checks += 1;
+  });
+  await context.setOffline(false);
+  // Well inside the 2 s the receipt would otherwise wait.
+  await expect.poll(() => checks, { timeout: 800 }).toBeGreaterThan(0);
+  await expect(slip).toHaveCount(0);
+});
+
 test('fix: every receipt says the payment was pretend', async ({ page }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();
@@ -594,11 +662,7 @@ test('minor: a failed refresh after an expired quote is reported as a failure', 
   );
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await expect(
-    page
-      .locator('.tip-quote')
-      .getByText(
-        'We couldn’t reach TipMe. Check your connection and try again.',
-      ),
+    page.locator('.tip-quote').getByText(CONNECTION_COPY.tipDropped),
   ).toBeVisible();
   await expect(page.getByText(/Please tap Tip again/)).toHaveCount(0);
 });
@@ -655,6 +719,12 @@ test('minor: the pretend provider page can retry loading', async ({ page }) => {
   await expect(
     page.getByText('The test provider is unavailable. Please try again.'),
   ).toBeVisible();
+  // A page-level error slip: no stamp, announced as an alert.
+  const slip = page
+    .locator('.tm-slip')
+    .filter({ hasText: 'Payment unavailable' });
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(slip.locator('.tm-slip__stamp')).toHaveCount(0);
   await page.unroute('**/v1/mock-provider/checkout/*');
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByText('NGN 2,000.00')).toBeVisible();

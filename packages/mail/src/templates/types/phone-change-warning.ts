@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineMailType } from '../define.js';
+import { defineMailType, mailLink } from '../define.js';
 import { letter } from '../layout.js';
 
 /** Retired with phone recovery (Part 6). */
@@ -14,15 +14,28 @@ export const phoneChangeWarning = defineMailType({
     letter(
       {
         subject: 'Your TipMe number is about to change',
-        heading: 'Your TipMe number is about to change',
+        heading: 'Your number changes in 24 hours',
+        tag: 'safety',
+        // The number's digits are private; the preview line must not show them.
+        preheader: 'It happens in 24 hours.',
         blocks: [
           {
             kind: 'text',
-            text: `Someone asked to move your TipMe account to a new number ending ${data.newPhoneHint}. It happens in 24 hours. If this wasn’t you, sign in and cancel it in Settings.`,
+            text: `Someone asked to move your TipMe account to a new number ending ${data.newPhoneHint}.`,
+          },
+          {
+            kind: 'alarm',
+            title: 'Wasn’t you?',
+            text: 'Sign in and cancel it in Settings before it happens.',
+          },
+          {
+            kind: 'button',
+            label: 'Sign in to cancel',
+            href: mailLink(ctx, '/dashboard/settings', 'cancel_phone_change'),
           },
         ],
         reason:
-          'You get this email because a recovery was started for your TipMe account.',
+          'You get this email because a number change was requested on your TipMe account.',
       },
       ctx,
     ),

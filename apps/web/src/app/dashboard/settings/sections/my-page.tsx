@@ -9,6 +9,8 @@ import { useRecipient } from '@/components/account/recipient-context';
 import { CoverSettings, type Layer } from '@/components/account/cover-settings';
 import { Avatar } from '@/components/avatar';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { ChangedElsewhere } from '@/components/dashboard/changed-elsewhere';
+import { useLiveForm } from '@/components/dashboard/use-live-form';
 import { hasAvatar } from '@/lib/avatar-source';
 import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
@@ -202,6 +204,14 @@ export function HandleChange() {
   // Nor does an API older than the handle rule send the count: no number to show, but it can go on.
   const counted = profile.handleChanges;
   const left = counted ? Math.max(0, counted.allowed - counted.used) : null;
+  // TipMe is taking the current username back: any plan may choose, and it isn't counted.
+  const takeBack =
+    profile.usernameTakeBack?.kind === 'current'
+      ? profile.usernameTakeBack
+      : null;
+  // After TipMe gave the page a username: one free change, any plan (owner answer 4).
+  const freeChange = takeBack ? null : (profile.usernameFreeChange ?? null);
+  const special = takeBack !== null || freeChange !== null;
   const [handle, setHandle] = useState(profile.handle);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -312,7 +322,7 @@ export function HandleChange() {
     </p>
   );
 
-  if (profile.plan !== 'pro')
+  if (!special && profile.plan !== 'pro')
     return (
       <Card id="handle" className="settings-section settings-handle-row">
         <h3 ref={heading} tabIndex={-1} className="sr-only">
@@ -320,6 +330,8 @@ export function HandleChange() {
         </h3>
         <div>
           <p className="settings-handle-row__name">Handle: @{profile.handle}</p>
+          {/* A Free page lands here right after choosing during a take-back. */}
+          {savedNotice}
           <p className="tm-hint" role={error ? 'alert' : undefined}>
             Handle changes are part of TipMe Pro.
           </p>
@@ -329,9 +341,9 @@ export function HandleChange() {
       </Card>
     );
 
-  if (left === 0)
+  if (!special && left === 0)
     return (
-      <Card className="settings-section">
+      <Card id="handle" className="settings-section">
         <h3 ref={heading} tabIndex={-1}>
           Your handle
         </h3>
@@ -346,14 +358,25 @@ export function HandleChange() {
     );
 
   return (
-    <Card className="settings-section">
-      <h3>Your handle</h3>
-      <p className="tm-hint">
-        {left !== null && <strong>{changesLeft(left)}. </strong>}
-        Switching back to an old handle counts as a change. Your old links and
-        printed QR codes keep working: they lead to your new handle, and nobody
-        else can take them.
-      </p>
+    <Card id="handle" className="settings-section">
+      <h3>{takeBack ? 'Choose a new username' : 'Your handle'}</h3>
+      {takeBack ? (
+        <p className="tm-hint">
+          TipMe needs @{takeBack.handle} back. Choosing a new username won’t use
+          up any of your username changes.
+        </p>
+      ) : freeChange ? (
+        <p className="tm-hint">
+          This change is free and won’t use up any of your username changes.
+        </p>
+      ) : (
+        <p className="tm-hint">
+          {left !== null && <strong>{changesLeft(left)}. </strong>}
+          Switching back to an old handle counts as a change. Your old links and
+          printed QR codes keep working: they lead to your new handle, and
+          nobody else can take them.
+        </p>
+      )}
       <form
         className="settings-form"
         onSubmit={(event) => void review(event)}
@@ -381,23 +404,44 @@ export function HandleChange() {
           disabled={wanted === profile.handle}
           aria-busy={busy}
         >
-          Change handle
+          {takeBack ? 'Choose this username' : 'Change handle'}
         </Button>
       </form>
       {confirming && (
         <ConfirmDialog
-          title={`Change your handle to @${confirming}?`}
+          title={
+            takeBack
+              ? `Make @${confirming} your new username?`
+              : `Change your handle to @${confirming}?`
+          }
           confirm="Yes, change it"
           busy={busy}
           onConfirm={() => void save(confirming)}
           onCancel={closeConfirm}
         >
-          <p>
-            Your page moves to {host}/@{confirming}. Old links and printed QR
-            codes keep working.
-          </p>
-          {left !== null && (
-            <p>You’ll have {changesLeft(left - 1)} after this.</p>
+          {takeBack ? (
+            <p>
+              Your page will be at {host}/@{confirming}. Links and QR codes with
+              @{takeBack.handle} will stop working now. This won’t use up any of
+              your username changes.
+            </p>
+          ) : (
+            <>
+              <p>
+                Your page moves to {host}/@{confirming}. Old links and printed
+                QR codes keep working.
+              </p>
+              {freeChange ? (
+                <p>
+                  This change is free and won’t use up any of your username
+                  changes.
+                </p>
+              ) : (
+                left !== null && (
+                  <p>You’ll have {changesLeft(left - 1)} after this.</p>
+                )
+              )}
+            </>
           )}
         </ConfirmDialog>
       )}
@@ -414,22 +458,55 @@ const wholeNairaMinor = (value: string): string | null => {
   return /^\d{1,6}$/.test(digits) ? String(Number(digits) * 100) : null;
 };
 
-/** Free pages show the standard amounts; Pro pages choose their own (PR-012). */
+/** The amounts typed so far that parse, in order and without repeats, as kobo. */
+const filledMinor = (presets: string[]): string[] => [
+  ...new Set(
+    presets
+      .filter((value) => value.trim() !== '')
+      .map(wholeNairaMinor)
+      .filter((minor): minor is string => minor !== null),
+  ),
+];
+
+/** What the amounts form edits, from the saved amounts. */
+function amountsForm(amounts: {
+  presetsMinor: string[];
+  minMinor: string;
+  startMinor?: string | null;
+}) {
+  return {
+    presets: [0, 1, 2, 3].map((i) =>
+      amounts.presetsMinor[i] ? nairaText(amounts.presetsMinor[i]) : '',
+    ),
+    minimum: nairaText(amounts.minMinor),
+    // The amount the page starts on, in kobo; null is automatic (the closest to ₦2,000).
+    start: amounts.startMinor ?? null,
+  };
+}
+
+/**
+ * Free pages show the standard amounts; Pro pages choose their own (PR-012), and which one their
+ * page starts on ("Make it yours"), saved together by one button.
+ */
 export function TipAmountsSettings() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
   // An API older than PR-012 sends neither: treat the page as Free with the standard amounts.
   const amounts = profile.tipAmounts ?? STANDARD_TIP_AMOUNTS;
   const pro = profile.plan === 'pro';
-  const [presets, setPresets] = useState(() =>
-    [0, 1, 2, 3].map((i) =>
-      amounts.presetsMinor[i] ? nairaText(amounts.presetsMinor[i]) : '',
-    ),
-  );
-  const [minimum, setMinimum] = useState(nairaText(amounts.minMinor));
+  const [form, setForm] = useState(() => amountsForm(amounts));
+  const { presets, minimum, start } = form;
+  const setPresets = (next: string[]) =>
+    setForm((current) => ({ ...current, presets: next }));
+  const setMinimum = (value: string) =>
+    setForm((current) => ({ ...current, minimum: value }));
+  const setStart = (value: string | null) =>
+    setForm((current) => ({ ...current, start: value }));
+  // Saved elsewhere (another device, or staff turning Pro on): follow it, keep what is being typed.
+  const live = useLiveForm(amountsForm(amounts), form, setForm);
   // Which field the problem is in, so the message sits next to it.
   const [error, setError] = useState<{
-    field: 'presets' | 'minimum';
+    field: 'presets' | 'minimum' | 'start';
     text: string;
   } | null>(null);
   const [saved, setSaved] = useState(false);
@@ -444,13 +521,19 @@ export function TipAmountsSettings() {
           and supporters can tip any amount from {formatNaira(amounts.minMinor)}
           . Choosing your own amounts and minimum is part of TipMe Pro.
         </p>
+        <p className="tm-hint">
+          Pro pages choose which amount the page starts on.
+        </p>
       </Card>
     );
+  // The amounts the page could start on: the ones typed so far that parse.
+  const offered = filledMinor(presets);
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
     setSaved(false);
     const filled = presets.filter((value) => value.trim() !== '');
+    const startMinor = start !== null && offered.includes(start) ? start : null;
     const presetsMinor = filled.map(wholeNairaMinor);
     const minMinor = wholeNairaMinor(minimum);
     if (presetsMinor.length === 0 || presetsMinor.includes(null)) {
@@ -470,7 +553,12 @@ export function TipAmountsSettings() {
     setBusy(true);
     const result = await apiFetch<MyProfile>('/v1/me/tip-amounts', {
       method: 'PUT',
-      body: { presetsMinor, minMinor },
+      // Sent when there is or was a choice; left out otherwise (the server keeps none), so a page
+      // that never chose a start saves as before, even against an API older than the start.
+      body:
+        startMinor !== null || amounts.startMinor !== undefined
+          ? { presetsMinor, minMinor, startMinor }
+          : { presetsMinor, minMinor },
     });
     setBusy(false);
     if (result.ok) {
@@ -483,6 +571,8 @@ export function TipAmountsSettings() {
         field: 'presets',
         text: 'Choosing your own amounts is part of TipMe Pro.',
       });
+    else if (result.fields?.includes('startMinor'))
+      setError({ field: 'start', text: 'Choose one of your own amounts.' });
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
@@ -501,6 +591,9 @@ export function TipAmountsSettings() {
         Choose the amounts on your page and the smallest tip you accept.
         Supporters can still type their own amount, from your minimum up.
       </p>
+      {live.changedElsewhere && (
+        <ChangedElsewhere onShowLatest={live.showLatest} />
+      )}
       <form className="settings-form" onSubmit={save} noValidate>
         <fieldset className="tip-amount-fields">
           <legend>Amounts on your page (NGN)</legend>
@@ -516,9 +609,14 @@ export function TipAmountsSettings() {
                 ? { error: error.text }
                 : {})}
               onChange={(e) => {
-                setPresets((current) =>
-                  current.map((v, i) => (i === index ? e.target.value : v)),
+                const next = presets.map((v, i) =>
+                  i === index ? e.target.value : v,
                 );
+                setPresets(next);
+                // A chosen amount that is no longer there moves the choice to automatic, and
+                // typing it back does not choose it again.
+                if (start !== null && !filledMinor(next).includes(start))
+                  setStart(null);
                 setSaved(false);
               }}
             />
@@ -537,6 +635,53 @@ export function TipAmountsSettings() {
           }}
           {...(error?.field === 'minimum' ? { error: error.text } : {})}
         />
+        <fieldset
+          className="tip-start"
+          {...(error?.field === 'start'
+            ? { 'aria-describedby': `${id}-start-error` }
+            : {})}
+        >
+          <legend>Your page starts on</legend>
+          {[...offered, null].map((minor) => {
+            const checked =
+              minor ===
+              (start !== null && offered.includes(start) ? start : null);
+            return (
+              <label
+                key={minor ?? 'automatic'}
+                className="tip-start__option"
+                htmlFor={`${id}-start-${minor ?? 'automatic'}`}
+              >
+                <input
+                  id={`${id}-start-${minor ?? 'automatic'}`}
+                  type="radio"
+                  name={`${id}-start`}
+                  checked={checked}
+                  onChange={() => {
+                    setStart(minor);
+                    setSaved(false);
+                  }}
+                />
+                <span className="tip-start__amount">
+                  {minor === null
+                    ? `Closest to ${formatNaira(200_000)} (automatic)`
+                    : formatNaira(minor)}
+                </span>
+                {/* The checked radio already says so to a screen reader; this is for the eye. */}
+                {checked && (
+                  <span className="tip-start__here" aria-hidden="true">
+                    Starts here
+                  </span>
+                )}
+              </label>
+            );
+          })}
+          {error?.field === 'start' && (
+            <p id={`${id}-start-error`} className="tm-field-error">
+              {error.text}
+            </p>
+          )}
+        </fieldset>
         {saved && (
           <p role="status" className="tm-hint">
             Saved. Your page now shows these amounts.
@@ -576,6 +721,8 @@ export function AboutYou({
 }) {
   const id = useId();
   const { profile, setProfile } = useRecipient();
+  // Saved elsewhere while this is open: untouched fields follow, what is being typed stays.
+  const live = useLiveForm(aboutFrom(profile), form, setForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -635,6 +782,9 @@ export function AboutYou({
       <p className="tm-hint">
         Everything here is optional. You decide what supporters see.
       </p>
+      {live.changedElsewhere && (
+        <ChangedElsewhere onShowLatest={live.showLatest} />
+      )}
       <form className="settings-form" onSubmit={save} noValidate>
         <InputField
           id={`${id}-name`}

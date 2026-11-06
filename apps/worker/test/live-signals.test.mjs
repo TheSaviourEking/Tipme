@@ -142,3 +142,110 @@ test('a publish sends each message as {to,type} JSON on the channel', async () =
   await publish([]);
   assert.equal(sent.length, 1);
 });
+
+// PR 2: withdrawals, the switch, freezes, payout account setup and weekly reports.
+
+test('payout.paid and payout.failed map to withdrawals.changed for the profile', () => {
+  for (const type of ['payout.paid', 'payout.failed'])
+    assert.deepEqual(
+      liveSignalFor(type, { payoutId: TIP, profileId: PROFILE }),
+      [{ to: { profile: PROFILE }, type: 'withdrawals.changed' }],
+      type,
+    );
+});
+
+test('a takeover freeze maps to withdrawals.changed for that page only', () => {
+  assert.deepEqual(
+    liveSignalFor(WITHDRAWAL_FREEZE_OPENED_EVENT, {
+      issueId: TIP,
+      profileId: PROFILE,
+    }),
+    [{ to: { profile: PROFILE }, type: 'withdrawals.changed' }],
+  );
+});
+
+test('the withdrawals switch broadcasts to all', () => {
+  for (const state of ['off', 'on'])
+    assert.deepEqual(liveSignalFor(WITHDRAWALS_SWITCH_EVENT, { state }), [
+      { to: { all: true }, type: 'withdrawals.changed' },
+    ]);
+});
+
+test('freeze_released uses the new profileId and maps to [] without it', () => {
+  const payload = {
+    action: 'freeze_released',
+    outcome: 'released',
+    targetId: TIP,
+    requestedBy: TIP,
+  };
+  assert.deepEqual(
+    liveSignalFor('ops.freeze_released', { ...payload, profileId: PROFILE }),
+    [{ to: { profile: PROFILE }, type: 'withdrawals.changed' }],
+  );
+  assert.deepEqual(liveSignalFor('ops.freeze_released', payload), []);
+});
+
+test('a payout start that changed the payout signals its profile; one that changed nothing does not', () => {
+  const data = { payoutId: TIP, profileId: PROFILE };
+  for (const outcome of ['started', 'failed', 'uncertain'])
+    assert.deepEqual(
+      jobSignalsFor(PAYOUT_START_EVENT, outcome, data),
+      [{ to: { profile: PROFILE }, type: 'withdrawals.changed' }],
+      outcome,
+    );
+  for (const outcome of [
+    'already',
+    'held',
+    'switched_off',
+    'waiting_on_platform',
+  ])
+    assert.deepEqual(
+      jobSignalsFor(PAYOUT_START_EVENT, outcome, data),
+      [],
+      outcome,
+    );
+  assert.deepEqual(jobSignalsFor(PAYOUT_START_EVENT, 'started', {}), []);
+});
+
+test('the payout setup sweep gives payments.changed for each changed profile', () => {
+  const OTHER = '33333333-3333-4333-8333-333333333333';
+  assert.deepEqual(
+    jobSignalsFor('payment-accounts.payout-setup', 'swept', {
+      profileIds: [PROFILE, OTHER, 'nope'],
+    }),
+    [
+      { to: { profile: PROFILE }, type: 'payments.changed' },
+      { to: { profile: OTHER }, type: 'payments.changed' },
+    ],
+  );
+  assert.deepEqual(
+    jobSignalsFor('payment-accounts.payout-setup', 'swept', { profileIds: [] }),
+    [],
+  );
+  assert.deepEqual(
+    jobSignalsFor('payment-accounts.payout-setup', 'skipped', {
+      profileIds: [PROFILE],
+    }),
+    [],
+  );
+});
+
+test('jobSignalsFor reports.weekly gives reports.changed and notifications.changed per profile id', () => {
+  const OTHER = '33333333-3333-4333-8333-333333333333';
+  assert.deepEqual(
+    jobSignalsFor('reports.weekly', 'reported', {
+      profileIds: [PROFILE, OTHER],
+    }),
+    [
+      { to: { profile: PROFILE }, type: 'reports.changed' },
+      { to: { profile: PROFILE }, type: 'notifications.changed' },
+      { to: { profile: OTHER }, type: 'reports.changed' },
+      { to: { profile: OTHER }, type: 'notifications.changed' },
+    ],
+  );
+  assert.deepEqual(jobSignalsFor('reports.weekly', 'reported', {}), []);
+  for (const m of jobSignalsFor('reports.weekly', 'reported', {
+    profileIds: [PROFILE],
+  }))
+    assert.deepEqual(parseLiveMessage(JSON.stringify(m)), m);
+});

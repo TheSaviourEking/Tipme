@@ -83,6 +83,7 @@ services:
       PARTNER_QUOTE_CACHE_SECONDS: ${PARTNER_QUOTE_CACHE_SECONDS:-30}
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       ADULT_PLATFORM_LINKS: ${ADULT_PLATFORM_LINKS:-on}
+      SUPPORTER_RECOGNITION: ${SUPPORTER_RECOGNITION:-on}
       RATE_LIMIT_AUTH_PER_HOUR: ${RATE_LIMIT_AUTH_PER_HOUR:-10}
       RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: ${RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR:-3}
       # The release check's staff address: lifted code limit on this test copy (as .example).
@@ -179,6 +180,9 @@ services:
       # The release check's staff address: its mail goes to the pretend inbox, like .example.
       MAIL_PRETEND_DOMAINS: ${MAIL_PRETEND_DOMAINS:-release-check.usetipme.xyz}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
+      # The take-back sweep tells the web app when a page changes username.
+      WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
+      WEB_REVALIDATE_URL: ${WEB_REVALIDATE_URL:-}
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}

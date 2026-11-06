@@ -115,10 +115,14 @@ test('weekly reports', async (t) => {
         isoWeek: '2026-W41',
       });
       assert.equal(first.created, 1);
-      assert.equal(
-        (await runWeeklyReports(db, { sealing, isoWeek: '2026-W41' })).created,
-        0,
-      );
+      // Live updates: the pages that got a report, for reports.changed.
+      assert.deepEqual(first.profileIds, [TOBI.id]);
+      const again = await runWeeklyReports(db, {
+        sealing,
+        isoWeek: '2026-W41',
+      });
+      assert.equal(again.created, 0);
+      assert.deepEqual(again.profileIds, []);
       assert.equal((await listWeeklyReports(db, ADA.id)).length, 0);
       const reports = await listWeeklyReports(db, TOBI.id);
       assert.deepEqual(

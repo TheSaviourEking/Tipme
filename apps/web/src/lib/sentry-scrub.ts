@@ -18,7 +18,23 @@ type ScrubbableEvent = {
   };
   user?: unknown;
   breadcrumbs?: Breadcrumb[];
+  extra?: unknown;
+  contexts?: unknown;
 };
+
+/** Keys never sent anywhere, at any depth: a supporter's recognition key (repeat supporters). */
+const NEVER_SENT = new Set(['supporterKey']);
+
+function withoutSecrets(value: unknown, depth = 0): unknown {
+  if (depth > 8 || typeof value !== 'object' || value === null) return value;
+  if (Array.isArray(value))
+    return value.map((item) => withoutSecrets(item, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !NEVER_SENT.has(key))
+      .map(([key, item]) => [key, withoutSecrets(item, depth + 1)]),
+  );
+}
 
 const TYPED_TEXT = new Set(['console', 'ui.input']);
 
@@ -40,6 +56,9 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T {
   // Nothing about the person. Sentry still infers an IP from the request itself; the
   // organization setting "Prevent Storing of IP Addresses" must be on (docs/runbooks/sentry.md).
   if ('user' in event) delete event.user;
+  if (event.extra !== undefined) event.extra = withoutSecrets(event.extra);
+  if (event.contexts !== undefined)
+    event.contexts = withoutSecrets(event.contexts);
   if (event.breadcrumbs)
     event.breadcrumbs = event.breadcrumbs
       .filter((crumb) => !TYPED_TEXT.has(crumb.category ?? ''))
@@ -48,13 +67,15 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T {
           ? {
               ...crumb,
               data: Object.fromEntries(
-                Object.entries(crumb.data).map(([key, value]) => [
-                  key,
-                  typeof value === 'string' &&
-                  ['url', 'from', 'to'].includes(key)
-                    ? withoutQuery(value)
-                    : value,
-                ]),
+                Object.entries(crumb.data)
+                  .filter(([key]) => !NEVER_SENT.has(key))
+                  .map(([key, value]) => [
+                    key,
+                    typeof value === 'string' &&
+                    ['url', 'from', 'to'].includes(key)
+                      ? withoutQuery(value)
+                      : value,
+                  ]),
               ),
             }
           : crumb,

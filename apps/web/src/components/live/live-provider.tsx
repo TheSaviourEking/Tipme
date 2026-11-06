@@ -20,6 +20,7 @@ import {
 } from '@/lib/live-client';
 import {
   createRefetchScheduler,
+  withdrawalsSignalDelay,
   type RefetchScheduler,
 } from '@/lib/live-refetch';
 import { firstReadPhase, type FirstReadPhase } from '@/lib/first-read';
@@ -32,6 +33,8 @@ interface LiveContextValue {
   phase: FirstReadPhase;
   /** Reasons a hidden tab keeps its stream (the armed tip sound). */
   keepers: Set<() => boolean>;
+  /** Panels that know of a withdrawal of this person's still on its way. */
+  inFlight: Set<() => boolean>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -83,11 +86,17 @@ export function LiveProvider({
   keepOpenWhenHidden?: () => boolean;
   onSignedOut?: () => void;
 }) {
+  const [inFlight] = useState(() => new Set<() => boolean>());
   const [scheduler] = useState(() =>
     createRefetchScheduler({
       debounceMs: 300,
       setTimeout: (fn, ms) => window.setTimeout(fn, ms),
       clearTimeout: (timer) => window.clearTimeout(timer as number),
+      // A broadcast can't be told apart from one's own signal: spread unless one is in flight.
+      signalDelay: withdrawalsSignalDelay({
+        random: Math.random,
+        inFlight: () => [...inFlight].some((known) => known()),
+      }),
     }),
   );
   const [status, setStatus] = useState<LiveStatus>('idle');
@@ -147,6 +156,7 @@ export function LiveProvider({
         scheduler,
         status,
         keepers,
+        inFlight,
         phase: firstReadPhase({
           enabled,
           supported:
@@ -214,4 +224,24 @@ export function useKeepStreamOpenWhenHidden(keep: () => boolean): void {
 /** 'free' outside a provider: nothing to wait for. */
 export function useFirstReadPhase(): FirstReadPhase {
   return useContext(LiveContext)?.phase ?? 'free';
+}
+
+/**
+ * While `known()` is true, this person has a withdrawal on its way, so a `withdrawals.changed` is
+ * re-read at once instead of after a random 0-10 s (live-refetch.ts, withdrawalsSignalDelay).
+ */
+export function useWithdrawalInFlight(known: () => boolean): void {
+  const registry = useContext(LiveContext)?.inFlight;
+  const latest = useRef(known);
+  useEffect(() => {
+    latest.current = known;
+  });
+  useEffect(() => {
+    if (!registry) return;
+    const entry = () => latest.current();
+    registry.add(entry);
+    return () => {
+      registry.delete(entry);
+    };
+  }, [registry]);
 }

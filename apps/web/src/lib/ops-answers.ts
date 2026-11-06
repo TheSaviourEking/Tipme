@@ -112,6 +112,9 @@ export const STAFF_ACTIVITY_WORDS: Record<string, string> = {
   'withdrawals.freeze_lifted': 'Closed a reported takeover',
   'withdrawals.freeze_reopened':
     'A takeover was reported again: a new issue now holds the freeze',
+  'username.take_back_started': 'Started taking a username back from a page',
+  'username.take_back_done': 'A username take-back finished',
+  'username.released': 'Released a reserved username',
 };
 
 const REFUSALS: Record<string, string> = {
@@ -135,6 +138,9 @@ const REFUSALS: Record<string, string> = {
   USERNAME_HELD_BY_PAGE:
     'A page has this username, now or as an old one. To take it, ask to take it back.',
   USERNAME_NOT_RESERVED: 'This username isn’t reserved',
+  TAKE_BACK_OPEN: 'This username already has a take-back under way',
+  TAKE_BACK_CLOSED: 'This take-back has already finished',
+  TAKE_BACK_NOT_FOUND: 'We couldn’t find that take-back',
 };
 
 const UNKNOWN =

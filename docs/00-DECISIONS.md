@@ -155,6 +155,29 @@
 > - **Order on Free:** existing pages showed X first (the database's own key order, which no one chose). They now show Facebook, Instagram, X, the order the old editor listed them in. Say so in the release notes.
 > - **Release compatibility (one release):** links saves also write the old `socials` column from what shows, so a rollback stays truthful. The profile form takes and ignores the old links, so tabs opened before the release still save. Both are marked TODO, to remove with the column.
 
+> **Pro additions: the owner's decision, 5 Nov 2026.** The owner approved five Pro additions from the ProAdditions board (canvas v101): repeat supporters, priority support, where your tips come from, the monthly recap, and early access (plan `docs/superpowers/plans/2026-11-05-pro-additions.md`). Excluded: the board's section 6, profile sections (owner to confirm), and tip goals and campaigns (TODO, pending our payment partner's view). This is a product decision. It is not legal advice, and it is not a regulatory, data-protection or payment-partner approval. **D-07 stays OPEN.** No fee, minimum, checkout amount, ledger posting or payout changes. Each PR of the plan appends its own builder's calls here. (This entry was opened by PR 3, which merges first; PR 1 adds the board and its own parts.)
+>
+> - **Repeat supporters, PR 3 (the supporter's choice), option (a):**
+>   - The tip form offers "Let {name} recognise me next time" only on a Pro page, only once a name is typed, off by default. Emptying the name unticks it.
+>   - The browser makes a random 32-byte key per recipient (`tipme.supporters.v1`); the server stores only its SHA-256 in `supporters`, linking tips in `tip_supporters`. The money tables gain no column. Never a card, IP, device or browser fingerprint.
+>   - Any receipt of a recognised tip has "Stop {name} recognising me", which deletes the supporter and their tip links; the tips stay. "Forget my tips and keys on this phone" clears only the browser's copy.
+>   - `SUPPORTER_RECOGNITION` (`on` by default, an API setting) turns it off without deleting anything (`docs/runbooks/supporter-recognition.md`). **Whether it should wait for the D-07 privacy review, i.e. whether production runs it `on`, is the owner's call (open question 3).** The default ships `on` because the owner approved option (a), opt-in and off by default.
+>   - **Privacy lines, for the privacy notice's author** (not legal advice; check the Nigeria Data Protection Act 2023, especially its lawful-basis and consent provisions, before relying on them):
+>     - **What is stored:** a random key, in the supporter's browser and, as a one-way hash, with their tips to that recipient. Never contact details.
+>     - **Why:** so that recipient can recognise them, only with their consent.
+>     - **How long:** until they stop it from a receipt, or the recipient deletes their account.
+>     - **How to stop:** "Stop {name} recognising me" on any receipt. "Forget my tips and keys on this phone" clears the browser's copy.
+>     - **Known limit:** a new phone, a new browser, cleared storage or the recipient renaming their handle makes a new supporter; old ones stay as they were.
+>   - **Builder's calls (PROPOSED):**
+>     - **The key is made when the tip is sent, not when the box is ticked,** so a supporter who ticks and leaves stores nothing. A browser that can't keep the key sends none, and the tip goes ahead unrecognised.
+>     - **The receipt says "recognised" only once the tip is paid,** like the note-consent flag. Unpaid tips are never counted anyway.
+>     - **Stopping works while the switch is off:** it is always the supporter's to do.
+>     - **The receipt line names the recipient by first name,** as the tip form does.
+>     - **The newest name wins** when one key is used with different names; concurrent tips keep the name of the latest tip.
+>     - **Logs and Sentry:** `supporterKey` is redacted by the shared logger (`packages/observability`, used by the API and the worker), not an API-only list, and is removed at any depth from Sentry events by the web's scrub.
+>     - **The stop route has no rate limit:** it needs the receipt's own status token and does nothing without it.
+>     - **The "Your choices" group** on the receipt holds only this line until make-it-yours PR D adds its note-consent withdrawal beside it.
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 
@@ -167,6 +190,8 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 > - **QR designs are Pro; Free gets a marked preview.** Builder's call. A Pro code printed earlier keeps working after Pro ends.
 > - **Privacy line, and the 500-cover R2 threshold** (turn R2 on before many covers are uploaded, because Postgres dumps grow): builder's calls. The Privacy page wording is not changed and stays for the owner's approval.
 > - **Still open (owner):** the final list of designs; whether staff may remove an uploaded image, and the wording of the email the owner receives; the Pro price, billing and how someone buys Pro (until then staff switch Pro on, and no screen names a price); the Privacy page wording; approval of the payment wording.
+
+> **The handle rule, amended for username take-backs (4 Nov 2026), from the owner's answers of 3 Nov 2026.** A product rule, not a legal, regulatory or provider approval: it approves nothing in D-02 to D-07. "Old handles keep leading to the page and stay unclaimable while it exists, unless TipMe takes one back (`docs/superpowers/specs/2026-11-03-username-reservation-design.md`)." A take-back is a serious action (`username.take_back`, permission `usernames.manage`, a second person when one exists) with a written staff reason that the user never sees. The user reads only the category's fixed words. Notice is 7 to 30 days (ordinary) or 1 to 7 (impersonation, trademark, required by law); the clock starts at the earlier of the notice email being sent and the dashboard banner being seen, and with neither the take-back goes ahead after 14 days (owner answers 1 to 3). A take-back breaks the old links and printed QR codes for that name only; the page, its tips and its balance are unchanged, and the name is then reserved. A page given a new username (`page_` and six letters or digits) gets one free change within 30 days (owner answer 4). The terms' "Your username" section must be on `main` before this deploys to production.
 
 > **Make it yours (owner's request, 5 Nov 2026: "work on what can be customized").** A product and visual decision, not a legal, regulatory or provider approval. No D-item changes, and nothing about fees, the minimum, checkout, money or the ledger changes. Plan: `docs/superpowers/plans/2026-11-05-make-it-yours.md`; boards in `docs/design/redesign/boards/` (`ProCustomise`, `ProStartAmount`, `AppreciationDetails`).
 > - **A thank-you line on the supporter's receipt.** Free: the line, up to 140 characters, no links. Pro: also one of three card styles (Paper, Violet, Night) and a signature (the first word of the display name, read at view time). The receipt shows the line as it is now, not frozen per tip.

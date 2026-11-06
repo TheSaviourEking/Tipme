@@ -71,18 +71,25 @@ import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
-import { jobSignalsFor } from './live-signals.js';
+import {
+  jobSignalsFor,
+  PAYOUT_SETUP_JOB_NAME,
+  WEEKLY_REPORTS_JOB_NAME,
+} from './live-signals.js';
 import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
+import { handleUsernameTakeBacks } from './handlers/username-take-backs.js';
+import { workerRevalidator } from './revalidate.js';
 import { databaseFailureFields, jobFailure } from './job-retry.js';
 import { runUnlessRunning } from './run-lock.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
-const WEEKLY_REPORTS_JOB = 'reports.weekly';
+const WEEKLY_REPORTS_JOB = WEEKLY_REPORTS_JOB_NAME;
 const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
 const APPROVALS_EXPIRE_JOB = 'approvals.expire';
-const PAYOUT_SETUP_JOB = 'payment-accounts.payout-setup';
+const USERNAME_TAKE_BACKS_JOB = 'usernames.take-backs';
+const PAYOUT_SETUP_JOB = PAYOUT_SETUP_JOB_NAME;
 const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
 // A long sweep (a backlog, or a slow provider) must not run beside the next one. Under the interval
 // so a run lost with its worker costs at most one missed turn.
@@ -230,6 +237,9 @@ export async function startJobWorker(
   // Starts on the small fallback if the read fails or is slow: never refuses to start.
   await budget.ready;
   const sealing = mailSealing(Buffer.from(config.MAIL_SEAL_KEY, 'base64'));
+  const takeBackRevalidate = workerRevalidator(config, {
+    log: (entry) => logger.warn(entry),
+  });
   const reporter = createErrorReporter({
     dsn: config.SENTRY_DSN,
     service: 'worker',
@@ -287,6 +297,13 @@ export async function startJobWorker(
   const approvalsSchedule = ensureSchedule({
     queue,
     id: APPROVALS_EXPIRE_JOB,
+    every: 60_000,
+    logger,
+  });
+  // Username take-backs: notice, reminder, deadline and the 14-day path, driven by the database.
+  const takeBacksSchedule = ensureSchedule({
+    queue,
+    id: USERNAME_TAKE_BACKS_JOB,
     every: 60_000,
     logger,
   });
@@ -434,15 +451,19 @@ export async function startJobWorker(
               budgetPerMonthMinor: config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
               sealing,
             });
-            const { created } = await runWeeklyReports(database.db, {
-              sealing,
-              isoWeek,
-            });
+            const { created, profileIds } = await runWeeklyReports(
+              database.db,
+              { sealing, isoWeek },
+            );
             logger.info({
               event: 'reports.weekly.completed',
               iso_week: isoWeek,
               created,
             });
+            // Each report and its notification committed on its own; ids go to Redis, not the log.
+            void publishLive(
+              jobSignalsFor(WEEKLY_REPORTS_JOB, 'reported', { profileIds }),
+            );
             processed.add(1, { outcome: 'reported' });
             return 'reported';
           }
@@ -466,6 +487,17 @@ export async function startJobWorker(
             logger.info({ event: 'approvals.expired', ...result });
             processed.add(1, { outcome: 'approvals_swept' });
             return 'approvals_swept';
+          }
+          if (job.name === USERNAME_TAKE_BACKS_JOB) {
+            const outcome = await handleUsernameTakeBacks({
+              db: database.db,
+              sealing,
+              now: () => new Date(),
+              revalidate: takeBackRevalidate,
+              log: (entry) => logger.info({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome });
+            return outcome;
           }
           if (job.name === REHEARSAL_SWEEP_JOB) {
             // Never on a live copy, even if the job was queued before RELEASE_KIND changed.
@@ -516,11 +548,19 @@ export async function startJobWorker(
               processed.add(1, { outcome: 'payout_setup_skipped' });
               return 'skipped';
             }
+            // The ids are for the live signals only: logs carry no profile ids.
+            const { changedProfileIds, ...totals } = swept.value;
             logger.info({
               event: 'payout_setup.swept',
-              ...swept.value,
+              ...totals,
+              changed: changedProfileIds.length,
               ...fields,
             });
+            void publishLive(
+              jobSignalsFor(PAYOUT_SETUP_JOB, 'swept', {
+                profileIds: changedProfileIds,
+              }),
+            );
             processed.add(1, { outcome: 'payout_setup' });
             return 'swept';
           }
@@ -585,6 +625,8 @@ export async function startJobWorker(
               log: (entry) => logger.warn({ ...entry, ...fields }),
             });
             logger.info({ event: 'payout.start', outcome, ...fields });
+            // After startPayout's own commits; never awaited, never thrown.
+            void publishLive(jobSignalsFor(job.name, outcome, job.data));
             processed.add(1, { outcome: `payout_${outcome}` });
             return outcome;
           }
@@ -736,6 +778,7 @@ export async function startJobWorker(
       await reserveSchedule?.stop();
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
+      await takeBacksSchedule.stop();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

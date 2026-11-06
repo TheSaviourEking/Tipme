@@ -9,7 +9,7 @@ import {
   Button,
   Card,
   InputField,
-  Notice,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import { track } from '@/lib/analytics';
@@ -19,6 +19,9 @@ import { formatDemoAmount, formatNaira } from '@/lib/demo-amount';
 import { amountOptions, keyLayout } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
+import { supporterKeyFor } from '@/lib/supporter-keys';
+import { onReconnect, sendWithOneRetry } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
@@ -41,8 +44,7 @@ const MESSAGE_LIMIT = 280;
 const NAME_LIMIT = 60;
 
 const failureMessage = (failure: ApiFailure, rangeText: string): string => {
-  if (failure.code === 'NETWORK')
-    return 'We couldn’t reach TipMe. Check your connection and try again.';
+  if (failure.code === 'NETWORK') return CONNECTION_COPY.tipDropped;
   if (failure.code === 'RATE_LIMITED')
     return 'That was a lot of tries. Please wait a minute, then try again.';
   if (failure.code === 'VALIDATION_FAILED')
@@ -59,7 +61,8 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
     return 'We couldn’t confirm whether your payment started. Please don’t tip again yet: wait a few minutes, and TipMe will check. Nothing is shown as paid until it is confirmed.';
   if (failure.code === 'DEPENDENCY_UNAVAILABLE')
     return 'The payment provider is unavailable right now. Nothing was charged. Please try again in a moment.';
-  return 'Something went wrong on our side. Please try again.';
+  // TipMe's own fault, before any redirect to the payment partner: nothing was paid (Q2).
+  return CONNECTION_COPY.ourSideTip;
 };
 
 export function AppreciationForm({
@@ -72,6 +75,7 @@ export function AppreciationForm({
   surface = 'home',
   pilotNotice,
   barNotice,
+  recognition = false,
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -92,6 +96,11 @@ export function AppreciationForm({
    * the button stays the one the page is tested by.
    */
   barNotice?: ReactNode;
+  /**
+   * The page is Pro and recognition is switched on (`PublicProfile.recognition`): once a name is
+   * typed, offer "Let {name} recognise me next time". Older APIs send nothing: no tick box.
+   */
+  recognition?: boolean;
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -115,6 +124,9 @@ export function AppreciationForm({
   const [payerName, setPayerName] = useState('');
   const [purpose, setPurpose] = useState<TipPurpose | ''>('');
   const [remember, setRemember] = useState(false);
+  // "Let {name} recognise me next time": off by default, offered only with a name, and dropped
+  // when the name is emptied, so a new name always asks again.
+  const [recognise, setRecognise] = useState(false);
   const [error, setError] = useState('');
   // The optional details stay mounted when closed, so what was typed survives closing.
   const [extrasOpen, setExtrasOpen] = useState(false);
@@ -122,9 +134,24 @@ export function AppreciationForm({
   const [nameError, setNameError] = useState('');
   const [quote, setQuote] = useState<QuoteState>({ kind: 'idle' });
   const [notice, setNotice] = useState('');
+  // Whether the failed tip reached TipMe. Only one that never did may say "You haven't paid
+  // anything" (states plan, Money-safety proofs): payment happens only on the partner's page,
+  // after the redirect on success below.
+  const [reachedUs, setReachedUs] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   // One key per draft (quote + message): retries and double taps reuse it, so one tip at most.
   const draftKey = useRef<string | null>(null);
+  // A tap made offline is sent when the connection comes back (states plan, Task 16), with the
+  // same draft. Anything that starts a new draft cancels it.
+  const armed = useRef<(() => void) | null>(null);
+  const disarm = () => {
+    armed.current?.();
+    armed.current = null;
+  };
+  const newDraft = () => {
+    draftKey.current = null;
+    disarm();
+  };
   const latestQuote = useRef(0);
   // Counted once a page view: choosing a key clears the field, and typing again is the same person.
   const customCounted = useRef(false);
@@ -144,7 +171,10 @@ export function AppreciationForm({
   const fetchQuote = async (minor: number) => {
     const request = ++latestQuote.current;
     setQuote({ kind: 'loading', amount: minor });
-    const result = await quoteTip(handle, minor);
+    // A read: a dropped connection is tried once more, quietly.
+    const { result } = await sendWithOneRetry('tip-quote', () =>
+      quoteTip(handle, minor),
+    );
     if (request !== latestQuote.current) return null;
     draftKey.current = null;
     if (!result.ok) {
@@ -180,6 +210,19 @@ export function AppreciationForm({
       : quote.amount !== amount)
       ? { kind: 'idle' }
       : quote;
+
+  // Nothing reached TipMe, so the slip's safe line holds. The send is armed once.
+  const waitForConnection = () => {
+    disarm();
+    setReachedUs(false);
+    setNotice(CONNECTION_COPY.tipOffline);
+    armed.current = onReconnect(window, () => {
+      armed.current = null;
+      form.current?.requestSubmit();
+    });
+  };
+  // A new amount is a new draft: an armed send never goes with an amount it wasn't tapped for.
+  useEffect(() => disarm, [amount]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -224,6 +267,11 @@ export function AppreciationForm({
       (tooLongMessage ? messageField : nameField).current?.focus();
       return;
     }
+    // Offline at the tap: send nothing now, say so, and send this same draft on reconnect.
+    if (!navigator.onLine) {
+      waitForConnection();
+      return;
+    }
     // Never pay without a current server quote for exactly this amount.
     // Disabled from here on, so a double tap starts one tip.
     setSubmitting(true);
@@ -246,16 +294,33 @@ export function AppreciationForm({
     }
     draftKey.current ??= newIdempotencyKey();
     const trimmed = message.trim();
-    const result = await createTip(draftKey.current, {
+    // The key for this recipient is made and kept only now, when it is about to be sent. If this
+    // browser can't keep it, none is sent: the tip goes ahead unrecognised.
+    let supporterKey: string | null = null;
+    if (recognition && recognise && payerName.trim()) {
+      try {
+        supporterKey = supporterKeyFor(localStorage, handle, true);
+      } catch {
+        supporterKey = null;
+      }
+    }
+    const key = draftKey.current;
+    // The same key and body: the API replays the original tip for it (intents.ts), so the quiet
+    // second try can never start a second tip.
+    const body = {
       quoteId: current.quoteId,
       ...(trimmed ? { message: trimmed } : {}),
       ...(trimmed && noteMayShow ? { noteMayShow: true as const } : {}),
       ...(purpose ? { purpose } : {}),
       ...(payerName.trim() ? { payerDisplayLabel: payerName.trim() } : {}),
+      ...(supporterKey ? { supporterKey } : {}),
       ...(joining && celebration
         ? { celebrationMomentId: celebration.momentId }
         : {}),
-    });
+    };
+    const { result } = await sendWithOneRetry('tip-intent', () =>
+      createTip(key, body),
+    );
     if (result.ok) {
       try {
         // The receipt token stays in this tab: it never travels through the provider's pages.
@@ -275,6 +340,11 @@ export function AppreciationForm({
       return;
     }
     setSubmitting(false);
+    if (result.code === 'NETWORK' && !navigator.onLine) {
+      // The retry found the connection gone: the same draft goes when it is back.
+      waitForConnection();
+      return;
+    }
     if (result.code === 'TIPPING_NOT_OPEN') {
       setClosed(true);
       return;
@@ -285,10 +355,13 @@ export function AppreciationForm({
     ) {
       // Nothing is charged without the supporter's tap. If the refresh itself fails, the quote area
       // already says why.
-      if (await fetchQuote(amount))
+      if (await fetchQuote(amount)) {
+        setReachedUs(true);
         setNotice('That took a little too long. Please tap Tip again.');
+      }
       return;
     }
+    setReachedUs(result.code !== 'NETWORK');
     setNotice(failureMessage(result, options.rangeText));
   };
 
@@ -303,7 +376,7 @@ export function AppreciationForm({
   useEffect(() => {
     if (!onProfile || !problem) return;
     form.current
-      ?.querySelector('.tm-notice, .tm-field-error')
+      ?.querySelector('.tm-slip, .tm-field-error')
       ?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
   }, [onProfile, problem]);
 
@@ -391,6 +464,10 @@ export function AppreciationForm({
   }, [onProfile, closed]);
 
   const busy = submitting;
+  // A typed amount that is only too small: the field says "below 2,000" and the key at the minimum
+  // lights up (states plan, Task 9). A mistyped one gets the line alone.
+  const belowMinimum =
+    selection === 'other' && Boolean(error) && options.belowMinimum(custom);
   const extras = (
     <>
       <div className="tm-field">
@@ -407,7 +484,7 @@ export function AppreciationForm({
               (option) => option.value === event.currentTarget.value,
             );
             setPurpose(selected?.value ?? '');
-            draftKey.current = null;
+            newDraft();
           }}
         >
           <option value="">Choose a reason</option>
@@ -432,7 +509,7 @@ export function AppreciationForm({
           setMessage(event.target.value);
           if (!event.target.value.trim()) setNoteMayShow(false);
           setMessageError('');
-          draftKey.current = null;
+          newDraft();
         }}
         placeholder="Your work made a difference. Thank you."
         hint={`${message.length}/${MESSAGE_LIMIT} characters. Sent privately with your tip.`}
@@ -447,7 +524,7 @@ export function AppreciationForm({
             disabled={submitting}
             onChange={(event) => {
               setNoteMayShow(event.target.checked);
-              draftKey.current = null;
+              newDraft();
             }}
           />
           <span>
@@ -469,12 +546,34 @@ export function AppreciationForm({
         ref={nameField}
         onChange={(event) => {
           setPayerName(event.target.value);
+          if (!event.target.value.trim()) setRecognise(false);
           setNameError('');
-          draftKey.current = null;
+          newDraft();
         }}
         hint={`Shown to ${recipient} with your tip. Leave it empty to stay anonymous.`}
         error={nameError || undefined}
       />
+      {recognition && payerName.trim() && (
+        <label className="tip-remember" htmlFor={`${id}-recognise`}>
+          <input
+            id={`${id}-recognise`}
+            type="checkbox"
+            checked={recognise}
+            disabled={submitting}
+            onChange={(event) => {
+              setRecognise(event.target.checked);
+              newDraft();
+            }}
+          />
+          <span>
+            Let {recipient} recognise me next time
+            <small>
+              They’ll see that you’ve tipped before, and how often. You can stop
+              this from any receipt.
+            </small>
+          </span>
+        </label>
+      )}
       <label className="tip-remember" htmlFor={`${id}-remember`}>
         <input
           id={`${id}-remember`}
@@ -581,6 +680,9 @@ export function AppreciationForm({
                   value={String(preset.minor)}
                   aria-label={`${preset.label} NGN`}
                   checked={selection === String(preset.minor)}
+                  suggested={
+                    belowMinimum && preset.minor === options.suggestedMinor
+                  }
                   onChange={() => {
                     setSelection(String(preset.minor));
                     choseAmount.current = true;
@@ -632,6 +734,7 @@ export function AppreciationForm({
             setError('');
           }}
           error={selection === 'other' && error ? error : undefined}
+          flag={belowMinimum ? `below ${options.minLabel}` : ''}
         />
         {onProfile ? (
           <p className="tip-quote-live sr-only" aria-live="polite">
@@ -649,7 +752,7 @@ export function AppreciationForm({
               disabled={submitting}
               onChange={(event) => {
                 setJoining(event.target.checked);
-                draftKey.current = null;
+                newDraft();
               }}
             />
             <span>Add to the celebration</span>
@@ -670,11 +773,6 @@ export function AppreciationForm({
           </summary>
           <div className="composer-extras__body">{extras}</div>
         </details>
-        {notice && (
-          <Notice tone="error" title="Not sent yet">
-            {notice}
-          </Notice>
-        )}
         {/* A fixed bar on a phone's public page (CSS): still this form's one submit button. */}
         <TipAction
           partner={copy.formPartner}
@@ -699,6 +797,31 @@ export function AppreciationForm({
             <Arrow />
           </Button>
         </TipAction>
+        {/* After Tip, so it comes out from under the button that was pressed. */}
+        {notice && (
+          <Slip
+            tone="error"
+            stamp={'Not\nsent'}
+            title="Not sent yet"
+            // tipDropped says it itself; the offline words don't, and nothing was sent.
+            safe={
+              reachedUs || notice === CONNECTION_COPY.tipDropped
+                ? undefined
+                : 'You haven’t paid anything.'
+            }
+            actions={
+              <Button
+                variant="continue"
+                disabled={busy}
+                onClick={() => form.current?.requestSubmit()}
+              >
+                Try again
+              </Button>
+            }
+          >
+            {notice}
+          </Slip>
+        )}
         {(pilotNotice || copy.formDisclaimer) && (
           <p className="composer-disclaimer">
             {/* The mode wording: on a phone with the Tip bar, the bar carries it and CSS removes this

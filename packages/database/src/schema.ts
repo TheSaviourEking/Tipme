@@ -552,6 +552,9 @@ export const profiles = pgTable(
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
     tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
     minTipMinor: minor('min_tip_minor'),
+    // The preset a Pro page's tip form starts on ("Make it yours"); NULL starts on the closest to
+    // ₦2,000. Kept when the page goes back to Free, used again if it returns to Pro.
+    tipStartMinor: minor('tip_start_minor'),
     // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
     customFeeBps: integer('custom_fee_bps'),
     // Handle changes made so far (never reset), and how many staff have allowed beyond the
@@ -602,6 +605,12 @@ export const profiles = pgTable(
     check(
       'profiles_tip_presets_range',
       sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
+    ),
+    // The start is one of the page's own presets. `= ANY (NULL)` is NULL, which a CHECK lets
+    // through, hence the coalesce: no own amounts means no start.
+    check(
+      'profiles_tip_start_in_presets',
+      sql`tip_start_minor IS NULL OR coalesce(tip_start_minor = ANY (tip_presets_minor), false)`,
     ),
     // char_length counts code points, as THANKS_LINE_LIMIT does, so an emoji counts once.
     check(
@@ -854,8 +863,8 @@ export const handleReservations = pgTable(
     id: uuid('id').primaryKey(),
     handleLower: text('handle_lower').notNull(),
     source: text('source').notNull(),
-    // The take-back this came from (PR 2 adds that table and the foreign key).
-    takeBackId: uuid('take_back_id'),
+    // The take-back this came from.
+    takeBackId: uuid('take_back_id').references(() => handleTakeBacks.id),
     reason: text('reason').notNull(),
     // Null only when the system completed a take-back.
     reservedBy: uuid('reserved_by').references(() => users.id),
@@ -875,6 +884,81 @@ export const handleReservations = pgTable(
     check(
       'handle_reservations_released',
       sql`${table.releasedAt} IS NULL OR (${table.releasedBy} IS NOT NULL AND ${table.releaseReason} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/**
+ * Usernames TipMe takes back from a page (username reservation spec, section 3.3). One row per
+ * take-back: approved (the notice is queued), noticed (a sent email or a seen banner started the
+ * clock), due, then done or cancelled. The reason is staff-only; the user only ever reads the
+ * category's fixed words, so there is no free text for them here (owner answer 3).
+ */
+export const handleTakeBacks = pgTable(
+  'handle_take_backs',
+  {
+    id: uuid('id').primaryKey(),
+    approvalRequestId: uuid('approval_request_id').references(
+      () => approvalRequests.id,
+    ),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    handleLower: text('handle_lower').notNull(),
+    kind: text('kind').notNull(),
+    category: text('category').notNull(),
+    noticeDays: integer('notice_days').notNull(),
+    reason: text('reason').notNull(),
+    state: text('state').notNull(),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id),
+    // Null when it ran alone, without a second person.
+    approvedBy: uuid('approved_by').references(() => users.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+    noticedAt: timestamp('noticed_at', { withTimezone: true }),
+    noticedVia: text('noticed_via'),
+    bannerSeenAt: timestamp('banner_seen_at', { withTimezone: true }),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    remindedAt: timestamp('reminded_at', { withTimezone: true }),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    noticeMailId: uuid('notice_mail_id').references(() => mailMessages.id),
+    outcome: text('outcome'),
+    newHandle: text('new_handle'),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    cancelReason: text('cancel_reason'),
+    freeChangeUntil: timestamp('free_change_until', { withTimezone: true }),
+    freeChangeUsedAt: timestamp('free_change_used_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('handle_take_backs_open')
+      .on(table.handleLower)
+      .where(sql`state IN ('approved', 'noticed', 'due')`),
+    index('handle_take_backs_open_profile')
+      .on(table.profileId)
+      .where(sql`state IN ('approved', 'noticed', 'due')`),
+    index('handle_take_backs_state_due').on(table.state, table.dueAt),
+    check('handle_take_backs_kind', sql`${table.kind} IN ('current', 'old')`),
+    check(
+      'handle_take_backs_category',
+      sql`${table.category} IN ('ordinary', 'impersonation', 'trademark', 'legal')`,
+    ),
+    check(
+      'handle_take_backs_notice_days',
+      sql`(${table.category} = 'ordinary' AND ${table.noticeDays} BETWEEN 7 AND 30) OR (${table.category} <> 'ordinary' AND ${table.noticeDays} BETWEEN 0 AND 7)`,
+    ),
+    check(
+      'handle_take_backs_state',
+      sql`${table.state} IN ('approved', 'noticed', 'due', 'done', 'cancelled')`,
+    ),
+    check(
+      'handle_take_backs_noticed_via',
+      sql`${table.noticedVia} IS NULL OR ${table.noticedVia} IN ('email', 'banner', 'unreached')`,
+    ),
+    check(
+      'handle_take_backs_outcome',
+      sql`${table.outcome} IS NULL OR ${table.outcome} IN ('user_chose', 'assigned', 'page_deleted', 'old_removed')`,
     ),
   ],
 );
@@ -2004,4 +2088,45 @@ export const messageFlags = pgTable(
       sql`report_reason IS NULL OR report_reason IN ('abusive', 'spam', 'other')`,
     ),
   ],
+);
+
+/**
+ * Repeat supporters (Pro additions, option (a)): a supporter who ticked "Let {recipient} recognise
+ * me next time". One row per recipient and browser key; only the key's SHA-256 is stored, never
+ * the key, and never a card, IP, device or browser fingerprint. Keys are per recipient, so these
+ * rows cannot link one supporter's tips across recipients. Kept apart from the money tables:
+ * deleting a row ("Stop {name} recognising me") never touches a tip.
+ */
+export const supporters = pgTable(
+  'supporters',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    keyHash: bytea('key_hash').notNull(),
+    // The name they typed most recently with this key (cleaned like tips.payer_display_label).
+    label: text('label').notNull(),
+    firstAt: timestamp('first_at', { withTimezone: true }).notNull(),
+    lastAt: timestamp('last_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check('supporters_key_hash_length', sql`octet_length(key_hash) = 32`),
+    check('supporters_label_length', sql`char_length(label) BETWEEN 1 AND 60`),
+    unique('supporters_profile_key').on(table.profileId, table.keyHash),
+  ],
+);
+
+/** Which tips an opted-in supporter made. Unpaid rows are harmless: only paid tips are counted. */
+export const tipSupporters = pgTable(
+  'tip_supporters',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => tips.id),
+    supporterId: uuid('supporter_id')
+      .notNull()
+      .references(() => supporters.id, { onDelete: 'cascade' }),
+  },
+  (table) => [index('tip_supporters_supporter').on(table.supporterId)],
 );

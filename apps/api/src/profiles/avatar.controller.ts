@@ -32,6 +32,7 @@ import {
 } from './image-upload.js';
 import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 
 // Profile photos (PR-013): 512×512. The safeguards every upload gets are in image-upload.ts.
 const toAvatar = reencodeTo(512, 512);
@@ -45,6 +46,9 @@ export class AvatarController {
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Put('me/avatar')
@@ -63,6 +67,10 @@ export class AvatarController {
       this.photos ?? undefined,
     );
     this.revalidator.revalidate(updated.handle);
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'profile.changed',
+    });
     return { data: updated };
   }
 
@@ -77,6 +85,10 @@ export class AvatarController {
       this.photos ?? undefined,
     );
     this.revalidator.revalidate(updated.handle);
+    void this.publishLive({
+      to: { user: auth.userId },
+      type: 'profile.changed',
+    });
     return { data: updated };
   }
 

@@ -37,6 +37,7 @@ import {
   type PreparedPayoutRead,
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
+import { takeBackAction } from './username-take-backs.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -810,6 +811,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(roleAddSensitive);
   registerSeriousAction(staffResetAuthenticator);
   registerSeriousAction(mailProviderSwitch);
+  registerSeriousAction(takeBackAction);
 }
 
 /* Routes whose seriousness depends on what is being done */

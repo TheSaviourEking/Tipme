@@ -1,11 +1,13 @@
 import type { Page } from '@playwright/test';
-import { sql } from '../e2e/ops-helpers';
+import { openOpsLink, sql } from '../e2e/ops-helpers';
 import { standInBanks } from '../e2e/bank-fixtures';
 import { API_ORIGIN } from '../e2e/stack';
 
 /** What a screen needs before it can be shown: a signed-in recipient, with or without tips. */
 export interface ReviewContext {
   recipient(): Promise<{ handle: string }>;
+  /** A new owner, enrolled, in the admin area. */
+  owner(): Promise<unknown>;
   recipientWithTips(count: number): Promise<{ handle: string }>;
 }
 
@@ -489,7 +491,7 @@ export const SCREENS: ReviewScreen[] = [
   {
     group: 'Dashboard',
     name: 'Withdraw',
-    board: 'ScreenWithdraw',
+    board: 'WithdrawRedesign',
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
       await page.goto('/dashboard/withdraw');
@@ -498,8 +500,8 @@ export const SCREENS: ReviewScreen[] = [
   },
   {
     group: 'Dashboard',
-    name: 'Withdraw, one on its way',
-    board: 'ScreenWithdraw',
+    name: 'Withdraw, the ledger',
+    board: 'WithdrawRedesign',
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
       // Only the withdrawal list is stubbed; the balance and the quote are the real ones.
@@ -517,7 +519,7 @@ export const SCREENS: ReviewScreen[] = [
                       null,
                       '2000000',
                       'processing',
-                      null,
+                      { bankName: 'GTBank', last4: '6789' },
                     ],
                     [
                       'w2',
@@ -559,6 +561,58 @@ export const SCREENS: ReviewScreen[] = [
       );
       await page.goto('/dashboard/withdraw');
       await page.getByRole('list', { name: 'Progress' }).waitFor();
+    },
+  },
+  // The Withdraw states with no shot before (ScreenAudit, "States with no shot").
+  ...(
+    [
+      ['Withdraw, paused', { state: 'paused', reason: 'switched_off' }],
+      ['Withdraw, no bank', { state: 'no_destination' }],
+    ] as const
+  ).map(([name, quote]): ReviewScreen => ({
+    group: 'Dashboard',
+    name,
+    board: 'WithdrawRedesign',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(3);
+      await page.route('**/v1/me/withdrawal-quote', (route) =>
+        route.fulfill({ json: { data: { inReview: false, ...quote } } }),
+      );
+      await page.goto('/dashboard/withdraw');
+      await page.locator('.withdraw__meter').waitFor();
+    },
+  })),
+  {
+    group: 'Dashboard',
+    name: 'Withdraw, below the minimum',
+    board: 'WithdrawRedesign',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(3);
+      await page.goto('/dashboard/withdraw');
+      await page.getByLabel('Amount (NGN)').fill('1500');
+      await page.getByLabel('Amount (NGN)').blur();
+      await page.locator('.tm-field-error').waitFor();
+    },
+  },
+  {
+    group: 'Dashboard',
+    name: 'Withdraw, not confirmed',
+    board: 'WithdrawRedesign',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(3);
+      // Answered here: no request reaches the API, so nothing is withdrawn.
+      await page.route('**/v1/me/withdrawals', (route) =>
+        route.request().method() === 'POST'
+          ? route.fulfill({
+              status: 502,
+              json: { error: { code: 'INTERNAL_ERROR', message: 'x' } },
+            })
+          : route.continue(),
+      );
+      await page.goto('/dashboard/withdraw');
+      await page.getByRole('button', { name: 'Everything' }).click();
+      await page.getByRole('button', { name: /^Withdraw ₦/ }).click();
+      await page.locator('.tm-slip--unsure').waitFor();
     },
   },
   // Settings (ScreenSettings): one shot per section, reached by its link. Shots are full-page, so
@@ -770,4 +824,57 @@ export const SCREENS: ReviewScreen[] = [
     board: 'ScreenSmall',
     open: visit('/legal/terms'),
   },
+  // Admin (OpsShell, OpsPages): a new owner each time, in the frame. The pages are in the frame
+  // only so far; their own patterns come in later PRs, so these shots show the frame around them.
+  {
+    group: 'Admin',
+    name: 'Overview',
+    board: 'OpsShell',
+    async open(page, ctx) {
+      await ctx.owner();
+      await page.getByRole('heading', { name: 'Pending approvals' }).waitFor();
+      await page.waitForLoadState('networkidle');
+    },
+  },
+  {
+    group: 'Admin',
+    name: 'Menu',
+    board: 'OpsShell',
+    viewport: true,
+    async open(page, ctx) {
+      await ctx.owner();
+      const menu = page.getByRole('button', { name: /^Menu · / });
+      if (await menu.isVisible()) {
+        await menu.click();
+        await page.getByRole('dialog', { name: 'Admin menu' }).waitFor();
+      }
+    },
+  },
+  ...(
+    [
+      ['Approvals', 'OpsPages'],
+      ['Issues', 'OpsShell'],
+      ['Search', 'OpsPages'],
+      ['Pages', 'OpsPages'],
+      ['Usernames', 'OpsPages'],
+      ['Visibility', 'OpsPages'],
+      ['Market', 'OpsPages'],
+      ['Providers', 'OpsPages'],
+      ['Email', 'OpsPages'],
+      ['Audit log', 'OpsPages'],
+      ['People', 'OpsPages'],
+      ['Roles', 'OpsPages'],
+      ['Your access', 'OpsPages'],
+    ] as const
+  ).map(([name, board]): ReviewScreen => ({
+    group: 'Admin',
+    name,
+    board,
+    async open(page, ctx) {
+      await ctx.owner();
+      await openOpsLink(page, name);
+      await page.getByRole('heading', { level: 1 }).waitFor();
+      await page.waitForLoadState('networkidle');
+    },
+  })),
 ];
