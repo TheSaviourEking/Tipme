@@ -418,7 +418,6 @@ the appreciation moment) is unchanged.
 - **Designs in three groups by the API's `kind`.** "Patterns" (`style`), "Cards" (`card`), "Photo" (`photo`), each in the API's order; an unknown `kind` from a newer API joins Patterns and an empty group is not drawn. Every radio keeps one `name`, so arrow keys still move through all designs across the groups.
 - **The free card is lettered in Manrope.** `drawQrCard` uses the page's own `--font-manrope` family once `document.fonts.load` has it, else Arial as before. Only the browser-drawn Free card changes (studio, share image, print); Pro designs are server pictures and do not change. The code's modules, quiet zone and colours are unchanged, so it scans as before.
 
-
 ## 2026-11-06 — TipMe for businesses: the verified badge and the business header
 
 - **Owner direction, 6 Nov 2026** (board `redesign/boards/Business.dc.html`). A product and visual decision, not a regulatory approval.

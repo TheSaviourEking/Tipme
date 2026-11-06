@@ -17,7 +17,6 @@ import { businessTag } from './business-tag';
 const LOOKUP_TIMEOUT_MS = 4000;
 const SLUG = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
-
 export const isBusinessSlug = (raw: string, max: number) =>
   raw.length <= max && SLUG.test(raw.toLowerCase());
 

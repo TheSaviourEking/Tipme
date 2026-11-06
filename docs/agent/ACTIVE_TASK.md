@@ -1,3 +1,10 @@
+# Current task: merge train 2, TipMe for businesses (6 November 2026)
+
+- Branch `train/2` from `origin/train/1` (#161): #140 (B0), #147 (B1), #145 (B2), #146 (B3), #143 (B4), #148 (B5), #149 (B6), #154 (B7), #152 (B8), #144 (R2-0), #150 (R2-A), #157 (R2-C1) and #159 (R2-B) merged in that order with `--no-ff`, then origin/train/1 again (QR font fix). One PR into `dev`; it merges after #161.
+- Migrations regenerated with drizzle-kit at merge time: `0081_business` (B0, was 0078; owner grant re-appended), `0082_business_release2` (R2-0, was 0079; hand-written triggers re-appended byte for byte), `0083_reversal_partner_keeps_fee` (R2-A, was 0080; `--custom`, SQL identical).
+- Everything stays behind `BUSINESS_ENABLED`, `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED` (all default false).
+- Next: CI on the train PR, then the owner merges #161 and this one. Evidence: `.superpowers/program/train2-report.md` (main checkout).
+
 # Current task: merge train 1 (6 November 2026)
 
 - Branch `train/1` from `origin/dev` at `44fcd42c`: #158, #137, #142, #141, #139, #151, #134, #138, #153, #155 and #156 merged in that order with `--no-ff`, so each PR's head commit is in it. One PR into `dev`.
@@ -41,6 +48,7 @@
 - Branch/worktree: `feat/business-b4` / `.worktrees/business-b4`, off `feat/business-b0` (B0 not yet on dev), test lane 0. Not pushed. Plan: Tasks 14–15.
 - Done: public reads (`publicLocation`, `searchBusinessPeople`, `publicStaffTipPage`) and their routes under `/v1/b/`; `/b/<business>/<location>` with the header, picker, search, "I don't see them" and "Tip {name} again"; the staff page with today's tip form and `business` prop; remembered tips carry the business slug; `/api/revalidate` accepts `{ business }`.
 - Next: rebase onto dev once B0 merges; full e2e on CI. Evidence: `.superpowers/program/b4-report.md` (main checkout).
+
 # Current task — states and feedback, PR B public (5 November 2026)
 
 - Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.

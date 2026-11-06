@@ -1,3 +1,11 @@
+# Current handoff: merge train 2, TipMe for businesses (6 November 2026)
+
+- `train/2` holds the 13 business PRs (release 1, and release 2's foundation, reversals, share agreement and business balance) on top of `train/1`. Merge #161 first; merging this marks each of the 13 merged.
+- Migrations after train 1's `0080_supporters`: `0081_business`, `0082_business_release2`, `0083_reversal_partner_keeps_fee`. All flags default off.
+- Integration fixes on the train: B5's manager note report resolves B7's note reference (`noteTipOf`); B3's `endMembership` ends the share (`endShareAgreements`); B4's `/b/` reads use B2's `business:<slug>` tag; the quote gate (train 1) is owner-aware (R2-B) and holds R2-A's below-zero pause; the bank-change email keeps M2's design with R2-B's business variant. The e2e stand-ins for other lanes' routes are gone.
+- Still open from the PRs: R2-B's live funds flow (business withdrawals are pretend-only), refunds and chargebacks (D-05), and the owner questions in each builder report.
+- Evidence and every conflict: `.superpowers/program/train2-report.md` (main checkout).
+
 # Current handoff: merge train 1 (6 November 2026)
 
 - `train/1` holds 11 reviewed PRs on top of dev `44fcd42c`. Merging it marks each of them merged.
