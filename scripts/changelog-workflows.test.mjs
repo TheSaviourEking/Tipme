@@ -214,3 +214,21 @@ test('the PR template has a For users section with the hint, which on its own dr
   // Before any long section, so cutting a long body to the size limit keeps it.
   assert.ok(template.indexOf('## For users') < template.indexOf('## Evidence'));
 });
+
+test('a workflow that checks out the repo and sets up Node without pnpm turns the pnpm cache off', () => {
+  // setup-node@v5 caches for the packageManager in package.json (pnpm) on its own, and fails when
+  // pnpm was never installed: every changelog draft failed this way after train 3 merged.
+  const missing = readdirSync(WORKFLOWS)
+    // ci.template.yml is an example, never run.
+    .filter((name) => /\.ya?ml$/.test(name) && name !== 'ci.template.yml')
+    .filter((name) => {
+      const source = read(name);
+      return (
+        source.includes('actions/checkout@') &&
+        source.includes('actions/setup-node@') &&
+        !source.includes('pnpm/action-setup@') &&
+        !source.includes('package-manager-cache: false')
+      );
+    });
+  assert.deepEqual(missing, []);
+});

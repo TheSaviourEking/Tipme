@@ -49,6 +49,8 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
+          # Node only: no pnpm here, so setup-node must not look for its cache.
+          package-manager-cache: false
           node-version-file: .nvmrc
 
       # A resend: the PR is read into a file, which the script reads (never into the shell).
