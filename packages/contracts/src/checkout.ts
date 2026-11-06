@@ -1,3 +1,4 @@
+import type { TipBusinessNote } from './business.js';
 import { z } from 'zod';
 import type { ThanksSlip } from './thanks.js';
 
@@ -50,6 +51,11 @@ export const tipIntentRequestSchema = z
      * consent is never a default, and a request without a message stores none.
      */
     noteMayShow: z.literal(true).optional(),
+    /**
+     * The business membership the supporter's page named (TipMe for businesses). A label the
+     * server checks and ignores when it doesn't hold: it never refuses or redirects a tip.
+     */
+    businessMemberId: z.uuid().optional(),
   })
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;
@@ -93,4 +99,9 @@ export interface TipStatusView {
    * it is now, not as it was when the tip was made (owner's answer, 5 Nov 2026).
    */
   thanks?: ThanksSlip;
+  /**
+   * Only for a paid tip made at a business: whether the supporter's note about the person is still
+   * open (7 days, once). Never carries the note.
+   */
+  businessNote?: TipBusinessNote;
 }

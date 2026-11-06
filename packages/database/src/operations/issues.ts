@@ -95,6 +95,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   staff_acted_alone: 'account',
   staff_approval_pending: 'info',
   staff_last_approver_removed: 'account',
+  business_waiting: 'info',
+  business_note_reported: 'account',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -153,6 +155,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return 'A serious action is waiting for a second person. Decide it under Approvals.';
     case 'staff_last_approver_removed':
       return 'A staff change left nobody else to act as second person, so one person can now take serious actions alone.';
+    case 'business_waiting':
+      return 'A business is waiting to be verified. Check its name, address and contact before its codes go live.';
+    case 'business_note_reported':
+      return 'A note a supporter wrote about someone at a business was reported. Read it only through Reveal.';
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
