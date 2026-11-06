@@ -283,6 +283,9 @@ export function NotificationBell() {
                 <li key={n.id}>
                   <strong>{n.title}</strong>
                   <span>{n.body}</span>
+                  {n.kind === 'business_invitation' && (
+                    <Link href="/dashboard/work">See the invitation</Link>
+                  )}
                 </li>
               ))}
             </ul>

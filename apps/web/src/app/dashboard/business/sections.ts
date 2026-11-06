@@ -1,5 +1,6 @@
 import type { BusinessDetail } from '@tipme/contracts';
 import type { JSX } from 'react';
+import { PeopleCard } from './sections/people';
 
 /**
  * The Business page's sections (PR B0 registry). Each lane adds its own lines here and nothing
@@ -14,4 +15,6 @@ export type BusinessSection = {
   needs?: 'owner';
 };
 
-export const BUSINESS_SECTIONS: readonly BusinessSection[] = [];
+export const BUSINESS_SECTIONS: readonly BusinessSection[] = [
+  { id: 'people', title: 'People', Card: PeopleCard },
+];

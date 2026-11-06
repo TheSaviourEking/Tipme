@@ -67,7 +67,9 @@ export function DeletePage() {
         ? 'You can’t delete your page while money is still confirming or in your balance.'
         : result.code === 'STAFF_CANNOT_DELETE'
           ? 'Staff accounts can’t be deleted. Ask an owner to remove your staff access first.'
-          : 'We couldn’t delete your page. Please try again.',
+          : result.code === 'BUSINESS_LAST_OWNER'
+            ? 'You’re the only owner of a business on TipMe. Make someone else an owner of it first.'
+            : 'We couldn’t delete your page. Please try again.',
     );
   };
   return (

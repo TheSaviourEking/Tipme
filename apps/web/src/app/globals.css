@@ -9723,6 +9723,145 @@ body > .coming-soon-page {
 /* business:B2 end */
 
 /* business:B3 start */
+.business-people,
+.work-invitations,
+.work-where,
+.work-where__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.business-people h3,
+.work-invitations h3 {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-base);
+}
+
+.business-people__list,
+.business-people__found,
+.work-invitations__list,
+.work-invitations__blocked ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-people__list > li,
+.work-invitations__blocked li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--edge-hairline);
+}
+
+.business-people__who {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.business-people__actions,
+.work-invitation__actions,
+.work-where__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.business-people__invite,
+.business-people__search {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+}
+
+.business-people__choice {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.business-people__choice legend {
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+
+.business-people__card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.business-people__card > span:last-child {
+  display: grid;
+}
+
+/* Chosen is said in words by aria-pressed, and shown by more than colour: a thicker edge. */
+.business-people__card[aria-pressed='true'] {
+  border: 2px solid var(--brand-primary);
+}
+
+.business-people__photo {
+  display: inline-grid;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-recessed);
+}
+
+.business-people__link {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+  padding: var(--space-4);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-recessed);
+}
+
+.business-people__link-title,
+.work-invitation__line {
+  margin: 0;
+  font-weight: 600;
+}
+
+.work-invitation {
+  display: grid;
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--edge-hairline);
+}
+
+.work-invitation p,
+.work-where__confirm p {
+  margin: 0;
+}
+
+.work-where__confirm {
+  display: grid;
+  gap: var(--space-3);
+}
 /* business:B3 end */
 
 /* business:B4 start */

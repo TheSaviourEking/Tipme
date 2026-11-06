@@ -17,6 +17,7 @@ import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { ownerAttention, RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 import { businessLinks, loadBusinessRoles } from '@/lib/business/roles-api';
+import { keepJoinLink, takeJoinCode } from '@/lib/business/join-link';
 
 /**
  * The dashboard's navigation: a segmented control on a desktop, the fixed four-item tab bar on a
@@ -76,15 +77,24 @@ export function DashboardShell({
       if (result.ok) {
         setProfile(result.data);
         setLiveUpdates(result.data.liveUpdates === true);
-      } else if (result.status === 404) router.replace('/sign-up');
-      else router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
+      } else {
+        // A business invitation's link (`#join=`) is a fragment: it survives sign-in only in
+        // this tab's storage, and never in `next`.
+        keepJoinLink();
+        if (result.status === 404) router.replace('/sign-up');
+        else router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
+      }
     });
   }, [router, pathname]);
 
   // Once per dashboard load: while BUSINESS_ENABLED is off the API answers 404 and no link shows.
   const [business, setBusiness] = useState({ business: false, work: false });
   useEffect(() => {
-    void loadBusinessRoles().then((roles) => setBusiness(businessLinks(roles)));
+    void loadBusinessRoles().then((roles) => {
+      const links = businessLinks(roles);
+      // An invitation link kept through sign-in (or sign-up) leads to Work, where it is answered.
+      setBusiness(roles && takeJoinCode() ? { ...links, work: true } : links);
+    });
   }, []);
 
   // Read on every page change too, so a finished setup clears its notice on the next click.
