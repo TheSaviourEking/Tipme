@@ -82,3 +82,4 @@ export * from './operations/fees.js';
 export * from './operations/export.js';
 export * from './operations/rehearsal-sweep.js';
 export * from './operations/supporters.js';
+export * from './operations/business-shifts.js';

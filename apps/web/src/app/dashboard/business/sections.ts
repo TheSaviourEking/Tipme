@@ -4,6 +4,7 @@ import { DetailsCard } from './sections/details';
 import { LocationsCard } from './sections/locations';
 import { ManagersCard } from './sections/managers';
 import { PeopleCard } from './sections/people';
+import { OnTodayCard } from './sections/on-today';
 
 /**
  * The Business page's sections (PR B0 registry). Each lane adds its own lines here and nothing
@@ -30,4 +31,5 @@ export const BUSINESS_SECTIONS: readonly BusinessSection[] = [
   { id: 'locations', title: 'Locations', Card: LocationsCard },
   { id: 'managers', title: 'Managers', Card: ManagersCard },
   { id: 'people', title: 'People', Card: PeopleCard },
+  { id: 'on-today', title: 'On today', Card: OnTodayCard },
 ];

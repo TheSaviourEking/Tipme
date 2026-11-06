@@ -113,6 +113,14 @@
 - Staff read the words only via `POST /v1/ops/business-notes/:tipId/reveal` (`private.view`, reason, audited `business_note.reveal`); review needs `issues.resolve` and resolves the issue. The generic issue reveal no longer offers the supporter's private message or name on this kind (`evidence.ts`).
 - Open: the Work page draws cards from B3's `GET /v1/me/work` (mocked in the e2e); a person with no current membership has no Work page, so their old notes are API-only until then. Evidence: `.superpowers/program/b5-report.md` (main checkout).
 
+# Current handoff — TipMe for businesses, PR B6 (6 November 2026)
+
+- Branch `feat/business-b6`, lane 8, committed, not pushed. No migration, no money change.
+- Contracts: `ShiftState` (`{ onShift, startedAt? }`), what each shift route answers. `startShift`/`endShift` also return `{ businessSlug, changed }` for the revalidation; the actor is `{ userId, as: 'self' } | { userId, as: 'manager', businessId }`.
+- Rulings: a start is refused at a business that is pending as well as suspended (`BUSINESS_NOT_VERIFIED`); ending is always allowed. A closed location answers 404 `NOT_FOUND`.
+- `BusinessModule` imports `ProfilesModule` for `ProfileRevalidator`; `revalidateBusiness` is byte-identical to B2's, so the two merge cleanly. The web route's `{ business }` branch is B2's/B4's; until one merges the call is refused (best effort, logged).
+- The Work and Business cards render once B3's `GET /v1/me/work` and members list and B1's detail are on the branch; the e2e answers those three reads from the database.
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.

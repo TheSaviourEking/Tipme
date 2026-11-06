@@ -56,6 +56,12 @@ export const MEMBER_LEFT_BY = [
 ] as const;
 export const SHIFT_STARTED_BY = ['self', 'manager'] as const;
 export const SHIFT_ENDED_BY = ['self', 'manager', 'expired', 'left'] as const;
+/** What a check-in or check-out answers (PR B6): the member's shift as it now stands. */
+export interface ShiftState {
+  onShift: boolean;
+  /** ISO time the open shift started; present only while on shift. */
+  startedAt?: string;
+}
 export const NOTE_REPORT_REASONS = ['abusive', 'spam', 'other'] as const;
 export const NOTE_REPORTED_BY = ['member', 'manager'] as const;
 export const NOTE_REVIEW_OUTCOMES = ['restored', 'removed'] as const;

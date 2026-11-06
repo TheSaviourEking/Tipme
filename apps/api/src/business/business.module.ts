@@ -3,6 +3,7 @@ import { CsrfGuard } from '../auth/csrf.guard.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { mailSealingProvider } from '../mail/mail-providers.provider.js';
+import { ProfilesModule } from '../profiles/profiles.module.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { BusinessRolesController } from './business-roles.controller.js';
 import { BusinessManageController } from './business-manage.controller.js';
@@ -19,6 +20,8 @@ import { BusinessCodesController } from './business-codes.controller.js';
  * is registered here by B0, so a lane changes only its own controller file.
  */
 @Module({
+  // ProfileRevalidator: shift changes refresh the business's public pages (B6).
+  imports: [ProfilesModule],
   controllers: [
     BusinessRolesController,
     BusinessManageController,
