@@ -467,3 +467,22 @@ test('LIVE_UPDATES_ENABLED defaults to false; true turns it on; LIVE_MAX_STREAMS
     /LIVE_HEARTBEAT_MS/,
   );
 });
+
+test('the changelog signing secret is optional, at least 32 characters, and blank means off', () => {
+  const dev = { ...valid, NODE_ENV: 'development' };
+  assert.equal(loadApiConfig(dev).CHANGELOG_SIGNING_SECRET, undefined);
+  assert.equal(
+    loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: '' })
+      .CHANGELOG_SIGNING_SECRET,
+    undefined,
+  );
+  assert.equal(
+    loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: 'c'.repeat(32) })
+      .CHANGELOG_SIGNING_SECRET,
+    'c'.repeat(32),
+  );
+  assert.throws(
+    () => loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: 'short' }),
+    /CHANGELOG_SIGNING_SECRET/,
+  );
+});
