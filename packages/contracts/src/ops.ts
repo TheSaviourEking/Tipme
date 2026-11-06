@@ -735,6 +735,8 @@ export interface OpsPage {
   handleChanges?: { used: number; allowed: number };
   /** Which images staff can review. Optional, as `handleChanges`. */
   images?: { hasCover: boolean; hasPhoto: boolean };
+  /** Search only: the name searched for was taken back from this page, on this date. */
+  takenBackOn?: string;
 }
 
 /** A page's image, as staff review and remove it. */

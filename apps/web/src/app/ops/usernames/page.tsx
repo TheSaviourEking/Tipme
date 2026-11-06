@@ -356,7 +356,7 @@ export default function UsernamesPage() {
     return null;
   };
 
-  const onTakeBack = (raw: string) => (outcome: TakeBackAnswer) => {
+  const onTakeBack = (raw: string, outcome: TakeBackAnswer) => {
     say(
       outcome.kind === 'waiting'
         ? {
@@ -376,22 +376,25 @@ export default function UsernamesPage() {
     void load(filters);
   };
 
-  const onCancelTakeBack =
-    (raw: string) => async (takeBackId: string, reason: string) => {
-      const result = await opsAct<OpsTakeBack>(
-        `/v1/ops/usernames/take-backs/${encodeURIComponent(takeBackId)}/cancel`,
-        { method: 'POST', body: { reason } },
-      );
-      if (result.kind === 'refused') return refused(raw, result);
-      say({
-        tone: 'success',
-        title: 'Take-back cancelled',
-        text: 'The username stays with the page. If they had the notice, they are told they can keep it.',
-      });
-      void recheck(raw);
-      void load(filters);
-      return null;
-    };
+  const onCancelTakeBack = async (
+    raw: string,
+    takeBackId: string,
+    reason: string,
+  ) => {
+    const result = await opsAct<OpsTakeBack>(
+      `/v1/ops/usernames/take-backs/${encodeURIComponent(takeBackId)}/cancel`,
+      { method: 'POST', body: { reason } },
+    );
+    if (result.kind === 'refused') return refused(raw, result);
+    say({
+      tone: 'success',
+      title: 'Take-back cancelled',
+      text: 'The username stays with the page. If they had the notice, they are told they can keep it.',
+    });
+    void recheck(raw);
+    void load(filters);
+    return null;
+  };
 
   const applyFilters = (event: FormEvent) => {
     event.preventDefault();
@@ -448,8 +451,10 @@ export default function UsernamesPage() {
             answer={answer}
             onReserve={(reason) => onReserve(answer.name, reason)}
             onRelease={(reason) => onRelease(answer.name, reason)}
-            onTakeBack={onTakeBack(answer.name)}
-            onCancelTakeBack={onCancelTakeBack(answer.name)}
+            onTakeBack={(outcome) => onTakeBack(answer.name, outcome)}
+            onCancelTakeBack={(takeBackId, reason) =>
+              onCancelTakeBack(answer.name, takeBackId, reason)
+            }
           />
         )}
       </Card>

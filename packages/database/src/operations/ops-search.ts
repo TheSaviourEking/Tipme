@@ -105,6 +105,19 @@ async function byText(tx: Tx, q: string): Promise<OpsSearchResult> {
     const renamed = await opsPageByHandle(tx, q);
     if (renamed) pages.push(renamed);
   }
+  // A name TipMe took back finds the page it was taken from, with the date: page-level fields only.
+  if (pages.length === 0) {
+    const takenFrom = await rowsOf(
+      tx,
+      sql`SELECT p.id, p.user_id, p.handle, p.display_name, p.plan, p.page_state, p.status, tb.done_at
+            FROM handle_take_backs tb JOIN profiles p ON p.id = tb.profile_id
+           WHERE tb.handle_lower = ${q.toLowerCase().replaceAll('-', '_')} AND tb.state = 'done'
+             AND p.page_state <> 'deleted'
+           ORDER BY tb.done_at DESC LIMIT 1`,
+    );
+    for (const row of takenFrom)
+      pages.push({ ...pageOf(row), takenBackOn: iso(row['done_at']) });
+  }
   const ending = q.length === 6 ? q.toLowerCase() : null;
   const tips = await rowsOf(
     tx,

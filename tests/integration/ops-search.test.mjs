@@ -149,3 +149,43 @@ test('search needs the search.view permission, a sensible query, and is audited 
   );
   assert.match(rows[0].subject_id, /^\d+ characters$/);
 });
+
+test('a taken-back name finds the page it was taken from, labelled with the date', async () => {
+  const [{ id: profileId, user_id: userId }] = (
+    await database.pool.query(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state)
+       VALUES (gen_random_uuid(), NULL, 'page_srch01', 'page_srch01', 'Searched Page', 'live')
+       RETURNING id, user_id`,
+    )
+  ).rows;
+  void userId;
+  const [{ id: staffId }] = (
+    await database.pool.query(
+      `SELECT id FROM users WHERE phone_e164 = '+2348031300099'`,
+    )
+  ).rows;
+  const doneAt = '2026-11-12T09:00:00.000Z';
+  const [{ id: takeBackId }] = (
+    await database.pool.query(
+      `INSERT INTO handle_take_backs (id, profile_id, handle_lower, kind, category, notice_days, reason, state, requested_by, approved_at, done_at, outcome, new_handle)
+       VALUES (gen_random_uuid(), $1, 'srchtaken', 'current', 'trademark', 3, 'Private staff words', 'done', $2, now(), $3, 'assigned', 'page_srch01')
+       RETURNING id`,
+      [profileId, staffId, doneAt],
+    )
+  ).rows;
+  await database.pool.query(
+    `INSERT INTO handle_reservations (id, handle_lower, source, take_back_id, reason, reserved_at)
+     VALUES (gen_random_uuid(), 'srchtaken', 'take_back', $1, 'Taken back', now())`,
+    [takeBackId],
+  );
+  const body = await (await search('srchtaken')).text();
+  const found = JSON.parse(body).data;
+  assert.equal(found.pages.length, 1);
+  assert.equal(found.pages[0].profileId, profileId);
+  assert.equal(found.pages[0].handle, 'page_srch01');
+  assert.equal(found.pages[0].takenBackOn, doneAt);
+  assert.ok(!body.includes('Private staff words'));
+  // A name that was never taken back says nothing of the sort.
+  const plain = (await (await search('tobi')).json()).data;
+  assert.equal(plain.pages[0].takenBackOn, undefined);
+});

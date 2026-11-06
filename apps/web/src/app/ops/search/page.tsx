@@ -1,4 +1,5 @@
 'use client';
+import { lagosDateWords } from '@tipme/domain';
 import Link from 'next/link';
 import { useId, useState, type FormEvent } from 'react';
 import type { OpsSearchResult } from '@tipme/contracts';
@@ -108,6 +109,8 @@ export default function OpsSearchPage() {
                           : p.pageState === 'live'
                             ? 'Live'
                             : 'Not live'}
+                        {p.takenBackOn &&
+                          ` · username taken back on ${lagosDateWords(new Date(p.takenBackOn))}`}
                       </li>
                     ))}
                   </ul>
