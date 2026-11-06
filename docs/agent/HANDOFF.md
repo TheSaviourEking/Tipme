@@ -1,3 +1,10 @@
+# Current handoff: merge train 1 (6 November 2026)
+
+- `train/1` holds 11 reviewed PRs on top of dev `44fcd42c`. Merging it marks each of them merged.
+- Migrations after dev's `0078_handle_take_backs`: `0079_tip_start`, `0080_supporters`. Both additive.
+- Resolutions worth knowing: Withdraw keeps live updates' "Check what you can withdraw" state inside W1's instrument (amber lamp, `Check again` button); Settings > Tip amounts keeps the start amount inside the live form; the threat model's share-card row is P12.
+- Evidence and every conflict: `.superpowers/program/train1-report.md` (main checkout).
+
 # Current handoff: username reservation PR 2, take-backs (6 November 2026)
 
 - Branch `feat/username-takebacks`, test lane 4, merged with `origin/dev` at `b86c7b99`, committed, not pushed. Additive migration `0078_handle_take_backs`: a new table, a foreign key from `handle_reservations.take_back_id` added `NOT VALID` then validated, and `issues_kind` widened the same way. Regenerate it with drizzle-kit if another migration lands first.

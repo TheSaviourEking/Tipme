@@ -1,3 +1,9 @@
+# Current task: merge train 1 (6 November 2026)
+
+- Branch `train/1` from `origin/dev` at `44fcd42c`: #158, #137, #142, #141, #139, #151, #134, #138, #153, #155 and #156 merged in that order with `--no-ff`, so each PR's head commit is in it. One PR into `dev`.
+- Migrations regenerated with drizzle-kit at merge time: `0079_tip_start` (#134, was 0078) and `0080_supporters` (#138, was 0078); SQL identical to the branches'.
+- Next: CI on the train PR, then the owner merges it. Evidence: `.superpowers/program/train1-report.md` (main checkout).
+
 # Current task: username reservation PR 2, take-backs (6 November 2026)
 
 - Branch/worktree: `feat/username-takebacks` / `.worktrees/username-takebacks`, test lane 4, with `origin/dev` at `b86c7b99` (#128) merged, not pushed. One migration, `0078_handle_take_backs`.
