@@ -513,6 +513,10 @@ const naira = (minor: bigint) =>
 const REVERSAL_REFUSALS: Record<string, string> = {
   already_reversed_this:
     'Reversal refused: this refund or dispute was already reversed. Nothing was posted. A separate refund or dispute from the partner opens its own issue.',
+  not_paid_yet:
+    'Reversal refused: the partner has not reported this refund as paid. Nothing was posted. Wait for it to be paid.',
+  amount_differs:
+    'Reversal refused: the amount entered differs from what the partner reports this refund gave back. Nothing was posted. Check the partner’s dashboard.',
   flags_off:
     'Reversal refused: business shares are switched off, so TipMe books no reversal. Nothing was posted.',
   already_reversed:
@@ -596,9 +600,21 @@ const tipReverse = acting<TipReversePayload>({
     // Each partner refund or dispute is reversed once; a second request for it is refused.
     if (await alreadyReversed(tx, payload.partnerReversalId))
       throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed_this');
+    // A paid refund is reversed for exactly what the partner says it gave back, with its own fee;
+    // staff enter the amount from the partner's dashboard, and it must match.
+    const { refundState, refundedMinor, refundFeeMinor } = issue.subject;
+    if (
+      issue.subject.partnerReversalId !== payload.partnerReversalId ||
+      (payload.partnerReversalId.startsWith('refund.') &&
+        (refundState !== 'paid' || !refundedMinor))
+    )
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'not_paid_yet');
+    if (refundedMinor && refundedMinor !== payload.refundedMinor)
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'amount_differs');
     const result = await reverseTip(tx, {
       tipId: payload.tipId,
       partnerReversalId: payload.partnerReversalId,
+      refundFeeMinor: BigInt(refundFeeMinor ?? '0'),
       refundedMinor: BigInt(payload.refundedMinor),
       now: context.now,
     });

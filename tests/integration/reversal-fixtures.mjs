@@ -22,8 +22,11 @@ export async function reportedReversal(
     handle = 'tobi',
     bps,
     keepHold = true,
-    // The partner's webhook events about this one refund (R2-A review: several, one refund).
-    events = ['refund.created'],
+    // The partner's webhook events about this one refund (its refund guide): accepted, then paid.
+    events = ['refund.created', 'refund.paid'],
+    // What the paid refund gave back, and its own fee.
+    refundedMinor = GROSS,
+    refundFeeMinor = 0n,
   } = {},
 ) {
   const q = (text, values = []) =>
@@ -91,6 +94,11 @@ export async function reportedReversal(
     payload: {},
   });
   const partnerReversalId = `refund.re_${randomUUID().replaceAll('-', '')}`;
+  const STATES = {
+    'refund.created': 'pending',
+    'refund.paid': 'paid',
+    'refund.failed': 'failed',
+  };
   for (const eventType of events)
     await ops.flagPaymentReversal(database.db, {
       attemptId: intent.attemptId,
@@ -98,6 +106,9 @@ export async function reportedReversal(
       eventType,
       partnerReversalId,
       disputeWon: false,
+      refundState: STATES[eventType] ?? null,
+      refundedMinor: eventType === 'refund.paid' ? refundedMinor : null,
+      refundFeeMinor: eventType === 'refund.paid' ? refundFeeMinor : null,
     });
   const [{ id: issueId }] = await q(
     `SELECT id FROM issues WHERE kind = 'payment_reversed' AND dedupe_key = $1`,

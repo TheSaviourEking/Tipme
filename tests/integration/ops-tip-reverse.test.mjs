@@ -129,8 +129,10 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
 });
 
 test('two webhook events for one ₦500 refund reverse exactly ₦500', async () => {
+  // Accepted, then paid: two events about one ₦500 refund.
   const target = await reportedReversal(database, {
-    events: ['refund.created', 'refund.processed'],
+    events: ['refund.created', 'refund.paid'],
+    refundedMinor: 50000n,
   });
   const issues = await q(
     `SELECT id FROM issues WHERE kind = 'payment_reversed' AND subject->>'tipId' = $1`,
@@ -152,15 +154,18 @@ test('two webhook events for one ₦500 refund reverse exactly ₦500', async ()
 });
 
 test('the approver sees earlier reversals, and an approval after the flags go off posts nothing', async () => {
-  const target = await reportedReversal(database);
+  const target = await reportedReversal(database, { refundedMinor: 100000n });
   // An earlier refund of this tip, already reversed (another partner refund).
   const earlierId = `refund.re_${randomUUID().replaceAll('-', '')}`;
   await ops.flagPaymentReversal(database.db, {
     attemptId: target.attemptId,
     eventId: `evt_${randomUUID()}`,
-    eventType: 'refund.processed',
+    eventType: 'refund.paid',
     partnerReversalId: earlierId,
     disputeWon: false,
+    refundState: 'paid',
+    refundedMinor: 50000n,
+    refundFeeMinor: 0n,
   });
   const [{ id: earlierIssue }] = await q(
     `SELECT id FROM issues WHERE subject->>'partnerReversalId' = $1`,
@@ -220,7 +225,7 @@ test('the approver sees earlier reversals, and an approval after the flags go of
 });
 
 test('a later chargeback for more than is left is refused, and the issue says why', async () => {
-  const first = await reportedReversal(database);
+  const first = await reportedReversal(database, { refundedMinor: GROSS / 2n });
   const half = await reverse(first.issueId, {
     ...full,
     refundedMinor: (GROSS / 2n).toString(),
@@ -311,4 +316,47 @@ test('only from an open payment_reversed issue, and off without the flags', asyn
   const flagsOff = await reverse(target.issueId, full, off.api);
   assert.equal(flagsOff.status, 404);
   assert.equal(await target.reversals(), 0);
+});
+
+test("only a paid refund is reversed, for exactly what the partner gave back, and its fee is TipMe's", async () => {
+  // Accepted but not paid yet: nothing to reverse.
+  const pending = await reportedReversal(database, {
+    events: ['refund.created'],
+  });
+  assert.equal((await reverse(pending.issueId, full)).status, 404);
+  // Paid: staff must enter what the partner reports it gave back.
+  const paid = await reportedReversal(database, {
+    refundedMinor: 120000n,
+    refundFeeMinor: 1500n,
+  });
+  const wrong = await reverse(paid.issueId, {
+    ...full,
+    refundedMinor: '100000',
+  });
+  assert.equal(wrong.status, 409, await wrong.clone().text());
+  const notes = await q(`SELECT text FROM issue_notes WHERE issue_id = $1`, [
+    paid.issueId,
+  ]);
+  assert.match(
+    notes.at(-1).text,
+    /^Reversal refused: the amount entered differs/,
+  );
+  assert.equal(await paid.reversals(), 0);
+  const right = await reverse(paid.issueId, {
+    ...full,
+    refundedMinor: '120000',
+  });
+  assert.equal(right.status, 200, await right.clone().text());
+  const [{ clearing, fee }] = await q(
+    `SELECT sum(e.amount_minor) FILTER (WHERE a.code = 'provider_clearing')::text AS clearing,
+            sum(e.amount_minor) FILTER (WHERE a.code = 'provider_fee_expense')::text AS fee
+       FROM ledger_entries e
+       JOIN ledger_accounts a ON a.id = e.account_id
+       JOIN ledger_transactions x ON x.id = e.transaction_id
+      WHERE x.tip_id = $1 AND x.operation_type = 'reversal'`,
+    [paid.tipId],
+  );
+  // The whole refund and its ₦15 fee leave the partner balance; the fee is TipMe's expense.
+  assert.equal(clearing, '121500');
+  assert.equal(fee, '1500');
 });

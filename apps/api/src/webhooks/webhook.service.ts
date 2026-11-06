@@ -262,9 +262,9 @@ export class WebhookService {
   }
 
   /**
-   * Refunds and disputes are not modelled yet (ADR-0004): each one raises a money issue for
-   * staff, once per Bachs event, and pauses that recipient's withdrawals. It never changes a
-   * balance or the ledger.
+   * Refunds and disputes raise a money issue for staff, once per partner refund or dispute, and
+   * pause that recipient's withdrawals. They never change a balance or the ledger here: staff
+   * reverse a paid refund from the issue (`tip.reverse`, business release 2).
    */
   private async flagBachsReversal(
     event: Extract<NormalizedProviderEvent, { kind: 'reversal' }>,
@@ -278,6 +278,9 @@ export class WebhookService {
       eventType: event.eventType,
       partnerReversalId: event.partnerReversalId,
       disputeWon: event.disputeWon,
+      refundState: event.refundState,
+      refundedMinor: event.refundedMinor,
+      refundFeeMinor: event.refundFeeMinor,
     });
     return flagged === 'dispute_won' ? 'dispute_won' : 'reversal_flagged';
   }

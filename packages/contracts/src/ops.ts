@@ -295,6 +295,15 @@ export interface OpsIssueSubject {
    * (`refund.<id>` / `dispute.<id>`). Only an issue with one can be reversed from TipMe.
    */
   partnerReversalId?: string;
+  /**
+   * A refund's state from the partner (its refund guide): `pending` once accepted, then `paid` or
+   * `failed`, both final. Only a paid refund can be reversed, for exactly `refundedMinor`.
+   */
+  refundState?: 'pending' | 'paid' | 'failed';
+  /** What a paid refund gave back, in minor units (decimal string). */
+  refundedMinor?: string;
+  /** A fee the paid refund itself carried, in minor units (decimal string): TipMe's expense. */
+  refundFeeMinor?: string;
 }
 
 export interface OpsIssue {

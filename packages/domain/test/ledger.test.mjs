@@ -225,21 +225,58 @@ const SHARED = buildPaymentPosting({
   businessShare: { businessId: 'b1', amountMinor: 17700n },
 });
 
-test('a full reversal mirrors every line exactly, sides swapped', () => {
-  const reversal = buildReversalPosting(SHARED);
+// The partner's refund guide: "Fees already charged are not returned." So a refund takes back what
+// the payment owed (the person's and business's parts, TipMe's fee and the fee it recovered), the
+// partner balance drops by the whole refund (plus any refund fee), and the provider fee stays TipMe's.
+const lineOf = (lines, account) => lines.filter((l) => l.account === account);
+const sum = (lines) => lines.reduce((total, l) => total + l.amountMinor, 0n);
+
+test('a full refund takes back every line the payment owed, and the partner keeps its fee', () => {
+  const reversal = buildReversalPosting(SHARED, { refundedMinor: 200000n });
   assert.ok(isBalanced(reversal));
+  // Every credit of the payment, mirrored exactly.
   assert.deepEqual(
-    reversal,
-    SHARED.map((l) => ({
+    reversal.filter((l) => l.side === 'debit'),
+    SHARED.filter((l) => l.side === 'credit').map((l) => ({
       ...l,
-      side: l.side === 'debit' ? 'credit' : 'debit',
+      side: 'debit',
     })),
   );
-  const net = effect([...SHARED, ...reversal]);
-  for (const value of net.values()) assert.equal(value, 0n);
+  // The partner balance drops by the whole refund; the provider fee is not taken back.
+  assert.deepEqual(lineOf(reversal, 'provider_clearing'), [
+    { account: 'provider_clearing', side: 'credit', amountMinor: 200000n },
+  ]);
+  assert.deepEqual(lineOf(reversal, 'provider_fee_expense'), []);
+  const after = effect([...SHARED, ...reversal]);
+  assert.equal(after.get('recipient_payable|p1|'), 0n);
+  assert.equal(after.get('business_payable||b1'), 0n);
+  assert.equal(after.get('platform_fee_revenue||'), 0n);
+  assert.equal(after.get('provider_fee_recovered||'), 0n);
+  // TipMe absorbs the partner's fee: its expense stays, paid from its own partner balance.
+  assert.equal(after.get('provider_fee_expense||'), 3100n);
+  assert.equal(after.get('provider_clearing||'), -3100n);
 });
 
-test('a partial reversal balances, takes the refund exactly, and never exceeds any line', () => {
+test("a refund's own fee is TipMe's expense, out of the partner balance", () => {
+  const reversal = buildReversalPosting(SHARED, {
+    refundedMinor: 200000n,
+    refundFeeMinor: 500n,
+  });
+  assert.ok(isBalanced(reversal));
+  assert.deepEqual(lineOf(reversal, 'provider_fee_expense'), [
+    { account: 'provider_fee_expense', side: 'debit', amountMinor: 500n },
+  ]);
+  assert.equal(sum(lineOf(reversal, 'provider_clearing')), 200500n);
+  // Nobody else's line changes because of it.
+  assert.deepEqual(
+    reversal.filter((l) => l.account.endsWith('_payable')),
+    buildReversalPosting(SHARED, { refundedMinor: 200000n }).filter((l) =>
+      l.account.endsWith('_payable'),
+    ),
+  );
+});
+
+test('a partial refund balances, takes back exactly the refund, and never exceeds any line', () => {
   for (let i = 0; i < 500; i++) {
     const tip = 200_000n + next(10_000_000n - 200_000n + 1n);
     const quote = priceTip(tip);
@@ -255,16 +292,18 @@ test('a partial reversal balances, takes the refund exactly, and never exceeds a
       businessShare: { businessId: 'b1', amountMinor: businessMinor },
     });
     const refunded = 1n + next(tip - 1n);
+    const fee = next(2n) === 0n ? 0n : next(1000n);
     const reversal = buildReversalPosting(original, {
-      num: refunded,
-      den: tip,
+      refundedMinor: refunded,
+      refundFeeMinor: fee,
     });
     assert.ok(isBalanced(reversal), `unbalanced for ${refunded}/${tip}`);
-    const debits = reversal
-      .filter((l) => l.side === 'debit')
-      .reduce((sum, l) => sum + l.amountMinor, 0n);
-    assert.equal(debits, refunded);
-    for (const l of reversal) {
+    const owed = reversal.filter(
+      (l) => l.side === 'debit' && l.account !== 'provider_fee_expense',
+    );
+    assert.equal(sum(owed), refunded);
+    assert.equal(sum(lineOf(reversal, 'provider_clearing')), refunded + fee);
+    for (const l of owed) {
       assert.ok(l.amountMinor > 0n);
       const from = original.find(
         (o) =>
@@ -273,17 +312,21 @@ test('a partial reversal balances, takes the refund exactly, and never exceeds a
           o.businessId === l.businessId,
       );
       assert.ok(from, `no original line for ${l.account}`);
-      assert.notEqual(from.side, l.side);
+      assert.equal(from.side, 'credit');
       assert.ok(
         l.amountMinor <= from.amountMinor,
         `${l.account} exceeds its line`,
       );
     }
+    // The provider fee is never taken back.
+    assert.ok(
+      lineOf(reversal, 'provider_fee_expense').every((l) => l.side === 'debit'),
+    );
   }
 });
 
-test("a partial reversal puts the remainder kobo on the person's line", () => {
-  // Half of 1,000 kobo across lines that each round down: 3 + 3 + 3 = 9 of 10 per side.
+test("a partial refund puts the remainder kobo on the person's line", () => {
+  // Half of 1,000 kobo across lines that each round down: 166 + 167 + 166 = 499 of 500.
   const original = [
     { account: 'provider_clearing', side: 'debit', amountMinor: 1000n },
     { account: 'platform_fee_revenue', side: 'credit', amountMinor: 333n },
@@ -300,9 +343,8 @@ test("a partial reversal puts the remainder kobo on the person's line", () => {
       businessId: 'b1',
     },
   ];
-  const reversal = buildReversalPosting(original, { num: 1n, den: 2n });
+  const reversal = buildReversalPosting(original, { refundedMinor: 500n });
   assert.deepEqual(reversal, [
-    { account: 'provider_clearing', side: 'credit', amountMinor: 500n },
     { account: 'platform_fee_revenue', side: 'debit', amountMinor: 166n },
     {
       account: 'recipient_payable',
@@ -316,26 +358,26 @@ test("a partial reversal puts the remainder kobo on the person's line", () => {
       amountMinor: 166n,
       businessId: 'b1',
     },
+    { account: 'provider_clearing', side: 'credit', amountMinor: 500n },
   ]);
 });
 
-test('a reversal of nothing, more than the payment, or of an unbalanced posting is refused', () => {
+test('a refund of nothing, more than the payment owed, a negative fee, or of an unbalanced posting is refused', () => {
   assert.throws(
-    () => buildReversalPosting(SHARED, { num: 0n, den: 10n }),
+    () => buildReversalPosting(SHARED, { refundedMinor: 0n }),
     RangeError,
   );
   assert.throws(
-    () => buildReversalPosting(SHARED, { num: 11n, den: 10n }),
+    () => buildReversalPosting(SHARED, { refundedMinor: 200001n }),
     RangeError,
   );
   assert.throws(
-    () => buildReversalPosting(SHARED, { num: 1n, den: 0n }),
+    () =>
+      buildReversalPosting(SHARED, { refundedMinor: 1n, refundFeeMinor: -1n }),
     RangeError,
   );
-  assert.throws(() => buildReversalPosting(SHARED.slice(1)), RangeError);
-  // So small a refund that it rounds to nothing.
   assert.throws(
-    () => buildReversalPosting(SHARED, { num: 1n, den: 10n ** 12n }),
+    () => buildReversalPosting(SHARED.slice(1), { refundedMinor: 1n }),
     RangeError,
   );
 });
