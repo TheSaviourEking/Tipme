@@ -65,7 +65,9 @@ const refusal = (answer: { status: number; code: string; message?: string }) =>
     ? 'Nothing changed. It may have changed since you opened it: reload and check its status.'
     : answer.code === 'BUSINESS_NOT_VERIFIED'
       ? 'Nothing changed. This business isn’t verified yet, so it has no pages to pause.'
-      : refusalWords(answer);
+      : answer.code === 'APPROVAL_SUBJECT'
+        ? 'Nothing changed. You, or an account sharing your email, manage this business, so you can’t verify it. Another staff member must.'
+        : refusalWords(answer);
 
 /**
  * One business for staff (PR B2): masked facts, a reveal with a reason, its locations and managers,

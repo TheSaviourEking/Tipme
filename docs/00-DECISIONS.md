@@ -210,6 +210,7 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 >   - Q1, a staff member's own page must be live to be listed (today's rules).
 >   - Q2, invitations go by email, by a one-time link the manager sends themselves (7 days, once), **or to a TipMe username** found by search in the manager's screen (an in-app notification, plus an email when the person has a confirmed email). Search shows only a username's public card and refuses suspended or deleted pages. The invited person can block further invitations from that business.
 >   - Q3, anyone signed in can create a business; TipMe staff verify it before its codes go live.
+>   - 6 Nov 2026 (owner): someone who owns or manages a business can never verify it, even as the only admin. Asking is refused; another staff member must.
 >   - Q4, a note shows to the business at once; text with links, emails or phone numbers is refused; a reported note is hidden until TipMe staff review it.
 >   - Q5, no naira in the business view except the weekly amounts of people who chose to share theirs.
 >   - Q9, a share (release 2) is of what the person receives after TipMe's fee.

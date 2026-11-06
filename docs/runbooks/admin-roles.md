@@ -92,7 +92,7 @@ Releasing a freeze is also one person: see below.
 4. On approval the server re-checks the facts and both people, then runs it. If something changed it stops, and Approvals says why.
 5. Requests expire after 24 hours. The person who asked can cancel their own.
 
-**Who qualifies:** active staff, set up with an authenticator, holding the same permission, and not the person who asked by id or mailbox. Someone the action concerns can't decide it.
+**Who qualifies:** active staff, set up with an authenticator, holding the same permission, and not the person who asked by id or mailbox. Someone the action concerns can't decide it, and can't ask for it either, even when nobody else qualifies: asking is refused and nothing is recorded. So someone who manages a business never verifies it (owner's ruling, 6 Nov 2026). The one exception is releasing a freeze on your own page, below.
 
 Some actions ask more of the approver:
 
