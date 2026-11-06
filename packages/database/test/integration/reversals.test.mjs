@@ -5,7 +5,9 @@ import { test } from 'node:test';
 import {
   balanceOf,
   businessBalanceIn,
+  createPayout,
   flagPaymentReversal,
+  tipReversalTarget,
   createPaymentIntent,
   createQuote,
   DEMO_PROFILES,
@@ -112,11 +114,11 @@ test('reversals and the business share', async (t) => {
     });
     return intent.tipId;
   };
-  const reverse = (tipId, refundedMinor = GROSS, providerEventId) =>
+  const reverse = (tipId, refundedMinor = GROSS, partnerReversalId) =>
     db.transaction((tx) =>
       reverseTip(tx, {
         tipId,
-        providerEventId: providerEventId ?? `evt_refund_${randomUUID()}`,
+        partnerReversalId: partnerReversalId ?? `refund.re_${randomUUID()}`,
         refundedMinor,
       }),
     );
@@ -297,6 +299,141 @@ test('reversals and the business share', async (t) => {
       // Nothing in the ledger changes until staff confirm the reversal (Q7).
       assert.equal(await person(), 324000n);
       assert.equal(await business(shared.businessId), 36000n);
+    },
+  );
+
+  /** The partner's webhook about a refund or dispute of this tip, as the webhook service passes it. */
+  const partnerSays = async (tipId, input) => {
+    const [{ attempt_id: attemptId }] = await q(
+      `SELECT a.id AS attempt_id FROM payment_attempts a JOIN tips t ON t.intent_id = a.intent_id
+        WHERE t.id = $1`,
+      [tipId],
+    );
+    return flagPaymentReversal(db, { attemptId, ...input });
+  };
+  const reversedIssues = () =>
+    q(
+      `SELECT id, subject, status FROM issues WHERE kind = 'payment_reversed' ORDER BY opened_at`,
+    );
+
+  await t.test(
+    'two webhook events for one ₦500 refund open one issue and reverse exactly ₦500',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness(1000);
+      const tipId = await paidTip(shared);
+      for (const eventType of ['refund.created', 'refund.processed'])
+        await partnerSays(tipId, {
+          eventId: `evt_${randomUUID()}`,
+          eventType,
+          partnerReversalId: 'refund.re_500',
+          disputeWon: false,
+        });
+      const issues = await reversedIssues();
+      assert.equal(issues.length, 1);
+      const target = await tipReversalTarget(db, issues[0].id);
+      assert.deepEqual(target, { tipId, partnerReversalId: 'refund.re_500' });
+      // Staff confirm it twice (two people, or the same person twice): one reversal of ₦500.
+      const once = await reverse(tipId, 50000n, target.partnerReversalId);
+      const twice = await reverse(tipId, 50000n, target.partnerReversalId);
+      assert.equal(once.created, true);
+      assert.equal(twice.created, false);
+      const [{ reversed }] = await q(
+        `SELECT sum(e.amount_minor)::text AS reversed FROM ledger_entries e
+           JOIN ledger_transactions x ON x.id = e.transaction_id
+          WHERE x.tip_id = $1 AND x.operation_type = 'reversal' AND e.side = 'debit'`,
+        [tipId],
+      );
+      assert.equal(reversed, '50000');
+      // A dispute on the same tip is another partner object: its own issue.
+      await partnerSays(tipId, {
+        eventId: `evt_${randomUUID()}`,
+        eventType: 'dispute.created',
+        partnerReversalId: 'dispute.dp_1',
+        disputeWon: false,
+      });
+      assert.equal((await reversedIssues()).length, 2);
+    },
+  );
+
+  await t.test(
+    'a won dispute opens no reversible issue and holds nothing',
+    async () => {
+      await database.fresh();
+      const tipId = await paidTip();
+      assert.equal(
+        await partnerSays(tipId, {
+          eventId: `evt_${randomUUID()}`,
+          eventType: 'dispute.won',
+          partnerReversalId: 'dispute.dp_9',
+          disputeWon: true,
+        }),
+        'dispute_won',
+      );
+      assert.deepEqual(await reversedIssues(), []);
+      assert.deepEqual(
+        await q(`SELECT 1 FROM withdrawal_holds WHERE released_at IS NULL`),
+        [],
+      );
+    },
+  );
+
+  await t.test(
+    "an event naming no refund or dispute still alerts and holds, but can't be reversed here",
+    async () => {
+      await database.fresh();
+      const tipId = await paidTip();
+      assert.equal(
+        await partnerSays(tipId, {
+          eventId: 'evt_no_object',
+          eventType: 'refund.created',
+          partnerReversalId: null,
+          disputeWon: false,
+        }),
+        'flagged',
+      );
+      const [issue] = await reversedIssues();
+      assert.equal(issue.status, 'open');
+      assert.equal(await tipReversalTarget(db, issue.id), null);
+      assert.equal(
+        (await q(`SELECT 1 FROM withdrawal_holds WHERE released_at IS NULL`))
+          .length,
+        1,
+      );
+    },
+  );
+
+  await t.test(
+    'the old tip-list payout refuses a tip a reversal took back while it waited',
+    async () => {
+      await database.fresh();
+      const tipId = await paidTip();
+      let release;
+      const gate = new Promise((done) => (release = done));
+      let locked;
+      const holding = new Promise((done) => (locked = done));
+      // The reversal holds the tip's lock, uncommitted, while the payout asks for it.
+      const reversal = db.transaction(async (tx) => {
+        const result = await reverseTip(tx, {
+          tipId,
+          partnerReversalId: 'refund.re_race',
+          refundedMinor: GROSS,
+        });
+        locked();
+        await gate;
+        return result;
+      });
+      await holding;
+      const payout = createPayout(db, {
+        profileId: TOBI.id,
+        tipIds: [tipId],
+        idempotencyKey: randomUUID(),
+      });
+      await new Promise((done) => setTimeout(done, 300));
+      release();
+      await reversal;
+      assert.equal(await codeOf(payout), 'TIP_NOT_PAYABLE');
+      assert.equal(await person(), 0n);
     },
   );
 

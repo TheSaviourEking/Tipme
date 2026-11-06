@@ -272,12 +272,14 @@ export class WebhookService {
   ): Promise<string> {
     const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId) return this.unmatchedBachs(event);
-    await flagPaymentReversal(this.database.db, {
+    const flagged = await flagPaymentReversal(this.database.db, {
       attemptId,
       eventId: event.eventId,
       eventType: event.eventType,
+      partnerReversalId: event.partnerReversalId,
+      disputeWon: event.disputeWon,
     });
-    return 'reversal_flagged';
+    return flagged === 'dispute_won' ? 'dispute_won' : 'reversal_flagged';
   }
 
   /**

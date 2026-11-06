@@ -18,6 +18,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   issues,
+  ledgerTransactions,
   paymentAccounts,
   paymentAttempts,
   paymentIntents,
@@ -117,6 +118,19 @@ export async function createPayout(
       // The same request may have committed while this one waited for the tips' locks.
       const afterLock = await replay();
       if (afterLock) return afterLock;
+      // A reversal holds the tip's lock until it commits, and the locked read above saw the
+      // reversals as they were when it began: read them again now (R2-A review finding 4).
+      const reversedNow = await tx
+        .select({ tipId: ledgerTransactions.tipId })
+        .from(ledgerTransactions)
+        .where(
+          and(
+            inArray(ledgerTransactions.tipId, ids),
+            eq(ledgerTransactions.operationType, 'reversal'),
+          ),
+        )
+        .limit(1);
+      if (reversedNow.length > 0) throw new OperationError('TIP_NOT_PAYABLE');
       const claimed = await tx
         .select({ tipId: payoutItems.tipId })
         .from(payoutItems)
@@ -406,16 +420,36 @@ export async function withdrawalsFrozen(
 }
 
 /**
- * The provider reports a refund or dispute on a paid tip: one issue per event for staff, and that
- * recipient's withdrawals wait. No balance or ledger entry changes (ADR-0004). The issue is opened
- * here, under the key the alert would give it, so the hold has one to name.
+ * The provider reports a refund or dispute on a paid tip: one issue per partner refund or dispute
+ * for staff, and that recipient's withdrawals wait. No balance or ledger entry changes here
+ * (ADR-0004); staff reverse it from the issue (`tip.reverse`, business release 2). Several events
+ * about one refund or dispute (created, processed, lost) join the same issue, so it can be reversed
+ * only once (R2-A review). An event naming none still alerts, keyed by the event, but can't be
+ * reversed from TipMe. A dispute won takes nothing back: no issue, no hold.
  */
 export function flagPaymentReversal(
   db: Database,
-  input: { attemptId: string; eventId: string; eventType: string; now?: Date },
-): Promise<void> {
+  input: {
+    attemptId: string;
+    eventId: string;
+    eventType: string;
+    partnerReversalId?: string | null;
+    disputeWon?: boolean;
+    now?: Date;
+  },
+): Promise<'flagged' | 'dispute_won'> {
+  if (input.disputeWon) return Promise.resolve('dispute_won');
   // Dedupe keys allow word characters, dots and dashes only.
-  const suffix = input.eventId.replace(/[^\w.-]/g, '_');
+  const suffix = (input.partnerReversalId ?? input.eventId).replace(
+    /[^\w.-]/g,
+    '_',
+  );
+  // Only a well-formed partner id makes the issue reversible.
+  const partnerReversalId =
+    input.partnerReversalId &&
+    /^(refund|dispute)\.[A-Za-z0-9_-]{1,100}$/.test(input.partnerReversalId)
+      ? input.partnerReversalId
+      : null;
   return guarded(() =>
     db.transaction(async (tx) => {
       await enqueueOutbox(tx, {
@@ -442,6 +476,7 @@ export function flagPaymentReversal(
         subject: {
           attemptId: input.attemptId,
           ...(tip?.businessId ? { businessId: tip.businessId } : {}),
+          ...(partnerReversalId ? { partnerReversalId } : {}),
         },
         now: input.now ?? new Date(),
       });
@@ -463,6 +498,7 @@ export function flagPaymentReversal(
           reason: 'reversal',
           issueId: issue.id,
         });
+      return 'flagged' as const;
     }),
   );
 }

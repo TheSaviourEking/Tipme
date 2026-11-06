@@ -5,6 +5,7 @@ import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
+import { totpAt } from '../../packages/domain/dist/index.js';
 import { WEB, browserHeaders, opsSignIn, startStack } from './helpers.mjs';
 import { GROSS, NET, reportedReversal } from './reversal-fixtures.mjs';
 
@@ -113,11 +114,109 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
     ).length > 0,
     true,
   );
-  // The same event again posts nothing more.
+  // The same refund again is refused, posts nothing, and the issue says why.
   const again = await reverse(before.issueId, full);
-  assert.equal(again.status, 200, await again.clone().text());
-  assert.equal((await again.json()).data.posted, false);
+  assert.equal(again.status, 409, await again.clone().text());
+  assert.equal((await again.json()).error.code, 'TIP_NOT_REVERSIBLE');
   assert.equal(await before.reversals(), 1);
+  const notes = await q(`SELECT text FROM issue_notes WHERE issue_id = $1`, [
+    before.issueId,
+  ]);
+  assert.match(
+    notes.at(-1).text,
+    /^Reversal refused: this refund or dispute was already reversed/,
+  );
+});
+
+test('two webhook events for one ₦500 refund reverse exactly ₦500', async () => {
+  const target = await reportedReversal(database, {
+    events: ['refund.created', 'refund.processed'],
+  });
+  const issues = await q(
+    `SELECT id FROM issues WHERE kind = 'payment_reversed' AND subject->>'tipId' = $1`,
+    [target.tipId],
+  );
+  assert.deepEqual(issues, [{ id: target.issueId }]);
+  const fiveHundred = { ...full, refundedMinor: '50000' };
+  const first = await reverse(target.issueId, fiveHundred);
+  assert.equal(first.status, 200, await first.clone().text());
+  const second = await reverse(target.issueId, fiveHundred);
+  assert.equal(second.status, 409, await second.clone().text());
+  const [{ reversed }] = await q(
+    `SELECT sum(e.amount_minor)::text AS reversed FROM ledger_entries e
+       JOIN ledger_transactions x ON x.id = e.transaction_id
+      WHERE x.tip_id = $1 AND x.operation_type = 'reversal' AND e.side = 'debit'`,
+    [target.tipId],
+  );
+  assert.equal(reversed, '50000');
+});
+
+test('the approver sees earlier reversals, and an approval after the flags go off posts nothing', async () => {
+  const target = await reportedReversal(database);
+  // An earlier refund of this tip, already reversed (another partner refund).
+  const earlierId = `refund.re_${randomUUID().replaceAll('-', '')}`;
+  await ops.flagPaymentReversal(database.db, {
+    attemptId: target.attemptId,
+    eventId: `evt_${randomUUID()}`,
+    eventType: 'refund.processed',
+    partnerReversalId: earlierId,
+    disputeWon: false,
+  });
+  const [{ id: earlierIssue }] = await q(
+    `SELECT id FROM issues WHERE subject->>'partnerReversalId' = $1`,
+    [earlierId],
+  );
+  const earlier = await reverse(earlierIssue, {
+    ...full,
+    refundedMinor: '50000',
+  });
+  assert.equal(earlier.status, 200, await earlier.clone().text());
+
+  const second = await opsSignIn(stack.api, database.db, '+2348037770102');
+  const [{ id: secondId }] = await q(
+    `SELECT id FROM users WHERE phone_e164 = '+2348037770102'`,
+  );
+  try {
+    const asked = await reverse(target.issueId, {
+      ...full,
+      refundedMinor: '100000',
+    });
+    assert.equal(asked.status, 202, await asked.clone().text());
+    const { requestId } = (await asked.json()).data;
+    const [{ summary }] = await q(
+      `SELECT summary FROM approval_requests WHERE id = $1`,
+      [requestId],
+    );
+    assert.match(
+      summary,
+      /Already taken back from this tip: NGN 500\.00 in 1 reversal/,
+    );
+    // The flags go off before the second person approves: nothing posts.
+    await q(`UPDATE staff_totp SET last_step = NULL WHERE user_id = $1`, [
+      secondId,
+    ]);
+    const approved = await fetch(
+      `${off.api}/v1/ops/approvals/${requestId}/approve`,
+      {
+        method: 'POST',
+        headers: browserHeaders(second.cookie),
+        body: JSON.stringify({
+          code: totpAt(second.secret, BigInt(Math.floor(Date.now() / 30_000))),
+        }),
+      },
+    );
+    assert.notEqual(approved.status, 500, await approved.clone().text());
+    assert.equal(await target.reversals(), 1);
+    const [{ status }] = await q(
+      `SELECT status FROM approval_requests WHERE id = $1`,
+      [requestId],
+    );
+    assert.notEqual(status, 'approved');
+  } finally {
+    await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
+      secondId,
+    ]);
+  }
 });
 
 test('a later chargeback for more than is left is refused, and the issue says why', async () => {
@@ -133,15 +232,17 @@ test('a later chargeback for more than is left is refused, and the issue says wh
       WHERE t.id = $1`,
     [first.tipId],
   );
-  const eventId = `evt_chargeback_${randomUUID()}`;
+  const disputeId = `dispute.dp_${randomUUID().replaceAll('-', '')}`;
   await ops.flagPaymentReversal(database.db, {
     attemptId,
-    eventId,
+    eventId: `evt_chargeback_${randomUUID()}`,
     eventType: 'dispute.created',
+    partnerReversalId: disputeId,
+    disputeWon: false,
   });
   const [{ id: chargeback }] = await q(
     `SELECT id FROM issues WHERE dedupe_key = $1`,
-    [`event.payment.reversed.${attemptId}.${eventId}`],
+    [`event.payment.reversed.${attemptId}.${disputeId}`],
   );
   const refused = await reverse(chargeback, full);
   assert.equal(refused.status, 409, await refused.clone().text());

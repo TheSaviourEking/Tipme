@@ -215,7 +215,7 @@ export class OpsActionsController {
         payload: {
           issueId,
           tipId: target.tipId,
-          providerEventId: target.providerEventId,
+          partnerReversalId: target.partnerReversalId,
           refundedMinor: body.refundedMinor,
         },
         actorId: ops.userId,

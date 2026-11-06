@@ -43,6 +43,14 @@ export type NormalizedProviderEvent =
       accountReference: string;
       providerReference: string | null;
       operationReference: string | null;
+      /**
+       * The partner's refund or dispute this event is about, as `refund.<id>` or `dispute.<id>`.
+       * Several events for one refund or dispute (created, processed, lost) share it, so they key
+       * one reversal (R2-A). Null when the payload names none: staff can't reverse it from TipMe.
+       */
+      partnerReversalId: string | null;
+      /** A dispute decided in the merchant's favour: nothing is taken back, nothing to reverse. */
+      disputeWon: boolean;
     }
   | {
       /** A payout reached a final state. A trigger only: it still goes through recordPayoutOutcome. */

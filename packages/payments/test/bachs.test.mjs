@@ -1103,6 +1103,9 @@ test('refund and dispute events become reversals, carrying ids only', () => {
           accountReference: 'acct_123abc',
           providerReference: 'acct_123abc:chk_123abc',
           operationReference: 'attempt-123',
+          // No refund or dispute id in this payload: the reversal can't be keyed (R2-A).
+          partnerReversalId: null,
+          disputeWon: false,
         },
       },
       type,
@@ -1477,4 +1480,73 @@ test('a payment settled in its own currency does not report a settlement currenc
   });
   assert.equal(answer.status, 'succeeded');
   assert.equal(answer.settlementCurrency, undefined);
+});
+
+// Business release 2, R2-A review finding 1: several events for one refund or dispute name the same
+// partner object, so they key one reversal; a won dispute takes nothing back.
+test('a reversal carries the partner refund or dispute id it is about, and whether a dispute was won', () => {
+  const provider = makeProvider(async () => {
+    throw new Error('no network');
+  });
+  const verify = (type, data) => {
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        id: `evt_${type}_${Math.random()}`,
+        type,
+        account: 'acct_123abc',
+        data: { checkout_id: 'chk_123abc', reference: 'attempt-123', ...data },
+      }),
+    );
+    const timestamp = String(Math.floor(NOW.getTime() / 1000));
+    const result = provider.verifyWebhook(
+      rawBody,
+      {
+        'x-bachs-signature-v2': `t=${timestamp},v1=${sign(CURRENT_SECRET, timestamp, rawBody)}`,
+      },
+      NOW,
+    );
+    assert.equal(result.ok, true, type);
+    return {
+      id: result.event.partnerReversalId,
+      won: result.event.disputeWon,
+    };
+  };
+  // refund.created then refund.processed for the same refund: one key.
+  assert.deepEqual(verify('refund.created', { id: 're_500' }), {
+    id: 'refund.re_500',
+    won: false,
+  });
+  assert.deepEqual(verify('refund.processed', { id: 're_500' }), {
+    id: 'refund.re_500',
+    won: false,
+  });
+  assert.deepEqual(verify('charge.refunded', { refund_id: 're_9' }), {
+    id: 'refund.re_9',
+    won: false,
+  });
+  assert.deepEqual(verify('dispute.created', { id: 'dp_1' }), {
+    id: 'dispute.dp_1',
+    won: false,
+  });
+  assert.deepEqual(verify('dispute.lost', { dispute_id: 'dp_1' }), {
+    id: 'dispute.dp_1',
+    won: false,
+  });
+  assert.deepEqual(verify('chargeback.created', { chargeback_id: 'cb_7' }), {
+    id: 'dispute.cb_7',
+    won: false,
+  });
+  assert.deepEqual(verify('dispute.won', { id: 'dp_1' }), {
+    id: 'dispute.dp_1',
+    won: true,
+  });
+  assert.deepEqual(verify('dispute.closed', { id: 'dp_1', status: 'won' }), {
+    id: 'dispute.dp_1',
+    won: true,
+  });
+  // An id that isn't a plain partner id is not trusted as a key.
+  assert.deepEqual(verify('refund.created', { id: 'bad id:with spaces' }), {
+    id: null,
+    won: false,
+  });
 });

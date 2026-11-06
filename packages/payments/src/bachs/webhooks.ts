@@ -328,6 +328,16 @@ function normalizeReversal(
   )
     return undefined;
   const checkoutId = nullableString(event.data['checkout_id']);
+  const family = REFUND_EVENT.test(event.type) ? 'refund' : 'dispute';
+  // The exact Bachs field names are unconfirmed (ADR-0004), so the object's own id is read from the
+  // names partners use: `<family>_id`, `chargeback_id`, or the event object's `id`.
+  const objectId =
+    partnerId(event.data[`${family}_id`]) ??
+    (family === 'dispute' ? partnerId(event.data['chargeback_id']) : null) ??
+    partnerId(event.data['id']);
+  const disputeWon =
+    family === 'dispute' &&
+    (/\.won$/.test(event.type) || event.data['status'] === 'won');
   return {
     kind: 'reversal',
     eventId: event.id,
@@ -335,8 +345,17 @@ function normalizeReversal(
     accountReference,
     providerReference: checkoutId ? `${accountReference}:${checkoutId}` : null,
     operationReference: nullableString(event.data['reference']),
+    partnerReversalId: objectId ? `${family}.${objectId}` : null,
+    disputeWon,
   };
 }
+
+const REFUND_EVENT = /^refund\.|^charge\.refund/;
+/** A partner object id we key a reversal on: plain characters only, never free text. */
+const partnerId = (value: unknown): string | null =>
+  typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value)
+    ? value
+    : null;
 
 export function verifyBachsWebhook(
   rawBody: Buffer,

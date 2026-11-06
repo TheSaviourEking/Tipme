@@ -290,6 +290,11 @@ export interface OpsIssueSubject {
   providerEventRowId?: string;
   /** TipMe for businesses: the business (business_waiting) or the noted tip's business. */
   businessId?: string;
+  /**
+   * Business release 2 (R2-A): the partner's refund or dispute a `payment_reversed` issue is about
+   * (`refund.<id>` / `dispute.<id>`). Only an issue with one can be reversed from TipMe.
+   */
+  partnerReversalId?: string;
 }
 
 export interface OpsIssue {

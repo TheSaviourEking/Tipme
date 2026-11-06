@@ -40,7 +40,7 @@ import {
   type PreparedPayoutRead,
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
-import { reversedMinorOf, reverseTip } from './reversals.js';
+import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -500,8 +500,8 @@ export interface TipReversePayload {
   /** The open `payment_reversed` issue the partner's refund or chargeback raised. */
   issueId: string;
   tipId: string;
-  /** The partner's event id, as the issue keeps it: one reversal per event. */
-  providerEventId: string;
+  /** The partner's refund or dispute (`refund.<id>`), as the issue names it: one reversal each. */
+  partnerReversalId: string;
   /** Minor units, as a decimal string (JSON has no bigint). */
   refundedMinor: string;
 }
@@ -511,6 +511,10 @@ const naira = (minor: bigint) =>
 
 /** Why a reversal was refused, in words for the issue's notes (never a balance or a name). */
 const REVERSAL_REFUSALS: Record<string, string> = {
+  already_reversed_this:
+    'Reversal refused: this refund or dispute was already reversed. Nothing was posted. A separate refund or dispute from the partner opens its own issue.',
+  flags_off:
+    'Reversal refused: business shares are switched off, so TipMe books no reversal. Nothing was posted.',
   already_reversed:
     'Reversal refused: everything this tip paid was already taken back by an earlier refund or chargeback. Nothing was posted.',
   more_than_left:
@@ -558,11 +562,18 @@ const tipReverse = acting<TipReversePayload>({
       .where(eq(tips.id, tipId));
     return {
       status: tip?.status ?? null,
-      reversedMinor: (await reversedMinorOf(tx, tipId)).toString(),
+      reversedMinor: (await reversalsOf(tx, tipId)).reversedMinor.toString(),
     };
   },
-  describe: async (_tx, { tipId, refundedMinor }) =>
-    `Reverse ${naira(BigInt(refundedMinor))} of the tip ending ${tipId.slice(-6)}, as the payment partner refunded or charged it back: the person's part and any business's part, in proportion`,
+  // The approver sees what earlier refunds or disputes already took back (R2-A review finding 1).
+  describe: async (tx, { tipId, refundedMinor }) => {
+    const { count, reversedMinor } = await reversalsOf(tx, tipId);
+    const earlier =
+      count === 0
+        ? 'Nothing was taken back from this tip before'
+        : `Already taken back from this tip: ${naira(reversedMinor)} in ${count} reversal${count === 1 ? '' : 's'}`;
+    return `Reverse ${naira(BigInt(refundedMinor))} of the tip ending ${tipId.slice(-6)}, as the payment partner refunded or charged it back: the person's part and any business's part, in proportion. ${earlier}`;
+  },
   act: async (tx, payload, context) => {
     const [issue] = await tx
       .select({
@@ -579,9 +590,15 @@ const tipReverse = acting<TipReversePayload>({
       issue.subject.tipId !== payload.tipId
     )
       throw new OperationError('INVALID_INPUT');
+    // Approval may come after the flags were turned off: then nothing posts (review finding 3).
+    if (!context.services?.businessSharesEnabled)
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'flags_off');
+    // Each partner refund or dispute is reversed once; a second request for it is refused.
+    if (await alreadyReversed(tx, payload.partnerReversalId))
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed_this');
     const result = await reverseTip(tx, {
       tipId: payload.tipId,
-      providerEventId: payload.providerEventId,
+      partnerReversalId: payload.partnerReversalId,
       refundedMinor: BigInt(payload.refundedMinor),
       now: context.now,
     });
