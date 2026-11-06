@@ -10667,6 +10667,21 @@ p.tip-choice:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* The location's page address: a link, then its Copy link key and what copying said. */
+.business-location__link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.business-location__link a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .business-location__keys {
   display: flex;
   flex-wrap: wrap;
