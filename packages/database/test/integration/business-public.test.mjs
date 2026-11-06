@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
   beginPaymentAccountCreation,
+  publicBusiness,
   publicLocation,
   publicStaffTipPage,
   searchBusinessPeople,
@@ -512,6 +513,65 @@ test('business public reads', async (t) => {
         ),
         null,
       );
+    },
+  );
+
+  await t.test(
+    'the business page: a verified business and its open locations in the order they were added, no people',
+    async () => {
+      await database.fresh();
+      const business = await seedBusiness(database, {
+        name: 'The Yellow Chilli',
+        locations: [
+          {
+            slug: 'vi',
+            name: 'Victoria Island',
+            address: '12 Akin Adesola Street, Victoria Island',
+          },
+          { slug: 'gone', name: 'Old Branch', closed: true },
+          { slug: 'lekki', name: 'Lekki Phase 1', address: '4 Admiralty Way' },
+        ],
+      });
+      await seedMember(database, {
+        locationId: business.locations[0].id,
+        profileId: TOBI,
+        shownName: 'Tobi',
+      });
+      const page = await publicBusiness(
+        database.db,
+        business.slug.toUpperCase(),
+      );
+      assert.deepEqual(page, {
+        business: {
+          slug: business.slug,
+          name: 'The Yellow Chilli',
+          verified: true,
+        },
+        locations: [
+          {
+            slug: 'vi',
+            name: 'Victoria Island',
+            address: '12 Akin Adesola Street, Victoria Island',
+          },
+          { slug: 'lekki', name: 'Lekki Phase 1', address: '4 Admiralty Way' },
+        ],
+      });
+      assert.doesNotMatch(JSON.stringify(page), /Tobi/);
+
+      // Waiting, paused, every location closed, unknown or a bad slug: nothing at all.
+      const pending = await seedBusiness(database, { status: 'pending' });
+      const paused = await seedBusiness(database, { status: 'suspended' });
+      const closed = await seedBusiness(database, {
+        locations: [{ slug: 'vi', closed: true }],
+      });
+      for (const slug of [
+        pending.slug,
+        paused.slug,
+        closed.slug,
+        'no-such-business',
+        'not a slug',
+      ])
+        assert.equal(await publicBusiness(database.db, slug), null, slug);
     },
   );
 });
