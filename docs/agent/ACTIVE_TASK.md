@@ -1,3 +1,9 @@
+# Current task: username reservation PR 2, take-backs (6 November 2026)
+
+- Branch/worktree: `feat/username-takebacks` / `.worktrees/username-takebacks`, test lane 4, with `origin/dev` at `b86c7b99` (#128) merged, not pushed. One migration, `0078_handle_take_backs`.
+- Done: Tasks 5 to 13 of `docs/superpowers/plans/2026-11-04-username-reservation.md`: the take-back table and fixed words, the four emails, the `username.take_back` serious action with request and cancel routes, the dashboard banner and its seen-time, the user's choice during the notice, the worker sweep (notice, reminder, deadline, the 14-day never-reached path), the free change after an assigned username, take-backs on Usernames, Pages and Search, and the runbook and decisions note. Not PR 3 (no-notice take-backs).
+- Next: review; do not deploy to production before the terms' "Your username" section is on `main`. Evidence: `.superpowers/program/b2-report.md`.
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.

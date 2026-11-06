@@ -100,6 +100,22 @@ When nobody else qualifies, a serious action runs straight away, with one person
 
 If the other qualified people leave while your request waits, Approvals tells you nobody else can decide it. Cancel it and do it again; it then runs alone, with the alert. Removing the last other qualified person is itself alerted.
 
+## Taking a username back
+
+Use this only when TipMe needs a name a page holds: a brand, a public figure, one of TipMe's own names, impersonation, a trademark, or the law. Reserving a free name is under Usernames and is instant; taking one from a page is the serious action `username.take_back` and waits for a second person when one is available.
+
+1. In **Usernames**, check the name (or open the page in **Pages** and use its Username card). It shows whether it is the page's current or an old username, and yes or no facts: plan, live, has a balance, withdrawal in flight, verified address on file. No amounts and no address.
+2. Choose the category. **Ordinary** gives 7 to 30 days' notice; **Impersonation**, **Trademark** and **Required by law** give 1 to 7. Taking a name without notice is not available yet.
+3. Write the internal reason. It goes to the audit log and to the approver. The user never sees it, nor who asked or approved: they read only the category's fixed sentence.
+4. Once approved (or alone, with the alert), the notice email is queued and the page's dashboard shows a banner. **The clock starts when the email is sent or the banner is seen**, whichever comes first, and ends at the end of that Lagos day plus the notice. A reminder goes 2 days before the end when the notice is 4 days or more.
+5. **Never reached:** if after 14 days neither the email was sent nor the banner seen, it goes ahead anyway, and the inbox has an issue from 24 hours on (`username_take_back_unnoticed`). Check the account's address, and cancel if it is wrong to continue.
+6. **At the end:** if the person chose a new username it is already done. Otherwise TipMe gives the page `page_` and six letters or digits, emails them, and they get one free change within 30 days. An old username's links simply stop working. The name is then reserved as a take-back. An end more than an hour late opens `username_take_back_overdue`; the worker retries every minute.
+7. **Cancel** any open take-back from Usernames with a reason. It is instant. If they may have read the notice, they are emailed that they can keep the name.
+8. **Live checkout:** if the page is listed in `LIVE_CHECKOUT_HANDLES`, the form warns you. Update that setting to the new username when it completes, or the page loses live checkout.
+9. **A harmful page:** don't wait for the approval. Pause it with `pages.suspend` straight away; the take-back still runs, and the page stays paused under its new name.
+
+Links and printed QR codes with the taken name stop working. Nothing about the page's money changes.
+
 ## Stopping, and starting again
 
 **Stopping takes no code, so it works first time in an incident:** switching off all withdrawals, freezing a page's withdrawals after a reported takeover, and ending an account's sessions. Each still needs its permission and a written reason, and is audited. That is within a live admin session: after an hour idle or 12 hours, opening the session takes one code first.
