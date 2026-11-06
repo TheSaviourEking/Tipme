@@ -70,3 +70,17 @@ test('Usernames appears only with usernames.manage, right after Pages', () => {
     'Usernames',
   );
 });
+
+test('Businesses shows for search.view only while the business feature is on', () => {
+  assert.ok(!hrefs(['search.view']).includes('/ops/businesses'));
+  assert.ok(
+    opsMenu(['search.view'], { business: true })
+      .map((link) => link.href)
+      .includes('/ops/businesses'),
+  );
+  assert.ok(
+    !opsMenu(['analytics.view'], { business: true })
+      .map((link) => link.href)
+      .includes('/ops/businesses'),
+  );
+});

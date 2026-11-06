@@ -1,3 +1,12 @@
+# Current handoff — TipMe for businesses, PR B2: the admin side (6 November 2026)
+
+- Branch `feat/business-b2`, lane 5, committed, not pushed; based on `feat/business-b0`. No migration.
+- Staff see contacts masked (`f•••@domain`, phone last 4). The full contact and managers' emails need `private.view` and a reason, audited as `business.reveal` in the same transaction.
+- Suspend/restore: `businesses.manage`, a reason, fresh code, audited. Suspending a waiting business is `BUSINESS_NOT_VERIFIED`; repeating either is a no-op. Attribution stops because B0's `tippableMember` reads the status; money is untouched.
+- `business.verify` is in `SERIOUS_ACTIONS` (count 11) and wired in the gating test. The business's own managers can't decide it. Verifying a business that isn't waiting is refused at asking (`INVALID_INPUT`, on the wire `VALIDATION_FAILED`).
+- Contract additions (additive): `opsBusinessListQuerySchema`, `OpsBusinessContact`. `ProfileRevalidator.revalidateBusiness(slug)`; the web's `/api/revalidate` accepts `{ business }`.
+- Evidence: `.superpowers/program/b2b-report.md` (main checkout).
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.

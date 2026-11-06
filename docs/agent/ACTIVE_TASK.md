@@ -1,3 +1,9 @@
+# Current task — TipMe for businesses, PR B2: the admin side (6 November 2026)
+
+- Branch/worktree: `feat/business-b2` / `.worktrees/business-b2`, off `feat/business-b0` (`3888c8e6`), test lane 5. Not pushed. Plan Tasks 8–10.
+- Done: `/v1/ops/businesses` list and detail (search.view, contacts masked), reveal (private.view, reason, audited), suspend and restore (businesses.manage, reason, audited; suspending ends open shifts as `expired`), `business.verify` as a serious action (pinned on status and slug; resolves `business_waiting`; tells owners in-app); the web revalidate route takes a business slug (`business:<slug>` tag); the admin Businesses list and detail pages, a "Businesses" menu entry shown only while the feature is on, and a link from a `business_waiting` issue.
+- Next: coordinator review; rebase onto dev once B0 merges; full e2e on CI. B4 must tag its `/b/` reads with `businessTag(slug)` from `apps/web/src/lib/business/business-tag.ts`.
+
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 
 - Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.

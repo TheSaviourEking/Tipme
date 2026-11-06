@@ -48,18 +48,19 @@ The menu only offers what someone can use. The server checks every call whatever
 
 These wait for a second person when one is available:
 
-| Action                      | In plain words                         | Needs                                                       |
-| --------------------------- | -------------------------------------- | ----------------------------------------------------------- |
-| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                         |
-| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                           |
-| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it |
-| `fee.change`                | Change a page’s fee                    | `fees.manage`                                               |
-| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                               |
-| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                       |
-| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                              |
-| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                              |
-| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                               |
-| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                          |
+| Action                      | In plain words                         | Needs                                                        |
+| --------------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                          |
+| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                            |
+| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it  |
+| `fee.change`                | Change a page’s fee                    | `fees.manage`                                                |
+| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                                |
+| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                        |
+| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                               |
+| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                               |
+| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                                |
+| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                           |
+| `business.verify`           | Verify a business                      | `businesses.manage` (not one of the business’s own managers) |
 
 Giving someone a role or permission counts as serious only if it contains something sensitive. A harmless edit applies at once. Hand closes of money issues are serious, except releasing a freeze (below).
 

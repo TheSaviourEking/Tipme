@@ -9,7 +9,13 @@ const PAGE_CARDS = [
 ];
 
 /** Each entry names what its page reads, so nobody is offered a page that would refuse them. */
-const LINKS: { href: string; label: string; needs: string[] | null }[] = [
+const LINKS: {
+  href: string;
+  label: string;
+  needs: string[] | null;
+  /** Shown only while that feature is on (the API answers 404 otherwise). */
+  feature?: 'business';
+}[] = [
   { href: '/ops', label: 'Overview', needs: null },
   { href: '/ops/approvals', label: 'Approvals', needs: null },
   { href: '/ops/issues', label: 'Issues', needs: ['issues.view'] },
@@ -17,6 +23,12 @@ const LINKS: { href: string; label: string; needs: string[] | null }[] = [
   { href: '/ops/market', label: 'Market', needs: ['analytics.view'] },
   { href: '/ops/pages', label: 'Pages', needs: [...PAGE_CARDS] },
   { href: '/ops/usernames', label: 'Usernames', needs: ['usernames.manage'] },
+  {
+    href: '/ops/businesses',
+    label: 'Businesses',
+    needs: ['search.view'],
+    feature: 'business',
+  },
   { href: '/ops/search', label: 'Search', needs: ['search.view'] },
   {
     href: '/ops/providers',
@@ -35,9 +47,14 @@ const LINKS: { href: string; label: string; needs: string[] | null }[] = [
 ];
 
 /** The admin menu for these permissions (the server still checks every call). */
-export function opsMenu(permissions: readonly string[]) {
+export function opsMenu(
+  permissions: readonly string[],
+  features: { business?: boolean } = {},
+) {
   return LINKS.filter(
     (link) =>
-      !link.needs || link.needs.some((needed) => permissions.includes(needed)),
+      (!link.feature || features[link.feature] === true) &&
+      (!link.needs ||
+        link.needs.some((needed) => permissions.includes(needed))),
   ).map(({ href, label }) => ({ href, label }));
 }

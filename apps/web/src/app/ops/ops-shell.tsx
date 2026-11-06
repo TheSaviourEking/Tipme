@@ -17,6 +17,7 @@ import {
   PROVIDER_TEST_TOKEN_KEY,
   type OpsAccess,
 } from '@/lib/ops-client';
+import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
 import { opsMenu } from '@/lib/ops-menu';
 import { apiFetch } from '@/lib/session-client';
@@ -104,6 +105,14 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [granted, pathname]);
 
+  // TipMe for businesses: the Businesses entry shows only while the feature is on, which the
+  // signed-in roles route says (404 while BUSINESS_ENABLED is off).
+  const [business, setBusiness] = useState(false);
+  useEffect(() => {
+    if (!granted) return;
+    void loadBusinessRoles().then((roles) => setBusiness(roles !== null));
+  }, [granted]);
+
   const apply = useCallback(
     (next: State | 'signed_out') => {
       if (next === 'signed_out') {
@@ -164,7 +173,7 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
           <>
             <div className="dashboard-bar">
               <nav aria-label="Admin" className="dashboard-nav" ref={menu}>
-                {opsMenu(state.access.permissions).map((link) => (
+                {opsMenu(state.access.permissions, { business }).map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}

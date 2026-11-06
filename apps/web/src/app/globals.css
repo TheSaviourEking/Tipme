@@ -9720,6 +9720,17 @@ body > .coming-soon-page {
 /* business:B1 end */
 
 /* business:B2 start */
+/* Admin Businesses: the status badge. The words carry the meaning; the ink only echoes it. */
+.ops-business-status--verified {
+  background: var(--brand-primary);
+  color: var(--surface-base);
+}
+
+.ops-business-status--suspended {
+  background: var(--surface-base);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
 /* business:B2 end */
 
 /* business:B3 start */
