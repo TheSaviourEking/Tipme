@@ -333,3 +333,11 @@ the appreciation moment) is unchanged.
 - **Codes in cells stay one copyable string**, so copy, paste and code autofill still get the whole code.
 - **Nothing private in a subject or preview line.** No code, link, address, name, bank or device in a subject or the hidden preheader; the tip amount in the tip email's subject is the one existing exception.
 - **Plan:** `docs/superpowers/plans/2026-11-05-emails-and-admin.md` (PR M1 is the frame and blocks with today's words; PR M2 is the boards' compositions).
+
+## 2026-11-06 — App icons
+
+- **Owner-approved board, 5 Nov 2026** (App icons). A product and visual decision, not a regulatory approval; no D-item is affected.
+- **The tab icon stays flat.** `icon.svg` (the purple tile and the white heart) is unchanged. Depth (a soft top light and a darker lower edge) appears only on the home-screen sizes, 180 px and up.
+- **Files.** `apple-icon` (180 × 180, full bleed; iOS rounds it), `/icons/192.png` (rounded tile, corner 28/120, transparent corners, purpose `any`) and `/icons/512-maskable.png` (full bleed, the heart inside the centre safe circle, purpose `maskable`). All drawn by TipMe with `next/og`; one heart path (`HEART_MARK`) shared with `icon.svg`.
+- **Manifest.** `/manifest.webmanifest`, name and short name "TipMe", `start_url` "/", `display: browser`, theme `#7A32F9`, background `#FFFFFF`. `browser` because the manifest adds no offline or app features, and it keeps the address bar, including on the payment partner's page.
+- **Gates.** The launch gate and the preview password leave exactly these four paths open, as they do `icon.svg`.
