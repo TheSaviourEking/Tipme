@@ -220,7 +220,7 @@ Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are
 **Before turning it on:**
 
 1. The privacy page on production (`/legal/privacy`) shows "If you tip at a business" and "If you work at a business", and `docs/00-DECISIONS.md` has "What a business sees". Both describe what the code shows; neither claims any approval.
-2. At least **two** staff members hold `businesses.manage` and can enter an authenticator code (`docs/runbooks/admin-roles.md`). **A business's own managers can't verify it fairly:** approving is refused for them, but today a staff member who manages the business can still ask, and with nobody else qualified it runs alone (audited, alert sent). A separate PR refuses that request. Until it is on production, the person who verifies a business must not be one of its managers.
+2. At least **two** staff members hold `businesses.manage` and can enter an authenticator code (`docs/runbooks/admin-roles.md`). **The system refuses a business's own managers:** a staff member who manages the business can neither ask for its verification nor approve it. Either answers `APPROVAL_SUBJECT` and nothing is recorded, even for a lone admin who owns the business (#176). So with only two staff, at least one must not manage the business.
 
 **Turning it on:**
 
@@ -231,7 +231,7 @@ Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are
 **Verifying the first business (staff, not one of its managers):**
 
 6. Open `/ops/businesses`, then the business. Check its name, address and a contact against something outside TipMe (O2: no documents are uploaded). The contact shows masked; **Reveal** needs a reason and is audited. Each location links to its public page: before verification it reads "isn't taking tips on TipMe right now", which is expected.
-7. **Verify this business** with a reason and a fresh code. With a second qualified person it waits for their approval; it runs alone only when nobody else qualifies, which the log and the alert record.
+7. **Verify this business** with a reason and a fresh code. With a second qualified person it waits for their approval; it runs alone only when nobody else qualifies, which the log and the alert record. If you manage this business, it is refused.
 8. After verification the location page shows the verified line and the people on shift, and the owners can print their codes.
 
 **To turn it off:** set `BUSINESS_ENABLED=false` and recreate the API colour. Business pages show as unavailable and tips go on as plain tips to each person; nothing is deleted, and a person's own data stays downloadable (`/v1/me/exports/work.csv`).
