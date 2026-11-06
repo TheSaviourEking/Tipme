@@ -87,8 +87,8 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   await expect(nav(them).getByRole('link')).toHaveText([
     'Overview',
     'Approvals',
-    'Businesses',
     'Search',
+    'Businesses',
     'Your access',
   ]);
   // Overview works without analytics: it says what it can and no more.

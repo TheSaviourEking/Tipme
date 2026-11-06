@@ -2,14 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import { seedBusiness } from './business-fixtures';
 import { expectAccessible, fitsViewport } from './helpers';
-import { codeFor, enrolOwner, secondOwner, sql } from './ops-helpers';
+import {
+  codeFor,
+  enrolOwner,
+  openOpsLink,
+  secondOwner,
+  sql,
+} from './ops-helpers';
 
 // TipMe for businesses, PR B2: staff look a business up with its contact masked, reveal it with a
 // reason, pause and restore it, and verify it with a second person.
 
 const REASON = 'Checked the name, address and contact today';
 
-const nav = (page: Page) => page.getByRole('navigation', { name: 'Admin' });
 /** The list stays mounted, hidden, after a client navigation: read only what is shown. */
 const shown = (page: Page, text: string) =>
   page.getByText(text, { exact: true }).filter({ visible: true });
@@ -38,7 +43,7 @@ test('staff find a business with its contact hidden, reveal it with a reason, pa
     name,
   });
 
-  await nav(page).getByRole('link', { name: 'Businesses' }).click();
+  await openOpsLink(page, 'Businesses');
   await expect(
     page.getByRole('heading', { name: 'Businesses', level: 1 }),
   ).toBeVisible();

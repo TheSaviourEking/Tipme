@@ -5298,25 +5298,6 @@ html:has(.confirm-dialog[open]) {
   margin-right: auto;
 }
 
-/* The admin menu has many links: one row that scrolls sideways (the open page's link is scrolled
-   into view by the shell), never a lone link wrapped onto a second line. */
-.dashboard-nav[aria-label='Admin'] {
-  flex-wrap: nowrap;
-  max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.dashboard-nav[aria-label='Admin']::-webkit-scrollbar {
-  display: none;
-}
-
-.dashboard-nav[aria-label='Admin'] a {
-  flex: none;
-  white-space: nowrap;
-}
-
 .dashboard-nav a,
 .filter-row .tm-button {
   display: inline-flex;
@@ -7342,6 +7323,273 @@ body > .coming-soon-page {
 
 .ops-row .ops-summary {
   overflow-wrap: anywhere;
+}
+
+/*
+ * The admin frame (OpsShell board), once access is granted: a grouped sidebar from 1024px; below
+ * it, the staff strip, a bar with "Menu · {page}" and a sheet. It replaces the one-row menu (#126):
+ * the sidebar scrolls on its own and the sheet scrolls inside itself, so every link stays reachable
+ * and nothing scrolls the page sideways. The 1024px breakpoint is WIDE in ops-frame.tsx.
+ */
+html[data-ops-frame] .site-header,
+html[data-ops-frame] .site-footer {
+  display: none;
+}
+
+.ops-frame {
+  min-height: 100dvh;
+}
+
+.ops-frame__column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ops-frame .ops-banner {
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: 0;
+  background: var(--key-face-dark);
+  font-size: 0.8125rem;
+}
+
+.ops-frame .ops-banner strong {
+  padding: 0.125rem var(--space-3);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.ops-frame__wordmark {
+  display: block;
+  width: auto;
+  height: 1.75rem;
+}
+
+.ops-frame__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+.ops-frame__bar .tm-button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Content: the page's own column, denser than the dashboard's. */
+.ops-frame__content.dashboard-page {
+  width: 100%;
+  max-width: calc(1100px + 2 * var(--space-8));
+  padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.ops-frame__content:focus {
+  outline: none;
+}
+
+/* The menu, in the sidebar and in the sheet. */
+.ops-frame__side {
+  display: none;
+}
+
+.ops-frame__group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ops-frame__label {
+  margin: var(--space-3) 10px 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.ops-frame__links {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ops-frame__links a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: 0.9063rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ops-frame__links a:hover {
+  color: var(--text-primary);
+}
+
+.ops-frame__links a[aria-current='page'] {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-weight: 700;
+  box-shadow:
+    0 1px 1px rgb(20 18 16 / 10%),
+    0 5px 14px rgb(20 18 16 / 7%);
+}
+
+/* What is waiting for this person, on Approvals: purple as a material, with its words for readers. */
+.ops-frame__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-primary);
+  color: var(--surface-base);
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-frame__leave {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.ops-frame__leave .tm-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+@media (min-width: 1024px) {
+  .ops-frame {
+    display: grid;
+    grid-template-columns: 236px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  /* Sticky, and scrolls on its own when it is taller than the window. */
+  .ops-frame__side {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 22px var(--space-4);
+    border-right: 1px solid var(--edge-hairline);
+  }
+
+  .ops-frame__mark {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-1) var(--space-2) var(--space-3);
+  }
+
+  .ops-frame__pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: var(--radius-pill);
+    background: var(--text-primary);
+    color: var(--surface-base);
+    font-size: 0.7188rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  .ops-frame .ops-banner {
+    padding: 10px var(--space-8);
+  }
+
+  .ops-frame__bar {
+    display: none;
+  }
+
+  .ops-frame__content.dashboard-page {
+    padding: 26px var(--space-8) var(--space-8);
+  }
+}
+
+/* The phone menu: a sheet from the bottom, the confirm dialog's sheet motion and scroll lock. */
+.ops-frame__sheet {
+  width: 100%;
+  max-width: 100%;
+  max-height: 85dvh;
+  margin: auto 0 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 -20px 40px -10px rgb(20 18 16 / 35%);
+  animation: confirm-dialog-sheet 180ms var(--ease-physical);
+}
+
+.ops-frame__sheet::backdrop {
+  background: rgb(20 18 16 / 35%);
+  animation: confirm-dialog-dim 180ms var(--ease-physical);
+}
+
+html:has(.ops-frame__sheet[open]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+.ops-frame__sheet-body {
+  padding: 10px var(--space-4)
+    calc(var(--space-4) + env(safe-area-inset-bottom));
+}
+
+.ops-frame__grab {
+  width: 40px;
+  height: 5px;
+  margin: 0 auto var(--space-3);
+  border-radius: 3px;
+  background: var(--border-subtle);
+}
+
+.ops-frame__nav {
+  display: grid;
+  gap: 2px;
+}
+
+.ops-frame__nav .ops-frame__links a {
+  min-height: 44px;
+}
+
+.ops-frame__links--split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-2);
+}
+
+.ops-frame__nav .ops-frame__leave {
+  padding-top: var(--space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-frame__sheet,
+  .ops-frame__sheet::backdrop {
+    animation: none;
+  }
 }
 
 /*

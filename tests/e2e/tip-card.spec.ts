@@ -7,6 +7,7 @@ import {
   type Stack,
 } from './profile-fixtures';
 import { DANGER_TEXT, PLAIN_TEXT, errorColour, hasRedEdge } from './helpers';
+import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 
 // The owner-approved compact tip card (2 Nov 2026), on the built web app against the stand-in API.
 // Calls the browser makes for prices and tips are answered here: nothing reaches any provider.
@@ -761,11 +762,7 @@ test('a quote that fails on the tap offers a retry, and the retry pays once', as
   );
   await tipButton(page).click();
   await expect(
-    page
-      .locator('.tip-quote')
-      .getByText(
-        'We couldn’t reach TipMe. Check your connection and try again.',
-      ),
+    page.locator('.tip-quote').getByText(CONNECTION_COPY.tipDropped),
   ).toBeVisible();
   // No field edge beside this line, so it keeps its red until the public batch.
   expect(
@@ -877,4 +874,313 @@ test('the Other amount example is never below the page’s minimum', async ({
     'placeholder',
     'e.g. 2,000',
   );
+});
+
+// States plan, Task 9: the tip form's Not sent slip, its proven safe line, and the amount flag.
+test('a tip that could not reach TipMe shows the Not sent slip under Tip, keeps the amount, and Try again replays the same key', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  const keys: string[] = [];
+  let fail = true;
+  await page.route('**/v1/tip-intents', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    keys.push(route.request().headers()['idempotency-key'] ?? '');
+    return fail ? route.abort() : route.fallback();
+  });
+  await page.getByRole('radio', { name: '5,000 NGN' }).check();
+  await tipButton(page).click();
+  const slip = page.locator('.appreciation-card .tm-slip');
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(slip).toContainText('Not sent yet');
+  // Both tries dropped: the words carry the safe line themselves, so the slip doesn't repeat it.
+  await expect(slip).toContainText(CONNECTION_COPY.tipDropped);
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(0);
+  await expect(page.locator('.appreciation-card .tm-notice')).toHaveCount(0);
+  // It comes out from under the Tip button.
+  const slipBox = await slip.boundingBox();
+  const tipBox = await tipButton(page).boundingBox();
+  expect(slipBox!.y).toBeGreaterThan(tipBox!.y);
+  await expect(page.getByRole('radio', { name: '5,000 NGN' })).toBeChecked();
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(violations.map((v) => v.id)).toEqual([]);
+  // The first tap was tried twice (one quiet retry, Task 16), with one key.
+  expect(keys).toHaveLength(2);
+  fail = false;
+  await slip.getByRole('button', { name: 'Try again' }).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(keys).toHaveLength(3);
+  expect(new Set(keys).size).toBe(1);
+  expect(sent.intents).toHaveLength(1);
+});
+
+test('a refusal that reached TipMe shows the slip without the safe line', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  for (const code of ['DEPENDENCY_UNAVAILABLE', 'PROVIDER_OUTCOME_UNKNOWN']) {
+    await page.route('**/v1/tip-intents', async (route) => {
+      if (route.request().method() === 'OPTIONS') return route.fallback();
+      return route.fulfill({
+        status: 503,
+        headers: { 'access-control-allow-origin': origin },
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code } }),
+      });
+    });
+    await tipButton(page).click();
+    const slip = page.locator('.appreciation-card .tm-slip');
+    await expect(slip, code).toBeVisible();
+    await expect(slip, code).toContainText('Not sent yet');
+    await expect(slip.locator('.tm-slip__safe'), code).toHaveCount(0);
+    await page.unroute('**/v1/tip-intents');
+  }
+});
+
+test('below the minimum: a red edge and the reason beside the number, one plain line, and the nearest amount lights up', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  const field = page.getByLabel(OTHER);
+  const suggested = page
+    .getByRole('radio', { name: '2,000 NGN' })
+    .locator('xpath=ancestor::label[contains(@class, "tm-amount-choice")]');
+  const resting = await field.evaluate(
+    (el) => getComputedStyle(el).backgroundColor,
+  );
+  await expect(suggested).not.toHaveAttribute('data-suggested', 'true');
+  await field.fill('1500');
+  await field.blur();
+  await tipButton(page).click();
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('.appreciation-card .tm-field-flag')).toHaveText(
+    'below 2,000',
+  );
+  await expect(page.locator('.appreciation-card .tm-field-error')).toHaveText(
+    /^Enter an amount of NGN 2,000 or more/,
+  );
+  expect(await hasRedEdge(field)).toBe(true);
+  await expect(suggested).toHaveAttribute('data-suggested', 'true');
+  // Only the key at the minimum lights up.
+  await expect(
+    page.locator('.appreciation-card [data-suggested="true"]'),
+  ).toHaveCount(1);
+  // No pink fill: the well keeps its own colour.
+  await field.blur();
+  expect(
+    await field.evaluate((el) => getComputedStyle(el).backgroundColor),
+  ).toBe(resting);
+  expect(sent.intents).toEqual([]);
+  // A mistyped amount is not "below" anything: the line shows, the flag and the light don't.
+  await field.fill('12,34');
+  await field.blur();
+  await tipButton(page).click();
+  await expect(
+    page.locator('.appreciation-card .tm-field-error'),
+  ).toBeVisible();
+  await expect(page.locator('.appreciation-card .tm-field-flag')).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator('.appreciation-card [data-suggested="true"]'),
+  ).toHaveCount(0);
+  // Choosing the lit key clears it all.
+  await field.fill('1500');
+  await field.blur();
+  await tipButton(page).click();
+  await expect(suggested).toHaveAttribute('data-suggested', 'true');
+  await page.getByRole('radio', { name: '2,000 NGN' }).check();
+  await expect(page.locator('.appreciation-card .tm-field-error')).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator('.appreciation-card [data-suggested="true"]'),
+  ).toHaveCount(0);
+});
+
+test('at 320px the flag and the slip fit, with long and unbroken names @mobile', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  for (const handle of ['longname', 'widename']) {
+    const origin = await at('live', `/@${handle}`, page);
+    await answerApi(page, origin);
+    const field = page.getByLabel(OTHER);
+    await field.fill('1500');
+    await field.blur();
+    await tipButton(page).click();
+    const flag = page.locator('.appreciation-card .tm-field-flag');
+    await expect(flag).toBeVisible();
+    // The typed value ends before the flag starts.
+    const [fieldBox, flagBox] = await Promise.all([
+      field.boundingBox(),
+      flag.boundingBox(),
+    ]);
+    const padEnd = await field.evaluate((el) =>
+      parseFloat(getComputedStyle(el).paddingInlineEnd),
+    );
+    expect(fieldBox!.x + fieldBox!.width - padEnd).toBeLessThanOrEqual(
+      flagBox!.x + 1,
+    );
+    await page.route('**/v1/tip-intents', (route) =>
+      route.request().method() === 'OPTIONS' ? route.fallback() : route.abort(),
+    );
+    await page.getByRole('radio', { name: '2,000 NGN' }).check();
+    await tipButton(page).click();
+    await expect(page.locator('.appreciation-card .tm-slip')).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      handle,
+    ).toBe(true);
+    await page.unroute('**/v1/tip-intents');
+  }
+});
+
+// States plan, Task 16: one quiet retry where it is safe, and a send on reconnect.
+const OFFLINE = CONNECTION_COPY.tipOffline;
+const DROPPED = CONNECTION_COPY.tipDropped;
+const DROPPED_SAFE_LINES = 0;
+/** Counts tip intents by idempotency key; `plan` says what each attempt does. */
+async function intentsBy(
+  page: Page,
+  plan: (attempt: number) => 'abort' | 'fallback',
+) {
+  const keys: string[] = [];
+  await page.route('**/v1/tip-intents', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    keys.push(route.request().headers()['idempotency-key'] ?? '');
+    return plan(keys.length) === 'abort' ? route.abort() : route.fallback();
+  });
+  return keys;
+}
+
+test('a dropped connection is retried once quietly with the same key, and the tip goes through', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  const keys = await intentsBy(page, (n) => (n === 1 ? 'abort' : 'fallback'));
+  // Any slip that ever appears is remembered, even if the page leaves at once.
+  await page.evaluate(() => {
+    new MutationObserver(() => {
+      if (document.querySelector('.tm-slip'))
+        sessionStorage.setItem('saw-slip', '1');
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await tipButton(page).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBe(keys[1]);
+  expect(sent.intents).toHaveLength(1);
+  expect(await page.evaluate(() => sessionStorage.getItem('saw-slip'))).toBe(
+    null,
+  );
+});
+
+test('two dropped connections show the Not sent slip saying nothing was paid; Try again replays the same key', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  const keys = await intentsBy(page, (n) => (n <= 2 ? 'abort' : 'fallback'));
+  await tipButton(page).click();
+  const slip = page.locator('.appreciation-card .tm-slip');
+  await expect(slip).toContainText('Not sent yet');
+  await expect(slip).toContainText(DROPPED);
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(DROPPED_SAFE_LINES);
+  expect(keys).toHaveLength(2);
+  await slip.getByRole('button', { name: 'Try again' }).click();
+  await page.waitForURL(/legal\/terms/);
+  expect(keys).toHaveLength(3);
+  expect(new Set(keys).size).toBe(1);
+});
+
+test('offline at the tap: nothing is sent, the slip says so, and the tip goes on reconnect', async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  await context.setOffline(true);
+  await tipButton(page).click();
+  const slip = page.locator('.appreciation-card .tm-slip');
+  await expect(slip).toContainText('Not sent yet');
+  await expect(slip).toContainText(OFFLINE);
+  // Nothing was sent, so this one is proven.
+  await expect(slip.locator('.tm-slip__safe')).toHaveText(
+    'You haven’t paid anything.',
+  );
+  expect(sent.quotes).toBe(0);
+  expect(sent.intents).toHaveLength(0);
+  await context.setOffline(false);
+  await page.waitForURL(/legal\/terms/);
+  expect(sent.intents).toHaveLength(1);
+});
+
+test('changing the amount while offline cancels the send on reconnect', async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  const sent = await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  await context.setOffline(true);
+  await tipButton(page).click();
+  await expect(page.locator('.appreciation-card .tm-slip')).toBeVisible();
+  await page.getByRole('radio', { name: '5,000 NGN' }).check();
+  await context.setOffline(false);
+  await page.waitForTimeout(1000);
+  expect(sent.quotes).toBe(0);
+  expect(sent.intents).toHaveLength(0);
+  expect(page.url()).toMatch(/\/@kemi$/);
+});
+
+// States plan, Task 17 (owner's answer to Q2): TipMe's own fault on the tip form.
+test('a fault on our side says so, and that nothing was paid', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const origin = await at('live', '/@kemi', page);
+  await answerApi(page, origin);
+  await tipButton(page).waitFor();
+  await page.waitForTimeout(300);
+  await page.route('**/v1/tip-intents', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    return route.fulfill({
+      status: 500,
+      headers: { 'access-control-allow-origin': origin },
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'INTERNAL_ERROR' } }),
+    });
+  });
+  await tipButton(page).click();
+  const slip = page.locator('.appreciation-card .tm-slip');
+  await expect(slip).toContainText(CONNECTION_COPY.ourSideTip);
+  await expect(slip).not.toContainText(/your money/i);
+  await expect(slip.locator('.tm-slip__safe')).toHaveCount(0);
 });

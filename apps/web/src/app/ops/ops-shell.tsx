@@ -1,10 +1,14 @@
 'use client';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Notice, Skeleton } from '@tipme/ui';
+import {
+  ApprovalsCount,
+  useApprovalsCount,
+} from '@/components/ops/approvals-count';
 import { FreshCodePrompt } from '@/components/ops/fresh-code';
+import { OpsFrame } from '@/components/ops/ops-frame';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
 import { PageUnavailable } from '@/components/page-unavailable';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -19,7 +23,6 @@ import {
 } from '@/lib/ops-client';
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
-import { opsMenu } from '@/lib/ops-menu';
 import { apiFetch } from '@/lib/session-client';
 
 /** Where this visitor stands: signed out, not staff, the authenticator step, or in. */
@@ -95,23 +98,6 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
   const mode = usePaymentMode();
   const pathname = usePathname();
   const [state, setState] = useState<State>({ step: 'loading' });
-  const menu = useRef<HTMLElement>(null);
-  const granted = state.step === 'granted';
-  // The admin menu scrolls sideways: keep the open page's link in view.
-  useEffect(() => {
-    if (!granted) return;
-    menu.current
-      ?.querySelector('[aria-current="page"]')
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [granted, pathname]);
-
-  // TipMe for businesses: the Businesses entry shows only while the feature is on, which the
-  // signed-in roles route says (404 while BUSINESS_ENABLED is off).
-  const [business, setBusiness] = useState(false);
-  useEffect(() => {
-    if (!granted) return;
-    void loadBusinessRoles().then((roles) => setBusiness(roles !== null));
-  }, [granted]);
 
   const apply = useCallback(
     (next: State | 'signed_out') => {
@@ -154,6 +140,16 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
 
   if (state.step === 'unavailable')
     return <PageUnavailable showDemo={mode === 'test'} />;
+  if (state.step === 'granted')
+    return (
+      <OpsGranted
+        access={state.access}
+        pathname={pathname}
+        onLeave={() => void signOut()}
+      >
+        {children}
+      </OpsGranted>
+    );
   return (
     <main id="main" tabIndex={-1} className="dashboard-page ops-page">
       <Container>
@@ -169,31 +165,53 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
           <OpsEnrol onDone={reload} canDecline={state.canDecline} />
         )}
         {state.step === 'needs_code' && <OpsCode onDone={reload} />}
-        {state.step === 'granted' && (
-          <>
-            <div className="dashboard-bar">
-              <nav aria-label="Admin" className="dashboard-nav" ref={menu}>
-                {opsMenu(state.access.permissions, { business }).map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    aria-current={pathname === link.href ? 'page' : undefined}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </nav>
-              <Button variant="quiet" onClick={() => void signOut()}>
-                Leave admin
-              </Button>
-            </div>
-            <FreshCodePrompt />
-            <OpsAccessContext.Provider value={state.access}>
-              {children}
-            </OpsAccessContext.Provider>
-          </>
-        )}
       </Container>
     </main>
+  );
+}
+
+/**
+ * Inside the admin area: the frame, the menu's count and the pages. Mounted only once access is
+ * granted, so the site's header and footer give way to the frame only then (`data-ops-frame`); a
+ * visitor who isn't staff, and the sign-in steps, keep them.
+ */
+function OpsGranted({
+  access,
+  pathname,
+  onLeave,
+  children,
+}: {
+  access: OpsAccess;
+  pathname: string;
+  onLeave: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.opsFrame = 'on';
+    return () => {
+      delete root.dataset.opsFrame;
+    };
+  }, []);
+  const approvals = useApprovalsCount(pathname);
+  // TipMe for businesses: the Businesses entry shows only while the feature is on, which the
+  // signed-in roles route says (404 while BUSINESS_ENABLED is off).
+  const [business, setBusiness] = useState(false);
+  useEffect(() => {
+    void loadBusinessRoles().then((roles) => setBusiness(roles !== null));
+  }, []);
+  return (
+    <OpsFrame
+      permissions={access.permissions}
+      features={{ business }}
+      pathname={pathname}
+      approvals={<ApprovalsCount count={approvals.count} />}
+      onLeave={onLeave}
+    >
+      <FreshCodePrompt />
+      <OpsAccessContext.Provider value={access}>
+        {children}
+      </OpsAccessContext.Provider>
+    </OpsFrame>
   );
 }
