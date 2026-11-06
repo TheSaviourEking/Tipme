@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
-import { signUpRecipient } from './helpers';
-import { enrolOwner, secondOwner, sql } from './ops-helpers';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  expectAccessible,
+  fitsViewport,
+  identity,
+  signInWithEmail,
+  signUpRecipient,
+} from './helpers';
+import { enrolOwner, grantOwner, secondOwner, sql } from './ops-helpers';
 
 // What a screen says for answers that are hard to cause on purpose, so the answers are stubbed.
 const REASON = 'Checked with the person on a call today';
@@ -203,38 +209,171 @@ test('holding only providers.manage or email.read opens those screens', async ({
   }
 });
 
-// The admin menu has many links: it stays one row and scrolls sideways, never wrapping a lone link
-// onto a second line, and the open page's link is always in view.
-for (const [label, width] of [
-  ['desktop', 1280],
-  ['phone', 360],
-] as const)
-  test(`the admin menu is one row on a ${label}, and every link can be reached`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width, height: 800 });
-    await enrolOwner(page, testInfo);
-    await page.goto('/ops');
-    const nav = page.getByRole('navigation', { name: 'Admin' });
-    const links = nav.getByRole('link');
-    // The menu appears once the admin area has loaded.
-    await expect(links.last()).toBeAttached();
-    expect(await links.count()).toBeGreaterThan(5);
-    const tops = await links.evaluateAll((all) =>
-      all.map((link) => Math.round(link.getBoundingClientRect().top)),
-    );
-    expect(new Set(tops).size).toBe(1);
-    // The last link opens its page, and that page's link is scrolled into view.
-    await links.last().click();
-    await expect(
-      page.locator('nav[aria-label="Admin"] [aria-current="page"]'),
-    ).toBeInViewport();
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-  });
+// The admin menu (OpsShell board): a grouped sidebar from 1024px, a Menu sheet below. It keeps
+// #126's promise: every link can be reached, the open page's link is in view, and no page scrolls
+// sideways.
+const GROUP_LABELS = ['Work', 'Numbers', 'Email and records', 'Staff'];
+const adminNav = (page: Page) =>
+  page.getByRole('navigation', { name: 'Admin' });
+const menuButton = (page: Page) =>
+  page.getByRole('button', { name: /^Menu · / });
+
+test('the admin sidebar on a desktop lists every link in its group, and the last one opens and stays in view', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await enrolOwner(page, testInfo);
+  await page.goto('/ops');
+  const nav = adminNav(page);
+  await expect(nav).toBeVisible();
+  await expect(menuButton(page)).toBeHidden();
+  const links = nav.getByRole('link');
+  await expect(links.last()).toBeVisible();
+  expect(await links.count()).toBeGreaterThan(5);
+  // One column: every link starts at the same left edge.
+  const lefts = await links.evaluateAll((all) =>
+    all.map((link) => Math.round(link.getBoundingClientRect().left)),
+  );
+  expect(new Set(lefts).size).toBe(1);
+  await expect(nav.getByRole('heading')).toHaveText(GROUP_LABELS);
+  for (const label of GROUP_LABELS)
+    await expect(nav.getByRole('heading', { name: label })).toBeVisible();
+  // The site's own header and footer give way to the admin frame.
+  await expect(page.locator('.site-header')).toBeHidden();
+  await expect(page.locator('.site-footer')).toBeHidden();
+  await expect(page.locator('html')).toHaveAttribute('data-ops-frame', 'on');
+
+  await nav.getByRole('link', { name: 'Your access' }).click();
+  await page.waitForURL(/\/ops\/staff$/);
+  const open = nav.locator('[aria-current="page"]');
+  await expect(open).toHaveText('Your access');
+  await expect(open).toBeInViewport();
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+});
+
+test('on a short desktop window the sidebar scrolls on its own', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 560 });
+  await enrolOwner(page, testInfo);
+  await page.goto('/ops/staff');
+  const nav = adminNav(page);
+  const leave = nav.getByRole('button', { name: 'Leave admin' });
+  // The open page's link was scrolled into view inside the sidebar, not the page.
+  await expect(nav.locator('[aria-current="page"]')).toBeInViewport();
+  await leave.scrollIntoViewIfNeeded();
+  await expect(leave).toBeInViewport();
+  expect(await nav.evaluate((side) => side.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  // It stays put while the page scrolls.
+  await page.mouse.move(800, 300);
+  await page.mouse.wheel(0, 400);
+  await expect(nav.getByRole('link', { name: 'Overview' })).toBeAttached();
+  expect(
+    await nav.evaluate((side) => Math.round(side.getBoundingClientRect().top)),
+  ).toBe(0);
+});
+
+test('on a phone the Menu opens a sheet, every link can be reached, and choosing one closes it', async ({
+  page,
+}, testInfo) => {
+  await enrolOwner(page, testInfo);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto('/ops');
+  const menu = page.getByRole('button', { name: 'Menu · Overview' });
+  await expect(menu).toBeVisible();
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  await expect(menu).toHaveAttribute('aria-haspopup', 'dialog');
+  // No sidebar, and the closed sheet's menu isn't there either.
+  await expect(adminNav(page)).toHaveCount(0);
+  await expect(page.locator('.site-header')).toBeHidden();
+  expect(await fitsViewport(page)).toBe(true);
+
+  await menu.click();
+  const sheet = page.getByRole('dialog', { name: 'Admin menu' });
+  await expect(sheet).toBeVisible();
+  await expect(menu).toHaveAttribute('aria-expanded', 'true');
+  expect(
+    await sheet.evaluate((dialog) => dialog.contains(document.activeElement)),
+  ).toBe(true);
+  const nav = sheet.getByRole('navigation', { name: 'Admin' });
+  const links = nav.getByRole('link');
+  expect(await links.count()).toBeGreaterThan(5);
+  for (const link of await links.all()) {
+    await link.scrollIntoViewIfNeeded();
+    await expect(link).toBeInViewport();
+    const box = await link.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+
+  await nav.getByRole('link', { name: 'Your access' }).click();
+  await page.waitForURL(/\/ops\/staff$/);
+  await expect(sheet).toBeHidden();
+  await expect(
+    page.getByRole('button', { name: 'Menu · Your access' }),
+  ).toBeVisible();
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+test('Escape closes the phone menu and focus goes back to Menu', async ({
+  page,
+}, testInfo) => {
+  await enrolOwner(page, testInfo);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto('/ops/issues');
+  const menu = page.getByRole('button', { name: 'Menu · Issues' });
+  await menu.click();
+  const sheet = page.getByRole('dialog', { name: 'Admin menu' });
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(menu).toBeFocused();
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  // A tap on the dimmed page closes it too.
+  await menu.click();
+  await expect(sheet).toBeVisible();
+  await page.mouse.click(180, 20);
+  await expect(sheet).toBeHidden();
+  await expect(menu).toBeFocused();
+});
+
+test('a visitor who isn’t staff sees the missing page with the normal header', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/ops');
+  await expect(
+    page.getByRole('heading', { name: 'This page isn’t available right now' }),
+  ).toBeVisible();
+  await expect(page.locator('.site-header')).toBeVisible();
+  await expect(page.locator('.site-footer')).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-ops-frame');
+  await expect(adminNav(page)).toHaveCount(0);
+  await expect(page.getByText('Staff area')).toHaveCount(0);
+});
+
+test('the authenticator step keeps the site header and stays centred', async ({
+  page,
+}, testInfo) => {
+  const { email } = identity(testInfo);
+  await grantOwner(email);
+  await signInWithEmail(page, email, '/sign-in?next=/ops');
+  await page.waitForURL(/\/ops$/);
+  await expect(
+    page.getByRole('heading', { name: 'Set up your authenticator' }),
+  ).toBeVisible();
+  await expect(page.locator('.site-header')).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-ops-frame');
+  await expect(adminNav(page)).toHaveCount(0);
+  const step = await page.locator('.ops-step').boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(Math.abs(step!.x + step!.width / 2 - viewport.width / 2)).toBeLessThan(
+    2,
+  );
+});
 
 test('a report after the takeover closed: the card stops pointing at the closed issue, and leads to the new one', async ({
   page,
