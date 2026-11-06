@@ -237,7 +237,7 @@ export default function TipsPage() {
                       <span className="tip-row__who">
                         <strong>
                           <span className="sr-only">Tip from </span>
-                          {tip.supporterLabel ?? 'A guest'}
+                          {tip.supporterLabel ?? 'Anonymous'}
                         </strong>
                         <small>
                           {timeOf(tip.at)}

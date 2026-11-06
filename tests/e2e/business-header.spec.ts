@@ -101,7 +101,15 @@ test('an owner uploads a logo in Details; the public header tile shows it, and R
 }, testInfo) => {
   const who = await signUpRecipient(page, testInfo);
   const { userId } = await accountOf(who.email);
-  const business = await seedBusiness({ owner: userId, name: 'Kiosk Ade' });
+  // Two places, so /b/<business> shows its own page rather than going straight to the one place.
+  const business = await seedBusiness({
+    owner: userId,
+    name: 'Kiosk Ade',
+    locations: [
+      { slug: 'vi', name: 'Victoria Island' },
+      { slug: 'ikeja', name: 'Ikeja' },
+    ],
+  });
 
   // Before: the initial.
   const before = await visit(browser, `/b/${business.slug}/vi`);
@@ -141,6 +149,18 @@ test('an owner uploads a logo in Details; the public header tile shows it, and R
     .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0);
   await expectAccessible(after.page);
+  // The business page (/b/<business>) uses the same header, so the same tile.
+  await after.page.goto(`/b/${business.slug}`);
+  const homeImage = header(after.page)
+    .getByTestId('business-logo-tile')
+    .locator('img');
+  await expect(homeImage).toHaveAttribute(
+    'src',
+    new RegExp(`/v1/business-logos/${business.businessId}/\\d+\\.webp$`),
+  );
+  await expect
+    .poll(() => homeImage.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
   await after.context.close();
 
   await details.getByRole('button', { name: 'Remove logo' }).click();

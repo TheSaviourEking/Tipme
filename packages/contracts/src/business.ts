@@ -317,6 +317,14 @@ export interface PublicLocation {
   /** On shift first (by started_at), then everyone else (by shownName). */
   people: StaffCard[];
 }
+/**
+ * Public: the business page (`/b/<business>`, BusinessProfile board Variant A). A verified, not
+ * suspended business and its open locations in the order they were added. Never any person.
+ */
+export interface PublicBusiness {
+  business: PublicLocation['business'];
+  locations: { slug: string; name: string; address: string }[];
+}
 export interface PublicStaffTipPage {
   business: PublicLocation['business'];
   location: PublicLocation['location'];
@@ -364,6 +372,8 @@ export interface InviteeCard {
 export interface MyBusinessRoles {
   manages: {
     businessId: string;
+    /** The business's address on TipMe: its public page knows a manager by it. */
+    slug: string;
     name: string;
     status: BusinessStatus;
     role: ManagerRole;

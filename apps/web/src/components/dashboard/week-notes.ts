@@ -56,7 +56,7 @@ export async function loadWeekNotes(week: string): Promise<WeekNote[]> {
         return {
           tipId: tip.tipId,
           note: result.data.message,
-          who: tip.supporterLabel ?? 'a guest',
+          who: tip.supporterLabel ?? 'Anonymous',
           grossMinor: tip.grossMinor,
         };
       } catch {

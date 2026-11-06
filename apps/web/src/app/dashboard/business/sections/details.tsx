@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { BusinessDetail } from '@tipme/contracts';
@@ -248,8 +249,10 @@ export function DetailsCard({
           )}
           {business.slugLocked ? (
             <p className="tm-hint" data-testid="business-slug">
-              Address on TipMe: /b/{business.slug}. It can’t change now that the
-              business is verified, because printed codes use it.
+              Address on TipMe:{' '}
+              <Link href={`/b/${business.slug}`}>/b/{business.slug}</Link>. It
+              can’t change now that the business is verified, because printed
+              codes use it.
             </p>
           ) : (
             input('slug', 'Address on TipMe', {

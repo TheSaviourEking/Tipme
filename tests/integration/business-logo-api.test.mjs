@@ -122,6 +122,8 @@ test('an owner sets a logo: a 512×512 WebP with no metadata, on the public loca
   const page = (await (await fetch(`${stack.api}/v1/b/${slug}/vi`)).json())
     .data;
   assert.equal(page.business.logoPath, detail.logoPath);
+  const home = (await (await fetch(`${stack.api}/v1/b/${slug}`)).json()).data;
+  assert.equal(home.business.logoPath, detail.logoPath);
 
   // A new logo is a new URL; the old one stops working.
   const second = (

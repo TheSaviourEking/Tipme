@@ -4,6 +4,13 @@
   box-sizing: border-box;
 }
 
+/* The reset above (Tailwind's base) takes away the margin a browser centres a modal dialog with, so
+   a pop-up opened in the top-left corner (the owner, 6 Nov 2026). Every modal is centred again;
+   :where() keeps this weightless, so a sheet that places itself (ops-frame__sheet, bank-sheet) wins. */
+:where(dialog:modal) {
+  margin: auto;
+}
+
 html {
   /* The header's height, shared so page content can fill the screen beneath it. */
   --nav-height: 76px;
@@ -10667,6 +10674,21 @@ p.tip-choice:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* The location's page address: a link, then its Copy link key and what copying said. */
+.business-location__link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.business-location__link a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .business-location__keys {
   display: flex;
   flex-wrap: wrap;
@@ -11175,9 +11197,115 @@ body:has(.business-public) > .site-footer {
   text-underline-offset: 3px;
 }
 
+/* The business page (BusinessProfile board, Variant A): a card per open place, and a managers'
+   note added in the browser. */
+.business-places {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-place {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 4rem;
+  padding: var(--space-3) var(--space-4);
+  box-sizing: border-box;
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  text-decoration: none;
+  box-shadow: 0 1px 0 rgb(20 18 16 / 8%);
+}
+
+.business-place:hover {
+  border-color: var(--border-control);
+}
+
+.business-place:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.business-place__pin {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-control);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+
+.business-place__words {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.business-place__name {
+  font: 400 1.125rem/1.15 var(--font-editorial);
+  overflow-wrap: anywhere;
+}
+
+.business-place__address {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.business-place__chevron {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.business-manager-note {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 1px solid var(--brand-mid);
+  border-radius: var(--radius-field);
+  background: var(--brand-soft);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.business-manager-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--brand-ink);
+}
+
+.business-manager-note p {
+  margin: 0;
+}
+
+.business-manager-note a {
+  color: var(--brand-ink);
+  font-weight: 800;
+}
+
+.quiet-page .business-manager-note {
+  margin-bottom: var(--space-4);
+}
+
 @media (forced-colors: active) {
   .staff-again {
     border-color: Highlight;
+  }
+
+  .business-place,
+  .business-manager-note {
+    border-color: CanvasText;
   }
 }
 /* business:B4 end */

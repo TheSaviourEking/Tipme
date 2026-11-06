@@ -68,7 +68,7 @@ export function notifyTipSucceeded(
           kind: 'tip',
           tipId: input.tipId,
           title: 'You got a tip',
-          body: `${ngn(row.net)} from ${row.label ?? 'a guest'}`,
+          body: `${ngn(row.net)} from ${row.label ?? 'Anonymous'}`,
           ...(input.now ? { createdAt: input.now } : {}),
         })
         .onConflictDoNothing()

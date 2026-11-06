@@ -10,19 +10,22 @@ import { BusinessLogoTile } from './business-logo-tile';
 export function BusinessHeader({
   name,
   location,
+  where,
   titleLevel,
-  onToday,
+  onToday = false,
   logoPath,
 }: {
   name: string;
-  location: string;
+  location?: string;
+  /** The business page's own line ("3 places"), in place of "{location} · on today". */
+  where?: string;
   /** The location page's title is the business; the staff page's is the person. */
   titleLevel: 'h1' | 'p';
   /**
    * Whether someone is on shift here now (the staff page: whether that person is). Only then does
-   * the line say "on today"; it never gives a number of people (owner's design note).
+   * the location line say "on today"; it never gives a number of people (owner's design note).
    */
-  onToday: boolean;
+  onToday?: boolean;
   /** The owner's uploaded logo; without one the tile shows the initial. */
   logoPath?: string;
 }) {
@@ -37,8 +40,7 @@ export function BusinessHeader({
         <div className="business-header__names">
           <Title className="business-header__name">{name}</Title>
           <p className="business-header__where">
-            {' '}
-            {onToday ? `${location} · on today` : location}
+            {where ?? (onToday ? `${location} · on today` : location)}
           </p>
         </div>
       </div>

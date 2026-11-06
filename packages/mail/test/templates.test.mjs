@@ -36,6 +36,17 @@ test('user text is escaped in HTML and intact in text', () => {
   assert.ok(out.text.includes(label));
 });
 
+test('a tip with no name says it came from Anonymous, never a guest', () => {
+  // The owner, 6 Nov 2026: "change the tip from guest to anonymous".
+  const out = renderMail(
+    'tip_received',
+    { ...MAIL_TYPES.tip_received.sample, supporterLabel: null },
+    ctx,
+  );
+  assert.ok(out.text.includes('From Anonymous.'), out.text);
+  assert.doesNotMatch(out.text + out.html + out.subject, /guest/i);
+});
+
 test('links carry their link key', () => {
   const url = mailLink(ctx, '/dashboard', 'open_dashboard');
   assert.equal(new URL(url).searchParams.get('ml'), 'open_dashboard');
@@ -772,7 +783,7 @@ test('the tip email puts the amount on the slab, exact to the kobo', () => {
   assert.doesNotMatch(out.text, /left you a note|payment provider/);
   const guest = tip({ supporterLabel: null });
   assert.ok(
-    guest.text.includes('From a guest. Confirmed by our payment partner.'),
+    guest.text.includes('From Anonymous. Confirmed by our payment partner.'),
   );
   // The preview line names nobody.
   for (const out of [tip(), guest, tip({ hasNote: true })]) {

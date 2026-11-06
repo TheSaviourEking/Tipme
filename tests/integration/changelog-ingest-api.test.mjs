@@ -108,8 +108,10 @@ test('an unsigned, stale or wrongly signed request is 401 and stores nothing', a
       'content-type': 'application/json',
       'x-tipme-signature': headers['x-tipme-signature'],
     },
-    stale: signed(body, { at: Date.now() - 301_000 }).headers,
-    ahead: signed(body, { at: Date.now() + 301_000 }).headers,
+    // Ten minutes either side: just past the 300 s window, the seconds rounding and the requests
+    // before it can bring "ahead" back inside the window (it passed as 200 on CI).
+    stale: signed(body, { at: Date.now() - 600_000 }).headers,
+    ahead: signed(body, { at: Date.now() + 600_000 }).headers,
     'other secret': signed(body, {
       secret: 'another-changelog-secret-of-32-characters',
     }).headers,

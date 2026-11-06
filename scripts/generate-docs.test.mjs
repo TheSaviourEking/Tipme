@@ -48,6 +48,7 @@ const PUBLIC_REVIEWED = [
   'POST /v1/auth/recover/complete',
   'POST /v1/auth/verify',
   'GET /v1/avatars/{profileId}/{file}',
+  'GET /v1/b/{business}',
   'GET /v1/b/{business}/people',
   'GET /v1/b/{business}/{location}',
   'GET /v1/b/{business}/{location}/{handle}',

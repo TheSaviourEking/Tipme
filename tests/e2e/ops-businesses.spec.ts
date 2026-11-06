@@ -130,3 +130,33 @@ test('verifying waits for a second person, who approves it; then it reads "Verif
   await expect(section(page, 'Verify')).toHaveCount(0);
   await expect(section(page, 'Pause')).toBeVisible();
 });
+
+test('staff who own the business can’t verify it, even alone; it stays waiting', async ({
+  page,
+}, testInfo) => {
+  const { email } = await enrolOwner(page, testInfo);
+  const [me] = await sql<{ id: string }>(
+    `SELECT id FROM users WHERE lower(email) = lower($1)`,
+    [email],
+  );
+  const name = `Kitchen ${randomUUID().slice(0, 6)}`;
+  const { businessId } = await seedBusiness({
+    owner: me!.id,
+    status: 'pending',
+    name,
+  });
+
+  await page.goto(`/ops/businesses/${businessId}`);
+  const verify = section(page, 'Verify');
+  await verify.getByRole('button', { name: 'Verify…' }).click();
+  await verify.getByLabel('What did you check?').fill(REASON);
+  await verify.getByRole('button', { name: 'Verify this business' }).click();
+  await expect(
+    page.getByText(
+      /manage this business, so you can’t verify it\. Another staff member must\./,
+    ),
+  ).toBeVisible({ timeout: 15_000 });
+  await expectAccessible(page);
+  await page.reload();
+  await expect(shown(page, 'Waiting to be verified')).toBeVisible();
+});

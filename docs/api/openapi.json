@@ -849,6 +849,47 @@
         "x-tipme-access": "public"
       }
     },
+    "/v1/b/{business}": {
+      "get": {
+        "operationId": "BusinessPublic.business",
+        "tags": [
+          "BusinessPublic"
+        ],
+        "parameters": [
+          {
+            "name": "business",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/v1/b/{business}/people": {
       "get": {
         "operationId": "BusinessPublic.search",

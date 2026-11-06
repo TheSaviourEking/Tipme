@@ -432,6 +432,9 @@ const moneyIssueClose = acting<{
   // The route asks for this too: closing an issue takes it.
   mayDecide: async (_db, _payload, approver) =>
     approver.access.permissions.has('issues.resolve'),
+  // The runbook's rule: on your own page the route refuses while someone else could, and alone you
+  // may, with the alert. So a subject may ask here.
+  subjectMayAsk: true,
   subjects: async ({ issueId }, db) => {
     const [issue] = await db
       .select({ subject: issues.subject })

@@ -109,6 +109,50 @@ test('API: the location page and the staff page; unknown is 404', async () => {
   assert.equal((await get(`/v1/b/${business.slug}/vi/nobody`)).status, 404);
 });
 
+test('API: the business page lists open locations, never people; anything else is 404', async () => {
+  const business = await seedBusiness(database, {
+    name: 'The Yellow Chilli',
+    locations: [
+      {
+        slug: 'vi',
+        name: 'Victoria Island',
+        address: '12 Akin Adesola Street',
+      },
+      { slug: 'shut', name: 'Shut', closed: true },
+      { slug: 'lekki', name: 'Lekki Phase 1', address: '4 Admiralty Way' },
+    ],
+  });
+  await seedMember(database, {
+    locationId: business.locations[0].id,
+    profileId: TOBI.id,
+    shownName: 'Tobi',
+    onShift: true,
+  });
+  const page = await get(`/v1/b/${business.slug}`);
+  assert.equal(page.status, 200);
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(page.body.data, {
+    business: {
+      slug: business.slug,
+      name: 'The Yellow Chilli',
+      verified: true,
+    },
+    locations: [
+      {
+        slug: 'vi',
+        name: 'Victoria Island',
+        address: '12 Akin Adesola Street',
+      },
+      { slug: 'lekki', name: 'Lekki Phase 1', address: '4 Admiralty Way' },
+    ],
+  });
+  assert.doesNotMatch(JSON.stringify(page.body), /Tobi|tobi/);
+  const pending = await seedBusiness(database, { status: 'pending' });
+  const paused = await seedBusiness(database, { status: 'suspended' });
+  for (const slug of [pending.slug, paused.slug, 'no-such-place'])
+    assert.equal((await get(`/v1/b/${slug}`)).status, 404, slug);
+});
+
 test('API: responses carry no display name, bio, phone, email or links', async () => {
   const business = await seedBusiness(database, {
     locations: [{ slug: 'vi' }, { slug: 'ikoyi' }],

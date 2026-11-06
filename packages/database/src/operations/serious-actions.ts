@@ -146,8 +146,16 @@ export interface SeriousActionDefinition<Payload> {
     payload: Payload,
     approver: { userId: string; access: StaffAccess },
   ): Promise<boolean>;
-  /** Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox. */
+  /**
+   * Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox, and can't
+   * ask for it either (owner's ruling, 6 Nov 2026), unless `subjectMayAsk` says otherwise.
+   */
   subjects?(payload: Payload, db: Database | Tx): string[] | Promise<string[]>;
+  /**
+   * A subject may still ask, and run it alone when nobody else qualifies. Only for an action whose
+   * documented rule allows it, such as releasing a freeze on your own page when nobody else can.
+   */
+  subjectMayAsk?: true;
   /**
    * After a refusal has undone the run, so what it records stays: on approval, in the transaction
    * that closes the request; when asking, on its own after the rollback.
@@ -367,6 +375,30 @@ async function refusalToDecide(
 }
 
 /**
+ * Whether the requester is someone the action concerns, by id or by mailbox: the same test that
+ * keeps them from deciding it. Owner's ruling, 6 Nov 2026: they can't ask for it either, even with
+ * nobody else to approve, so a business's manager never verifies their own business.
+ */
+async function requesterIsSubject(
+  db: Database | Tx,
+  action: SeriousActionDefinition<unknown>,
+  payload: unknown,
+  requesterId: string,
+): Promise<boolean> {
+  if (action.subjectMayAsk) return false;
+  const theirs = await readMailboxes(db, requesterId);
+  for (const address of action.mailboxes?.(payload) ?? [])
+    if (theirs.has(normaliseStaffEmail(address))) return true;
+  for (const subject of (await action.subjects?.(payload, db)) ?? []) {
+    const subjectId = canonicalId(subject);
+    if (subjectId === requesterId) return true;
+    if (subjectId && sharesMailbox(theirs, await readMailboxes(db, subjectId)))
+      return true;
+  }
+  return false;
+}
+
+/**
  * Who could be the second person: active staff with a confirmed authenticator on a live account,
  * holding this permission, and not the requester by id or by mailbox. Someone mid-reset can't enter
  * a code, so they don't count, even though they have enrolled before. Given the action and payload,
@@ -432,6 +464,10 @@ export function requestSeriousAction(
     if (!action) throw new OperationError('INVALID_INPUT');
     const reason = checkedReason(input.reason);
     const payload = plainPayload(input.payload);
+    // Before `prepare`, so asking about yourself never reaches a provider or records anything.
+    const asker = canonicalId(input.actorId);
+    if (asker && (await requesterIsSubject(db, action, payload, asker)))
+      throw new OperationError('APPROVAL_SUBJECT');
     const facts = await action.prepare?.(db, payload, {
       actorId: input.actorId,
       services: input.services,
@@ -455,6 +491,9 @@ export function requestSeriousAction(
           userId: actorId,
           now,
         });
+        // Again under the lock: who manages or owns the subject may have changed since.
+        if (await requesterIsSubject(tx, action, payload, actorId))
+          throw new OperationError('APPROVAL_SUBJECT');
 
         const check = {
           actorId,
