@@ -10,36 +10,122 @@ const PAGE_CARDS = [
   'usernames.manage',
 ];
 
-/** Each entry names what its page reads, so nobody is offered a page that would refuse them. */
-const LINKS: { href: string; label: string; needs: string[] | null }[] = [
-  { href: '/ops', label: 'Overview', needs: null },
-  { href: '/ops/approvals', label: 'Approvals', needs: null },
-  { href: '/ops/issues', label: 'Issues', needs: ['issues.view'] },
-  { href: '/ops/visibility', label: 'Visibility', needs: ['analytics.view'] },
-  { href: '/ops/market', label: 'Market', needs: ['analytics.view'] },
-  { href: '/ops/pages', label: 'Pages', needs: [...PAGE_CARDS] },
-  { href: '/ops/usernames', label: 'Usernames', needs: ['usernames.manage'] },
-  { href: '/ops/search', label: 'Search', needs: ['search.view'] },
+/** The menu's groups, in the order the OpsShell board draws them; the first has no label. */
+const GROUPS = [null, 'Work', 'Numbers', 'Email and records', 'Staff'] as const;
+type Group = (typeof GROUPS)[number];
+
+/**
+ * Each entry names what its page reads, so nobody is offered a page that would refuse them, and the
+ * group it is listed in. A new page is one line here (a Changelog would join 'Email and records').
+ */
+const LINKS: {
+  href: string;
+  label: string;
+  group: Group;
+  needs: string[] | null;
+}[] = [
+  { href: '/ops', label: 'Overview', group: null, needs: null },
+  { href: '/ops/approvals', label: 'Approvals', group: null, needs: null },
+  {
+    href: '/ops/issues',
+    label: 'Issues',
+    group: 'Work',
+    needs: ['issues.view'],
+  },
+  {
+    href: '/ops/search',
+    label: 'Search',
+    group: 'Work',
+    needs: ['search.view'],
+  },
+  { href: '/ops/pages', label: 'Pages', group: 'Work', needs: [...PAGE_CARDS] },
+  {
+    href: '/ops/usernames',
+    label: 'Usernames',
+    group: 'Work',
+    needs: ['usernames.manage'],
+  },
+  {
+    href: '/ops/visibility',
+    label: 'Visibility',
+    group: 'Numbers',
+    needs: ['analytics.view'],
+  },
+  {
+    href: '/ops/market',
+    label: 'Market',
+    group: 'Numbers',
+    needs: ['analytics.view'],
+  },
   {
     href: '/ops/providers',
     label: 'Providers',
+    group: 'Email and records',
     needs: ['issues.view', 'providers.manage'],
   },
   {
     href: '/ops/email',
     label: 'Email',
+    group: 'Email and records',
     needs: ['issues.view', 'email.read', 'email.export'],
   },
-  { href: '/ops/audit', label: 'Audit log', needs: ['audit.view'] },
-  { href: '/ops/staff/people', label: 'People', needs: ['staff.manage'] },
-  { href: '/ops/staff/roles', label: 'Roles', needs: ['staff.manage'] },
-  { href: '/ops/staff', label: 'Your access', needs: null },
+  {
+    href: '/ops/audit',
+    label: 'Audit log',
+    group: 'Email and records',
+    needs: ['audit.view'],
+  },
+  {
+    href: '/ops/staff/people',
+    label: 'People',
+    group: 'Staff',
+    needs: ['staff.manage'],
+  },
+  {
+    href: '/ops/staff/roles',
+    label: 'Roles',
+    group: 'Staff',
+    needs: ['staff.manage'],
+  },
+  { href: '/ops/staff', label: 'Your access', group: 'Staff', needs: null },
 ];
 
-/** The admin menu for these permissions (the server still checks every call). */
-export function opsMenu(permissions: readonly string[]) {
-  return LINKS.filter(
+export type OpsMenuLink = { href: string; label: string };
+export type OpsMenuGroup = { label: string | null; links: OpsMenuLink[] };
+
+/** The admin menu's groups for these permissions; a group with no links left is dropped. */
+export function opsMenuGroups(permissions: readonly string[]): OpsMenuGroup[] {
+  const allowed = LINKS.filter(
     (link) =>
       !link.needs || link.needs.some((needed) => permissions.includes(needed)),
-  ).map(({ href, label }) => ({ href, label }));
+  );
+  return GROUPS.map((label) => ({
+    label,
+    links: allowed
+      .filter((link) => link.group === label)
+      .map(({ href, label: name }) => ({ href, label: name })),
+  })).filter((group) => group.links.length > 0);
+}
+
+/** The admin menu for these permissions, in order (the server still checks every call). */
+export function opsMenu(permissions: readonly string[]): OpsMenuLink[] {
+  return opsMenuGroups(permissions).flatMap((group) => group.links);
+}
+
+/**
+ * The link for the open page: its own, else the section it sits in (an issue is under Issues).
+ * Overview is never a section, so an unlisted page has none.
+ */
+export function opsMenuCurrent(
+  links: readonly OpsMenuLink[],
+  pathname: string,
+): OpsMenuLink | null {
+  const exact = links.find((link) => link.href === pathname);
+  if (exact) return exact;
+  return (
+    links
+      .filter((link) => link.href !== '/ops')
+      .filter((link) => pathname.startsWith(`${link.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0] ?? null
+  );
 }

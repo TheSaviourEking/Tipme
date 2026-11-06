@@ -10,6 +10,7 @@ import {
   type Mode,
   type Stack,
 } from './profile-fixtures';
+import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 
 // The public page (spec section 5). Test mode runs on the full e2e stack. The other payment states
 // and the worst-case pages run the same built web app against a stand-in API (profile-fixtures).
@@ -827,10 +828,10 @@ test('a failed start is shown clear of the Tip bar @mobile', async ({
   );
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
   await tipButton(page).click();
-  const notice = page.locator('.appreciation-card .tm-notice');
+  const notice = page.locator('.appreciation-card .tm-slip');
   await expect(notice).toBeInViewport();
   await expect
-    .poll(() => clearOfBar(page, '.appreciation-card .tm-notice'))
+    .poll(() => clearOfBar(page, '.appreciation-card .tm-slip'))
     .toBe(true);
 });
 
@@ -1199,14 +1200,12 @@ test('a failed quote on a phone is announced once, from one live region outside 
   await tipButton(page).click();
   await expect(page.locator('[data-tip-panel] [aria-live]')).toHaveCount(1);
   const live = page.locator('.tip-quote-live');
-  await expect(live).toHaveText(
-    'We couldn’t reach TipMe. Check your connection and try again.',
-  );
+  await expect(live).toHaveText(CONNECTION_COPY.tipDropped);
   expect(
     await live.evaluate((el) => el.closest('.composer-action') === null),
   ).toBe(true);
   const tree = await page.locator('[data-tip-panel]').ariaSnapshot();
-  expect(tree.match(/We couldn’t reach TipMe/g)).toHaveLength(1);
+  expect(tree.match(/Your tip didn’t go through/g)).toHaveLength(1);
 });
 
 for (const [name, width] of [

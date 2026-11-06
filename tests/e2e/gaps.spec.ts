@@ -172,3 +172,96 @@ test('a sign-in code pasted with a space to remove the recovery email keeps all 
   await pasteInto(page, code, '123 456');
   await expect(code).toHaveValue('123456');
 });
+
+/** CORS for an answer the test gives in place of the API. */
+const corsFor = (page: Page) => ({
+  'access-control-allow-origin': new URL(page.url()).origin,
+  'access-control-allow-credentials': 'true',
+  'access-control-allow-headers': '*',
+  'access-control-allow-methods': '*',
+});
+
+test('a report that doesn’t go through says so on its key, and Try again sends it', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await page.getByRole('button', { name: 'Report this page' }).click();
+  let sent = 0;
+  await page.route('**/v1/profiles/*/report', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsFor(page) });
+    sent += 1;
+    if (sent === 1) return route.abort();
+    return route.fulfill({
+      status: 201,
+      headers: corsFor(page),
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { accepted: true } }),
+    });
+  });
+  await page.getByRole('button', { name: 'Send report' }).click();
+  const key = page.locator('.report-page .tm-key-result--failed');
+  await expect(key).toContainText('Not sent');
+  await expect(page.locator('.report-page .tm-state-line')).toHaveText(
+    'We couldn’t send the report. Please try again.',
+  );
+  await expect(page.locator('.report-page .tm-state-line')).toHaveAttribute(
+    'role',
+    'alert',
+  );
+  await expect(page.locator('.report-page .tm-notice')).toHaveCount(0);
+  const again = key.getByRole('button', { name: 'Try again' });
+  await expect(again).toBeFocused();
+  await expect(again).toHaveAccessibleDescription(/Not sent/);
+  await expectAccessible(page);
+  await again.click();
+  await expect(
+    page.getByText('Thank you. TipMe will review this page.'),
+  ).toBeVisible();
+  expect(sent).toBe(2);
+});
+
+test('unsubscribe: a bad link is a slip, and a turn-off that fails is told on its key', async ({
+  page,
+}) => {
+  await page.goto('/email/unsubscribed');
+  const slip = page.locator('.tm-slip');
+  await expect(slip).toContainText('This link doesn’t work');
+  await expect(slip).toContainText('It may have been copied wrongly.');
+  await expect(slip).toHaveAttribute('role', 'alert');
+  await expect(slip.locator('.tm-slip__stamp')).toHaveCount(0);
+  await expectAccessible(page);
+
+  await page.goto('/email/unsubscribed?t=test-token');
+  let sent = 0;
+  await page.route('**/v1/mail/unsubscribe**', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({ status: 204, headers: corsFor(page) });
+    sent += 1;
+    return sent === 1
+      ? route.fulfill({
+          status: 500,
+          headers: corsFor(page),
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR' } }),
+        })
+      : route.fulfill({
+          status: 200,
+          headers: corsFor(page),
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { type: 'weekly_report' } }),
+        });
+  });
+  await page.getByRole('button', { name: 'Turn off this email' }).click();
+  const key = page.locator('.tm-key-result--failed');
+  await expect(key).toContainText('That didn’t go through');
+  await expect(page.locator('.tm-state-line')).toHaveText('Please try again.');
+  await expect(page.locator('.tm-notice')).toHaveCount(0);
+  await expectAccessible(page);
+  await key.getByRole('button', { name: 'Try again' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'You’re unsubscribed.' }),
+  ).toBeVisible();
+  await expect(page.getByText('weekly report emails')).toBeVisible();
+  expect(sent).toBe(2);
+});
