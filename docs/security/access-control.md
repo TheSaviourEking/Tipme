@@ -62,7 +62,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
-| `issues.resolve` | POST `/v1/ops/issues/{id}/resolve` |
+| `issues.resolve` | POST `/v1/ops/business-notes/{tipId}/review`<br>POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/database-budget`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
 | `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
@@ -70,7 +70,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `payments.recheck` | POST `/v1/ops/recheck` |
 | `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
-| `private.view` | POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
+| `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
@@ -131,6 +131,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
+| POST | `/v1/tips/{tipId}/business-note` | – | `business_note` | – |
 | POST | `/v1/tips/{tipId}/recognition/stop` | – | – | – |
 | GET | `/v1/tips/{tipId}/status` | n/a (read) | – | – |
 
@@ -160,19 +161,36 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/business-roles` | n/a (read) | – | – |
 | POST | `/v1/me/businesses` | yes | `business_apply` | – |
+| GET | `/v1/me/businesses/{businessId}/balance` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{businessId}/payout-destination` | n/a (read) | – | – |
+| PUT | `/v1/me/businesses/{businessId}/payout-destination` | yes | `auth_verify` | – |
+| POST | `/v1/me/businesses/{businessId}/payout-destination/code` | yes | `auth_code` | – |
+| POST | `/v1/me/businesses/{businessId}/payout-destination/resolve` | yes | `bank_resolve` | – |
+| GET | `/v1/me/businesses/{businessId}/withdrawal-quote` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{businessId}/withdrawals` | yes | – | – |
 | GET | `/v1/me/businesses/{id}` | n/a (read) | – | – |
 | PATCH | `/v1/me/businesses/{id}` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/codes` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{id}/insights` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{id}/invitations` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/invitations` | yes | `handles` | – |
+| POST | `/v1/me/businesses/{id}/invitations/{invitationId}/revoke` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/invitees` | n/a (read) | `handles` | – |
 | POST | `/v1/me/businesses/{id}/locations` | yes | – | – |
 | PATCH | `/v1/me/businesses/{id}/locations/{locationId}` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/locations/{locationId}/close` | yes | – | – |
 | GET | `/v1/me/businesses/{id}/managers` | n/a (read) | – | – |
 | POST | `/v1/me/businesses/{id}/managers/{managerId}/remove` | yes | – | – |
-| GET | `/v1/me/businesses/{id}/invitations` | n/a (read) | – | – |
-| POST | `/v1/me/businesses/{id}/invitations` | yes | `handles` | – |
-| POST | `/v1/me/businesses/{id}/invitations/{invitationId}/revoke` | yes | – | – |
-| GET | `/v1/me/businesses/{id}/invitees` | n/a (read) | `handles` | – |
 | GET | `/v1/me/businesses/{id}/members` | n/a (read) | – | – |
 | POST | `/v1/me/businesses/{id}/members/{memberId}/remove` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/members/{memberId}/shift/end` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/members/{memberId}/shift/start` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/notes` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/notes/{tipId}/report` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/shares` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/shares` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/shares/{agreementId}/accept` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/shares/{agreementId}/decline` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
@@ -233,11 +251,21 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/work` | n/a (read) | – | – |
 | PATCH | `/v1/me/work/{memberId}` | yes | – | – |
 | POST | `/v1/me/work/{memberId}/leave` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/report-business` | yes | – | – |
+| PATCH | `/v1/me/work/{memberId}/share-amounts` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/shift/end` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/shift/start` | yes | – | – |
 | PUT | `/v1/me/work/invitation-blocks/{businessId}` | yes | – | – |
 | GET | `/v1/me/work/invitations` | n/a (read) | – | – |
 | POST | `/v1/me/work/invitations/accept` | yes | – | – |
 | POST | `/v1/me/work/invitations/decline` | yes | – | – |
 | POST | `/v1/me/work/invitations/preview` | yes | – | – |
+| GET | `/v1/me/work/notes` | n/a (read) | – | – |
+| POST | `/v1/me/work/notes/{tipId}/report` | yes | – | – |
+| GET | `/v1/me/work/shares` | n/a (read) | – | – |
+| POST | `/v1/me/work/shares/{agreementId}/accept` | yes | – | – |
+| POST | `/v1/me/work/shares/{agreementId}/counter` | yes | – | – |
+| POST | `/v1/me/work/shares/{agreementId}/decline` | yes | – | – |
 | GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
 #### Signed-in staff, before an admin grant
@@ -261,6 +289,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/bachs/account-recovery` | `payments.repair` | yes | – | – |
 | POST | `/v1/ops/bachs/checkout-recovery` | `payments.repair` | yes | – | – |
 | POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.repair` | yes | – | – |
+| POST | `/v1/ops/business-notes/{tipId}/reveal` | `private.view` | yes | – | – |
+| POST | `/v1/ops/business-notes/{tipId}/review` | `issues.resolve` | yes | – | – |
 | GET | `/v1/ops/businesses` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}` | `search.view` | n/a (read) | – | – |
 | POST | `/v1/ops/businesses/{id}/restore` | `businesses.manage` | yes | – | – |

@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { accountOf, seedBusiness, seedMember } from './business-fixtures';
 import { sql } from './ops-helpers';
@@ -9,10 +9,7 @@ import { WEB_ORIGIN } from './stack';
 // TipMe for businesses, PR B8: printed location signs and staff badges. Every printed code must
 // scan to the right URL, so each canvas is read back pixel for pixel and decoded.
 
-// The web's shapes for B1's BusinessDetail and B3's MyMembership (packages/contracts), as far as
-// these pages read them; the tools tsconfig does not resolve workspace packages.
-type Status = 'pending' | 'verified' | 'suspended';
-type BusinessDetail = { id: string; status: Status } & Record<string, unknown>;
+// Every read is the real API: B1's business detail, B3's Work list and B8's codes.
 
 type Decode = (
   data: Uint8ClampedArray,
@@ -50,43 +47,12 @@ async function scan(canvas: Locator): Promise<string | undefined> {
   return jsQR(new Uint8ClampedArray(data), info.width, info.height)?.data;
 }
 
-/**
- * The Business page draws its sections from B1's detail route, and the Work page from B3's work
- * route; neither is on this branch, so the test answers them with what those routes return. The
- * codes themselves always come from the real API.
- */
-async function answerDetail(page: Page, detail: BusinessDetail) {
-  await page.route(
-    (url) => url.pathname === `/v1/me/businesses/${detail.id}`,
-    (route) => route.fulfill({ json: { data: detail } }),
-  );
-}
-const detailOf = (
-  businessId: string,
-  slug: string,
-  status: Status,
-  locations: { id: string; slug: string; name: string }[],
-): BusinessDetail => ({
-  id: businessId,
-  slug,
-  name: 'The Yellow Chilli',
-  status,
-  slugLocked: status !== 'pending',
-  contact: { name: 'Funke', email: 'funke@example.com' },
-  locations: locations.map((location) => ({
-    ...location,
-    address: '27 Ademola Adetokunbo, Lagos',
-    closed: false,
-  })),
-  you: { role: 'owner' },
-});
-
 test('a verified business shows each sign and badge, and each decodes to its URL with src=qr', async ({
   page,
 }, testInfo) => {
   const who = await signUpRecipient(page, testInfo);
   const { userId, profileId } = await accountOf(who.email);
-  const { businessId, slug, locations } = await seedBusiness({
+  const { slug, locations } = await seedBusiness({
     owner: userId,
     locations: [{ slug: 'vi', name: 'Victoria Island' }],
   });
@@ -95,12 +61,6 @@ test('a verified business shows each sign and badge, and each decodes to its URL
     profileId,
     shownName: 'Kemi',
   });
-  await answerDetail(
-    page,
-    detailOf(businessId, slug, 'verified', [
-      { id: locations[0]!.id, slug: 'vi', name: 'Victoria Island' },
-    ]),
-  );
   await page.goto('/dashboard/business');
   const codes = page.getByRole('region', { name: 'Codes' });
   const sign = codes.getByRole('img', { name: /^Sign for Victoria Island/ });
@@ -185,16 +145,10 @@ test('codes are refused until verified: nothing is drawn for a pending business'
 }, testInfo) => {
   const who = await signUpRecipient(page, testInfo, { live: false });
   const { userId } = await accountOf(who.email);
-  const { businessId, slug, locations } = await seedBusiness({
+  const { businessId } = await seedBusiness({
     owner: userId,
     status: 'pending',
   });
-  await answerDetail(
-    page,
-    detailOf(businessId, slug, 'pending', [
-      { id: locations[0]!.id, slug: 'vi', name: 'Victoria Island' },
-    ]),
-  );
   await page.goto('/dashboard/business');
   const codes = page.getByRole('region', { name: 'Codes' });
   await expect(
@@ -217,27 +171,15 @@ test('Work → My code: the member’s own badge, downloadable once verified, sc
 }, testInfo) => {
   const who = await signUpRecipient(page, testInfo);
   const { userId, profileId } = await accountOf(who.email);
-  const { businessId, slug, locations } = await seedBusiness({ owner: userId });
-  const { memberId } = await seedMember({
+  const { businessId, slug, locations } = await seedBusiness({
+    owner: userId,
+    status: 'pending',
+  });
+  await seedMember({
     locationId: locations[0]!.id,
     profileId,
     shownName: 'Kemi',
   });
-  const membership = (status: Status): Record<string, unknown> => ({
-    memberId,
-    business: { id: businessId, name: 'The Yellow Chilli', slug, status },
-    location: { id: locations[0]!.id, name: 'Victoria Island', slug: 'vi' },
-    shownName: 'Kemi',
-    showPhoto: true,
-    shareAmounts: false,
-    onShift: false,
-    staffCodePath: `/b/${slug}/vi/${who.handle}`,
-  });
-  let status: Status = 'pending';
-  await page.route(
-    (url) => url.pathname === '/v1/me/work',
-    (route) => route.fulfill({ json: { data: [membership(status)] } }),
-  );
   await page.goto('/dashboard/work');
   await expect(
     page.getByText(
@@ -246,7 +188,11 @@ test('Work → My code: the member’s own badge, downloadable once verified, sc
   ).toBeVisible();
   await expect(page.locator('canvas')).toHaveCount(0);
 
-  status = 'verified';
+  // TipMe staff verify it (B2's operation, here straight in the database).
+  await sql(
+    `UPDATE businesses SET status = 'verified', verified_at = now(), verified_by = $2 WHERE id = $1`,
+    [businessId, userId],
+  );
   await page.reload();
   const badge = page.getByRole('img', {
     name: /^Your badge at The Yellow Chilli/,

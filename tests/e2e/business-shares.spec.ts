@@ -1,31 +1,10 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import type {
-  BusinessDetail,
-  MyMembership,
-} from '../../packages/contracts/src/business';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { accountOf, seedBusiness, seedMember } from './business-fixtures';
-import { API_ORIGIN } from './stack';
 
 // Business release 2, PR R2-C1: the business proposes a share, the staff member decides on their
 // Work page (board section 3). The e2e stack runs with BUSINESS_ENABLED and BUSINESS_SHARES_ENABLED.
-//
-// The Business page draws its sections once B1's business detail loads, and the Work page its
-// cards once B3's `GET /v1/me/work` answers. Neither route is on this branch's base, so this spec
-// answers those two reads with the seeded rows; every share call goes to the real API.
-
-async function answerShellReads(
-  page: Page,
-  detail: BusinessDetail,
-  memberships: MyMembership[],
-) {
-  await page.route(`${API_ORIGIN}/v1/me/businesses/${detail.id}`, (route) =>
-    route.fulfill({ json: { data: detail } }),
-  );
-  await page.route(`${API_ORIGIN}/v1/me/work`, (route) =>
-    route.fulfill({ json: { data: memberships } }),
-  );
-}
+// Every read and every share call goes to the real API (B1's detail and B3's Work list included).
 
 // The radio sits under its label's face (tm-choice), so a person, and this test, clicks the label.
 async function pick(scope: Locator, name: string) {
@@ -63,53 +42,7 @@ test('the business proposes; a decline stays pending until the start date; a sug
     profileId,
     shownName: 'Kemi L',
   });
-  const place = (id: string, slug: string, name: string) => ({
-    id,
-    slug,
-    name,
-    address: '27 Ademola Adetokunbo, Lagos',
-    closed: false,
-  });
-  const membership = (
-    memberId: string,
-    location: { id: string; slug: string },
-    name: string,
-    shownName: string,
-  ): MyMembership => ({
-    memberId,
-    business: {
-      id: business.businessId,
-      name: 'The Yellow Chilli',
-      slug: business.slug,
-      status: 'verified',
-    },
-    location: { id: location.id, name, slug: location.slug },
-    shownName,
-    showPhoto: true,
-    shareAmounts: false,
-    onShift: false,
-    staffCodePath: `/b/${business.slug}/${location.slug}/${who.handle}`,
-  });
-  await answerShellReads(
-    page,
-    {
-      id: business.businessId,
-      slug: business.slug,
-      name: 'The Yellow Chilli',
-      status: 'verified',
-      slugLocked: true,
-      contact: { name: 'Funke', email: 'funke@example.com' },
-      locations: [
-        place(vi.id, vi.slug, 'Victoria Island'),
-        place(lekki.id, lekki.slug, 'Lekki'),
-      ],
-      you: { role: 'owner' },
-    },
-    [
-      membership(atVi, vi, 'Victoria Island', 'Kemi'),
-      membership(atLekki, lekki, 'Lekki', 'Kemi L'),
-    ],
-  );
+
   const viRow = shares(page).getByTestId(`share-${atVi}`);
   const lekkiRow = shares(page).getByTestId(`share-${atLekki}`);
   const viCard = page.getByRole('region', {

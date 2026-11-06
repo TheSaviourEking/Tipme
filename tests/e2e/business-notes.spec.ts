@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { MyMembership } from '../../packages/contracts/src/business';
 import { expectAccessible, signUpRecipient } from './helpers';
 import {
   accountOf,
@@ -182,32 +181,7 @@ test('the person reads their notes on the Work page and reports one; TipMe staff
   await supporter.getByRole('button', { name: 'Send note' }).click();
   await expect(supporter.getByText('Sent. Thank you.')).toBeVisible();
 
-  // The Work page draws each membership from GET /v1/me/work, which lane B3 builds; until it
-  // merges, this test answers it with the seeded membership.
-  const membership: MyMembership = {
-    memberId: paid.memberId,
-    business: {
-      id: paid.business.businessId,
-      name: 'The Yellow Chilli',
-      slug: paid.business.slug,
-      status: 'verified',
-    },
-    location: {
-      id: paid.business.locations[0]!.id,
-      name: 'Victoria Island',
-      slug: 'vi',
-    },
-    shownName: 'Tobi',
-    showPhoto: true,
-    shareAmounts: false,
-    onShift: false,
-    staffCodePath: `/b/${paid.business.slug}/vi/${paid.who.handle}`,
-  };
-  await page.route('**/v1/me/work', (route) =>
-    route.request().method() === 'GET'
-      ? route.fulfill({ json: { data: [membership] } })
-      : route.fallback(),
-  );
+  // The Work page draws each membership from B3's real GET /v1/me/work.
   await page.goto('/dashboard/work');
   const notes = page
     .locator('.work-section')

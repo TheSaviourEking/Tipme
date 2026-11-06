@@ -88,27 +88,7 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
   const kobo = share % 100n;
   const shareText = `₦${new Intl.NumberFormat('en').format(share / 100n)}${kobo ? `.${String(kobo).padStart(2, '0')}` : ''}`;
 
-  // The Business page draws its sections from the business's detail, which PR B1 serves. It is
-  // not on this branch yet, so only that one read is answered here; all money calls are real.
-  await page.route(
-    `${API_ORIGIN}/v1/me/businesses/${business.businessId}`,
-    (route) =>
-      route.fulfill({
-        json: {
-          data: {
-            id: business.businessId,
-            slug: business.slug,
-            name: 'The Yellow Chilli',
-            status: 'verified',
-            slugLocked: true,
-            contact: { name: 'Funke', email: 'funke@example.com' },
-            locations: [],
-            you: { role: 'owner' },
-          },
-        },
-      }),
-  );
-
+  // Every read is the real API (B1's business detail included); all money calls are real.
   const money = page.locator('#money');
   await expect(async () => {
     await page.goto('/dashboard/business');

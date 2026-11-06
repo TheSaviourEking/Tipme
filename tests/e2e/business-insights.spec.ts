@@ -1,8 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import type {
-  BusinessDetail,
-  MyMembership,
-} from '../../packages/contracts/src/business';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
 import {
@@ -12,9 +8,8 @@ import {
   seedMember,
 } from './business-fixtures';
 
-// TipMe for businesses, PR B7: what the business sees. The business's detail (B1) and the Work
-// list (B3) belong to other lanes, so this spec answers those two reads itself; everything B7
-// owns (insights, notes, share amounts) is the real API.
+// TipMe for businesses, PR B7: what the business sees. Everything is the real API: B1's detail,
+// B3's Work list, B7's insights, notes and share amounts, and B5's manager report route.
 
 // Each test pays 10 pretend tips through the API to reach the counts it needs; under load that
 // alone can pass the 30-second default.
@@ -22,6 +17,8 @@ test.describe.configure({ timeout: 120_000 });
 
 type Seeded = {
   businessId: string;
+  /** The tip behind the one seeded note (Kemi's). */
+  noteTipId: string;
   slug: string;
   locationId: string;
   memberId: string;
@@ -32,7 +29,7 @@ type Seeded = {
 async function seed(
   page: Page,
   testInfo: Parameters<typeof signUpRecipient>[1],
-) {
+): Promise<Seeded> {
   const who = await signUpRecipient(page, testInfo);
   const { userId, profileId } = await accountOf(who.email);
   const business = await seedBusiness({
@@ -82,84 +79,13 @@ async function seed(
   );
   const seeded = {
     businessId: business.businessId,
+    noteTipId: kemiTips[0]!.tipId,
     slug: business.slug,
     locationId,
     memberId,
     handle: who.handle,
   };
-  await answerOtherLanes(page, seeded);
   return seeded;
-}
-
-/** B1's `GET /v1/me/businesses/:id` and B3's `GET /v1/me/work`, answered here. */
-async function answerOtherLanes(page: Page, s: Seeded) {
-  const detail: BusinessDetail = {
-    id: s.businessId,
-    slug: s.slug,
-    name: 'The Yellow Chilli',
-    status: 'verified',
-    slugLocked: true,
-    contact: { name: 'Funke', email: 'funke@example.com' },
-    locations: [
-      {
-        id: s.locationId,
-        slug: 'vi',
-        name: 'Victoria Island',
-        address: '27 Ademola Adetokunbo, Lagos',
-        closed: false,
-      },
-    ],
-    you: { role: 'owner' },
-  };
-  const membership: MyMembership = {
-    memberId: s.memberId,
-    business: {
-      id: s.businessId,
-      name: 'The Yellow Chilli',
-      slug: s.slug,
-      status: 'verified',
-    },
-    location: { id: s.locationId, name: 'Victoria Island', slug: 'vi' },
-    shownName: 'Kemi',
-    showPhoto: true,
-    shareAmounts: false,
-    onShift: false,
-    staffCodePath: `/b/${s.slug}/vi/${s.handle}`,
-  };
-  const json = (data: unknown) => ({
-    status: 200,
-    contentType: 'application/json',
-    headers: { 'access-control-allow-credentials': 'true' },
-    body: JSON.stringify({ data }),
-  });
-  await page.route(
-    (url) => url.pathname === `/v1/me/businesses/${s.businessId}`,
-    async (route) => {
-      const origin = route.request().headers()['origin'];
-      const response = json(detail);
-      await route.fulfill({
-        ...response,
-        headers: {
-          ...response.headers,
-          ...(origin ? { 'access-control-allow-origin': origin } : {}),
-        },
-      });
-    },
-  );
-  await page.route(
-    (url) => url.pathname === '/v1/me/work',
-    async (route) => {
-      const origin = route.request().headers()['origin'];
-      const response = json([membership]);
-      await route.fulfill({
-        ...response,
-        headers: {
-          ...response.headers,
-          ...(origin ? { 'access-control-allow-origin': origin } : {}),
-        },
-      });
-    },
-  );
 }
 
 test('the owner sees this week in groups of 3, no amounts, and the notes; reporting one hides it', async ({
@@ -199,25 +125,7 @@ test('the owner sees this week in groups of 3, no amounts, and the notes; report
   await expect(notes).toContainText('Kemi · Friendly, Went the extra mile');
   await expectAccessible(page);
 
-  // B5 owns the report route; answer it here and check the note goes.
-  let reported: unknown;
-  await page.route(
-    (url) =>
-      url.pathname.startsWith(`/v1/me/businesses/${s.businessId}/notes/`) &&
-      url.pathname.endsWith('/report'),
-    async (route) => {
-      if (route.request().method() === 'OPTIONS') return route.fallback();
-      reported = route.request().postDataJSON();
-      const origin = route.request().headers()['origin'];
-      await route.fulfill({
-        status: 204,
-        headers: {
-          'access-control-allow-credentials': 'true',
-          ...(origin ? { 'access-control-allow-origin': origin } : {}),
-        },
-      });
-    },
-  );
+  // B5's real report route, reached by B7's note reference (merge train 2).
   await notes.getByRole('button', { name: /^Report Kemi/ }).click();
   const reasons = notes.getByRole('group', {
     name: 'What’s wrong with this note?',
@@ -231,7 +139,12 @@ test('the owner sees this week in groups of 3, no amounts, and the notes; report
   await expect(notes.getByText('Fixed our order in five minutes.')).toHaveCount(
     0,
   );
-  expect(reported).toEqual({ reason: 'spam' });
+  expect(
+    await sql<{ reported_by: string; reason: string }>(
+      `SELECT reported_by, reason FROM business_note_flags WHERE tip_id = $1`,
+      [s.noteTipId],
+    ),
+  ).toEqual([{ reported_by: 'manager', reason: 'spam' }]);
 });
 
 test('a staff member shares their amounts from Work; the business then sees their weekly total only', async ({

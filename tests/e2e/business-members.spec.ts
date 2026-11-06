@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, signInWithEmail, signUpRecipient } from './helpers';
 import { accountOf, seedBusiness } from './business-fixtures';
-import { API_ORIGIN } from './stack';
 
 // TipMe for businesses, PR B3: inviting people (link, username, email), the Work page, and
 // leaving. The e2e stack runs with BUSINESS_ENABLED=true (playwright.config.ts).
@@ -10,40 +9,6 @@ import { API_ORIGIN } from './stack';
 test.slow();
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Dashboard' });
-
-/**
- * The Business page draws its sections once `GET /v1/me/businesses/:id` answers. That route is
- * PR B1's (not on this branch yet), so its answer is stood in for here; every People call
- * (members, invitations, invitees) goes to the real API.
- */
-async function standInForDetail(
-  page: Page,
-  business: { businessId: string; slug: string; locations: { id: string }[] },
-) {
-  // The shape of BusinessDetail (`@tipme/contracts`), which the e2e package does not import.
-  const detail = {
-    id: business.businessId,
-    slug: business.slug,
-    name: 'The Yellow Chilli',
-    status: 'verified',
-    slugLocked: true,
-    contact: { name: 'Funke', email: 'funke@example.com' },
-    locations: [
-      {
-        id: business.locations[0]!.id,
-        slug: 'vi',
-        name: 'Victoria Island',
-        address: '27 Ademola Adetokunbo, Lagos',
-        closed: false,
-      },
-    ],
-    you: { role: 'owner' },
-  };
-  await page.route(
-    `${API_ORIGIN}/v1/me/businesses/${business.businessId}`,
-    (route) => route.fulfill({ json: { data: detail } }),
-  );
-}
 
 /** Reloads the Business page and waits for its People section (its detail loads after the shell). */
 async function reloadPeople(page: Page) {
@@ -60,7 +25,6 @@ async function ownerWithBusiness(
   const owner = await signUpRecipient(page, testInfo);
   const { userId } = await accountOf(owner.email);
   const business = await seedBusiness({ owner: userId });
-  await standInForDetail(page, business);
   await page.goto('/dashboard/business');
   await expect(
     page.getByRole('heading', { level: 2, name: 'People' }),
@@ -198,9 +162,10 @@ test('by username: the search shows a public card, the person accepts, the owner
   await expect(staff.getByText('You joined The Yellow Chilli.')).toBeVisible();
 
   await reloadPeople(page);
-  const remove = page.getByRole('button', { name: /^Remove / });
-  await remove.click();
-  await page.getByRole('button', { name: /^Yes, remove / }).click();
+  // In People: B1's Managers card (now real) has its own "Remove …" for the owner.
+  const people = page.getByRole('region', { name: 'People' });
+  await people.getByRole('button', { name: /^Remove / }).click();
+  await people.getByRole('button', { name: /^Yes, remove / }).click();
   await expect(page.getByText(/is no longer on the team\./)).toBeVisible();
   await staff.reload();
   await expect(
