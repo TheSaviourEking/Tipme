@@ -17,6 +17,7 @@ import { OpsProvidersController } from './providers.controller.js';
 import { OpsStaffController } from './staff.controller.js';
 import { OpsApprovalsController } from './approvals.controller.js';
 import { OpsUsernamesController } from './usernames.controller.js';
+import { OpsChangelogController } from './changelog.controller.js';
 import { MailModule } from '../mail/mail.module.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
@@ -44,6 +45,7 @@ import { seriousServicesProvider } from './serious-services.js';
     OpsEmailConsoleController,
     OpsAccountRecoveryController,
     OpsUsernamesController,
+    OpsChangelogController,
   ],
   providers: [
     CsrfGuard,

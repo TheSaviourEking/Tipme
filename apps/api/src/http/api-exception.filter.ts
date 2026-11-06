@@ -5,7 +5,11 @@ import {
   type ExceptionFilter,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import type { ApiErrorCode, ApiErrorResponse } from '@tipme/contracts';
+import type {
+  ApiErrorCode,
+  ApiErrorResponse,
+  ChangelogTextProblem,
+} from '@tipme/contracts';
 import {
   databaseFailureOf,
   isDatabaseAvailabilityFailure,
@@ -291,6 +295,18 @@ const operationErrors: Partial<
   TAKE_BACK_OPEN: { status: 409, code: 'TAKE_BACK_OPEN' },
   TAKE_BACK_NOT_FOUND: { status: 404, code: 'TAKE_BACK_NOT_FOUND' },
   TAKE_BACK_CLOSED: { status: 409, code: 'TAKE_BACK_CLOSED' },
+  // Changelog plan (5 Nov 2026), Task 4.3. CHANGELOG_SIGNATURE_INVALID is the ingest PR's (401).
+  APPROVAL_NO_APPROVER: { status: 409, code: 'APPROVAL_NO_APPROVER' },
+  CHANGELOG_EDITED_ELSEWHERE: {
+    status: 409,
+    code: 'CHANGELOG_EDITED_ELSEWHERE',
+  },
+  CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  CHANGELOG_TEXT_NOT_ALLOWED: {
+    status: 422,
+    code: 'CHANGELOG_TEXT_NOT_ALLOWED',
+    fields: ['userText'],
+  },
   ROLE_IN_USE: { status: 409, code: 'ROLE_IN_USE' },
   ROLE_PROTECTED: { status: 409, code: 'ROLE_PROTECTED' },
   STAFF_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
@@ -376,6 +392,29 @@ function classify(exception: unknown): {
   return { status: 500, code: 'INTERNAL_ERROR' };
 }
 
+const CHANGELOG_PROBLEMS: ReadonlySet<string> = new Set<ChangelogTextProblem>([
+  'provider_name',
+  'regulatory_claim',
+  'too_long',
+]);
+
+/**
+ * Why a changelog text can't be shown, for the field: the problem names, comma-separated. The one
+ * OperationError detail an answer carries, so it is re-checked here against the fixed names.
+ */
+function changelogProblemsOf(exception: unknown): string | undefined {
+  if (
+    !(exception instanceof OperationError) ||
+    exception.code !== 'CHANGELOG_TEXT_NOT_ALLOWED' ||
+    !exception.detail
+  )
+    return undefined;
+  const names = exception.detail.split(',');
+  return names.every((name) => CHANGELOG_PROBLEMS.has(name))
+    ? names.join(',')
+    : undefined;
+}
+
 /** Fixed words and codes only: what the next person needs to tell one 503 from another. */
 function dependencyFields(failure: DatabaseFailure | null) {
   if (!failure) return { cause: 'not_database' };
@@ -440,6 +479,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     else if (fields) body.error.fields = fields;
     if (exception instanceof CodedHttpException && exception.reason)
       body.error.reason = exception.reason;
+    const problems = changelogProblemsOf(exception);
+    if (problems) body.error.reason = problems;
     if (
       exception instanceof RateLimitedException ||
       (exception instanceof CodedHttpException && exception.retryAfterSeconds)
