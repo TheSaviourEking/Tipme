@@ -38,6 +38,7 @@ import {
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import { takeBackAction } from './username-take-backs.js';
+import { changelogPublishAction } from './changelog-admin.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -812,6 +813,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(staffResetAuthenticator);
   registerSeriousAction(mailProviderSwitch);
   registerSeriousAction(takeBackAction);
+  registerSeriousAction(changelogPublishAction);
 }
 
 /* Routes whose seriousness depends on what is being done */

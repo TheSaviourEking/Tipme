@@ -15,6 +15,12 @@ import { approvalRequests, changelogEntries, users } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { maskEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
+import {
+  requestSeriousAction,
+  type SeriousActionDefinition,
+  type SeriousActionOutcome,
+  type SeriousActionServices,
+} from './serious-actions.js';
 import { checkedReason, withAuditChange } from './staff.js';
 
 /*
@@ -371,5 +377,114 @@ export function withdrawChangelogEntry(
       });
       return toEntry(tx, updated!, now);
     });
+  });
+}
+
+/* The approvals flow (Design §4, Task 4.2) */
+
+export interface ChangelogPublishPayload {
+  number: number;
+  revision: number;
+}
+
+const AUDIENCE_WORDS: Record<Exclude<ChangelogAudience, 'staff'>, string> = {
+  everyone: 'everyone',
+  pro: 'Pro',
+  early_access: 'early access',
+};
+
+const positiveInt = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+
+/** The checks approval repeats: the entry at that revision, with a text users may read. */
+async function publishable(
+  tx: Database | Tx,
+  payload: ChangelogPublishPayload,
+): Promise<EntryRow> {
+  if (!positiveInt(payload?.number) || !positiveInt(payload?.revision))
+    throw new OperationError('INVALID_INPUT');
+  const row = await entryOrThrow(tx, payload.number);
+  if (row.revision !== payload.revision)
+    throw new OperationError('CHANGELOG_EDITED_ELSEWHERE');
+  if (row.userText === null || row.revision === row.publishedRevision)
+    throw new OperationError('INVALID_INPUT');
+  const problems = userTextProblems(row.userText);
+  if (problems.length > 0)
+    throw new OperationError('CHANGELOG_TEXT_NOT_ALLOWED', problems.join(','));
+  return row;
+}
+
+/**
+ * `changelog.publish`: an editor asks a publisher to show users an entry. Asked for with
+ * `changelog.edit`, decided with `changelog.publish`, so an editor can never run it alone. The full
+ * text (at most 280 characters, never private) is in the summary the approver reads.
+ */
+export const changelogPublishAction: SeriousActionDefinition<ChangelogPublishPayload> =
+  {
+    name: CHANGELOG_PUBLISH_ACTION,
+    permission: 'changelog.publish',
+    askPermission: 'changelog.edit',
+    validate: async (tx, payload) => {
+      await publishable(tx, payload);
+    },
+    target: ({ number }) => `changelog:${number}`,
+    // Any edit, direct approval or withdrawal while it waits makes the request stale.
+    current: async (tx, { number }) => {
+      const [row] = await tx
+        .select({
+          revision: changelogEntries.revision,
+          publishedRevision: changelogEntries.publishedRevision,
+          withdrawnAt: changelogEntries.withdrawnAt,
+        })
+        .from(changelogEntries)
+        .where(eq(changelogEntries.prNumber, number));
+      return row
+        ? {
+            revision: row.revision,
+            publishedRevision: row.publishedRevision,
+            withdrawnAt: iso(row.withdrawnAt),
+          }
+        : null;
+    },
+    describe: async (tx, payload) => {
+      const row = await publishable(tx, payload);
+      const audience = row.audience as Exclude<ChangelogAudience, 'staff'>;
+      return `Show users this What’s new entry (#${row.prNumber}, ${AUDIENCE_WORDS[audience]}): “${row.userText}”`;
+    },
+    run: (tx, payload, context) =>
+      approveChangelogEntry(tx, {
+        number: payload.number,
+        revision: payload.revision,
+        approverId: context.approverId ?? context.actorId,
+        reason: context.reason,
+        askedBy: context.actorId,
+        now: context.now,
+      }),
+  };
+
+/** An editor asks for the revision they read to be shown to users (POST …/ask). */
+export function askToPublishChangelogEntry(
+  db: Database,
+  input: {
+    actorId: string;
+    grantId: string;
+    number: number;
+    revision: number;
+    reason: string;
+    services: SeriousActionServices;
+    now?: Date;
+  },
+): Promise<SeriousActionOutcome> {
+  return requestSeriousAction(db, {
+    name: CHANGELOG_PUBLISH_ACTION,
+    payload: {
+      number: input.number,
+      revision: input.revision,
+    } satisfies ChangelogPublishPayload,
+    actorId: input.actorId,
+    grantId: input.grantId,
+    reason: input.reason,
+    services: input.services,
+    ...(input.now ? { now: input.now } : {}),
   });
 }

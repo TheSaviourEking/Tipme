@@ -51,19 +51,22 @@ Every role except `release_check` holds `changelog.edit` (the owner's default, 6
 
 These wait for a second person when one is available:
 
-| Action                      | In plain words                         | Needs                                                       |
-| --------------------------- | -------------------------------------- | ----------------------------------------------------------- |
-| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                         |
-| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                           |
-| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it |
-| `fee.change`                | Change a page’s fee                    | `fees.manage`                                               |
-| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                               |
-| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                       |
-| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                              |
-| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                              |
-| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                               |
-| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                          |
-| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it        |
+| Action                      | In plain words                         | Needs                                                         |
+| --------------------------- | -------------------------------------- | ------------------------------------------------------------- |
+| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                           |
+| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                             |
+| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it   |
+| `fee.change`                | Change a page’s fee                    | `fees.manage`                                                 |
+| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                                 |
+| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                         |
+| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                                |
+| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                                |
+| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                                 |
+| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                            |
+| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it          |
+| `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish` |
+
+`changelog.publish` is the one action asked for with a different permission from the one that decides it. An editor without `changelog.publish` can never run it alone: with no publisher able to enter a code, asking is refused ("Nobody who can approve this is set up yet."). A publisher doesn't ask: their own Approve on the entry page, with a fresh code, is the one approval (owner's default, 6 Nov 2026).
 
 Giving someone a role or permission counts as serious only if it contains something sensitive. A harmless edit applies at once. Hand closes of money issues are serious, except releasing a freeze (below).
 

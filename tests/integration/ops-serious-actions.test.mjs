@@ -113,6 +113,20 @@ registerSeriousAction({
   },
 });
 
+// Asked for with one permission, decided with another (changelog plan, Task 4.2).
+const ASKED = 'test.asked';
+registerSeriousAction({
+  name: ASKED,
+  permission: 'fees.manage',
+  askPermission: 'issues.view',
+  validate: async () => {},
+  describe: async (_tx, payload) => `Asked for ${payload.value}`,
+  run: async (_tx, payload, ctx) => {
+    runs.push({ payload, ctx });
+    return { applied: payload.value };
+  },
+});
+
 const REASON = 'The provider confirmed the change by phone';
 let phoneSeq = 0;
 const grants = new Map();
@@ -809,6 +823,75 @@ test('an action registers once, with a permission the catalogue knows', () => {
         permission: 'issues.view',
       }),
     /not sensitive/,
+  );
+});
+
+test('actions without askPermission still require the requester to hold the permission, and still run alone without a second person', async () => {
+  // Holding only what some other action asks with is not enough here.
+  const asker = await person({ roleId: await roleWith(['issues.view']) });
+  await assert.rejects(ask(asker), { code: 'PERMISSION_NOT_HELD' });
+  const owner = await person();
+  const outcome = await ask(owner);
+  assert.equal(outcome.state, 'ran');
+  assert.equal(outcome.aloneReason, 'no_second_person');
+  assert.equal(runs.length, 1);
+  assert.equal((await aloneAlerts()).length, 1);
+});
+
+test('an action with askPermission: asking takes that one, deciding the other, and only someone who could act directly runs alone', async () => {
+  const asker = await person({ roleId: await roleWith(['issues.view']) });
+  // Nobody can decide: refused, nothing runs, nothing waits, no alert.
+  await assert.rejects(ask(asker, { name: ASKED }), {
+    code: 'APPROVAL_NO_APPROVER',
+  });
+  assert.equal(runs.length, 0);
+  assert.equal((await q('SELECT 1 FROM approval_requests')).length, 0);
+  assert.equal((await aloneAlerts()).length, 0);
+  // Holding neither permission: refused as before.
+  const outsider = await person({ roleId: await roleWith(['search.view']) });
+  await assert.rejects(ask(outsider, { name: ASKED }), {
+    code: 'PERMISSION_NOT_HELD',
+  });
+  // Someone who holds the deciding permission too still runs alone, as today.
+  const owner = await person();
+  await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [owner]);
+  const both = await person({
+    roleId: await roleWith(['issues.view', 'fees.manage']),
+  });
+  const alone = await ask(both, { name: ASKED });
+  assert.equal(alone.state, 'ran');
+  assert.equal((await aloneAlerts()).length, 1);
+  // With a decider, the asker's request waits, under the deciding permission.
+  const pending = await ask(asker, { name: ASKED });
+  assert.equal(pending.state, 'pending');
+  const [row] = await q(`SELECT * FROM approval_requests WHERE id = $1`, [
+    pending.requestId,
+  ]);
+  assert.equal(row.permission, 'fees.manage');
+  assert.equal(row.requested_by, asker);
+  assert.deepEqual(await approvers(asker), [both]);
+  // The fresh code is still asserted for the asker.
+  await q(
+    `UPDATE ops_sessions SET last_totp_at = now() - interval '6 hours' WHERE user_id = $1`,
+    [asker],
+  );
+  await assert.rejects(ask(asker, { name: ASKED, payload: { value: 'y' } }), {
+    code: 'FRESH_CODE_REQUIRED',
+  });
+});
+
+test('registering an action with an unknown askPermission throws', () => {
+  assert.throws(
+    () =>
+      registerSeriousAction({
+        name: 'test.unknown_ask',
+        permission: 'fees.manage',
+        askPermission: 'nothing.such',
+        validate: async () => {},
+        describe: async () => '',
+        run: async () => {},
+      }),
+    /unknown ask permission/,
   );
 });
 

@@ -342,6 +342,24 @@ const wired = {
         ).length > 0,
     };
   },
+  'changelog.publish': async () => {
+    const number = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
+    await q(
+      `INSERT INTO changelog_entries (pr_number, merge_sha, merged_at, pr_title, staff_text, user_text, audience)
+       VALUES ($1, $2, now(), 'feat: pins', 'feat: pins — Adds pins.', 'You can pin a supporter note.', 'everyone')`,
+      [number, 'd'.repeat(40)],
+    );
+    return {
+      payload: { number, revision: 1 },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM changelog_entries WHERE pr_number = $1 AND published_revision = 1`,
+            [number],
+          )
+        ).length > 0,
+    };
+  },
   'fee.free': async () => {
     const id = await profileId();
     await q(`DELETE FROM fee_free_credits WHERE profile_id = $1`, [id]);

@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed eleven', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 11);
+test('the serious actions are the agreed twelve', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 12);
   assert.ok(SERIOUS_ACTIONS.includes('staff.grant_owner'));
   assert.ok(SERIOUS_ACTIONS.includes('username.take_back'));
   assert.equal(
@@ -89,9 +89,8 @@ test('the runbook names every permission and serious action', () => {
     assert.match(runbook, rule);
 });
 
-// Changelog plan (5 Nov 2026), Design §4. The serious action itself is registered with its
-// approval flow in the admin API PR, so SERIOUS_ACTIONS stays at eleven until then.
-test('changelog.edit is not sensitive; changelog.publish is, both under content', () => {
+// Changelog plan (5 Nov 2026), Design §4.
+test('changelog.edit is not sensitive; changelog.publish is, and names its serious action', () => {
   assert.deepEqual(OPS_CATALOGUE['changelog.edit'], {
     description: 'Edit changelog entries and ask for one to be shown to users',
     group: 'content',
@@ -103,4 +102,13 @@ test('changelog.edit is not sensitive; changelog.publish is, both under content'
     sensitive: true,
   });
   assert.equal(OPS_PERMISSIONS.length, 22);
+  assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['changelog.publish'],
+    'changelog.publish',
+  );
+  assert.equal(
+    SERIOUS_ACTION_WORDS['changelog.publish'],
+    'Show users a What’s new entry',
+  );
 });
