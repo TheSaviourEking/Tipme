@@ -98,6 +98,13 @@
 - Shared files touched outside B3's own: `business.module.ts` (the mail sealing provider), `work-view.tsx` (invitations above the workplaces), `dashboard-shell.tsx` (keeps `#join=` through sign-in; Work link while one is kept), `notification-bell.tsx` (a link for invitation notices), `settings/sections/data.tsx` (the refusal's words).
 - Evidence: `.superpowers/program/b3-report.md` (main checkout). Full e2e not run locally (overload ruling); CI runs it.
 
+# Current handoff — TipMe for businesses, PR B4 (6 November 2026)
+
+- Branch `feat/business-b4`, lane 0, committed, not pushed. No migration. Money unchanged: the tip goes through today's quote, intent and posting; the member id is a label B0's `createPaymentIntent` checks.
+- Contract changes beyond the plan: `tipIntentRequestSchema.businessMemberId` drops a malformed value instead of refusing the intent (B0's test changed to match); `PublicStaffTipPage.profile` gains `tippingOpen`; new `StaffPageRedirect`, `BusinessPersonMatch`, `businessPeopleQuerySchema`. `searchBusinessPeople` takes `options` (the payment-account rule) before `now`.
+- `/v1/b/` is added to the API's uncredentialed cross-origin paths (the browser calls the search). The `people` route is declared before `:location`, so a location slugged `people` would be shadowed: B1 should refuse that slug.
+- Nothing in the API calls `/api/revalidate` with `{ business }` yet; business pages fall back to a 30 s cache. B3/B6 can call it on join, leave and shift changes.
+
 # Current handoff — TipMe for businesses, PR B0 (6 November 2026)
 
 - Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.

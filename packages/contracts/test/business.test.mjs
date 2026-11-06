@@ -243,17 +243,23 @@ test('business, location and member inputs', () => {
   );
 });
 
-test('tipIntentRequestSchema accepts businessMemberId as a uuid and nothing else', () => {
+test('tipIntentRequestSchema keeps a uuid businessMemberId and drops anything else, never refusing the tip', () => {
   const base = { quoteId: LOCATION };
   assert.ok(ok(tipIntentRequestSchema, base));
-  assert.ok(
-    ok(tipIntentRequestSchema, { ...base, businessMemberId: LOCATION }),
+  assert.equal(
+    tipIntentRequestSchema.parse({ ...base, businessMemberId: LOCATION })
+      .businessMemberId,
+    LOCATION,
   );
-  for (const businessMemberId of ['tobi', 42, '', null])
-    assert.ok(
-      !ok(tipIntentRequestSchema, { ...base, businessMemberId }),
-      String(businessMemberId),
-    );
+  // A bad label is ignored, never refused (PR B4, money safety): the tip goes ahead unlabelled.
+  for (const businessMemberId of ['tobi', 42, '', null, {}, 'x'.repeat(5000)]) {
+    const parsed = tipIntentRequestSchema.safeParse({
+      ...base,
+      businessMemberId,
+    });
+    assert.ok(parsed.success, String(businessMemberId));
+    assert.equal(parsed.data.businessMemberId, undefined);
+  }
   assert.ok(
     !ok(tipIntentRequestSchema, { ...base, businessLocationId: LOCATION }),
   );

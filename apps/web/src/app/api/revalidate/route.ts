@@ -8,7 +8,8 @@ const BUSINESS_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 
 /**
  * The API calls this when a recipient changes their page, so the cached public page refreshes
- * at once (`expire: 0`: the next visitor never sees the old version).
+ * at once (`expire: 0`: the next visitor never sees the old version). `{ business }` (a slug)
+ * refreshes every `/b/<business>/...` page instead (PR B4).
  */
 export async function POST(request: Request): Promise<Response> {
   const expected = process.env.WEB_REVALIDATE_SECRET ?? '';

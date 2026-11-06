@@ -36,7 +36,11 @@
 - Done: `/v1/ops/businesses` list and detail (search.view, contacts masked), reveal (private.view, reason, audited), suspend and restore (businesses.manage, reason, audited; suspending ends open shifts as `expired`), `business.verify` as a serious action (pinned on status and slug; resolves `business_waiting`; tells owners in-app); the web revalidate route takes a business slug (`business:<slug>` tag); the admin Businesses list and detail pages, a "Businesses" menu entry shown only while the feature is on, and a link from a `business_waiting` issue.
 - Next: coordinator review; rebase onto dev once B0 merges; full e2e on CI. B4 must tag its `/b/` reads with `businessTag(slug)` from `apps/web/src/lib/business/business-tag.ts`.
 
+# Current task — TipMe for businesses, PR B4: the supporter's flow (6 November 2026)
 
+- Branch/worktree: `feat/business-b4` / `.worktrees/business-b4`, off `feat/business-b0` (B0 not yet on dev), test lane 0. Not pushed. Plan: Tasks 14–15.
+- Done: public reads (`publicLocation`, `searchBusinessPeople`, `publicStaffTipPage`) and their routes under `/v1/b/`; `/b/<business>/<location>` with the header, picker, search, "I don't see them" and "Tip {name} again"; the staff page with today's tip form and `business` prop; remembered tips carry the business slug; `/api/revalidate` accepts `{ business }`.
+- Next: rebase onto dev once B0 merges; full e2e on CI. Evidence: `.superpowers/program/b4-report.md` (main checkout).
 # Current task — states and feedback, PR B public (5 November 2026)
 
 - Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.

@@ -40,6 +40,9 @@ export const tipPurposes = [
 ] as const;
 export type TipPurpose = (typeof tipPurposes)[number];
 
+// Hyphenated hex, any version: the same shape z.uuid() accepts in practice for our ids.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const tipIntentRequestSchema = z
   .object({
     quoteId: z.uuid(),
@@ -60,9 +63,16 @@ export const tipIntentRequestSchema = z
     supporterKey: z.string().regex(SUPPORTER_KEY_PATTERN).optional(),
     /**
      * The business membership the supporter's page named (TipMe for businesses). A label the
-     * server checks and ignores when it doesn't hold: it never refuses or redirects a tip.
+     * server checks and ignores when it doesn't hold: it never refuses or redirects a tip. So a
+     * malformed one (not a uuid, not a string) is dropped here rather than refused (PR B4).
      */
-    businessMemberId: z.uuid().optional(),
+    businessMemberId: z
+      .unknown()
+      .optional()
+      .transform((value) =>
+        typeof value === 'string' && UUID.test(value) ? value : undefined,
+      )
+      .meta({ type: 'string', format: 'uuid' }),
   })
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;
