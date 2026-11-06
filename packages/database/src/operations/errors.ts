@@ -84,7 +84,11 @@ export type OperationErrorCode =
   | 'USERNAME_NOT_RESERVED'
   | 'TAKE_BACK_OPEN'
   | 'TAKE_BACK_NOT_FOUND'
-  | 'TAKE_BACK_CLOSED';
+  | 'TAKE_BACK_CLOSED'
+  | 'APPROVAL_NO_APPROVER'
+  | 'CHANGELOG_EDITED_ELSEWHERE'
+  | 'CHANGELOG_TEXT_NOT_ALLOWED'
+  | 'CHANGELOG_NOT_FOUND';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is
