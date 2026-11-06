@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
+import { CheckoutModule } from '../checkout/checkout.module.js';
+import { MailModule } from '../mail/mail.module.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { BusinessRolesController } from './business-roles.controller.js';
 import { BusinessManageController } from './business-manage.controller.js';
@@ -26,6 +28,8 @@ import {
  * is registered here by B0, so a lane changes only its own controller file.
  */
 @Module({
+  // R2-B: a business's withdrawals use the person's payout provider and mail sealing.
+  imports: [CheckoutModule, MailModule],
   controllers: [
     BusinessRolesController,
     BusinessManageController,

@@ -154,6 +154,13 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/business-roles` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{businessId}/balance` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{businessId}/payout-destination` | n/a (read) | – | – |
+| PUT | `/v1/me/businesses/{businessId}/payout-destination` | yes | `auth_verify` | – |
+| POST | `/v1/me/businesses/{businessId}/payout-destination/code` | yes | `auth_code` | – |
+| POST | `/v1/me/businesses/{businessId}/payout-destination/resolve` | yes | `bank_resolve` | – |
+| GET | `/v1/me/businesses/{businessId}/withdrawal-quote` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{businessId}/withdrawals` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
