@@ -135,6 +135,9 @@ const REFUSALS: Record<string, string> = {
   USERNAME_HELD_BY_PAGE:
     'A page has this username, now or as an old one. To take it, ask to take it back.',
   USERNAME_NOT_RESERVED: 'This username isn’t reserved',
+  TAKE_BACK_OPEN: 'This username already has a take-back under way',
+  TAKE_BACK_CLOSED: 'This take-back has already finished',
+  TAKE_BACK_NOT_FOUND: 'We couldn’t find that take-back',
 };
 
 const UNKNOWN =

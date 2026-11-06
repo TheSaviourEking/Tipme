@@ -7,11 +7,14 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import type {
-  OpsReservation,
-  OpsUsernameCheck,
-  OpsUsernamesList,
+import {
+  TAKE_BACK_CATEGORY_WORDS,
+  type OpsReservation,
+  type OpsTakeBack,
+  type OpsUsernameCheck,
+  type OpsUsernamesList,
 } from '@tipme/contracts';
+import Link from 'next/link';
 import {
   Badge,
   Button,
@@ -22,8 +25,13 @@ import {
   Skeleton,
 } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
+import {
+  TakeBackForm,
+  type TakeBackAnswer,
+} from '@/components/ops/take-back-form';
 import { age, can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
+import { takeBackStateWords } from '@/lib/take-back-words';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 type Said = {
@@ -63,10 +71,14 @@ function CheckAnswer({
   answer,
   onReserve,
   onRelease,
+  onTakeBack,
+  onCancelTakeBack,
 }: {
   answer: OpsUsernameCheck;
   onReserve: (reason: string) => Promise<string | null>;
   onRelease: (reason: string) => Promise<string | null>;
+  onTakeBack: (answer: TakeBackAnswer) => void;
+  onCancelTakeBack: (id: string, reason: string) => Promise<string | null>;
 }) {
   const id = useId();
   const heading = <h3 id={id}>@{answer.name}</h3>;
@@ -140,9 +152,43 @@ function CheckAnswer({
                 : `An old username of @${answer.page.handle}, which still leads to their page.`}
             </strong>{' '}
             {answer.page.displayName},{' '}
-            {answer.page.plan === 'pro' ? 'Pro' : 'Free'}. Taking a username
-            back from a page isn’t available yet.
+            {answer.page.plan === 'pro' ? 'Pro' : 'Free'}.
           </p>
+          {answer.openTakeBack ? (
+            <>
+              <p>
+                <strong>Take-back:</strong>{' '}
+                {takeBackStateWords(answer.openTakeBack)} (
+                {TAKE_BACK_CATEGORY_WORDS[answer.openTakeBack.category]},{' '}
+                {answer.openTakeBack.noticeDays} days’ notice).
+              </p>
+              <div className="ops-actions">
+                <ReasonAction
+                  open="Cancel the take-back…"
+                  field="Why cancel this take-back?"
+                  submit="Cancel the take-back"
+                  onSubmit={(reason) =>
+                    onCancelTakeBack(answer.openTakeBack!.id, reason)
+                  }
+                />
+              </div>
+            </>
+          ) : answer.pendingRequestId ? (
+            <p>
+              <strong>Take-back:</strong> Waiting for approval.{' '}
+              <Link href="/ops/approvals">Open Approvals</Link>
+            </p>
+          ) : (
+            <div className="ops-actions">
+              <TakeBackForm
+                name={answer.name}
+                kind={answer.kind}
+                page={answer.page}
+                facts={answer.facts}
+                onDone={onTakeBack}
+              />
+            </div>
+          )}
         </article>
       );
   }
@@ -310,6 +356,43 @@ export default function UsernamesPage() {
     return null;
   };
 
+  const onTakeBack = (raw: string) => (outcome: TakeBackAnswer) => {
+    say(
+      outcome.kind === 'waiting'
+        ? {
+            tone: 'neutral',
+            title: 'Waiting for approval',
+            text: 'The take-back starts once someone else approves it in Approvals.',
+          }
+        : {
+            tone: 'success',
+            title: outcome.actedAlone ? 'Done alone' : 'Take-back started',
+            text: outcome.actedAlone
+              ? 'Nobody else could approve it, so it started now, and the owners were alerted. The notice is on its way.'
+              : 'The notice is on its way.',
+          },
+    );
+    void recheck(raw);
+    void load(filters);
+  };
+
+  const onCancelTakeBack =
+    (raw: string) => async (takeBackId: string, reason: string) => {
+      const result = await opsAct<OpsTakeBack>(
+        `/v1/ops/usernames/take-backs/${encodeURIComponent(takeBackId)}/cancel`,
+        { method: 'POST', body: { reason } },
+      );
+      if (result.kind === 'refused') return refused(raw, result);
+      say({
+        tone: 'success',
+        title: 'Take-back cancelled',
+        text: 'The username stays with the page. If they had the notice, they are told they can keep it.',
+      });
+      void recheck(raw);
+      void load(filters);
+      return null;
+    };
+
   const applyFilters = (event: FormEvent) => {
     event.preventDefault();
     void load(filters);
@@ -322,7 +405,8 @@ export default function UsernamesPage() {
         A reserved username can’t be claimed at sign-up or taken by a handle
         change. The public sees “reserved”, exactly as for TipMe’s own words.
         Reserving and releasing happen at once, with your reason in the audit
-        log.
+        log. Taking a username back from a page waits for a second person when
+        one is available.
       </p>
       <div ref={saidAt} tabIndex={-1}>
         {said && (
@@ -364,7 +448,64 @@ export default function UsernamesPage() {
             answer={answer}
             onReserve={(reason) => onReserve(answer.name, reason)}
             onRelease={(reason) => onRelease(answer.name, reason)}
+            onTakeBack={onTakeBack(answer.name)}
+            onCancelTakeBack={onCancelTakeBack(answer.name)}
           />
+        )}
+      </Card>
+
+      <Card className="settings-section">
+        <h2 id={`${id}-take-backs`}>Take-backs</h2>
+        {list?.pending && list.pending.length > 0 && (
+          <ul className="ops-list">
+            {list.pending.map((request) => (
+              <li key={request.requestId} className="ops-row">
+                @{request.name}: Waiting for approval.{' '}
+                <Link href="/ops/approvals">Open Approvals</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {list &&
+          (list.takeBacks ?? []).length === 0 &&
+          !list.pending?.length && (
+            <EmptyState title="No take-backs">
+              Check a name above to take it back from a page.
+            </EmptyState>
+          )}
+        {list && (list.takeBacks ?? []).length > 0 && (
+          <div
+            className="ops-table-wrap"
+            role="region"
+            aria-labelledby={`${id}-take-backs`}
+            tabIndex={0}
+          >
+            <table className="ops-table">
+              <caption className="sr-only">Take-backs, open ones first</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Page</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Asked by</th>
+                  <th scope="col">New username</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(list.takeBacks ?? []).map((row) => (
+                  <tr key={row.id}>
+                    <td>@{row.name}</td>
+                    <td>@{row.pageHandle}</td>
+                    <td>{TAKE_BACK_CATEGORY_WORDS[row.category]}</td>
+                    <td>{takeBackStateWords(row)}</td>
+                    <td>{row.requestedBy}</td>
+                    <td>{row.newHandle ? `@${row.newHandle}` : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 

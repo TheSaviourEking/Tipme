@@ -227,6 +227,7 @@ export const OPS_PAGE_LOOKUP_PERMISSIONS: readonly OpsPermission[] = [
   'fees.manage',
   'payouts.resolve',
   'recoveries.manage',
+  'usernames.manage',
 ];
 
 /**

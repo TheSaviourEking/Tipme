@@ -6,6 +6,8 @@ const PAGE_CARDS = [
   'fees.manage',
   'payouts.resolve',
   'recoveries.manage',
+  // The page card offers "Take back this username".
+  'usernames.manage',
 ];
 
 /** Each entry names what its page reads, so nobody is offered a page that would refuse them. */
