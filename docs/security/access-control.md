@@ -60,6 +60,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `analytics.view` | GET `/v1/ops/market`<br>GET `/v1/ops/market/series`<br>GET `/v1/ops/metrics/health`<br>GET `/v1/ops/metrics/visibility` |
 | `audit.view` | GET `/v1/ops/audit`<br>GET `/v1/ops/staff-activity` |
 | `businesses.manage` | POST `/v1/ops/businesses/{id}/restore`<br>POST `/v1/ops/businesses/{id}/suspend`<br>POST `/v1/ops/businesses/{id}/verify` |
+| `changelog.edit` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/ask`<br>POST `/v1/ops/changelog/{number}/withdraw` |
+| `changelog.publish` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/approve`<br>POST `/v1/ops/changelog/{number}/withdraw` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `fees.manage` | POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing` |
@@ -309,6 +311,12 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/businesses/{id}/reveal` | `private.view` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/suspend` | `businesses.manage` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/verify` | `businesses.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/changelog` | `changelog.edit,changelog.publish` | n/a (read) | `ops_read` | – |
+| GET | `/v1/ops/changelog/{number}` | `changelog.edit,changelog.publish` | n/a (read) | `ops_read` | – |
+| PUT | `/v1/ops/changelog/{number}` | `changelog.edit,changelog.publish` | yes | `ops_request` | – |
+| POST | `/v1/ops/changelog/{number}/approve` | `changelog.publish` | yes | `ops_request` | – |
+| POST | `/v1/ops/changelog/{number}/ask` | `changelog.edit` | yes | `ops_request` | – |
+| POST | `/v1/ops/changelog/{number}/withdraw` | `changelog.edit,changelog.publish` | yes | `ops_request` | – |
 | GET | `/v1/ops/database-budget` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/email/export.csv` | `email.export` | n/a (read) | – | – |
 | GET | `/v1/ops/email/messages` | `issues.view,email.read,email.export` | n/a (read) | – | – |
