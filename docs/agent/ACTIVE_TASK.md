@@ -35,6 +35,8 @@
 - Branch/worktree: `feat/business-b2` / `.worktrees/business-b2`, off `feat/business-b0` (`3888c8e6`), test lane 5. Not pushed. Plan Tasks 8–10.
 - Done: `/v1/ops/businesses` list and detail (search.view, contacts masked), reveal (private.view, reason, audited), suspend and restore (businesses.manage, reason, audited; suspending ends open shifts as `expired`), `business.verify` as a serious action (pinned on status and slug; resolves `business_waiting`; tells owners in-app); the web revalidate route takes a business slug (`business:<slug>` tag); the admin Businesses list and detail pages, a "Businesses" menu entry shown only while the feature is on, and a link from a `business_waiting` issue.
 - Next: coordinator review; rebase onto dev once B0 merges; full e2e on CI. B4 must tag its `/b/` reads with `businessTag(slug)` from `apps/web/src/lib/business/business-tag.ts`.
+
+
 # Current task — states and feedback, PR B public (5 November 2026)
 
 - Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.
@@ -71,6 +73,12 @@
 - Branch/worktree: `feat/business-b1` / `.worktrees/business-b1`, off local `feat/business-b0` (not yet merged), test lane 4. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 6–7 plus the owner's answer Q3.
 - Done: `business-manage.ts` (apply, detail, edit, add/edit/close location, list/remove managers) and the eight `/v1/me/businesses` routes; `business_apply` rate limit (10 an hour per person); `/health/release` carries `business`; `/for-businesses` and the header's "Businesses" choice follow it (create a business when on, the coming-soon form when off); `/dashboard/business/apply`; the Details, Locations and Managers sections; Home's "Add your business".
 - Next: coordinator review; rebase onto dev once B0 merges; the full e2e suite on CI. Verifying a business is PR B2; inviting managers is PR B3.
+
+# Current task — TipMe for businesses, PR B3: invitations and membership (6 November 2026)
+
+- Branch/worktree: `feat/business-b3` / `.worktrees/business-b3`, off `feat/business-b0` (`3888c8e6`, not yet on dev), test lane 2. Not pushed. Plan Tasks 11–13 and the owner's answer on invitations (email, one-time link, TipMe username; block a business).
+- Done: invitations (operations, `business_invitation` email, API), membership lifecycle (list, remove, leave, display choices, account deletion's M13 rules), the People section on the Business page, the Work page's invitations and "How you show here", `#join=` kept through sign-in.
+- Next: rebase onto dev once B0 merges; regenerate OpenAPI and docs after merging; CI's full e2e. The People section draws only once B1's `GET /v1/me/businesses/:id` exists (the e2e stands in for it).
 
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 

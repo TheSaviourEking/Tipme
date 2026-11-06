@@ -164,6 +164,12 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/businesses/{id}/locations/{locationId}/close` | yes | – | – |
 | GET | `/v1/me/businesses/{id}/managers` | n/a (read) | – | – |
 | POST | `/v1/me/businesses/{id}/managers/{managerId}/remove` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/invitations` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/invitations` | yes | `handles` | – |
+| POST | `/v1/me/businesses/{id}/invitations/{invitationId}/revoke` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/invitees` | n/a (read) | `handles` | – |
+| GET | `/v1/me/businesses/{id}/members` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/members/{memberId}/remove` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
@@ -221,6 +227,14 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
 | GET | `/v1/me/withdrawals` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
+| GET | `/v1/me/work` | n/a (read) | – | – |
+| PATCH | `/v1/me/work/{memberId}` | yes | – | – |
+| POST | `/v1/me/work/{memberId}/leave` | yes | – | – |
+| PUT | `/v1/me/work/invitation-blocks/{businessId}` | yes | – | – |
+| GET | `/v1/me/work/invitations` | n/a (read) | – | – |
+| POST | `/v1/me/work/invitations/accept` | yes | – | – |
+| POST | `/v1/me/work/invitations/decline` | yes | – | – |
+| POST | `/v1/me/work/invitations/preview` | yes | – | – |
 | GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
 #### Signed-in staff, before an admin grant

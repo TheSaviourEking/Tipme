@@ -366,11 +366,73 @@ function sampleStrings(value, key = '') {
   return [];
 }
 
+test('a business invitation carries its code only in the fragment, untracked, naming no payment provider', () => {
+  const type = MAIL_TYPES.business_invitation;
+  assert.equal(type.category, 'account');
+  assert.equal(type.sender, 'notifications');
+  assert.equal(type.preference, null);
+  // A rewritten (tracked) link would carry the code through a redirect.
+  assert.equal(type.tracking, false);
+  const code = 'ABCDEFGHJKMNPQ23';
+  const staff = renderMail(
+    'business_invitation',
+    {
+      code,
+      businessName: 'The Yellow Chilli',
+      locationName: 'Victoria Island',
+      kind: 'staff',
+    },
+    ctx,
+  );
+  assert.equal(
+    staff.subject,
+    'The Yellow Chilli invites you to receive tips there',
+  );
+  assert.match(
+    staff.text,
+    /Your tips go to your own TipMe balance, as always\./,
+  );
+  assert.match(staff.text, /This link works once, for 7 days\./);
+  const href = /href="([^"]+)"/.exec(
+    staff.html.slice(staff.html.indexOf('See the invitation') - 400),
+  )?.[1];
+  assert.ok(href, 'the button has a link');
+  const url = new URL(href.replaceAll('&amp;', '&'));
+  assert.equal(url.pathname, '/dashboard/work');
+  assert.equal(url.hash, `#join=${code}`);
+  assert.equal(url.search.includes(code), false, 'never in the query');
+  for (const out of [staff, staff.snapshot])
+    assert.doesNotMatch(
+      `${out.subject} ${out.text} ${out.html}`,
+      /bachs|paystack|flutterwave|provider/i,
+    );
+  assert.ok(!staff.snapshot.text.includes(code), 'the snapshot hides the code');
+  assert.ok(!staff.snapshot.html.includes(code));
+  const manager = renderMail(
+    'business_invitation',
+    { code, businessName: 'The Yellow Chilli', kind: 'manager', role: 'owner' },
+    ctx,
+  );
+  assert.equal(
+    manager.subject,
+    'The Yellow Chilli invites you to help manage it on TipMe',
+  );
+  assert.throws(() =>
+    renderMail(
+      'business_invitation',
+      { code: 'short', businessName: 'X', kind: 'staff' },
+      ctx,
+    ),
+  );
+});
+
 test('no sample value reaches a subject or preheader', () => {
   // The tip amount and the staff-only provider name are already in today's subjects.
   const allowed = {
     tip_received: ['netMinor'],
     provider_test: ['providerLabel'],
+    // The inviting business's public name (shown on its own TipMe pages), so the invitee knows who asks.
+    business_invitation: ['businessName'],
   };
   for (const [id, type] of Object.entries(MAIL_TYPES)) {
     const out = renderMail(id, type.sample, ctx);
@@ -605,6 +667,9 @@ const PREVIOUS_SAMPLES = {
   username_take_back_reminder: MAIL_TYPES.username_take_back_reminder.sample,
   username_take_back_done: MAIL_TYPES.username_take_back_done.sample,
   username_take_back_cancelled: MAIL_TYPES.username_take_back_cancelled.sample,
+  // TipMe for businesses (merge train 2): new types that no earlier release queued, so the only
+  // data they can meet is their own sample's shape.
+  business_invitation: MAIL_TYPES.business_invitation.sample,
 };
 
 const settingsCtx = {

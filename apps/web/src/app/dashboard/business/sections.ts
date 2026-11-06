@@ -3,6 +3,7 @@ import type { JSX } from 'react';
 import { DetailsCard } from './sections/details';
 import { LocationsCard } from './sections/locations';
 import { ManagersCard } from './sections/managers';
+import { PeopleCard } from './sections/people';
 
 /**
  * The Business page's sections (PR B0 registry). Each lane adds its own lines here and nothing
@@ -28,4 +29,5 @@ export const BUSINESS_SECTIONS: readonly BusinessSection[] = [
   { id: 'details', title: 'Details', Card: DetailsCard },
   { id: 'locations', title: 'Locations', Card: LocationsCard },
   { id: 'managers', title: 'Managers', Card: ManagersCard },
+  { id: 'people', title: 'People', Card: PeopleCard },
 ];

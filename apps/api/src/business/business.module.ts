@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
+import { mailSealingProvider } from '../mail/mail-providers.provider.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { BusinessRolesController } from './business-roles.controller.js';
 import { BusinessManageController } from './business-manage.controller.js';
@@ -29,7 +30,14 @@ import { BusinessCodesController } from './business-codes.controller.js';
     BusinessInsightsController,
     BusinessCodesController,
   ],
-  providers: [BusinessEnabledGuard, SessionGuard, CsrfGuard, RateLimitGuard],
+  providers: [
+    BusinessEnabledGuard,
+    SessionGuard,
+    CsrfGuard,
+    RateLimitGuard,
+    // B3: invitation emails are sealed in the outbox as they are queued.
+    mailSealingProvider,
+  ],
   exports: [BusinessEnabledGuard],
 })
 export class BusinessModule {}

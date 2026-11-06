@@ -120,6 +120,7 @@ export function listNotifications(
       tipId: row.tipId,
       momentId: row.momentId,
       reportId: row.reportId,
+      invitationId: row.invitationId,
       title: row.title,
       body: row.body,
       read: row.readAt !== null,
