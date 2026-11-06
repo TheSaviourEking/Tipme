@@ -13,7 +13,7 @@ import { makePagePro } from './ops-helpers';
 
 const startsOn = (page: Page) =>
   page.getByRole('group', { name: 'Your page starts on' });
-const AUTOMATIC = 'Closest to NGN 2,000 (automatic)';
+const AUTOMATIC = 'Closest to ₦2,000 (automatic)';
 
 /** Sign up, have staff make the page Pro, and come back to its tip amounts in Settings. */
 async function proPage(page: Page, browser: Browser, testInfo: TestInfo) {
@@ -75,8 +75,8 @@ test('a Pro page picks ₦10,000 to start on, and its page opens on ₦10,000', 
   // The choices follow the amounts as they are typed, and start on automatic.
   await expect(group.getByRole('radio')).toHaveCount(4);
   await expect(group.getByRole('radio', { name: AUTOMATIC })).toBeChecked();
-  await group.getByRole('radio', { name: 'NGN 10,000', exact: true }).check();
-  await expect(group.locator('label', { hasText: 'NGN 10,000' })).toContainText(
+  await group.getByRole('radio', { name: '₦10,000', exact: true }).check();
+  await expect(group.locator('label', { hasText: '₦10,000' })).toContainText(
     'Starts here',
   );
   await expect(group.getByText('Starts here')).toHaveCount(1);
@@ -90,7 +90,7 @@ test('a Pro page picks ₦10,000 to start on, and its page opens on ₦10,000', 
   );
   await page.reload();
   await expect(
-    startsOn(page).getByRole('radio', { name: 'NGN 10,000', exact: true }),
+    startsOn(page).getByRole('radio', { name: '₦10,000', exact: true }),
   ).toBeChecked();
   await expectAccessible(page);
 
@@ -107,7 +107,7 @@ test('removing the chosen amount moves the choice to automatic, and the page sta
   await staff.close();
   await fillAmounts(page, ['5000', '10000', '20000'], '5000');
   await startsOn(page)
-    .getByRole('radio', { name: 'NGN 20,000', exact: true })
+    .getByRole('radio', { name: '₦20,000', exact: true })
     .check();
   await save(page);
   await expectPageStartsOn(browser, handle, '20,000');
@@ -136,7 +136,7 @@ test('a page that leaves Pro starts on ₦2,000 again, and gets its choice back 
   const { handle, staff } = await proPage(page, browser, testInfo);
   await fillAmounts(page, ['5000', '10000', '20000'], '5000');
   await startsOn(page)
-    .getByRole('radio', { name: 'NGN 10,000', exact: true })
+    .getByRole('radio', { name: '₦10,000', exact: true })
     .check();
   await save(page);
   await expectPageStartsOn(browser, handle, '10,000');
@@ -163,7 +163,7 @@ test('a page that leaves Pro starts on ₦2,000 again, and gets its choice back 
   await expectAccessible(visitor);
   await page.reload();
   await expect(
-    startsOn(page).getByRole('radio', { name: 'NGN 10,000', exact: true }),
+    startsOn(page).getByRole('radio', { name: '₦10,000', exact: true }),
   ).toBeChecked();
   await expectAccessible(page);
 });

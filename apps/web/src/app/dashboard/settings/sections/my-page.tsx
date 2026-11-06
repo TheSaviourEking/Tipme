@@ -599,8 +599,8 @@ export function TipAmountsSettings() {
                 />
                 <span className="tip-start__amount">
                   {minor === null
-                    ? 'Closest to NGN 2,000 (automatic)'
-                    : `NGN ${nairaText(minor)}`}
+                    ? `Closest to ${formatNaira(200_000)} (automatic)`
+                    : formatNaira(minor)}
                 </span>
                 {/* The checked radio already says so to a screen reader; this is for the eye. */}
                 {checked && (
