@@ -333,3 +333,11 @@ the appreciation moment) is unchanged.
 - **Codes in cells stay one copyable string**, so copy, paste and code autofill still get the whole code.
 - **Nothing private in a subject or preview line.** No code, link, address, name, bank or device in a subject or the hidden preheader; the tip amount in the tip email's subject is the one existing exception.
 - **Plan:** `docs/superpowers/plans/2026-11-05-emails-and-admin.md` (PR M1 is the frame and blocks with today's words; PR M2 is the boards' compositions).
+
+## 2026-11-06 — QR studio
+
+- **Owner approval, 5 Nov 2026.** The QR studio board is approved; the two proposals it does not draw (three design groups, Manrope lettering) ship with the owner's default yes (public boards plan, Q12). A visual decision, not a regulatory or payment-partner approval; no D-item changes. The board file was not available to copy, so these rulings follow the plan's written design (`docs/superpowers/plans/2026-11-05-public-boards.md`, PR 4).
+- **The code sits on paper.** The free card's canvas and a Pro design's plate sit in one `Surface material="paper"` panel (`.qr-studio__panel`), with a `CanvasText` edge in forced colours.
+- **One place for the status line.** The studio's only `role="status"` line sits directly under the Upgrade panel's slot, before the style lists, at every width. One DOM order for every width (no CSS `order`), so reading order and focus order match, and a phone sees "… is a Pro design" next to the Upgrade link. It stays mounted, so screen readers keep listening to the same element.
+- **Designs in three groups by the API's `kind`.** "Patterns" (`style`), "Cards" (`card`), "Photo" (`photo`), each in the API's order; an unknown `kind` from a newer API joins Patterns and an empty group is not drawn. Every radio keeps one `name`, so arrow keys still move through all designs across the groups.
+- **The free card is lettered in Manrope.** `drawQrCard` uses the page's own `--font-manrope` family once `document.fonts.load` has it, else Arial as before. Only the browser-drawn Free card changes (studio, share image, print); Pro designs are server pictures and do not change. The code's modules, quiet zone and colours are unchanged, so it scans as before.
