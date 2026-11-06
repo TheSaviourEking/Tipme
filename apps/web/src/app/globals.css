@@ -9735,6 +9735,152 @@ body > .coming-soon-page {
 /* business:B6 end */
 
 /* business:B7 start */
+.insights {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.insights__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.insights__location {
+  min-width: 12rem;
+}
+
+.insights__week {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.insights__week-name {
+  margin: 0;
+  min-width: 10rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.insights__total {
+  margin: 0;
+}
+
+.insights__table-wrap {
+  overflow-x: auto;
+}
+
+.insights__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.insights__table caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: var(--space-2);
+}
+
+.insights__table th,
+.insights__table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.insights__table thead th {
+  font-size: 0.875rem;
+}
+
+.insights__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insights__tiles li {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-field);
+}
+
+.insights__tiles strong {
+  font-size: 1.125rem;
+}
+
+.insights__privacy {
+  margin: 0;
+}
+
+.insights__error {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.business-notes {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.business-notes__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-note {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.business-note__who,
+.business-note__date {
+  margin: 0;
+}
+
+.business-note__body {
+  margin: 0;
+  font-style: italic;
+}
+
+.business-note__report {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.business-note__report fieldset {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.business-note__report legend {
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.work-share {
+  display: grid;
+  gap: var(--space-2);
+}
 /* business:B7 end */
 
 /* business:B8 start */

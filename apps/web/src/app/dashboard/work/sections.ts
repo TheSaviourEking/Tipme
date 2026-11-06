@@ -1,5 +1,6 @@
 import type { MyMembership } from '@tipme/contracts';
 import type { JSX } from 'react';
+import { ShareCard } from './sections/share';
 
 /**
  * The Work page's sections, one card each per membership (PR B0 registry). Each lane adds its own
@@ -12,4 +13,7 @@ export type WorkSection = {
   Card: (props: { membership: MyMembership }) => JSX.Element;
 };
 
-export const WORK_SECTIONS: readonly WorkSection[] = [];
+export const WORK_SECTIONS: readonly WorkSection[] = [
+  // B7
+  { id: 'share', title: 'Your tip amounts', Card: ShareCard },
+];

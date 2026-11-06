@@ -1,5 +1,7 @@
 import type { BusinessDetail } from '@tipme/contracts';
 import type { JSX } from 'react';
+import { NotesCard } from './sections/notes';
+import { ThisWeekCard } from './sections/this-week';
 
 /**
  * The Business page's sections (PR B0 registry). Each lane adds its own lines here and nothing
@@ -14,4 +16,8 @@ export type BusinessSection = {
   needs?: 'owner';
 };
 
-export const BUSINESS_SECTIONS: readonly BusinessSection[] = [];
+export const BUSINESS_SECTIONS: readonly BusinessSection[] = [
+  // B7
+  { id: 'this-week', title: 'This week', Card: ThisWeekCard },
+  { id: 'notes', title: 'What customers say', Card: NotesCard },
+];
