@@ -24,6 +24,12 @@
 - Plan: `docs/superpowers/plans/2026-11-05-public-boards.md` (on `feat/claim-moment`), PR 1, Tasks 1.0 to 1.4. `apple-icon` (180), `/icons/192.png`, `/icons/512-maskable.png` and `/manifest.webmanifest` (display `browser`), all open in both gates; the tab icon stays `icon.svg`.
 - Next: CI's full e2e run (only `app-icons.spec.ts` and `quality.spec.ts` ran locally, per the 6 Nov overload rule).
 
+# Current task — public boards PR 6, the claim moment (6 November 2026)
+
+- Branch/worktree: `feat/claim-moment` / `.worktrees/claim-moment`, test lane 9, from `origin/dev` at `bf6629f8`. Committed, not pushed. Front end only: no API, contract, database or payment change.
+- Plan: `docs/superpowers/plans/2026-11-05-public-boards.md`, PR 6 (Tasks 6.0 to 6.3). "@handle is yours." plays once after the server confirms a claim (a one-time session-storage marker), with a 30 ms vibration where allowed, a still scene under reduced motion and no sound.
+- Next: CI's full e2e run (only `welcome.spec.ts` and `accounts.spec.ts` ran locally, per the 6 Nov overload rule); then PR 7 (keepsake) builds on the same welcome files. PR 10 (the stamp sound) waits for the owner (Q5).
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.

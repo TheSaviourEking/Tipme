@@ -21,6 +21,16 @@
 - Next links the Apple icon as `/apple-icon?<hash>`; the gates exempt the path `/apple-icon` exactly.
 - Evidence: `.superpowers/program/pub6-report.md`, PR 1 section (main checkout); PNGs in `.superpowers/program/pub1-icons/`.
 
+# Current handoff — public boards PR 6, the claim moment (6 November 2026)
+
+- Branch `feat/claim-moment`, test lane 9, from `origin/dev` at `bf6629f8`, committed, not pushed. No migration, no contract change.
+- `HandleClaim` calls `markClaimed(handle)` after the 2xx from `POST /v1/me/page`; `WelcomeView` calls `takeClaimed` once (layout effect, ref-guarded against React's development double-run) and draws `ClaimMoment` over the hello step, which is `inert` meanwhile. The marker holds the handle only and is deleted on first read, so a reload, another tab or another device never replays it.
+- Hand-over: 1600 ms, or any tap, any key, Continue or Escape; focus goes to the hello heading one task later (so a tap's mousedown cannot steal it).
+- The `SignUpCelebration.dc.html` board was not on disk to copy into `docs/design/redesign/boards/`; the decision log records the rulings from the plan's written design.
+- Lane 9's API port is 4190, on the Fetch spec's blocked-port list: server-side fetches from Next to the API fail with `bad port`, so public-page checks fail on lane 9 only (`tests/lane.ts`).
+- `pnpm test` builds the web without the e2e settings, and `node scripts/build-e2e.mjs` then replays that turbo cache entry (the hash does not include the e2e API origin): the e2e web calls `localhost:4000` and every sign-in fails. After `pnpm test`, rebuild with `rm -rf apps/web/.next && TURBO_FORCE=1 node scripts/build-e2e.mjs`.
+- Evidence: `.superpowers/program/pub6-report.md` (main checkout).
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.
