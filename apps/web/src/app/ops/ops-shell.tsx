@@ -3,6 +3,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Notice, Skeleton } from '@tipme/ui';
+import {
+  ApprovalsCount,
+  useApprovalsCount,
+} from '@/components/ops/approvals-count';
 import { FreshCodePrompt } from '@/components/ops/fresh-code';
 import { OpsFrame } from '@/components/ops/ops-frame';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
@@ -166,7 +170,7 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Inside the admin area: the frame and the pages. Mounted only once access is
+ * Inside the admin area: the frame, the menu's count and the pages. Mounted only once access is
  * granted, so the site's header and footer give way to the frame only then (`data-ops-frame`); a
  * visitor who isn't staff, and the sign-in steps, keep them.
  */
@@ -188,11 +192,12 @@ function OpsGranted({
       delete root.dataset.opsFrame;
     };
   }, []);
+  const approvals = useApprovalsCount(pathname);
   return (
     <OpsFrame
       permissions={access.permissions}
       pathname={pathname}
-      approvals={null}
+      approvals={<ApprovalsCount count={approvals.count} />}
       onLeave={onLeave}
     >
       <FreshCodePrompt />
