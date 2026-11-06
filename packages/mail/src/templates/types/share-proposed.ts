@@ -49,7 +49,7 @@ export const shareProposed = defineMailType({
           },
           {
             kind: 'text',
-            text: 'Nothing changes unless you accept. You can accept, decline or suggest another split on your Work page. If you decline, the business sees only that nothing changed. Tips through your own page, outside the business, are never shared.',
+            text: 'Nothing changes unless you accept. You can accept, decline or suggest another split on your Work page. The business isn’t told how you answered: on the start date it sees only the split that applies. Tips through your own page, outside the business, are never shared.',
           },
           {
             kind: 'button',

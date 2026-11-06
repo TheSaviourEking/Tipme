@@ -33,8 +33,13 @@ import { enqueueMail, type MailSealing } from './mail-queue.js';
 // Every write locks the membership row first, then the agreement, so writes about one person run
 // one at a time and never deadlock.
 //
-// The business never sees "declined": a declined proposal, a lapsed one and a withdrawn one all
-// read `no_change` (spec 11, M14). A report about the business is never shown to it.
+// The business never learns how the staff member answered its own proposal (spec 11, M14; the
+// coordinator's ruling of 6 Nov 2026): accepted, declined or unanswered, the proposal reads
+// `pending` until its start date, and from then the business sees only the outcome, the new split
+// (`in_force`) or `no_change`. The one exception is a split the staff member suggests instead
+// (their counter), which the business sees at once because it must answer it. This is derived
+// from the rows and the database's now() (`VISIBLE_PENDING`); nothing is stored for it. A report
+// about the business is never shown to it.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -169,6 +174,24 @@ async function closeLapsed(tx: Tx, memberId: string): Promise<void> {
        AND withdrawn_at IS NULL AND effective_from <= now()`);
 }
 
+/**
+ * What the business reads as `pending` for a member, as a condition on agreement alias `a`:
+ * - its own proposal whose start date hasn't come, whatever the member did, unless the member
+ *   answered it with a counter (a counter declines the proposal in the same transaction, so its
+ *   `declined_at` equals the counter's `proposed_at`; the business sees the counter instead);
+ * - the member's counter, while it waits for the business's answer.
+ * A proposal withdrawn by the system (lapsed, or closed on leaving) is not pending.
+ */
+const VISIBLE_PENDING = sql.raw(`
+  a.effective_from > now() AND (
+    (a.proposed_by = 'business' AND a.withdrawn_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM share_agreements c
+         WHERE c.member_id = a.member_id AND c.proposed_by = 'member'
+           AND c.proposed_at = a.declined_at))
+    OR (a.proposed_by = 'member' AND a.accepted_at IS NULL AND a.declined_at IS NULL
+      AND a.withdrawn_at IS NULL))`);
+
 /** A new proposal, after the checks both sides share. `proposed_at` is the database's default. */
 async function insertProposal(
   tx: Tx,
@@ -179,6 +202,14 @@ async function insertProposal(
   if (member.business_status !== 'verified')
     throw new OperationError('BUSINESS_NOT_VERIFIED');
   await closeLapsed(tx, member.member_id);
+  // While the business reads a proposal as pending, it can't make another, whatever the member
+  // did: the refusal is the same for an accepted, a declined and an unanswered proposal.
+  if (input.by === 'business') {
+    const pending = await tx.execute<{ id: string }>(sql`
+      SELECT a.id FROM share_agreements a
+       WHERE a.member_id = ${member.member_id} AND ${VISIBLE_PENDING}`);
+    if (pending.rows[0]) throw new OperationError('SHARE_NOT_ALLOWED');
+  }
   const open = await tx.execute<{ id: string }>(sql`
     SELECT id FROM share_agreements
      WHERE member_id = ${member.member_id} AND accepted_at IS NULL AND declined_at IS NULL
@@ -250,9 +281,10 @@ async function businessRows(
       FROM business_members bm
       JOIN business_locations l ON l.id = bm.location_id
       LEFT JOIN LATERAL (
-        SELECT id, business_bps, effective_from, proposed_by FROM share_agreements
-         WHERE member_id = bm.id AND accepted_at IS NULL AND declined_at IS NULL
-           AND withdrawn_at IS NULL AND effective_from > now()
+        SELECT a.id, a.business_bps, a.effective_from, a.proposed_by FROM share_agreements a
+         WHERE a.member_id = bm.id AND ${VISIBLE_PENDING}
+         ORDER BY a.proposed_at DESC
+         LIMIT 1
       ) o ON true
       LEFT JOIN LATERAL (
         SELECT id, business_bps, effective_from FROM share_agreements
@@ -274,7 +306,8 @@ async function businessRows(
         startsOn: lagosDateOf(asDate(row.open_from)),
         proposedBy: row.open_by,
       };
-    // Accepted: in force now, or starting on `startsOn`.
+    // Accepted: in force now, or (a counter the business accepted) starting on `startsOn`. A
+    // business proposal accepted but not started yet is still `pending` above.
     if (row.agreed_id && row.agreed_bps !== null && row.agreed_from)
       return {
         ...base,
@@ -283,7 +316,7 @@ async function businessRows(
         businessPercent: percentOf(row.agreed_bps),
         startsOn: lagosDateOf(asDate(row.agreed_from)),
       };
-    // Never a share, or a proposal declined, withdrawn or lapsed: all read the same.
+    // Never a share, or a proposal that ended without one: all read the same.
     return { ...base, state: 'no_change' };
   });
 }
@@ -349,35 +382,6 @@ export function proposeShare(
       }
       const [row] = await businessRows(tx, businessId, null, member.member_id);
       return row!;
-    }),
-  );
-}
-
-/**
- * The business takes back its own open proposal. Anything else (declined, accepted, lapsed, the
- * member's suggestion, unknown) is the same SHARE_NOT_OPEN, so a decline never shows here.
- */
-export function withdrawShare(
-  db: Database,
-  userId: string,
-  businessId: string,
-  agreementId: string,
-): Promise<void> {
-  return guarded(() =>
-    db.transaction(async (tx) => {
-      const { agreement } = await businessAgreement(
-        tx,
-        userId,
-        businessId,
-        agreementId,
-      );
-      if (
-        agreement.proposed_by !== 'business' ||
-        !isAnswerable(agreement, await databaseNow(tx))
-      )
-        throw new OperationError('SHARE_NOT_OPEN');
-      await tx.execute(sql`
-        UPDATE share_agreements SET withdrawn_at = now() WHERE id = ${agreement.id}`);
     }),
   );
 }

@@ -29,7 +29,6 @@ import {
   myShares,
   proposeShare,
   reportBusiness,
-  withdrawShare,
   type MailSealing,
 } from '@tipme/database';
 import { CsrfGuard } from '../auth/csrf.guard.js';
@@ -48,7 +47,8 @@ import { SharesEnabledGuard } from './release2-flags.guard.js';
  * Lane R2-C1: the share agreement. A business (an owner, or the manager of that location) proposes
  * a split; the staff member accepts, declines or suggests another on their Work page; they can
  * report the business to TipMe. Off (404) unless BUSINESS_ENABLED and BUSINESS_SHARES_ENABLED.
- * The business side never says "declined"; a report never reaches the business.
+ * The business never learns how the staff member answered its own proposal before the start date
+ * (see the operations file); a report never reaches the business.
  */
 @Controller('v1/me')
 @UseGuards(BusinessEnabledGuard, SharesEnabledGuard, SessionGuard, CsrfGuard)
@@ -85,16 +85,6 @@ export class ShareAgreementsController {
         body,
       ),
     };
-  }
-
-  @Post('businesses/:id/shares/:agreementId/withdraw')
-  @HttpCode(204)
-  async withdraw(
-    @CurrentUser() auth: AuthContext,
-    @Param('id') businessId: string,
-    @Param('agreementId') agreementId: string,
-  ): Promise<void> {
-    await withdrawShare(this.database.db, auth.userId, businessId, agreementId);
   }
 
   /** The business accepts a split the staff member suggested. */

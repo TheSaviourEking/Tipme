@@ -25,11 +25,6 @@ export const proposeShare = (
     method: 'POST',
     body: { memberId, businessBps },
   });
-export const withdrawShare = (businessId: string, agreementId: string) =>
-  apiFetch<null>(
-    `${shares(businessId)}/${encodeURIComponent(agreementId)}/withdraw`,
-    { method: 'POST', body: {} },
-  );
 export const answerSuggestedShare = (
   businessId: string,
   agreementId: string,
@@ -76,7 +71,7 @@ export function shareProblem(code: string): string {
     case 'SHARE_CHANGE_TOO_SOON':
       return 'The split can change at most once a month. Try again next month.';
     case 'SHARE_NOT_ALLOWED':
-      return 'That would change nothing, or a proposal is already waiting for an answer.';
+      return 'That would change nothing, or a proposal is still waiting for its start date.';
     case 'SHARE_NOT_OPEN':
       return 'This proposal can’t be answered any more.';
     case 'BUSINESS_NOT_VERIFIED':

@@ -112,14 +112,9 @@ test('a split outside the options, or over the 50% cap, is a 400', async () => {
   assert.equal(fifty.status, 201);
   assert.equal(fifty.body.data.state, 'pending');
   assert.equal(fifty.body.data.businessPercent, 50);
-  await call(
-    'POST',
-    `/v1/me/businesses/${businessId}/shares/${fifty.body.data.agreementId}/withdraw`,
-    ada.cookie,
-  );
 });
 
-test('propose, then the staff member accepts on their Work page; a second change this month is refused', async () => {
+test('the staff member answers on their Work page; Ada cannot answer for them', async () => {
   const { businessId, memberId } = await team();
   const proposed = await call(
     'POST',
@@ -139,7 +134,6 @@ test('propose, then the staff member accepts on their Work page; a second change
   assert.equal(offer.state, 'proposed');
   assert.equal(offer.youKeepPercent, 90);
   assert.equal(offer.businessName, 'The Yellow Chilli');
-  // Ada can't answer Tobi's proposal.
   const notHers = await call(
     'POST',
     `/v1/me/work/shares/${offer.agreementId}/accept`,
@@ -154,51 +148,69 @@ test('propose, then the staff member accepts on their Work page; a second change
   );
   assert.equal(accepted.status, 200);
   assert.equal(accepted.body.data.state, 'scheduled');
-  const again = await call(
-    'POST',
-    `/v1/me/businesses/${businessId}/shares`,
-    ada.cookie,
-    {
-      memberId,
-      businessBps: 2000,
-    },
-  );
-  assert.equal(again.status, 409);
-  assert.equal(again.body.error.code, 'SHARE_CHANGE_TOO_SOON');
 });
 
-test('a decline reads no_change, and no business response says declined', async () => {
-  const { businessId, memberId } = await team();
-  const proposed = await call(
-    'POST',
-    `/v1/me/businesses/${businessId}/shares`,
-    ada.cookie,
-    {
-      memberId,
-      businessBps: 2000,
-    },
+test('before the start date, an accepted and a declined proposal answer the business identically', async () => {
+  const yes = await team();
+  const no = await team();
+  const propose = (t, businessBps) =>
+    call('POST', `/v1/me/businesses/${t.businessId}/shares`, ada.cookie, {
+      memberId: t.memberId,
+      businessBps,
+    });
+  const toYes = await propose(yes, 2000);
+  const toNo = await propose(no, 2000);
+  assert.equal(
+    (
+      await call(
+        'POST',
+        `/v1/me/work/shares/${toYes.body.data.agreementId}/accept`,
+        tobi.cookie,
+      )
+    ).status,
+    200,
   );
-  const declined = await call(
-    'POST',
-    `/v1/me/work/shares/${proposed.body.data.agreementId}/decline`,
-    tobi.cookie,
+  assert.equal(
+    (
+      await call(
+        'POST',
+        `/v1/me/work/shares/${toNo.body.data.agreementId}/decline`,
+        tobi.cookie,
+      )
+    ).status,
+    204,
   );
-  assert.equal(declined.status, 204);
-  const list = await call(
-    'GET',
-    `/v1/me/businesses/${businessId}/shares`,
-    ada.cookie,
+  const seen = async (t) => {
+    const list = await call(
+      'GET',
+      `/v1/me/businesses/${t.businessId}/shares`,
+      ada.cookie,
+    );
+    assert.equal(list.status, 200);
+    assert.doesNotMatch(list.text, /declin|accept/i);
+    const rest = { ...list.body.data.find((r) => r.memberId === t.memberId) };
+    delete rest.agreementId;
+    delete rest.memberId;
+    return rest;
+  };
+  const yesRow = await seen(yes);
+  assert.deepEqual(yesRow, await seen(no));
+  assert.equal(yesRow.state, 'pending');
+  assert.equal(yesRow.businessPercent, 20);
+  // Proposing again is refused the same way for both.
+  const again = [await propose(yes, 1000), await propose(no, 1000)];
+  assert.deepEqual(
+    again.map((r) => [r.status, r.body.error.code]),
+    [
+      [409, 'SHARE_NOT_ALLOWED'],
+      [409, 'SHARE_NOT_ALLOWED'],
+    ],
   );
-  const row = list.body.data.find((r) => r.memberId === memberId);
-  assert.deepEqual(row, { memberId, shownName: 'Tobi', state: 'no_change' });
-  const withdraw = await call(
-    'POST',
-    `/v1/me/businesses/${businessId}/shares/${proposed.body.data.agreementId}/withdraw`,
-    ada.cookie,
-  );
-  assert.equal(withdraw.status, 404);
-  for (const text of [list.text, withdraw.text])
-    assert.doesNotMatch(text, /declin/i);
+  const words = (r) => ({
+    code: r.body.error.code,
+    message: r.body.error.message,
+  });
+  assert.deepEqual(words(again[0]), words(again[1]));
 });
 
 test('the staff member suggests another split and the business accepts it', async () => {
@@ -237,6 +249,18 @@ test('the staff member suggests another split and the business accepts it', asyn
   assert.equal(accepted.status, 200);
   assert.equal(accepted.body.data.state, 'in_force');
   assert.equal(accepted.body.data.businessPercent, 10);
+  // The business knows this change: another can't take effect in the same month.
+  const again = await call(
+    'POST',
+    `/v1/me/businesses/${businessId}/shares`,
+    ada.cookie,
+    {
+      memberId,
+      businessBps: 2000,
+    },
+  );
+  assert.equal(again.status, 409);
+  assert.equal(again.body.error.code, 'SHARE_CHANGE_TOO_SOON');
 });
 
 test('report the business: 204, an issue for TipMe, nothing for the business', async () => {

@@ -167,6 +167,7 @@ test('a share proposal names the business, the split and the start date, never a
   assert.match(out.text, /from 1 December 2026/);
   assert.match(out.text, /Nothing changes unless you accept/);
   assert.match(out.text, /never shared/);
+  assert.match(out.text, /The business isn’t told how you answered/);
   for (const part of [out, out.snapshot])
     assert.doesNotMatch(
       `${part.subject} ${part.text} ${part.html}`,

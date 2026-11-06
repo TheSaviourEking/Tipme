@@ -14,7 +14,6 @@ import {
   myShares,
   proposeShare,
   reportBusiness,
-  withdrawShare,
 } from '../../dist/index.js';
 import {
   leaveMember,
@@ -110,7 +109,8 @@ test('propose 10% then accept: in force from the start date, at least 14 days on
     await listBusinessShares(database.db, ADA_USER, businessId),
     memberId,
   );
-  assert.equal(business.state, 'in_force');
+  // Accepted, but the business still reads its own proposal as pending until the start date.
+  assert.equal(business.state, 'pending');
   assert.equal(business.businessPercent, 10);
   assert.equal(business.startsOn, proposed.startsOn);
 });
@@ -132,7 +132,10 @@ test('the split is one of the options, capped at 50%', async (t) => {
   });
   assert.equal(fifty.businessPercent, 50);
   // 100/0 when there is no share yet changes nothing, so it is not a proposal.
-  await withdrawShare(database.db, ADA_USER, businessId, fifty.agreementId);
+  await database.pool.query(
+    `UPDATE share_agreements SET withdrawn_at = now() WHERE id = $1`,
+    [fifty.agreementId],
+  );
   await assert.rejects(
     proposeShare(database.db, sealing, ADA_USER, businessId, {
       memberId,
@@ -173,12 +176,12 @@ test('a proposal reaches the member by email when they have a confirmed address,
   ]);
 });
 
-test('one open proposal at a time, and a second change in the same month is refused', async (t) => {
+test('one proposal at a time, and a second change in the same month is refused', async (t) => {
   const database = await useDatabase(t);
   const { businessId, memberId } = await setup(database);
   const first = await proposeShare(database.db, sealing, ADA_USER, businessId, {
     memberId,
-    businessBps: 1000,
+    businessBps: 3000,
   });
   await assert.rejects(
     proposeShare(database.db, sealing, ADA_USER, businessId, {
@@ -187,8 +190,23 @@ test('one open proposal at a time, and a second change in the same month is refu
     }),
     code('SHARE_NOT_ALLOWED'),
   );
-  await acceptShare(database.db, TOBI_USER, first.agreementId);
-  // The accepted one takes effect this coming month: another change can't take effect then too.
+  // The member suggests 10% and the business accepts it: the business knows this change, which
+  // takes effect this coming month, so another change can't take effect then too.
+  const counter = await counterShare(
+    database.db,
+    TOBI_USER,
+    first.agreementId,
+    {
+      businessBps: 1000,
+    },
+  );
+  await answerSuggestedShare(
+    database.db,
+    ADA_USER,
+    businessId,
+    counter.agreementId,
+    'accept',
+  );
   await assert.rejects(
     proposeShare(database.db, sealing, ADA_USER, businessId, {
       memberId,
@@ -242,10 +260,15 @@ test('a change is accepted in one transaction: the old agreement names its succe
   );
 });
 
-test('a declined proposal reads no_change to the business, and nothing says declined', async (t) => {
+test('before its start date, an accepted and a declined proposal look the same to the business', async (t) => {
   const database = await useDatabase(t);
-  const { businessId, memberId } = await setup(database);
-  const proposed = await proposeShare(
+  const { businessId, locations, memberId } = await setup(database);
+  const { memberId: other } = await seedMember(database, {
+    locationId: locations[0].id,
+    profileId: DEMO_PROFILES[0].id,
+    shownName: 'Ada',
+  });
+  const toTobi = await proposeShare(
     database.db,
     sealing,
     ADA_USER,
@@ -255,29 +278,106 @@ test('a declined proposal reads no_change to the business, and nothing says decl
       businessBps: 1000,
     },
   );
-  await declineShare(database.db, TOBI_USER, proposed.agreementId);
+  const toAda = await proposeShare(database.db, sealing, ADA_USER, businessId, {
+    memberId: other,
+    businessBps: 1000,
+  });
+  await acceptShare(database.db, TOBI_USER, toTobi.agreementId);
+  await declineShare(database.db, ADA_USER, toAda.agreementId);
   const rows = await listBusinessShares(database.db, ADA_USER, businessId);
-  assert.deepEqual(row(rows, memberId), {
+  const shape = (r) => {
+    const rest = { ...r };
+    delete rest.memberId;
+    delete rest.shownName;
+    delete rest.agreementId;
+    return rest;
+  };
+  assert.deepEqual(shape(row(rows, memberId)), shape(row(rows, other)));
+  assert.deepEqual(shape(row(rows, memberId)), {
+    state: 'pending',
+    businessPercent: 10,
+    startsOn: toTobi.startsOn,
+    proposedBy: 'business',
+  });
+  assert.deepEqual(
+    Object.keys(row(rows, memberId)).sort(),
+    Object.keys(row(rows, other)).sort(),
+  );
+  assert.doesNotMatch(JSON.stringify(rows), /declin|accept/i);
+  // A new proposal is refused the same way for both while they read pending.
+  for (const id of [memberId, other])
+    await assert.rejects(
+      proposeShare(database.db, sealing, ADA_USER, businessId, {
+        memberId: id,
+        businessBps: 2000,
+      }),
+      code('SHARE_NOT_ALLOWED'),
+    );
+  // Answered once: a declined proposal can't then be accepted.
+  await assert.rejects(
+    acceptShare(database.db, ADA_USER, toAda.agreementId),
+    code('SHARE_NOT_OPEN'),
+  );
+});
+
+// Proposals whose start date has passed, written as history (the database refuses a backdated
+// proposal or acceptance except through the test-only setting).
+async function seedAnswered(
+  database,
+  { memberId, answer, businessBps = 1000, startedDaysAgo = 2 },
+) {
+  const id = randomUUID();
+  const client = await database.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL tipme.allow_backdate = 'on'`);
+    await client.query(
+      `INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
+         proposed_at, effective_from)
+       VALUES ($1, $2, $3, 'business', $4, now() - make_interval(days => $5::int + 14),
+         now() - make_interval(days => $5::int))`,
+      [id, memberId, businessBps, ADA_USER, startedDaysAgo],
+    );
+    await client.query(
+      `UPDATE share_agreements SET ${answer === 'accepted' ? 'accepted_at' : 'declined_at'} =
+         now() - make_interval(days => $2::int + 13) WHERE id = $1`,
+      [id, startedDaysAgo],
+    );
+    await client.query('COMMIT');
+  } finally {
+    client.release();
+  }
+  return id;
+}
+
+test('from its start date the business sees the outcome: the split if accepted, no change if declined', async (t) => {
+  const database = await useDatabase(t);
+  const { businessId, locations, memberId } = await setup(database);
+  const { memberId: other } = await seedMember(database, {
+    locationId: locations[0].id,
+    profileId: DEMO_PROFILES[0].id,
+    shownName: 'Ada',
+  });
+  const accepted = await seedAnswered(database, {
     memberId,
-    shownName: 'Tobi',
+    answer: 'accepted',
+  });
+  await seedAnswered(database, { memberId: other, answer: 'declined' });
+  const rows = await listBusinessShares(database.db, ADA_USER, businessId);
+  assert.deepEqual(
+    {
+      state: row(rows, memberId).state,
+      businessPercent: row(rows, memberId).businessPercent,
+      agreementId: row(rows, memberId).agreementId,
+    },
+    { state: 'in_force', businessPercent: 10, agreementId: accepted },
+  );
+  assert.deepEqual(row(rows, other), {
+    memberId: other,
+    shownName: 'Ada',
     state: 'no_change',
   });
   assert.doesNotMatch(JSON.stringify(rows), /declin/i);
-  // Withdrawing it afterwards answers exactly as for any proposal that can't be withdrawn.
-  await assert.rejects(
-    withdrawShare(database.db, ADA_USER, businessId, proposed.agreementId),
-    code('SHARE_NOT_OPEN'),
-  );
-  await assert.rejects(
-    withdrawShare(database.db, ADA_USER, businessId, randomUUID()),
-    code('SHARE_NOT_OPEN'),
-  );
-  // Answered once: it can't be accepted after a decline.
-  await assert.rejects(
-    acceptShare(database.db, TOBI_USER, proposed.agreementId),
-    code('SHARE_NOT_OPEN'),
-  );
-  assert.deepEqual(await myShares(database.db, TOBI_USER), []);
 });
 
 test('a proposal not answered by its start date lapses as no_change, and a new one can be made', async (t) => {
@@ -353,9 +453,15 @@ test('suggesting another split declines the proposal and asks the business, who 
     },
     { state: 'pending', businessPercent: 10, proposedBy: 'member' },
   );
-  // The business can't withdraw the member's suggestion; it answers it.
+  // Not the business's own proposal: it can't answer it as the member would.
   await assert.rejects(
-    withdrawShare(database.db, ADA_USER, businessId, counter.agreementId),
+    answerSuggestedShare(
+      database.db,
+      ADA_USER,
+      businessId,
+      proposed.agreementId,
+      'accept',
+    ),
     code('SHARE_NOT_OPEN'),
   );
   await answerSuggestedShare(
@@ -372,6 +478,41 @@ test('suggesting another split declines the proposal and asks the business, who 
   assert.equal(after.state, 'in_force');
   assert.equal(after.businessPercent, 10);
   assert.equal(await inForceAt(database, memberId, 16), counter.agreementId);
+});
+
+test('a suggestion the business declined leaves no change, and the countered proposal never reappears', async (t) => {
+  const database = await useDatabase(t);
+  const { businessId, memberId } = await setup(database);
+  const proposed = await proposeShare(
+    database.db,
+    sealing,
+    ADA_USER,
+    businessId,
+    {
+      memberId,
+      businessBps: 3000,
+    },
+  );
+  const counter = await counterShare(
+    database.db,
+    TOBI_USER,
+    proposed.agreementId,
+    {
+      businessBps: 1000,
+    },
+  );
+  await answerSuggestedShare(
+    database.db,
+    ADA_USER,
+    businessId,
+    counter.agreementId,
+    'decline',
+  );
+  const after = row(
+    await listBusinessShares(database.db, ADA_USER, businessId),
+    memberId,
+  );
+  assert.deepEqual(after, { memberId, shownName: 'Tobi', state: 'no_change' });
 });
 
 test('two accepts racing leave one agreement accepted', async (t) => {

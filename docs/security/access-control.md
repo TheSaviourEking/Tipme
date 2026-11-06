@@ -158,7 +158,6 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/businesses/{id}/shares` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/accept` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/decline` | yes | – | – |
-| POST | `/v1/me/businesses/{id}/shares/{agreementId}/withdraw` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |

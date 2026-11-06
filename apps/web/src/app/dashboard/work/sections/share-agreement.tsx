@@ -239,8 +239,9 @@ export function ShareAgreementCard({
       {proposal && <Proposal view={proposal} onChanged={load} />}
       <p className="tm-hint">
         A share is of what you receive after TipMe’s fee, and only with your
-        agreement. Declining keeps today’s split. Tips through your own page,
-        outside the business, are never shared.
+        agreement. Declining keeps today’s split. The business isn’t told how
+        you answered: on the start date it sees only the split that applies.
+        Tips through your own page, outside the business, are never shared.
       </p>
       <Report membership={membership} />
     </div>

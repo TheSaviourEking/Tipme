@@ -14,11 +14,11 @@ import {
   proposeShare,
   shareDate,
   shareProblem,
-  withdrawShare,
 } from '@/lib/business/shares-api';
 
 // Business PR R2-C1, board section 3: the business proposes a split; nothing changes until the
-// staff member accepts. The business reads only Accepted, Pending or No change: never "declined".
+// staff member accepts. Its own proposal reads Pending until the start date, whatever the staff
+// member did; from then it reads the outcome. A split the staff member suggests shows at once.
 
 /** "90/10": staff keeps / business takes. */
 const splitLabel = (bps: number) => `${100 - bps / 100}/${bps / 100}`;
@@ -33,7 +33,7 @@ function rowLine(row: BusinessShareRow): string {
     case 'pending':
       return row.proposedBy === 'member'
         ? `They suggest the business takes ${row.businessPercent}%, from ${from}.`
-        : `Pending: the business takes ${row.businessPercent}%, from ${from}, if they accept.`;
+        : `Proposed: the business takes ${row.businessPercent}% from ${from}. You’ll see on that date whether it applies.`;
     case 'no_change':
       return 'No change: they keep all their tips here.';
   }
@@ -63,51 +63,33 @@ function ShareRow({
     <li className="business-share" data-testid={`share-${row.memberId}`}>
       <p className="business-share__name">{row.shownName}</p>
       <p className="tm-hint">{rowLine(row)}</p>
-      {id && row.state === 'pending' && (
+      {id && row.state === 'pending' && row.proposedBy === 'member' && (
         <div className="business-share__actions">
-          {row.proposedBy === 'member' ? (
-            <>
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  void run(() =>
-                    answerSuggestedShare(businessId, id, 'accept').then((r) =>
-                      r.ok ? { ok: true } : { ok: false, code: r.code },
-                    ),
-                  )
-                }
-              >
-                Accept {row.shownName}’s split
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() =>
-                  void run(() =>
-                    answerSuggestedShare(businessId, id, 'decline').then((r) =>
-                      r.ok ? { ok: true } : { ok: false, code: r.code },
-                    ),
-                  )
-                }
-              >
-                Keep today’s split
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="quiet"
-              disabled={busy}
-              onClick={() =>
-                void run(() =>
-                  withdrawShare(businessId, id).then((r) =>
-                    r.ok ? { ok: true } : { ok: false, code: r.code },
-                  ),
-                )
-              }
-            >
-              Withdraw proposal
-            </Button>
-          )}
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(() =>
+                answerSuggestedShare(businessId, id, 'accept').then((r) =>
+                  r.ok ? { ok: true } : { ok: false, code: r.code },
+                ),
+              )
+            }
+          >
+            Accept {row.shownName}’s split
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() =>
+              void run(() =>
+                answerSuggestedShare(businessId, id, 'decline').then((r) =>
+                  r.ok ? { ok: true } : { ok: false, code: r.code },
+                ),
+              )
+            }
+          >
+            Keep today’s split
+          </Button>
         </div>
       )}
       {problem && <StateLine tone="error">{problem}</StateLine>}
@@ -215,9 +197,9 @@ export function SharesSection({ business }: { business: BusinessDetail }) {
         <p className="tm-hint">From: {from}</p>
         <p className="tm-hint">
           The share is of what they receive after TipMe’s fee, at most half.
-          Nothing changes until they accept, and the split can change at most
-          once a month. Tips through their own page, outside the business, are
-          never shared.
+          Nothing changes until they accept, and you’ll see on the start date
+          whether it applies. The split can change at most once a month. Tips
+          through their own page, outside the business, are never shared.
         </p>
         <Button type="submit" disabled={busy}>
           Send to {chosen.shownName}

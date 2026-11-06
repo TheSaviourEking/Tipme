@@ -1723,54 +1723,6 @@
         ]
       }
     },
-    "/v1/me/businesses/{id}/shares/{agreementId}/withdraw": {
-      "post": {
-        "operationId": "ShareAgreements.withdraw",
-        "tags": [
-          "ShareAgreements"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "agreementId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Done; no body."
-          },
-          "default": {
-            "description": "An error with a stable code; never echoes request values.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "x-tipme-access": "recipient",
-        "x-tipme-csrf": true,
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
     "/v1/me/cover": {
       "delete": {
         "operationId": "Cover.remove",
