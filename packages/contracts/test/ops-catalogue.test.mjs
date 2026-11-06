@@ -58,7 +58,7 @@ test('usernames.manage is a sensitive people permission', () => {
 });
 
 test('the serious actions are the agreed ten', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 10);
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 11);
   assert.ok(SERIOUS_ACTIONS.includes('staff.grant_owner'));
 });
 

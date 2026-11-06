@@ -92,11 +92,13 @@ export class OpsApprovalsController {
     switch (outcome.status) {
       case 'approved': {
         // After the commit: a public page showing the old fee, as the route would refresh it.
-        const { revalidateHandle } = (outcome.result ?? {}) as {
-          revalidateHandle?: unknown;
-        };
+        const { revalidateHandle, revalidateBusiness } = (outcome.result ??
+          {}) as { revalidateHandle?: unknown; revalidateBusiness?: unknown };
         if (typeof revalidateHandle === 'string')
           this.revalidator.revalidate(revalidateHandle);
+        // A business verified on approval: its `/b/` pages go live (PR B2).
+        if (typeof revalidateBusiness === 'string')
+          this.revalidator.revalidateBusiness(revalidateBusiness);
         return { data: { status: 'approved' } };
       }
       case 'stale':

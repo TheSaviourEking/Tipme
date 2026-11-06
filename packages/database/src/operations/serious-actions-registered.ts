@@ -8,6 +8,7 @@ import type { MailProviderName } from '@tipme/mail';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  businesses,
   issues,
   payouts,
   profiles,
@@ -21,6 +22,11 @@ import {
   normaliseEmail,
   normaliseStaffEmail,
 } from './email-address.js';
+import {
+  businessManagerUsers,
+  businessVerifyFacts,
+  verifyBusiness,
+} from './business-ops.js';
 import { startStaffRecovery } from './email-recovery.js';
 import { guarded, OperationError } from './errors.js';
 import { grantFeeFreeTips, setAccountFee } from './fees.js';
@@ -490,6 +496,41 @@ const feeFree = acting<{ profileId: string; count: number }>({
     }),
 });
 
+/* TipMe for businesses */
+
+/**
+ * Verifying makes a business's printed codes live (PR B2). Pinned on its status and slug: a slug
+ * corrected, or the business suspended, after asking makes the approval stale. The business's own
+ * managers can't decide it, even when they are staff.
+ */
+const businessVerify = acting<{ businessId: string }>({
+  name: 'business.verify',
+  permission: 'businesses.manage',
+  subjects: ({ businessId }, db) => businessManagerUsers(db, businessId),
+  target: ({ businessId }) => businessId,
+  current: (tx, { businessId }) => businessVerifyFacts(tx, businessId),
+  describe: async (tx, { businessId }) => {
+    const facts = await opsBusinessName(tx, businessId);
+    return `Verify ${facts.name} (usetipme.xyz/b/${facts.slug}) so its codes go live.`;
+  },
+  act: (tx, { businessId }, context) =>
+    verifyBusiness(tx, {
+      businessId,
+      staffUserId: context.actorId,
+      reason: context.reason,
+      now: context.now,
+    }).then(({ slug }) => ({ revalidateBusiness: slug })),
+});
+
+const opsBusinessName = async (db: Database | Tx, businessId: string) => {
+  const [row] = await db
+    .select({ name: businesses.name, slug: businesses.slug })
+    .from(businesses)
+    .where(eq(businesses.id, businessId));
+  if (!row) throw new OperationError('BUSINESS_NOT_FOUND');
+  return row;
+};
+
 /* Staff access */
 
 export type GrantPayload =
@@ -810,6 +851,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(roleAddSensitive);
   registerSeriousAction(staffResetAuthenticator);
   registerSeriousAction(mailProviderSwitch);
+  registerSeriousAction(businessVerify);
 }
 
 /* Routes whose seriousness depends on what is being done */

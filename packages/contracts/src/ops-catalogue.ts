@@ -285,6 +285,8 @@ export const SERIOUS_ACTIONS = [
   'role.add_sensitive',
   'staff.reset_authenticator',
   'mail_provider.switch',
+  // TipMe for businesses (PR B2): verifying makes a business's printed codes live.
+  'business.verify',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -300,6 +302,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'role.add_sensitive': 'Add sensitive access to a role',
   'staff.reset_authenticator': 'Reset someone’s authenticator',
   'mail_provider.switch': 'Switch the active email provider',
+  'business.verify': 'Verify a business',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -315,4 +318,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'role.add_sensitive': 'staff.manage',
     'staff.reset_authenticator': 'staff.manage',
     'mail_provider.switch': 'providers.manage',
+    'business.verify': 'businesses.manage',
   };
