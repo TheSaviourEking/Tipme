@@ -104,7 +104,10 @@ export function businessDetail(
   return guarded(() => readDetail(db, userId, businessId));
 }
 
-/** Owners only. The slug changes only while pending (SLUG_LOCKED once verified). */
+/**
+ * Owners only. The slug and the name change only while pending (SLUG_LOCKED,
+ * BUSINESS_NAME_LOCKED once verified).
+ */
 export function updateBusiness(
   db: Database,
   userId: string,
@@ -126,7 +129,13 @@ export function updateBusiness(
         if (taken) throw new OperationError('BUSINESS_SLUG_TAKEN');
         changes.slug = patch.slug;
       }
-      if (patch.name !== undefined) changes.name = patch.name;
+      // The name TipMe checked is locked once verified (coordinator ruling, 6 Nov 2026): the
+      // verified badge never shows a name TipMe didn't check. Staff renames come later.
+      if (patch.name !== undefined && patch.name !== current.name) {
+        if (current.status !== 'pending')
+          throw new OperationError('BUSINESS_NAME_LOCKED');
+        changes.name = patch.name;
+      }
       if (patch.contactName !== undefined)
         changes.contactName = patch.contactName;
       if (patch.contactEmail !== undefined)
@@ -369,9 +378,13 @@ const slugRace =
 async function lockBusiness(
   tx: Tx,
   businessId: string,
-): Promise<{ slug: string; status: string }> {
+): Promise<{ slug: string; name: string; status: string }> {
   const [row] = await tx
-    .select({ slug: businesses.slug, status: businesses.status })
+    .select({
+      slug: businesses.slug,
+      name: businesses.name,
+      status: businesses.status,
+    })
     .from(businesses)
     .where(eq(businesses.id, businessId))
     .for('update');

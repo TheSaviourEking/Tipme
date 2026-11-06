@@ -123,6 +123,42 @@ test('an owner adds a second location and edits its address', async ({
   );
 });
 
+test('a verified business shows its name read-only, and other details still save', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  const { userId } = await accountOf(who.email);
+  await seedBusiness({ owner: userId, status: 'verified', name: 'Ada Bakes' });
+  await page.goto('/dashboard/business');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Ada Bakes' }),
+  ).toBeVisible();
+  const details = page.locator('#details');
+  await expect(details.getByLabel('Business name')).toHaveCount(0);
+  await expect(details.getByTestId('business-name')).toContainText('Ada Bakes');
+  await expect(details).toContainText(
+    'Your name was checked by TipMe. To change it, contact TipMe.',
+  );
+  // Other details still save.
+  await details.getByLabel('Contact name').fill('Ada O.');
+  await details.getByRole('button', { name: 'Save details' }).click();
+  await expect(details.getByText('Saved.')).toBeVisible();
+  await expectAccessible(page);
+});
+
+test('a pending business can rename itself', async ({ page }, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  const { userId } = await accountOf(who.email);
+  await seedBusiness({ owner: userId, status: 'pending', name: 'Ada Bakes' });
+  await page.goto('/dashboard/business');
+  const details = page.locator('#details');
+  await details.getByLabel('Business name').fill('Ada’s Bakery');
+  await details.getByRole('button', { name: 'Save details' }).click();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Ada’s Bakery' }),
+  ).toBeVisible();
+});
+
 test('a slug already taken is refused next to the field', async ({
   page,
 }, testInfo) => {

@@ -77,3 +77,9 @@ test('a location slug TipMe keeps says so', () => {
     'That address is kept for TipMe. Try another.',
   );
 });
+
+test('a locked name is told next to the name field', () => {
+  assert.deepEqual(setupFieldErrors({ code: 'BUSINESS_NAME_LOCKED' }).fields, {
+    name: 'Your name was checked by TipMe. To change it, contact TipMe.',
+  });
+});

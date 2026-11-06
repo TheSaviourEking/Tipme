@@ -9825,6 +9825,15 @@ body > .coming-soon-page {
   margin: 0;
 }
 
+.business-details__locked {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.business-details__locked p {
+  margin: 0;
+}
+
 @media (min-width: 40rem) {
   .business-manager {
     grid-template-columns: 1fr auto;

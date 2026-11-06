@@ -315,3 +315,7 @@ test('a location can never be slugged "people": that path is the public search (
   // A business may still be called "people": only the location segment is taken.
   assert.ok(businessSlugSchema.safeParse('people').success);
 });
+
+test('a verified business can not be renamed: BUSINESS_NAME_LOCKED is a code of its own', () => {
+  assert.ok(apiErrorCodes.includes('BUSINESS_NAME_LOCKED'));
+});

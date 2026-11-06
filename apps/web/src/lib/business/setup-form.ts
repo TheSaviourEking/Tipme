@@ -62,6 +62,12 @@ export function setupFieldErrors(
           'This business already has a location with that address.',
       },
     };
+  if (result.code === 'BUSINESS_NAME_LOCKED')
+    return {
+      fields: {
+        name: 'Your name was checked by TipMe. To change it, contact TipMe.',
+      },
+    };
   if (result.code === 'SLUG_LOCKED')
     return {
       fields: {

@@ -34,6 +34,8 @@ const messages: Record<ApiErrorCode, string> = {
     'This business already has a location with that address.',
   SLUG_LOCKED:
     'The address can’t change once the business is verified, because printed codes use it.',
+  BUSINESS_NAME_LOCKED:
+    'Your name was checked by TipMe. To change it, contact TipMe.',
   OWNER_REQUIRED: 'Only an owner of this business can do that.',
   INVITATION_INVALID:
     'That invitation isn’t valid any more. Ask the business for a new one.',
@@ -319,6 +321,7 @@ const operationErrors: Partial<
   BUSINESS_SLUG_TAKEN: { status: 409, code: 'BUSINESS_SLUG_TAKEN' },
   LOCATION_SLUG_TAKEN: { status: 409, code: 'LOCATION_SLUG_TAKEN' },
   SLUG_LOCKED: { status: 409, code: 'SLUG_LOCKED' },
+  BUSINESS_NAME_LOCKED: { status: 409, code: 'BUSINESS_NAME_LOCKED' },
   ALREADY_A_MEMBER: { status: 409, code: 'ALREADY_A_MEMBER' },
   BUSINESS_LAST_OWNER: { status: 409, code: 'BUSINESS_LAST_OWNER' },
   INVITATIONS_BLOCKED: { status: 409, code: 'INVITATIONS_BLOCKED' },

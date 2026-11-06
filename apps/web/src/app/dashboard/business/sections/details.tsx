@@ -75,7 +75,8 @@ export function DetailsCard({
     setLine({ tone: 'status', text: '' });
     const phone = draft.contactPhone.trim();
     const result = await updateBusiness(business.id, {
-      name: draft.name,
+      // Locked with the slug once verified: sent only while it can change.
+      ...(business.slugLocked ? {} : { name: draft.name }),
       contactName: draft.contactName,
       contactEmail: draft.contactEmail,
       contactPhone: phone ? phone : null,
@@ -118,7 +119,19 @@ export function DetailsCard({
           noValidate
           onSubmit={(event) => void save(event)}
         >
-          {input('name', 'Business name', { maxLength: 80, required: true })}
+          {business.slugLocked ? (
+            <div className="business-details__locked">
+              <p>
+                <span className="tm-hint">Business name</span>{' '}
+                <strong data-testid="business-name">{business.name}</strong>
+              </p>
+              <p className="tm-hint">
+                Your name was checked by TipMe. To change it, contact TipMe.
+              </p>
+            </div>
+          ) : (
+            input('name', 'Business name', { maxLength: 80, required: true })
+          )}
           {business.slugLocked ? (
             <p className="tm-hint" data-testid="business-slug">
               Address on TipMe: /b/{business.slug}. It can’t change now that the

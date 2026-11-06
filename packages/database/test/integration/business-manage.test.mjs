@@ -242,12 +242,40 @@ test('business setup', async (t) => {
         ),
         'SLUG_LOCKED',
       );
-      // The same slug again is not a change; other fields still save.
+      // The name was checked by TipMe: it is locked like the slugs (coordinator ruling, 6 Nov).
+      assert.equal(
+        await codeOf(
+          updateBusiness(database.db, ADA.userId, detail.id, {
+            name: 'Someone Else’s Bar',
+          }),
+        ),
+        'BUSINESS_NAME_LOCKED',
+      );
+      // A suspended business was verified first: still locked.
+      await q(
+        `UPDATE businesses SET status = 'suspended', suspended_at = now(), suspended_reason = 'x' WHERE id = $1`,
+        [detail.id],
+      );
+      assert.equal(
+        await codeOf(
+          updateBusiness(database.db, ADA.userId, detail.id, { name: 'New' }),
+        ),
+        'BUSINESS_NAME_LOCKED',
+      );
+      await q(
+        `UPDATE businesses SET status = 'verified', suspended_at = NULL, suspended_reason = NULL WHERE id = $1`,
+        [detail.id],
+      );
+      const [kept] = await q(`SELECT name FROM businesses WHERE id = $1`, [
+        detail.id,
+      ]);
+      assert.equal(kept.name, 'Chilli House');
+      // The same slug and name again are not changes; other fields still save.
       const verified = await updateBusiness(
         database.db,
         ADA.userId,
         detail.id,
-        { slug: 'chilli-house', contactName: 'Funke A.' },
+        { slug: 'chilli-house', name: 'Chilli House', contactName: 'Funke A.' },
       );
       assert.equal(verified.slugLocked, true);
       assert.equal(verified.contact.name, 'Funke A.');

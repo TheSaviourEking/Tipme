@@ -254,6 +254,18 @@ test('API: another business id answers 404 exactly like an unknown one; a locati
   );
   assert.equal(verified.status, 409);
   assert.equal(verified.body.error.code, 'SLUG_LOCKED');
+  // Verified: the name TipMe checked can't change either.
+  const renamed = await call(
+    'PATCH',
+    `/v1/me/businesses/${theirs.businessId}`,
+    { cookie: tobi.cookie, body: { name: 'Another Name' } },
+  );
+  assert.equal(renamed.status, 409);
+  assert.equal(renamed.body.error.code, 'BUSINESS_NAME_LOCKED');
+  assert.equal(
+    renamed.body.error.message,
+    'Your name was checked by TipMe. To change it, contact TipMe.',
+  );
 });
 
 test('API: every write needs CSRF; reads and writes need a session', async () => {
