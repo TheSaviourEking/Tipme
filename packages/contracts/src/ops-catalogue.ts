@@ -304,6 +304,7 @@ export const SERIOUS_ACTIONS = [
   // TipMe for businesses (PR B2): verifying makes a business's printed codes live.
   'business.verify',
   'tip.reverse',
+  'changelog.publish',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -322,6 +323,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'username.take_back': 'Take a username back from a page',
   'business.verify': 'Verify a business',
   'tip.reverse': 'Reverse a refunded or charged-back tip',
+  'changelog.publish': 'Show users a What’s new entry',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -340,4 +342,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'username.take_back': 'usernames.manage',
     'business.verify': 'businesses.manage',
     'tip.reverse': 'payments.repair',
+    'changelog.publish': 'changelog.publish',
   };

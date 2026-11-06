@@ -48,6 +48,7 @@ import {
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import { takeBackAction } from './username-take-backs.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
+import { changelogPublishAction } from './changelog-admin.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -1011,6 +1012,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(takeBackAction);
   registerSeriousAction(businessVerify);
   registerSeriousAction(tipReverse);
+  registerSeriousAction(changelogPublishAction);
 }
 
 /* Routes whose seriousness depends on what is being done */

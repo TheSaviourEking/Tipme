@@ -287,6 +287,21 @@ export const opsChangelogEditSchema = z
   .strict();
 export type OpsChangelogEdit = z.infer<typeof opsChangelogEditSchema>;
 
+/** One page of the admin list, newest merged first; `nextBefore` is the cursor for the next page. */
+export interface OpsChangelogList {
+  rows: OpsChangelogRow[];
+  nextBefore: number | null;
+}
+
+/** Approve, or ask for approval of, the revision the person read. The reason is the usual staff reason. */
+export const opsChangelogDecisionSchema = z
+  .object({
+    revision: z.number().int().positive(),
+    reason: z.string().trim().min(10).max(500),
+  })
+  .strict();
+export type OpsChangelogDecision = z.infer<typeof opsChangelogDecisionSchema>;
+
 // Users.
 export interface WhatsNewEntry {
   number: number;
