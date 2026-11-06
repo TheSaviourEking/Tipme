@@ -43,7 +43,7 @@ export default function TipDetailPage() {
       </Notice>
     );
   if (!tip) return <Skeleton label="Loading the tip" />;
-  const who = tip.supporterLabel ?? 'A guest';
+  const who = tip.supporterLabel ?? 'Anonymous';
   const fee = feeLine(
     tip.platformFeeMinor,
     tip.providerFeeMinor,
@@ -58,7 +58,7 @@ export default function TipDetailPage() {
       <Surface material="paper" className="receipt">
         <h1>
           {formatNaira(Number(tip.netMinor))} from{' '}
-          {tip.supporterLabel ?? 'a guest'}
+          {tip.supporterLabel ?? 'Anonymous'}
         </h1>
         <p className="receipt__when">
           {lagos(tip.at, { dateStyle: 'medium', timeStyle: 'short' })}

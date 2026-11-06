@@ -277,12 +277,17 @@ export default function WithdrawPage({
     setError('');
     setUnsure(null);
     key.current ??= crypto.randomUUID();
+    const sent = key.current;
     const result = await apiFetch<{ payoutId: string }>('/v1/me/withdrawals', {
       method: 'POST',
       body: { amountMinor: String(amount) },
-      headers: { 'idempotency-key': key.current },
+      headers: { 'idempotency-key': sent },
     });
     setBusy(false);
+    // The amount changed while this was on its way (typing clears the key): a refusal belongs to
+    // the old amount, so it doesn't bring back a slip or an error over the new one. A success still
+    // shows below: money that moved is always said.
+    const stale = key.current !== sent;
     if (result.ok) {
       setDone(formatNaira(amount));
       setRaw('');
@@ -292,9 +297,10 @@ export default function WithdrawPage({
       return;
     }
     const refusal = withdrawRefusal(result.code);
+    if (refusal.reload) void Promise.all([balance.reload(), latest.reload()]);
+    if (stale) return;
     // Refused before anything was recorded, so a new key is safe.
     if (refusal.message === null) key.current = null;
-    if (refusal.reload) void Promise.all([balance.reload(), latest.reload()]);
     const maybeSent = withdrawUnsure(result.code);
     if (maybeSent) setUnsure(maybeSent);
     else if (refusal.message) setError(refusal.message);

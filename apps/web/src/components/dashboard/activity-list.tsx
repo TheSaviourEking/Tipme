@@ -46,7 +46,7 @@ export function ActivityList({
           <>
             <span>
               {row.kind === 'tip'
-                ? `Tip from ${row.supporterLabel ?? 'a guest'}`
+                ? `Tip from ${row.supporterLabel ?? 'Anonymous'}`
                 : 'Withdrawal'}
               <small>
                 {row.state === 'confirming' ? 'Being confirmed' : when(row.at)}

@@ -834,9 +834,14 @@ test('a withdrawal we could not confirm is a Not confirmed slip with no money li
   await fakeBalance(page, '540000');
   await fakeQuote(page, readyQuote());
   const keys: string[] = [];
-  await page.route('**/v1/me/withdrawals', (route) => {
+  // The second answer is held until the amount has changed: an answer that lands after the person
+  // typed a new amount must not bring the old slip back (it did, on CI's slower machines).
+  let release = () => {};
+  const changed = new Promise<void>((done) => (release = done));
+  await page.route('**/v1/me/withdrawals', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
     keys.push(route.request().headers()['idempotency-key'] ?? '');
+    if (keys.length === 2) await changed;
     return route.fulfill({
       status: 502,
       json: { error: { code: 'INTERNAL_ERROR', message: 'x' } },
@@ -860,6 +865,11 @@ test('a withdrawal we could not confirm is a Not confirmed slip with no money li
   expect(keys[1]).toBe(keys[0]);
   // A different amount is a new request: the slip goes, and the next key is new.
   await page.getByLabel('Amount (NGN)').fill('2700');
+  await expect(slip).toHaveCount(0);
+  // The held answer for ₦2,500 lands now, after the change: the slip stays gone.
+  const late = page.waitForResponse('**/v1/me/withdrawals');
+  release();
+  await late;
   await expect(slip).toHaveCount(0);
   await page.getByRole('button', { name: 'Withdraw ₦2,700' }).click();
   await expect.poll(() => keys.length).toBe(3);
