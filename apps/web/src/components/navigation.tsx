@@ -2,8 +2,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActionLink, Button, Container, Surface } from '@tipme/ui';
-import { Brand, Arrow } from './brand';
+import { Button, Container, Surface } from '@tipme/ui';
+import { Brand } from './brand';
+import { GuestActions, NavAccount } from './nav-account';
 
 /**
  * Who the product is for. Individuals is open; the other two say so and are not links until
@@ -245,23 +246,11 @@ export function Navigation({
           <Suspense fallback={<Link href="/pro">Pro</Link>}>
             <ProLink onClick={close} />
           </Suspense>
-          {/* Guest actions; hidden in the dashboard, where someone already has a page (CSS). */}
-          <ActionLink
-            className="nav-guest"
-            variant="secondary"
-            href="/sign-in"
-            onClick={close}
-          >
-            Sign in
-          </ActionLink>
-          {/* Getting someone their own page is the one primary action. */}
-          <ActionLink
-            className="nav-guest nav-claim"
-            href="/sign-up"
-            onClick={close}
-          >
-            Claim your username <Arrow />
-          </ActionLink>
+          {/* Sign in and Claim your username, or, signed in, Go to my dashboard (NavAccount). Before
+              the address is read it is the signed-out pair, as the server renders it. */}
+          <Suspense fallback={<GuestActions onClick={close} />}>
+            <NavAccount onClick={close} />
+          </Suspense>
         </nav>
       </Container>
     </header>

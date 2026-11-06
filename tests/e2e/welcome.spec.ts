@@ -254,7 +254,10 @@ test('a new recipient is welcomed and sets up their page one small step at a tim
   await expect(page.getByText(/Your page is live\./)).toBeVisible();
   await expectAccessible(page);
   await page.screenshot({ path: testInfo.outputPath('welcome-done.png') });
-  await page.getByRole('link', { name: 'Go to my dashboard' }).click();
+  await page
+    .getByRole('main')
+    .getByRole('link', { name: 'Go to my dashboard' })
+    .click();
   await page.waitForURL(/\/dashboard$/);
   await expect(
     page.getByRole('heading', { name: 'Your page is ready to share' }),
@@ -293,7 +296,10 @@ test('every welcome step can be skipped, and nothing goes live without asking', 
     page.getByRole('heading', { name: 'You’re set up.' }),
   ).toBeVisible();
   await expect(page.getByText(/not online yet/)).toBeVisible();
-  await page.getByRole('link', { name: 'Go to my dashboard' }).click();
+  await page
+    .getByRole('main')
+    .getByRole('link', { name: 'Go to my dashboard' })
+    .click();
   await page.waitForURL(/\/dashboard$/);
   await expect(
     page.getByRole('heading', { name: 'Get your page ready to share' }),
