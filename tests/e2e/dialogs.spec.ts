@@ -6,18 +6,23 @@ import { expect, test, type Page } from '@playwright/test';
 
 /** Opens a modal <dialog> with this class on the page and returns its box and the window's. */
 async function openDialog(page: Page, className: string) {
-  return page.evaluate((name) => {
+  return page.evaluate(async (name) => {
     const dialog = document.createElement('dialog');
     dialog.className = name;
     dialog.innerHTML = '<h2>A pop-up</h2><p>Some words.</p><button>OK</button>';
     document.body.append(dialog);
     dialog.showModal();
+    // Measured where it comes to rest, after any entry animation.
+    await Promise.all(dialog.getAnimations().map((motion) => motion.finished));
     const box = dialog.getBoundingClientRect();
+    // A dialog is centred in the page's visible area: without a classic scrollbar (Linux CI has
+    // one, 15px wide; a Mac's floats over the page), so measure against clientWidth, not innerWidth.
+    const { clientWidth, clientHeight } = document.documentElement;
     return {
       left: box.left,
-      right: innerWidth - box.right,
+      right: clientWidth - box.right,
       top: box.top,
-      bottom: innerHeight - box.bottom,
+      bottom: clientHeight - box.bottom,
     };
   }, className);
 }
