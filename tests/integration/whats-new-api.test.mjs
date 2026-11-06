@@ -62,13 +62,15 @@ async function seed(number, values = {}) {
   );
 }
 
-// Sign-in codes are limited per phone, so each device signs in once for the whole file.
+// Sign-in codes are limited per phone, so each device signs in once for the whole file. One after
+// the other: the second's code would replace the first's in the pretend inbox.
 let devices;
 const sessions = () =>
-  (devices ??= Promise.all([
-    signIn(stack.api, TOBI.phone),
-    signIn(stack.api, TOBI.phone),
-  ]));
+  (devices ??= (async () => {
+    const phone = await signIn(stack.api, TOBI.phone);
+    const laptop = await signIn(stack.api, TOBI.phone);
+    return [phone, laptop];
+  })());
 
 const get = async (path, cookie) => {
   const response = await fetch(`${stack.api}${path}`, {
