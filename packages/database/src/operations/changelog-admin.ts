@@ -38,10 +38,9 @@ type EntryRow = typeof changelogEntries.$inferSelect;
 const iso = (date: Date | null) => date?.toISOString() ?? null;
 const audienceOf = (value: string | null) => value as ChangelogAudience | null;
 
-function toRow(
-  row: EntryRow,
-  waitingRequestId: string | null,
-): OpsChangelogRow {
+type Waiting = { id: string; revision: number | null };
+
+function toRow(row: EntryRow, waiting: Waiting | null): OpsChangelogRow {
   const audience = row.audience as ChangelogAudience;
   return {
     number: row.prNumber,
@@ -60,7 +59,10 @@ function toRow(
     mergedAt: row.mergedAt.toISOString(),
     stagingAt: iso(row.stagingAt),
     liveAt: iso(row.liveAt),
-    waitingRequestId,
+    waitingRequestId: waiting?.id ?? null,
+    // The request pins the revision it asked about; any later edit to the user text or audience
+    // moves the entry's revision, and the request will go stale at approval.
+    editedSinceAsking: waiting !== null && waiting.revision !== row.revision,
   };
 }
 
@@ -69,12 +71,15 @@ async function waitingRequests(
   db: Database | Tx,
   numbers: number[],
   now: Date,
-): Promise<Map<number, string>> {
-  const waiting = new Map<number, string>();
+): Promise<Map<number, Waiting>> {
+  const waiting = new Map<number, Waiting>();
   if (numbers.length === 0) return waiting;
   const number = sql<number>`(${approvalRequests.payload}->>'number')::int`;
+  const revision = sql<
+    number | null
+  >`(${approvalRequests.payload}->>'revision')::int`;
   const rows = await db
-    .select({ id: approvalRequests.id, number })
+    .select({ id: approvalRequests.id, number, revision })
     .from(approvalRequests)
     .where(
       and(
@@ -86,7 +91,8 @@ async function waitingRequests(
     )
     .orderBy(desc(approvalRequests.createdAt));
   for (const row of rows)
-    if (!waiting.has(row.number)) waiting.set(row.number, row.id);
+    if (!waiting.has(row.number))
+      waiting.set(row.number, { id: row.id, revision: row.revision });
   return waiting;
 }
 

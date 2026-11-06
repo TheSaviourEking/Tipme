@@ -243,6 +243,11 @@ export interface OpsChangelogRow {
   liveAt: string | null;
   /** The approval request waiting for a publisher, if any. */
   waitingRequestId: string | null;
+  /**
+   * The waiting request asked about an older revision: the entry was edited since, so approving it
+   * will stop without running (stale). Optional: an older API leaves it out.
+   */
+  editedSinceAsking?: boolean;
 }
 
 export interface OpsChangelogEntry extends OpsChangelogRow {
