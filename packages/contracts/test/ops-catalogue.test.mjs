@@ -88,3 +88,19 @@ test('the runbook names every permission and serious action', () => {
   ])
     assert.match(runbook, rule);
 });
+
+// Changelog plan (5 Nov 2026), Design §4. The serious action itself is registered with its
+// approval flow in the admin API PR, so SERIOUS_ACTIONS stays at eleven until then.
+test('changelog.edit is not sensitive; changelog.publish is, both under content', () => {
+  assert.deepEqual(OPS_CATALOGUE['changelog.edit'], {
+    description: 'Edit changelog entries and ask for one to be shown to users',
+    group: 'content',
+    sensitive: false,
+  });
+  assert.deepEqual(OPS_CATALOGUE['changelog.publish'], {
+    description: 'Approve what users read in What’s new',
+    group: 'content',
+    sensitive: true,
+  });
+  assert.equal(OPS_PERMISSIONS.length, 22);
+});

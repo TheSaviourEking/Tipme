@@ -30,6 +30,8 @@ The menu only offers what someone can use. The server checks every call whatever
 | `recoveries.cancel` | people   | no        | Cancel a pending phone recovery                                                                                             |
 | `recoveries.manage` | people   | yes       | Start and manage account recoveries for a person                                                                            |
 | `usernames.manage`  | people   | yes       | Reserve and release usernames, and ask to take one back from a page                                                         |
+| `changelog.edit`    | content  | no        | Edit changelog entries and ask for one to be shown to users                                                                 |
+| `changelog.publish` | content  | yes       | Approve what users read in What’s new                                                                                       |
 | `email.export`      | content  | yes       | Download the email log as a spreadsheet                                                                                     |
 | `email.read`        | content  | yes       | Open a sent email: its delivery timeline and its content                                                                    |
 | `issues.resolve`    | content  | no        | Resolve issues                                                                                                              |
@@ -42,6 +44,8 @@ The menu only offers what someone can use. The server checks every call whatever
 | `staff.manage`      | settings | yes       | Add staff, change their access and roles                                                                                    |
 
 **Sensitive** means moving or settling money, reading logs or private details, or changing accounts and settings. The screens warn when one is ticked.
+
+Every role except `release_check` holds `changelog.edit` (the owner's default, 6 Nov 2026). Only the owner holds `changelog.publish` until someone adds it to a role. It is sensitive because its approval goes through the serious-action flow, so its routes need a fresh code.
 
 ## Serious actions
 
