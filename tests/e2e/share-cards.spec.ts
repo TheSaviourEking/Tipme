@@ -158,13 +158,13 @@ test('the card changes after the person changes their role', async ({
     await page.getByLabel('Display name').fill(name);
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText('Saved')).toBeVisible();
-    let bytes = Buffer.alloc(0);
+    let bytes: Buffer | undefined;
     await expect(async () => {
       await page.goto(`/@${handle}`);
       expect((await advertised(page)).alt).toBe(`${name} on TipMe`);
       bytes = await card(request, path);
     }).toPass({ timeout: 10_000 });
-    writeFileSync(testInfo.outputPath(`${file}.png`), bytes);
+    if (bytes) writeFileSync(testInfo.outputPath(`${file}.png`), bytes);
     await page.goto('/dashboard/settings');
   }
 });

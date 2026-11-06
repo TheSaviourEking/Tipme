@@ -1,3 +1,12 @@
+# Current handoff — public boards PR 2, share cards (6 November 2026)
+
+- Branch `feat/share-cards`, test lane 8, from `origin/dev` at `246bebb2`, committed, not pushed.
+- `HEART_MARK` is added to `lib/wordmark.ts` and `brand.tsx` exactly as `feat/app-icons` adds it (and its `brand-heart.test.mjs`), so whichever PR lands second rebases with identical hunks.
+- Fonts: static TTF subsets in `apps/web/src/fonts/og/` (pinned commits and sizes in `docs/third-party-component-register.md`). Turbopack emits them as server assets from `new URL('../fonts/og/…', import.meta.url)`; checked under `next start` (the e2e server).
+- `next/og` falls back to another font word by word and drops the space after a fallback word. DM Serif Display has no Ọ or Ẹ, so `lib/font-cmap.ts` reads its character map and a name it cannot draw whole is set in Manrope Bold. Combining accents (Ẹ̀, ọ́) are drawn without mark positioning, so they sit slightly off their letter.
+- The general card's bytes are drawn once per process in the route and match the prerendered `/opengraph-image` byte for byte (asserted in `share-cards.spec.ts`).
+- Evidence: `.superpowers/program/pub2-report.md` (main checkout); PNGs in `.superpowers/program/pub2-cards/`.
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.

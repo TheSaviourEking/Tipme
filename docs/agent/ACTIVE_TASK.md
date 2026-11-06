@@ -1,3 +1,9 @@
+# Current task — public boards PR 2, share cards (6 November 2026)
+
+- Branch/worktree: `feat/share-cards` / `.worktrees/share-cards`, test lane 8, from `origin/dev` at `246bebb2`. Committed, not pushed. Front end only: no API, contract, database or payment change.
+- Plan: `.superpowers/program/plans/2026-11-05-public-boards.md`, PR 2, Tasks 2.0 to 2.4. The general card in the new materials; `/@handle` advertises `/people/<handle>/share-card` (name, role, handle, cover colour; initials, no photo; TipMe purple for photo and colourless covers); anything else answers the general card with 200.
+- Next: CI's full e2e run (only `share-cards.spec.ts` and `quality.spec.ts` ran locally, per the 6 Nov overload rule).
+
 # Current task — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, test lane 3, with `origin/dev` at `1cb0cad` (#109–#126) merged, not pushed.
