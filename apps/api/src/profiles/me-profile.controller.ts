@@ -207,7 +207,10 @@ export class MeProfileController {
     };
   }
 
-  /** A Pro page's own preset amounts and minimum (PR-012); refused on Free (PRO_REQUIRED). */
+  /**
+   * A Pro page's own preset amounts and minimum (PR-012), and the one its page starts on ("Make
+   * it yours"); refused on Free (PRO_REQUIRED).
+   */
   @Put('tip-amounts')
   async tipAmounts(
     @CurrentUser() auth: AuthContext,
@@ -216,6 +219,11 @@ export class MeProfileController {
     const updated = await setTipAmounts(this.database.db, auth.userId, {
       presetsMinor: body.presetsMinor.map(BigInt),
       minTipMinor: BigInt(body.minMinor),
+      // Left out keeps the saved start (while still offered); null clears it.
+      startMinor:
+        body.startMinor === undefined || body.startMinor === null
+          ? body.startMinor
+          : BigInt(body.startMinor),
     });
     this.revalidator.revalidate(updated.handle);
     this.profileChanged(auth);

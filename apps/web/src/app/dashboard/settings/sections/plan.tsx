@@ -34,7 +34,7 @@ export function ProPlan() {
         <li>
           Every animated cover, in any colour, and you choose how it plays
         </li>
-        <li>Your own tip amounts</li>
+        <li>Your own tip amounts, and the one your page starts on</li>
         <li>Card styles and your signature on your thank-you</li>
         <li>
           Up to 8 links in your own order, one of them featured, including your

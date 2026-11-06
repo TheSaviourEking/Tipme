@@ -35,6 +35,7 @@ import {
   isReservedHandle,
   normaliseHandle,
   tipAmountsProblem,
+  tipStartAllowed,
 } from '@tipme/domain';
 import {
   and,
@@ -256,11 +257,14 @@ async function myRow(db: Database, userId: string) {
 /**
  * The amounts a page offers (PR-012): a Pro page's own when it has set them, otherwise the
  * standard ones. Kept on the row when a page goes back to Free, used again if it returns to Pro.
+ * `startMinor` ("Make it yours") is sent only for a Pro page's own amounts, and only while the
+ * saved start is one of the payable presets; otherwise the form starts on the closest to ₦2,000.
  */
 export function tipAmountsOf(profile: {
   plan: string;
   tipPresetsMinor: bigint[] | null;
   minTipMinor: bigint | null;
+  tipStartMinor?: bigint | null;
 }): TipAmounts {
   const floor = FEE_POLICY_V1.minTipMinor;
   // A page can hold amounts saved under an older, lower floor: offer only what can be paid.
@@ -272,17 +276,29 @@ export function tipAmountsOf(profile: {
   const presets = own ? payable : [...STANDARD_TIP_PRESETS_MINOR];
   const min =
     own && profile.minTipMinor! > floor ? profile.minTipMinor! : floor;
+  const start = profile.tipStartMinor;
   return {
     presetsMinor: presets.map(String),
     minMinor: String(min),
+    ...(own && start != null && tipStartAllowed(payable, start)
+      ? { startMinor: String(start) }
+      : {}),
   };
 }
 
-/** A Pro page sets its own preset amounts and minimum; refused on Free (PRO_REQUIRED). */
+/**
+ * A Pro page sets its own preset amounts and minimum, and the one its page starts on; refused on
+ * Free (PRO_REQUIRED). `startMinor` null clears the start; left out, the saved start is kept while
+ * it is still one of the new presets and cleared otherwise, so an older client never breaks it.
+ */
 export function setTipAmounts(
   db: Database,
   userId: string,
-  input: { presetsMinor: bigint[]; minTipMinor: bigint },
+  input: {
+    presetsMinor: bigint[];
+    minTipMinor: bigint;
+    startMinor?: bigint | null;
+  },
 ): Promise<MyProfile> {
   return guarded(async () => {
     const row = await myRow(db, userId);
@@ -291,6 +307,18 @@ export function setTipAmounts(
     if (problem === 'minMinor') throw new OperationError('INVALID_TIP_MINIMUM');
     if (problem === 'presetsMinor')
       throw new OperationError('INVALID_TIP_PRESETS');
+    if (
+      input.startMinor != null &&
+      !tipStartAllowed(input.presetsMinor, input.startMinor)
+    )
+      throw new OperationError('INVALID_TIP_START');
+    const kept = row.profile.tipStartMinor;
+    const startMinor =
+      input.startMinor !== undefined
+        ? input.startMinor
+        : kept !== null && tipStartAllowed(input.presetsMinor, kept)
+          ? kept
+          : null;
     // Only while still Pro: staff may have moved the page to Free since it was read.
     const updated = await db
       .update(profiles)
@@ -299,6 +327,7 @@ export function setTipAmounts(
           a < b ? -1 : a > b ? 1 : 0,
         ),
         minTipMinor: input.minTipMinor,
+        tipStartMinor: startMinor,
       })
       .where(and(eq(profiles.id, row.profile.id), eq(profiles.plan, 'pro')))
       .returning({ id: profiles.id });

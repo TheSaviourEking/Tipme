@@ -552,6 +552,9 @@ export const profiles = pgTable(
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
     tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
     minTipMinor: minor('min_tip_minor'),
+    // The preset a Pro page's tip form starts on ("Make it yours"); NULL starts on the closest to
+    // ₦2,000. Kept when the page goes back to Free, used again if it returns to Pro.
+    tipStartMinor: minor('tip_start_minor'),
     // TipMe's share for this account in basis points, set by staff (ADR-0014); null = the policy's.
     customFeeBps: integer('custom_fee_bps'),
     // Handle changes made so far (never reset), and how many staff have allowed beyond the
@@ -602,6 +605,12 @@ export const profiles = pgTable(
     check(
       'profiles_tip_presets_range',
       sql`tip_presets_minor IS NULL OR min_tip_minor <= ALL (tip_presets_minor)`,
+    ),
+    // The start is one of the page's own presets. `= ANY (NULL)` is NULL, which a CHECK lets
+    // through, hence the coalesce: no own amounts means no start.
+    check(
+      'profiles_tip_start_in_presets',
+      sql`tip_start_minor IS NULL OR coalesce(tip_start_minor = ANY (tip_presets_minor), false)`,
     ),
     // char_length counts code points, as THANKS_LINE_LIMIT does, so an emoji counts once.
     check(

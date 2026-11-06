@@ -458,17 +458,36 @@ const wholeNairaMinor = (value: string): string | null => {
   return /^\d{1,6}$/.test(digits) ? String(Number(digits) * 100) : null;
 };
 
-/** Free pages show the standard amounts; Pro pages choose their own (PR-012). */
+/** The amounts typed so far that parse, in order and without repeats, as kobo. */
+const filledMinor = (presets: string[]): string[] => [
+  ...new Set(
+    presets
+      .filter((value) => value.trim() !== '')
+      .map(wholeNairaMinor)
+      .filter((minor): minor is string => minor !== null),
+  ),
+];
+
 /** What the amounts form edits, from the saved amounts. */
-function amountsForm(amounts: { presetsMinor: string[]; minMinor: string }) {
+function amountsForm(amounts: {
+  presetsMinor: string[];
+  minMinor: string;
+  startMinor?: string | null;
+}) {
   return {
     presets: [0, 1, 2, 3].map((i) =>
       amounts.presetsMinor[i] ? nairaText(amounts.presetsMinor[i]) : '',
     ),
     minimum: nairaText(amounts.minMinor),
+    // The amount the page starts on, in kobo; null is automatic (the closest to ₦2,000).
+    start: amounts.startMinor ?? null,
   };
 }
 
+/**
+ * Free pages show the standard amounts; Pro pages choose their own (PR-012), and which one their
+ * page starts on ("Make it yours"), saved together by one button.
+ */
 export function TipAmountsSettings() {
   const id = useId();
   const { profile, setProfile } = useRecipient();
@@ -476,16 +495,18 @@ export function TipAmountsSettings() {
   const amounts = profile.tipAmounts ?? STANDARD_TIP_AMOUNTS;
   const pro = profile.plan === 'pro';
   const [form, setForm] = useState(() => amountsForm(amounts));
-  const { presets, minimum } = form;
-  const setPresets = (next: (current: string[]) => string[]) =>
-    setForm((current) => ({ ...current, presets: next(current.presets) }));
+  const { presets, minimum, start } = form;
+  const setPresets = (next: string[]) =>
+    setForm((current) => ({ ...current, presets: next }));
   const setMinimum = (value: string) =>
     setForm((current) => ({ ...current, minimum: value }));
+  const setStart = (value: string | null) =>
+    setForm((current) => ({ ...current, start: value }));
   // Saved elsewhere (another device, or staff turning Pro on): follow it, keep what is being typed.
   const live = useLiveForm(amountsForm(amounts), form, setForm);
   // Which field the problem is in, so the message sits next to it.
   const [error, setError] = useState<{
-    field: 'presets' | 'minimum';
+    field: 'presets' | 'minimum' | 'start';
     text: string;
   } | null>(null);
   const [saved, setSaved] = useState(false);
@@ -500,13 +521,19 @@ export function TipAmountsSettings() {
           and supporters can tip any amount from {formatNaira(amounts.minMinor)}
           . Choosing your own amounts and minimum is part of TipMe Pro.
         </p>
+        <p className="tm-hint">
+          Pro pages choose which amount the page starts on.
+        </p>
       </Card>
     );
+  // The amounts the page could start on: the ones typed so far that parse.
+  const offered = filledMinor(presets);
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
     setSaved(false);
     const filled = presets.filter((value) => value.trim() !== '');
+    const startMinor = start !== null && offered.includes(start) ? start : null;
     const presetsMinor = filled.map(wholeNairaMinor);
     const minMinor = wholeNairaMinor(minimum);
     if (presetsMinor.length === 0 || presetsMinor.includes(null)) {
@@ -526,7 +553,12 @@ export function TipAmountsSettings() {
     setBusy(true);
     const result = await apiFetch<MyProfile>('/v1/me/tip-amounts', {
       method: 'PUT',
-      body: { presetsMinor, minMinor },
+      // Sent when there is or was a choice; left out otherwise (the server keeps none), so a page
+      // that never chose a start saves as before, even against an API older than the start.
+      body:
+        startMinor !== null || amounts.startMinor !== undefined
+          ? { presetsMinor, minMinor, startMinor }
+          : { presetsMinor, minMinor },
     });
     setBusy(false);
     if (result.ok) {
@@ -539,6 +571,8 @@ export function TipAmountsSettings() {
         field: 'presets',
         text: 'Choosing your own amounts is part of TipMe Pro.',
       });
+    else if (result.fields?.includes('startMinor'))
+      setError({ field: 'start', text: 'Choose one of your own amounts.' });
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
@@ -575,9 +609,14 @@ export function TipAmountsSettings() {
                 ? { error: error.text }
                 : {})}
               onChange={(e) => {
-                setPresets((current) =>
-                  current.map((v, i) => (i === index ? e.target.value : v)),
+                const next = presets.map((v, i) =>
+                  i === index ? e.target.value : v,
                 );
+                setPresets(next);
+                // A chosen amount that is no longer there moves the choice to automatic, and
+                // typing it back does not choose it again.
+                if (start !== null && !filledMinor(next).includes(start))
+                  setStart(null);
                 setSaved(false);
               }}
             />
@@ -596,6 +635,53 @@ export function TipAmountsSettings() {
           }}
           {...(error?.field === 'minimum' ? { error: error.text } : {})}
         />
+        <fieldset
+          className="tip-start"
+          {...(error?.field === 'start'
+            ? { 'aria-describedby': `${id}-start-error` }
+            : {})}
+        >
+          <legend>Your page starts on</legend>
+          {[...offered, null].map((minor) => {
+            const checked =
+              minor ===
+              (start !== null && offered.includes(start) ? start : null);
+            return (
+              <label
+                key={minor ?? 'automatic'}
+                className="tip-start__option"
+                htmlFor={`${id}-start-${minor ?? 'automatic'}`}
+              >
+                <input
+                  id={`${id}-start-${minor ?? 'automatic'}`}
+                  type="radio"
+                  name={`${id}-start`}
+                  checked={checked}
+                  onChange={() => {
+                    setStart(minor);
+                    setSaved(false);
+                  }}
+                />
+                <span className="tip-start__amount">
+                  {minor === null
+                    ? `Closest to ${formatNaira(200_000)} (automatic)`
+                    : formatNaira(minor)}
+                </span>
+                {/* The checked radio already says so to a screen reader; this is for the eye. */}
+                {checked && (
+                  <span className="tip-start__here" aria-hidden="true">
+                    Starts here
+                  </span>
+                )}
+              </label>
+            );
+          })}
+          {error?.field === 'start' && (
+            <p id={`${id}-start-error`} className="tm-field-error">
+              {error.text}
+            </p>
+          )}
+        </fieldset>
         {saved && (
           <p role="status" className="tm-hint">
             Saved. Your page now shows these amounts.

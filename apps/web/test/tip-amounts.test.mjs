@@ -127,6 +127,29 @@ test('the typed-amount example is the page’s own minimum', () => {
   );
 });
 
+// "Make it yours" (PR B): a Pro page chooses the amount its tip form starts on.
+test('the picker starts on the page’s chosen amount', () => {
+  assert.equal(
+    amountOptions({
+      presetsMinor: ['500000', '1000000', '2000000'],
+      minMinor: '500000',
+      startMinor: '1000000',
+    }).defaultMinor,
+    1000000,
+  );
+});
+
+test('a start that is not among the presets is ignored for the closest-to-₦2,000 rule', () => {
+  assert.equal(
+    amountOptions({
+      presetsMinor: ['500000', '1000000', '2000000'],
+      minMinor: '500000',
+      startMinor: '700000',
+    }).defaultMinor,
+    500000,
+  );
+});
+
 test('the minimum has a short label, and a typed amount below it is told apart from a mistyped one', () => {
   const options = amountOptions(undefined);
   assert.equal(options.minLabel, '2,000');

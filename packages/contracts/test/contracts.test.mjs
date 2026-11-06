@@ -56,3 +56,15 @@ test('error codes and job names are stable identifiers', () => {
   assert.ok(apiErrorCodes.includes('DEPENDENCY_UNAVAILABLE'));
   assert.equal(JOB_NAMES.traceProbe, 'diagnostics.trace-probe');
 });
+
+test('tipAmountsSchema takes an optional or null startMinor in kobo', async () => {
+  const { tipAmountsSchema } = await import('../dist/index.js');
+  const amounts = { presetsMinor: ['500000', '1000000'], minMinor: '200000' };
+  const ok = (extra) =>
+    tipAmountsSchema.safeParse({ ...amounts, ...extra }).success;
+  assert.equal(ok({ startMinor: '1000000' }), true);
+  assert.equal(ok({ startMinor: null }), true);
+  assert.equal(ok({}), true, 'omitted');
+  assert.equal(ok({ startMinor: '10.5' }), false);
+  assert.equal(ok({ startMinor: 1000000 }), false, 'a number is not kobo');
+});
