@@ -9,6 +9,7 @@ export * from './connection-budget.js';
 export * from './operations/errors.js';
 export * from './operations/quotes.js';
 export * from './operations/intents.js';
+export * from './operations/business-access.js';
 export * from './operations/provider-events.js';
 export * from './operations/payouts.js';
 export * from './operations/payout-start.js';

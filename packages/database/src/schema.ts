@@ -1,4 +1,6 @@
 import {
+  BUSINESS_NOTE_TAGS,
+  BUSINESS_NOTIFICATION_KINDS,
   ISSUE_KINDS,
   ISSUE_OUTCOMES,
   OPS_PERMISSIONS,
@@ -691,6 +693,11 @@ export const notifications = pgTable(
     tipId: uuid('tip_id'),
     momentId: uuid('moment_id'),
     reportId: uuid('report_id'),
+    // TipMe for businesses: the invitation (business_invitation) or the business (business_verified).
+    invitationId: uuid('invitation_id').references(
+      () => businessInvitations.id,
+    ),
+    businessId: uuid('business_id').references(() => businesses.id),
     title: text('title').notNull(),
     body: text('body').notNull(),
     readAt: timestamp('read_at', { withTimezone: true }),
@@ -699,8 +706,12 @@ export const notifications = pgTable(
   (table) => [
     check(
       'notifications_kind',
-      sql`kind IN ('tip', 'weekly_report', 'moment')`,
+      sql`kind IN ('tip', 'weekly_report', 'moment', ${sql.raw(BUSINESS_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(', '))})`,
     ),
+    // One notification per invitation, however often B3's write is retried.
+    uniqueIndex('notifications_invitation_once')
+      .on(table.kind, table.invitationId)
+      .where(sql`invitation_id IS NOT NULL`),
     // One notification per confirmed tip, even when the outbox event is delivered twice.
     uniqueIndex('notifications_tip_once')
       .on(table.kind, table.tipId)
@@ -958,11 +969,29 @@ export const tips = pgTable(
     purpose: text('purpose'),
     // Started from a recipient's shared celebration ("add to the celebration").
     celebrationMomentId: uuid('celebration_moment_id'),
+    // Where the tip was made (TipMe for businesses): a label the server chose and checked at intent
+    // time, never a destination. No posting reads it; the tip credits profile_id as every tip does.
+    businessMemberId: uuid('business_member_id').references(
+      () => businessMembers.id,
+    ),
+    businessLocationId: uuid('business_location_id').references(
+      () => businessLocations.id,
+    ),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (table) => [
     currencyCheck('tips'),
+    check(
+      'tips_business_pair',
+      sql`(business_member_id IS NULL) = (business_location_id IS NULL)`,
+    ),
+    index('tips_business_location_completed')
+      .on(table.businessLocationId, table.completedAt)
+      .where(sql`business_location_id IS NOT NULL`),
+    index('tips_business_member')
+      .on(table.businessMemberId)
+      .where(sql`business_member_id IS NOT NULL`),
     check('tips_gross_positive', sql`gross_minor > 0`),
     check(
       'tips_label_length',
@@ -2002,6 +2031,317 @@ export const messageFlags = pgTable(
     check(
       'message_flags_reason',
       sql`report_reason IS NULL OR report_reason IN ('abusive', 'spam', 'other')`,
+    ),
+  ],
+);
+
+// TipMe for businesses (plan docs/superpowers/plans/2026-11-06-business.md, PR B0). Release 1 moves
+// no money: every table here is a label or a list beside today's tips, never a ledger input.
+
+const BUSINESS_SLUG_RE = (max: number) =>
+  `'^[a-z0-9](?:[a-z0-9-]{0,${max - 2}}[a-z0-9])?$'`;
+const quotedList = (values: readonly string[]) =>
+  sql.raw(values.map((value) => `'${value}'`).join(', '));
+
+/** A business account: verified by TipMe staff before its codes go live. */
+export const businesses = pgTable(
+  'businesses',
+  {
+    id: uuid('id').primaryKey(),
+    // Locked once verified (M7): printed codes are never reprinted.
+    slug: text('slug').notNull().unique(),
+    name: text('name').notNull(),
+    status: text('status').notNull().default('pending'),
+    contactName: text('contact_name').notNull(),
+    contactEmail: text('contact_email').notNull(),
+    contactPhone: text('contact_phone'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    verifiedBy: uuid('verified_by').references(() => users.id),
+    suspendedAt: timestamp('suspended_at', { withTimezone: true }),
+    suspendedReason: text('suspended_reason'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check('businesses_slug', sql`slug ~ ${sql.raw(BUSINESS_SLUG_RE(40))}`),
+    check('businesses_name', sql`char_length(name) BETWEEN 1 AND 80`),
+    check(
+      'businesses_status',
+      sql`status IN ('pending', 'verified', 'suspended')`,
+    ),
+    check(
+      'businesses_contact',
+      sql`char_length(contact_name) BETWEEN 1 AND 80 AND char_length(contact_email) BETWEEN 3 AND 254 AND (contact_phone IS NULL OR char_length(contact_phone) <= 32)`,
+    ),
+    check(
+      'businesses_suspended',
+      sql`(status = 'suspended') = (suspended_at IS NOT NULL) AND (suspended_at IS NULL OR suspended_reason IS NOT NULL)`,
+    ),
+    // A suspended business was verified first.
+    check(
+      'businesses_verified',
+      sql`status = 'pending' OR verified_at IS NOT NULL`,
+    ),
+    index('businesses_created_by').on(table.createdBy),
+    index('businesses_status_created').on(table.status, table.createdAt),
+  ],
+);
+
+export const businessLocations = pgTable(
+  'business_locations',
+  {
+    id: uuid('id').primaryKey(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    address: text('address').notNull(),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('business_locations_slug').on(table.businessId, table.slug),
+    check(
+      'business_locations_slug_rule',
+      sql`slug ~ ${sql.raw(BUSINESS_SLUG_RE(30))}`,
+    ),
+    check(
+      'business_locations_text',
+      sql`char_length(name) BETWEEN 1 AND 60 AND char_length(address) BETWEEN 1 AND 200`,
+    ),
+  ],
+);
+
+/** Owners manage every location; a location manager one. Removal keeps the row. */
+export const businessManagers = pgTable(
+  'business_managers',
+  {
+    id: uuid('id').primaryKey(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    role: text('role').notNull(),
+    locationId: uuid('location_id').references(() => businessLocations.id),
+    addedBy: uuid('added_by').references(() => users.id),
+    createdAt: createdAt(),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('business_managers_role', sql`role IN ('owner', 'location_manager')`),
+    check(
+      'business_managers_location',
+      sql`(role = 'owner') = (location_id IS NULL)`,
+    ),
+    uniqueIndex('business_managers_open')
+      .on(table.businessId, table.userId)
+      .where(sql`removed_at IS NULL`),
+    index('business_managers_user')
+      .on(table.userId)
+      .where(sql`removed_at IS NULL`),
+  ],
+);
+
+/** A staff member: one TipMe page at one location. A new row each time someone rejoins. */
+export const businessMembers = pgTable(
+  'business_members',
+  {
+    id: uuid('id').primaryKey(),
+    locationId: uuid('location_id')
+      .notNull()
+      .references(() => businessLocations.id),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    shownName: text('shown_name').notNull(),
+    showPhoto: boolean('show_photo').notNull().default(true),
+    shareAmounts: boolean('share_amounts').notNull().default(false),
+    invitedBy: uuid('invited_by').references(() => users.id),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull(),
+    leftAt: timestamp('left_at', { withTimezone: true }),
+    leftBy: text('left_by'),
+  },
+  (table) => [
+    check(
+      'business_members_shown_name',
+      sql`char_length(shown_name) BETWEEN 1 AND 30`,
+    ),
+    check(
+      'business_members_left',
+      sql`(left_at IS NULL) = (left_by IS NULL) AND (left_by IS NULL OR left_by IN ('self', 'manager', 'tipme', 'account_deleted'))`,
+    ),
+    uniqueIndex('business_members_open')
+      .on(table.locationId, table.profileId)
+      .where(sql`left_at IS NULL`),
+    index('business_members_profile')
+      .on(table.profileId)
+      .where(sql`left_at IS NULL`),
+  ],
+);
+
+/**
+ * An invitation to join (staff) or help manage (manager). It reaches the person by email, a
+ * one-time link, or a TipMe username (owner's answer, 6 Nov 2026). Only the code's hash is kept.
+ */
+export const businessInvitations = pgTable(
+  'business_invitations',
+  {
+    id: uuid('id').primaryKey(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    locationId: uuid('location_id').references(() => businessLocations.id),
+    kind: text('kind').notNull(),
+    managerRole: text('manager_role'),
+    target: text('target').notNull(),
+    emailLower: text('email_lower'),
+    invitedProfileId: uuid('invited_profile_id').references(() => profiles.id),
+    codeSha256: text('code_sha256').notNull().unique(),
+    invitedBy: uuid('invited_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    acceptedBy: uuid('accepted_by').references(() => users.id),
+    declinedAt: timestamp('declined_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('business_invitations_kind', sql`kind IN ('staff', 'manager')`),
+    check(
+      'business_invitations_target',
+      sql`target IN ('email', 'link', 'user') AND (target = 'email') = (email_lower IS NOT NULL) AND (target = 'user') = (invited_profile_id IS NOT NULL)`,
+    ),
+    check(
+      'business_invitations_role',
+      sql`(kind = 'staff' AND manager_role IS NULL AND location_id IS NOT NULL) OR (kind = 'manager' AND manager_role IN ('owner', 'location_manager') AND (manager_role = 'owner') = (location_id IS NULL))`,
+    ),
+    check(
+      'business_invitations_outcome',
+      sql`(accepted_at IS NOT NULL)::int + (declined_at IS NOT NULL)::int + (revoked_at IS NOT NULL)::int <= 1 AND (accepted_at IS NULL) = (accepted_by IS NULL)`,
+    ),
+    index('business_invitations_business').on(
+      table.businessId,
+      table.createdAt,
+    ),
+    index('business_invitations_email')
+      .on(table.emailLower)
+      .where(sql`email_lower IS NOT NULL`),
+    index('business_invitations_profile')
+      .on(table.invitedProfileId)
+      .where(sql`invited_profile_id IS NOT NULL`),
+  ],
+);
+
+/** The invited person said no more invitations from this business (owner's answer, 6 Nov 2026). */
+export const businessInvitationBlocks = pgTable(
+  'business_invitation_blocks',
+  {
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.businessId, table.userId] }),
+    index('business_invitation_blocks_user').on(table.userId),
+  ],
+);
+
+/** On shift at a location. Reads ignore an open row older than SHIFT_MAX_HOURS. */
+export const businessShifts = pgTable(
+  'business_shifts',
+  {
+    id: uuid('id').primaryKey(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => businessMembers.id),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    startedBy: text('started_by').notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    endedBy: text('ended_by'),
+  },
+  (table) => [
+    check('business_shifts_started_by', sql`started_by IN ('self', 'manager')`),
+    check(
+      'business_shifts_ended',
+      sql`(ended_at IS NULL) = (ended_by IS NULL) AND (ended_by IS NULL OR ended_by IN ('self', 'manager', 'expired', 'left'))`,
+    ),
+    uniqueIndex('business_shifts_open')
+      .on(table.memberId)
+      .where(sql`ended_at IS NULL`),
+    index('business_shifts_member_started').on(table.memberId, table.startedAt),
+  ],
+);
+
+/**
+ * What a supporter said about the person, after paying. Apart from tip_messages, which stay
+ * private to the person. The member comes from the tip, never from the request.
+ */
+export const businessNotes = pgTable(
+  'business_notes',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => tips.id),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => businessMembers.id),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    body: text('body'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check(
+      'business_notes_tags',
+      sql`cardinality(tags) <= 5 AND tags <@ ARRAY[${quotedList(BUSINESS_NOTE_TAGS.map((tag) => tag.id))}]::text[]`,
+    ),
+    check(
+      'business_notes_body',
+      sql`body IS NULL OR char_length(body) BETWEEN 1 AND 280`,
+    ),
+    check(
+      'business_notes_something',
+      sql`cardinality(tags) > 0 OR body IS NOT NULL`,
+    ),
+    index('business_notes_member').on(table.memberId, table.createdAt),
+  ],
+);
+
+/** A reported note is hidden from the business until TipMe staff review it. */
+export const businessNoteFlags = pgTable(
+  'business_note_flags',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => businessNotes.tipId),
+    reportedAt: timestamp('reported_at', { withTimezone: true }).notNull(),
+    reportedBy: text('reported_by').notNull(),
+    reason: text('reason').notNull(),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewedBy: uuid('reviewed_by').references(() => users.id),
+    outcome: text('outcome'),
+  },
+  () => [
+    check(
+      'business_note_flags_reported',
+      sql`reported_by IN ('member', 'manager') AND reason IN ('abusive', 'spam', 'other')`,
+    ),
+    check(
+      'business_note_flags_review',
+      sql`(reviewed_at IS NULL) = (outcome IS NULL) AND (outcome IS NULL OR outcome IN ('restored', 'removed'))`,
     ),
   ],
 );
