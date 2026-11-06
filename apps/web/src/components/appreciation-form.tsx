@@ -19,6 +19,7 @@ import { formatDemoAmount, formatNaira } from '@/lib/demo-amount';
 import { amountOptions, keyLayout } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
+import { supporterKeyFor } from '@/lib/supporter-keys';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
@@ -72,6 +73,7 @@ export function AppreciationForm({
   surface = 'home',
   pilotNotice,
   barNotice,
+  recognition = false,
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -92,6 +94,11 @@ export function AppreciationForm({
    * the button stays the one the page is tested by.
    */
   barNotice?: ReactNode;
+  /**
+   * The page is Pro and recognition is switched on (`PublicProfile.recognition`): once a name is
+   * typed, offer "Let {name} recognise me next time". Older APIs send nothing: no tick box.
+   */
+  recognition?: boolean;
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -115,6 +122,9 @@ export function AppreciationForm({
   const [payerName, setPayerName] = useState('');
   const [purpose, setPurpose] = useState<TipPurpose | ''>('');
   const [remember, setRemember] = useState(false);
+  // "Let {name} recognise me next time": off by default, offered only with a name, and dropped
+  // when the name is emptied, so a new name always asks again.
+  const [recognise, setRecognise] = useState(false);
   const [error, setError] = useState('');
   // The optional details stay mounted when closed, so what was typed survives closing.
   const [extrasOpen, setExtrasOpen] = useState(false);
@@ -246,12 +256,23 @@ export function AppreciationForm({
     }
     draftKey.current ??= newIdempotencyKey();
     const trimmed = message.trim();
+    // The key for this recipient is made and kept only now, when it is about to be sent. If this
+    // browser can't keep it, none is sent: the tip goes ahead unrecognised.
+    let supporterKey: string | null = null;
+    if (recognition && recognise && payerName.trim()) {
+      try {
+        supporterKey = supporterKeyFor(localStorage, handle, true);
+      } catch {
+        supporterKey = null;
+      }
+    }
     const result = await createTip(draftKey.current, {
       quoteId: current.quoteId,
       ...(trimmed ? { message: trimmed } : {}),
       ...(trimmed && noteMayShow ? { noteMayShow: true as const } : {}),
       ...(purpose ? { purpose } : {}),
       ...(payerName.trim() ? { payerDisplayLabel: payerName.trim() } : {}),
+      ...(supporterKey ? { supporterKey } : {}),
       ...(joining && celebration
         ? { celebrationMomentId: celebration.momentId }
         : {}),
@@ -469,12 +490,34 @@ export function AppreciationForm({
         ref={nameField}
         onChange={(event) => {
           setPayerName(event.target.value);
+          if (!event.target.value.trim()) setRecognise(false);
           setNameError('');
           draftKey.current = null;
         }}
         hint={`Shown to ${recipient} with your tip. Leave it empty to stay anonymous.`}
         error={nameError || undefined}
       />
+      {recognition && payerName.trim() && (
+        <label className="tip-remember" htmlFor={`${id}-recognise`}>
+          <input
+            id={`${id}-recognise`}
+            type="checkbox"
+            checked={recognise}
+            disabled={submitting}
+            onChange={(event) => {
+              setRecognise(event.target.checked);
+              draftKey.current = null;
+            }}
+          />
+          <span>
+            Let {recipient} recognise me next time
+            <small>
+              They’ll see that you’ve tipped before, and how often. You can stop
+              this from any receipt.
+            </small>
+          </span>
+        </label>
+      )}
       <label className="tip-remember" htmlFor={`${id}-remember`}>
         <input
           id={`${id}-remember`}

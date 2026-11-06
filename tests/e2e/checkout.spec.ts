@@ -115,13 +115,23 @@ test('an opted-in supporter is celebrated after each confirmed tip', async ({
   for (const entry of stored.tips)
     expect(Object.keys(entry).sort()).toEqual(['at', 'handle', 'id']);
 
+  // A recognition key from an earlier tip elsewhere goes too (repeat supporters).
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'tipme.supporters.v1',
+      JSON.stringify({ v: 1, keys: { tobi: 'A'.repeat(43) } }),
+    ),
+  );
   await page
-    .getByRole('button', { name: 'Forget my tips on this phone' })
+    .getByRole('button', { name: 'Forget my tips and keys on this phone' })
     .click();
   await expect(page.getByText(/This phone no longer remembers/)).toBeVisible();
   expect(
-    await page.evaluate(() => localStorage.getItem('tipme.myTips.v1')),
-  ).toBeNull();
+    await page.evaluate(() => [
+      localStorage.getItem('tipme.myTips.v1'),
+      localStorage.getItem('tipme.supporters.v1'),
+    ]),
+  ).toEqual([null, null]);
 });
 
 test('a supporter who did not opt in is never remembered', async ({ page }) => {

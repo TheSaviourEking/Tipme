@@ -120,6 +120,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
                   : {})}
                 recipient={firstName}
                 handle={profile.handle}
+                recognition={profile.recognition === true}
                 {...(profile.tipAmounts
                   ? { tipAmounts: profile.tipAmounts }
                   : {})}

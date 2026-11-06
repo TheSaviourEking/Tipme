@@ -64,3 +64,24 @@ test('breadcrumbs that carry typed text (console, UI input) are dropped', () => 
 test('an event without these parts passes through unchanged', () => {
   assert.deepEqual(scrubEvent({ message: 'x' }), { message: 'x' });
 });
+
+test("a supporter's recognition key is removed wherever it appears", () => {
+  const key = 'k'.repeat(42) + 'Q';
+  const event = scrubEvent({
+    request: {
+      url: 'https://api.usetipme.xyz/v1/tip-intents',
+      data: { supporterKey: key },
+    },
+    extra: { body: { quoteId: 'q', supporterKey: key } },
+    contexts: { tip: { supporterKey: key } },
+    breadcrumbs: [
+      {
+        category: 'fetch',
+        data: { url: '/v1/tip-intents', supporterKey: key },
+      },
+    ],
+  });
+  assert.ok(!JSON.stringify(event).includes(key));
+  assert.deepEqual(event.extra, { body: { quoteId: 'q' } });
+  assert.deepEqual(event.breadcrumbs[0].data, { url: '/v1/tip-intents' });
+});
