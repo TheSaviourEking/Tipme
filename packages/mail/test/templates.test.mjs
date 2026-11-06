@@ -564,3 +564,153 @@ test('the ready email shows the page link when it has the handle, and still read
   assert.doesNotMatch(without.text, /xyz\/@|Put it in your bio/);
   assert.ok(without.text.includes('Go to your dashboard: '));
 });
+
+test('the bank change email strikes through the old account', () => {
+  const out = renderMail(
+    'payout_destination_changed',
+    MAIL_TYPES.payout_destination_changed.sample,
+    ctx,
+  );
+  assert.equal(out.subject, 'Your TipMe bank account changed');
+  assert.ok(
+    out.text.startsWith(
+      'Your account’s safety\n\nYour bank account changed\n\nYour next withdrawal goes to the new account. One already under way still goes to the account it started with.\n\nNow: Guaranty Trust Bank ••1234\nBefore: Providus Bank ••6789\n\nWasn’t you? Contact support@usetipme.xyz straight away. We can stop withdrawals while we look.\n\n—\nYou get this email whenever the bank account on your TipMe page changes.',
+    ),
+    out.text,
+  );
+  assert.match(out.html, /line-through[^>]*>Providus Bank ••6789</);
+  assert.doesNotMatch(out.html, /line-through[^>]*>Guaranty/);
+  assert.doesNotMatch(preheaderOf(out.html), /Bank|\d{4}/);
+});
+
+test('the number change and deleted account emails read as the board', () => {
+  const phone = renderMail(
+    'phone_change_warning',
+    { newPhoneHint: '•••47' },
+    ctx,
+  );
+  assert.ok(
+    phone.text.startsWith(
+      'Your account’s safety\n\nYour number changes in 24 hours\n\nSomeone asked to move your TipMe account to a new number ending •••47.\n\nWasn’t you? Sign in and cancel it in Settings before it happens.\n\nSign in to cancel: https://usetipme.xyz/dashboard/settings?ml=',
+    ),
+    phone.text,
+  );
+  assert.ok(
+    phone.text.includes(
+      'You get this email because a number change was requested on your TipMe account.',
+    ),
+  );
+  const gone = renderMail('account_deleted_notice', {}, ctx);
+  assert.ok(
+    gone.text.startsWith(
+      'Your account was deleted\n\nYour TipMe account and page are gone. This is the last email we’ll send you.\n\nDidn’t do this? Reply to this email straight away.\n\n—',
+    ),
+    gone.text,
+  );
+});
+
+const week = (isoWeek, totalNetMinor = '1250000', tipCount = 4) =>
+  renderMail(
+    'weekly_report',
+    { isoWeek, totalNetMinor, tipCount },
+    settingsCtx,
+  );
+
+test('the weekly report names the week’s days, across a year end too', () => {
+  // Checked against isoWeekOf in packages/database/src/operations/reports.ts: Lagos
+  // 2025-10-27 is 2025-W44; 2026-10-19 is 2026-W43; 2026-12-28 and 2027-01-03 are 2026-W53;
+  // 2027-01-04 is 2027-W01.
+  for (const [isoWeek, days] of [
+    ['2025-W44', '27 October to 2 November.'],
+    ['2026-W43', '19 October to 25 October.'],
+    ['2026-W53', '28 December to 3 January.'],
+    ['2027-W01', '4 January to 10 January.'],
+  ]) {
+    const out = week(isoWeek);
+    assert.ok(
+      out.text.startsWith(`Your week on TipMe\n\n${days}\n\n`),
+      `${isoWeek}: ${out.text}`,
+    );
+  }
+  const out = week('2026-W43');
+  assert.ok(
+    out.text.includes(
+      '₦12,500 you received\n4 tips\n\nSee the whole week: https://usetipme.xyz/dashboard/reports?ml=open_report',
+    ),
+    out.text,
+  );
+  assert.ok(
+    out.text.includes(
+      'You get this email every Monday when you were tipped last week.\nEmail settings: ',
+    ),
+  );
+  assert.match(out.html, /class="tm-well tm-stat"/);
+  assert.equal(preheaderOf(out.html), 'See the whole week.');
+});
+
+test('the weekly report counts one tip in the singular', () => {
+  assert.ok(
+    week('2026-W43', '180000', 1).text.includes('₦1,800 you received\n1 tip\n'),
+  );
+});
+
+test('the invitation never prints its code', () => {
+  const out = renderMail(
+    'staff_invitation',
+    MAIL_TYPES.staff_invitation.sample,
+    ctx,
+  );
+  assert.equal(out.subject, 'You’re invited to TipMe’s admin area');
+  const code = MAIL_TYPES.staff_invitation.sample.code;
+  assert.ok(!visible(out.html).includes(code), 'not shown');
+  assert.ok(!preheaderOf(out.html).includes(code));
+  // Only inside the one-time link.
+  assert.equal(out.html.split(code).length - 1, 1);
+  assert.equal(out.text.split(code).length - 1, 1);
+  assert.match(
+    out.text,
+    new RegExp(
+      `Set up your authenticator: https://usetipme.xyz/ops\\?ml=staff_enrol#enrol=${code}`,
+    ),
+  );
+  assert.ok(
+    out.text.startsWith(
+      'You’re invited to TipMe’s admin area\n\nSign in with this email address, then set up an authenticator app to finish. The link works once, for 30 minutes.\n\nSet up your authenticator: ',
+    ),
+    out.text,
+  );
+  assert.deepEqual(
+    inside(out.html, 'tm-muted" style="margin:0;font-size:14px'),
+    [
+      'Don’t want this? Open the link, sign in, and choose Decline. If you weren’t expecting it at all, tell the person who runs your TipMe admin area.',
+    ],
+  );
+  // The reset keeps its words.
+  const reset = renderMail('staff_invitation', { code, kind: 'reset' }, ctx);
+  assert.equal(reset.subject, 'Set up your TipMe admin authenticator again');
+  assert.ok(
+    reset.text.includes(
+      'Your authenticator was reset, so your admin access is paused until you set up a new one. This link works once, for 30 minutes.',
+    ),
+  );
+  assert.ok(!visible(reset.html).includes(code));
+});
+
+test('every security email from the boards carries the safety line', () => {
+  for (const id of [
+    'payout_destination_changed',
+    'new_sign_in_notice',
+    'phone_change_warning',
+  ]) {
+    const out = renderMail(id, MAIL_TYPES[id].sample, ctx);
+    assert.ok(out.text.startsWith('Your account’s safety\n\n'), id);
+    assert.match(out.html, /class="tm-tag"/, id);
+  }
+  // Mail about money and pages is not a safety notice.
+  for (const id of ['tip_received', 'weekly_report', 'payment_account_ready'])
+    assert.doesNotMatch(
+      renderMail(id, MAIL_TYPES[id].sample, ctx).html,
+      /class="tm-tag"/,
+      id,
+    );
+});

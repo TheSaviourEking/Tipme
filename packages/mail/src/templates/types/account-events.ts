@@ -54,7 +54,12 @@ export const accountDeletedNotice = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'Your TipMe account and page are gone. This is the last email we’ll send you. If you didn’t do this, reply to this email straight away.',
+            text: 'Your TipMe account and page are gone. This is the last email we’ll send you.',
+          },
+          {
+            kind: 'alarm',
+            title: 'Didn’t do this?',
+            text: 'Reply to this email straight away.',
           },
         ],
         reason: 'You get this email because your TipMe account was deleted.',
