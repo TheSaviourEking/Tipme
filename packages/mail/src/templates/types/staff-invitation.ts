@@ -74,6 +74,8 @@ export const staffInvitationDeclined = defineMailType({
       {
         subject: 'A TipMe admin invitation was declined',
         heading: 'Invitation declined',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'Invitation declined.',
         blocks: [
           {
             kind: 'text',
@@ -108,6 +110,9 @@ export const staffActedAlone = defineMailType({
       {
         subject: 'A serious TipMe admin action ran without a second person',
         heading: 'Done without a second person',
+        // The first text names someone or something private; the preview line must not.
+        preheader:
+          'The admin audit log has their reason. If you didn’t expect this, check it now.',
         blocks: [
           {
             kind: 'text',
@@ -138,6 +143,9 @@ export const staffFreezeReleased = defineMailType({
       {
         subject: 'A TipMe withdrawal freeze was released',
         heading: 'A withdrawal freeze was released',
+        // The first text names someone or something private; the preview line must not.
+        preheader:
+          'The admin audit log has their reason. If you didn’t expect this, check it now.',
         blocks: [
           {
             kind: 'text',
@@ -172,6 +180,9 @@ export const staffApprovalPending = defineMailType({
       {
         subject: 'A serious TipMe admin action is waiting for you',
         heading: 'Waiting for a second person',
+        // The first text names someone or something private; the preview line must not.
+        preheader:
+          'Nothing has happened yet. It closes by itself after 24 hours.',
         blocks: [
           {
             kind: 'text',
@@ -206,6 +217,9 @@ export const staffLastApproverRemoved = defineMailType({
       {
         subject: 'A TipMe staff change removed the last second person',
         heading: 'No second person left',
+        // The first text names someone or something private; the preview line must not.
+        preheader:
+          'One person can now take those actions alone. The admin audit log has their reason.',
         blocks: [
           {
             kind: 'text',
@@ -246,6 +260,8 @@ export const staffApprovalOutcome = defineMailType({
       {
         subject: 'Your serious TipMe admin request has an outcome',
         heading: 'Your request has an outcome',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'Your request has an outcome.',
         blocks: [
           {
             kind: 'text',

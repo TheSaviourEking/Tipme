@@ -15,6 +15,8 @@ export const phoneChangeWarning = defineMailType({
       {
         subject: 'Your TipMe number is about to change',
         heading: 'Your TipMe number is about to change',
+        // The first text names someone or something private; the preview line must not.
+        preheader: 'It happens in 24 hours.',
         blocks: [
           {
             kind: 'text',

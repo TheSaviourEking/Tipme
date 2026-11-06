@@ -19,7 +19,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "preview": "node scripts/preview.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "3.1152.0",
