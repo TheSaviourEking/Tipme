@@ -33,7 +33,7 @@
 
 # Current handoff — Make it yours, PR B: the Pro starting amount (5 November 2026)
 
-- Branch `feat/miy-start-amount`, test lane 2, not pushed. Additive migration `0078_tip_start` (one nullable column and a check, no backfill), generated with drizzle-kit after rebuilding `@tipme/contracts`; regenerate if another branch takes 0078 first.
+- Branch `feat/miy-start-amount`, test lane 2, not pushed. Additive migration `0078_tip_start` (renumbered `0079_tip_start` in merge train 1) (one nullable column and a check, no backfill), generated with drizzle-kit after rebuilding `@tipme/contracts`; regenerate if another branch takes 0078 first.
 - The check uses `coalesce(tip_start_minor = ANY (tip_presets_minor), false)`: `= ANY (NULL)` is NULL, which a CHECK would let through.
 - Lapse: a page that leaves Pro keeps `tip_start_minor`; the API sends no `startMinor`, so the form starts on ₦2,000. It comes back with Pro. A start whose amount fell under the floor is not sent either.
 - Deploy the API with or before the web: an older API's strict `tipAmountsSchema` refuses `startMinor` with a 400. The web sends it only when a start is or was chosen, so only those saves fail in between. An old web against the new API omits `startMinor`, which keeps the saved start while it is still offered.
@@ -42,7 +42,7 @@
 
 # Current handoff — repeat supporters PR 3 (6 November 2026)
 
-- Branch `feat/repeat-supporters`, test lane 8, not pushed. Additive migration `0078_supporters` (two new tables, no column on any money table), generated with drizzle-kit after rebuilding `@tipme/contracts`. If another migration merges first, regenerate it as the next number; never rename it.
+- Branch `feat/repeat-supporters`, test lane 8, not pushed. Additive migration `0078_supporters` (renumbered `0080_supporters` in merge train 1) (two new tables, no column on any money table), generated with drizzle-kit after rebuilding `@tipme/contracts`. If another migration merges first, regenerate it as the next number; never rename it.
 - Deploy order: the web reads `recognition` and `recognised` as optional, so the web can go first. The intent request is `.strict()`: after an API rollback to a version without `supporterKey`, a tab that ticked the box gets a 400 (untick and retry works), as with `noteMayShow`.
 - Fingerprints of requests without a key (or without a name) are byte-identical to dev's (test). A key adds `'s', sha256hex` to the fingerprint, so adding or changing a key on a replayed idempotency key is a conflict.
 - `SUPPORTER_RECOGNITION` (default `on`) is wired into both compose files and the env examples. D-07 is open: whether production keeps it on is the owner's call (`docs/runbooks/supporter-recognition.md`).
