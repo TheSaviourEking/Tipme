@@ -294,6 +294,11 @@ export interface WhatsNewEntry {
   pro: boolean;
   /** YYYY-MM-DD, Africa/Lagos. */
   liveOn: string;
+  /**
+   * The instant it went live (ISO). The seen call sends this back, so a person who opened What's
+   * new is marked up to exactly the newest entry they were shown, not to the start of its day.
+   */
+  liveAt: string;
 }
 
 export interface WhatsNewList {

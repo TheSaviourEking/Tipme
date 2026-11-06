@@ -32,6 +32,7 @@ export * from './operations/username-reservations.js';
 export * from './operations/username-take-backs.js';
 export * from './operations/balance.js';
 export * from './operations/dashboard.js';
+export * from './operations/whats-new.js';
 export * from './operations/rewards.js';
 export * from './operations/notifications.js';
 export * from './operations/email.js';
