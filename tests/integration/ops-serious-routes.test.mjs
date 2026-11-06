@@ -370,6 +370,7 @@ const routes = {
       // Not Tobi: the freeze test below needs Tobi with no other open hold issue.
       handle: 'ada',
       keepHold: false,
+      refundedMinor: 100000n,
     });
     return {
       method: 'POST',

@@ -128,58 +128,59 @@ export function buildPaymentPosting(input: PaymentPostingInput): LedgerLine[] {
   ].filter((entry) => entry.amountMinor > 0n);
 }
 
-const opposite = (side: LedgerLine['side']): LedgerLine['side'] =>
-  side === 'debit' ? 'credit' : 'debit';
-
 /**
- * Business release 2: a refund or chargeback takes back every line of a payment, the person's and
- * the business's parts alike, sides swapped. Without `fraction` it mirrors the lines exactly. With
- * one (a partial refund of `num` out of a gross of `den`), each line is scaled down and rounded
- * down; each side then takes the refund's remainder kobo, first on the person's line (the first
- * `recipient_payable`) on the side that holds it, else on the side's first line, never beyond an
- * original line. Each side totals floor(gross × num / den), so the reversal always balances, and
- * with `den` the gross it takes back exactly the refund.
+ * Business release 2: a refund or chargeback takes back what a payment owed: every credit line of
+ * it (the person's part, the business's part, TipMe's fee and the provider fee it recovered from the
+ * tip), as debits, in proportion to the refund. The partner's refund guide says "Fees already
+ * charged are not returned", so the provider fee expense is never taken back: TipMe absorbs it, and
+ * the partner balance (`provider_clearing`) drops by the whole refund. A fee the refund itself
+ * carries (`refundFeeMinor`) is TipMe's expense too, out of the same balance. Nobody's balance loses
+ * more than the payment gave them.
+ *
+ * `lines` is what is left to take back of the payment (all of it the first time); only its credit
+ * lines are used. A refund of everything left mirrors them exactly. Less is scaled down and rounded
+ * down, then the remainder kobo goes first on the person's line (the first `recipient_payable`),
+ * then on the others in order, never beyond a line, so the debits total exactly the refund.
  */
 export function buildReversalPosting(
-  original: readonly LedgerLine[],
-  fraction?: { num: bigint; den: bigint },
+  lines: readonly LedgerLine[],
+  refund: { refundedMinor: bigint; refundFeeMinor?: bigint },
 ): LedgerLine[] {
-  if (!isBalanced(original) || original.some((l) => l.amountMinor <= 0n))
+  const { refundedMinor } = refund;
+  const refundFeeMinor = refund.refundFeeMinor ?? 0n;
+  if (!isBalanced(lines) || lines.some((l) => l.amountMinor <= 0n))
     throw new RangeError('only a balanced posting can be reversed');
-  const mirrored = original.map((l) => ({ ...l, side: opposite(l.side) }));
-  if (!fraction) return mirrored;
-  const { num, den } = fraction;
-  if (den <= 0n || num <= 0n || num > den)
-    throw new RangeError('reversal fraction out of range');
-  const gross = original
-    .filter((l) => l.side === 'debit')
-    .reduce((sum, l) => sum + l.amountMinor, 0n);
-  const target = (gross * num) / den;
-  if (target <= 0n) throw new RangeError('reversal rounds to nothing');
-  const scaled = mirrored.map((l) => ({
+  const owed = lines.filter((l) => l.side === 'credit');
+  const left = owed.reduce((total, l) => total + l.amountMinor, 0n);
+  if (refundedMinor <= 0n || refundedMinor > left)
+    throw new RangeError('refund out of range');
+  if (refundFeeMinor < 0n) throw new RangeError('refund fee out of range');
+  const back = owed.map((l) => ({
     ...l,
-    amountMinor: (l.amountMinor * num) / den,
+    side: 'debit' as const,
+    amountMinor: (l.amountMinor * refundedMinor) / left,
   }));
-  for (const side of ['debit', 'credit'] as const) {
-    const indexes = scaled.flatMap((l, i) => (l.side === side ? [i] : []));
-    const person = indexes.find(
-      (i) => scaled[i]!.account === 'recipient_payable',
-    );
-    const order =
-      person === undefined
-        ? indexes
-        : [person, ...indexes.filter((i) => i !== person)];
-    let remainder =
-      target - indexes.reduce((sum, i) => sum + scaled[i]!.amountMinor, 0n);
-    for (const i of order) {
-      if (remainder === 0n) break;
-      const room = mirrored[i]!.amountMinor - scaled[i]!.amountMinor;
-      const take = remainder < room ? remainder : room;
-      scaled[i]!.amountMinor += take;
-      remainder -= take;
-    }
+  const person = back.findIndex((l) => l.account === 'recipient_payable');
+  const order = [
+    ...(person >= 0 ? [person] : []),
+    ...back.flatMap((_, i) => (i === person ? [] : [i])),
+  ];
+  let remainder =
+    refundedMinor - back.reduce((total, l) => total + l.amountMinor, 0n);
+  for (const i of order) {
+    if (remainder === 0n) break;
+    const room = owed[i]!.amountMinor - back[i]!.amountMinor;
+    const take = remainder < room ? remainder : room;
+    back[i]!.amountMinor += take;
+    remainder -= take;
   }
-  return scaled.filter((l) => l.amountMinor > 0n);
+  return [
+    ...back.filter((l) => l.amountMinor > 0n),
+    ...(refundFeeMinor > 0n
+      ? [line('provider_fee_expense', 'debit', refundFeeMinor)]
+      : []),
+    line('provider_clearing', 'credit', refundedMinor + refundFeeMinor),
+  ];
 }
 
 /** Paying a recipient settles what TipMe owed them out of the provider balance. */

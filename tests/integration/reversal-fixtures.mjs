@@ -18,7 +18,16 @@ export const NET = 360000n;
  */
 export async function reportedReversal(
   database,
-  { handle = 'tobi', bps, keepHold = true } = {},
+  {
+    handle = 'tobi',
+    bps,
+    keepHold = true,
+    // The partner's webhook events about this one refund (its refund guide): accepted, then paid.
+    events = ['refund.created', 'refund.paid'],
+    // What the paid refund gave back, and its own fee.
+    refundedMinor = GROSS,
+    refundFeeMinor = 0n,
+  } = {},
 ) {
   const q = (text, values = []) =>
     database.pool.query(text, values).then((result) => result.rows);
@@ -84,15 +93,26 @@ export async function reportedReversal(
     signatureVerified: true,
     payload: {},
   });
-  const eventId = `evt_refund_${randomUUID()}`;
-  await ops.flagPaymentReversal(database.db, {
-    attemptId: intent.attemptId,
-    eventId,
-    eventType: 'refund.processed',
-  });
+  const partnerReversalId = `refund.re_${randomUUID().replaceAll('-', '')}`;
+  const STATES = {
+    'refund.created': 'pending',
+    'refund.paid': 'paid',
+    'refund.failed': 'failed',
+  };
+  for (const eventType of events)
+    await ops.flagPaymentReversal(database.db, {
+      attemptId: intent.attemptId,
+      eventId: `evt_${randomUUID()}`,
+      eventType,
+      partnerReversalId,
+      disputeWon: false,
+      refundState: STATES[eventType] ?? null,
+      refundedMinor: eventType === 'refund.paid' ? refundedMinor : null,
+      refundFeeMinor: eventType === 'refund.paid' ? refundFeeMinor : null,
+    });
   const [{ id: issueId }] = await q(
     `SELECT id FROM issues WHERE kind = 'payment_reversed' AND dedupe_key = $1`,
-    [`event.payment.reversed.${intent.attemptId}.${eventId}`],
+    [`event.payment.reversed.${intent.attemptId}.${partnerReversalId}`],
   );
   // A suite that checks a page's other holds can drop this one (the issue stays open).
   if (!keepHold)
@@ -109,7 +129,8 @@ export async function reportedReversal(
     tipId: intent.tipId,
     profileId,
     issueId,
-    eventId,
+    attemptId: intent.attemptId,
+    partnerReversalId,
     businessId: shared?.businessId ?? null,
     reversals,
   };

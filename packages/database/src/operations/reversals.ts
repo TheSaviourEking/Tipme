@@ -31,17 +31,31 @@ export interface ReversalResult {
 }
 
 /** The ledger key of the reversal for one provider refund or chargeback event. */
-export const reversalKey = (providerEventId: string) =>
-  `reversal.${providerEventId}`;
+/**
+ * The ledger key of the reversal of one partner refund or dispute (`refund.<id>` / `dispute.<id>`),
+ * never of a webhook event: several events about one refund make one reversal.
+ */
+export const reversalKey = (partnerReversalId: string) =>
+  `reversal.${partnerReversalId}`;
+
+/** TipMe's own side of the partner balance: a reversal never mirrors it (the partner keeps fees). */
+const TIPME_SIDE: ReadonlySet<string> = new Set([
+  'provider_clearing',
+  'provider_fee_expense',
+]);
 
 const ownerKey = (line: LedgerLine) =>
   `${line.account}|${line.profileId ?? ''}|${line.businessId ?? ''}`;
 
 /**
- * Business release 2 (Q7, Q8): takes back a refunded or charged-back tip, every line of its payment
- * (the person's part, the business's part and TipMe's own lines), in one balanced `reversal`
- * transaction keyed by the provider event. TipMe only records it: the partner already moved the
- * money, so nothing here calls the partner and a repeat of the event is a no-op.
+ * Business release 2 (Q7, Q8): takes back a refunded or charged-back tip: everything its payment owed
+ * (the person's part, the business's part, TipMe's fee and the provider fee it recovered), while the
+ * partner balance drops by the whole refund plus any refund fee. The partner's refund guide says
+ * "Fees already charged are not returned", so the provider fee stays TipMe's expense, as does the
+ * refund's own fee: nobody's balance loses more than they received. One balanced `reversal`
+ * transaction keyed by the partner's refund or dispute (never by a webhook event). TipMe only
+ * records it: the partner already moved the money, so nothing here calls the partner, and a repeat
+ * for the same refund or dispute is a no-op.
  *
  * A partial refund (`refundedMinor` below what is left of the tip) takes back each line in
  * proportion. A tip can be refunded and later charged back: each reversal works on what earlier
@@ -58,15 +72,19 @@ export async function reverseTip(
   tx: Tx,
   input: {
     tipId: string;
-    providerEventId: string;
+    /** The partner's refund or dispute, as the issue names it. */
+    partnerReversalId: string;
+    /** What the partner gave back of the supporter's payment. */
     refundedMinor: bigint;
+    /** A fee the refund itself carried: TipMe's expense, out of the partner balance. */
+    refundFeeMinor?: bigint;
     traceId?: string | null;
     now?: Date;
   },
 ): Promise<ReversalResult> {
-  if (input.refundedMinor <= 0n || input.providerEventId.length === 0)
+  if (input.refundedMinor <= 0n || input.partnerReversalId.length === 0)
     throw new OperationError('INVALID_INPUT');
-  const operationKey = reversalKey(input.providerEventId);
+  const operationKey = reversalKey(input.partnerReversalId);
   const [tip] = await tx
     .select({ id: tips.id, currency: tips.currency })
     .from(tips)
@@ -125,36 +143,43 @@ export async function reverseTip(
     ...(row.profileId ? { profileId: row.profileId } : {}),
     ...(row.businessId ? { businessId: row.businessId } : {}),
   });
-  // What is left of each line of the payment after the reversals already posted against it.
+  // What is left of what the payment owed (its credit lines) after earlier reversals. TipMe's own
+  // side (the partner balance and the provider fee) is never mirrored: the partner keeps its fee.
   const original = rows
-    .filter((row) => row.transactionId === payment.id)
+    .filter((row) => row.transactionId === payment.id && row.side === 'credit')
     .map(asLine);
   const taken = new Map<string, bigint>();
   for (const row of rows) {
-    if (row.transactionId === payment.id) continue;
+    if (row.transactionId === payment.id || TIPME_SIDE.has(row.account))
+      continue;
     const line = asLine(row);
     const from = original.find((o) => ownerKey(o) === ownerKey(line));
-    // A reversal only ever mirrors a payment line (and the database checks it): stop otherwise.
-    if (!from || from.side === line.side)
+    // A reversal only ever takes back what a payment credited (and the database checks it).
+    if (!from || line.side !== 'debit')
       throw new Error('a reversal does not mirror its payment');
     taken.set(
       ownerKey(line),
       (taken.get(ownerKey(line)) ?? 0n) + line.amountMinor,
     );
   }
-  const remaining = original
+  const owed = original
     .map((line) => ({
       ...line,
       amountMinor: line.amountMinor - (taken.get(ownerKey(line)) ?? 0n),
     }))
     .filter((line) => line.amountMinor > 0n);
-  const left = remaining
-    .filter((line) => line.side === 'debit')
-    .reduce((sum, line) => sum + line.amountMinor, 0n);
+  const left = owed.reduce((sum, line) => sum + line.amountMinor, 0n);
   if (left === 0n)
     throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed');
   if (input.refundedMinor > left)
     throw new OperationError('TIP_NOT_REVERSIBLE', 'more_than_left');
+  const refundFeeMinor = input.refundFeeMinor ?? 0n;
+  if (refundFeeMinor < 0n) throw new OperationError('INVALID_INPUT');
+  // As a balanced posting, so the domain can check it: what is left, against the partner balance.
+  const remaining: LedgerLine[] = [
+    { account: 'provider_clearing', side: 'debit', amountMinor: left },
+    ...owed,
+  ];
 
   // Lock each balance the reversal touches, in a fixed order, before posting against it.
   const people = [
@@ -178,12 +203,10 @@ export async function reverseTip(
       .orderBy(businesses.id)
       .for('update');
 
-  const lines = buildReversalPosting(
-    remaining,
-    input.refundedMinor === left
-      ? undefined
-      : { num: input.refundedMinor, den: left },
-  );
+  const lines = buildReversalPosting(remaining, {
+    refundedMinor: input.refundedMinor,
+    refundFeeMinor,
+  });
   const posted = await postLedgerTransaction(tx, {
     operationType: 'reversal',
     operationKey,
@@ -223,42 +246,84 @@ export async function reverseTip(
   return { ...posted, belowZero };
 }
 
-/** How much of a tip's payment reversals have taken back so far (its gross, in minor units). */
-export async function reversedMinorOf(tx: Tx, tipId: string): Promise<bigint> {
-  const result = await tx.execute<{ reversed: string | null }>(sql`
-    SELECT COALESCE(SUM(e.amount_minor), 0) AS reversed
-      FROM ledger_entries e JOIN ledger_transactions x ON x.id = e.transaction_id
-     WHERE x.tip_id = ${tipId} AND x.operation_type = 'reversal' AND e.side = 'debit'
-  `);
-  return BigInt(result.rows[0]?.reversed ?? '0');
-}
-
 /**
- * What a staff reversal from this issue would take back: the open `payment_reversed` issue's tip,
- * and the partner's event id it was opened for (the last part of its key, as flagPaymentReversal
- * wrote it). Null for any other issue.
+ * What a staff reversal from this issue would take back: the open `payment_reversed` issue's tip and
+ * the partner's refund or dispute it is about. Null for any other issue, and for one whose events
+ * named no refund or dispute: without that id, two events about one refund could each be reversed
+ * (R2-A review finding 1), so such an issue is settled at the partner and closed by hand. A refund
+ * is reversible only once the partner reports it paid (`refund.paid`), for the amount it gave back;
+ * a dispute (no events documented by the partner) for the amount staff enter.
  */
 export function tipReversalTarget(
   db: Database,
   issueId: string,
-): Promise<{ tipId: string; providerEventId: string } | null> {
+): Promise<{
+  tipId: string;
+  partnerReversalId: string;
+  /** What the partner reports the refund gave back; null for a dispute (staff enter it). */
+  refundedMinor: bigint | null;
+  refundFeeMinor: bigint;
+} | null> {
   return guarded(async () => {
     const [issue] = await db
       .select({
         kind: issues.kind,
         status: issues.status,
-        dedupeKey: issues.dedupeKey,
         subject: issues.subject,
       })
       .from(issues)
       .where(eq(issues.id, issueId));
     if (issue?.kind !== 'payment_reversed' || issue.status !== 'open')
       return null;
-    const { attemptId, tipId } = issue.subject;
-    const prefix = `event.payment.reversed.${attemptId ?? ''}.`;
-    if (!attemptId || !tipId || !issue.dedupeKey.startsWith(prefix))
-      return null;
-    const providerEventId = issue.dedupeKey.slice(prefix.length);
-    return providerEventId ? { tipId, providerEventId } : null;
+    const { tipId, partnerReversalId, refundState, refundedMinor } =
+      issue.subject;
+    if (!tipId || !partnerReversalId) return null;
+    if (partnerReversalId.startsWith('dispute.'))
+      return {
+        tipId,
+        partnerReversalId,
+        refundedMinor: null,
+        refundFeeMinor: 0n,
+      };
+    // A refund only once the partner says it was paid, for what it gave back (its refund guide).
+    if (refundState !== 'paid' || !refundedMinor) return null;
+    return {
+      tipId,
+      partnerReversalId,
+      refundedMinor: BigInt(refundedMinor),
+      refundFeeMinor: BigInt(issue.subject.refundFeeMinor ?? '0'),
+    };
   });
+}
+
+/** The reversals already posted against a tip's payment: how many, and how much of its gross. */
+export async function reversalsOf(
+  tx: Tx,
+  tipId: string,
+): Promise<{ count: number; reversedMinor: bigint }> {
+  const result = await tx.execute<{ n: string; reversed: string | null }>(sql`
+    SELECT count(DISTINCT x.id) AS n, COALESCE(SUM(e.amount_minor), 0) AS reversed
+      FROM ledger_transactions x
+      JOIN ledger_entries e ON e.transaction_id = x.id AND e.side = 'debit'
+      -- What was taken back of the payment, not a refund's own fee (TipMe's expense).
+      JOIN ledger_accounts a ON a.id = e.account_id AND a.code <> 'provider_fee_expense'
+     WHERE x.tip_id = ${tipId} AND x.operation_type = 'reversal'
+  `);
+  const row = result.rows[0];
+  return {
+    count: Number(row?.n ?? '0'),
+    reversedMinor: BigInt(row?.reversed ?? '0'),
+  };
+}
+
+/** Whether this partner refund or dispute was already reversed. */
+export async function alreadyReversed(
+  tx: Tx,
+  partnerReversalId: string,
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: ledgerTransactions.id })
+    .from(ledgerTransactions)
+    .where(eq(ledgerTransactions.operationKey, reversalKey(partnerReversalId)));
+  return row !== undefined;
 }

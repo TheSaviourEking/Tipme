@@ -57,6 +57,8 @@ const services = () => ({
   sealing,
   authCodeSecret: 'test-auth-code-secret-of-enough-length',
   payoutReader: reader,
+  // tip.reverse runs only while business shares are on (R2-A review finding 3).
+  businessSharesEnabled: true,
   mail: {
     production: false,
     configured: new Set(['mock']),
@@ -372,15 +374,13 @@ const wired = {
   },
   'tip.reverse': async () => {
     // No hold: beforeEach deletes payment_reversed issues, which a hold would still name.
-    const { tipId, issueId, eventId, reversals } = await reportedReversal(
-      database,
-      { bps: 1000, keepHold: false },
-    );
+    const { tipId, issueId, partnerReversalId, reversals } =
+      await reportedReversal(database, { bps: 1000, keepHold: false });
     return {
       payload: {
         issueId,
         tipId,
-        providerEventId: eventId,
+        partnerReversalId,
         refundedMinor: GROSS.toString(),
       },
       happened: async () => (await reversals()) === 1,

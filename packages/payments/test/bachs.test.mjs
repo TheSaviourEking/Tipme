@@ -1103,6 +1103,12 @@ test('refund and dispute events become reversals, carrying ids only', () => {
           accountReference: 'acct_123abc',
           providerReference: 'acct_123abc:chk_123abc',
           operationReference: 'attempt-123',
+          // No refund or dispute id in this payload: the reversal can't be keyed (R2-A).
+          partnerReversalId: null,
+          disputeWon: false,
+          refundState: type === 'refund.created' ? 'pending' : null,
+          refundedMinor: null,
+          refundFeeMinor: null,
         },
       },
       type,
@@ -1477,4 +1483,127 @@ test('a payment settled in its own currency does not report a settlement currenc
   });
   assert.equal(answer.status, 'succeeded');
   assert.equal(answer.settlementCurrency, undefined);
+});
+
+// Business release 2, R2-A: the partner's refund guide (docs.bachs.io/guides/refunds). The top-level
+// `id` is the webhook event; the refund is `data.refund_id`; `refund.created` is accepted and still
+// processing, `refund.paid` (with `refunded_amount`) and `refund.failed` are final. No dispute events
+// are documented, so a dispute is keyed only by an explicit dispute or chargeback id.
+test('a refund event carries the refund, its state and, once paid, the amount and its fee', () => {
+  const provider = makeProvider(async () => {
+    throw new Error('no network');
+  });
+  const verify = (type, data) => {
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        id: `evt_${type.replace('.', '_')}_1`,
+        type,
+        account: 'acct_123abc',
+        data: { checkout_id: 'chk_123abc', reference: 'attempt-123', ...data },
+      }),
+    );
+    const timestamp = String(Math.floor(NOW.getTime() / 1000));
+    const result = provider.verifyWebhook(
+      rawBody,
+      {
+        'x-bachs-signature-v2': `t=${timestamp},v1=${sign(CURRENT_SECRET, timestamp, rawBody)}`,
+      },
+      NOW,
+    );
+    assert.equal(result.ok, true, type);
+    const {
+      partnerReversalId,
+      disputeWon,
+      refundState,
+      refundedMinor,
+      refundFeeMinor,
+    } = result.event;
+    return {
+      partnerReversalId,
+      disputeWon,
+      refundState,
+      refundedMinor,
+      refundFeeMinor,
+    };
+  };
+  const refund = {
+    id: 'evt_not_the_refund',
+    refund_id: 'rfnd_500',
+    charge_id: 'ch_1',
+    requested_amount: '500.00',
+    currency: 'NGN',
+  };
+  assert.deepEqual(
+    verify('refund.created', { ...refund, refunded_amount: null }),
+    {
+      partnerReversalId: 'refund.rfnd_500',
+      disputeWon: false,
+      refundState: 'pending',
+      refundedMinor: null,
+      refundFeeMinor: null,
+    },
+  );
+  assert.deepEqual(
+    verify('refund.paid', {
+      ...refund,
+      refunded_amount: '500.00',
+      refund_fee_amount: '10.00',
+    }),
+    {
+      partnerReversalId: 'refund.rfnd_500',
+      disputeWon: false,
+      refundState: 'paid',
+      refundedMinor: 50000n,
+      refundFeeMinor: 1000n,
+    },
+  );
+  assert.deepEqual(
+    verify('refund.failed', { ...refund, refunded_amount: null }),
+    {
+      partnerReversalId: 'refund.rfnd_500',
+      disputeWon: false,
+      refundState: 'failed',
+      refundedMinor: null,
+      refundFeeMinor: null,
+    },
+  );
+  // `data.id` is never taken for the refund; no refund_id means no key.
+  assert.equal(
+    verify('refund.paid', { id: 're_x', refunded_amount: '5.00' })
+      .partnerReversalId,
+    null,
+  );
+  // Undocumented refund-family events carry no state, so they are never reversible.
+  assert.equal(
+    verify('charge.refunded', { refund_id: 'rfnd_9' }).refundState,
+    null,
+  );
+  // A paid refund whose amount can't be read has no amount (staff can't reverse it from TipMe).
+  assert.equal(
+    verify('refund.paid', { ...refund, refunded_amount: 'lots' }).refundedMinor,
+    null,
+  );
+  // Disputes: only an explicit dispute or chargeback id, never `data.id`.
+  assert.equal(
+    verify('dispute.created', { dispute_id: 'dp_1' }).partnerReversalId,
+    'dispute.dp_1',
+  );
+  assert.equal(
+    verify('chargeback.created', { chargeback_id: 'cb_7' }).partnerReversalId,
+    'dispute.cb_7',
+  );
+  assert.equal(
+    verify('dispute.created', { id: 'dp_guess' }).partnerReversalId,
+    null,
+  );
+  assert.equal(verify('dispute.won', { dispute_id: 'dp_1' }).disputeWon, true);
+  assert.equal(
+    verify('dispute.closed', { dispute_id: 'dp_1', status: 'won' }).disputeWon,
+    true,
+  );
+  assert.equal(
+    verify('refund.created', { ...refund, refund_id: 'bad id:x' })
+      .partnerReversalId,
+    null,
+  );
 });
