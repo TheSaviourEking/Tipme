@@ -321,8 +321,20 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   await page.unroute(handleUrl);
 
   // Pro ended elsewhere, likewise.
+  // The dashboard reads the profile on load and again when its live stream connects (the
+  // resync): both must be done before the faked profile below, or the card turns Free first.
+  let profileReads = 0;
+  const countRead = (response: { url(): string }) => {
+    if (response.url() === profileUrl) profileReads += 1;
+  };
+  page.on('response', countRead);
   await page.reload();
   await expect(field).toBeVisible();
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  await expect.poll(() => profileReads).toBeGreaterThanOrEqual(2);
+  page.off('response', countRead);
   await refuse('HANDLE_CHANGE_PRO_REQUIRED', 403);
   await profileWith({ plan: 'free' });
   await field.fill(`${handle}_z`);
