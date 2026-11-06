@@ -1,3 +1,4 @@
+import { SERIOUS_ACTION_WORDS } from '@tipme/contracts';
 import type { Database, MailSealing } from '@tipme/database';
 import {
   evaluateTipMoments,
@@ -29,6 +30,7 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'payment.conflict',
   'payment.mismatch',
   'payment.reversed',
+  'username.take_back_done',
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;
@@ -41,6 +43,7 @@ const STAFF_ALERT_EVENTS: ReadonlySet<string> = new Set([
 
 /** Staff alerts that open no inbox issue: the post is all there is, besides any mail. */
 const POSTED_ONLY_EVENTS: ReadonlySet<string> = new Set([
+  'username.take_back_done',
   'ops.approval_ran',
   'ops.approval_closed',
   'ops.staff_changed',
@@ -136,7 +139,13 @@ export async function handleDomainEvent(
   if (POSTED_ONLY_EVENTS.has(name) && deps.postStaffAlert) {
     const { action, outcome, requestedBy, targetId, roleName } = (data ??
       {}) as Record<string, unknown>;
-    const what = typeof action === 'string' ? action : 'unknown';
+    // A take-back's alert names the action in words: the inbox has no issue for it.
+    const what =
+      name === 'username.take_back_done' && action === 'username.take_back'
+        ? SERIOUS_ACTION_WORDS['username.take_back']
+        : typeof action === 'string'
+          ? action
+          : 'unknown';
     const about =
       typeof targetId === 'string'
         ? `${what}: ${targetId}${typeof roleName === 'string' ? `, ${roleName}` : ''}`

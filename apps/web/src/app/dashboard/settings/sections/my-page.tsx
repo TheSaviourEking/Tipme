@@ -207,6 +207,9 @@ export function HandleChange() {
     profile.usernameTakeBack?.kind === 'current'
       ? profile.usernameTakeBack
       : null;
+  // After TipMe gave the page a username: one free change, any plan (owner answer 4).
+  const freeChange = takeBack ? null : (profile.usernameFreeChange ?? null);
+  const special = takeBack !== null || freeChange !== null;
   const [handle, setHandle] = useState(profile.handle);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -317,7 +320,7 @@ export function HandleChange() {
     </p>
   );
 
-  if (!takeBack && profile.plan !== 'pro')
+  if (!special && profile.plan !== 'pro')
     return (
       <Card id="handle" className="settings-section settings-handle-row">
         <h3 ref={heading} tabIndex={-1} className="sr-only">
@@ -334,7 +337,7 @@ export function HandleChange() {
       </Card>
     );
 
-  if (!takeBack && left === 0)
+  if (!special && left === 0)
     return (
       <Card id="handle" className="settings-section">
         <h3 ref={heading} tabIndex={-1}>
@@ -357,6 +360,10 @@ export function HandleChange() {
         <p className="tm-hint">
           TipMe needs @{takeBack.handle} back. Choosing a new username won’t use
           up any of your username changes.
+        </p>
+      ) : freeChange ? (
+        <p className="tm-hint">
+          This change is free and won’t use up any of your username changes.
         </p>
       ) : (
         <p className="tm-hint">
@@ -420,8 +427,15 @@ export function HandleChange() {
                 Your page moves to {host}/@{confirming}. Old links and printed
                 QR codes keep working.
               </p>
-              {left !== null && (
-                <p>You’ll have {changesLeft(left - 1)} after this.</p>
+              {freeChange ? (
+                <p>
+                  This change is free and won’t use up any of your username
+                  changes.
+                </p>
+              ) : (
+                left !== null && (
+                  <p>You’ll have {changesLeft(left - 1)} after this.</p>
+                )
               )}
             </>
           )}

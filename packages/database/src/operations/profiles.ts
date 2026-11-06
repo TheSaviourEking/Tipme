@@ -36,7 +36,18 @@ import {
   normaliseHandle,
   tipAmountsProblem,
 } from '@tipme/domain';
-import { and, asc, eq, gt, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   emailTokens,
@@ -66,13 +77,18 @@ import {
   lockedActiveStaff,
   lockStaffAdmin,
   revokeUnenrolled,
+  withAuditChange,
 } from './staff.js';
 import { mailOwner } from './account-mail.js';
 import { removeObjects } from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
-import { completeTakeBack, myTakeBack } from './username-take-backs.js';
+import {
+  completeTakeBack,
+  myFreeChange,
+  myTakeBack,
+} from './username-take-backs.js';
 import { publicCelebration } from './moments.js';
 import {
   getReadyPaymentAccount,
@@ -498,6 +514,7 @@ const toMine = async (
     signed: row.profile.thanksSigned,
   }),
   usernameTakeBack: await myTakeBack(db, row.profile.id),
+  usernameFreeChange: await myFreeChange(db, row.profile.id),
 });
 
 export function getMyProfile(db: Database, userId: string): Promise<MyProfile> {
@@ -726,8 +743,25 @@ export function renameHandle(
             ),
           )
           .for('update');
+        // After TipMe assigned a username: one change, any plan, not counted (owner answer 4).
+        const [freeChange] = takeBack
+          ? []
+          : await tx
+              .select({ id: handleTakeBacks.id })
+              .from(handleTakeBacks)
+              .where(
+                and(
+                  eq(handleTakeBacks.profileId, row.id),
+                  eq(handleTakeBacks.state, 'done'),
+                  isNull(handleTakeBacks.freeChangeUsedAt),
+                  gt(handleTakeBacks.freeChangeUntil, now),
+                ),
+              )
+              .orderBy(desc(handleTakeBacks.doneAt))
+              .limit(1)
+              .for('update');
         const { used, allowed } = handleChangesOf(row);
-        if (!takeBack) {
+        if (!takeBack && !freeChange) {
           if (row.plan !== 'pro')
             throw new OperationError('HANDLE_CHANGE_PRO_REQUIRED');
           if (used >= allowed) throw new OperationError('HANDLE_CHANGE_LIMIT');
@@ -780,9 +814,30 @@ export function renameHandle(
           .set({
             handle: wanted,
             handleLower: wanted,
-            handleChangesUsed: used + 1,
+            handleChangesUsed: freeChange ? used : used + 1,
           })
           .where(eq(profiles.id, row.id));
+        if (freeChange) {
+          await tx
+            .update(handleTakeBacks)
+            .set({ freeChangeUsedAt: now })
+            .where(eq(handleTakeBacks.id, freeChange.id));
+          await recordAudit(tx, {
+            staffUserId: input.userId,
+            action: 'username.free_change_used',
+            subjectType: 'profile',
+            subjectId: row.id,
+            reason: withAuditChange(
+              'The free change after an assigned username',
+              {
+                takeBackId: freeChange.id,
+                from: row.handleLower,
+                to: wanted,
+              },
+            ),
+            now,
+          });
+        }
         return { previous: row.handleLower, handle: wanted };
       });
     } catch (error) {

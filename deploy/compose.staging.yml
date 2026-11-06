@@ -179,6 +179,9 @@ services:
       # The release check's staff address: its mail goes to the pretend inbox, like .example.
       MAIL_PRETEND_DOMAINS: ${MAIL_PRETEND_DOMAINS:-release-check.usetipme.xyz}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
+      # The take-back sweep tells the web app when a page changes username.
+      WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
+      WEB_REVALIDATE_URL: ${WEB_REVALIDATE_URL:-}
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}

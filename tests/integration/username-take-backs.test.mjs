@@ -680,3 +680,405 @@ test('deleting the page during the notice reserves the name as page_deleted, wit
     1,
   );
 });
+
+/* Task 10: the worker sweep, the deadline and the 14-day never-reached path (injected clock) */
+
+const DAY = 86_400_000;
+const sweep = (now) => ops.sweepTakeBacks(database.db, { sealing, now });
+const markSent = (mailId, sentAt) =>
+  q(`UPDATE mail_messages SET status = 'sent', sent_at = $2 WHERE id = $1`, [
+    mailId,
+    sentAt,
+  ]);
+const doneMailData = async (takeBackId) => {
+  const [row] = await mailOf('username_take_back_done', takeBackId);
+  if (!row) return null;
+  return (await queuedMail(database.db, sealing, { limit: 500 })).find(
+    (m) => m.id === row.id,
+  ).data;
+};
+
+test('the full path: approved, noticed only after sent_at, reminder at due minus 2 days, due, done', async () => {
+  const { target, row } = await started();
+  const t0 = new Date(row.approved_at);
+  // Queued, not sent: nothing moves, however late it is.
+  await sweep(new Date(t0.getTime() + DAY));
+  assert.equal((await takeBackOf(target.handle)).state, 'approved');
+  const sentAt = new Date(t0.getTime() + 60_000);
+  await markSent(row.notice_mail_id, sentAt);
+  const first = await sweep(new Date(t0.getTime() + 120_000));
+  assert.equal(first.noticed, 1);
+  const noticed = await takeBackOf(target.handle);
+  assert.equal(noticed.state, 'noticed');
+  assert.equal(noticed.noticed_via, 'email');
+  assert.equal(noticed.noticed_at.toISOString(), sentAt.toISOString());
+  const due = takeBackDueAt(sentAt, 7);
+  assert.equal(noticed.due_at.toISOString(), due.toISOString());
+  const [audit] = await auditOf('username.take_back_noticed', target.handle);
+  assert.equal(audit.staff_user_id, null);
+  // Just before due minus 2 days: no reminder yet; at it: one, and only one.
+  await sweep(new Date(due.getTime() - 2 * DAY - 1000));
+  assert.equal((await mailOf('username_take_back_reminder', row.id)).length, 0);
+  const reminded = await sweep(new Date(due.getTime() - 2 * DAY + 1000));
+  assert.equal(reminded.reminded, 1);
+  await sweep(new Date(due.getTime() - DAY));
+  assert.equal((await mailOf('username_take_back_reminder', row.id)).length, 1);
+  // The deadline: a new username, the done email, the reservation.
+  const atDue = new Date(due.getTime() + 1000);
+  const done = await sweep(atDue);
+  assert.equal(done.completed, 1);
+  const after = await takeBackOf(target.handle);
+  assert.equal(after.state, 'done');
+  assert.equal(after.outcome, 'assigned');
+  assert.match(after.new_handle, /^page_[a-z0-9]{6}$/);
+  assert.ok(done.revalidate.includes(target.handle));
+  assert.ok(done.revalidate.includes(after.new_handle));
+  const [page] = await q(`SELECT handle FROM profiles WHERE id = $1`, [
+    target.id,
+  ]);
+  assert.equal(page.handle, after.new_handle);
+  assert.equal(after.free_change_until.getTime(), atDue.getTime() + 30 * DAY);
+  const data = await doneMailData(row.id);
+  assert.equal(data.variant, 'assigned');
+  assert.equal(data.new, after.new_handle);
+  assert.equal(data.noticeDate, lagosDateWords(sentAt));
+  // Running again changes nothing.
+  const again = await sweep(new Date(atDue.getTime() + 60_000));
+  assert.deepEqual(
+    [again.completed, again.unreached, again.noticed, again.reminded],
+    [0, 0, 0, 0],
+  );
+  assert.equal((await mailOf('username_take_back_done', row.id)).length, 1);
+});
+
+test('no reminder when notice_days is below 4', async () => {
+  const { target, row } = await started({
+    category: 'impersonation',
+    noticeDays: 3,
+  });
+  const sentAt = new Date(new Date(row.approved_at).getTime() + 1000);
+  await markSent(row.notice_mail_id, sentAt);
+  await sweep(new Date(sentAt.getTime() + 1000));
+  const due = (await takeBackOf(target.handle)).due_at;
+  await sweep(new Date(due.getTime() - DAY));
+  assert.equal((await mailOf('username_take_back_reminder', row.id)).length, 0);
+});
+
+test('worker catch-up after a missed deadline completes at the next run, recording the actual time', async () => {
+  const { target, row } = await started();
+  const sentAt = new Date(new Date(row.approved_at).getTime() + 1000);
+  await markSent(row.notice_mail_id, sentAt);
+  await sweep(new Date(sentAt.getTime() + 1000));
+  const due = (await takeBackOf(target.handle)).due_at;
+  // The worker was down for three days past the deadline.
+  const late = new Date(due.getTime() + 3 * DAY);
+  await sweep(late);
+  const after = await takeBackOf(target.handle);
+  assert.equal(after.state, 'done');
+  assert.equal(after.done_at.toISOString(), late.toISOString());
+  // The reminder that was due during the outage is not sent after the deadline.
+  assert.equal((await mailOf('username_take_back_reminder', row.id)).length, 0);
+});
+
+/** A take-back past its deadline, ready for the sweep. */
+async function pastDue() {
+  const setup = await started();
+  await q(
+    `UPDATE handle_take_backs SET state = 'noticed', noticed_at = now() - interval '8 days', noticed_via = 'banner', due_at = now() - interval '1 minute' WHERE id = $1`,
+    [setup.row.id],
+  );
+  return setup;
+}
+
+test('cancel racing the deadline sweep: one outcome', async () => {
+  for (let round = 0; round < 3; round++) {
+    const { requester, target, row } = await pastDue();
+    const [swept, cancelled] = await Promise.allSettled([
+      sweep(new Date()),
+      ops.cancelTakeBack(database.db, {
+        staffId: requester,
+        takeBackId: row.id,
+        reason: 'The brand withdrew its request',
+        sealing,
+      }),
+    ]);
+    assert.equal(swept.status, 'fulfilled', String(swept.reason));
+    const after = await takeBackOf(target.handle);
+    assert.ok(['done', 'cancelled'].includes(after.state));
+    if (after.state === 'done') {
+      assert.equal(cancelled.status, 'rejected');
+      assert.equal(cancelled.reason.code, 'TAKE_BACK_CLOSED');
+      assert.equal((await mailOf('username_take_back_done', row.id)).length, 1);
+      assert.equal(
+        (await mailOf('username_take_back_cancelled', row.id)).length,
+        0,
+      );
+    } else {
+      assert.equal(cancelled.status, 'fulfilled');
+      assert.equal((await mailOf('username_take_back_done', row.id)).length, 0);
+      const [page] = await q(`SELECT handle FROM profiles WHERE id = $1`, [
+        target.id,
+      ]);
+      assert.equal(page.handle, target.handle, 'the page kept its name');
+    }
+  }
+});
+
+test('user choice racing the sweep: one outcome', async () => {
+  for (let round = 0; round < 3; round++) {
+    const { target, row } = await pastDue();
+    const chosen = `${target.handle}_u`;
+    const [, chose] = await Promise.allSettled([
+      sweep(new Date()),
+      ops.renameHandle(database.db, {
+        userId: target.userId,
+        handle: chosen,
+        sealing,
+      }),
+    ]);
+    const after = await takeBackOf(target.handle);
+    assert.equal(after.state, 'done');
+    assert.equal((await mailOf('username_take_back_done', row.id)).length, 1);
+    const [page] = await q(`SELECT handle FROM profiles WHERE id = $1`, [
+      target.id,
+    ]);
+    if (after.outcome === 'user_chose') {
+      assert.equal(chose.status, 'fulfilled');
+      assert.equal(page.handle, chosen);
+    } else {
+      assert.equal(after.outcome, 'assigned');
+      assert.equal(page.handle, after.new_handle);
+      // Their change then ran as an ordinary one on a Free page, and was refused.
+      assert.equal(chose.status, 'rejected');
+    }
+    // Never an alias for the taken name.
+    assert.equal(
+      (
+        await q(`SELECT 1 FROM handle_aliases WHERE handle_lower = $1`, [
+          target.handle,
+        ])
+      ).length,
+      0,
+    );
+  }
+});
+
+test('never reached for 14 days: completed as unreached and recorded', async () => {
+  // No address at all: nothing is sent, before or after.
+  const quiet = await started({}, { verified: false });
+  const at = new Date(
+    new Date(quiet.row.approved_at).getTime() + 14 * DAY + 1000,
+  );
+  const result = await sweep(at);
+  assert.ok(result.unreached >= 1);
+  const after = await takeBackOf(quiet.target.handle);
+  assert.equal(after.state, 'done');
+  assert.equal(after.outcome, 'assigned');
+  assert.equal(after.noticed_via, 'unreached');
+  assert.equal(after.noticed_at, null);
+  assert.equal(
+    (await mailOf('username_take_back_done', quiet.row.id)).length,
+    0,
+  );
+  // An address added since: the done email goes, in the unreached words.
+  const later = await started({}, { verified: false });
+  await q(`UPDATE users SET email_verified_at = now() WHERE id = $1`, [
+    later.target.userId,
+  ]);
+  await sweep(
+    new Date(new Date(later.row.approved_at).getTime() + 14 * DAY + 1000),
+  );
+  const data = await doneMailData(later.row.id);
+  assert.equal(data.variant, 'unreached');
+  assert.equal(data.why, contracts.TAKE_BACK_WHY.ordinary);
+});
+
+test('approved for 13 days 23 hours without notice: nothing happens yet', async () => {
+  const { target, row } = await started({}, { verified: false });
+  await sweep(
+    new Date(new Date(row.approved_at).getTime() + 14 * DAY - 3_600_000),
+  );
+  assert.equal((await takeBackOf(target.handle)).state, 'approved');
+});
+
+test('the generated username retries on collision and is never built-in or reserved', async () => {
+  const taken = await page();
+  await q(
+    `INSERT INTO handle_reservations (id, handle_lower, source, reason, reserved_at)
+     VALUES (gen_random_uuid(), 'page_rsrvd0', 'staff', 'test name', now())`,
+  );
+  const tries = [
+    'bad',
+    'RSRVD0',
+    'rsrvd0',
+    taken.handle.slice(5, 11),
+    'free01',
+  ];
+  // The page's own handle is tb_xxxxxxxxxx, so page_ plus its 6 characters isn't it: make one.
+  await q(
+    `INSERT INTO profiles (id, handle, handle_lower, display_name) VALUES (gen_random_uuid(), 'page_takenx', 'page_takenx', 'Page')`,
+  );
+  tries[3] = 'takenx';
+  const seen = [];
+  const handle = await database.db.transaction((tx) =>
+    ops.generatedHandle(tx, () => {
+      const next = tries.shift();
+      seen.push(next);
+      return next;
+    }),
+  );
+  assert.equal(handle, 'page_free01');
+  assert.deepEqual(seen, ['bad', 'RSRVD0', 'rsrvd0', 'takenx', 'free01']);
+  // Ten collisions in a row: it gives up, and the take-back stays due.
+  await assert.rejects(
+    database.db.transaction((tx) => ops.generatedHandle(tx, () => 'takenx')),
+    refused('HANDLE_TAKEN'),
+  );
+  for (let i = 0; i < 200; i++)
+    assert.match(
+      await database.db.transaction((tx) => ops.generatedHandle(tx)),
+      /^page_[a-z0-9]{6}$/,
+    );
+});
+
+test('an old-username take-back removes the alias at the deadline, and the page keeps its username', async () => {
+  const requester = await person();
+  await q(
+    `UPDATE staff SET revoked_at = now() WHERE revoked_at IS NULL AND user_id <> $1`,
+    [requester],
+  );
+  const target = await page({ plan: 'pro' });
+  const now = `${target.handle}_now`;
+  await ops.renameHandle(database.db, {
+    userId: target.userId,
+    handle: now,
+    sealing,
+  });
+  assert.equal(
+    (await ask(requester, { profileId: target.id, name: target.handle })).state,
+    'ran',
+  );
+  const row = await takeBackOf(target.handle);
+  assert.equal(row.kind, 'old');
+  await q(
+    `UPDATE handle_take_backs SET state = 'noticed', noticed_at = now(), noticed_via = 'email', due_at = now() - interval '1 second' WHERE id = $1`,
+    [row.id],
+  );
+  const result = await sweep(new Date());
+  assert.ok(result.revalidate.includes(target.handle));
+  const after = await takeBackOf(target.handle);
+  assert.equal(after.state, 'done');
+  assert.equal(after.outcome, 'old_removed');
+  assert.equal(after.new_handle, null);
+  assert.equal(after.free_change_until, null);
+  const [pageRow] = await q(`SELECT handle FROM profiles WHERE id = $1`, [
+    target.id,
+  ]);
+  assert.equal(pageRow.handle, now);
+  assert.equal(
+    (
+      await q(`SELECT 1 FROM handle_aliases WHERE handle_lower = $1`, [
+        target.handle,
+      ])
+    ).length,
+    0,
+  );
+  const data = await doneMailData(row.id);
+  assert.equal(data.variant, 'old');
+  assert.equal(data.current, now);
+});
+
+test('the unnoticed issue opens at 24 hours and closes once noticed', async () => {
+  const { target, row } = await started();
+  const issue = () =>
+    q(`SELECT status, kind, severity FROM issues WHERE dedupe_key = $1`, [
+      `username_take_back_unnoticed.${row.id}`,
+    ]);
+  const approved = new Date(row.approved_at);
+  await ops.runIssueDetectors(
+    database.db,
+    new Date(approved.getTime() + 23 * 3_600_000),
+  );
+  assert.equal((await issue()).length, 0);
+  await ops.runIssueDetectors(
+    database.db,
+    new Date(approved.getTime() + 24 * 3_600_000 + 1000),
+  );
+  const [opened] = await issue();
+  assert.equal(opened.status, 'open');
+  assert.equal(opened.severity, 'account');
+  await seen(target, row);
+  await ops.autoResolveIssues(database.db, new Date());
+  assert.equal((await issue())[0].status, 'resolved');
+});
+
+test('the overdue issue opens an hour after due and closes once done', async () => {
+  const { row } = await pastDue();
+  const issue = () =>
+    q(`SELECT status FROM issues WHERE dedupe_key = $1`, [
+      `username_take_back_overdue.${row.id}`,
+    ]);
+  await ops.runIssueDetectors(database.db, new Date());
+  assert.equal((await issue()).length, 0, 'not within the hour');
+  await ops.runIssueDetectors(
+    database.db,
+    new Date(Date.now() + 2 * 3_600_000),
+  );
+  assert.equal((await issue())[0].status, 'open');
+  await sweep(new Date());
+  await ops.autoResolveIssues(database.db, new Date());
+  assert.equal((await issue())[0].status, 'resolved');
+});
+
+test('a suspended page still gets the banner, and stays suspended under its new name', async () => {
+  const { target, row } = await started();
+  await q(`UPDATE profiles SET status = 'suspended' WHERE id = $1`, [
+    target.id,
+  ]);
+  const mine = await ops.getMyProfile(database.db, target.userId);
+  assert.equal(mine.usernameTakeBack.id, row.id);
+  await q(
+    `UPDATE handle_take_backs SET state = 'noticed', noticed_at = now(), noticed_via = 'banner', due_at = now() - interval '1 second' WHERE id = $1`,
+    [row.id],
+  );
+  await sweep(new Date());
+  const [page] = await q(`SELECT handle, status FROM profiles WHERE id = $1`, [
+    target.id,
+  ]);
+  assert.match(page.handle, /^page_/);
+  assert.equal(page.status, 'suspended');
+});
+
+test('the staff alert names the action in words; no email comes of the event', async () => {
+  const { handleDomainEvent } =
+    await import('../../apps/worker/dist/handlers/domain-events.js');
+  const posted = [];
+  const before = (await q(`SELECT count(*)::int AS n FROM mail_messages`))[0].n;
+  await handleDomainEvent(
+    'username.take_back_done',
+    {
+      takeBackId: randomUUID(),
+      action: 'username.take_back',
+      requestedBy: 'staff-id',
+    },
+    {
+      db: database.db,
+      logger: { info() {}, warn() {}, error() {} },
+      dedupeKey: `username.take_back_done.${randomUUID()}`,
+      sealing,
+      pretendPayment: true,
+      postStaffAlert: async (alert) => posted.push(alert),
+    },
+  );
+  assert.deepEqual(posted, [
+    {
+      event: 'username.take_back_done',
+      action: 'Take a username back from a page',
+      requestedBy: 'staff-id',
+    },
+  ]);
+  assert.equal(
+    (await q(`SELECT count(*)::int AS n FROM mail_messages`))[0].n,
+    before,
+  );
+});

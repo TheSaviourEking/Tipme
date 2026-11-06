@@ -4,11 +4,12 @@ import { useEffect, useRef } from 'react';
 import type { MyProfile } from '@tipme/contracts';
 import { Notice } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
-import { takeBackBannerWords } from '@/lib/take-back-words';
+import { freeChangeWords, takeBackBannerWords } from '@/lib/take-back-words';
 import { useRecipient } from '@/components/account/recipient-context';
 
 /**
- * The notice that TipMe is taking a username back. Seeing it can start the notice clock (owner
+ * The notice that TipMe is taking a username back, or, once it has given the page a new one, that
+ * the page can change it once for free. Seeing it can start the notice clock (owner
  * answer 1), so it reports "seen" only while the tab is visible and the banner is on screen: never
  * from a hidden tab's refetch. Once per mount; a hidden tab tries again when it becomes visible.
  * No motion. Notice keeps its system border in forced colours, and the words carry the meaning.
@@ -52,7 +53,20 @@ export function UsernameTakeBackBanner() {
     };
   }, [takeBack, setProfile]);
 
-  if (!takeBack) return null;
+  if (!takeBack) {
+    const free = profile.usernameFreeChange;
+    if (!free) return null;
+    const after = freeChangeWords(free);
+    return (
+      <div className="take-back-banner">
+        <Notice title={after.title}>
+          <p>
+            <Link href="/dashboard/settings#handle">{after.action}</Link>
+          </p>
+        </Notice>
+      </div>
+    );
+  }
   const words = takeBackBannerWords(takeBack);
   return (
     <div ref={box} className="take-back-banner">

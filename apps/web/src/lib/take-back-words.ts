@@ -1,4 +1,4 @@
-import type { MyProfile } from '@tipme/contracts';
+import type { MyProfile, OpsTakeBack } from '@tipme/contracts';
 import { lagosDateWords } from '@tipme/domain';
 
 export type UsernameTakeBack = NonNullable<MyProfile['usernameTakeBack']>;
@@ -24,4 +24,38 @@ export function takeBackBannerWords(t: UsernameTakeBack): {
         why: t.why,
         action: null,
       };
+}
+
+export type UsernameFreeChange = NonNullable<MyProfile['usernameFreeChange']>;
+
+/**
+ * The dashboard notice after TipMe gave the page a username: it keeps the terms' promise to tell
+ * people on their dashboard too, for anyone without an email address.
+ */
+export function freeChangeWords(f: UsernameFreeChange): {
+  title: string;
+  action: string;
+} {
+  return {
+    title: `Your page has a new username, @${f.assignedHandle}. Links and QR codes with @${f.old} no longer work. You can change it once, for free, until ${lagosDateWords(new Date(f.until))}.`,
+    action: 'Choose a new username',
+  };
+}
+
+/** A take-back's state as staff read it: the meaning is in the words, never colour alone. */
+export function takeBackStateWords(t: OpsTakeBack): string {
+  switch (t.state) {
+    case 'approved':
+      return 'Notice being sent';
+    case 'noticed':
+      return t.dueAt
+        ? `Notice sent, due ${lagosDateWords(new Date(t.dueAt))}`
+        : 'Notice sent';
+    case 'due':
+      return 'Being completed';
+    case 'done':
+      return 'Done';
+    case 'cancelled':
+      return 'Cancelled';
+  }
 }

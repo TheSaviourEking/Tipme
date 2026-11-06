@@ -2,6 +2,7 @@ import {
   TAKE_BACK_CATEGORIES,
   TAKE_BACK_CATEGORY_WORDS,
   TAKE_BACK_FREE_CHANGE_MS,
+  TAKE_BACK_NEVER_REACHED_MS,
   TAKE_BACK_WHY,
   type MyProfile,
   type OpsTakeBack,
@@ -22,7 +23,7 @@ import {
   takeBackDueAt,
 } from '@tipme/domain';
 import { randomInt } from 'node:crypto';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Database, Tx } from '../client.js';
 import {
@@ -842,4 +843,251 @@ export function markTakeBackSeen(
       return myTakeBack(tx, page.id, now);
     });
   });
+}
+
+/* The worker's sweep (Task 10) */
+
+/** The profile row, unless another writer has it: the next run gets it. */
+async function lockProfileOrSkip(tx: Tx, profileId: string): Promise<boolean> {
+  const locked = await tx.execute<{ id: string }>(
+    sql`SELECT id FROM profiles WHERE id = ${profileId} FOR UPDATE SKIP LOCKED`,
+  );
+  return locked.rows.length > 0;
+}
+
+/** Runs one id's step in its own transaction, under the profile lock then the take-back lock. */
+async function stepFor<T>(
+  db: Database,
+  id: string,
+  work: (tx: Tx, row: TakeBackRow) => Promise<T | null>,
+): Promise<T | null> {
+  return db.transaction(async (tx) => {
+    const [first] = await tx
+      .select({ profileId: handleTakeBacks.profileId })
+      .from(handleTakeBacks)
+      .where(eq(handleTakeBacks.id, id));
+    if (!first || !(await lockProfileOrSkip(tx, first.profileId))) return null;
+    const row = await lockTakeBack(tx, id);
+    return row ? work(tx, row) : null;
+  });
+}
+
+const candidates = async (db: Database, query: ReturnType<typeof sql>) =>
+  (await db.execute<{ id: string }>(query)).rows.map((row) => row.id);
+
+/** The handles whose public pages a completion changed. */
+const changedHandles = (done: { old: string; newHandle: string | null }) =>
+  done.newHandle ? [done.old, done.newHandle] : [done.old];
+
+/**
+ * Moves take-backs on, driven by the database: a sent notice starts the clock, the reminder goes two
+ * days before the deadline, the deadline completes it, and 14 days with neither a sent email nor a
+ * seen banner completes it too (owner answer 2). Each id is its own transaction that re-reads the
+ * state under the locks, and every email has a dedupe key, so a second run at once is harmless.
+ */
+export function sweepTakeBacks(
+  db: Database,
+  input: { sealing: MailSealing; now: Date; batch?: number },
+): Promise<{
+  noticed: number;
+  reminded: number;
+  completed: number;
+  unreached: number;
+  revalidate: string[];
+}> {
+  const { now, sealing } = input;
+  const batch = input.batch ?? 100;
+  const at = now.toISOString();
+  return guarded(async () => {
+    const result = {
+      noticed: 0,
+      reminded: 0,
+      completed: 0,
+      unreached: 0,
+      revalidate: [] as string[],
+    };
+
+    // 1. A sent notice starts the clock, from when it was sent.
+    for (const id of await candidates(
+      db,
+      sql`SELECT tb.id FROM handle_take_backs tb
+            JOIN mail_messages m ON m.id = tb.notice_mail_id
+           WHERE tb.state = 'approved' AND tb.noticed_at IS NULL AND m.sent_at IS NOT NULL
+           ORDER BY tb.approved_at LIMIT ${batch}`,
+    )) {
+      const done = await stepFor(db, id, async (tx, row) => {
+        if (row.state !== 'approved' || row.noticedAt || !row.noticeMailId)
+          return null;
+        const [mail] = await tx
+          .select({ sentAt: mailMessages.sentAt })
+          .from(mailMessages)
+          .where(eq(mailMessages.id, row.noticeMailId));
+        if (!mail?.sentAt) return null;
+        await tx
+          .update(handleTakeBacks)
+          .set({
+            state: 'noticed',
+            noticedAt: mail.sentAt,
+            noticedVia: 'email',
+            dueAt: takeBackDueAt(mail.sentAt, row.noticeDays),
+          })
+          .where(eq(handleTakeBacks.id, row.id));
+        await recordAudit(tx, {
+          staffUserId: null,
+          action: 'username.take_back_noticed',
+          subjectType: 'username',
+          subjectId: row.handleLower,
+          reason: withAuditChange('The notice email was sent', {
+            takeBackId: row.id,
+            via: 'email',
+          }),
+          now,
+        });
+        return true;
+      });
+      if (done) result.noticed += 1;
+    }
+
+    // 2. The reminder, two days before the deadline, when there was time for one.
+    for (const id of await candidates(
+      db,
+      sql`SELECT id FROM handle_take_backs
+           WHERE state = 'noticed' AND notice_days >= 4 AND reminded_at IS NULL
+             AND kind = 'current'
+             AND due_at - interval '2 days' <= ${at}::timestamptz AND due_at > ${at}::timestamptz
+           ORDER BY due_at LIMIT ${batch}`,
+    )) {
+      const done = await stepFor(db, id, async (tx, row) => {
+        if (row.state !== 'noticed' || row.remindedAt || !row.dueAt)
+          return null;
+        await mailOwner(tx, sealing, {
+          profileId: row.profileId,
+          type: 'username_take_back_reminder',
+          data: { old: row.handleLower, dueDate: lagosDateWords(row.dueAt) },
+          dedupeKey: `username_take_back_reminder.${row.id}`,
+          now,
+        });
+        await tx
+          .update(handleTakeBacks)
+          .set({ remindedAt: now })
+          .where(eq(handleTakeBacks.id, row.id));
+        return true;
+      });
+      if (done) result.reminded += 1;
+    }
+
+    // 3. The deadline. Marked due first, on its own, so a completion that fails (no free generated
+    // username) leaves it due for the next run and for the overdue issue.
+    for (const id of await candidates(
+      db,
+      sql`SELECT id FROM handle_take_backs
+           WHERE state IN ('noticed', 'due') AND due_at <= ${at}::timestamptz
+           ORDER BY due_at LIMIT ${batch}`,
+    )) {
+      await stepFor(db, id, async (tx, row) => {
+        if (row.state !== 'noticed') return null;
+        await tx
+          .update(handleTakeBacks)
+          .set({ state: 'due' })
+          .where(eq(handleTakeBacks.id, row.id));
+        return true;
+      });
+      const done = await completeOrLeave(db, id, sealing, now, (row) =>
+        row.state === 'due' ? {} : null,
+      );
+      if (done) {
+        result.completed += 1;
+        result.revalidate.push(...changedHandles(done));
+      }
+    }
+
+    // 4. Never reached: 14 days with neither a sent email nor a seen banner.
+    const reachBy = new Date(now.getTime() - TAKE_BACK_NEVER_REACHED_MS);
+    for (const id of await candidates(
+      db,
+      sql`SELECT id FROM handle_take_backs
+           WHERE state = 'approved' AND noticed_at IS NULL
+             AND approved_at <= ${reachBy.toISOString()}::timestamptz
+           ORDER BY approved_at LIMIT ${batch}`,
+    )) {
+      const done = await completeOrLeave(db, id, sealing, now, (row) =>
+        row.state === 'approved' &&
+        row.noticedAt === null &&
+        row.approvedAt <= reachBy
+          ? { noticedVia: 'unreached' as const }
+          : null,
+      );
+      if (done) {
+        result.unreached += 1;
+        result.revalidate.push(...changedHandles(done));
+      }
+    }
+    result.revalidate = [...new Set(result.revalidate)];
+    return result;
+  });
+}
+
+/**
+ * Completes one take-back if `ready` says so under the locks. A refusal (no free generated
+ * username) leaves the row as it was, for the next run and the overdue issue.
+ */
+async function completeOrLeave(
+  db: Database,
+  id: string,
+  sealing: MailSealing,
+  now: Date,
+  ready: (row: TakeBackRow) => { noticedVia?: TakeBackNoticedVia } | null,
+) {
+  try {
+    return await stepFor(db, id, async (tx, row) => {
+      const how = ready(row);
+      if (!how) return null;
+      return completeTakeBack(tx, {
+        takeBackId: row.id,
+        outcome: row.kind === 'current' ? 'assigned' : 'old_removed',
+        ...how,
+        sealing,
+        now,
+        actorUserId: null,
+      });
+    });
+  } catch (error) {
+    // Also a generated username claimed by someone else in the same instant: next run.
+    if (error instanceof OperationError || sqlStateOf(error) === '23505')
+      return null;
+    throw error;
+  }
+}
+
+export type MyFreeChange = NonNullable<MyProfile['usernameFreeChange']>;
+
+/** The page's free change after an assigned username, while it lasts and is unused. */
+export async function myFreeChange(
+  db: Database | Tx,
+  profileId: string,
+  now: Date = new Date(),
+): Promise<MyFreeChange | null> {
+  const [row] = await db
+    .select({
+      until: handleTakeBacks.freeChangeUntil,
+      assignedHandle: handleTakeBacks.newHandle,
+      old: handleTakeBacks.handleLower,
+    })
+    .from(handleTakeBacks)
+    .where(
+      and(
+        eq(handleTakeBacks.profileId, profileId),
+        eq(handleTakeBacks.state, 'done'),
+        isNull(handleTakeBacks.freeChangeUsedAt),
+        sql`${handleTakeBacks.freeChangeUntil} > ${now.toISOString()}::timestamptz`,
+      ),
+    )
+    .orderBy(desc(handleTakeBacks.doneAt))
+    .limit(1);
+  if (!row?.until || !row.assignedHandle) return null;
+  return {
+    until: row.until.toISOString(),
+    assignedHandle: row.assignedHandle,
+    old: row.old,
+  };
 }

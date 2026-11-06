@@ -35,5 +35,33 @@ test('the banner words for current and old', () => {
     action: null,
   });
   for (const words of [current, old])
-    assert.equal(/[–—]/.test(words.title), false);
+    assert.equal(/[\u2013\u2014]/.test(words.title), false);
+});
+
+test('the dashboard notice words after an assignment', async () => {
+  const { freeChangeWords } = await import('../src/lib/take-back-words.ts');
+  const words = freeChangeWords({
+    until: '2026-12-10T10:00:00.000Z',
+    assignedHandle: 'page_x7k2qd',
+    old: 'kemi',
+  });
+  assert.deepEqual(words, {
+    title:
+      'Your page has a new username, @page_x7k2qd. Links and QR codes with @kemi no longer work. You can change it once, for free, until 10 December 2026.',
+    action: 'Choose a new username',
+  });
+  assert.equal(/[\u2013\u2014]/.test(words.title), false);
+});
+
+test('the take-back state words staff read', async () => {
+  const { takeBackStateWords } = await import('../src/lib/take-back-words.ts');
+  const at = (state, dueAt = null) => takeBackStateWords({ state, dueAt });
+  assert.equal(at('approved'), 'Notice being sent');
+  assert.equal(
+    at('noticed', '2026-11-10T22:59:59.999Z'),
+    'Notice sent, due 10 November 2026',
+  );
+  assert.equal(at('due'), 'Being completed');
+  assert.equal(at('done'), 'Done');
+  assert.equal(at('cancelled'), 'Cancelled');
 });

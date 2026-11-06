@@ -140,6 +140,15 @@ export interface MyProfile {
     why: string;
     current: string;
   } | null;
+  /**
+   * After TipMe gave the page a username (owner answer 4): one change, free and not counted, until
+   * `until`. Optional: the web deploys first.
+   */
+  usernameFreeChange?: {
+    until: string;
+    assignedHandle: string;
+    old: string;
+  } | null;
 }
 
 /** The public page: each detail is present only when the recipient made it public. */
