@@ -39,6 +39,13 @@
   --edge-warning: rgb(208 138 22 / 50%);
   /* The pressed face of a key that shows its result (StatesConcepts .split .face). */
   --key-face-dark: #141210;
+  /* Ink on that dark face (WithdrawRedesign's instrument): #c9c4ba is about 10:1 and #c9aeff
+     about 9:1 on #141210. */
+  --text-on-night: #ffffff;
+  --text-on-night-quiet: #c9c4ba;
+  --link-on-night: #c9aeff;
+  /* A ledger stamp for a confirmed outcome (WithdrawRedesign .s-ok). */
+  --stamp-ok: var(--state-success);
   /* Type roles; actual faces are supplied by the app */
   --font-interface: var(--font-manrope), 'Avenir Next', Arial, sans-serif;
   --font-body: var(--font-interface);

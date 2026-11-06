@@ -18,8 +18,11 @@ export function TestModePill({
     <details className="test-pill">
       <summary>
         <Lamp tone="amber" />
-        {label}
-        {detail && <span className="test-pill__detail"> · {detail}</span>}
+        {/* One run of text, so the gap after the lamp doesn't also open before the detail. */}
+        <span>
+          {label}
+          {detail && <span className="test-pill__detail"> · {detail}</span>}
+        </span>
       </summary>
       {sentence && <p className="test-pill__sentence">{sentence}</p>}
     </details>

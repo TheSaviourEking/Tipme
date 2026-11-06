@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  TOO_SMALL,
+  belowMinimum,
   withdrawableNow,
   withdrawFee,
   withdrawLamp,
@@ -332,4 +334,16 @@ test('the fee line says who pays the transfer fee, and nothing when there is non
   assert.equal(withdrawFee(ready({ feeMinor: '0' })), null);
   assert.equal(withdrawFee({ state: 'no_destination', inReview: false }), null);
   assert.equal(withdrawFee(null), null);
+});
+
+test('below the minimum is only an amount under ₦2,000 that is not everything that can go', () => {
+  assert.equal(belowMinimum(150000n, 540000n), true);
+  assert.equal(belowMinimum(150000n, 150000n), false); // the whole of it, under the minimum: allowed
+  assert.equal(belowMinimum(200000n, 540000n), false);
+  assert.equal(belowMinimum(null, 540000n), false);
+  assert.equal(belowMinimum(0n, 540000n), false);
+  assert.equal(
+    TOO_SMALL,
+    'Too small. The smallest withdrawal is ₦2,000, or your whole balance if it’s less.',
+  );
 });

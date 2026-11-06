@@ -289,3 +289,22 @@ export function withdrawableNow(input: {
   const allowed = BigInt(quote.withdrawableMinor);
   return allowed < available ? allowed : available;
 }
+
+/** What the field says for an amount below the smallest withdrawal (WithdrawRedesign §2). */
+export const TOO_SMALL = `Too small. The smallest withdrawal is ${formatNaira(FEE_POLICY_V1.minWithdrawalMinor)}, or your whole balance if it’s less.`;
+
+/**
+ * The amount is below the smallest withdrawal and isn't the whole of what can go now
+ * (FEE_POLICY_V1): the server would refuse it, so the field says so before anything is sent.
+ */
+export function belowMinimum(
+  chosen: bigint | null,
+  withdrawable: bigint,
+): boolean {
+  return (
+    chosen !== null &&
+    chosen > BigInt(0) &&
+    chosen < FEE_POLICY_V1.minWithdrawalMinor &&
+    chosen !== withdrawable
+  );
+}

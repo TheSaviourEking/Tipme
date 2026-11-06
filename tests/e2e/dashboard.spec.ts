@@ -316,14 +316,16 @@ test('test mode is one pill in the header that opens its sentence', async ({
 }, testInfo) => {
   await signUpRecipient(page, testInfo);
   await page.goto('/dashboard/withdraw');
+  // Settled: the page and its reminders have loaded, so nothing re-renders the bar under the key.
+  await expect(page.locator('.withdraw__meter')).toBeVisible();
   const pill = page.locator('.test-pill');
   await expect(pill.locator('summary')).toContainText('Test mode');
   const sentence = page.getByText(
     'No real money moves in test mode. The test bank pays straight away.',
   );
   await expect(sentence).toBeHidden();
-  await pill.locator('summary').focus();
   await pill.locator('summary').press('Enter');
+  await expect(pill).toHaveAttribute('open', '');
   await expect(sentence).toBeVisible();
   // The old notice box is gone from Withdraw.
   await expect(
