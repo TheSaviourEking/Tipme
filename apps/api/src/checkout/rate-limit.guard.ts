@@ -39,13 +39,17 @@ type RateLimitedRoute =
   | 'live_connect'
   | 'live_connect_user'
   | 'business_public'
-  | 'business_note';
+  | 'business_note'
+  | 'business_apply';
 
 // Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
 const BANK_RESOLVES_PER_USER_PER_DAY = 10;
 const DAY_MS = 86_400_000;
 // Live stream connects per signed-in person per minute: a tab reconnecting with backoff uses few.
 const LIVE_CONNECTS_PER_USER_PER_MIN = 30;
+// Applying for a business (PR B1), per signed-in person: each one opens an issue for TipMe staff.
+// A real owner applies once or twice; a script filling the staff inbox stops here.
+const BUSINESS_APPLICATIONS_PER_USER_PER_HOUR = 10;
 
 type LimitedRequest = Request & { auth?: { userId: string } };
 
@@ -112,6 +116,11 @@ export class RateLimitGuard implements CanActivate {
       return this.count(route, `user:${userId}`, {
         limit: LIVE_CONNECTS_PER_USER_PER_MIN,
         windowMs: 60_000,
+      });
+    if (route === 'business_apply')
+      return this.count(route, `user:${userId}`, {
+        limit: BUSINESS_APPLICATIONS_PER_USER_PER_HOUR,
+        windowMs: 3_600_000,
       });
     if (route === 'bank_resolve') {
       await this.count(route, ip, {

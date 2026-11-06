@@ -1490,6 +1490,549 @@
         ]
       }
     },
+    "/v1/me/businesses": {
+      "post": {
+        "operationId": "BusinessManage.apply",
+        "tags": [
+          "BusinessManage"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 640
+                  },
+                  "slug": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+                  },
+                  "contactName": {
+                    "type": "string",
+                    "maxLength": 640
+                  },
+                  "contactEmail": {
+                    "type": "string"
+                  },
+                  "contactPhone": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "pattern": "^\\+?[\\d\\s\\-()]{7,}$"
+                  },
+                  "location": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "maxLength": 480
+                      },
+                      "slug": {
+                        "type": "string",
+                        "maxLength": 30,
+                        "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+                      },
+                      "address": {
+                        "type": "string",
+                        "maxLength": 1600
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "slug",
+                      "address"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "slug",
+                  "contactName",
+                  "contactEmail",
+                  "location"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "business_apply",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/businesses/{id}": {
+      "get": {
+        "operationId": "BusinessManage.detail",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "BusinessManage.update",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 640
+                  },
+                  "contactName": {
+                    "type": "string",
+                    "maxLength": 640
+                  },
+                  "contactEmail": {
+                    "type": "string"
+                  },
+                  "contactPhone": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 32,
+                        "pattern": "^\\+?[\\d\\s\\-()]{7,}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "slug": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/businesses/{id}/locations": {
+      "post": {
+        "operationId": "BusinessManage.addLocation",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 480
+                  },
+                  "slug": {
+                    "type": "string",
+                    "maxLength": 30,
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 1600
+                  }
+                },
+                "required": [
+                  "name",
+                  "slug",
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/businesses/{id}/locations/{locationId}": {
+      "patch": {
+        "operationId": "BusinessManage.updateLocation",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 480
+                  },
+                  "slug": {
+                    "type": "string",
+                    "maxLength": 30,
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 1600
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/businesses/{id}/locations/{locationId}/close": {
+      "post": {
+        "operationId": "BusinessManage.closeLocation",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/businesses/{id}/managers": {
+      "get": {
+        "operationId": "BusinessManage.managers",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/businesses/{id}/managers/{managerId}/remove": {
+      "post": {
+        "operationId": "BusinessManage.removeManager",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "managerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done; no body."
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/cover": {
       "delete": {
         "operationId": "Cover.remove",

@@ -154,6 +154,14 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/business-roles` | n/a (read) | – | – |
+| POST | `/v1/me/businesses` | yes | `business_apply` | – |
+| GET | `/v1/me/businesses/{id}` | n/a (read) | – | – |
+| PATCH | `/v1/me/businesses/{id}` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/locations` | yes | – | – |
+| PATCH | `/v1/me/businesses/{id}/locations/{locationId}` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/locations/{locationId}/close` | yes | – | – |
+| GET | `/v1/me/businesses/{id}/managers` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{id}/managers/{managerId}/remove` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
