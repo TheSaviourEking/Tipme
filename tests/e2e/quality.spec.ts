@@ -187,7 +187,13 @@ test('share card is a prerendered PNG advertised on profiles', async ({
 });
 
 test('responses carry baseline security headers', async ({ request }) => {
-  for (const route of ['/', '/@ada', '/opengraph-image']) {
+  for (const route of [
+    '/',
+    '/@ada',
+    '/opengraph-image',
+    '/manifest.webmanifest',
+    '/icons/192.png',
+  ]) {
     const headers = (await request.get(route)).headers();
     expect(headers['x-content-type-options'], route).toBe('nosniff');
     expect(headers['referrer-policy'], route).toBe(
