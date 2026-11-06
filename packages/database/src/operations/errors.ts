@@ -111,6 +111,8 @@ export type OperationErrorCode =
   | 'TEAM_NOBODY_ON_SHIFT'
   | 'CARD_NOT_FOUND'
   | 'BALANCE_BELOW_ZERO'
+  // R2-A: nothing (more) of this tip's payment to take back, or a refund larger than what is left.
+  | 'TIP_NOT_REVERSIBLE'
   // A release 1 path met a team tip or a business's row (see owner.ts personOf).
   | 'NOT_A_PERSON';
 

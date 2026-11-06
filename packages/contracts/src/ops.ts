@@ -292,6 +292,20 @@ export interface OpsIssueSubject {
   providerEventRowId?: string;
   /** TipMe for businesses: the business (business_waiting) or the noted tip's business. */
   businessId?: string;
+  /**
+   * Business release 2 (R2-A): the partner's refund or dispute a `payment_reversed` issue is about
+   * (`refund.<id>` / `dispute.<id>`). Only an issue with one can be reversed from TipMe.
+   */
+  partnerReversalId?: string;
+  /**
+   * A refund's state from the partner (its refund guide): `pending` once accepted, then `paid` or
+   * `failed`, both final. Only a paid refund can be reversed, for exactly `refundedMinor`.
+   */
+  refundState?: 'pending' | 'paid' | 'failed';
+  /** What a paid refund gave back, in minor units (decimal string). */
+  refundedMinor?: string;
+  /** A fee the paid refund itself carried, in minor units (decimal string): TipMe's expense. */
+  refundFeeMinor?: string;
 }
 
 export interface OpsIssue {
@@ -494,6 +508,28 @@ const providerIdSchema = z
   .regex(/^[^\s:/\u0000-\u001f\u007f]{1,200}$/);
 
 /** Attach a dashboard-found checkout ID only after the server verifies its scoped status. */
+/**
+ * Business release 2 (Q7): staff confirm a refund or chargeback the payment partner reported, from
+ * its `payment_reversed` issue, after checking the partner's dashboard. `refundedMinor` is what the
+ * partner took back of the supporter's payment; less than the tip is a partial refund, taken back
+ * from every line in proportion. `dashboardVerified` is the staff member's word that they checked.
+ */
+export const opsTipReverseSchema = opsReasonSchema
+  .extend({
+    refundedMinor: z.string().regex(/^[1-9]\d{0,11}$/),
+    dashboardVerified: z.literal(true),
+  })
+  .strict();
+export type OpsTipReverseRequest = z.infer<typeof opsTipReverseSchema>;
+
+/** A reversal that ran: whether it posted now, and whether it left a balance below zero (Q8). */
+export interface OpsTipReversed {
+  reversed: true;
+  /** False when this refund event was already reversed: nothing new was posted. */
+  posted: boolean;
+  belowZero: boolean;
+}
+
 export const opsBachsCheckoutRecoverySchema = opsReasonSchema
   .extend({
     issueId: z.uuid(),

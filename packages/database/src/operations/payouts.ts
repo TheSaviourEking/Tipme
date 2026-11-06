@@ -18,6 +18,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   issues,
+  ledgerTransactions,
   paymentAccounts,
   paymentAttempts,
   paymentIntents,
@@ -28,8 +29,11 @@ import {
   providerEvents,
   providerFeeCredits,
   tipQuotes,
+  teamTipSplits,
+  tipBusinessShares,
   tips,
   withdrawalHolds,
+  type IssueSubject,
 } from '../schema.js';
 import { balanceIn } from './balance.js';
 import { guarded, OperationError, safeError } from './errors.js';
@@ -100,15 +104,34 @@ export async function createPayout(
           status: tips.status,
           currency: tips.currency,
           net: tipQuotes.recipientNetMinor,
+          // Business release 2: the business's share of the net is never the person's to withdraw.
+          share: tipBusinessShares.shareMinor,
+          // ...and a tip a refund or chargeback took back (in part) is not paid out tip by tip.
+          reversed: sql<boolean>`EXISTS (SELECT 1 FROM ledger_transactions r
+            WHERE r.tip_id = ${tips.id} AND r.operation_type = 'reversal')`,
         })
         .from(tips)
         .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
         .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
+        .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
         .where(inArray(tips.id, ids))
         .for('update', { of: tips });
       // The same request may have committed while this one waited for the tips' locks.
       const afterLock = await replay();
       if (afterLock) return afterLock;
+      // A reversal holds the tip's lock until it commits, and the locked read above saw the
+      // reversals as they were when it began: read them again now (R2-A review finding 4).
+      const reversedNow = await tx
+        .select({ tipId: ledgerTransactions.tipId })
+        .from(ledgerTransactions)
+        .where(
+          and(
+            inArray(ledgerTransactions.tipId, ids),
+            eq(ledgerTransactions.operationType, 'reversal'),
+          ),
+        )
+        .limit(1);
+      if (reversedNow.length > 0) throw new OperationError('TIP_NOT_PAYABLE');
       const claimed = await tx
         .select({ tipId: payoutItems.tipId })
         .from(payoutItems)
@@ -120,7 +143,9 @@ export async function createPayout(
         claimed.length > 0 ||
         rows.some(
           (row) =>
-            row.profileId !== input.profileId || row.status !== 'SUCCEEDED',
+            row.profileId !== input.profileId ||
+            row.status !== 'SUCCEEDED' ||
+            row.reversed,
         )
       ) {
         throw new OperationError('TIP_NOT_PAYABLE');
@@ -129,7 +154,10 @@ export async function createPayout(
       const [currency] = currencies;
       if (currencies.size !== 1 || !currency)
         throw new OperationError('CURRENCY_MISMATCH');
-      const amountMinor = rows.reduce((sum, row) => sum + row.net, 0n);
+      const amountMinor = rows.reduce(
+        (sum, row) => sum + row.net - (row.share ?? 0n),
+        0n,
+      );
 
       const payoutId = newId();
       const inserted = await tx
@@ -393,16 +421,48 @@ export async function withdrawalsFrozen(
 }
 
 /**
- * The provider reports a refund or dispute on a paid tip: one issue per event for staff, and that
- * recipient's withdrawals wait. No balance or ledger entry changes (ADR-0004). The issue is opened
- * here, under the key the alert would give it, so the hold has one to name.
+ * The provider reports a refund or dispute on a paid tip: one issue per partner refund or dispute
+ * for staff, and that recipient's withdrawals wait. No balance or ledger entry changes here
+ * (ADR-0004); staff reverse it from the issue (`tip.reverse`, business release 2).
+ *
+ * Several events about one refund or dispute join the same issue, so it is reversed at most once.
+ * A refund follows the partner's refund guide: `refund.created` (accepted, processing) notes it as
+ * pending; `refund.paid` (final) records what it gave back and its own fee, and only then can it be
+ * reversed; `refund.failed` (final) says nothing moved. A final state is never undone by a later
+ * event. A dispute is alerted and held; the partner documents no dispute events, so staff enter its
+ * amount. An event naming no refund or dispute still alerts, keyed by the event, but can't be
+ * reversed from TipMe. A dispute won takes nothing back: no issue, no hold.
  */
 export function flagPaymentReversal(
   db: Database,
-  input: { attemptId: string; eventId: string; eventType: string; now?: Date },
-): Promise<void> {
+  input: {
+    attemptId: string;
+    eventId: string;
+    eventType: string;
+    partnerReversalId?: string | null;
+    disputeWon?: boolean;
+    refundState?: 'pending' | 'paid' | 'failed' | null;
+    refundedMinor?: bigint | null;
+    refundFeeMinor?: bigint | null;
+    now?: Date;
+  },
+): Promise<'flagged' | 'dispute_won'> {
+  if (input.disputeWon) return Promise.resolve('dispute_won');
   // Dedupe keys allow word characters, dots and dashes only.
-  const suffix = input.eventId.replace(/[^\w.-]/g, '_');
+  const suffix = (input.partnerReversalId ?? input.eventId).replace(
+    /[^\w.-]/g,
+    '_',
+  );
+  // Only a well-formed partner id makes the issue reversible.
+  const partnerReversalId =
+    input.partnerReversalId &&
+    /^(refund|dispute)\.[A-Za-z0-9_-]{1,100}$/.test(input.partnerReversalId)
+      ? input.partnerReversalId
+      : null;
+  const state = partnerReversalId?.startsWith('refund.')
+    ? (input.refundState ?? null)
+    : null;
+  const now = input.now ?? new Date();
   return guarded(() =>
     db.transaction(async (tx) => {
       await enqueueOutbox(tx, {
@@ -411,23 +471,95 @@ export function flagPaymentReversal(
         dedupeSuffix: suffix,
         payload: { attemptId: input.attemptId, eventType: input.eventType },
       });
-      const issue = await openIssue(tx, {
-        dedupeKey: `event.payment.reversed.${input.attemptId}.${suffix}`,
-        kind: 'payment_reversed',
-        subject: { attemptId: input.attemptId },
-        now: input.now ?? new Date(),
-      });
       const [tip] = await tx
-        .select({ profileId: tips.profileId })
+        .select({
+          id: tips.id,
+          profileId: tips.profileId,
+          businessId: tipBusinessShares.businessId,
+        })
         .from(paymentAttempts)
         .innerJoin(tips, eq(tips.intentId, paymentAttempts.intentId))
+        .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
         .where(eq(paymentAttempts.id, input.attemptId));
-      if (tip)
-        await holdWithdrawals(tx, {
-          profileId: personOf(tip.profileId),
-          reason: 'reversal',
-          issueId: issue.id,
+      const stateFields = (): Partial<IssueSubject> =>
+        state === 'paid' && input.refundedMinor
+          ? {
+              refundState: 'paid',
+              refundedMinor: input.refundedMinor.toString(),
+              refundFeeMinor: (input.refundFeeMinor ?? 0n).toString(),
+            }
+          : state === 'paid'
+            ? {} // paid, but its amount couldn't be read: alert only
+            : state
+              ? { refundState: state }
+              : {};
+      const FAILED_NOTE =
+        'The partner reports the refund failed: nothing moved. Close this issue.';
+      const dedupeKey = `event.payment.reversed.${input.attemptId}.${suffix}`;
+      const [known] = await tx
+        .select({
+          id: issues.id,
+          status: issues.status,
+          subject: issues.subject,
+          summary: issues.summary,
+        })
+        .from(issues)
+        .where(eq(issues.dedupeKey, dedupeKey))
+        .for('update');
+      let issueId: string;
+      if (known && (known.status === 'open' || state !== 'paid')) {
+        issueId = known.id;
+        // A final state stays final; a later event only moves pending (or none) on.
+        const current = known.subject.refundState;
+        if (state && current !== 'paid' && current !== 'failed') {
+          await tx
+            .update(issues)
+            .set({
+              subject: { ...known.subject, ...stateFields() },
+              ...(state === 'failed'
+                ? { summary: `${known.summary} ${FAILED_NOTE}` }
+                : {}),
+            })
+            .where(eq(issues.id, known.id));
+        }
+      } else {
+        // First event about it, or a refund paid after staff closed its pending issue: that one
+        // can't be reopened, so the paid refund gets its own (still one reversal, by its key).
+        const issue = await openIssue(tx, {
+          dedupeKey: known ? `${dedupeKey}.paid` : dedupeKey,
+          kind: 'payment_reversed',
+          subject: {
+            attemptId: input.attemptId,
+            ...(tip?.businessId ? { businessId: tip.businessId } : {}),
+            ...(partnerReversalId ? { partnerReversalId } : {}),
+            ...stateFields(),
+          },
+          now,
+          ...(state === 'failed' ? { note: FAILED_NOTE } : {}),
         });
+        issueId = issue.id;
+      }
+      // A failed refund moved nothing: no hold for it.
+      if (state === 'failed') return 'flagged' as const;
+      // Everyone the tip paid waits: the person, or each person of a team tip (R2-D). Never a
+      // throw here, which would roll back the alert itself.
+      const people = !tip
+        ? []
+        : tip.profileId !== null
+          ? [tip.profileId]
+          : (
+              await tx
+                .select({ profileId: teamTipSplits.profileId })
+                .from(teamTipSplits)
+                .where(eq(teamTipSplits.tipId, tip.id))
+            ).map((split) => split.profileId);
+      for (const profileId of people)
+        await holdWithdrawals(tx, {
+          profileId,
+          reason: 'reversal',
+          issueId,
+        });
+      return 'flagged' as const;
     }),
   );
 }
@@ -1225,6 +1357,9 @@ async function quoteGate(
     }),
   }));
   if (hold) return { block: { state: 'paused', reason: hold } };
+  // Q8 (R2-A): below zero after a reversal, withdrawals wait until it is back above zero.
+  if ((await guarded(() => balanceIn(db, input.profileId))).availableMinor < 0n)
+    return { block: { state: 'paused', reason: 'reversal' } };
   // A request would be refused, so the quote must not say otherwise. The states have no word for
   // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
   if (foreign) return { block: { state: 'provider_unavailable' } };
@@ -1400,6 +1535,9 @@ export async function requestWithdrawal(
       if (await activeHold(tx, input.profileId))
         throw new OperationError('WITHDRAWALS_PAUSED');
       const { availableMinor } = await balanceIn(tx, input.profileId);
+      // Q8: a reversal after the money left can take the balance below zero. Nothing more leaves
+      // until it is back; nothing is collected automatically. Under the lock reverseTip also takes.
+      if (availableMinor < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
       const withdrawable = lower(
         availableMinor,
         notNegative(

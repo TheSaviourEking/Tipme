@@ -108,6 +108,12 @@
 - Done: `GET /v1/me/businesses/:id/codes` (manager scope; `BUSINESS_NOT_VERIFIED` while pending or suspended, M12); `BusinessCodes` gains the business and location names; `apps/web/src/lib/business-sign.ts` draws the sign and badge with `qrMatrix` / `renderQrPixels`; Business → Codes, the print view `/dashboard/business/codes/print` (A5 sign, A6 table tent, 85 × 55 mm badge, one per page, black or purple), Work → My code.
 - Next: coordinator review, rebase onto dev once B0 merges, CI's full e2e suite. When B1 and B3 land, the e2e spec's stand-ins for their detail and work routes can go.
 
+# Current task — TipMe for businesses, PR R2-A: ledger, share line and reversals (6 November 2026)
+
+- Branch/worktree: `feat/business-r2-a` / `.worktrees/business-r2-a`, off local `feat/business-r2-0` `f13146bb` (R2-0 with its review fixes), test lane 6 (template `tipme_it_lane6_r2a`). Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-A" (Tasks 28–29), Q7–Q9 defaults kept by the owner (share of the person's net after TipMe's fee).
+- Done: `buildPaymentPosting` with `businessShare` and `teamSplits` (golden-identical without them); `buildReversalPosting`; the share posted as its own `business_payable` line in the payment's transaction; `reverseTip` (proportional, works on what earlier reversals left, below zero allowed, `balance_below_zero` issue); `BALANCE_BELOW_ZERO` on withdrawals; `businessBalanceIn`; `tip.reverse` serious action and `POST /v1/ops/issues/:id/reverse-tip` behind `BUSINESS_ENABLED` + `BUSINESS_SHARES_ENABLED`; `flagPaymentReversal` names the business and no longer throws on a team tip.
+- Next: coordinator review; R2-C2 writes `tip_business_shares` at intent time (using `tipme_share_agreement_at`) and fixes the release-1 readers of `recipient_net_minor`; R2-B's business withdrawals lock the business row and refuse `BALANCE_BELOW_ZERO`; an ops UI button for `tip.reverse` (API only here).
+
 # Current task — TipMe for businesses, PR R2-0: release 2 foundation (6 November 2026)
 
 - Branch/worktree: `feat/business-r2-0` / `.worktrees/business-r2-0`, off local `feat/business-b0` `3888c8e6` (B0 not merged yet), test lane 6. Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-0" (Tasks 26–27) and the owner's answers at the end.

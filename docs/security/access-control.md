@@ -68,7 +68,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
-| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation` |
+| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
@@ -284,6 +284,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/issues/{id}/payout-resume` | `payouts.resolve` | yes | – | – |
 | POST | `/v1/ops/issues/{id}/resolve` | `issues.resolve` | yes | `ops_request (money closes only)` | – |
 | POST | `/v1/ops/issues/{id}/reveal` | `private.view` | yes | – | – |
+| POST | `/v1/ops/issues/{id}/reverse-tip` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/market` | `analytics.view` | n/a (read) | – | – |
 | POST | `/v1/ops/market` | `market.edit` | yes | – | – |
 | PATCH | `/v1/ops/market/{id}` | `market.edit` | yes | – | – |

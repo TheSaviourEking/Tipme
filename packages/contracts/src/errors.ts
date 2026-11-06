@@ -122,6 +122,7 @@ export const apiErrorCodes = [
   'TEAM_NOBODY_ON_SHIFT',
   'CARD_NOT_FOUND',
   'BALANCE_BELOW_ZERO',
+  'TIP_NOT_REVERSIBLE',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];

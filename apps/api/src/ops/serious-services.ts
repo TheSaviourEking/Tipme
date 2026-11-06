@@ -57,6 +57,8 @@ export const seriousServicesProvider: Provider<SeriousActionServices> = {
         throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
       },
       payoutLog: (entry) => logger.warn({ ...entry }),
+      businessSharesEnabled:
+        config.BUSINESS_ENABLED && config.BUSINESS_SHARES_ENABLED,
       mail: {
         production:
           config.NODE_ENV === 'production' &&

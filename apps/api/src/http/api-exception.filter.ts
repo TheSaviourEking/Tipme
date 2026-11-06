@@ -57,6 +57,8 @@ const messages: Record<ApiErrorCode, string> = {
   CARD_NOT_FOUND: 'That table card does not exist.',
   BALANCE_BELOW_ZERO:
     'Withdrawals are paused until the balance is back above zero.',
+  TIP_NOT_REVERSIBLE:
+    'Nothing of this tip is left to take back, or the refund is more than what is left.',
   PERMISSION_NOT_HELD:
     'You can only give or take away access you hold yourself.',
   FRESH_CODE_REQUIRED: 'Enter a code from your authenticator to do this.',
@@ -351,6 +353,7 @@ const operationErrors: Partial<
   TEAM_NOBODY_ON_SHIFT: { status: 409, code: 'TEAM_NOBODY_ON_SHIFT' },
   CARD_NOT_FOUND: { status: 404, code: 'CARD_NOT_FOUND' },
   BALANCE_BELOW_ZERO: { status: 409, code: 'BALANCE_BELOW_ZERO' },
+  TIP_NOT_REVERSIBLE: { status: 409, code: 'TIP_NOT_REVERSIBLE' },
   NOTE_TEXT_REFUSED: {
     status: 400,
     code: 'VALIDATION_FAILED',

@@ -9,12 +9,15 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   businesses,
+  businessManagers,
   issues,
   payouts,
   profiles,
   providerSettings,
   roles,
   staff,
+  tipBusinessShares,
+  tips,
   users,
 } from '../schema.js';
 import {
@@ -30,7 +33,7 @@ import {
 import { startStaffRecovery } from './email-recovery.js';
 import { guarded, OperationError } from './errors.js';
 import { grantFeeFreeTips, setAccountFee } from './fees.js';
-import { resolveIssue } from './issues.js';
+import { addIssueNote, resolveIssue } from './issues.js';
 import { openPayoutConflict } from './payout-start.js';
 import {
   applyAfterRead,
@@ -44,6 +47,7 @@ import {
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import { takeBackAction } from './username-take-backs.js';
+import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -531,7 +535,143 @@ const opsBusinessName = async (db: Database | Tx, businessId: string) => {
   if (!row) throw new OperationError('BUSINESS_NOT_FOUND');
   return row;
 };
+/* Business release 2: reversals (Q7, Q8) */
 
+export interface TipReversePayload {
+  /** The open `payment_reversed` issue the partner's refund or chargeback raised. */
+  issueId: string;
+  tipId: string;
+  /** The partner's refund or dispute (`refund.<id>`), as the issue names it: one reversal each. */
+  partnerReversalId: string;
+  /** Minor units, as a decimal string (JSON has no bigint). */
+  refundedMinor: string;
+}
+
+const naira = (minor: bigint) =>
+  `NGN ${(minor / 100n).toLocaleString('en-NG')}.${(minor % 100n).toString().padStart(2, '0')}`;
+
+/** Why a reversal was refused, in words for the issue's notes (never a balance or a name). */
+const REVERSAL_REFUSALS: Record<string, string> = {
+  already_reversed_this:
+    'Reversal refused: this refund or dispute was already reversed. Nothing was posted. A separate refund or dispute from the partner opens its own issue.',
+  not_paid_yet:
+    'Reversal refused: the partner has not reported this refund as paid. Nothing was posted. Wait for it to be paid.',
+  amount_differs:
+    'Reversal refused: the amount entered differs from what the partner reports this refund gave back. Nothing was posted. Check the partner’s dashboard.',
+  flags_off:
+    'Reversal refused: business shares are switched off, so TipMe books no reversal. Nothing was posted.',
+  already_reversed:
+    'Reversal refused: everything this tip paid was already taken back by an earlier refund or chargeback. Nothing was posted.',
+  more_than_left:
+    'Reversal refused: the amount is more than what is left of this tip after earlier refunds or chargebacks. Nothing was posted. Check the partner’s dashboard for what this event took back.',
+  not_paid:
+    'Reversal refused: this tip has no payment in the ledger. Nothing was posted.',
+};
+
+/**
+ * Staff take back a refunded or charged-back tip, every line of it: the person's part and any
+ * business's part (Q7). Never automatic: only from the partner's own `payment_reversed` issue, after
+ * checking the partner's dashboard, because the event doesn't say whether a refund is partial. It
+ * posts even after the money was withdrawn (Q8). It moves no money at the partner: TipMe records it.
+ */
+const tipReverse = acting<TipReversePayload>({
+  name: 'tip.reverse',
+  permission: 'payments.repair',
+  // Neither the person tipped nor anyone running the business can decide their own reversal.
+  subjects: async ({ tipId }, db) => {
+    const [tip] = await db
+      .select({
+        profileId: tips.profileId,
+        businessId: tipBusinessShares.businessId,
+      })
+      .from(tips)
+      .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
+      .where(eq(tips.id, tipId));
+    const managers = tip?.businessId
+      ? await db
+          .select({ userId: businessManagers.userId })
+          .from(businessManagers)
+          .where(eq(businessManagers.businessId, tip.businessId))
+      : [];
+    return [
+      ...(tip?.profileId ? await pageOwner(db, tip.profileId) : []),
+      ...managers.map(({ userId }) => userId),
+    ];
+  },
+  target: ({ tipId }) => tipId,
+  // Pinned to the tip's status and to how much of it was already taken back.
+  current: async (tx, { tipId }) => {
+    const [tip] = await tx
+      .select({ status: tips.status })
+      .from(tips)
+      .where(eq(tips.id, tipId));
+    return {
+      status: tip?.status ?? null,
+      reversedMinor: (await reversalsOf(tx, tipId)).reversedMinor.toString(),
+    };
+  },
+  // The approver sees what earlier refunds or disputes already took back (R2-A review finding 1).
+  describe: async (tx, { tipId, refundedMinor }) => {
+    const { count, reversedMinor } = await reversalsOf(tx, tipId);
+    const earlier =
+      count === 0
+        ? 'Nothing was taken back from this tip before'
+        : `Already taken back from this tip: ${naira(reversedMinor)} in ${count} reversal${count === 1 ? '' : 's'}`;
+    return `Reverse ${naira(BigInt(refundedMinor))} of the tip ending ${tipId.slice(-6)}, as the payment partner refunded or charged it back: the person's part and any business's part, in proportion. ${earlier}`;
+  },
+  act: async (tx, payload, context) => {
+    const [issue] = await tx
+      .select({
+        kind: issues.kind,
+        status: issues.status,
+        subject: issues.subject,
+      })
+      .from(issues)
+      .where(eq(issues.id, payload.issueId));
+    if (!issue) throw new OperationError('ISSUE_NOT_FOUND');
+    if (issue.status !== 'open') throw new OperationError('ISSUE_RESOLVED');
+    if (
+      issue.kind !== 'payment_reversed' ||
+      issue.subject.tipId !== payload.tipId
+    )
+      throw new OperationError('INVALID_INPUT');
+    // Approval may come after the flags were turned off: then nothing posts (review finding 3).
+    if (!context.services?.businessSharesEnabled)
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'flags_off');
+    // Each partner refund or dispute is reversed once; a second request for it is refused.
+    if (await alreadyReversed(tx, payload.partnerReversalId))
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed_this');
+    // A paid refund is reversed for exactly what the partner says it gave back, with its own fee;
+    // staff enter the amount from the partner's dashboard, and it must match.
+    const { refundState, refundedMinor, refundFeeMinor } = issue.subject;
+    if (
+      issue.subject.partnerReversalId !== payload.partnerReversalId ||
+      (payload.partnerReversalId.startsWith('refund.') &&
+        (refundState !== 'paid' || !refundedMinor))
+    )
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'not_paid_yet');
+    if (refundedMinor && refundedMinor !== payload.refundedMinor)
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'amount_differs');
+    const result = await reverseTip(tx, {
+      tipId: payload.tipId,
+      partnerReversalId: payload.partnerReversalId,
+      refundFeeMinor: BigInt(refundFeeMinor ?? '0'),
+      refundedMinor: BigInt(payload.refundedMinor),
+      now: context.now,
+    });
+    return {
+      reversed: true as const,
+      posted: result.created,
+      belowZero: result.belowZero.length > 0,
+    };
+  },
+  // A refusal says why on the issue, so the next person sees it was tried (and nothing posted).
+  afterRefusal: async (db, { issueId }, { detail }, check) => {
+    const text = detail ? REVERSAL_REFUSALS[detail] : undefined;
+    if (!text) return;
+    await addIssueNote(db, { issueId, staffUserId: check.actorId, text });
+  },
+});
 /* Staff access */
 
 export type GrantPayload =
@@ -854,6 +994,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(mailProviderSwitch);
   registerSeriousAction(takeBackAction);
   registerSeriousAction(businessVerify);
+  registerSeriousAction(tipReverse);
 }
 
 /* Routes whose seriousness depends on what is being done */
