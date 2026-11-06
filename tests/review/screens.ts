@@ -500,7 +500,7 @@ export const SCREENS: ReviewScreen[] = [
   },
   {
     group: 'Dashboard',
-    name: 'Withdraw, one on its way',
+    name: 'Withdraw, the ledger',
     board: 'WithdrawRedesign',
     async open(page, ctx) {
       await ctx.recipientWithTips(3);
@@ -519,7 +519,7 @@ export const SCREENS: ReviewScreen[] = [
                       null,
                       '2000000',
                       'processing',
-                      null,
+                      { bankName: 'GTBank', last4: '6789' },
                     ],
                     [
                       'w2',

@@ -378,6 +378,12 @@ test('progress follows the real state only', async ({ page }, testInfo) => {
                   amountMinor: '1250000',
                   state: 'failed',
                 }),
+                withdrawal({
+                  payoutId: 'w4',
+                  requestedAt: '2026-10-10T09:00:00.000000Z',
+                  amountMinor: '750000',
+                  state: 'reversed',
+                }),
               ],
             },
           },
@@ -396,12 +402,29 @@ test('progress follows the real state only', async ({ page }, testInfo) => {
   // The bank is the one recorded on the withdrawal; a row without one says nothing of a bank.
   await expect(paid).toContainText('to GTBank ••6789');
   await expect(moving).not.toContainText('••');
-  await expect(
-    history.getByRole('listitem').filter({ hasText: '₦12,500' }),
-  ).toContainText('the money is back in your balance');
+  const failed = history.getByRole('listitem').filter({ hasText: '₦12,500' });
+  await expect(failed).toContainText('the money is back in your balance');
   await expect(
     history.getByRole('listitem').filter({ hasText: '••' }),
   ).toHaveCount(1);
+  // The ledger: each row's state is a stamp in its own words (capitals are only CSS).
+  await expect(moving.locator('.tm-stamp')).toHaveText('On its way');
+  await expect(paid.locator('.tm-stamp')).toHaveText('Paid');
+  await expect(failed.locator('.tm-stamp')).toHaveText('Failed');
+  // Only a row the API reports failed says what came back, and with that row's amount.
+  await expect(failed.locator('.withdraw__back')).toHaveText(
+    'Back in your balance: ₦12,500',
+  );
+  await expect(history.locator('.withdraw__back')).toHaveCount(1);
+  const reversed = history.getByRole('listitem').filter({ hasText: '₦7,500' });
+  await expect(reversed.locator('.tm-stamp')).toHaveText('Reversed');
+  await expect(reversed.locator('.withdraw__back')).toHaveCount(0);
+  await expect(reversed).not.toContainText('Back in your balance');
+  // Rows are history: nothing in the ledger is announced.
+  await expect(failed).not.toHaveAttribute('role', /.+/);
+  await expect(
+    history.locator('ol [role="alert"], ol [role="status"]'),
+  ).toHaveCount(0);
   await expectAccessible(page);
 });
 
@@ -536,6 +559,32 @@ test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
   // the ledger, in that order, and nothing wider than the screen.
   await page.setViewportSize({ width: 320, height: 720 });
   await fakeBalance(page, '540000');
+  // The ledger at 320px: an open row with its step lamps, a failed row's line, long bank names.
+  await page.route('**/v1/me/withdrawals*', (route) =>
+    route.request().method() !== 'GET'
+      ? route.continue()
+      : route.fulfill({
+          json: {
+            data: {
+              nextCursor: null,
+              items: [
+                withdrawal({
+                  payoutId: 'w1',
+                  amountMinor: '2000000',
+                  state: 'in_review',
+                  bank: { bankName: LONG_NAME, last4: '6789' },
+                }),
+                withdrawal({
+                  payoutId: 'w2',
+                  amountMinor: '125000000',
+                  state: 'failed',
+                  bank: { bankName: UNBROKEN_NAME, last4: '6789' },
+                }),
+              ],
+            },
+          },
+        }),
+  );
   const states: [string, Record<string, unknown>, string | null][] = [
     [
       'ready',
@@ -555,6 +604,7 @@ test('the withdraw page fits a phone, clear of the tab bar @mobile', async ({
     await fakeQuote(page, quote);
     await page.goto('/dashboard/withdraw');
     await expect(meter(page)).toBeVisible();
+    await expect(page.locator('.withdraw__back')).toBeVisible();
     expect(await fitsViewport(page), name).toBe(true);
     const top = async (selector: string) =>
       (await page.locator(selector).first().boundingBox())!.y;

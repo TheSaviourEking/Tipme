@@ -14,9 +14,12 @@ import {
   Lamp,
   Skeleton,
   Slip,
+  Stamp,
   StandingWarning,
+  Steps,
   Surface,
 } from '@tipme/ui';
+import type { StampTone } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
 import { useWithdrawalInFlight } from '@/components/live/live-provider';
@@ -57,51 +60,59 @@ const requested = (iso: string) =>
     ? `Requested today at ${timeOf(iso)}.`
     : `Requested ${dateOf(iso)}.`;
 
+/** The three steps a withdrawal's lamps light, one by one, from the API's state only. */
+const STEPS = ['Requested', 'Sent to our payment partner', 'Paid'] as const;
+
 /**
- * What a withdrawal row says, only from the state the API reports. `steps` is how many of the
- * three are filled: requested, sent to our payment partner, paid.
+ * What a withdrawal row says, only from the state the API reports. `stamp` is the tone of the
+ * row's stamp; `steps` is how many of the three STEPS are filled.
  */
-function describe(row: WithdrawalRow) {
+function describe(row: WithdrawalRow): {
+  label: string;
+  stamp: StampTone;
+  steps: number;
+  note: string;
+} {
   switch (row.state) {
     case 'sent':
       return {
         label: 'Paid',
-        tone: 'ok',
+        stamp: 'ok',
         steps: 3,
         note: dateOf(row.paidAt ?? row.requestedAt),
       };
     case 'failed':
       return {
         label: 'Failed',
-        tone: 'bad',
+        stamp: 'bad',
         steps: 0,
         note: `${dateOf(row.requestedAt)}. It didn’t go through, so the money is back in your balance.`,
       };
     case 'reversed':
       return {
         label: 'Reversed',
-        tone: 'bad',
+        stamp: 'bad',
         steps: 0,
         note: `${dateOf(row.requestedAt)}. The payment was reversed. Your balance shows where the money is.`,
       };
     case 'in_review':
       return {
         label: 'Being checked',
-        tone: 'wait',
+        stamp: 'wait',
         steps: 2,
         note: `${requested(row.requestedAt)} Our payment partner is checking it.`,
       };
     case 'processing':
       return {
         label: 'On its way',
-        tone: 'wait',
+        stamp: 'wait',
         steps: 2,
         note: `${requested(row.requestedAt)} Sent to our payment partner.`,
       };
     default:
       return {
         label: 'Requested',
-        tone: 'wait',
+        stamp: 'wait',
         steps: 1,
         note: `${requested(row.requestedAt)} Waiting to be sent.`,
       };
@@ -131,36 +142,34 @@ function History({
       ) : rows.length === 0 ? (
         <p className="tm-hint">Withdrawals you make will be listed here.</p>
       ) : (
-        <ol>
+        <ol className="withdraw__rows">
           {rows.map((row) => {
             const view = describe(row);
             const open = view.steps > 0 && view.steps < 3;
+            const bank = bankLine(row.bank);
+            // History, not news: a row has no live role, so nothing here is announced.
             return (
               <li key={row.payoutId} className="withdraw__row" data-open={open}>
-                <div className="withdraw__row-head">
-                  <strong>{formatNaira(row.amountMinor)}</strong>
-                  <span
-                    className={`withdraw__state withdraw__state--${view.tone}`}
-                  >
-                    {view.label}
-                  </span>
-                </div>
+                <span className="withdraw__amount">
+                  {formatNaira(row.amountMinor)}
+                </span>
+                <Stamp tone={view.stamp}>{view.label}</Stamp>
                 {open && (
-                  <ol aria-label="Progress" className="withdraw__steps">
-                    {[1, 2, 3].map((step) => (
-                      <li key={step} data-filled={step <= view.steps}>
-                        <span className="sr-only">
-                          Step {step} of 3,{' '}
-                          {step <= view.steps ? 'done' : 'not yet'}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
+                  <Steps
+                    className="withdraw__steps"
+                    labels={STEPS}
+                    filled={view.steps}
+                  />
                 )}
-                <p>{view.note}</p>
-                {bankLine(row.bank) && (
-                  <p className="tm-hint">{bankLine(row.bank)}</p>
+                <p className="withdraw__note">{view.note}</p>
+                {/* Proven: a failed payout is released and its amount no longer reserved
+                    (withdraw-and-audit plan, money-safety proofs). Only on a row the API reports failed. */}
+                {row.state === 'failed' && (
+                  <p className="withdraw__back">
+                    Back in your balance: {formatNaira(row.amountMinor)}
+                  </p>
                 )}
+                {bank && <p className="withdraw__bank">{bank}</p>}
               </li>
             );
           })}
@@ -172,7 +181,7 @@ function History({
         </p>
       )}
       {next && (
-        <Button variant="secondary" onClick={onMore}>
+        <Button variant="secondary" className="withdraw__more" onClick={onMore}>
           Show more
         </Button>
       )}

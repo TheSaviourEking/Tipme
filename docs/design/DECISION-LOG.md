@@ -388,6 +388,7 @@ the appreciation moment) is unchanged.
 - **Reduced motion.** The still scene (card on the table, stamp in place, three hearts beside it), no vibration, the same hand-over.
 - **No sound** in this change. The stamp sound is a separate change, held for the owner.
 
+
 ## 2026-11-05 — Withdraw, redesigned
 
 - **Owner's approval, 5 Nov 2026.** A visual and copy decision, not a legal, regulatory or provider approval; no D-item in `docs/00-DECISIONS.md` changes, and nothing about fees, the ₦2,000 minimum, payouts, the ledger or the partner quote cache changes. Boards: `docs/design/redesign/boards/WithdrawRedesign.dc.html` and `ScreenAudit.dc.html`. Plan: `docs/superpowers/plans/2026-11-05-withdraw-and-audit.md` (PRs W1 and W2).

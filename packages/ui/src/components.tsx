@@ -572,6 +572,28 @@ export function EmptyWell({
   );
 }
 
+export type StampTone = 'wait' | 'ok' | 'bad' | 'ink';
+
+/**
+ * A state's word as an ink stamp beside a row (WithdrawRedesign ledger). Unlike a slip's stamp,
+ * its word IS the state, so it is read aloud: capitals come from CSS, never the text.
+ */
+export function Stamp({
+  tone,
+  children,
+  className,
+}: {
+  tone: StampTone;
+  children: string;
+  className?: string;
+}) {
+  return (
+    <span className={classes('tm-stamp', `tm-stamp--${tone}`, className)}>
+      {children}
+    </span>
+  );
+}
+
 /**
  * Progress as lamps in wells (FeedbackMoments "Withdrawal requested"): lamps fill one by one, from
  * the API's state only. A failure lights the first lamp red and leaves the others dark.

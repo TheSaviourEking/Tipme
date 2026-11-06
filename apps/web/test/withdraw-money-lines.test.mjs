@@ -39,19 +39,59 @@ test('“back in your balance” appears only on Withdraw and in the design-syst
     );
 });
 
+/** The failed row's own line: from `row.state === 'failed' && (` to the `)}` after its `</p>`. */
+const FAILED_GUARD = "row.state === 'failed' && (";
+function failedGuard() {
+  const from = view.indexOf(FAILED_GUARD);
+  if (from === -1) return null;
+  const close = view.indexOf('</p>', from);
+  assert.notEqual(close, -1, 'the failed line is one paragraph');
+  const to = view.indexOf(')}', close);
+  assert.doesNotMatch(
+    view.slice(close + '</p>'.length, to),
+    /<|\{/,
+    'nothing else is guarded',
+  );
+  return { from, to };
+}
+
 test('on Withdraw, a balance line or a safe line is only in the failed row', () => {
-  // Every such line sits under `case 'failed':` in describe(), before the next case.
+  // Every such line sits under `case 'failed':` in describe(), before the next case, or inside
+  // the ledger's one `row.state === 'failed' && (…)` expression.
+  const guard = failedGuard();
   for (const pattern of [/back in your balance/gi, /\bsafe=/g]) {
     for (const match of view.matchAll(pattern)) {
       const before = view.slice(0, match.index);
       const lastCase = [...before.matchAll(/case '([a-z_]+)':/g)].at(-1);
       const describeEnd = view.indexOf('function History');
+      const inDescribe =
+        lastCase && lastCase[1] === 'failed' && match.index < describeEnd;
+      const inGuard =
+        guard !== null && match.index > guard.from && match.index < guard.to;
       assert.ok(
-        lastCase && lastCase[1] === 'failed' && match.index < describeEnd,
+        inDescribe || inGuard,
         `${match[0]} at ${match.index} is outside the failed row`,
       );
     }
   }
+});
+
+test('“Back in your balance” is written only for a failed row, once, with that row’s amount', () => {
+  const lines = [...view.matchAll(/Back in your balance:/g)];
+  assert.equal(lines.length, 1, 'one “Back in your balance:” line');
+  const guard = failedGuard();
+  assert.ok(guard, `the line is guarded by ${FAILED_GUARD}`);
+  assert.equal(
+    view.indexOf(FAILED_GUARD, guard.from + 1),
+    -1,
+    'one failed guard',
+  );
+  const expression = view.slice(guard.from, guard.to);
+  assert.match(
+    expression,
+    /Back in your balance: \{formatNaira\(row\.amountMinor\)\}/,
+  );
+  assert.ok(lines[0].index > guard.from && lines[0].index < guard.to);
 });
 
 test('the unconfirmed slip carries no safe line and no money words', () => {
