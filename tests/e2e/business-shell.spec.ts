@@ -59,7 +59,10 @@ test('a seeded owner sees Business; a seeded member sees Work; both pages pass e
   await expect(page.getByTestId('business-status')).toHaveText(
     'Waiting to be verified',
   );
-  await expect(page.getByText('Nothing to set up here yet.')).toBeVisible();
+  // PR B1 fills the page from the business's detail: its Details section shows.
+  await expect(
+    page.getByRole('heading', { level: 2, name: 'Details' }),
+  ).toBeVisible();
   await page
     .getByLabel('Business', { exact: true })
     .selectOption({ label: 'The Yellow Chilli' });

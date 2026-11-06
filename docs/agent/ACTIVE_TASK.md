@@ -30,6 +30,7 @@
 - Next: owner review; the controller pushes a draft PR and follows CI's full e2e suite. Then PR 4 (the recipient's list). Turning `SUPPORTER_RECOGNITION` on in production is the owner's call under D-07.
 - Evidence: `.superpowers/program/pro3-report.md` (main checkout).
 
+
 # Current task — states and feedback, PR B public (5 November 2026)
 
 - Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.
@@ -60,6 +61,12 @@
 - Branch/worktree: `feat/qr-studio-restyle` / `.worktrees/qr-studio`, test lane 4, from `origin/dev` at `246bebb`. Committed, not pushed. Front end only: no API, contract, migration or payment change.
 - Done: Tasks 4.0 to 4.4 of the public boards plan (PR 4): the code on a paper panel (`.qr-studio__panel`); the one status line directly under the Upgrade panel, before the style lists, at every width; designs in Patterns, Cards and Photo by the API's `kind` (`lib/qr-groups.ts`); the Free card lettered in Manrope (`lib/brand-font.ts`, `drawQrCard`'s `fontFamily`). The `QrStudio.dc.html` board was not on disk to copy.
 - Next: the controller pushes the branch as a draft PR; CI runs the full e2e suite. Then PR 5 (QR print) builds on `qr-card.ts` and the QR CSS block. Evidence: `.superpowers/program/pub4-report.md` (main checkout).
+
+# Current task — TipMe for businesses, PR B1: applying for a business, locations and managers (6 November 2026)
+
+- Branch/worktree: `feat/business-b1` / `.worktrees/business-b1`, off local `feat/business-b0` (not yet merged), test lane 4. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 6–7 plus the owner's answer Q3.
+- Done: `business-manage.ts` (apply, detail, edit, add/edit/close location, list/remove managers) and the eight `/v1/me/businesses` routes; `business_apply` rate limit (10 an hour per person); `/health/release` carries `business`; `/for-businesses` and the header's "Businesses" choice follow it (create a business when on, the coming-soon form when off); `/dashboard/business/apply`; the Details, Locations and Managers sections; Home's "Add your business".
+- Next: coordinator review; rebase onto dev once B0 merges; the full e2e suite on CI. Verifying a business is PR B2; inviting managers is PR B3.
 
 # Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
 

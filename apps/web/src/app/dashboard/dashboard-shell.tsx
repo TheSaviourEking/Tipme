@@ -22,6 +22,7 @@ import {
 } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
 import { businessLinks, loadBusinessRoles } from '@/lib/business/roles-api';
+import { BUSINESS_ROLES_CHANGED } from '@/lib/business/setup-api';
 
 /**
  * The dashboard's navigation: a segmented control on a desktop, the fixed four-item tab bar on a
@@ -89,7 +90,14 @@ export function DashboardShell({
   // Once per dashboard load: while BUSINESS_ENABLED is off the API answers 404 and no link shows.
   const [business, setBusiness] = useState({ business: false, work: false });
   useEffect(() => {
-    void loadBusinessRoles().then((roles) => setBusiness(businessLinks(roles)));
+    const refresh = () =>
+      void loadBusinessRoles().then((roles) =>
+        setBusiness(businessLinks(roles)),
+      );
+    refresh();
+    // Again after creating a business (PR B1), so its Business link shows without a reload.
+    window.addEventListener(BUSINESS_ROLES_CHANGED, refresh);
+    return () => window.removeEventListener(BUSINESS_ROLES_CHANGED, refresh);
   }, []);
 
   // Read on every page change too, so a finished setup clears its notice on the next click.

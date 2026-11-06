@@ -10555,6 +10555,129 @@ p.tip-choice:focus-visible {
 /* business:B0 end */
 
 /* business:B1 start */
+/* PR B1: create a business, its details, locations and managers; the create card on
+   /for-businesses. Mobile-first: one column, keys wrap. */
+.business-card__create {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.business-card__create p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.business-card__create .business-card__big {
+  color: var(--text-primary);
+  font: 400 2.25rem / 1.05 var(--font-editorial);
+}
+
+.business-apply,
+.business-apply__form,
+.business-details,
+.business-details__form,
+.business-locations,
+.business-location__form,
+.business-managers {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 36rem;
+}
+
+.business-apply__group {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.business-apply__group legend {
+  padding: 0 var(--space-2) 0 0;
+  font-size: var(--text-base);
+}
+
+.business-apply__send,
+.business-details__send {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.business-standing {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.business-standing span {
+  color: var(--text-secondary);
+}
+
+.business-locations__list,
+.business-managers__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-location,
+.business-manager {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+}
+
+.business-location__text,
+.business-manager__text {
+  display: grid;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.business-location__keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.business-location__confirm,
+.business-manager__confirm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.business-location__confirm p,
+.business-manager__confirm p {
+  margin: 0;
+}
+
+.add-business-link {
+  margin: 0;
+}
+
+.business-details__locked {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.business-details__locked p {
+  margin: 0;
+}
+
+@media (min-width: 40rem) {
+  .business-manager {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
 /* business:B1 end */
 
 /* business:B2 start */

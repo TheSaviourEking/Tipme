@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { siteOrigin } from '@/lib/metadata';
 import { Navigation } from '@/components/navigation';
+import { BusinessesWho } from '@/components/business/businesses-who';
 import { Footer } from '@/components/footer';
 import { UpdateNotice } from '@/components/update-notice';
 import { WebVitalsReporter } from '@/components/web-vitals-reporter';
@@ -47,7 +48,7 @@ export default function RootLayout({
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <Navigation />
+        <Navigation businesses={<BusinessesWho />} />
         {children}
         <Footer />
         <UpdateNotice />

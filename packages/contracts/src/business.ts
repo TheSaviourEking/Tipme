@@ -102,7 +102,15 @@ const slug = (max: number) =>
   });
 /** `/b/<slug>` (M7): locked once the business is verified. */
 export const businessSlugSchema = slug(40);
-export const locationSlugSchema = slug(30);
+/**
+ * Location slugs a business can't take: `/b/<business>/people` is the public "I don't see them"
+ * search (PR B4), matched before `/b/<business>/<location>`, so a location with it could never open.
+ */
+export const RESERVED_LOCATION_SLUGS = ['people'] as const;
+export const locationSlugSchema = slug(30).refine(
+  (value) => !(RESERVED_LOCATION_SLUGS as readonly string[]).includes(value),
+  { message: 'That address is kept for TipMe. Try another.' },
+);
 
 const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
 const phoneSchema = z

@@ -21,6 +21,7 @@ import {
   invitationRequestSchema,
   inviteeQuerySchema,
   locationInputSchema,
+  locationUpdateSchema,
   memberDisplaySchema,
   noteReportSchema,
   shareAmountsSchema,
@@ -295,4 +296,26 @@ test('the business notification kinds and error codes exist', () => {
     assert.ok(apiErrorCodes.includes(code), code);
   // Answered as "not found", so another business's id reads exactly like an unknown one.
   assert.ok(!apiErrorCodes.includes('NOT_A_MANAGER'));
+});
+
+test('a location can never be slugged "people": that path is the public search (B4)', () => {
+  for (const slug of ['people', 'PEOPLE', ' people '])
+    assert.ok(
+      !locationInputSchema.safeParse({ name: 'P', slug, address: 'x' }).success,
+      slug,
+    );
+  assert.ok(
+    !locationUpdateSchema.safeParse({ slug: 'people' }).success,
+    'nor renamed to it',
+  );
+  assert.ok(
+    locationInputSchema.safeParse({ name: 'P', slug: 'people-2', address: 'x' })
+      .success,
+  );
+  // A business may still be called "people": only the location segment is taken.
+  assert.ok(businessSlugSchema.safeParse('people').success);
+});
+
+test('a verified business can not be renamed: BUSINESS_NAME_LOCKED is a code of its own', () => {
+  assert.ok(apiErrorCodes.includes('BUSINESS_NAME_LOCKED'));
 });

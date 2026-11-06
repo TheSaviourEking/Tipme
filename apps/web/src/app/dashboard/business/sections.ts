@@ -1,5 +1,8 @@
 import type { BusinessDetail } from '@tipme/contracts';
 import type { JSX } from 'react';
+import { DetailsCard } from './sections/details';
+import { LocationsCard } from './sections/locations';
+import { ManagersCard } from './sections/managers';
 
 /**
  * The Business page's sections (PR B0 registry). Each lane adds its own lines here and nothing
@@ -9,9 +12,20 @@ import type { JSX } from 'react';
 export type BusinessSection = {
   id: string;
   title: string;
-  Card: (props: { business: BusinessDetail }) => JSX.Element;
+  /**
+   * `onChange` hands the page a business a write answered with (PR B1), so every section and the
+   * page's heading show it at once.
+   */
+  Card: (props: {
+    business: BusinessDetail;
+    onChange?: (next: BusinessDetail) => void;
+  }) => JSX.Element;
   /** Shown to owners only. */
   needs?: 'owner';
 };
 
-export const BUSINESS_SECTIONS: readonly BusinessSection[] = [];
+export const BUSINESS_SECTIONS: readonly BusinessSection[] = [
+  { id: 'details', title: 'Details', Card: DetailsCard },
+  { id: 'locations', title: 'Locations', Card: LocationsCard },
+  { id: 'managers', title: 'Managers', Card: ManagersCard },
+];

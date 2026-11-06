@@ -1,4 +1,5 @@
 'use client';
+import { AddBusinessLink } from '@/components/business/add-business-link';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type {
@@ -365,6 +366,7 @@ export default function DashboardHome() {
           </Link>
         )}
         <Moments />
+        <AddBusinessLink />
       </aside>
     </div>
   );

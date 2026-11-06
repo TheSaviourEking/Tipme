@@ -104,6 +104,8 @@ export const apiErrorCodes = [
   'BUSINESS_SLUG_TAKEN',
   'LOCATION_SLUG_TAKEN',
   'SLUG_LOCKED',
+  // A verified business's name was checked by TipMe: it is locked like its slugs.
+  'BUSINESS_NAME_LOCKED',
   'OWNER_REQUIRED',
   'INVITATION_INVALID',
   'INVITATIONS_BLOCKED',

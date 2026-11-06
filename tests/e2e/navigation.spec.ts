@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-// Owner, 2 Nov 2026: the header asks "Who it's for" and answers with three choices. Businesses and
-// infrastructure are not open yet, so they say so; infrastructure has no page to go to.
+// Owner, 2 Nov 2026: the header asks "Who it's for" and answers with three choices. Infrastructure
+// is not open yet, so it says so and has no page to go to. Businesses follows BUSINESS_ENABLED
+// (PR B1): the e2e stack has it on, so it reads "Businesses"; "Businesses (coming soon)" while it is
+// off is tested on a stand-in stack in business-setup.spec.ts.
 
 test("Who it's for opens a menu of individuals, businesses and infrastructure", async ({
   page,
@@ -17,7 +19,7 @@ test("Who it's for opens a menu of individuals, businesses and infrastructure", 
     '/for-creators',
   );
   await expect(
-    nav.getByRole('link', { name: /^Businesses \(coming soon\)/ }),
+    nav.getByRole('link', { name: /^Businesses\s*Create your business/ }),
   ).toHaveAttribute('href', '/for-businesses');
   // Infrastructure is words only: nothing to click until there is somewhere to go.
   await expect(nav.getByText('Infrastructure (coming soon)')).toBeVisible();
@@ -41,7 +43,7 @@ test(
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
     const items = [
       nav.getByRole('link', { name: /^Individuals/ }),
-      nav.getByRole('link', { name: /^Businesses \(coming soon\)/ }),
+      nav.getByRole('link', { name: /^Businesses\s*Create your business/ }),
       nav.getByText('Infrastructure (coming soon)'),
     ];
     for (const item of items) {

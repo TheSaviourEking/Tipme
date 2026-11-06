@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type {
   BusinessDetail,
@@ -36,7 +37,14 @@ export function BusinessView() {
   useEffect(() => {
     void loadBusinessRoles().then((loaded) => {
       setRoles(loaded);
-      setChosen(loaded?.manages[0]?.businessId ?? null);
+      // `?business=` (after creating one) chooses it, when this person manages it.
+      const asked = new URLSearchParams(window.location.search).get('business');
+      const manages = loaded?.manages ?? [];
+      setChosen(
+        manages.find((entry) => entry.businessId === asked)?.businessId ??
+          manages[0]?.businessId ??
+          null,
+      );
     });
   }, []);
 
@@ -60,10 +68,10 @@ export function BusinessView() {
   return (
     <div className="dashboard-section business-page">
       <header className="business-page__head">
-        <h1>{current ? current.name : 'Business'}</h1>
+        <h1>{detail?.name ?? current?.name ?? 'Business'}</h1>
         {current && (
           <p className="tm-hint" data-testid="business-status">
-            {STATUS_WORDS[current.status]}
+            {STATUS_WORDS[detail?.status ?? current.status]}
           </p>
         )}
       </header>
@@ -85,7 +93,14 @@ export function BusinessView() {
         </div>
       )}
       {!current ? (
-        <EmptySlip title="You don’t manage a business on TipMe.">
+        <EmptySlip
+          title="You don’t manage a business on TipMe."
+          action={
+            roles ? (
+              <Link href="/dashboard/business/apply">Create your business</Link>
+            ) : undefined
+          }
+        >
           <p>When you do, its locations, team and codes show here.</p>
         </EmptySlip>
       ) : detail ? (
@@ -99,7 +114,10 @@ export function BusinessView() {
             className="business-section"
           >
             <h2 id={`${id}-title`}>{title}</h2>
-            <Card business={detail} />
+            <Card
+              business={detail}
+              onChange={(next) => setLoaded({ id: next.id, detail: next })}
+            />
           </section>
         ))
       ) : (
