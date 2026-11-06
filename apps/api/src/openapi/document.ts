@@ -55,6 +55,8 @@ const OTHER_ACCESS: Record<string, string> = {
   MockWebhookController: 'provider-signature',
   BachsWebhookController: 'provider-signature',
   MailWebhookController: 'provider-signature',
+  // CI (merges and deploys): a signature over the raw body with the changelog secret.
+  ChangelogWebhookController: 'ci-signature',
   // The release check: a bearer token, and only on copies that say RELEASE_KIND=test.
   ReleaseRunsController: 'release-token',
 };

@@ -75,6 +75,7 @@ export * from './operations/live-switch.js';
 export * from './operations/withdrawals-switch.js';
 export * from './operations/market.js';
 export * from './operations/release-runs.js';
+export * from './operations/changelog.js';
 export * from './backup/backup.js';
 export * from './operations/message-flags.js';
 export * from './operations/profile-reports.js';

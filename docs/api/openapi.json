@@ -14705,6 +14705,102 @@
         "x-tipme-access": "provider-signature"
       }
     },
+    "/v1/webhooks/changelog/drafts": {
+      "post": {
+        "operationId": "ChangelogWebhook.drafts",
+        "tags": [
+          "ChangelogWebhook"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "ci-signature",
+        "x-tipme-rate-limit": "changelog_ingest"
+      }
+    },
+    "/v1/webhooks/changelog/pending": {
+      "post": {
+        "operationId": "ChangelogWebhook.pending",
+        "tags": [
+          "ChangelogWebhook"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "ci-signature",
+        "x-tipme-rate-limit": "changelog_ingest"
+      }
+    },
+    "/v1/webhooks/changelog/releases": {
+      "post": {
+        "operationId": "ChangelogWebhook.releases",
+        "tags": [
+          "ChangelogWebhook"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "ci-signature",
+        "x-tipme-rate-limit": "changelog_ingest"
+      }
+    },
     "/v1/webhooks/mail/{provider}": {
       "post": {
         "operationId": "MailWebhook.receive",

@@ -13,6 +13,7 @@ import { requestContext } from './http/request-context.middleware.js';
 import { previewGate } from './http/preview-gate.middleware.js';
 import { SERVICE_NAME, type ApiConfig } from './config.js';
 import { mailWebhookBody } from './mail/raw-body.middleware.js';
+import { changelogWebhookBody } from './changelog/changelog-body.middleware.js';
 import { liveGate } from './live/live-gate.middleware.js';
 import { LiveHubService } from './live/live-hub.service.js';
 
@@ -105,6 +106,7 @@ export async function createApp(
     }),
   );
   app.use(mailWebhookBody);
+  app.use(changelogWebhookBody);
   app.useBodyParser('json', { limit: '16kb' });
   app.useGlobalFilters(
     new ApiExceptionFilter(

@@ -40,7 +40,8 @@ type RateLimitedRoute =
   | 'live_connect_user'
   | 'business_public'
   | 'business_note'
-  | 'business_apply';
+  | 'business_apply'
+  | 'changelog_ingest';
 
 // Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
 const BANK_RESOLVES_PER_USER_PER_DAY = 10;
@@ -50,6 +51,8 @@ const LIVE_CONNECTS_PER_USER_PER_MIN = 30;
 // Applying for a business (PR B1), per signed-in person: each one opens an issue for TipMe staff.
 // A real owner applies once or twice; a script filling the staff inbox stops here.
 const BUSINESS_APPLICATIONS_PER_USER_PER_HOUR = 10;
+// CI's signed changelog calls, per address per minute: a deploy makes two, a merge one.
+const CHANGELOG_INGEST_PER_MIN = 60;
 
 type LimitedRequest = Request & { auth?: { userId: string } };
 
@@ -214,6 +217,11 @@ export class RateLimitGuard implements CanActivate {
       qr_thumb: {
         limit: this.config.RATE_LIMIT_QR_THUMBS_PER_HOUR,
         windowMs: 3_600_000,
+      },
+      // Counted before the signature check, so a flood of unsigned calls stops here too.
+      changelog_ingest: {
+        limit: CHANGELOG_INGEST_PER_MIN,
+        windowMs: 60_000,
       },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
