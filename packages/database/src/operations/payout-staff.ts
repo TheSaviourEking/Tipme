@@ -28,8 +28,8 @@ import {
   type FoundPayout,
   type PayoutStartLog,
 } from './payout-start.js';
-import { failPayoutByStaff, type PayoutFailure } from './payouts.js';
-import { personOf } from './owner.js';
+import { failPayoutByStaff, holdsOf, type PayoutFailure } from './payouts.js';
+import { ownerOf, type MoneyOwner } from './owner.js';
 
 /*
  * What staff can do about a withdrawal the system can't settle by itself (permission
@@ -101,7 +101,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, personOf(payout.profileId)),
+        holdsOf(ownerOf(payout), payout.createdAt),
         eq(withdrawalHolds.reason, 'account_takeover'),
       ),
     )
@@ -111,7 +111,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, personOf(payout.profileId)),
+        holdsOf(ownerOf(payout), payout.createdAt),
         isNull(withdrawalHolds.releasedAt),
       ),
     )
@@ -121,7 +121,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, personOf(payout.profileId)),
+        holdsOf(ownerOf(payout), payout.createdAt),
         or(
           isNull(withdrawalHolds.releasedAt),
           gte(withdrawalHolds.createdAt, payout.createdAt),
@@ -321,13 +321,18 @@ export async function withCurrentCase(
 export async function payoutCaseFacts(
   db: Database | Tx,
   issueId: string,
-): Promise<{ payoutId: string; status: string; profileId: string } | null> {
+): Promise<{
+  payoutId: string;
+  status: string;
+  /** A person's page, or (R2-B) a business's own withdrawal. */
+  owner: MoneyOwner;
+} | null> {
   const kase = await loadCase(db, issueId);
   return (
     kase && {
       payoutId: kase.payout.id,
       status: kase.payout.status,
-      profileId: personOf(kase.payout.profileId),
+      owner: ownerOf(kase.payout),
     }
   );
 }
@@ -603,10 +608,7 @@ export async function markFailedAfterRead(
         .for('update');
       const current = await loadCase(tx, input.issueId);
       if (!current || !offersFor(current, answer, now).markFailed) return false;
-      await failPayoutByStaff(tx, {
-        ...current.payout,
-        profileId: personOf(current.payout.profileId),
-      });
+      await failPayoutByStaff(tx, current.payout);
       await staffAudit(
         tx,
         input,

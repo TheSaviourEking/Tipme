@@ -139,6 +139,14 @@
 - The e2e spec answers B1's `GET /v1/me/businesses/:id` and B3's `GET /v1/me/work` with fixed shapes, since neither route is on this branch; the codes route is real.
 - Verified: commands and counts in `.superpowers/program/b8-report.md` (main checkout). Full e2e suite not run locally (overload ruling); CI runs it.
 
+# Current handoff — TipMe for businesses, PR R2-B (6 November 2026)
+
+- Branch `feat/business-r2-b`, lane 2, off local `feat/business-r2-a` (`92dff2ec`), committed, not pushed. No migration.
+- Money: a business's balance is the sum of its `business_payable` less its payouts in flight (`businessBalanceIn`). Its withdrawals run the person's code path (`packages/database/src/operations/payouts.ts` `requestFor`): replay before any partner read, owner check, switch, foreign-provider check, route, one partner read outside the transaction, then the `businesses` row lock, replay, owner re-check, switch, holds, `BALANCE_BELOW_ZERO`, min(ledger, partner − queued), ₦2,000 minimum, the `payouts.start` job. Paid debits `business_payable`. Person payouts, payloads and fingerprints are byte-identical to before.
+- Holds: no business holds exist (would need a migration). `holdsOf` counts any owner's `account_takeover` hold (owners removed after the payout was requested included at start time); a takeover freeze also opens `payout_held` for the owner's businesses' unstarted payouts. An `in_debt` failure on a business payout opens the issue without a hold.
+- Live partner: no business payment account is created, so a live quote reads `setup_needed` and requests refuse `PAYOUT_SETUP_NEEDED`. Shares are collected into the person's own partner account, so a business account would hold none of them (open question in the report).
+- Verified: commands and counts in `.superpowers/program/r2b-report.md` (main checkout). Full e2e not run locally (overload ruling); touched specs ran on lane 2.
+
 # Current handoff — TipMe for businesses, PR R2-A (6 November 2026)
 
 - Branch `feat/business-r2-a`, lane 6, off `feat/business-r2-0` (`f13146bb`), committed, not pushed. No migration.

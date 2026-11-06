@@ -4,6 +4,8 @@ import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { mailSealingProvider } from '../mail/mail-providers.provider.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
+import { CheckoutModule } from '../checkout/checkout.module.js';
+import { MailModule } from '../mail/mail.module.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { BusinessRolesController } from './business-roles.controller.js';
 import { BusinessManageController } from './business-manage.controller.js';
@@ -28,8 +30,9 @@ import {
  * is registered here by B0, so a lane changes only its own controller file.
  */
 @Module({
-  // ProfileRevalidator: shift changes refresh the business's public pages (B6).
-  imports: [ProfilesModule],
+  // ProfileRevalidator: shift changes refresh the business's public pages (B6). R2-B: a business's
+  // withdrawals use the person's payout provider and mail sealing.
+  imports: [ProfilesModule, CheckoutModule, MailModule],
   controllers: [
     BusinessRolesController,
     BusinessManageController,

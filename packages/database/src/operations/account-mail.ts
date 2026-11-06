@@ -2,6 +2,8 @@ import { SERIOUS_ACTION_WORDS, type SeriousAction } from '@tipme/contracts';
 import { eq, and, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   approvalRequests,
+  businesses,
+  businessManagers,
   paymentAttempts,
   payouts,
   profiles,
@@ -282,12 +284,41 @@ export function mailForDomainEvent(
       const payoutId = idOf(payload['payoutId']);
       if (!payoutId) return;
       const [payout] = await db
-        .select({ profileId: payouts.profileId, amount: payouts.amountMinor })
+        .select({
+          profileId: payouts.profileId,
+          businessId: payouts.businessId,
+          amount: payouts.amountMinor,
+        })
         .from(payouts)
         .where(eq(payouts.id, payoutId));
       if (!payout) return;
       const type =
         name === 'payout.paid' ? 'withdrawal_paid' : 'withdrawal_failed';
+      if (payout.businessId !== null) {
+        // A business's own withdrawal (R2-B): each of its owners is told, as only they can withdraw.
+        const owners = await db
+          .select({ userId: businessManagers.userId, name: businesses.name })
+          .from(businessManagers)
+          .innerJoin(businesses, eq(businesses.id, businessManagers.businessId))
+          .where(
+            and(
+              eq(businessManagers.businessId, payout.businessId),
+              eq(businessManagers.role, 'owner'),
+              isNull(businessManagers.removedAt),
+            ),
+          );
+        for (const owner of owners)
+          await mailOwner(db, sealing, {
+            userId: owner.userId,
+            type,
+            data: {
+              amountMinor: payout.amount.toString(),
+              businessName: owner.name,
+            },
+            dedupeKey: `${type}.${payoutId}.${owner.userId}`,
+          });
+        return;
+      }
       await mailOwner(db, sealing, {
         profileId: personOf(payout.profileId),
         type,

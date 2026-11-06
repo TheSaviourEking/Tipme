@@ -1159,3 +1159,55 @@ test('the security notices put “if this wasn’t you” in the black panel', (
       id,
     );
 });
+
+test("a business's withdrawal names the business in the body only, and links to its page (R2-B)", () => {
+  for (const id of ['withdrawal_paid', 'withdrawal_failed']) {
+    const out = renderMail(
+      id,
+      { amountMinor: '250000', businessName: 'The Yellow Chilli' },
+      ctx,
+    );
+    assert.match(out.text, /The Yellow Chilli/, id);
+    assert.match(out.subject, /business/, id);
+    assert.doesNotMatch(out.subject, /Yellow Chilli/, id);
+    assert.doesNotMatch(preheaderOf(out.html), /Yellow Chilli/, id);
+    assert.doesNotMatch(out.text, /your balance/, id);
+    // A person's own withdrawal reads as it always has.
+    const own = renderMail(id, { amountMinor: '250000' }, ctx);
+    assert.doesNotMatch(own.subject, /business/, id);
+  }
+  const failed = renderMail(
+    'withdrawal_failed',
+    { amountMinor: '250000', businessName: 'The Yellow Chilli' },
+    ctx,
+  );
+  assert.match(failed.text, /\/dashboard\/business/);
+});
+
+test("a business's bank change tells its owners which business, in the body only (R2-B)", () => {
+  const data = {
+    bankName: 'Guaranty Trust Bank',
+    last4: '1234',
+    previousBankName: 'Providus Bank',
+    previousLast4: '6789',
+  };
+  const out = renderMail(
+    'payout_destination_changed',
+    { ...data, businessName: 'The Yellow Chilli' },
+    ctx,
+  );
+  // Merge train 2: M2 redrew this email (facts rows, no sentence naming both banks), so the
+  // business's name is a facts row and the opening line (the preview) names no one.
+  assert.match(
+    out.text,
+    /The business’s next withdrawal goes to the new account/,
+  );
+  assert.match(out.text, /The Yellow Chilli/);
+  assert.doesNotMatch(out.subject, /Yellow Chilli/);
+  assert.doesNotMatch(preheaderOf(out.html), /Yellow Chilli/);
+  assert.match(out.subject, /business/);
+  const own = renderMail('payout_destination_changed', data, ctx);
+  assert.match(own.text, /Your next withdrawal goes to the new account/);
+  assert.doesNotMatch(own.text, /Business/);
+  assert.equal(own.subject, 'Your TipMe bank account changed');
+});

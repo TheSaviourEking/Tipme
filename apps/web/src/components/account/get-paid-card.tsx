@@ -53,8 +53,20 @@ function checkMessageFor(code: string): string {
 
 type Step = 'details' | 'code';
 
-/** The bank account withdrawals go to. Adding or changing one takes a code from the owner's email. */
-export function GetPaidCard() {
+/**
+ * The bank account withdrawals go to. Adding or changing one takes a code from the owner's email.
+ * A business's Money section (R2-B) reuses it with the business's own destination routes, which
+ * take the same requests and answer the same shapes.
+ */
+export function GetPaidCard({
+  destinationPath = '/v1/me/payout-destination',
+  anchor = 'get-paid',
+  intro = 'The bank account your withdrawals go to.',
+}: {
+  destinationPath?: string;
+  anchor?: string;
+  intro?: string;
+} = {}) {
   const id = useId();
   const [state, setState] = useState<
     | { kind: 'loading' }
@@ -80,7 +92,7 @@ export function GetPaidCard() {
 
   const load = useCallback(async () => {
     const [destination, banks] = await Promise.all([
-      apiFetch<PayoutDestinationState>('/v1/me/payout-destination'),
+      apiFetch<PayoutDestinationState>(destinationPath),
       apiFetch<PayoutBank[]>('/v1/payout-banks'),
     ]);
     setState(
@@ -93,7 +105,7 @@ export function GetPaidCard() {
           }
         : { kind: 'failed' },
     );
-  }, []);
+  }, [destinationPath]);
 
   useEffect(() => {
     void (async () => {
@@ -106,9 +118,9 @@ export function GetPaidCard() {
   // motion needs no special case; again once loaded, as the card's height has changed.
   const loaded = state.kind !== 'loading';
   useEffect(() => {
-    if (location.hash === '#get-paid')
-      document.getElementById('get-paid')?.scrollIntoView();
-  }, [loaded]);
+    if (location.hash === `#${anchor}`)
+      document.getElementById(anchor)?.scrollIntoView();
+  }, [loaded, anchor]);
 
   const resetForm = () => {
     setStep('details');
@@ -132,7 +144,7 @@ export function GetPaidCard() {
     async (claimed: string, bank: string, number: string) => {
       redraw();
       const result = await apiFetch<PayoutBankResolveResponse>(
-        '/v1/me/payout-destination/resolve',
+        `${destinationPath}/resolve`,
         { method: 'POST', body: { bankCode: bank, accountNumber: number } },
       );
       // Stored for its own pair: a late answer never shows against a newer number.
@@ -146,7 +158,7 @@ export function GetPaidCard() {
       );
       redraw();
     },
-    [checks],
+    [checks, destinationPath],
   );
   useEffect(() => {
     if (checks.claim(key)) void run(key, bankCode, accountNumber);
@@ -167,7 +179,7 @@ export function GetPaidCard() {
     }
     setBusy(true);
     setError('');
-    const result = await apiFetch('/v1/me/payout-destination/code', {
+    const result = await apiFetch(`${destinationPath}/code`, {
       method: 'POST',
     });
     setBusy(false);
@@ -190,7 +202,7 @@ export function GetPaidCard() {
     setBusy(true);
     setError('');
     const result = await apiFetch<PayoutDestinationView | null>(
-      '/v1/me/payout-destination',
+      destinationPath,
       {
         method: 'PUT',
         body: { bankCode, accountNumber, accountName, emailCode: code },
@@ -222,14 +234,14 @@ export function GetPaidCard() {
 
   if (state.kind === 'loading')
     return (
-      <Card id="get-paid" className="settings-section" aria-busy="true">
+      <Card id={anchor} className="settings-section" aria-busy="true">
         <h3>Get paid</h3>
         <p className="tm-hint">Checking your bank account…</p>
       </Card>
     );
   if (state.kind === 'failed')
     return (
-      <Card id="get-paid" className="settings-section">
+      <Card id={anchor} className="settings-section">
         <h3>Get paid</h3>
         <Notice tone="error" title="Couldn’t load your bank account">
           Please try again.
@@ -246,9 +258,9 @@ export function GetPaidCard() {
     (changing || !destination || destination.status === 'rejected');
 
   return (
-    <Card id="get-paid" className="settings-section">
+    <Card id={anchor} className="settings-section">
       <h3>Get paid</h3>
-      <p className="tm-hint">The bank account your withdrawals go to.</p>
+      <p className="tm-hint">{intro}</p>
       {destination && (
         <p role="status">
           {destination.bankName} ••{destination.last4}:{' '}

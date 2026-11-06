@@ -81,3 +81,11 @@ export async function businessBalanceIn(
     availableMinor: BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0'),
   };
 }
+
+/** A business's own balance (R2-B), for its owners. The caller checks the reader is one. */
+export function businessBalanceOf(
+  db: Database,
+  businessId: string,
+): Promise<{ availableMinor: bigint }> {
+  return guarded(() => businessBalanceIn(db, businessId));
+}

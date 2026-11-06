@@ -1,10 +1,18 @@
-import type { PartnerQuoteCache, PartnerQuoteEntries } from '@tipme/database';
+import type {
+  PartnerQuoteCache,
+  PartnerQuoteEntries,
+  PartnerQuoteScope,
+} from '@tipme/database';
 import type { Redis } from 'ioredis';
 import { withTimeout } from './timeout.js';
 
 export const PARTNER_QUOTE_CACHE = Symbol('PARTNER_QUOTE_CACHE');
 
-type Scope = { provider: string; profileId: string };
+type Scope = PartnerQuoteScope;
+
+/** A person's account by profile; a business's own (R2-B) by a name a profile id can't take. */
+const accountOf = (scope: Scope) =>
+  'businessId' in scope ? `business-${scope.businessId}` : scope.profileId;
 type CacheRedis = Pick<Redis, 'get' | 'set' | 'multi'>;
 
 // The entries' format. Raise it when what an entry means changes, so copies on either side of a
@@ -31,7 +39,7 @@ export class RedisPartnerQuoteCache implements PartnerQuoteCache {
   ) {}
 
   private key(scope: Scope, rest: string): string {
-    return `${FORMAT}:${this.options.prefix}:${scope.provider}:${scope.profileId}:${rest}`;
+    return `${FORMAT}:${this.options.prefix}:${scope.provider}:${accountOf(scope)}:${rest}`;
   }
 
   async open(scope: Scope): Promise<PartnerQuoteEntries | null> {
