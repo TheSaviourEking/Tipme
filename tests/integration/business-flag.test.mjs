@@ -68,3 +68,31 @@ test('with it off, a tip intent carrying businessMemberId is made and not labell
     business_location_id: null,
   });
 });
+
+test('with it off, the note routes (PR B5) are 404 like an unknown path', async () => {
+  const id = '0195a1b2-0000-7000-8000-000000000001';
+  const routes = [
+    ['POST', `/v1/tips/${id}/business-note`, { tags: ['fast'] }],
+    ['GET', '/v1/me/work/notes'],
+    ['POST', `/v1/me/work/notes/${id}/report`, { reason: 'spam' }],
+    ['POST', `/v1/me/businesses/${id}/notes/${id}/report`, { reason: 'spam' }],
+    ['POST', `/v1/ops/business-notes/${id}/reveal`, { reason: 'x'.repeat(12) }],
+    [
+      'POST',
+      `/v1/ops/business-notes/${id}/review`,
+      { outcome: 'removed', reason: 'x'.repeat(12) },
+    ],
+  ];
+  for (const [method, path, body] of routes) {
+    const response = await fetch(`${stack.api}${path}`, {
+      method,
+      headers: {
+        cookie: ada.cookie,
+        ...(body ? { 'content-type': 'application/json' } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    assert.equal(response.status, 404, path);
+    assert.equal((await response.json()).error.code, 'NOT_FOUND', path);
+  }
+});

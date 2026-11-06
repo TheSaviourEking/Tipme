@@ -1,12 +1,14 @@
 import {
   shownThanks,
   type PagePlan,
+  type TipBusinessNote,
   type TipStatusState,
   type TipStatusView,
 } from '@tipme/contracts';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { paymentAttempts, profiles, tipMessages, tips } from '../schema.js';
+import { noteWindowStart } from './business-notes.js';
 import { guarded } from './errors.js';
 
 /** After this long without an answer the supporter is told we are still checking. */
@@ -38,6 +40,7 @@ export function tipStatusView(
         thanksLine: profiles.thanksLine,
         thanksStyle: profiles.thanksStyle,
         thanksSigned: profiles.thanksSigned,
+        businessMemberId: tips.businessMemberId,
       })
       .from(tips)
       .innerJoin(profiles, eq(profiles.id, tips.profileId))
@@ -104,6 +107,32 @@ export function tipStatusView(
             displayName: tip.displayName,
           })
         : null;
+    // Only for a paid tip made at a business: may the supporter still leave their note (B5)?
+    // One small read; the receipt never waits on anything the note needs.
+    let businessNote: TipBusinessNote | null = null;
+    if (state === 'paid' && tip.businessMemberId && tip.completedAt) {
+      const rows = await db.execute<{
+        business: string;
+        person: string;
+        written: boolean;
+      }>(sql`
+        SELECT b.name AS business, bm.shown_name AS person,
+               EXISTS (SELECT 1 FROM business_notes n WHERE n.tip_id = ${tipId}) AS written
+          FROM business_members bm
+          JOIN business_locations l ON l.id = bm.location_id
+          JOIN businesses b ON b.id = l.business_id
+         WHERE bm.id = ${tip.businessMemberId}`);
+      const row = rows.rows[0];
+      if (row)
+        businessNote = {
+          business: row.business,
+          person: row.person,
+          written: row.written,
+          open:
+            !row.written &&
+            tip.completedAt.getTime() >= noteWindowStart(now).getTime(),
+        };
+    }
     return {
       state,
       recipient: { handle: tip.handle, displayName: tip.displayName },
@@ -113,6 +142,7 @@ export function tipStatusView(
       reference,
       ...(noteMayShow ? { noteMayShow: true as const } : {}),
       ...(thanks ? { thanks } : {}),
+      ...(businessNote ? { businessNote } : {}),
     };
   });
 }

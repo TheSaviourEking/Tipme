@@ -49,6 +49,8 @@ const PRETEND_ONLY = new Set([
 const OTHER_ACCESS: Record<string, string> = {
   // A supporter's receipt: the tip's own status token.
   StatusController: 'status-token',
+  // PR B5: the supporter's note after paying (its session routes are classed by their guard).
+  BusinessNotesController: 'status-token',
   // The payment provider: a signature over the raw body, with a replay window.
   MockWebhookController: 'provider-signature',
   BachsWebhookController: 'provider-signature',
