@@ -8810,7 +8810,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 20,
+                    "maxItems": 22,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8834,7 +8834,9 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "changelog.edit",
+                        "changelog.publish"
                       ]
                     }
                   }
@@ -8918,7 +8920,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 20,
+                    "maxItems": 22,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -8942,7 +8944,9 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "changelog.edit",
+                        "changelog.publish"
                       ]
                     }
                   }
@@ -9081,7 +9085,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 20,
+                    "maxItems": 22,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -9105,7 +9109,9 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "changelog.edit",
+                        "changelog.publish"
                       ]
                     }
                   }
@@ -9224,7 +9230,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 20,
+                    "maxItems": 22,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -9248,12 +9254,14 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "changelog.edit",
+                        "changelog.publish"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 20,
+                    "maxItems": 22,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -9277,7 +9285,9 @@
                         "email.export",
                         "payments.repair",
                         "staff.manage",
-                        "usernames.manage"
+                        "usernames.manage",
+                        "changelog.edit",
+                        "changelog.publish"
                       ]
                     }
                   }
@@ -10926,6 +10936,11 @@
                   "APPROVAL_EXPIRED",
                   "APPROVAL_STALE",
                   "APPROVAL_ALREADY_PENDING",
+                  "APPROVAL_NO_APPROVER",
+                  "CHANGELOG_SIGNATURE_INVALID",
+                  "CHANGELOG_EDITED_ELSEWHERE",
+                  "CHANGELOG_TEXT_NOT_ALLOWED",
+                  "CHANGELOG_NOT_FOUND",
                   "PAYOUT_CHANGED",
                   "SELF_ACCESS_CHANGE",
                   "ROLE_NAME_TAKEN",
