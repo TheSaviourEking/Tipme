@@ -4692,12 +4692,15 @@ body:has(.profile-page) .brand__mark {
   font-weight: 700;
 }
 
-/* The stamp: purple ink pressed across the card, a signature mark rather than a wash. */
+/*
+ * The stamp: purple ink pressed across the card's keys, a signature mark rather than a wash. It
+ * sits below the name and link so the card still says whose page it is.
+ */
 .claim-moment__stamp {
   position: absolute;
-  top: 46%;
-  left: 50%;
-  max-width: 88%;
+  top: 70%;
+  left: 54%;
+  max-width: 80%;
   padding: 0.3rem 0.6rem;
   overflow-wrap: anywhere;
   border: 3px solid var(--brand-primary);
