@@ -1,11 +1,13 @@
 import type { Page } from '@playwright/test';
-import { sql } from '../e2e/ops-helpers';
+import { openOpsLink, sql } from '../e2e/ops-helpers';
 import { standInBanks } from '../e2e/bank-fixtures';
 import { API_ORIGIN } from '../e2e/stack';
 
 /** What a screen needs before it can be shown: a signed-in recipient, with or without tips. */
 export interface ReviewContext {
   recipient(): Promise<{ handle: string }>;
+  /** A new owner, enrolled, in the admin area. */
+  owner(): Promise<unknown>;
   recipientWithTips(count: number): Promise<{ handle: string }>;
 }
 
@@ -822,4 +824,57 @@ export const SCREENS: ReviewScreen[] = [
     board: 'ScreenSmall',
     open: visit('/legal/terms'),
   },
+  // Admin (OpsShell, OpsPages): a new owner each time, in the frame. The pages are in the frame
+  // only so far; their own patterns come in later PRs, so these shots show the frame around them.
+  {
+    group: 'Admin',
+    name: 'Overview',
+    board: 'OpsShell',
+    async open(page, ctx) {
+      await ctx.owner();
+      await page.getByRole('heading', { name: 'Pending approvals' }).waitFor();
+      await page.waitForLoadState('networkidle');
+    },
+  },
+  {
+    group: 'Admin',
+    name: 'Menu',
+    board: 'OpsShell',
+    viewport: true,
+    async open(page, ctx) {
+      await ctx.owner();
+      const menu = page.getByRole('button', { name: /^Menu · / });
+      if (await menu.isVisible()) {
+        await menu.click();
+        await page.getByRole('dialog', { name: 'Admin menu' }).waitFor();
+      }
+    },
+  },
+  ...(
+    [
+      ['Approvals', 'OpsPages'],
+      ['Issues', 'OpsShell'],
+      ['Search', 'OpsPages'],
+      ['Pages', 'OpsPages'],
+      ['Usernames', 'OpsPages'],
+      ['Visibility', 'OpsPages'],
+      ['Market', 'OpsPages'],
+      ['Providers', 'OpsPages'],
+      ['Email', 'OpsPages'],
+      ['Audit log', 'OpsPages'],
+      ['People', 'OpsPages'],
+      ['Roles', 'OpsPages'],
+      ['Your access', 'OpsPages'],
+    ] as const
+  ).map(([name, board]): ReviewScreen => ({
+    group: 'Admin',
+    name,
+    board,
+    async open(page, ctx) {
+      await ctx.owner();
+      await openOpsLink(page, name);
+      await page.getByRole('heading', { level: 1 }).waitFor();
+      await page.waitForLoadState('networkidle');
+    },
+  })),
 ];

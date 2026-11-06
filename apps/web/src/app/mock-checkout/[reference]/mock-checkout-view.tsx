@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Notice, Skeleton } from '@tipme/ui';
+import { Skeleton, Slip } from '@tipme/ui';
 import { mockCheckoutPay, mockCheckoutSummary } from '@/lib/api-client';
 import { formatDemoAmount } from '@/lib/demo-amount';
 
@@ -78,9 +78,9 @@ export function MockCheckoutView() {
       </p>
       <h1 id="mock-provider-title">Confirm payment</h1>
       {failed && (
-        <Notice tone="error" title="Payment unavailable">
+        <Slip tone="error" title="Payment unavailable">
           {failed}
-        </Notice>
+        </Slip>
       )}
       {failed && retryable && !summary && (
         <button
