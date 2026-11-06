@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
-import { codeFor, codeWentStale, enrolOwner, sql } from './ops-helpers';
+import {
+  codeFor,
+  codeWentStale,
+  enrolOwner,
+  secondOwner,
+  sql,
+} from './ops-helpers';
 
 // One admin, truly alone: everyone else's staff row goes, and the global switch really changes.
 // So @alone tests are a run of their own, after the others (playwright.config.ts).
@@ -161,4 +167,64 @@ test('@alone a stale session can freeze and end sessions at once, and releasing 
     page.getByText('The issue is resolved. Withdrawals are released.'),
   ).toBeVisible();
   await expect(page.getByTestId('action-outcome')).toBeFocused();
+});
+
+// Alone, because every other owner in a parallel run could decide this person's requests too, and
+// their requests would show in the count.
+test('@alone a request a second owner can decide shows a count of one on their menu, and none on the asker’s', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  await enrolOwner(page, testInfo);
+  const asker = await secondOwner(browser, testInfo);
+  const approvals = (on: typeof page) =>
+    on
+      .getByRole('navigation', { name: 'Admin' })
+      .getByRole('link', { name: /^Approvals/ });
+  // Nothing waits yet: no count.
+  await expect(approvals(page)).toHaveAccessibleName('Approvals');
+  await expect(page.locator('.ops-frame__count')).toHaveCount(0);
+
+  await asker.page.goto(`/ops/pages?handle=${handle}`);
+  await asker.page.getByLabel('New TipMe fee (%)').fill('7');
+  await asker.page
+    .locator('form')
+    .filter({ has: asker.page.getByLabel('New TipMe fee (%)') })
+    .getByLabel('Reason')
+    .fill(REASON);
+  await asker.page.getByRole('button', { name: 'Set this page’s fee' }).click();
+  await expect(
+    asker.page.getByText('Waiting for a second person', { exact: true }),
+  ).toBeVisible();
+
+  await page.goto('/ops');
+  await expect(approvals(page)).toHaveAccessibleName(
+    'Approvals (1 waiting for you)',
+  );
+  await expect(approvals(page).locator('.ops-frame__count')).toHaveText('1');
+  await expectAccessible(page);
+
+  await asker.page.goto('/ops');
+  await expect(
+    asker.page.getByRole('heading', { name: 'Pending approvals' }),
+  ).toBeVisible();
+  await expect(approvals(asker.page)).toHaveAccessibleName('Approvals');
+  await expect(asker.page.locator('.ops-frame__count')).toHaveCount(0);
+
+  // A list that can't be read shows no count, never a wrong one, and the menu still works.
+  await page.route('**/v1/ops/approvals?status=pending', (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: { code: 'INTERNAL', message: 'x' } },
+    }),
+  );
+  await page.goto('/ops/staff');
+  await expect(approvals(page)).toHaveAccessibleName('Approvals');
+  await approvals(page).click();
+  await page.waitForURL(/\/ops\/approvals$/);
+  await asker.context.close();
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { opsMenu } from '../src/lib/ops-menu.ts';
+import { opsMenu, opsMenuCurrent, opsMenuGroups } from '../src/lib/ops-menu.ts';
 
 const hrefs = (permissions) => opsMenu(permissions).map((link) => link.href);
 
@@ -69,4 +69,66 @@ test('Usernames appears only with usernames.manage, right after Pages', () => {
       .label,
     'Usernames',
   );
+});
+
+const OWNER = [
+  'issues.view',
+  'analytics.view',
+  'pages.plan',
+  'usernames.manage',
+  'search.view',
+  'providers.manage',
+  'email.read',
+  'audit.view',
+  'staff.manage',
+];
+
+test('the menu comes in the board’s groups, in order', () => {
+  const groups = opsMenuGroups(OWNER);
+  assert.deepEqual(
+    groups.map((group) => group.label),
+    [null, 'Work', 'Numbers', 'Email and records', 'Staff'],
+  );
+  assert.deepEqual(
+    groups.map((group) => group.links.map((link) => link.label)),
+    [
+      ['Overview', 'Approvals'],
+      ['Issues', 'Search', 'Pages', 'Usernames'],
+      ['Visibility', 'Market'],
+      ['Providers', 'Email', 'Audit log'],
+      ['People', 'Roles', 'Your access'],
+    ],
+  );
+  // The flat menu is the groups read in order.
+  assert.deepEqual(
+    opsMenu(OWNER),
+    groups.flatMap((group) => group.links),
+  );
+});
+
+test('a group with nothing left is dropped', () => {
+  assert.deepEqual(
+    opsMenuGroups(['search.view']).map((group) => group.label),
+    [null, 'Work', 'Staff'],
+  );
+  assert.deepEqual(
+    opsMenuGroups([]).map((group) => group.label),
+    [null, 'Staff'],
+  );
+});
+
+test('the open page is its own link, or the section it sits in', () => {
+  const links = opsMenu(OWNER);
+  assert.equal(opsMenuCurrent(links, '/ops')?.label, 'Overview');
+  assert.equal(opsMenuCurrent(links, '/ops/staff')?.label, 'Your access');
+  assert.equal(opsMenuCurrent(links, '/ops/staff/people')?.label, 'People');
+  assert.equal(opsMenuCurrent(links, '/ops/issues/abc')?.label, 'Issues');
+  assert.equal(
+    opsMenuCurrent(links, '/ops/providers/confirm')?.label,
+    'Providers',
+  );
+  // Overview is never the section of another page.
+  assert.equal(opsMenuCurrent(links, '/ops/nowhere'), null);
+  // A page the menu doesn't offer this person has no link.
+  assert.equal(opsMenuCurrent(opsMenu([]), '/ops/issues/abc'), null);
 });
