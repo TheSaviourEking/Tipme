@@ -1,3 +1,12 @@
+# Current handoff — TipMe for businesses, PR B0 (6 November 2026)
+
+- Branch `feat/business-b0`, lane 6, committed, not pushed. One additive migration, `0078_business` (generated with drizzle-kit after rebuilding contracts; the owner grant for `businesses.manage` is appended by hand, as 0073 did). No backfill; tips gain two nullable columns and a check.
+- Money: unchanged. A tip made at a business still credits `tips.profile_id`; the member and location are a label no posting reads. A bad or stale `businessMemberId` is ignored. Fingerprints without a member are byte-identical to before; a retry after the membership ended replays the tip instead of conflicting.
+- Flag: `BUSINESS_ENABLED` is off by default (compose passes it as `false`). Off, every business route is 404 and the checkout drops `businessMemberId`. The e2e stack turns it on. The value is `true`, not `1`.
+- Lanes: each owns its controller file (registered empty in B0), its `sections.ts` lines, its `globals.css` markers (`business:B1` to `business:B8`) and its `apps/web/src/lib/business/<lane>-api.ts`. Seed with `packages/database/test/integration/business-fixtures.mjs` and `tests/e2e/business-fixtures.ts`.
+- Not done here (by design): `business.verify` is not in `SERIOUS_ACTIONS` yet, because the catalogue test needs every action wired; B2 adds it with its registration. `NotificationView` has no invitation id yet (B3 adds it with its notification writes).
+- Verified: commands and counts in `.superpowers/program/b0-report.md` (main checkout). The full e2e suite was not run locally (machine overload ruling); CI runs it.
+
 # Current handoff — animated covers (5 November 2026)
 
 - Branch/worktree: `feat/animated-covers` / `.worktrees/animated-covers`, merged with `origin/dev` at `1cb0cad`, committed, not pushed. Additive migration `0077_cover_animation` (journal idx 77; two nullable columns and a check, no backfill), regenerated with drizzle-kit after rebuilding `@tipme/contracts`. Deploy the API right after the web: in between, the old API's strict schema refuses `animation` with a 400.
