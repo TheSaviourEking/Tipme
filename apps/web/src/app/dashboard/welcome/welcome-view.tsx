@@ -25,6 +25,8 @@ import { Arrow } from '@/components/brand';
 import { takeClaimed } from '@/lib/claim-moment';
 import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
+import { onReconnect, sendWithOneRetry } from '@/lib/connection';
+import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { useSiteHost } from '@/lib/site-host';
 
 type Step = 'hello' | 'about' | 'bio' | 'live' | 'done';
@@ -129,24 +131,49 @@ export function WelcomeView() {
     heading.current?.focus();
   }, [step]);
 
+  // A save tapped offline goes when the connection is back (states plan, Task 16). Moving to
+  // another step, or leaving, cancels it.
+  const armed = useRef<(() => void) | null>(null);
+  const disarm = () => {
+    armed.current?.();
+    armed.current = null;
+  };
+  useEffect(() => disarm, []);
+  const whenOnline = (run: () => void) => {
+    disarm();
+    armed.current = onReconnect(window, () => {
+      armed.current = null;
+      run();
+    });
+  };
+
   const go = (next: Step) => {
+    disarm();
     setError('');
     setStep(next);
   };
 
   const save = async (patch: ProfilePatch, next: Step) => {
+    disarm();
+    if (!navigator.onLine) {
+      setError('We couldn’t save that. Check your connection and try again.');
+      whenOnline(() => void save(patch, next));
+      return;
+    }
     setBusy(true);
     setError('');
-    const result = await apiFetch<MyProfile>('/v1/me/profile', {
-      method: 'PATCH',
-      body: patch,
-    });
+    // The same PATCH twice leaves the same profile, so a dropped one is tried once more, quietly.
+    const { result } = await sendWithOneRetry('welcome-profile', () =>
+      apiFetch<MyProfile>('/v1/me/profile', { method: 'PATCH', body: patch }),
+    );
     setBusy(false);
     if (!result.ok) {
       setError(
         result.fields?.includes('displayName')
           ? 'Add the name people know you by.'
-          : 'We couldn’t save that. Check your connection and try again.',
+          : result.code === 'NETWORK'
+            ? CONNECTION_COPY.welcomeDropped
+            : CONNECTION_COPY.ourSide,
       );
       return;
     }
@@ -168,12 +195,22 @@ export function WelcomeView() {
   };
 
   const goLive = async () => {
+    disarm();
+    if (!navigator.onLine) {
+      setError(
+        'We couldn’t put your page online. You can try again, or do it later in Settings.',
+      );
+      whenOnline(() => void goLive());
+      return;
+    }
     setBusy(true);
     setError('');
-    const result = await apiFetch<MyProfile>('/v1/me/page/state', {
-      method: 'PUT',
-      body: { state: 'live' },
-    });
+    const { result } = await sendWithOneRetry('welcome-live', () =>
+      apiFetch<MyProfile>('/v1/me/page/state', {
+        method: 'PUT',
+        body: { state: 'live' },
+      }),
+    );
     setBusy(false);
     if (!result.ok) {
       setError(
