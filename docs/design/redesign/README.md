@@ -40,3 +40,5 @@ Where a board and a newer owner decision disagree, the decision wins:
 | `StatesMap`                 | States: every message on every screen and the pattern it becomes        |
 | `FeedbackMoments`           | Feedback: press, settle, shake and the withdrawal's step lamps           |
 | `SocialLinks`               | Social links: the editor in Settings and the public row (version 97, approved by the owner 5 Nov 2026) |
+| `WithdrawRedesign`          | Withdraw in every state (approved 5 Nov 2026)              |
+| `ScreenAudit`               | Every screen graded against the design rules (5 Nov 2026)  |

@@ -324,3 +324,14 @@ the appreciation moment) is unchanged.
 - **Freeze rules.** The cover pauses on the first use of the tip form and stays paused for that view; it also pauses off screen. Reduced motion, forced colours and print show the still frame.
 - **Lock.** The server refuses Pro-only choices from Free pages. A page that leaves Pro shows the still frame and keeps its choice.
 - **Performance.** Transform and opacity only; profile LCP stays under 2000ms in `pnpm perf:lab`.
+
+## 2026-11-05 — Withdraw, redesigned
+
+- **Owner's approval, 5 Nov 2026.** A visual and copy decision, not a legal, regulatory or provider approval; no D-item in `docs/00-DECISIONS.md` changes, and nothing about fees, the ₦2,000 minimum, payouts, the ledger or the partner quote cache changes. Boards: `docs/design/redesign/boards/WithdrawRedesign.dc.html` and `ScreenAudit.dc.html`. Plan: `docs/superpowers/plans/2026-11-05-withdraw-and-audit.md` (PRs W1 and W2).
+- **The dark instrument.** "Available" leads as a dark face (`--key-face-dark`, not purple) with editorial numerals and one lamp line for the state ("Ready to withdraw ₦X", from `withdrawableNow()`), the bank as a chip with Change. It carries no reassurance line.
+- **One slip or one standing warning** replaces the three stacked notice boxes: no bank is a slip stamped "Needs a bank" (ink, not purple: a slip's purple stamp stays for a confirmed outcome); a pause is a standing warning. The recovery-email reminder shows on Home and Settings only.
+- **Test mode is one pill in the header**, which opens its sentence ("No real money moves in test mode. The test bank pays straight away.").
+- **"Too small." before pressing.** An amount under the minimum that isn't the whole balance gets the field's red edge and "Too small. The smallest withdrawal is ₦2,000, or your whole balance if it’s less." when the field is left or submitted. Nothing is sent and the request key is untouched.
+- **The unconfirmed slip has no money words.** "We couldn’t confirm your withdrawal" (stamp "Not confirmed") and "This withdrawal may already be on its way" say nothing about money or the balance: the request may have arrived, and the key stays so the same amount again can't withdraw twice.
+- **Ledger stamps and "Back in your balance: ₦X"** (W2) only on rows the API reports as `failed`. Proof: a payout's ledger debit is posted only when it is paid, and a failed payout is released and no longer reserved (`packages/database/src/operations/payouts.ts`, `balance.ts`).
+- **The states plan's Task 12 (PR E, Withdraw) moved here**, to W1 and W2, with its money-line tests and key-keeping rules.
