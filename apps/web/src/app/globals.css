@@ -6048,6 +6048,8 @@ html:has(.confirm-dialog[open]) {
 
 /* QR studio (PR-008 Task 8). */
 .qr-studio {
+  /* The paper panel: a 22rem code plus the panel's own padding. */
+  --qr-panel: calc(22rem + 2 * var(--space-4));
   display: grid;
   gap: var(--space-4);
 }
@@ -6060,8 +6062,19 @@ html:has(.confirm-dialog[open]) {
 
 @media (min-width: 52rem) {
   .qr-studio__layout {
-    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, var(--qr-panel)) minmax(0, 1fr);
   }
+}
+
+/* The code is held on a raised paper panel (public boards, QR studio): the free card's canvas and a
+   Pro design's plate alike. Forced colours keep the panel's CanvasText edge (.tm-surface). */
+.qr-studio__panel {
+  display: grid;
+  gap: var(--space-3);
+  align-self: start;
+  width: 100%;
+  max-width: var(--qr-panel);
+  padding: var(--space-4);
 }
 
 .qr-preview {

@@ -13,7 +13,7 @@ import {
   type QrArtCatalogue,
   type QrArtItem,
 } from '@tipme/contracts';
-import { Button } from '@tipme/ui';
+import { Button, Surface } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
@@ -222,66 +222,68 @@ export function QrStudio() {
       <h1>My QR code</h1>
       <p className="tm-hint">{copy.qrHint}</p>
       <div className="qr-studio__layout">
-        {freeView ? (
-          <canvas
-            ref={preview}
-            className="qr-preview"
-            role="img"
-            aria-label={`QR code for ${label}, ${style.name} style`}
-          />
-        ) : (
-          <div className="qr-design">
-            <div
-              className="qr-design__plate"
-              aria-busy={!art.ready && !art.error}
-            >
-              {art.error ? (
-                <div role="alert" className="qr-design__error">
-                  <p>{art.error.message}</p>
-                  {(art.error.code === 'QR_ART_PHOTO_REQUIRED' ||
-                    art.error.code === 'QR_ART_PHOTO_TOO_LARGE') && (
-                    <Link href="/dashboard/settings#photo">
-                      Change your page photo
-                    </Link>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* While the next picture loads, the last one stays; it fades out under the new one. */}
-                  {art.previous && (
-                    // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
-                    <img
-                      className="qr-design__image qr-design__image--under"
-                      src={art.previous}
-                      alt=""
-                    />
-                  )}
-                  {art.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
-                    <img
-                      key={art.version}
-                      className={`qr-design__image${art.previous ? ' qr-design__image--fade' : ''}`}
-                      src={art.url}
-                      onAnimationEnd={art.clearPrevious}
-                      alt={
-                        art.ready
-                          ? previewing
-                            ? `Preview of the ${design.name} QR design. It leads to the TipMe home page, not your page.`
-                            : `QR code for ${label}, ${design.name} design`
-                          : 'The last design, while the next one is drawn'
-                      }
-                    />
-                  ) : (
-                    <p className="qr-design__wait">Drawing your design…</p>
-                  )}
-                </>
+        <Surface material="paper" className="qr-studio__panel">
+          {freeView ? (
+            <canvas
+              ref={preview}
+              className="qr-preview"
+              role="img"
+              aria-label={`QR code for ${label}, ${style.name} style`}
+            />
+          ) : (
+            <div className="qr-design">
+              <div
+                className="qr-design__plate"
+                aria-busy={!art.ready && !art.error}
+              >
+                {art.error ? (
+                  <div role="alert" className="qr-design__error">
+                    <p>{art.error.message}</p>
+                    {(art.error.code === 'QR_ART_PHOTO_REQUIRED' ||
+                      art.error.code === 'QR_ART_PHOTO_TOO_LARGE') && (
+                      <Link href="/dashboard/settings#photo">
+                        Change your page photo
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* While the next picture loads, the last one stays; it fades out under the new one. */}
+                    {art.previous && (
+                      // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
+                      <img
+                        className="qr-design__image qr-design__image--under"
+                        src={art.previous}
+                        alt=""
+                      />
+                    )}
+                    {art.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
+                      <img
+                        key={art.version}
+                        className={`qr-design__image${art.previous ? ' qr-design__image--fade' : ''}`}
+                        src={art.url}
+                        onAnimationEnd={art.clearPrevious}
+                        alt={
+                          art.ready
+                            ? previewing
+                              ? `Preview of the ${design.name} QR design. It leads to the TipMe home page, not your page.`
+                              : `QR code for ${label}, ${design.name} design`
+                            : 'The last design, while the next one is drawn'
+                        }
+                      />
+                    ) : (
+                      <p className="qr-design__wait">Drawing your design…</p>
+                    )}
+                  </>
+                )}
+              </div>
+              {design.note && !previewing && (
+                <p className="tm-hint">{design.note}</p>
               )}
             </div>
-            {design.note && !previewing && (
-              <p className="tm-hint">{design.note}</p>
-            )}
-          </div>
-        )}
+          )}
+        </Surface>
         <div>
           {previewing && design && (
             <div className="qr-locked">
@@ -311,6 +313,11 @@ export function QrStudio() {
               </Button>
             </div>
           )}
+          {/* The studio's one live region, always mounted, right under the Upgrade panel at every
+              width: on a phone "… is a Pro design" is seen beside the Upgrade link. */}
+          <p role="status" className="settings-saved">
+            {saved}
+          </p>
           <fieldset className="qr-styles">
             <legend>Style</legend>
             {QR_STYLES.map((option) => (
@@ -378,9 +385,6 @@ export function QrStudio() {
               listed. Please reload to try again.
             </p>
           )}
-          <p role="status" className="settings-saved">
-            {saved}
-          </p>
           <p className="qr-link">{label}</p>
           {!previewing && (
             <div className="qr-actions">
