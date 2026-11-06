@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Emails: reports and notices</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{width:1400px;height:1640px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:48px 56px;align-content:start}
+.label{margin:0 0 12px;font-size:13px;font-weight:700;color:#5d5a54}
+.client{background:#f3f2ee;border-radius:18px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4);overflow:hidden}
+.bar{display:flex;flex-direction:column;gap:4px;padding:14px 20px;background:#fffefa;border-bottom:1px solid rgba(20,18,16,.08);font-size:13px;color:#5d5a54}
+.bar strong{color:#000;font-size:15px}
+.mail{padding:28px 40px 34px}
+.mark{display:flex;align-items:center;gap:6px;margin:0 4px 18px;font:800 22px Manrope,Arial,sans-serif;letter-spacing:-.02em}
+.mark svg{width:20px;height:20px}
+.card{background:#fffefa;border-radius:24px;border:1px solid rgba(20,18,16,.1);box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -22px rgba(20,18,16,.45);padding:26px 28px 30px}
+.card h1{margin:0;font:400 31px/1.1 'DM Serif Display',Georgia,serif}
+.card p{margin:14px 0 0;font-size:16px;line-height:1.55}
+.stats{margin:20px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{padding:14px 16px;border-radius:14px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1)}
+.stat b{display:block;font:400 30px/1.1 'DM Serif Display',Georgia,serif}
+.stat span{font-size:13px;color:#5d5a54;font-weight:600}
+.slip{margin:16px 0 0;background:#fffefa;border-radius:16px;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.08),0 12px 20px -16px rgba(20,18,16,.45);padding:18px 20px}
+.slip q{display:block;quotes:none;font:400 21px/1.25 'DM Serif Display',Georgia,serif}
+.slip q:before{content:'\201C';display:block;height:20px;font-size:48px;line-height:.75;color:#7a32f9}
+.slip p{margin:10px 0 0;font-size:13.5px;font-weight:700}
+.signature{margin:16px 0 0;padding:22px;border-radius:18px;background:#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+.signature b{display:block;font:400 26px/1.15 'DM Serif Display',Georgia,serif}
+.signature span{display:block;margin-top:6px;font-size:14.5px;color:#efe6ff}
+.code{margin:18px 0 0;padding:14px 18px;border-radius:14px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 3px rgba(20,18,16,.1);font:700 22px Manrope,Arial,sans-serif;letter-spacing:.18em;text-align:center}
+.date{margin:18px 0 0;display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-radius:14px;background:#141210;color:#fff;font-size:15px}
+.date b{font:400 22px 'DM Serif Display',Georgia,serif}
+.go{display:block;margin:20px 0 0;height:54px;line-height:54px;border-radius:14px;background:#000;color:#fff;text-align:center;text-decoration:none;font-weight:700;font-size:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 3px 0 #2a2826}
+.quiet{margin:16px 0 0;font-size:14px;line-height:1.55;color:#5d5a54}
+.foot{margin:26px 4px 0;padding-top:16px;border-top:1px solid rgba(20,18,16,.12);font-size:12.5px;line-height:1.6;color:#5d5a54}
+.foot a{color:#5d5a54}
+</style>
+</helmet>
+<div class="board">
+  <div>
+    <p class="label">Weekly report</p>
+    <div class="client">
+      <div class="bar"><strong>Your week on TipMe</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>Your week on TipMe</h1>
+          <p>27 October to 2 November.</p>
+          <div class="stats"><div class="stat"><b>₦31,500</b><span>you received</span></div><div class="stat"><b>14</b><span>tips</span></div></div>
+          <div class="slip"><q>For the extra session before my exam. Thank you.</q><p>Dayo</p></div>
+          <a class="go" href="#">See the whole week</a>
+        </section>
+        <p class="foot">You get this email every Monday when you were tipped last week. <a href="#">Email settings</a>. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Ready for tips</p>
+    <div class="client">
+      <div class="bar"><strong>You can receive tips on TipMe now</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>You can receive tips now</h1>
+          <p>Your bank account is ready, so people can tip you. Share your link to get your first one.</p>
+          <div class="signature"><b>usetipme.xyz/@ada</b><span>Put it in your bio, or print your QR code.</span></div>
+          <a class="go" href="#">Go to your dashboard</a>
+        </section>
+        <p class="foot">You get this email when your TipMe page is ready to take tips. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Staff invitation</p>
+    <div class="client">
+      <div class="bar"><strong>You’re invited to TipMe’s admin area</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>You’re invited to TipMe’s admin area</h1>
+          <p>Set up an authenticator app to finish. You will need this code:</p>
+          <p class="code">SAMPLE C2DE</p>
+          <a class="go" href="#">Set up your authenticator</a>
+          <p class="quiet">Not expecting this? Ignore it: nothing happens until you set up the app.</p>
+        </section>
+        <p class="foot">You get this email because a TipMe owner invited this address to the admin area. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="label">Coming soon: a username taken back</p>
+    <div class="client">
+      <div class="bar"><strong>We need your TipMe username back</strong><span>TipMe &lt;hello@usetipme.xyz&gt;</span></div>
+      <div class="mail">
+        <div class="mark"><span>tipme</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z" fill="#7a32f9"></path></svg></div>
+        <section class="card">
+          <h1>We need your username back</h1>
+          <p>We need it to protect a brand, a public figure or one of our own names. Please choose a new username before the date below.</p>
+          <p class="date"><span>@brandname goes on</span><b>12 November</b></p>
+          <a class="go" href="#">Choose a new username</a>
+          <p class="quiet">Your page, your tips and your balance stay yours. Links and QR codes with the old username will stop working, so update them.</p>
+        </section>
+        <p class="foot">You get this email because TipMe needs a username on your account, as our terms describe. Questions? <a href="#">support@usetipme.xyz</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":1640}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
