@@ -22,6 +22,7 @@ import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordTransition } from './transitions.js';
+import { personOf } from './owner.js';
 
 /** A provider message about a payment. Only signature-verified events may reach this function. */
 export interface PaymentEvent {
@@ -111,7 +112,8 @@ async function lock(tx: Tx, attemptId: string): Promise<Locked | null> {
       provider: attempt.provider,
       providerReference: attempt.providerReference,
     },
-    tip,
+    // A team tip (R2-D) has no person and is posted by its own PR; until then it stops here.
+    tip: { ...tip, profileId: personOf(tip.profileId) },
     quote,
   };
 }

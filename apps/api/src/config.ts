@@ -209,6 +209,11 @@ export const apiConfigSchema = z
     // TipMe for businesses (plan 2026-11-06-business). Off: every business route answers 404 and
     // a tip intent's businessMemberId is dropped before it reaches the database.
     BUSINESS_ENABLED: flag,
+    // Business release 2, each on top of BUSINESS_ENABLED and off by default. Off: the API ignores
+    // a share or team-tip field and every posting is today's. The owner turns each on only after
+    // its PR (R2-C2, R2-D) is on dev and the terms and privacy text is live.
+    BUSINESS_SHARES_ENABLED: flag,
+    TEAM_TIPS_ENABLED: flag,
     // Open streams per API process; beyond it a connect gets 503 and the page polls.
     LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
     // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.

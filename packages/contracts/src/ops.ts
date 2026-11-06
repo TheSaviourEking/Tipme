@@ -246,6 +246,10 @@ export const ISSUE_KINDS = [
   'staff_last_approver_removed',
   'business_waiting',
   'business_note_reported',
+  // Business release 2 (R2-0): a staff member reported their business over a share (never shown
+  // to the business), and a reversal left a person's or a business's balance below zero (Q8).
+  'share_report',
+  'balance_below_zero',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

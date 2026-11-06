@@ -14,6 +14,7 @@ import { maskEmail } from './email-address.js';
 import { guarded } from './errors.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
 import { qualifiedApprovers } from './serious-actions.js';
+import { personOf } from './owner.js';
 
 type Owner = { userId: string } | { profileId: string };
 
@@ -286,7 +287,7 @@ export function mailForDomainEvent(
       const type =
         name === 'payout.paid' ? 'withdrawal_paid' : 'withdrawal_failed';
       await mailOwner(db, sealing, {
-        profileId: payout.profileId,
+        profileId: personOf(payout.profileId),
         type,
         data: { amountMinor: payout.amount.toString() },
         dedupeKey: `${type}.${payoutId}`,
@@ -305,7 +306,7 @@ export function mailForDomainEvent(
       // One per provider event: a refund and a later dispute are different news.
       const suffix = (dedupeKey ?? attemptId).replace(/[^\w.-]/g, '_');
       await mailOwner(db, sealing, {
-        profileId: tip.profileId,
+        profileId: personOf(tip.profileId),
         type: 'tip_reversed',
         data: {},
         dedupeKey: `tip_reversed.${tip.id}.${suffix}`,

@@ -71,6 +71,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   staff_last_approver_removed: 'Last second person removed',
   business_waiting: 'Business waiting to be verified',
   business_note_reported: 'Note about business staff reported',
+  share_report: 'Business reported over a share',
+  balance_below_zero: 'Balance below zero after a reversal',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',

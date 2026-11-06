@@ -29,6 +29,7 @@ import {
   type PayoutStartLog,
 } from './payout-start.js';
 import { failPayoutByStaff, type PayoutFailure } from './payouts.js';
+import { personOf } from './owner.js';
 
 /*
  * What staff can do about a withdrawal the system can't settle by itself (permission
@@ -100,7 +101,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, payout.profileId),
+        eq(withdrawalHolds.profileId, personOf(payout.profileId)),
         eq(withdrawalHolds.reason, 'account_takeover'),
       ),
     )
@@ -110,7 +111,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, payout.profileId),
+        eq(withdrawalHolds.profileId, personOf(payout.profileId)),
         isNull(withdrawalHolds.releasedAt),
       ),
     )
@@ -120,7 +121,7 @@ async function loadCase(db: Database | Tx, issueId: string) {
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, payout.profileId),
+        eq(withdrawalHolds.profileId, personOf(payout.profileId)),
         or(
           isNull(withdrawalHolds.releasedAt),
           gte(withdrawalHolds.createdAt, payout.createdAt),
@@ -326,7 +327,7 @@ export async function payoutCaseFacts(
     kase && {
       payoutId: kase.payout.id,
       status: kase.payout.status,
-      profileId: kase.payout.profileId,
+      profileId: personOf(kase.payout.profileId),
     }
   );
 }
@@ -602,7 +603,10 @@ export async function markFailedAfterRead(
         .for('update');
       const current = await loadCase(tx, input.issueId);
       if (!current || !offersFor(current, answer, now).markFailed) return false;
-      await failPayoutByStaff(tx, current.payout);
+      await failPayoutByStaff(tx, {
+        ...current.payout,
+        profileId: personOf(current.payout.profileId),
+      });
       await staffAudit(
         tx,
         input,

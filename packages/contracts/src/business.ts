@@ -460,3 +460,132 @@ export interface TipBusinessNote {
   written: boolean;
   open: boolean;
 }
+
+// ---- Release 2 (plan R2-0 Task 27; owner's answers, 6 Nov 2026) ----
+// Each part is behind its own flag on top of BUSINESS_ENABLED: BUSINESS_SHARES_ENABLED for the
+// share agreement and TEAM_TIPS_ENABLED for team tips. Table cards ride BUSINESS_ENABLED.
+
+/**
+ * What the business takes, in basis points of what the person receives after TipMe's fee (Q9):
+ * staff keeps / business takes 100/0, 90/10, 80/20, 70/30, 50/50. The cap is 50%. The same list
+ * is `SHARE_OPTIONS_BPS` in `@tipme/domain`; a database test checks the two agree.
+ */
+export const SHARE_OPTIONS_BPS = [0, 1000, 2000, 3000, 5000] as const;
+export type ShareBps = (typeof SHARE_OPTIONS_BPS)[number];
+export const shareBpsSchema = z.literal([...SHARE_OPTIONS_BPS]);
+export const SHARE_PROPOSED_BY = ['business', 'member'] as const;
+export const SHARE_REPORT_REASONS = [
+  'pressure',
+  'wrong_share',
+  'other',
+] as const;
+export type ShareReportReason = (typeof SHARE_REPORT_REASONS)[number];
+export const SHARE_REPORT_LIMIT = 280;
+
+/** A business proposes a split to one staff member (an owner, or the manager of their location). */
+export const shareProposalSchema = z
+  .object({ memberId: z.uuid(), businessBps: shareBpsSchema })
+  .strict();
+export type ShareProposal = z.infer<typeof shareProposalSchema>;
+/** The staff member answers a proposal with another option from the list (M14). */
+export const shareCounterSchema = z
+  .object({ businessBps: shareBpsSchema })
+  .strict();
+export type ShareCounter = z.infer<typeof shareCounterSchema>;
+/** A staff member reports their business to TipMe. Never shown to the business. */
+export const shareReportSchema = z
+  .object({
+    reason: z.enum(SHARE_REPORT_REASONS),
+    body: plain(SHARE_REPORT_LIMIT).optional(),
+  })
+  .strict();
+export type ShareReport = z.infer<typeof shareReportSchema>;
+
+/**
+ * The member's side of an agreement. `proposed` waits for their answer; `scheduled` is accepted
+ * and starts on `startsOn`; `in_force` applies now; `ended` stopped (left, or replaced).
+ */
+export type ShareAgreementState =
+  'proposed' | 'scheduled' | 'in_force' | 'ended';
+export interface ShareAgreementView {
+  agreementId: string;
+  memberId: string;
+  businessName: string;
+  /** 100 minus the business's percent: what the person keeps of what they receive. */
+  youKeepPercent: number;
+  /** YYYY-MM-DD, the Lagos date the split starts. */
+  startsOn: string;
+  state: ShareAgreementState;
+  proposedBy: (typeof SHARE_PROPOSED_BY)[number];
+}
+
+/**
+ * The business's side. A declined proposal, and one left unanswered until it lapsed, both read
+ * `no_change`: nothing in this shape tells them apart (spec 11, M14).
+ */
+export interface BusinessShareRow {
+  agreementId?: string;
+  memberId: string;
+  shownName: string;
+  state: 'in_force' | 'pending' | 'no_change';
+  /** The business's percent: the one in force, or the one pending. */
+  businessPercent?: number;
+  startsOn?: string;
+}
+
+/** What the supporter is told before paying, and on the receipt. Percentages only, never naira. */
+export interface ShareDisclosure {
+  personKeepsPercent: number;
+  businessPercent: number;
+  businessName: string;
+}
+
+/** Tip the whole team at a location (R2-D): split equally among the people on shift (M17). */
+export const teamTipQuoteRequestSchema = z
+  .object({
+    locationId: z.uuid(),
+    amountMinor: z.string().regex(/^\d{1,12}$/),
+    currency: z.literal('NGN'),
+  })
+  .strict();
+export type TeamTipQuoteRequest = z.infer<typeof teamTipQuoteRequestSchema>;
+export interface TeamTipQuote {
+  quoteId: string;
+  business: { slug: string; name: string };
+  location: { slug: string; name: string };
+  currency: string;
+  tipMinor: string;
+  platformFeeMinor: string;
+  providerFeeMinor: string;
+  recipientNetMinor: string;
+  payerTotalMinor: string;
+  expiresAt: string;
+  feePolicyVersion: string;
+  /** People on shift now. The split itself is fixed when the tip is made. */
+  people: number;
+}
+
+/** Table cards that name the server for a shift (R2-E, M18). */
+export const TABLE_CARD_CODE = /^[a-z2-7]{10}$/;
+export const tableCardCreateSchema = z.object({ label: plain(20) }).strict();
+export type TableCardCreate = z.infer<typeof tableCardCreateSchema>;
+export const tableCardAssignSchema = z.object({ memberId: z.uuid() }).strict();
+export type TableCardAssign = z.infer<typeof tableCardAssignSchema>;
+export interface TableCardRow {
+  cardId: string;
+  locationId: string;
+  label: string;
+  /** `/b/<business>/<location>/t/<code>`. */
+  path: string;
+  retired: boolean;
+  assigned?: { memberId: string; shownName: string; since: string };
+}
+
+/** A business's own balance (R2-B): what TipMe owes it from shares. Owners only. */
+export interface BusinessBalance {
+  businessId: string;
+  currency: string;
+  /** May be negative after a reversal (Q8); withdrawals then stop. */
+  balanceMinor: string;
+  canWithdraw: boolean;
+}

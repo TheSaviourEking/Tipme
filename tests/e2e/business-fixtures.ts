@@ -126,3 +126,62 @@ export async function payAtBusiness(
   });
   return { tipId: intent.data.tipId, statusToken: intent.data.statusToken };
 }
+
+/**
+ * Business release 2: a share agreement for a member, by default accepted and in force since
+ * yesterday (proposed 15 days ago, so the database's 14-day notice holds).
+ */
+export async function seedAgreement({
+  memberId,
+  proposedByUser,
+  businessBps = 1000,
+  accepted = true,
+  startedDaysAgo = 1,
+}: {
+  memberId: string;
+  proposedByUser: string;
+  businessBps?: 0 | 1000 | 2000 | 3000 | 5000;
+  accepted?: boolean;
+  startedDaysAgo?: number;
+}): Promise<{ agreementId: string }> {
+  const agreementId = randomUUID();
+  await sql(
+    `INSERT INTO share_agreements (id, member_id, business_bps, proposed_by, proposed_by_user,
+       proposed_at, effective_from, accepted_at)
+     VALUES ($1, $2, $3, 'business', $4,
+       now() - make_interval(days => $5::int + 14), now() - make_interval(days => $5::int),
+       CASE WHEN $6 THEN now() - make_interval(days => $5::int + 13) END)`,
+    [
+      agreementId,
+      memberId,
+      businessBps,
+      proposedByUser,
+      startedDaysAgo,
+      accepted,
+    ],
+  );
+  return { agreementId };
+}
+
+/** Business release 2: a table card at a location (M18), with a fresh 10-character code. */
+export async function seedTableCard({
+  locationId,
+  createdBy,
+  label = 'Table 1',
+}: {
+  locationId: string;
+  createdBy: string;
+  label?: string;
+}): Promise<{ cardId: string; code: string }> {
+  const cardId = randomUUID();
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
+  const code = Array.from(
+    { length: 10 },
+    () => alphabet[Math.floor(Math.random() * 32)],
+  ).join('');
+  await sql(
+    `INSERT INTO table_cards (id, location_id, label, code, created_by) VALUES ($1, $2, $3, $4, $5)`,
+    [cardId, locationId, label, code, createdBy],
+  );
+  return { cardId, code };
+}

@@ -97,6 +97,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   staff_last_approver_removed: 'account',
   business_waiting: 'info',
   business_note_reported: 'account',
+  share_report: 'account',
+  balance_below_zero: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -159,6 +161,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return 'A business is waiting to be verified. Check its name, address and contact before its codes go live.';
     case 'business_note_reported':
       return 'A note a supporter wrote about someone at a business was reported. Read it only through Reveal.';
+    case 'share_report':
+      return 'Someone who works at a business reported it over a share of their tips. The business is never told.';
+    case 'balance_below_zero':
+      return `A reversed tip left a balance below zero (${page} or a business). Withdrawals for it stop until it is back above zero. Nothing is collected automatically.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
   }
@@ -191,14 +197,14 @@ async function completeSubject(
       .select({ profileId: tips.profileId })
       .from(tips)
       .where(eq(tips.id, filled.tipId));
-    if (row) filled.profileId = row.profileId;
+    if (row) filled.profileId = row.profileId ?? undefined;
   }
   if (filled.payoutId && !filled.profileId) {
     const [row] = await tx
       .select({ profileId: payouts.profileId })
       .from(payouts)
       .where(eq(payouts.id, filled.payoutId));
-    if (row) filled.profileId = row.profileId;
+    if (row) filled.profileId = row.profileId ?? undefined;
   }
   if (filled.userId && !filled.profileId) {
     const [row] = await tx
@@ -425,7 +431,7 @@ export function runIssueDetectors(
           await openIssue(db, {
             dedupeKey: `payment_account_unresolved.${row.id}`,
             kind: 'payment_account_unresolved',
-            subject: { profileId: row.profileId },
+            subject: { profileId: row.profileId ?? undefined },
             now,
           })
         ).opened

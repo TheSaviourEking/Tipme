@@ -7,6 +7,7 @@ import type { MailSealing } from './mail-queue.js';
 import { newId } from './ids.js';
 import { recordAudit } from './audit.js';
 import { OPAQUE_PROVIDER_ID } from './provider-ids.js';
+import { personOf } from './owner.js';
 
 export type PaymentAccountStatus =
   (typeof paymentAccounts.$inferSelect)['status'];
@@ -601,6 +602,7 @@ export function findPaymentAccountByReference(
           ),
         ),
       );
-    return row ?? null;
+    // A business's account (R2-B) is refreshed by its own path.
+    return row ? { profileId: personOf(row.profileId) } : null;
   });
 }

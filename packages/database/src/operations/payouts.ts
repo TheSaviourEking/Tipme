@@ -44,6 +44,7 @@ import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { recordTransition } from './transitions.js';
+import { personOf } from './owner.js';
 
 export interface PayoutResult {
   payoutId: string;
@@ -423,7 +424,7 @@ export function flagPaymentReversal(
         .where(eq(paymentAttempts.id, input.attemptId));
       if (tip)
         await holdWithdrawals(tx, {
-          profileId: tip.profileId,
+          profileId: personOf(tip.profileId),
           reason: 'reversal',
           issueId: issue.id,
         });
@@ -682,7 +683,7 @@ async function recordPayoutOutcomeIn(
       traceId,
       lines: buildPayoutPosting({
         amountMinor: payout.amountMinor,
-        profileId: payout.profileId,
+        profileId: personOf(payout.profileId),
       }),
     });
     await enqueueOutbox(tx, {
@@ -726,7 +727,10 @@ async function recordPayoutOutcomeIn(
     }
   }
   if (to === 'FAILED') {
-    await releaseFailedPayout(tx, payout);
+    await releaseFailedPayout(tx, {
+      ...payout,
+      profileId: personOf(payout.profileId),
+    });
     if (input.failureReason === 'in_debt') {
       const issue = await openIssue(tx, {
         dedupeKey: `provider_in_debt.${payout.id}`,
@@ -735,7 +739,7 @@ async function recordPayoutOutcomeIn(
         now,
       });
       await holdWithdrawals(tx, {
-        profileId: payout.profileId,
+        profileId: personOf(payout.profileId),
         reason: 'in_debt',
         issueId: issue.id,
       });

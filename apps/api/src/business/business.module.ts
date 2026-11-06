@@ -12,6 +12,14 @@ import { BusinessNotesController } from './business-notes.controller.js';
 import { BusinessShiftsController } from './business-shifts.controller.js';
 import { BusinessInsightsController } from './business-insights.controller.js';
 import { BusinessCodesController } from './business-codes.controller.js';
+import { ShareAgreementsController } from './share-agreements.controller.js';
+import { TeamTipsController } from './team-tips.controller.js';
+import { TableCardsController } from './table-cards.controller.js';
+import { BusinessPayoutsController } from './business-payouts.controller.js';
+import {
+  SharesEnabledGuard,
+  TeamTipsEnabledGuard,
+} from './release2-flags.guard.js';
 
 /**
  * TipMe for businesses (plan 2026-11-06-business). Behind `BUSINESS_ENABLED`. Every lane's controller
@@ -28,8 +36,20 @@ import { BusinessCodesController } from './business-codes.controller.js';
     BusinessShiftsController,
     BusinessInsightsController,
     BusinessCodesController,
+    // Release 2 (R2-0).
+    ShareAgreementsController,
+    TeamTipsController,
+    TableCardsController,
+    BusinessPayoutsController,
   ],
-  providers: [BusinessEnabledGuard, SessionGuard, CsrfGuard, RateLimitGuard],
+  providers: [
+    BusinessEnabledGuard,
+    SharesEnabledGuard,
+    TeamTipsEnabledGuard,
+    SessionGuard,
+    CsrfGuard,
+    RateLimitGuard,
+  ],
   exports: [BusinessEnabledGuard],
 })
 export class BusinessModule {}

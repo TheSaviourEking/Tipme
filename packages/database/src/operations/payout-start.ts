@@ -23,6 +23,7 @@ import {
   setPayoutReview,
   type PayoutFailure,
 } from './payouts.js';
+import { personOf } from './owner.js';
 
 /**
  * How long "the provider has no such payout" stays no proof after a start with no answer. The
@@ -449,7 +450,7 @@ async function claimStart(
     .from(withdrawalHolds)
     .where(
       and(
-        eq(withdrawalHolds.profileId, payout.profileId),
+        eq(withdrawalHolds.profileId, personOf(payout.profileId)),
         or(
           isNull(withdrawalHolds.releasedAt),
           gte(withdrawalHolds.createdAt, payout.createdAt),
@@ -520,7 +521,7 @@ function claimFeeCredit(
       await tx
         .select({ id: profiles.id })
         .from(profiles)
-        .where(eq(profiles.id, payout.profileId))
+        .where(eq(profiles.id, personOf(payout.profileId)))
         .for('update');
       const [credit] = await tx
         .select({ reference: providerFeeCredits.transferReference })
@@ -966,13 +967,13 @@ export function openUnexpectedPayout(
         dedupeKey: `payout_unexpected.${input.unmatchedId}`,
         kind: 'payout_unexpected',
         subject: {
-          profileId: account.profileId,
+          profileId: account.profileId ?? undefined,
           unmatchedId: input.unmatchedId,
         },
         now: input.now,
       });
       await holdWithdrawals(tx, {
-        profileId: account.profileId,
+        profileId: personOf(account.profileId),
         reason: 'unexpected_payout',
         issueId: issue.id,
       });

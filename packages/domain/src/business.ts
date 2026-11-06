@@ -89,3 +89,50 @@ export function firstNameOf(displayName: string): string {
   const first = displayName.trim().split(/\s+/)[0] ?? '';
   return Array.from(first).slice(0, 30).join('');
 }
+
+// ---- Release 2 (plan R2-0 Task 27; owner's answers, 6 Nov 2026) ----
+
+/**
+ * What a business may take of a staff member's tips there, in basis points of what the person
+ * receives after TipMe's fee (Q9): staff keep / business takes 100/0, 90/10, 80/20, 70/30, 50/50.
+ * The database refuses any other value.
+ */
+export const SHARE_OPTIONS_BPS = [0, 1000, 2000, 3000, 5000] as const;
+export type ShareBps = (typeof SHARE_OPTIONS_BPS)[number];
+/** The cap: the owner's largest option. Staff always keep at least half. */
+export const SHARE_CAP_BPS = 5000;
+/** A share change takes effect at least this many days after it is proposed. */
+export const SHARE_NOTICE_DAYS = 14;
+
+export function isShareBps(bps: number): bps is ShareBps {
+  return (SHARE_OPTIONS_BPS as readonly number[]).includes(bps);
+}
+
+/**
+ * Splits a person's net between them and the business. The share is rounded down, so any
+ * remainder kobo stays with the person, and the two parts always add up to the net.
+ */
+export function splitShare(
+  netMinor: bigint,
+  bps: number,
+): { personMinor: bigint; businessMinor: bigint } {
+  if (!isShareBps(bps)) throw new RangeError('share is not one of the options');
+  if (netMinor <= 0n) throw new RangeError('net must be positive');
+  const businessMinor = (netMinor * BigInt(bps)) / 10_000n;
+  return { personMinor: netMinor - businessMinor, businessMinor };
+}
+
+/**
+ * Splits a team tip's net equally among `people` (M17). The first part takes the remainder kobo;
+ * callers order the people by earliest check-in. Every part is at least 1 kobo.
+ */
+export function splitEqually(totalMinor: bigint, people: number): bigint[] {
+  if (!Number.isInteger(people) || people < 1)
+    throw new RangeError('at least one person');
+  const n = BigInt(people);
+  if (totalMinor < n) throw new RangeError('less than a kobo each');
+  const each = totalMinor / n;
+  const parts = Array.from({ length: people }, () => each);
+  parts[0] = each + (totalMinor - each * n);
+  return parts;
+}

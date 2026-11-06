@@ -447,7 +447,7 @@ async function tellStaffSetupFailed(
       openIssue(db, {
         dedupeKey: setupIssueKey(account.id),
         kind: 'payment_account_setup_failed',
-        subject: { profileId: account.profileId },
+        subject: { profileId: account.profileId ?? undefined },
         now: new Date(),
       }),
     );
@@ -668,7 +668,7 @@ export async function sweepPayoutSetup(
 
   const pending: {
     id: string;
-    profileId: string;
+    profileId: string | null;
     accountReference: string | null;
   }[] = await guarded(() =>
     db
@@ -698,6 +698,8 @@ export async function sweepPayoutSetup(
   );
   let limitedInARow = 0;
   for (const row of pending) {
+    // A business's destination (R2-B) is not this sweep's: skip it, never stop the sweep.
+    if (row.profileId === null) continue;
     let limited = false;
     if (
       await refreshPendingDestination(db, input.provider, {
