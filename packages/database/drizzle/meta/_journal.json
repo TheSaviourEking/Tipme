@@ -554,6 +554,13 @@
       "when": 1793893012077,
       "tag": "0078_handle_take_backs",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793983197656,
+      "tag": "0079_changelog",
+      "breakpoints": true
     }
   ]
 }
