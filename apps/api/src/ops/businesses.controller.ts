@@ -5,6 +5,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Query,
@@ -43,6 +44,8 @@ import { FreshCode } from './fresh-code.guard.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from '../business/business-live.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const businessIdOf = (value: string) => {
@@ -64,6 +67,10 @@ export class OpsBusinessesController {
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Get()
@@ -123,7 +130,10 @@ export class OpsBusinessesController {
       reason: body.reason,
     });
     // After the commit: the location and staff pages stop at once (M11).
-    if (changed) this.revalidator.revalidateBusiness(slug);
+    if (changed) {
+      this.revalidator.revalidateBusiness(slug);
+      signalBusiness(this.database.db, this.publishLive, { businessId });
+    }
     return { data: await opsBusinessDetail(this.database.db, businessId) };
   }
 
@@ -142,7 +152,10 @@ export class OpsBusinessesController {
       businessId,
       reason: body.reason,
     });
-    if (changed) this.revalidator.revalidateBusiness(slug);
+    if (changed) {
+      this.revalidator.revalidateBusiness(slug);
+      signalBusiness(this.database.db, this.publishLive, { businessId });
+    }
     return { data: await opsBusinessDetail(this.database.db, businessId) };
   }
 
@@ -174,6 +187,7 @@ export class OpsBusinessesController {
     );
     if ('pending' in answer) return { data: answer.pending };
     this.revalidator.revalidateBusiness(answer.result.revalidateBusiness);
+    signalBusiness(this.database.db, this.publishLive, { businessId });
     return {
       data: {
         ...(await opsBusinessDetail(this.database.db, businessId)),

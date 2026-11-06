@@ -5,6 +5,7 @@ import { EmptySlip, Skeleton, StateLine } from '@tipme/ui';
 import { loadWork, WORK_CHANGED } from '@/lib/business/members-api';
 import { InvitationsPanel } from './sections/invitations';
 import { WORK_SECTIONS } from './sections';
+import { useBusinessLive } from '@/lib/business/use-business-live';
 
 /**
  * The Work page: invitations waiting for this account (B3), then each place the signed-in
@@ -27,6 +28,7 @@ export function WorkView() {
     window.addEventListener(WORK_CHANGED, reload);
     return () => window.removeEventListener(WORK_CHANGED, reload);
   }, [reload]);
+  useBusinessLive(reload);
 
   return (
     <div className="dashboard-section work-page">

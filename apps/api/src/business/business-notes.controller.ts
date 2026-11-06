@@ -7,6 +7,7 @@ import {
   HttpCode,
   Inject,
   NotFoundException,
+  Optional,
   Param,
   Post,
   UseGuards,
@@ -42,6 +43,8 @@ import {
 } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from './business-live.js';
 
 const uuid = z.uuid();
 
@@ -56,6 +59,10 @@ export class BusinessNotesController {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Post('tips/:tipId/business-note')
@@ -85,6 +92,7 @@ export class BusinessNotesController {
         ),
       ]);
     await writeBusinessNote(this.database.db, tipId, parsed.data);
+    signalBusiness(this.database.db, this.publishLive, { tipId });
   }
 
   @Get('me/work/notes')
@@ -109,6 +117,7 @@ export class BusinessNotesController {
       tipId,
       reason: body.reason,
     });
+    signalBusiness(this.database.db, this.publishLive, { tipId });
   }
 
   @Post('me/businesses/:id/notes/:tipId/report')
@@ -132,5 +141,6 @@ export class BusinessNotesController {
       tipId,
       reason: body.reason,
     });
+    signalBusiness(this.database.db, this.publishLive, { tipId });
   }
 }
