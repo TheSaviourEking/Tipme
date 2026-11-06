@@ -59,9 +59,15 @@ function record() {
 /** The commit (full sha) carrying a passing status for `sha`'s tree, if any. */
 export function findStagingPass({ repo, sha, stagingVersion, api = gh }) {
   const get = (path) => JSON.parse(api(`repos/${repo}/${path}`));
-  const commit = get(`commits/${sha}`);
-  const tree = commit.commit.tree.sha;
-  const parents = commit.parents.map((p) => p.sha);
+  // Only the fields used: a merge commit's full answer carries every changed file and can pass
+  // the output buffer (#129's merge to main: ENOBUFS).
+  const commit = JSON.parse(
+    api(
+      `repos/${repo}/commits/${sha}`,
+      '{sha: .sha, tree: .commit.tree.sha, parents: [.parents[].sha]}',
+    ),
+  );
+  const { tree, parents } = commit;
   const pullHeads = get(`commits/${commit.sha}/pulls`).map((p) => p.head.sha);
   for (const candidate of checkCandidates({
     sha: commit.sha,
@@ -72,7 +78,7 @@ export function findStagingPass({ repo, sha, stagingVersion, api = gh }) {
     // The staging version is a short sha; resolve it rather than trust the statuses endpoint to.
     const full = SHA.test(candidate)
       ? candidate
-      : get(`commits/${candidate}`).sha;
+      : api(`repos/${repo}/commits/${candidate}`, '.sha');
     if (stagingPassed(tree, get(`commits/${full}/statuses`)))
       return { tree, head: full };
   }

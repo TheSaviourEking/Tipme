@@ -63,11 +63,11 @@ function stubApi(calls) {
   const answers = {
     [`repos/o/r/commits/${FULL_MAIN}`]: {
       sha: FULL_MAIN,
-      commit: { tree: { sha: T } },
+      tree: T,
       parents: [],
     },
     [`repos/o/r/commits/${FULL_MAIN}/pulls`]: [],
-    'repos/o/r/commits/dddddddddddd': { sha: FULL_STAGED },
+    'repos/o/r/commits/dddddddddddd': FULL_STAGED,
     [`repos/o/r/commits/${FULL_STAGED}/statuses`]: [
       status('success', `tree ${T}`),
     ],
@@ -76,7 +76,8 @@ function stubApi(calls) {
   return (path) => {
     calls.push(path);
     if (!(path in answers)) throw new Error(`unexpected ${path}`);
-    return JSON.stringify(answers[path]);
+    const answer = answers[path];
+    return typeof answer === 'string' ? answer : JSON.stringify(answer);
   };
 }
 
@@ -101,4 +102,40 @@ test('no passing candidate returns no head', () => {
     api: stubApi(calls),
   });
   assert.deepEqual(result, { tree: T, head: undefined });
+});
+
+// A merge commit's full answer carries every changed file (#129: 85,199 added lines, past the
+// 1 MB buffer: ENOBUFS). Commit lookups must ask only for the fields they use.
+test('commit lookups ask for their fields only, never the whole commit with its files', () => {
+  const asked = [];
+  const answers = {
+    [`repos/o/r/commits/${FULL_MAIN}`]: {
+      sha: FULL_MAIN,
+      tree: T,
+      parents: [],
+    },
+    [`repos/o/r/commits/${FULL_MAIN}/pulls`]: [],
+    'repos/o/r/commits/dddddddddddd': FULL_STAGED,
+    [`repos/o/r/commits/${FULL_STAGED}/statuses`]: [
+      status('success', `tree ${T}`),
+    ],
+    [`repos/o/r/commits/${FULL_MAIN}/statuses`]: [],
+  };
+  const api = (path, query) => {
+    asked.push({ path, query });
+    if (!(path in answers)) throw new Error(`unexpected ${path}`);
+    const answer = answers[path];
+    return typeof answer === 'string' ? answer : JSON.stringify(answer);
+  };
+  const result = findStagingPass({
+    repo: 'o/r',
+    sha: FULL_MAIN,
+    stagingVersion: 'd'.repeat(12),
+    api,
+  });
+  assert.deepEqual(result, { tree: T, head: FULL_STAGED });
+  for (const { path, query } of asked.filter(({ path }) =>
+    /\/commits\/[0-9a-f]+$/.test(path),
+  ))
+    assert.ok(query, `${path} was fetched whole`);
 });
