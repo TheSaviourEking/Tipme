@@ -4,6 +4,13 @@
   box-sizing: border-box;
 }
 
+/* The reset above (Tailwind's base) takes away the margin a browser centres a modal dialog with, so
+   a pop-up opened in the top-left corner (the owner, 6 Nov 2026). Every modal is centred again;
+   :where() keeps this weightless, so a sheet that places itself (ops-frame__sheet, bank-sheet) wins. */
+:where(dialog:modal) {
+  margin: auto;
+}
+
 html {
   /* The header's height, shared so page content can fill the screen beneath it. */
   --nav-height: 76px;
