@@ -154,6 +154,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
 | GET | `/v1/me/business-roles` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{id}/insights` | n/a (read) | – | – |
+| GET | `/v1/me/businesses/{id}/notes` | n/a (read) | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
@@ -210,6 +212,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/withdrawal-quote` | n/a (read) | – | – |
 | GET | `/v1/me/withdrawals` | n/a (read) | – | – |
 | POST | `/v1/me/withdrawals` | yes | – | – |
+| PATCH | `/v1/me/work/{memberId}/share-amounts` | yes | – | – |
 | GET | `/v1/payout-banks` | n/a (read) | `bank_read` | – |
 
 #### Signed-in staff, before an admin grant

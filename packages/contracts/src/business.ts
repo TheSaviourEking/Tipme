@@ -405,6 +405,7 @@ export interface LocationInsights {
   locationId: string;
   tips: Shown;
   people: MemberWeek[];
+  /** The 2-hour window with the most tips (3 or more), Lagos time; day 0 is Sunday (as getDay). */
   busiest?: {
     day: 0 | 1 | 2 | 3 | 4 | 5 | 6;
     fromHour: number;
@@ -413,6 +414,10 @@ export interface LocationInsights {
   topTag?: { tag: BusinessNoteTag; percent: number };
 }
 export interface BusinessNoteView {
+  /**
+   * On the business's list (B7) this is an opaque reference to the note, not the tip's id: tip
+   * ids are UUIDv7 and carry the time the tip started. `noteTipOf` resolves it for that business.
+   */
   tipId: string;
   shownName: string;
   /** YYYY-MM-DD in Lagos: never a time (M5). */
