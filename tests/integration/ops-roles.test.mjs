@@ -997,7 +997,9 @@ test('the migration creates the starter roles, editable and without staff manage
        GROUP BY r.id, r.name, r.system ORDER BY r.name`,
     );
     const byName = new Map(rows.map((row) => [row.name, row]));
+    // Every starter role can edit the changelog and ask for approval (owner's default, 6 Nov 2026).
     assert.deepEqual(byName.get('Support').permissions, [
+      'changelog.edit',
       'issues.resolve',
       'issues.view',
       'pages.suspend',
@@ -1005,6 +1007,7 @@ test('the migration creates the starter roles, editable and without staff manage
     ]);
     assert.deepEqual(byName.get('Finance').permissions, [
       'analytics.view',
+      'changelog.edit',
       'fees.manage',
       'issues.view',
       'payments.recheck',
@@ -1012,6 +1015,7 @@ test('the migration creates the starter roles, editable and without staff manage
     ]);
     assert.deepEqual(byName.get('Marketing').permissions, [
       'analytics.view',
+      'changelog.edit',
       'market.edit',
     ]);
     for (const starter of ['Support', 'Finance', 'Marketing']) {
@@ -1022,6 +1026,19 @@ test('the migration creates the starter roles, editable and without staff manage
     }
     assert.equal(byName.get('Owner').system, true);
     assert.equal(byName.get('Release check').system, true);
+    // Only the owner publishes; release_check stays fixed.
+    for (const [role, held] of [
+      ['Owner', ['changelog.edit', 'changelog.publish']],
+      ['Release check', []],
+      ['Support', ['changelog.edit']],
+    ])
+      assert.deepEqual(
+        (byName.get(role)?.permissions ?? []).filter((p) =>
+          p.startsWith('changelog.'),
+        ),
+        held,
+        role,
+      );
   } finally {
     await fresh.close();
     await database.pool.query(`DROP DATABASE IF EXISTS ${name}`);

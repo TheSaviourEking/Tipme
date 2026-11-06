@@ -485,3 +485,22 @@ test('BUSINESS_SHARES_ENABLED and TEAM_TIPS_ENABLED default to false; true turns
       new RegExp(name),
     );
 });
+
+test('the changelog signing secret is optional, at least 32 characters, and blank means off', () => {
+  const dev = { ...valid, NODE_ENV: 'development' };
+  assert.equal(loadApiConfig(dev).CHANGELOG_SIGNING_SECRET, undefined);
+  assert.equal(
+    loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: '' })
+      .CHANGELOG_SIGNING_SECRET,
+    undefined,
+  );
+  assert.equal(
+    loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: 'c'.repeat(32) })
+      .CHANGELOG_SIGNING_SECRET,
+    'c'.repeat(32),
+  );
+  assert.throws(
+    () => loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: 'short' }),
+    /CHANGELOG_SIGNING_SECRET/,
+  );
+});

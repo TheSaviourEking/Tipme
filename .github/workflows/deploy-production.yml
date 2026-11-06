@@ -25,6 +25,9 @@
 #   PRODUCTION_SSH (deploy@<server>), PRODUCTION_WEB_URL, PRODUCTION_API_URL
 # Also read, as a repository variable already used by Deploy staging: STAGING_API_URL
 # (the gate asks it which version staging runs).
+# Changelog (optional; docs/runbooks/changelog.md): the repository secret CHANGELOG_SIGNING_SECRET
+# and the repository variable CHANGELOG_API_URL (production's API). Unset, the changelog step
+# only notes "Changelog not set up".
 name: Deploy production
 on:
   workflow_dispatch:
@@ -151,6 +154,16 @@ jobs:
           API: ${{ vars.PRODUCTION_API_URL }}
           EXPECT_LIVE: ${{ vars.PRODUCTION_PAYMENTS_LIVE || 'false' }}
         run: pnpm release:check --web "$WEB" --api "$API" --expect-version "$VERSION" --expect-provider bachs-live --expect-live "$EXPECT_LIVE"
+      # Marks the changelog entries this version carries as live (scripts/changelog-sync.mjs). It can
+      # never fail the deploy: a miss is caught up by the next deploy or the Changelog sync workflow.
+      - name: 'Changelog: what is now live'
+        if: success()
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          CHANGELOG_API_URL: ${{ vars.CHANGELOG_API_URL }}
+          CHANGELOG_SIGNING_SECRET: ${{ secrets.CHANGELOG_SIGNING_SECRET }}
+        run: node scripts/changelog-sync.mjs --environment production --version "$VERSION"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

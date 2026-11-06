@@ -92,6 +92,23 @@ test('the pretend-only public routes are exactly the reviewed ones', () => {
   );
 });
 
+// CI's changelog routes (changelog plan, Design §3): signed with the changelog secret.
+const SIGNED_CI_REVIEWED = [
+  'POST /v1/webhooks/changelog/drafts',
+  'POST /v1/webhooks/changelog/pending',
+  'POST /v1/webhooks/changelog/releases',
+];
+
+test('the changelog routes require the CI signature, and are rate-limited', () => {
+  const signed = routes.filter((r) => r.access === 'ci-signature');
+  assert.deepEqual(
+    signed.map((r) => r.key).sort(),
+    [...SIGNED_CI_REVIEWED].sort(),
+  );
+  for (const route of signed)
+    assert.equal(route.rateLimit, 'changelog_ingest', route.key);
+});
+
 test('payment and mail webhooks require provider signatures', () => {
   assert.deepEqual(
     routes

@@ -23,6 +23,8 @@ export const WEBHOOK_SECRET = 'integration-webhook-secret-32-characters!';
 export const STATUS_TOKEN_SECRET = 'integration-status-token-secret-32-chars';
 export const AUTH_CODE_SECRET = 'integration-auth-code-secret-32-characters';
 export const WEB = 'http://localhost:3000';
+/** Signs CI's changelog requests in every test stack (pass '' in apiEnv to turn the routes off). */
+export const CHANGELOG_SECRET = 'integration-changelog-secret-32-characters';
 // 32 zero-ish bytes for tests only; production keys come from the environment (ADR-0010).
 export const OPS_TOTP_KEY = Buffer.alloc(32, 7).toString('base64');
 /** Seals queued mail in the integration stack; tests open it with the same key. */
@@ -72,6 +74,7 @@ export async function startStack({
       AUTH_CODE_SECRET,
       WEB_REVALIDATE_SECRET: 'integration-revalidate-secret-32-characters',
       OPS_TOTP_KEY,
+      CHANGELOG_SIGNING_SECRET: CHANGELOG_SECRET,
       ...apiEnv,
     }),
     { logDestination },

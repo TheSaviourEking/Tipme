@@ -38,6 +38,9 @@ export const apiConfigSchema = z
       .optional(),
     // Bearer token for the release check's rehearsal runs (test copies only). Never logged.
     RELEASE_CHECK_TOKEN: z.string().min(32).optional(),
+    // Signs CI's changelog requests (drafts, pending, releases). Unset: those routes answer 404.
+    // Never logged.
+    CHANGELOG_SIGNING_SECRET: z.string().min(32).optional(),
     // Preview cookie scope shared by the web and API hosts, e.g. staging.example.com.
     PREVIEW_COOKIE_DOMAIN: z
       .string()

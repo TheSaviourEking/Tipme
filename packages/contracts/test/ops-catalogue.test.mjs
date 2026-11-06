@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed thirteen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 13);
+test('the serious actions are the agreed fourteen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 14);
   assert.ok(SERIOUS_ACTIONS.includes('business.verify'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['business.verify'],
@@ -94,4 +94,28 @@ test('the runbook names every permission and serious action', () => {
     /approves a regulatory/,
   ])
     assert.match(runbook, rule);
+});
+
+// Changelog plan (5 Nov 2026), Design §4.
+test('changelog.edit is not sensitive; changelog.publish is, and names its serious action', () => {
+  assert.deepEqual(OPS_CATALOGUE['changelog.edit'], {
+    description: 'Edit changelog entries and ask for one to be shown to users',
+    group: 'content',
+    sensitive: false,
+  });
+  assert.deepEqual(OPS_CATALOGUE['changelog.publish'], {
+    description: 'Approve what users read in What’s new',
+    group: 'content',
+    sensitive: true,
+  });
+  assert.equal(OPS_PERMISSIONS.length, 23);
+  assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['changelog.publish'],
+    'changelog.publish',
+  );
+  assert.equal(
+    SERIOUS_ACTION_WORDS['changelog.publish'],
+    'Show users a What’s new entry',
+  );
 });

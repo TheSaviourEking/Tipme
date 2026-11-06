@@ -64,6 +64,7 @@ import {
   profiles,
   sessions,
   emailCodeLockouts,
+  changelogReads,
   emailCodes,
   signInCodes,
   signInLockouts,
@@ -1248,6 +1249,11 @@ export function deleteAccount(
         .update(sessions)
         .set({ revokedAt: now })
         .where(eq(sessions.userId, input.userId));
+      // When they last opened What's new: per person, so it goes with the account. Its foreign key
+      // to users doesn't cascade (the users row stays, erased), so it is removed here.
+      await tx
+        .delete(changelogReads)
+        .where(eq(changelogReads.userId, input.userId));
       return { handle: row?.handleLower ?? '' };
     });
     // After the commit: an account's photos must not outlive it in the bucket.

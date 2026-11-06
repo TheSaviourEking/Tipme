@@ -119,12 +119,17 @@ export function OpsFrame({
   const menuButton = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
 
-  // A tall menu scrolls inside the sidebar: keep the open page's link in view there.
+  // A tall menu scrolls inside the sidebar: keep the open page's link in view there. Again when the
+  // menu itself changes: a link that arrives later (Businesses, once its switch is read) pushes the
+  // rest down, and could push the open page's link out of sight.
+  const menu = groups
+    .flatMap((group) => group.links.map((link) => link.href))
+    .join(' ');
   useEffect(() => {
     side.current
       ?.querySelector('[aria-current="page"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [pathname]);
+  }, [pathname, menu]);
 
   // A window widened past the breakpoint gets the sidebar, so the sheet goes.
   useEffect(() => {

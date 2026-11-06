@@ -117,6 +117,13 @@ export interface SeriousActionDefinition<Payload> {
   name: string;
   /** Must be sensitive in the catalogue: what the route's fresh code and the second person guard. */
   permission: string;
+  /**
+   * Who may ask, when that differs from who may decide (`changelog.publish`: editors ask, publishers
+   * decide). The person asking may not be able to act directly, so they can never run it alone: with
+   * nobody to decide, someone holding only this is refused APPROVAL_NO_APPROVER. They must still be
+   * able to enter a code, and the fresh code is still asserted. Leave out and `permission` asks too.
+   */
+  askPermission?: string;
   /** Throws an OperationError if the facts don't allow it. */
   validate(tx: Tx, payload: Payload, check: SeriousActionCheck): Promise<void>;
   /**
@@ -207,6 +214,11 @@ export function registerSeriousAction<Payload>(
   if (!entry) throw new Error(`${action.name} names an unknown permission`);
   if (!entry.sensitive)
     throw new Error(`${action.name}: ${action.permission} is not sensitive`);
+  if (
+    action.askPermission !== undefined &&
+    !OPS_CATALOGUE[action.askPermission as OpsPermission]
+  )
+    throw new Error(`${action.name} names an unknown ask permission`);
   const named = SERIOUS_ACTION_PERMISSIONS[action.name as SeriousAction];
   if (named && named !== action.permission)
     throw new Error(`${action.name} must use ${named}`);
@@ -431,9 +443,10 @@ export function requestSeriousAction(
         const now = input.now ?? new Date();
         const actorId = canonicalId(input.actorId);
         const access = actorId ? await readStaffAccess(tx, actorId) : null;
+        const askWith = action.askPermission ?? action.permission;
         if (
           !actorId ||
-          !access?.permissions.has(action.permission) ||
+          !access?.permissions.has(askWith) ||
           !(await canEnterCode(tx, actorId))
         )
           throw new OperationError('PERMISSION_NOT_HELD');
@@ -463,6 +476,12 @@ export function requestSeriousAction(
           action: action.name,
           payload,
         });
+        // Running alone is only for someone who could have acted directly.
+        if (
+          approvers.length === 0 &&
+          !access.permissions.has(action.permission)
+        )
+          throw new OperationError('APPROVAL_NO_APPROVER');
         const waiting = await tx
           .select({
             id: approvalRequests.id,
@@ -815,14 +834,19 @@ async function deciderOrThrow(
   return actorId;
 }
 
-/** Still staff, holding it, and able to enter a code: a phone reported stolen ends what it asked for. */
+/**
+ * Still staff, holding what let them ask, and able to enter a code: a phone reported stolen ends what
+ * it asked for. For an action asked with another permission, that one is what they must still hold.
+ */
 async function requesterStillHolds(
   tx: Tx,
   request: ApprovalRow,
 ): Promise<boolean> {
   if (!(await canEnterCode(tx, request.requestedBy))) return false;
   const access = await readStaffAccess(tx, request.requestedBy);
-  return Boolean(access?.permissions.has(request.permission));
+  const askWith =
+    registry.get(request.action)?.askPermission ?? request.permission;
+  return Boolean(access?.permissions.has(askWith));
 }
 
 const DESCRIPTION_CHANGED = Symbol('description changed');

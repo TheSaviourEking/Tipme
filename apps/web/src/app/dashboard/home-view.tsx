@@ -9,6 +9,7 @@ import type {
 } from '@tipme/contracts';
 import { Button, Notice, Skeleton } from '@tipme/ui';
 import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';
+import { WhatsNewSlip } from '@/components/dashboard/whats-new-slip';
 import { useRecipient } from '@/components/account/recipient-context';
 import { ActivityList } from '@/components/dashboard/activity-list';
 import { Moments } from '@/components/dashboard/moments';
@@ -151,6 +152,7 @@ export default function DashboardHome() {
     <div className="dashboard-home">
       <div className="dashboard-home__main">
         <UsernameTakeBackBanner />
+        <WhatsNewSlip />
         {firstDay ? (
           <section className="first-day recipient-setup" aria-labelledby="next">
             <div>
