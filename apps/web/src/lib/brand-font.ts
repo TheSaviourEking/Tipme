@@ -36,3 +36,21 @@ async function load(): Promise<string | undefined> {
     return undefined;
   }
 }
+
+/**
+ * The same font with no time limit, for redrawing a card that was first lettered in Arial because
+ * the font was slow: resolves once the browser has it, or undefined if it never can.
+ */
+export async function interfaceFontWhenReady(): Promise<string | undefined> {
+  if (typeof document === 'undefined' || !document.fonts) return undefined;
+  const family = getComputedStyle(document.documentElement)
+    .getPropertyValue('--font-manrope')
+    .trim();
+  if (!family) return undefined;
+  try {
+    const faces = await document.fonts.load(`700 1em ${family}`);
+    return faces.length > 0 ? family : undefined;
+  } catch {
+    return undefined;
+  }
+}
