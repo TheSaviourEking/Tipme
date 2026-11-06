@@ -75,11 +75,13 @@ export async function enrolOwner(page: Page, testInfo: TestInfo) {
  */
 export async function openOpsLink(page: Page, name: string) {
   const menu = page.getByRole('button', { name: /^Menu · / });
-  if (await menu.isVisible()) await menu.click();
-  await page
+  const link = page
     .getByRole('navigation', { name: 'Admin' })
-    .getByRole('link', { name, exact: true })
-    .click();
+    .getByRole('link', { name, exact: true });
+  // Wait for the frame first: checking the Menu button before it renders would take the desktop path.
+  await expect(menu.or(link)).toBeVisible();
+  if (await menu.isVisible()) await menu.click();
+  await link.click();
 }
 
 /** A tip whose provider reports the wrong amount: a money issue in the inbox. */
@@ -224,7 +226,8 @@ export async function makePagePro(
 ): Promise<Page> {
   const staff = await (await browser.newContext()).newPage();
   await enrolOwner(staff, testInfo);
-  await staff.getByRole('link', { name: 'Pages' }).click();
+  // Through the menu: at phone width the admin links sit in the Menu sheet.
+  await openOpsLink(staff, 'Pages');
   await staff.getByLabel('Handle').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await staff.getByRole('button', { name: 'Make Pro…' }).click();
