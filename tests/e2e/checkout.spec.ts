@@ -488,14 +488,22 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
 }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();
-  await page.route('**/v1/tips/*/status', (route) => route.abort());
+  // The receipt keeps retrying on a timer while it can't reach TipMe. The API stays unreachable
+  // until the moment Check again is pressed, so it is the button that brings the receipt back: a
+  // timed retry landing first used to take the button away mid-click (CI on #181).
+  let reachable = false;
+  await page.route('**/v1/tips/*/status', (route) =>
+    reachable ? route.continue() : route.abort(),
+  );
   await page.reload();
   await expect(
     page.getByRole('heading', { name: 'We can’t reach TipMe right now' }),
   ).toBeVisible();
   await expectAccessible(page);
-  await page.unroute('**/v1/tips/*/status');
-  await page.getByRole('button', { name: 'Check again' }).click();
+  const again = page.getByRole('button', { name: 'Check again' });
+  await expect(again).toBeEnabled();
+  reachable = true;
+  await again.click();
   await expect(paidHeading(page)).toBeVisible();
 });
 
