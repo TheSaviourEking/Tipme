@@ -1,8 +1,9 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Button, Card, InputField } from '@tipme/ui';
+import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { apiDownload, apiFetch } from '@/lib/session-client';
 import { SettingsChapter } from './section';
 
@@ -30,11 +31,55 @@ function TipsExport() {
       <p className="tm-hint">
         A file of your paid and confirming tips: the date, the supporter’s name,
         what they tipped, TipMe’s fee, what you received, the status, and the
-        last 6 characters of the reference. Messages stay private and are left
-        out.
+        last 6 characters of the reference. A tip made at a business also shows
+        the business and the note written about you. Messages stay private and
+        are left out.
       </p>
       <Button variant="secondary" onClick={() => void download()}>
         Download as CSV
+      </Button>
+      <p role="status" className="tm-hint">
+        {note}
+      </p>
+    </Card>
+  );
+}
+
+/**
+ * Where your page has worked (plan B9 Task 24): every business and location, left ones included.
+ * Shown only while businesses are on (the roles read answers 404 when they are off).
+ */
+function WorkExport() {
+  const [on, setOn] = useState(false);
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    void loadBusinessRoles().then((roles) => setOn(roles !== null));
+  }, []);
+  if (!on) return null;
+  const download = async () => {
+    setNote('Preparing your file…');
+    const day = new Date().toISOString().slice(0, 10);
+    const result = await apiDownload(
+      '/v1/me/exports/work.csv',
+      `tipme-work-${day}.csv`,
+    );
+    setNote(
+      result.ok
+        ? 'Downloaded. It lists each business and location you joined, what you chose to show, and when you joined and left.'
+        : 'We couldn’t prepare the file. Please try again.',
+    );
+  };
+  return (
+    <Card className="settings-section">
+      <h3>Where you work</h3>
+      <p className="tm-hint">
+        A file of every business and location your page joined, including ones
+        you left: the name you show, whether your photo shows, whether you share
+        your amounts, and when you joined and left. The notes written about you
+        are in your tips file.
+      </p>
+      <Button variant="secondary" onClick={() => void download()}>
+        Download where you work
       </Button>
       <p role="status" className="tm-hint">
         {note}
@@ -101,6 +146,7 @@ export function DataSection() {
   return (
     <SettingsChapter id="data">
       <TipsExport />
+      <WorkExport />
       <DeletePage />
     </SettingsChapter>
   );

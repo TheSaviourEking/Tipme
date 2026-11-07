@@ -4,6 +4,7 @@ import {
   Get,
   Header,
   Inject,
+  Optional,
   Param,
   Patch,
   Query,
@@ -34,6 +35,8 @@ import {
 import { DatabaseProvider } from '../infra/database.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from './business-live.js';
 
 /** `2026-W54` has the right shape and is no week: refused as `week`, never read as empty. */
 const insightsQueryPipe = new ZodValidationPipe(
@@ -53,6 +56,10 @@ const insightsQueryPipe = new ZodValidationPipe(
 export class BusinessInsightsController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Get('businesses/:id/insights')
@@ -97,13 +104,13 @@ export class BusinessInsightsController {
     @Param('memberId') memberId: string,
     @Body(new ZodValidationPipe(shareAmountsSchema)) body: ShareAmounts,
   ): Promise<ApiDataResponse<MyMembership>> {
-    return {
-      data: await setShareAmounts(
-        this.database.db,
-        auth.userId,
-        memberId,
-        body.share,
-      ),
-    };
+    const data = await setShareAmounts(
+      this.database.db,
+      auth.userId,
+      memberId,
+      body.share,
+    );
+    signalBusiness(this.database.db, this.publishLive, { memberId });
+    return { data };
   }
 }

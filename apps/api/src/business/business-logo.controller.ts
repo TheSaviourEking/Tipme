@@ -38,6 +38,8 @@ import {
 } from '../profiles/image-upload.js';
 import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from './business-live.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 
 // A business's logo (owner, 6 Nov 2026): the page photo's pipeline end to end. The same limits,
@@ -55,6 +57,10 @@ export class BusinessLogoController {
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   /** Owners only. The public pages refresh, so the tile shows it promptly. */
@@ -76,6 +82,7 @@ export class BusinessLogoController {
       this.photos ?? undefined,
     );
     this.revalidator.revalidateBusiness(slug);
+    signalBusiness(this.database.db, this.publishLive, { businessId: id });
     return { data: detail };
   }
 
@@ -93,6 +100,7 @@ export class BusinessLogoController {
       this.photos ?? undefined,
     );
     this.revalidator.revalidateBusiness(slug);
+    signalBusiness(this.database.db, this.publishLive, { businessId: id });
     return { data: detail };
   }
 

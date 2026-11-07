@@ -12,6 +12,7 @@ import { useManagedLogo } from '@/lib/business/logo';
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { apiFetch } from '@/lib/session-client';
 import { BUSINESS_SECTIONS } from './sections';
+import { useBusinessRevision } from '@/lib/business/use-business-live';
 
 const STATUS_WORDS: Record<BusinessStatus, string> = {
   pending: 'Waiting to be verified',
@@ -50,13 +51,17 @@ export function BusinessView() {
     });
   }, []);
 
+  const revision = useBusinessRevision();
   useEffect(() => {
     if (!chosen) return;
     void apiFetch<BusinessDetail>(`/v1/me/businesses/${chosen}`).then(
-      (result) =>
-        setLoaded({ id: chosen, detail: result.ok ? result.data : null }),
+      (result) => {
+        // A failed re-read keeps what is shown; only the first read shows the failure.
+        if (!result.ok && revision > 0) return;
+        setLoaded({ id: chosen, detail: result.ok ? result.data : null });
+      },
     );
-  }, [chosen]);
+  }, [chosen, revision]);
   const detail = loaded?.id === chosen ? loaded.detail : null;
   const logo = useManagedLogo(detail);
 
@@ -84,6 +89,17 @@ export function BusinessView() {
         {current && (
           <p className="tm-hint" data-testid="business-status">
             {STATUS_WORDS[detail?.status ?? current.status]}
+          </p>
+        )}
+        {current && (detail?.status ?? current.status) !== 'verified' && (
+          // Anyone may open a location page, the owner included. Until TipMe verifies the business
+          // (or while it is paused) it reads only the "isn't taking tips" state (M11): say so.
+          <p className="tm-hint" data-testid="business-preview-note">
+            {(detail?.status ?? current.status) === 'suspended'
+              ? `While TipMe has paused ${current.name}, `
+              : `Until TipMe verifies ${current.name}, `}
+            your location pages show “This business isn’t taking tips on TipMe
+            right now.” to everyone, you included.
           </p>
         )}
       </header>
