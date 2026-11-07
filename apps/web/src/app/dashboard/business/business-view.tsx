@@ -7,6 +7,8 @@ import type {
   MyBusinessRoles,
 } from '@tipme/contracts';
 import { EmptySlip, Skeleton } from '@tipme/ui';
+import { BusinessLogoTile } from '@/components/business/business-logo-tile';
+import { useManagedLogo } from '@/lib/business/logo';
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { apiFetch } from '@/lib/session-client';
 import { BUSINESS_SECTIONS } from './sections';
@@ -56,6 +58,7 @@ export function BusinessView() {
     );
   }, [chosen]);
   const detail = loaded?.id === chosen ? loaded.detail : null;
+  const logo = useManagedLogo(detail);
 
   if (roles === undefined)
     return (
@@ -68,7 +71,16 @@ export function BusinessView() {
   return (
     <div className="dashboard-section business-page">
       <header className="business-page__head">
-        <h1>{detail?.name ?? current?.name ?? 'Business'}</h1>
+        <div className="business-page__brand">
+          {current && (
+            <BusinessLogoTile
+              name={detail?.name ?? current.name}
+              src={logo}
+              className="business-page__logo"
+            />
+          )}
+          <h1>{detail?.name ?? current?.name ?? 'Business'}</h1>
+        </div>
         {current && (
           <p className="tm-hint" data-testid="business-status">
             {STATUS_WORDS[detail?.status ?? current.status]}

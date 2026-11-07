@@ -52,6 +52,7 @@ const PUBLIC_REVIEWED = [
   'GET /v1/b/{business}/people',
   'GET /v1/b/{business}/{location}',
   'GET /v1/b/{business}/{location}/{handle}',
+  'GET /v1/business-logos/{businessId}/{file}',
   'GET /v1/covers/{profileId}/{file}',
   'POST /v1/events',
   'GET /v1/handles/{handle}/availability',

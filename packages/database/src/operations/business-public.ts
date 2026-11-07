@@ -159,6 +159,7 @@ async function openLocation(
       businessId: businesses.id,
       businessSlug: businesses.slug,
       businessName: businesses.name,
+      logoPath: businesses.logoPath,
       locationId: businessLocations.id,
       locationSlug: businessLocations.slug,
       locationName: businessLocations.name,
@@ -180,6 +181,7 @@ async function openLocation(
       slug: row.businessSlug,
       name: row.businessName,
       verified: true,
+      ...(row.logoPath ? { logoPath: row.logoPath } : {}),
     },
     location: {
       id: row.locationId,
@@ -243,6 +245,7 @@ export function publicBusiness(
       .select({
         businessSlug: businesses.slug,
         businessName: businesses.name,
+        logoPath: businesses.logoPath,
         slug: businessLocations.slug,
         name: businessLocations.name,
         address: businessLocations.address,
@@ -264,6 +267,7 @@ export function publicBusiness(
         slug: first.businessSlug,
         name: first.businessName,
         verified: true,
+        ...(first.logoPath ? { logoPath: first.logoPath } : {}),
       },
       locations: rows.map(({ slug, name, address }) => ({
         slug,
