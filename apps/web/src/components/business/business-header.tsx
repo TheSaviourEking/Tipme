@@ -1,3 +1,6 @@
+import { API_ORIGIN, businessLogoSource } from '@/lib/avatar-source';
+import { BusinessLogoTile } from './business-logo-tile';
+
 /**
  * The top of every business page a code opens (PR B4, board section 2): who this is, where, and
  * that TipMe checked them, always before any person (QR-sticker fraud: the badge, the business
@@ -9,6 +12,8 @@ export function BusinessHeader({
   location,
   where,
   titleLevel,
+  onToday = false,
+  logoPath,
 }: {
   name: string;
   location?: string;
@@ -16,19 +21,26 @@ export function BusinessHeader({
   where?: string;
   /** The location page's title is the business; the staff page's is the person. */
   titleLevel: 'h1' | 'p';
+  /**
+   * Whether someone is on shift here now (the staff page: whether that person is). Only then does
+   * the location line say "on today"; it never gives a number of people (owner's design note).
+   */
+  onToday?: boolean;
+  /** The owner's uploaded logo; without one the tile shows the initial. */
+  logoPath?: string;
 }) {
   const Title = titleLevel;
-  const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '';
   return (
     <header className="business-header" data-testid="business-header">
       <div className="business-header__who">
-        <span className="business-header__logo" aria-hidden="true">
-          {initial}
-        </span>
+        <BusinessLogoTile
+          name={name}
+          src={businessLogoSource(logoPath, API_ORIGIN)}
+        />
         <div className="business-header__names">
           <Title className="business-header__name">{name}</Title>
           <p className="business-header__where">
-            {where ?? `${location} · on today`}
+            {where ?? (onToday ? `${location} · on today` : location)}
           </p>
         </div>
       </div>

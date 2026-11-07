@@ -2279,6 +2279,10 @@ export const businesses = pgTable(
     verifiedBy: uuid('verified_by').references(() => users.id),
     suspendedAt: timestamp('suspended_at', { withTimezone: true }),
     suspendedReason: text('suspended_reason'),
+    // The logo's served address (`/v1/business-logos/<id>/<n>.webp`), or null for the initial.
+    // `logoVersion` only ever goes up, like a page's `avatarVersion`: a new logo is a new URL.
+    logoPath: text('logo_path'),
+    logoVersion: integer('logo_version').notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [
@@ -2303,6 +2307,30 @@ export const businesses = pgTable(
     ),
     index('businesses_created_by').on(table.createdBy),
     index('businesses_status_created').on(table.status, table.createdAt),
+  ],
+);
+
+/**
+ * A business's uploaded logo: one per business, re-encoded on the server (512×512 WebP, no
+ * metadata) exactly like a page photo, and kept like `profile_avatars`: in Postgres or in R2,
+ * exactly one of the two.
+ */
+export const businessLogos = pgTable(
+  'business_logos',
+  {
+    businessId: uuid('business_id')
+      .primaryKey()
+      .references(() => businesses.id),
+    version: integer('version').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdAt: createdAt(),
+  },
+  () => [
+    check(
+      'business_logos_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
   ],
 );
 

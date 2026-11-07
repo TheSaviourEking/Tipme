@@ -136,6 +136,10 @@ export function opsBusinessDetail(
       .where(eq(businessLocations.businessId, id))
       .orderBy(asc(businessLocations.createdAt), asc(businessLocations.slug));
     const managers = await openManagers(db, id);
+    const [logo] = await db
+      .select({ logoPath: businesses.logoPath })
+      .from(businesses)
+      .where(eq(businesses.id, id));
     return {
       ...rowOf(row),
       locationList: locationList.map(({ closedAt, ...location }) => ({
@@ -150,6 +154,7 @@ export function opsBusinessDetail(
       ...(row.suspended_reason
         ? { suspendedReason: row.suspended_reason }
         : {}),
+      hasLogo: Boolean(logo?.logoPath),
     };
   });
 }

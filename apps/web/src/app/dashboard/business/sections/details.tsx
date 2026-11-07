@@ -1,10 +1,18 @@
 'use client';
 import Link from 'next/link';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { BusinessDetail } from '@tipme/contracts';
 import { Button, InputField, Slip, StateLine } from '@tipme/ui';
+import { BusinessLogoTile } from '@/components/business/business-logo-tile';
+import {
+  removeBusinessLogo,
+  uploadBusinessLogo,
+  useManagedLogo,
+} from '@/lib/business/logo';
 import { updateBusiness } from '@/lib/business/setup-api';
+import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
+import { shrinkPhoto } from '@/lib/shrink-photo';
 import { setupFieldErrors, type SetupField } from '@/lib/business/setup-form';
 
 /** Where the business stands with TipMe. Never "approved", "licensed" or "regulated" (M10). */
@@ -33,6 +41,111 @@ function Standing({ business }: { business: BusinessDetail }) {
         once it’s verified.
       </span>
     </p>
+  );
+}
+
+/**
+ * Owners: the square logo the public pages show beside the name (the initial without one). The
+ * page photo's pipeline: the same limits, and TipMe re-encodes it without hidden details.
+ */
+function LogoField({
+  business,
+  onChange,
+}: {
+  business: BusinessDetail;
+  onChange?: (next: BusinessDetail) => void;
+}) {
+  const id = useId();
+  const logo = useManagedLogo(business);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState('');
+  const chooser = useRef<HTMLInputElement>(null);
+  const refocusChooser = useRef(false);
+  // After Remove logo the button is gone: focus goes to the chooser, once it is enabled again.
+  useEffect(() => {
+    if (busy || !refocusChooser.current) return;
+    refocusChooser.current = false;
+    chooser.current?.focus();
+  }, [busy]);
+  const send = async (file?: File) => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    // A PNG or WebP that already fits is sent as it is, so a transparent logo stays transparent;
+    // anything else is shrunk first, like a page photo (a phone photo uploads in seconds).
+    const keepsAlpha =
+      file &&
+      (file.type === 'image/png' || file.type === 'image/webp') &&
+      file.size <= PHOTO_LIMIT_BYTES;
+    const logoFile = file
+      ? keepsAlpha
+        ? file
+        : await shrinkPhoto(file)
+      : undefined;
+    if (logoFile && logoFile.size > PHOTO_LIMIT_BYTES) {
+      setBusy(false);
+      setError(photoErrors['PAYLOAD_TOO_LARGE']!);
+      return;
+    }
+    const result = logoFile
+      ? await uploadBusinessLogo(business.id, logoFile)
+      : await removeBusinessLogo(business.id);
+    setBusy(false);
+    if (result.ok) {
+      onChange?.(result.data);
+      setDone(logoFile ? 'Logo saved.' : 'Logo removed.');
+      if (!logoFile) refocusChooser.current = true;
+    } else
+      setError(
+        photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
+      );
+  };
+  return (
+    <div className="business-details__logo">
+      <p className="tm-hint">
+        Logo (optional). It shows beside your name on your location and staff
+        pages. TipMe crops it to a square and removes hidden details such as
+        where it was taken. JPEG, PNG or WebP, up to 5 MB.
+      </p>
+      <BusinessLogoTile
+        name={business.name}
+        src={logo}
+        className="business-page__logo"
+      />
+      <div className="tm-field">
+        <label htmlFor={`${id}-logo`}>
+          {business.logoPath ? 'Choose a new logo' : 'Choose a logo'}
+        </label>
+        <input
+          ref={chooser}
+          id={`${id}-logo`}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          aria-describedby={error ? `${id}-logo-error` : undefined}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void send(file);
+            event.target.value = '';
+          }}
+        />
+      </div>
+      {error && (
+        <p className="tm-field-error" role="alert" id={`${id}-logo-error`}>
+          {error}
+        </p>
+      )}
+      {/* Always present, so screen readers announce what is written into it. */}
+      <p role="status" className="tm-hint">
+        {done}
+      </p>
+      {business.logoPath && (
+        <Button variant="quiet" disabled={busy} onClick={() => void send()}>
+          Remove logo
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -114,6 +227,7 @@ export function DetailsCard({
   return (
     <div className="business-details">
       <Standing business={business} />
+      {owner && <LogoField business={business} onChange={onChange} />}
       {owner ? (
         <form
           className="business-details__form"

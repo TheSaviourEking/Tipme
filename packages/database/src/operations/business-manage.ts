@@ -433,6 +433,7 @@ async function readDetail(
       ? { suspendedReason: business.suspendedReason }
       : {}),
     slugLocked: status !== 'pending',
+    ...(business.logoPath ? { logoPath: business.logoPath } : {}),
     contact: {
       name: business.contactName,
       email: business.contactEmail,

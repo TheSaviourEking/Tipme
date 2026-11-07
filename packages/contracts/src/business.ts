@@ -311,7 +311,8 @@ export interface StaffCard {
   onShift: boolean;
 }
 export interface PublicLocation {
-  business: { slug: string; name: string; verified: true };
+  /** `logoPath`: the uploaded logo (`/v1/business-logos/…`); without one, the tile shows the initial. */
+  business: { slug: string; name: string; verified: true; logoPath?: string };
   location: { slug: string; name: string };
   /** On shift first (by started_at), then everyone else (by shownName). */
   people: StaffCard[];
@@ -406,6 +407,8 @@ export interface BusinessDetail {
   status: BusinessStatus;
   suspendedReason?: string;
   slugLocked: boolean;
+  /** The uploaded logo's served address; it is served publicly only once the business is verified. */
+  logoPath?: string;
   contact: { name: string; email: string; phone?: string };
   /** A location manager sees only their location. */
   locations: BusinessLocationView[];
@@ -580,6 +583,8 @@ export interface OpsBusinessDetail extends OpsBusinessRow {
   managers: { userHint: string; role: ManagerRole }[];
   verifiedAt?: string;
   suspendedReason?: string;
+  /** Whether the owners uploaded a logo; staff read it through their own route, whatever the status. */
+  hasLogo?: boolean;
 }
 /**
  * PR B2: the Businesses list's filter and search. `q` matches the name or the slug only, never a

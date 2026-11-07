@@ -74,6 +74,8 @@ export default async function BusinessStaffPage({
           name={page.business.name}
           location={page.location.name}
           titleLevel="p"
+          onToday={page.person.onShift}
+          logoPath={page.business.logoPath}
         />
         <h1 className="business-staff__title">
           {firstName} <span>at {page.business.name}</span>
