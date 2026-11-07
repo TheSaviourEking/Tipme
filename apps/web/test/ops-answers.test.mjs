@@ -226,3 +226,17 @@ test('each take-back refusal and activity has plain words, with no em dash', asy
   ])
     assert.equal(/[\u2013\u2014]/.test(text), false);
 });
+
+test('the changelog refusals say nothing changed, and what to do', () => {
+  const words = (code, status = 409) => refusalWords({ status, code });
+  assert.match(
+    words('CHANGELOG_EDITED_ELSEWHERE'),
+    /someone else.*Nothing changed/is,
+  );
+  assert.match(words('APPROVAL_NO_APPROVER'), /Nobody who can approve/);
+  assert.match(words('CHANGELOG_NOT_FOUND', 404), /no changelog entry/i);
+  assert.match(
+    words('CHANGELOG_TEXT_NOT_ALLOWED', 422),
+    /can’t be shown to users/,
+  );
+});

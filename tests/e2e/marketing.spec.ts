@@ -54,24 +54,43 @@ test('the individuals page names creators and streamers and keeps one call to cl
   expect(content).not.toContain('₦1,000');
 });
 
-test('the businesses page only registers interest', async ({ page }) => {
+// The e2e stack runs with TipMe for businesses on (playwright.config.ts). The coming-soon interest
+// form it shows while off is tested on a stand-in stack in business-setup.spec.ts.
+test('with businesses on, the businesses page invites people to create one', async ({
+  page,
+}) => {
   await page.goto('/for-businesses');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    'TipMe for businesses is on its way.',
+    'Let your customers thank your team.',
   );
-  await page.getByLabel('Work email').fill('owner@example.com');
-  await page.getByRole('button', { name: "Tell me when it's ready" }).click();
-  // Nothing is sent or stored yet: the card says so and offers the draft.
-  await expect(page.getByText('Your email is ready to send.')).toBeVisible();
-  await expect(page.getByText("You're on the list.")).toHaveCount(0);
-  const href = await page
-    .getByRole('link', { name: 'Open email app' })
-    .getAttribute('href');
-  expect(href).toContain('mailto:usetipme@gmail.com?');
-  expect(decodeURIComponent((href ?? '').replaceAll('+', ' '))).toContain(
-    'owner@example.com',
-  );
+  await expect(
+    page.getByRole('link', { name: 'Create your business' }),
+  ).toHaveAttribute('href', '/dashboard/business/apply');
+  await expect(page.getByLabel('Work email')).toHaveCount(0);
   const main = page.getByRole('main');
   await expect(main).not.toContainText(/₦|\bNGN\b|launch date|\bper month\b/i);
   await expect(main).not.toContainText(/20\d\d/);
+  await expect(main).not.toContainText(/approved|licensed|regulated/i);
+});
+
+test('the businesses page is centred: the text and the card sit as one block in the middle', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/for-businesses');
+  const hero = page.locator('.business-hero');
+  const parts = hero.locator('> *').filter({ visible: true });
+  const text = parts.first();
+  const card = parts.last();
+  await expect(parts).toHaveCount(2);
+  const [t, c] = [(await text.boundingBox())!, (await card.boundingBox())!];
+  // Horizontally: the space left of the text matches the space right of the card.
+  const left = t.x;
+  const right = 1440 - (c.x + c.width);
+  expect(Math.abs(left - right)).toBeLessThan(24);
+  // Vertically: the block sits mid-way between the header and the bottom of the window.
+  const header = (await page.locator('header').first().boundingBox())!;
+  const top = Math.min(t.y, c.y) - (header.y + header.height);
+  const bottom = 900 - Math.max(t.y + t.height, c.y + c.height);
+  expect(Math.abs(top - bottom)).toBeLessThan(64);
 });

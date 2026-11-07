@@ -4,10 +4,11 @@ import { CheckoutModule } from '../checkout/checkout.module.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { DashboardController } from './dashboard.controller.js';
+import { WhatsNewController } from './whats-new.controller.js';
 
 @Module({
   imports: [CheckoutModule],
-  controllers: [DashboardController],
+  controllers: [DashboardController, WhatsNewController],
   providers: [SessionGuard, CsrfGuard, ServerEvents],
 })
 export class DashboardModule {}

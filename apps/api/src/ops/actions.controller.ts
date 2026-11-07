@@ -8,6 +8,7 @@ import {
   Post,
   Res,
   SetMetadata,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -18,7 +19,11 @@ import {
   opsReasonSchema,
   opsRecheckSchema,
   opsResolveIssueSchema,
+  opsTipReverseSchema,
   type ApiDataResponse,
+  type OpsActedAlone,
+  type OpsTipReverseRequest,
+  type OpsTipReversed,
   type OpsNoteRequest,
   type OpsBachsAccountRecoveryRequest,
   type OpsBachsCheckoutRecoveryRequest,
@@ -46,6 +51,7 @@ import {
   setPageSuspension,
   freezeReleaseBySubject,
   requestSeriousAction,
+  tipReversalTarget,
   type SeriousActionServices,
 } from '@tipme/database';
 import {
@@ -57,6 +63,7 @@ import {
 import type { Logger } from '@tipme/observability';
 import {
   RATE_LIMIT_ROUTE,
+  RateLimit,
   RateLimitGuard,
 } from '../checkout/rate-limit.guard.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
@@ -65,6 +72,8 @@ import {
   PAYMENT_PROVIDER_TOKEN,
 } from '../checkout/payment-provider.provider.js';
 import { CodedHttpException } from '../http/coded.exception.js';
+import { BusinessEnabledGuard } from '../business/business-enabled.guard.js';
+import { SharesEnabledGuard } from '../business/release2-flags.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
@@ -83,8 +92,10 @@ export const uuidParam = (value: string) => {
 };
 
 /**
- * Decisions staff can take (PR-009). None moves money: no refunds, adjustments or payout holds.
- * Every action needs a written reason and is audited in the same transaction.
+ * Decisions staff can take (PR-009). None moves money at the provider. The one that books a money
+ * movement is `tip.reverse` (business release 2, Q7): it records a refund or chargeback the partner
+ * already made, as a serious action. Every action needs a written reason and is audited in the same
+ * transaction.
  */
 @Controller('v1/ops')
 export class OpsActionsController {
@@ -177,6 +188,49 @@ export class OpsActionsController {
         : {}),
     });
     return { data: { resolved: true, ...closed } };
+  }
+
+  /**
+   * Business release 2 (Q7): from the partner's `payment_reversed` issue, staff take back the tip
+   * the partner refunded or charged back, every line of it, after checking the partner's dashboard.
+   * A second person approves it when there is one (`tip.reverse`). Never automatic. Off (404) until
+   * shares are on: with both flags off, a refund changes no balance, as in release 1 (D-05).
+   */
+  @Post('issues/:id/reverse-tip')
+  @UseGuards(BusinessEnabledGuard, SharesEnabledGuard)
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('payments.repair')
+  async reverseTip(
+    @CurrentOps() ops: OpsContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(opsTipReverseSchema))
+    body: OpsTipReverseRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<(OpsTipReversed & OpsActedAlone) | OpsSeriousPending>
+  > {
+    const issueId = uuidParam(id);
+    const target = await tipReversalTarget(this.database.db, issueId);
+    if (!target) throw new CodedHttpException(404, 'NOT_FOUND');
+    const answer = pendingOr<OpsTipReversed>(
+      await requestSeriousAction(this.database.db, {
+        name: 'tip.reverse',
+        payload: {
+          issueId,
+          tipId: target.tipId,
+          partnerReversalId: target.partnerReversalId,
+          refundedMinor: body.refundedMinor,
+        },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    return { data: 'pending' in answer ? answer.pending : answer.result };
   }
 
   @Post('issues/:id/notes')

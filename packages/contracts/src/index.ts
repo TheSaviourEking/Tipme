@@ -21,3 +21,5 @@ export * from './thanks.js';
 export * from './live.js';
 export * from './usernames.js';
 export * from './supporters.js';
+export * from './business.js';
+export * from './changelog.js';

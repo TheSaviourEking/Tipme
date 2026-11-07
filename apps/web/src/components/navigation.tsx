@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { ActionLink, Button, Container, Surface } from '@tipme/ui';
-import { Brand, Arrow } from './brand';
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Button, Container, Surface } from '@tipme/ui';
+import { Brand } from './brand';
+import { GuestActions, NavAccount } from './nav-account';
 
 /**
  * Who the product is for. Individuals is open; the other two say so and are not links until
@@ -16,9 +17,11 @@ const WHO = [
     text: 'Creators, streamers, video editors, barbers, drivers: anyone can receive payments.',
   },
   {
+    // The words follow the business flag when the layout passes them (`businesses`, PR B1).
     title: 'Businesses (coming soon)',
     href: '/for-businesses',
     text: 'Tell us you’re interested, and we’ll let you know.',
+    flagged: true,
   },
   {
     title: 'Infrastructure (coming soon)',
@@ -57,7 +60,12 @@ function ProLink({ onClick }: { onClick(): void }) {
   );
 }
 
-export function Navigation() {
+export function Navigation({
+  businesses,
+}: {
+  /** The Businesses choice's words, rendered on the server per request (BusinessesWho). */
+  businesses?: ReactNode;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [whoOpen, setWhoOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -206,22 +214,28 @@ export function Navigation() {
             <p className="who__label">Who it&apos;s for</p>
             <Surface material="instrument" id="who-menu" className="who__menu">
               <ul>
-                {WHO.map(({ title, href, text }) => (
-                  <li key={title}>
-                    {href ? (
+                {WHO.map((choice) => (
+                  <li key={choice.title}>
+                    {choice.href ? (
                       <Link
-                        href={href}
+                        href={choice.href}
                         className="who__item"
                         data-who-item
                         onClick={close}
                       >
-                        <strong>{title}</strong>
-                        <span>{text}</span>
+                        {'flagged' in choice && businesses ? (
+                          businesses
+                        ) : (
+                          <>
+                            <strong>{choice.title}</strong>
+                            <span>{choice.text}</span>
+                          </>
+                        )}
                       </Link>
                     ) : (
                       <div className="who__item" data-who-item>
-                        <strong>{title}</strong>
-                        <span>{text}</span>
+                        <strong>{choice.title}</strong>
+                        <span>{choice.text}</span>
                       </div>
                     )}
                   </li>
@@ -232,23 +246,11 @@ export function Navigation() {
           <Suspense fallback={<Link href="/pro">Pro</Link>}>
             <ProLink onClick={close} />
           </Suspense>
-          {/* Guest actions; hidden in the dashboard, where someone already has a page (CSS). */}
-          <ActionLink
-            className="nav-guest"
-            variant="secondary"
-            href="/sign-in"
-            onClick={close}
-          >
-            Sign in
-          </ActionLink>
-          {/* Getting someone their own page is the one primary action. */}
-          <ActionLink
-            className="nav-guest nav-claim"
-            href="/sign-up"
-            onClick={close}
-          >
-            Claim your username <Arrow />
-          </ActionLink>
+          {/* Sign in and Claim your username, or, signed in, Go to my dashboard (NavAccount). Before
+              the address is read it is the signed-out pair, as the server renders it. */}
+          <Suspense fallback={<GuestActions onClick={close} />}>
+            <NavAccount onClick={close} />
+          </Suspense>
         </nav>
       </Container>
     </header>

@@ -83,10 +83,12 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   await them.getByLabel('Authenticator code').fill(await totpNow(secret, 1n));
   await them.getByRole('button', { name: 'Confirm' }).click();
   await expect(nav(them).getByRole('link', { name: 'Search' })).toBeVisible();
+  // Businesses reads with search.view too (the e2e stack has BUSINESS_ENABLED on).
   await expect(nav(them).getByRole('link')).toHaveText([
     'Overview',
     'Approvals',
     'Search',
+    'Businesses',
     'Your access',
   ]);
   // Overview works without analytics: it says what it can and no more.
@@ -322,8 +324,11 @@ test('on approve: an outage says still waiting, a stale request says why, and it
   await other.page.unroute('**/v1/ops/approvals/*/approve');
   await refuse(409, 'APPROVAL_STALE', 'facts_changed');
   await approve();
+  // In the alert: a request that really went stale (ops-changelog.spec) lists the same words.
   await expect(
-    other.page.getByText(/the facts changed after it was asked/),
+    other.page
+      .getByRole('alert')
+      .filter({ hasText: /the facts changed after it was asked/ }),
   ).toBeVisible();
   await other.context.close();
 });

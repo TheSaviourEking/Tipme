@@ -11,6 +11,7 @@ import {
   tipQuotes,
   tips,
 } from '../schema.js';
+import { tippableMember } from './business-access.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { recordSupporter, supporterKeyHash } from './supporters.js';
@@ -54,6 +55,11 @@ export interface CreatePaymentIntentInput {
   supporterKey?: string;
   /** The API's SUPPORTER_RECOGNITION switch. Off unless passed. */
   recognitionOn?: boolean;
+  /**
+   * The business membership the supporter's page named (TipMe for businesses). Checked against the
+   * quote's page inside the transaction and ignored when it doesn't hold: never a refusal.
+   */
+  businessMemberId?: string;
   traceId?: string | null;
   now?: Date;
   /** Test-only: throw after the named step to prove the transaction rolls back. Ignored unless NODE_ENV=test. */
@@ -99,22 +105,29 @@ export async function createPaymentIntent(
   const mayShow = message !== null && input.noteMayShow === true;
   // A key counts only with a name to recognise; without one it is ignored and stored nowhere.
   const keyHash = label === null ? null : supporterKeyHash(input.supporterKey);
-  const fingerprint = createHash('sha256')
-    .update(
-      JSON.stringify([
-        input.quoteId,
-        label,
-        message,
-        input.celebrationMomentId ?? null,
-        // Appended only with consent, so every fingerprint made without it (in-flight replays
-        // included) stays byte-identical, and adding consent to a replayed key is a conflict.
-        ...(mayShow ? [true] : []),
-        // The same trick for a supporter key: only its hash, and only when it can be recorded, so a
-        // request without one hashes exactly as before and adding one to a replayed key conflicts.
-        ...(keyHash ? ['s', keyHash.toString('hex')] : []),
-      ]),
-    )
-    .digest('hex');
+  const requestParts = [
+    input.quoteId,
+    label,
+    message,
+    input.celebrationMomentId ?? null,
+    // Appended only with consent, so every fingerprint made without it (in-flight replays
+    // included) stays byte-identical, and adding consent to a replayed key is a conflict.
+    ...(mayShow ? [true] : []),
+    // The same trick for a supporter key: only its hash, and only when it can be recorded, so a
+    // request without one hashes exactly as before and adding one to a replayed key conflicts.
+    ...(keyHash ? ['s', keyHash.toString('hex')] : []),
+  ];
+  // The validated member is appended only when it resolved, so a request without one, or whose
+  // member was ignored, hashes exactly as before the business feature.
+  const fingerprintOf = (memberId: string | null) =>
+    createHash('sha256')
+      .update(
+        JSON.stringify([
+          ...requestParts,
+          ...(memberId === null ? [] : ['b', memberId]),
+        ]),
+      )
+      .digest('hex');
 
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -123,6 +136,25 @@ export async function createPaymentIntent(
         .from(tipQuotes)
         .where(eq(tipQuotes.id, input.quoteId));
       if (!quote) throw new OperationError('QUOTE_NOT_FOUND');
+      // A team quote (business release 2, R2-D) names a location, not a person, and is paid only
+      // through its own intent route: here it reads as no quote at all.
+      const profileId = quote.profileId;
+      if (profileId === null) throw new OperationError('QUOTE_NOT_FOUND');
+      // Where the tip is made, resolved before the fingerprint, since that needs the quote's page.
+      // A label, never a destination: no posting reads it.
+      const member = await tippableMember(
+        tx,
+        profileId,
+        input.businessMemberId,
+        now,
+      );
+      const fingerprint = fingerprintOf(member?.memberId ?? null);
+      // The same request when its member resolved the first time and no longer does (they left
+      // or the business was suspended in between): a retry replays the tip, never refuses it.
+      const firstTimeFingerprint =
+        member === null && input.businessMemberId !== undefined
+          ? fingerprintOf(input.businessMemberId)
+          : null;
       // The same key replays the original tip, even after the quote has expired.
       const replay = async (): Promise<PaymentIntentResult | null> => {
         const [existing] = await tx
@@ -133,12 +165,15 @@ export async function createPaymentIntent(
           .from(paymentIntents)
           .where(
             and(
-              eq(paymentIntents.profileId, quote.profileId),
+              eq(paymentIntents.profileId, profileId),
               eq(paymentIntents.idempotencyKey, input.idempotencyKey),
             ),
           );
         if (!existing) return null;
-        if (existing.fingerprint !== fingerprint)
+        if (
+          existing.fingerprint !== fingerprint &&
+          existing.fingerprint !== firstTimeFingerprint
+        )
           throw new OperationError('IDEMPOTENCY_CONFLICT');
         const [tip] = await tx
           .select({ id: tips.id })
@@ -173,7 +208,7 @@ export async function createPaymentIntent(
           plan: profiles.plan,
         })
         .from(profiles)
-        .where(eq(profiles.id, quote.profileId));
+        .where(eq(profiles.id, profileId));
       if (page?.pageState !== 'live' || page.status !== 'active')
         throw new OperationError('TIP_NOT_PAYABLE');
 
@@ -184,7 +219,7 @@ export async function createPaymentIntent(
         .values({
           id: intentId,
           quoteId: quote.id,
-          profileId: quote.profileId,
+          profileId,
           idempotencyKey: input.idempotencyKey,
           requestFingerprint: fingerprint,
           status: 'AWAITING_PAYMENT',
@@ -204,7 +239,7 @@ export async function createPaymentIntent(
       await tx.insert(tips).values({
         id: tipId,
         intentId,
-        profileId: quote.profileId,
+        profileId,
         currency: quote.currency,
         grossMinor: quote.tipMinor,
         status: 'AWAITING_PAYMENT',
@@ -212,9 +247,11 @@ export async function createPaymentIntent(
         purpose: input.purpose ?? null,
         celebrationMomentId: await sharedMomentOf(
           tx,
-          quote.profileId,
+          profileId,
           input.celebrationMomentId,
         ),
+        businessMemberId: member?.memberId ?? null,
+        businessLocationId: member?.locationId ?? null,
       });
       await recordTransition(tx, {
         entityType: 'tip',
@@ -232,7 +269,7 @@ export async function createPaymentIntent(
         page.plan === 'pro'
       )
         await recordSupporter(tx, {
-          profileId: quote.profileId,
+          profileId,
           keyHash,
           label,
           tipId,

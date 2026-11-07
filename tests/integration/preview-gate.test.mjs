@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
@@ -8,7 +9,7 @@ import {
   issuePreviewTicket,
   previewServerKey,
 } from '../../packages/domain/dist/index.js';
-import { startStack } from './helpers.mjs';
+import { CHANGELOG_SECRET, startStack } from './helpers.mjs';
 
 startTelemetry({
   serviceName: 'tipme-integration',
@@ -131,6 +132,7 @@ test('health, release info and signed webhooks need no cookie', async () => {
     paymentsLive: false,
     analytics: true,
     paymentProvider: 'mock',
+    business: false,
   });
   // Unsigned, so refused by the webhook itself (400/401), not by the gate.
   const hook = await fetch(`${gated.api}/v1/webhooks/mock`, {
@@ -139,6 +141,53 @@ test('health, release info and signed webhooks need no cookie', async () => {
     body: '{}',
   });
   assert.notEqual((await hook.json()).error?.code, 'PREVIEW_REQUIRED');
+});
+
+test('the changelog routes pass the staging preview gate without a cookie, and nothing else new does', async () => {
+  // Signed as CI signs: the gate lets it through and the route answers.
+  const raw = JSON.stringify({ environment: 'staging' });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', CHANGELOG_SECRET)
+    .update(`${timestamp}.${raw}`)
+    .digest('hex');
+  const pending = await fetch(`${gated.api}/v1/webhooks/changelog/pending`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-tipme-timestamp': timestamp,
+      'x-tipme-signature': `sha256=${signature}`,
+    },
+    body: raw,
+  });
+  assert.equal(pending.status, 200);
+  assert.ok(Array.isArray((await pending.json()).data));
+  // Unsigned: refused by the route's own check, not by the gate.
+  const unsigned = await fetch(`${gated.api}/v1/webhooks/changelog/drafts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  assert.equal(unsigned.status, 401);
+  assert.equal(
+    (await unsigned.json()).error.code,
+    'CHANGELOG_SIGNATURE_INVALID',
+  );
+  // The changelog's admin and user routes stay behind the gate.
+  for (const [method, path] of [
+    ['GET', '/v1/ops/changelog'],
+    ['GET', '/v1/me/whats-new'],
+    ['POST', '/v1/me/whats-new/seen'],
+    ['POST', '/v1/webhooks/changelog/../../ops/changelog'],
+    ['POST', '/v1/webhooks//changelog/pending'],
+  ]) {
+    const response = await fetch(`${gated.api}${path}`, { method });
+    assert.equal(response.status, 401, path);
+    assert.equal(
+      (await response.json()).error.code,
+      'PREVIEW_REQUIRED',
+      `${method} ${path}`,
+    );
+  }
 });
 
 test('in preview, browser calls to every API path are credentialed from the web origin', async () => {

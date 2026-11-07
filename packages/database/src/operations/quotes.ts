@@ -12,6 +12,7 @@ import { feeFreeCredits, profiles, tipQuotes } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { opsPageByHandle, tipAmountsOf } from './profiles.js';
+import { personOf } from './owner.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -175,7 +176,7 @@ export function findQuoteCharge(
       })
       .from(tipQuotes)
       .where(eq(tipQuotes.id, quoteId));
-    return row ?? null;
+    return row ? { ...row, profileId: personOf(row.profileId) } : null;
   });
 }
 

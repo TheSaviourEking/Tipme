@@ -38,6 +38,8 @@
 >
 > **1 Nov 2026:** the owner's decision of this date (see "Launching without these" below) supersedes that sentence for launch, unless the owner's ADR says otherwise. D-04 stays open and is not approved.
 
+> **D-05 note (6 Nov 2026):** Reversal of business shares: see Q7/Q8 defaults in "Business release 2 (owner's report, 6 Nov 2026)" below. D-05 keeps its status: refunds and chargebacks stay OPEN.
+
 > **PR-008 notes (19 Oct 2026), all PROPOSED:**
 > - **Paid plans** (future idea from the user): premium QR styles, custom backgrounds, deeper insights. Premium styles are marked "free in preview"; nothing is billed. Charging to keep personal details private is **not** planned: phone and email stay private by default and free (privacy by default; D-07).
 > - **Cash rewards:** TipMe-funded bonuses of 50% of the platform fees a recipient earned since the last bonus, capped at 50% of lifetime fees (cash plus waived fees) and by a monthly budget. Pretend money only; real rewards need D-05, a legal review of financial promotions, and the two-person rule for manual adjustments.
@@ -200,3 +202,53 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 > - **The amount a page starts on (Pro),** chosen from the page's own amounts.
 > - **Leaving Pro hides, never deletes:** every saved choice is kept and shows again on return to Pro; a Free page shows the Free version.
 > - **Answers to the plan's questions (5 Nov 2026, final):** Q1, the accent follows the cover colour, and photo and automatic covers use TipMe purple. Q2, a supporter may stop their note being shown, from their receipt. Q3, the consent says "on their page": TipMe never infers pronouns. Q4, the tick box ships first; earlier notes can never be pinned. Q5, the receipt shows the current thank-you line.
+
+> **TipMe for businesses (owner's direction, 6 Nov 2026).** A product decision, not a legal, regulatory or provider approval: no D-item changes. Spec `docs/superpowers/specs/2026-11-06-business-design.md`, plan `docs/superpowers/plans/2026-11-06-business.md`, board `docs/design/redesign/boards/Business.dc.html`. Everything is behind `BUSINESS_ENABLED`, off by default.
+> - **Release 1 scope:** verified business accounts with locations and managers (owner, location manager); staff join by invitation only, with their own TipMe accounts; one printed code per location and an optional staff code; the supporter picks the person who served them and tips with today's form; an optional kind note with one-tap positive tags after paying; on shift; weekly counts, tags, notes and busy hours for the business with groups smaller than 3 hidden; TipMe staff verify, suspend and look up businesses.
+> - **Release 1 moves no money; every tip credits the person tipped.** A tip made at a business carries a label (member and location) that the server chose and checked; a bad or stale label is ignored, never refused, and no posting reads it. Release 2 (share agreement, team tips, table cards) is recorded separately when it is built.
+> - **Owner's answers (6 Nov 2026), binding:**
+>   - Q1, a staff member's own page must be live to be listed (today's rules).
+>   - Q2, invitations go by email, by a one-time link the manager sends themselves (7 days, once), **or to a TipMe username** found by search in the manager's screen (an in-app notification, plus an email when the person has a confirmed email). Search shows only a username's public card and refuses suspended or deleted pages. The invited person can block further invitations from that business.
+>   - Q3, anyone signed in can create a business; TipMe staff verify it before its codes go live.
+>   - 6 Nov 2026 (owner): someone who owns or manages a business can never verify it, even as the only admin. Asking is refused; another staff member must.
+>   - Q4, a note shows to the business at once; text with links, emails or phone numbers is refused; a reported note is hidden until TipMe staff review it.
+>   - Q5, no naira in the business view except the weekly amounts of people who chose to share theirs.
+>   - Q9, a share (release 2) is of what the person receives after TipMe's fee.
+> - **Spec items shipped with their defaults:** O1 people on shift first, then everyone; O2 staff check name, address and a contact, no document upload; O3 tags Friendly, Fast, Went the extra mile, Great advice, Made my day; O4 the business plan price comes later, with billing (nothing built, no price shown).
+
+> **Business release 2 (owner's report, 6 Nov 2026).** The owner reported that our payment partner and a legal check said yes to a business sharing staff tips and to team tips. The options are 100/0, 90/10, 80/20, 70/30 and 50/50, with a cap of 50%. This records the owner's report. It is not a regulatory approval, a licence, or written provider confirmation held in this repository. D-03, D-04 and D-05 keep their status (OPEN, OPEN, PARTLY DECIDED), and `AGENTS.md`'s hard stop on real payments is unchanged. Spec `docs/superpowers/specs/2026-11-06-business-design.md` ("Release 2"), plan `docs/superpowers/plans/2026-11-06-business.md` (PRs R2-0 to R2-E). Each part sits behind its own flag on top of `BUSINESS_ENABLED`, off by default: `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED`. The owner turns them on only after the share and team-tip PRs are on dev and the terms and privacy text below is live.
+> - **Safeguards (spec item 11):**
+>   - The split is "staff keeps / business takes", one of the five options; the business never takes more than 50%, so staff always keep at least half. The database refuses any other value.
+>   - A share applies only after the staff member accepts, and only to tips made after the agreed start date. It is fixed on the tip when the supporter starts paying and never changes afterwards.
+>   - Tips through the staff member's own page, outside the business, are never shared. The database refuses a share on a tip not made at that membership.
+>   - At most one change takes effect per person per calendar month (Lagos), with at least 14 days' notice.
+>   - The business never learns who declined: a declined proposal reads "No change", like one never answered.
+>   - Staff can report the business to TipMe; the report is never shown to the business.
+>   - The supporter is told about any share on the tip page before paying.
+>   - The share is its own ledger line (`business_payable`), so a refund or chargeback reverses the person's part and the business's part together.
+>   - Leaving a business ends its agreement at once; rejoining starts at 100/0.
+> - **Owner's answers and defaults:**
+>   - Q7, staff confirm each reversal of a refunded or charged-back tip as a serious action (`tip.reverse`, `payments.repair`) after checking our payment partner's dashboard; it is never automatic. A partial refund reverses each line in proportion, with the remaining kobo on the person's line. (Default kept, 6 Nov 2026.)
+>   - Q8, a reversal after the money was withdrawn posts anyway: the balance may go below zero, withdrawals for that person or business stop until it is back above zero, and a money issue opens. Nothing is collected automatically. (Default kept.)
+>   - Q9, the share is of what the person receives after TipMe's 10% fee (ADR-0014), so TipMe's fee and the supporter's total are unchanged. The tip page says: "Of what Tobi receives, they keep 90% and 10% goes to The Yellow Chilli." (Owner's answer.)
+>   - Q10, team tips carry no business share. A team tip is split equally among the people on shift at that location when the tip is made; the earliest check-in takes any remaining kobo. (Default kept.)
+
+> **Changelog and What's new (owner, 5–6 Nov 2026).** The owner asked for the full changelog in admin, and for users to see what an update brings when it ships. The `Changelog.dc.html` board was approved on 5–6 Nov 2026. It is on the design canvas only, not in the repo. On 6 Nov the owner said "use the defaults for the changelogs".
+>
+> - **Drafts come from merged PRs.** When a PR merges into `dev`, CI sends its number, title, body and merge commit to TipMe, signed with a secret. TipMe reads nothing else from GitHub, and the PR body is parsed and never stored. The staff text is the title plus the body's first paragraph. The user text is the PR description's "For users" section. An empty section makes the entry staff only ("Recorded").
+> - **One approval** by someone holding `changelog.publish` (owner only by default) is needed before users see anything. Editors (`changelog.edit`, every role except release_check) ask through the existing Approvals screen. Users only ever read the approved copy.
+> - **In-app only, no email.** "What's new" sits in the dashboard menu, with a dot and one Home slip per update. It never appears on public pages or the tip form.
+> - **"Reached production"** is decided by git ancestry. After a production (or staging) deploy passes its release check, the deploy job asks TipMe for pending entries and checks `git merge-base --is-ancestor <merge sha> <deployed version>`. It reports the contained ones, signed. The step never fails a deploy, and a hand-run workflow catches up. This requires `main` to keep taking `dev` through a merge commit.
+> - **Copy rules:** user text may not name the payment provider or imply approval by a regulator (refused at approval). There is no Pro price, and pronouns are "they".
+>
+> This is a product decision, not a legal, regulatory or provider approval. No D-item changes. Nothing about money, fees, checkout, the ledger or payouts changes.
+>
+> **Open, with the defaults shipped:**
+> 1. Pro entries are shown to every page as "On Pro, …".
+> 2. One approval is enough, even when the approver wrote the text.
+> 3. Drafts go to production only; staging gets only the "on staging" sync.
+> 4. `changelog.publish` is sensitive: a fresh code, and a second person to add it to a role.
+> 5. On phones, "What's new" is a small link beside the bell, and the tab bar keeps four items.
+> 6. A production rollback does not un-live entries; staff withdraw them.
+> 7. Anyone with `changelog.edit` can withdraw, with a reason; showing an entry again needs a new approval.
+> 8. No backfill of older PRs; a one-off resend is possible by dispatch.

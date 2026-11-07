@@ -467,3 +467,40 @@ test('LIVE_UPDATES_ENABLED defaults to false; true turns it on; LIVE_MAX_STREAMS
     /LIVE_HEARTBEAT_MS/,
   );
 });
+
+test('BUSINESS_SHARES_ENABLED and TEAM_TIPS_ENABLED default to false; true turns each on alone', () => {
+  const off = loadApiConfig({ ...valid, NODE_ENV: 'development' });
+  assert.equal(off.BUSINESS_SHARES_ENABLED, false);
+  assert.equal(off.TEAM_TIPS_ENABLED, false);
+  const shares = loadApiConfig({
+    ...valid,
+    NODE_ENV: 'development',
+    BUSINESS_SHARES_ENABLED: 'true',
+  });
+  assert.equal(shares.BUSINESS_SHARES_ENABLED, true);
+  assert.equal(shares.TEAM_TIPS_ENABLED, false);
+  for (const name of ['BUSINESS_SHARES_ENABLED', 'TEAM_TIPS_ENABLED'])
+    assert.throws(
+      () => loadApiConfig({ ...valid, NODE_ENV: 'development', [name]: 'yes' }),
+      new RegExp(name),
+    );
+});
+
+test('the changelog signing secret is optional, at least 32 characters, and blank means off', () => {
+  const dev = { ...valid, NODE_ENV: 'development' };
+  assert.equal(loadApiConfig(dev).CHANGELOG_SIGNING_SECRET, undefined);
+  assert.equal(
+    loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: '' })
+      .CHANGELOG_SIGNING_SECRET,
+    undefined,
+  );
+  assert.equal(
+    loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: 'c'.repeat(32) })
+      .CHANGELOG_SIGNING_SECRET,
+    'c'.repeat(32),
+  );
+  assert.throws(
+    () => loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: 'short' }),
+    /CHANGELOG_SIGNING_SECRET/,
+  );
+});

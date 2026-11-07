@@ -11,6 +11,11 @@ export interface ReleaseInfo {
   analytics: boolean;
   /** Which checkout a tip goes through: the release check completes a pretend one only. */
   paymentProvider: 'mock' | 'bachs-sandbox' | 'bachs-live';
+  /**
+   * TipMe for businesses is switched on (BUSINESS_ENABLED). The web reads it to invite people to
+   * create a business on /for-businesses and in the header; off, they see the coming-soon form.
+   */
+  business: boolean;
 }
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */

@@ -27,6 +27,8 @@ jobs:
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v5
         with:
+          # Node only: no pnpm here, so setup-node must not look for its cache.
+          package-manager-cache: false
           node-version: 24
       - name: Check staging
         env:

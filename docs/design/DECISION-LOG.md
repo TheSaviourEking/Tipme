@@ -417,3 +417,22 @@ the appreciation moment) is unchanged.
 - **One place for the status line.** The studio's only `role="status"` line sits directly under the Upgrade panel's slot, before the style lists, at every width. One DOM order for every width (no CSS `order`), so reading order and focus order match, and a phone sees "… is a Pro design" next to the Upgrade link. It stays mounted, so screen readers keep listening to the same element.
 - **Designs in three groups by the API's `kind`.** "Patterns" (`style`), "Cards" (`card`), "Photo" (`photo`), each in the API's order; an unknown `kind` from a newer API joins Patterns and an empty group is not drawn. Every radio keeps one `name`, so arrow keys still move through all designs across the groups.
 - **The free card is lettered in Manrope.** `drawQrCard` uses the page's own `--font-manrope` family once `document.fonts.load` has it, else Arial as before. Only the browser-drawn Free card changes (studio, share image, print); Pro designs are server pictures and do not change. The code's modules, quiet zone and colours are unchanged, so it scans as before.
+
+## 2026-11-06 — TipMe for businesses: the verified badge and the business header
+
+- **Owner direction, 6 Nov 2026** (board `redesign/boards/Business.dc.html`). A product and visual decision, not a regulatory approval.
+- **Badge copy.** "Verified business", with the line "TipMe checked this business's name, address and contact." It never says approved, licensed or regulated.
+- **The business header is always above the people list** on a location page and a staff tip page (business initial, name, location, the verified line), so a sticker that leads somewhere else is easy to spot (QR-sticker fraud). It is never scrolled away on the list.
+
+## 2026-11-06 — What's new in the dashboard (changelog plan)
+
+- **Board `Changelog.dc.html`** (approved 5–6 Nov 2026) is on the canvas only, not in the repo. A product and visual decision, not a regulatory approval.
+- **Desktop:** the dashboard gains a menu item, "What’s new", right before Settings (the fifth, or after Business and Work when those show), with the attention dot and " (new updates)" for screen readers while an update is unseen.
+- **Phones:** the four-item tab bar stays, and a quiet "What's new" link sits in the dashboard bar beside the bell, with the same dot.
+- **Home** gains one neutral `Slip` ("New in TipMe") after the username take-back banner, until it is opened or closed.
+- **The empty page uses `EmptySlip`.** Never on public pages or the tip form.
+
+## 2026-11-06 — Admin changelog (changelog PR 5)
+
+- The empty list uses `EmptyWell` (the admin empty state), not `EmptySlip`.
+- List rows show the state as plain bold text; the entry page uses `StateLine`.

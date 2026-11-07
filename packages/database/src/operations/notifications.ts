@@ -68,7 +68,7 @@ export function notifyTipSucceeded(
           kind: 'tip',
           tipId: input.tipId,
           title: 'You got a tip',
-          body: `${ngn(row.net)} from ${row.label ?? 'a guest'}`,
+          body: `${ngn(row.net)} from ${row.label ?? 'Anonymous'}`,
           ...(input.now ? { createdAt: input.now } : {}),
         })
         .onConflictDoNothing()
@@ -120,6 +120,7 @@ export function listNotifications(
       tipId: row.tipId,
       momentId: row.momentId,
       reportId: row.reportId,
+      invitationId: row.invitationId,
       title: row.title,
       body: row.body,
       read: row.readAt !== null,

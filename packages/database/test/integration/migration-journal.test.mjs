@@ -35,3 +35,7 @@ test('the handle rule migration is in the journal', () => {
 test('the take-back migration is in the journal', () => {
   assert.ok(entries.some((entry) => entry.tag.endsWith('_handle_take_backs')));
 });
+
+test('the changelog migration is in the journal', () => {
+  assert.ok(entries.some((entry) => entry.tag.endsWith('_changelog')));
+});

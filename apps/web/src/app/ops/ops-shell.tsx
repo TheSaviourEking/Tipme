@@ -21,6 +21,7 @@ import {
   PROVIDER_TEST_TOKEN_KEY,
   type OpsAccess,
 } from '@/lib/ops-client';
+import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
 import { apiFetch } from '@/lib/session-client';
 
@@ -193,9 +194,16 @@ function OpsGranted({
     };
   }, []);
   const approvals = useApprovalsCount(pathname);
+  // TipMe for businesses: the Businesses entry shows only while the feature is on, which the
+  // signed-in roles route says (404 while BUSINESS_ENABLED is off).
+  const [business, setBusiness] = useState(false);
+  useEffect(() => {
+    void loadBusinessRoles().then((roles) => setBusiness(roles !== null));
+  }, []);
   return (
     <OpsFrame
       permissions={access.permissions}
+      features={{ business }}
       pathname={pathname}
       approvals={<ApprovalsCount count={approvals.count} />}
       onLeave={onLeave}

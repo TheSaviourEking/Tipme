@@ -10,6 +10,8 @@ import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
 import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
 import { staffAlertPoster } from '../../apps/worker/dist/handlers/domain-events.js';
 import * as contracts from '../../packages/contracts/dist/index.js';
+import { seedBusiness } from '../../packages/database/test/integration/business-fixtures.mjs';
+import { GROSS, reportedReversal } from './reversal-fixtures.mjs';
 import {
   MAIL_SEAL_KEY,
   OPS_TOTP_KEY,
@@ -56,6 +58,8 @@ const services = () => ({
   sealing,
   authCodeSecret: 'test-auth-code-secret-of-enough-length',
   payoutReader: reader,
+  // tip.reverse runs only while business shares are on (R2-A review finding 3).
+  businessSharesEnabled: true,
   mail: {
     production: false,
     configured: new Set(['mock']),
@@ -342,6 +346,24 @@ const wired = {
         ).length > 0,
     };
   },
+  'changelog.publish': async () => {
+    const number = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
+    await q(
+      `INSERT INTO changelog_entries (pr_number, merge_sha, merged_at, pr_title, staff_text, user_text, audience)
+       VALUES ($1, $2, now(), 'feat: pins', 'feat: pins — Adds pins.', 'You can pin a supporter note.', 'everyone')`,
+      [number, 'd'.repeat(40)],
+    );
+    return {
+      payload: { number, revision: 1 },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM changelog_entries WHERE pr_number = $1 AND published_revision = 1`,
+            [number],
+          )
+        ).length > 0,
+    };
+  },
   'fee.free': async () => {
     const id = await profileId();
     await q(`DELETE FROM fee_free_credits WHERE profile_id = $1`, [id]);
@@ -396,6 +418,30 @@ const wired = {
       happened: async () =>
         (await q(`SELECT 1 FROM staff_totp WHERE user_id = $1`, [userId]))
           .length === 0,
+    };
+  },
+  'business.verify': async () => {
+    const { businessId } = await seedBusiness(database, { status: 'pending' });
+    return {
+      payload: { businessId },
+      happened: async () =>
+        (
+          await q(`SELECT status FROM businesses WHERE id = $1`, [businessId])
+        )[0].status === 'verified',
+    };
+  },
+  'tip.reverse': async () => {
+    // No hold: beforeEach deletes payment_reversed issues, which a hold would still name.
+    const { tipId, issueId, partnerReversalId, reversals } =
+      await reportedReversal(database, { bps: 1000, keepHold: false });
+    return {
+      payload: {
+        issueId,
+        tipId,
+        partnerReversalId,
+        refundedMinor: GROSS.toString(),
+      },
+      happened: async () => (await reversals()) === 1,
     };
   },
   'mail_provider.switch': async () => {

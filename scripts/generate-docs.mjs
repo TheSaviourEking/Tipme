@@ -23,6 +23,7 @@ const ACCESS = [
   ['status-token', 'Holder of the tip’s status token'],
   ['provider-signature', 'The payment provider (signed request body)'],
   ['release-token', 'The release check (bearer token; test copies only)'],
+  ['ci-signature', 'CI, for the changelog (signed request body)'],
   ['recipient', 'Signed-in recipient (their own page and data only)'],
   ['staff', 'Signed-in staff, before an admin grant'],
   ['staff-grant', 'Staff with a live admin grant and the permission'],

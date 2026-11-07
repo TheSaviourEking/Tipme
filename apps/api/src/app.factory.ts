@@ -13,6 +13,7 @@ import { requestContext } from './http/request-context.middleware.js';
 import { previewGate } from './http/preview-gate.middleware.js';
 import { SERVICE_NAME, type ApiConfig } from './config.js';
 import { mailWebhookBody } from './mail/raw-body.middleware.js';
+import { changelogWebhookBody } from './changelog/changelog-body.middleware.js';
 import { liveGate } from './live/live-gate.middleware.js';
 import { LiveHubService } from './live/live-hub.service.js';
 
@@ -25,6 +26,8 @@ const CROSS_ORIGIN_PATHS = [
   '/v1/vitals',
   // Reporting a page from its public page (PR-013); profile reads are public data anyway.
   '/v1/profiles/',
+  // A business location page's "I don't see them" search (PR B4): public, never credentialed.
+  '/v1/b/',
 ];
 // Recipient routes carry the session cookie, so the browser must send credentials.
 const CREDENTIALED_PATHS = [
@@ -103,6 +106,7 @@ export async function createApp(
     }),
   );
   app.use(mailWebhookBody);
+  app.use(changelogWebhookBody);
   app.useBodyParser('json', { limit: '16kb' });
   app.useGlobalFilters(
     new ApiExceptionFilter(

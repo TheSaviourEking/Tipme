@@ -17,6 +17,8 @@ export const payoutDestinationChanged = defineMailType({
       last4,
       previousBankName: bankName,
       previousLast4: last4,
+      /** A business's own bank (R2-B), told to each of its owners. In the body only. */
+      businessName: z.string().min(1).max(80).optional(),
     })
     .strict(),
   sample: {
@@ -28,17 +30,27 @@ export const payoutDestinationChanged = defineMailType({
   render: (data, ctx) =>
     letter(
       {
-        subject: 'Your TipMe bank account changed',
-        heading: 'Your bank account changed',
+        subject: data.businessName
+          ? 'Your business’s TipMe bank account changed'
+          : 'Your TipMe bank account changed',
+        heading: data.businessName
+          ? 'The business’s bank account changed'
+          : 'Your bank account changed',
         tag: 'safety',
         blocks: [
           {
             kind: 'text',
-            text: 'Your next withdrawal goes to the new account. One already under way still goes to the account it started with.',
+            // The first text is the preview line: the business's name stays in the facts below.
+            text: data.businessName
+              ? 'The business’s next withdrawal goes to the new account. One already under way still goes to the account it started with.'
+              : 'Your next withdrawal goes to the new account. One already under way still goes to the account it started with.',
           },
           {
             kind: 'facts',
             rows: [
+              ...(data.businessName
+                ? [{ label: 'Business', value: data.businessName }]
+                : []),
               { label: 'Now', value: `${data.bankName} ••${data.last4}` },
               {
                 label: 'Before',
@@ -53,8 +65,9 @@ export const payoutDestinationChanged = defineMailType({
             text: 'Contact support@usetipme.xyz straight away. We can stop withdrawals while we look.',
           },
         ],
-        reason:
-          'You get this email whenever the bank account on your TipMe page changes.',
+        reason: data.businessName
+          ? 'You get this email whenever the bank account of a business you own on TipMe changes.'
+          : 'You get this email whenever the bank account on your TipMe page changes.',
       },
       ctx,
     ),

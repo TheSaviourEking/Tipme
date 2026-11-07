@@ -48,6 +48,10 @@ const PUBLIC_REVIEWED = [
   'POST /v1/auth/recover/complete',
   'POST /v1/auth/verify',
   'GET /v1/avatars/{profileId}/{file}',
+  'GET /v1/b/{business}',
+  'GET /v1/b/{business}/people',
+  'GET /v1/b/{business}/{location}',
+  'GET /v1/b/{business}/{location}/{handle}',
   'GET /v1/covers/{profileId}/{file}',
   'POST /v1/events',
   'GET /v1/handles/{handle}/availability',
@@ -87,6 +91,23 @@ test('the pretend-only public routes are exactly the reviewed ones', () => {
     [...PRETEND_PUBLIC_REVIEWED].sort(),
     'a pretend-only public route was added or removed: review it, then update this list',
   );
+});
+
+// CI's changelog routes (changelog plan, Design §3): signed with the changelog secret.
+const SIGNED_CI_REVIEWED = [
+  'POST /v1/webhooks/changelog/drafts',
+  'POST /v1/webhooks/changelog/pending',
+  'POST /v1/webhooks/changelog/releases',
+];
+
+test('the changelog routes require the CI signature, and are rate-limited', () => {
+  const signed = routes.filter((r) => r.access === 'ci-signature');
+  assert.deepEqual(
+    signed.map((r) => r.key).sort(),
+    [...SIGNED_CI_REVIEWED].sort(),
+  );
+  for (const route of signed)
+    assert.equal(route.rateLimit, 'changelog_ingest', route.key);
 });
 
 test('payment and mail webhooks require provider signatures', () => {

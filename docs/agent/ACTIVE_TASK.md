@@ -1,3 +1,61 @@
+# Current task: merge train 3, the changelog and What's new (6 November 2026)
+
+- Branch `train/3` from `origin/dev` at `f03801bc` (trains 1 and 2 merged): #160 (schema), #164 (ingest), #166 (CI), #162 (admin API), #169 (admin screens) and #163 (What's new) merged in that order with `--no-ff`, so each PR's head commit is in it. One PR into `dev`.
+- Migration regenerated with drizzle-kit at merge time: `0084_changelog` (#160, was `0079_changelog`). The generated part now also lists `businesses.manage` in the permission checks; the hand-written grants are re-appended byte for byte.
+- `changelog.publish` is the fourteenth serious action, beside train 2's `business.verify` and `tip.reverse`.
+- Nothing is switched on until the owner follows `docs/runbooks/changelog.md` (the Actions secret and variable, the server secret, a deploy). Next: CI on the train PR, then the owner merges it. Evidence: `.superpowers/program/train3-report.md` (main checkout).
+
+# Current task: changelog PR 6, What's new (`feat/whats-new`, #163) (6 November 2026)
+
+- Built on PR 1: the DB reads and the seen marker, the three `/v1/me/whats-new` routes, the menu item, the phone link, the Home slip and the page, and the public-pages guard test. `deleteAccount` now removes `changelog_reads`.
+- Unit and the touched integration tests pass. E2E did not run on the builder's lane (lane 8 was in use by `preview`); merge train 3 ran `whats-new.spec.ts` and `dashboard.spec.ts` on lane 3.
+- Users see nothing until entries are ingested, approved and live. Evidence: `.superpowers/program/cl6-report.md` (main checkout).
+
+# Current task: changelog PR 5, the admin screens (`feat/changelog-ops-web`, #169) (6 November 2026)
+
+- Built on PR 4: "Changelog" sits in the admin menu's Email and records group, for `changelog.edit` or `changelog.publish`.
+- `/ops/changelog` has the All / Drafts / For users / Staff only filters (`?view=`), state stamps, "Waiting in Approvals" and "Edited since asking".
+- `/ops/changelog/[number]` edits the staff text, the user text and who sees it, previews the exact user line, flags provider names and regulatory claims by the field, and offers Approve (publish) or Ask for approval (edit), plus Withdraw.
+- `OpsChangelogRow.editedSinceAsking?` is added to PR 4's admin operation.
+- Verified by the builder: lint, typecheck, format, `pnpm test`, 130 touched integration tests, and e2e `ops-changelog` (7) with `ops-screens`, `ops` and `ops-usernames` (27/27 on a clean lane database). Evidence: `.superpowers/program/cl5-report.md` (main checkout).
+
+# Current task: changelog PR 4, the admin API and approval (`feat/changelog-ops-api`, #162) (6 November 2026)
+
+- Admin operations in `operations/changelog-admin.ts`: list, read, edit, approve and withdraw.
+- `askPermission` on serious actions, so editors ask with `changelog.edit` and publishers decide with `changelog.publish`. An editor never runs it alone: with nobody to approve they get `APPROVAL_NO_APPROVER`. A requester must still hold the ask permission at approval.
+- `changelog.publish` was the twelfth serious action on its branch; on dev after merge train 3 it is the fourteenth (after train 2's `business.verify` and `tip.reverse`).
+- Six `/v1/ops/changelog` routes, plus the 409/404/422 error mappings. Evidence: `.superpowers/program/cl4-report.md` (main checkout).
+
+# Current task: changelog PR 3, the CI sender and sync (`feat/changelog-ci`, #166) (6 November 2026)
+
+- `scripts/changelog-client.mjs`: signing matches the API's pinned fixture; the body is cut by UTF-8 bytes to stay under 128 KiB; one retry on a network error or 5xx.
+- `scripts/changelog-send.mjs` and `.github/workflows/changelog-draft.yml`: PRs merged into dev, plus a hand-run resend.
+- `scripts/changelog-sync.mjs` and `.github/workflows/changelog-sync.yml`: git ancestry, and a 14-day stuck warning by commit date.
+- "Changelog" steps in `deploy-production.yml` and `deploy-staging.yml`, with `continue-on-error`; the staging one comes before the staging-pass record.
+- The PR template gains `## For users`; `docs/runbooks/changelog.md`.
+- Nothing is switched on until `CHANGELOG_SIGNING_SECRET` and `CHANGELOG_API_URL` are set (runbook). Evidence: `.superpowers/program/cl3-report.md` (main checkout).
+
+# Current task: changelog PR 2, signed ingest (`feat/changelog-ingest`, #164) (6 November 2026)
+
+- `recordChangelogDraft`, `pendingForRelease` and `markReleased` in `packages/database/src/operations/changelog.ts`.
+- The HMAC signature check (`apps/api/src/changelog/changelog-signature.ts`; 300 s window, constant time).
+- `POST /v1/webhooks/changelog/{drafts,pending,releases}`: 404 without `CHANGELOG_SIGNING_SECRET`, 401 `CHANGELOG_SIGNATURE_INVALID` before parsing, 128 KiB raw body, `changelog_ingest` 60/min.
+- The new access kind `ci-signature`; threat model A12; the secret is passed blank in the production and staging composes and env examples.
+- The builder's full local integration suite passed except the docker-only backup and base-backup tests (environmental). Evidence: `.superpowers/program/cl2-report.md` (main checkout).
+
+# Current task: changelog PR 1, schema (`feat/changelog-schema`, #160) (6 November 2026)
+
+- Contracts: `changelog.ts`, the `changelog.edit`/`changelog.publish` permissions and five error codes.
+- Migration `0079_changelog` (renumbered `0084_changelog` in merge train 3): `changelog_entries` and `changelog_reads`, the permission checks, and the grants (owner both, every role but release_check gets edit).
+- The `changelog.publish` serious action moved to PR 4. Evidence: `.superpowers/program/cl1-report.md` (main checkout).
+
+# Current task: merge train 2, TipMe for businesses (6 November 2026)
+
+- Branch `train/2` from `origin/train/1` (#161): #140 (B0), #147 (B1), #145 (B2), #146 (B3), #143 (B4), #148 (B5), #149 (B6), #154 (B7), #152 (B8), #144 (R2-0), #150 (R2-A), #157 (R2-C1) and #159 (R2-B) merged in that order with `--no-ff`, then origin/train/1 again (QR font fix). One PR into `dev`; it merges after #161.
+- Migrations regenerated with drizzle-kit at merge time: `0081_business` (B0, was 0078; owner grant re-appended), `0082_business_release2` (R2-0, was 0079; hand-written triggers re-appended byte for byte), `0083_reversal_partner_keeps_fee` (R2-A, was 0080; `--custom`, SQL identical).
+- Everything stays behind `BUSINESS_ENABLED`, `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED` (all default false).
+- Next: CI on the train PR, then the owner merges #161 and this one. Evidence: `.superpowers/program/train2-report.md` (main checkout).
+
 # Current task: merge train 1 (6 November 2026)
 
 - Branch `train/1` from `origin/dev` at `44fcd42c`: #158, #137, #142, #141, #139, #151, #134, #138, #153, #155 and #156 merged in that order with `--no-ff`, so each PR's head commit is in it. One PR into `dev`.
@@ -30,6 +88,18 @@
 - Next: owner review; the controller pushes a draft PR and follows CI's full e2e suite. Then PR 4 (the recipient's list). Turning `SUPPORTER_RECOGNITION` on in production is the owner's call under D-07.
 - Evidence: `.superpowers/program/pro3-report.md` (main checkout).
 
+# Current task — TipMe for businesses, PR B2: the admin side (6 November 2026)
+
+- Branch/worktree: `feat/business-b2` / `.worktrees/business-b2`, off `feat/business-b0` (`3888c8e6`), test lane 5. Not pushed. Plan Tasks 8–10.
+- Done: `/v1/ops/businesses` list and detail (search.view, contacts masked), reveal (private.view, reason, audited), suspend and restore (businesses.manage, reason, audited; suspending ends open shifts as `expired`), `business.verify` as a serious action (pinned on status and slug; resolves `business_waiting`; tells owners in-app); the web revalidate route takes a business slug (`business:<slug>` tag); the admin Businesses list and detail pages, a "Businesses" menu entry shown only while the feature is on, and a link from a `business_waiting` issue.
+- Next: coordinator review; rebase onto dev once B0 merges; full e2e on CI. B4 must tag its `/b/` reads with `businessTag(slug)` from `apps/web/src/lib/business/business-tag.ts`.
+
+# Current task — TipMe for businesses, PR B4: the supporter's flow (6 November 2026)
+
+- Branch/worktree: `feat/business-b4` / `.worktrees/business-b4`, off `feat/business-b0` (B0 not yet on dev), test lane 0. Not pushed. Plan: Tasks 14–15.
+- Done: public reads (`publicLocation`, `searchBusinessPeople`, `publicStaffTipPage`) and their routes under `/v1/b/`; `/b/<business>/<location>` with the header, picker, search, "I don't see them" and "Tip {name} again"; the staff page with today's tip form and `business` prop; remembered tips carry the business slug; `/api/revalidate` accepts `{ business }`.
+- Next: rebase onto dev once B0 merges; full e2e on CI. Evidence: `.superpowers/program/b4-report.md` (main checkout).
+
 # Current task — states and feedback, PR B public (5 November 2026)
 
 - Branch/worktree: `feat/states-b` / `.worktrees/states-b`, test lane 1, from `origin/dev` at `931a545`. Not pushed.
@@ -60,6 +130,72 @@
 - Branch/worktree: `feat/qr-studio-restyle` / `.worktrees/qr-studio`, test lane 4, from `origin/dev` at `246bebb`. Committed, not pushed. Front end only: no API, contract, migration or payment change.
 - Done: Tasks 4.0 to 4.4 of the public boards plan (PR 4): the code on a paper panel (`.qr-studio__panel`); the one status line directly under the Upgrade panel, before the style lists, at every width; designs in Patterns, Cards and Photo by the API's `kind` (`lib/qr-groups.ts`); the Free card lettered in Manrope (`lib/brand-font.ts`, `drawQrCard`'s `fontFamily`). The `QrStudio.dc.html` board was not on disk to copy.
 - Next: the controller pushes the branch as a draft PR; CI runs the full e2e suite. Then PR 5 (QR print) builds on `qr-card.ts` and the QR CSS block. Evidence: `.superpowers/program/pub4-report.md` (main checkout).
+
+# Current task — TipMe for businesses, PR B1: applying for a business, locations and managers (6 November 2026)
+
+- Branch/worktree: `feat/business-b1` / `.worktrees/business-b1`, off local `feat/business-b0` (not yet merged), test lane 4. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 6–7 plus the owner's answer Q3.
+- Done: `business-manage.ts` (apply, detail, edit, add/edit/close location, list/remove managers) and the eight `/v1/me/businesses` routes; `business_apply` rate limit (10 an hour per person); `/health/release` carries `business`; `/for-businesses` and the header's "Businesses" choice follow it (create a business when on, the coming-soon form when off); `/dashboard/business/apply`; the Details, Locations and Managers sections; Home's "Add your business".
+- Next: coordinator review; rebase onto dev once B0 merges; the full e2e suite on CI. Verifying a business is PR B2; inviting managers is PR B3.
+
+# Current task — TipMe for businesses, PR B3: invitations and membership (6 November 2026)
+
+- Branch/worktree: `feat/business-b3` / `.worktrees/business-b3`, off `feat/business-b0` (`3888c8e6`, not yet on dev), test lane 2. Not pushed. Plan Tasks 11–13 and the owner's answer on invitations (email, one-time link, TipMe username; block a business).
+- Done: invitations (operations, `business_invitation` email, API), membership lifecycle (list, remove, leave, display choices, account deletion's M13 rules), the People section on the Business page, the Work page's invitations and "How you show here", `#join=` kept through sign-in.
+- Next: rebase onto dev once B0 merges; regenerate OpenAPI and docs after merging; CI's full e2e. The People section draws only once B1's `GET /v1/me/businesses/:id` exists (the e2e stands in for it).
+
+# Current task — TipMe for businesses, PR B5: the note after paying (6 November 2026)
+
+- Branch/worktree: `feat/business-b5` / `.worktrees/business-b5`, off `origin/feat/business-b0` `3888c8e6` (B0 not merged yet; rebase onto dev once it is), test lane 7. Not pushed. Plan Tasks 16–18.
+- Done: `POST /v1/tips/:tipId/business-note` (status token, no cookie, `business_note` rate limit), `businessNote` on the paid receipt, the note block on the receipt (tags, a few words, Skip), member and manager reports (hidden from the business at once, one issue), the ops reveal and restore/remove, the Work page's "Notes about you", `noteShownToBusiness` / `notesVisibleToBusiness` for B7. No migration; contracts gain `noteReviewSchema`, `WorkNoteView`, `OpsBusinessNote`.
+- Next: coordinator review, push as a draft PR, full e2e on CI. The Work page notes need B3's `GET /v1/me/work` to show outside tests.
+
+# Current task — TipMe for businesses, PR B6: on shift (6 November 2026)
+
+- Branch/worktree: `feat/business-b6` / `.worktrees/business-b6`, off `origin/feat/business-b0` (B0 not yet on dev), test lane 8. Not pushed. Plan: Task 19.
+- Done: `startShift`, `endShift`, `expireShifts` (a shift that ran out closes 'expired' at the 14-hour mark, on the next start or end; no job); the four shift routes under `/v1/me/`; each change asks the web to refresh `/b/<business>/…` (`revalidateBusiness`, B2's identical method); Work → "On shift" card; Business → "On today" switches.
+- Next: rebase onto dev once B0 merges; full e2e on CI. Evidence: `.superpowers/program/b6-report.md` (main checkout).
+
+# Current task — TipMe for businesses, PR B7: what the business sees (6 November 2026)
+
+- Branch/worktree: `feat/business-b7` / `.worktrees/business-b7`, off `origin/feat/business-b0`, test lane 5. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 20–21.
+- Done: insights and notes for a manager (k ≥ 3, no naira by default, leavers folded into totals, opaque note references), share-my-amounts, the This week and Notes sections, the Work share switch.
+- Next: coordinator review; B5 resolves note references in its manager report route; rebase onto dev after B0 merges and rerun `pnpm api:openapi` and `pnpm docs:generate`.
+
+# Current task — TipMe for businesses, PR B8: printed location signs and staff badges (6 November 2026)
+
+- Branch/worktree: `feat/business-b8` / `.worktrees/business-b8`, off `origin/feat/business-b0` (`8e7a9752`), test lane 2. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Task 22 (B8 only).
+- Done: `GET /v1/me/businesses/:id/codes` (manager scope; `BUSINESS_NOT_VERIFIED` while pending or suspended, M12); `BusinessCodes` gains the business and location names; `apps/web/src/lib/business-sign.ts` draws the sign and badge with `qrMatrix` / `renderQrPixels`; Business → Codes, the print view `/dashboard/business/codes/print` (A5 sign, A6 table tent, 85 × 55 mm badge, one per page, black or purple), Work → My code.
+- Next: coordinator review, rebase onto dev once B0 merges, CI's full e2e suite. When B1 and B3 land, the e2e spec's stand-ins for their detail and work routes can go.
+
+# Current task — TipMe for businesses, PR R2-B: a business's own balance and withdrawals (6 November 2026)
+
+- Branch/worktree: `feat/business-r2-b` / `.worktrees/business-r2-b`, off local `feat/business-r2-a` `92dff2ec` (includes R2-0 and B0; not on origin), test lane 2 (template `tipme_it_lane2_r2b`, Redis db 13). Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-B" (Task 30). No migration.
+- Done: `buildPayoutPosting` takes a `businessId` (debits `business_payable`); `MoneyOwner` (`operations/owner.ts`); `businessWithdrawalQuote` and `requestBusinessWithdrawal` share the person's quote/request code (`quoteFor`/`requestFor`), locking the `businesses` row, re-checking the open owner under it, refusing `BALANCE_BELOW_ZERO`; `holdsOf` (a business stops on any owner's takeover hold) in request, start job, staff case and reconcile; paid/failed/conflict paths, the start job's fee-credit lock and `account-mail` work for business payouts (owners mailed, with the business's name); `setPayoutDestination`/`getPayoutDestination` for a business (code to the acting owner; every owner told of a change); `/v1/me/businesses/:id/{balance,withdrawal-quote,withdrawals,payout-destination[/code|/resolve]}` (owners only, 404 for anyone else, both flags); the web Money section (owners only) reusing `GetPaidCard`.
+- Next: coordinator review; owner's answer on the funds-flow question (shares sit in the person's partner account; R2-B works with the pretend partner only, live answers `PAYOUT_SETUP_NEEDED`); whether a business needs its own withdrawal holds (migration); a business withdrawals history list.
+
+# Current task — TipMe for businesses, PR R2-A: ledger, share line and reversals (6 November 2026)
+
+- Branch/worktree: `feat/business-r2-a` / `.worktrees/business-r2-a`, off local `feat/business-r2-0` `f13146bb` (R2-0 with its review fixes), test lane 6 (template `tipme_it_lane6_r2a`). Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-A" (Tasks 28–29), Q7–Q9 defaults kept by the owner (share of the person's net after TipMe's fee).
+- Done: `buildPaymentPosting` with `businessShare` and `teamSplits` (golden-identical without them); `buildReversalPosting`; the share posted as its own `business_payable` line in the payment's transaction; `reverseTip` (proportional, works on what earlier reversals left, below zero allowed, `balance_below_zero` issue); `BALANCE_BELOW_ZERO` on withdrawals; `businessBalanceIn`; `tip.reverse` serious action and `POST /v1/ops/issues/:id/reverse-tip` behind `BUSINESS_ENABLED` + `BUSINESS_SHARES_ENABLED`; `flagPaymentReversal` names the business and no longer throws on a team tip.
+- Next: coordinator review; R2-C2 writes `tip_business_shares` at intent time (using `tipme_share_agreement_at`) and fixes the release-1 readers of `recipient_net_minor`; R2-B's business withdrawals lock the business row and refuse `BALANCE_BELOW_ZERO`; an ops UI button for `tip.reverse` (API only here).
+
+# Current task — TipMe for businesses, PR R2-C1: the share agreement (6 November 2026)
+
+- Branch/worktree: `feat/business-r2-c1` / `.worktrees/business-r2-c1`, off local `feat/business-r2-0` `f13146bb` (R2-0 with its review fix; B0, B1 and B3 not merged yet), test lane 3. Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-C1" (Task 31) and the owner's answers (Q9: a share of what the person receives after TipMe's fee).
+- Done: `packages/database/src/operations/share-agreements.ts` (propose, list, withdraw, accept, decline, suggest another split, the business answering a suggestion, report the business, `endShareAgreements` for leaving); routes in `share-agreements.controller.ts` behind `BUSINESS_ENABLED` and `BUSINESS_SHARES_ENABLED`; mail `share_proposed`; the Business page's "Share of tips" section and the Work page's card; domain `shareStartsAt`, `lagosDateOf`, `lagosMonthOf`.
+- Next: review; once B3 is on the base, call `endShareAgreements(tx, memberId)` from B3's `endMembership` (one line) and drop the two mocked reads in `tests/e2e/business-shares.spec.ts`.
+
+# Current task — TipMe for businesses, PR R2-0: release 2 foundation (6 November 2026)
+
+- Branch/worktree: `feat/business-r2-0` / `.worktrees/business-r2-0`, off local `feat/business-b0` `3888c8e6` (B0 not merged yet), test lane 6. Not pushed. Plan: `.superpowers/program/plans/2026-11-06-business.md`, "PR R2-0" (Tasks 26–27) and the owner's answers at the end.
+- Done: the decisions entry "Business release 2 (owner's report, 6 Nov 2026)" (the owner's report, not a regulatory approval; D-03/D-04/D-05 keep their status) and a D-05 note; terms and privacy sections on shares and team tips; migration `0079_business_release2` (shares, reports, team splits, table cards and assignments, business-owned ledger accounts/payment accounts/destinations/payouts, `reversal` transactions, database guard triggers); domain `splitShare`/`splitEqually` and the share constants; contracts, error codes, two issue kinds; `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED` (off by default) with 404 guards; empty controllers for R2-A..R2-E; fixtures `seedAgreement`, `seedTableCard`.
+- Next: coordinator review; rebase onto dev after B0 merges and regenerate `0079_business_release2` if another migration lands first; then R2-A, R2-B, R2-C1, R2-E.
+
+# Current task — TipMe for businesses, PR B0: schema, contracts, attribution, shells (6 November 2026)
+
+- Branch/worktree: `feat/business-b0` / `.worktrees/business-b0`, off `origin/dev` `b86c7b99`, test lane 6. Not pushed. Plan: `docs/superpowers/plans/2026-11-06-business.md` Tasks 0–5 (B0 only); spec `docs/superpowers/specs/2026-11-06-business-design.md`; the owner's answers of 6 Nov are at the end of both.
+- Done: the decision entries; domain helpers (slugs, shifts, Lagos weeks); contracts (every shape the lanes share, invitations by email, link or username with a per-business block, `businesses.manage`, two issue kinds, two notification kinds, the error codes); migration `0078_business`; attribution in `createPaymentIntent` (ignored, never refused, when it doesn't hold); `BUSINESS_ENABLED` (off by default) with a 404 guard; empty lane controllers; `GET /v1/me/business-roles`; the Business and Work shells; `/b/*` placeholders; CSS marker blocks; fixtures for every lane.
+- Next: coordinator review, push, and the full e2e suite on CI. Then wave 1 (B1–B8) branches off dev after B0 merges. Regenerate `0078_business` if another migration lands first.
 
 # Current task — animated covers (5 November 2026)
 

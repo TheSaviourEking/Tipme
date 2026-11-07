@@ -1,0 +1,60 @@
+# Catches the changelog up with what an environment runs now (changelog plan, Design §2;
+# docs/runbooks/changelog.md): after a deploy whose changelog step failed or was skipped. It reads
+# the running version from the environment's /health/release and marks every pending entry whose
+# merge commit that version contains. Running it again changes nothing.
+#
+# Repository settings → Secrets and variables → Actions:
+#   secret:    CHANGELOG_SIGNING_SECRET
+#   variables: CHANGELOG_API_URL (production's API, for both environments: the changelog lives in
+#              production's database), PRODUCTION_API_URL, STAGING_API_URL (whose version to read)
+name: Changelog sync
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which environment's running version to check
+        required: true
+        type: choice
+        options: [production, staging]
+permissions:
+  contents: read
+concurrency:
+  group: changelog-sync-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.environment == 'production' && 'main' || 'dev' }}
+          # Full history (every branch), so any deployed commit's ancestry can be checked.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          # Node only: no pnpm here, so setup-node must not look for its cache.
+          package-manager-cache: false
+          node-version-file: .nvmrc
+
+      # Public, no secrets.
+      - name: What runs there now
+        env:
+          HEALTH_API: ${{ inputs.environment == 'production' && vars.PRODUCTION_API_URL || vars.STAGING_API_URL }}
+        run: |
+          running=$(curl -fsS --max-time 10 "$HEALTH_API/health/release" | jq -r '.data.version // empty')
+          if ! [[ "$running" =~ ^[0-9a-f]{7,40}$ ]] || ! full=$(git rev-parse --verify --quiet "$running^{commit}"); then
+            echo "::error::Could not read a version this checkout has from $HEALTH_API/health/release."
+            exit 1
+          fi
+          echo "VERSION=${full:0:12}" >> "$GITHUB_ENV"
+
+      - name: Sync
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          CHANGELOG_API_URL: ${{ vars.CHANGELOG_API_URL }}
+          CHANGELOG_SIGNING_SECRET: ${{ secrets.CHANGELOG_SIGNING_SECRET }}
+        run: node scripts/changelog-sync.mjs --environment "$ENVIRONMENT" --version "$VERSION"

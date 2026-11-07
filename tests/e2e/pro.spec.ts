@@ -312,8 +312,41 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
         json: { ...body, data: { ...body.data, ...changes } },
       });
     });
-  await refuse('HANDLE_CHANGE_LIMIT', 409);
-  await profileWith({ handleChanges: { used: 3, allowed: 3 } });
+  // The real change above sends a live profile.changed, and its re-read can land late on a slow
+  // machine: the profile reads as used up only once the change is refused, so an early re-read
+  // gets the true count and the card stays until then.
+  let usedUp = false;
+  await page.route(handleUrl, (route) => {
+    usedUp = true;
+    return route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      headers: {
+        'access-control-allow-origin': WEB_ORIGIN,
+        'access-control-allow-credentials': 'true',
+      },
+      body: JSON.stringify({
+        error: {
+          code: 'HANDLE_CHANGE_LIMIT',
+          message: 'No',
+          reference: 'test',
+        },
+      }),
+    });
+  });
+  await page.route(profileUrl, async (route) => {
+    // Before the refusal, the true profile, untouched.
+    if (!usedUp) return route.fallback();
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        data: { ...body.data, handleChanges: { used: 3, allowed: 3 } },
+      },
+    });
+  });
   await field.fill(`${handle}_y`);
   await change.click();
   await confirm.click();

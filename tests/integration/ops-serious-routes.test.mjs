@@ -8,6 +8,7 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { totpAt } from '../../packages/domain/dist/index.js';
 import { Redis } from './helpers.mjs';
+import { reportedReversal } from './reversal-fixtures.mjs';
 import {
   REDIS_URL,
   WEB,
@@ -58,6 +59,9 @@ before(async () => {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
+      // tip.reverse (business release 2) is behind both flags.
+      BUSINESS_ENABLED: 'true',
+      BUSINESS_SHARES_ENABLED: 'true',
     },
   });
   limited = await startStack({
@@ -361,6 +365,24 @@ const routes = {
       happened: async () => (await payoutStatus(payoutId)) === 'PAID',
     };
   },
+  'reverse a refunded tip': async () => {
+    const { issueId, reversals } = await reportedReversal(database, {
+      // Not Tobi: the freeze test below needs Tobi with no other open hold issue.
+      handle: 'ada',
+      keepHold: false,
+      refundedMinor: 100000n,
+    });
+    return {
+      method: 'POST',
+      path: `/v1/ops/issues/${issueId}/reverse-tip`,
+      body: {
+        reason: REASON,
+        refundedMinor: '100000',
+        dashboardVerified: true,
+      },
+      happened: async () => (await reversals()) === 1,
+    };
+  },
   'close money as written off': resolving('written_off'),
   'close money as recipient owes': resolving('recipient_owes'),
   'close money as settled by the provider': resolving('resolved_by_provider'),
@@ -628,6 +650,52 @@ test('the take-back route goes through requestSeriousAction', async () => {
     { reason: 'The brand withdrew its request' },
   );
   assert.equal(unknown.status, 404);
+});
+
+// Changelog plan (5 Nov 2026), Task 4.3: the publisher's Approve is the one approval and never waits;
+// asking goes through requestSeriousAction and waits for a publisher.
+test('the changelog ask route goes through requestSeriousAction; Approve applies at once with a second person available', async () => {
+  const number = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
+  for (const n of [number, number + 1])
+    await q(
+      `INSERT INTO changelog_entries (pr_number, merge_sha, merged_at, pr_title, staff_text, user_text, audience)
+       VALUES ($1, $2, now(), 'feat: pins', 'feat: pins — Adds pins.', 'You can pin a supporter note.', 'everyone')`,
+      [n, 'f'.repeat(40)],
+    );
+  const published = async (n) =>
+    (
+      await q(
+        `SELECT published_revision FROM changelog_entries WHERE pr_number = $1`,
+        [n],
+      )
+    )[0].published_revision;
+  const asked = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/changelog/${number}/ask`,
+    first.cookie,
+    { revision: 1, reason: REASON },
+  );
+  assert.equal(asked.status, 202, await asked.clone().text());
+  const { requestId } = (await asked.json()).data;
+  assert.equal(
+    await published(number),
+    null,
+    'nothing happens before approval',
+  );
+  const approved = await approveThroughApi(requestId);
+  assert.equal(approved.status, 200, await approved.clone().text());
+  assert.equal(await published(number), 1);
+  const direct = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/changelog/${number + 1}/approve`,
+    first.cookie,
+    { revision: 1, reason: REASON },
+  );
+  assert.equal(direct.status, 200, await direct.clone().text());
+  assert.equal((await direct.json()).data.actedAlone, undefined);
+  assert.equal(await published(number + 1), 1);
 });
 
 test('I2: stopping needs no fresh code; switching back on does, and refuses until given', async () => {

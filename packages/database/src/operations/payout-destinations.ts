@@ -2,11 +2,14 @@ import { recordedProviderName } from '@tipme/contracts';
 import { and, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
+  businesses,
+  businessManagers,
   issues,
   paymentAccounts,
   payoutDestinations,
   profiles,
   users,
+  withdrawalHolds,
 } from '../schema.js';
 import { mailOwner } from './account-mail.js';
 import {
@@ -17,7 +20,9 @@ import {
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { markResolved, openIssue } from './issues.js';
-import { withdrawalsFrozen } from './payouts.js';
+import { managerOf } from './business-access.js';
+import { holdsOf, withdrawalsFrozen } from './payouts.js';
+import type { MoneyOwner } from './owner.js';
 import type { MailSealing } from './mail-queue.js';
 import {
   bachsAccountEnvironment,
@@ -130,25 +135,32 @@ export function spendPayoutDestinationCode(
   );
 }
 
+type DestinationInput = {
+  provider: string;
+  destinationRef: string;
+  bankCode: string;
+  bankName: string;
+  last4: string;
+  status: PayoutDestinationStatus;
+  sealing: MailSealing;
+  now?: Date;
+};
+
 /**
  * Makes this the account withdrawals go to. The profile lock serialises this with another change
  * and with `requestWithdrawal` (including a first add, when no destination row exists to lock), so
  * only one can be current and a payout never records an account replaced under it. The account
  * number never reaches here. Payouts keep the row they recorded, so old rows stay.
+ *
+ * A business's own bank (R2-B) is set the same way by one of its owners (`userId`): the business
+ * row is the lock its withdrawals take, the owner must still be one under it, a takeover freeze on
+ * any owner refuses, and the 72 hours after the acting owner's email moved hold it. Every owner is
+ * told of a change.
  */
 export function setPayoutDestination(
   db: Database,
-  input: {
-    profileId: string;
-    provider: string;
-    destinationRef: string;
-    bankCode: string;
-    bankName: string;
-    last4: string;
-    status: PayoutDestinationStatus;
-    sealing: MailSealing;
-    now?: Date;
-  },
+  input: DestinationInput &
+    ({ profileId: string } | { businessId: string; userId: string }),
 ): Promise<{ replaced: boolean }> {
   const now = input.now ?? new Date();
   if (
@@ -158,25 +170,48 @@ export function setPayoutDestination(
     !STATUSES.has(input.status)
   )
     return Promise.reject(new OperationError('INVALID_INPUT'));
+  const owner: MoneyOwner =
+    'businessId' in input
+      ? { businessId: input.businessId }
+      : { profileId: input.profileId };
   return guarded(() =>
     db.transaction(async (tx) => {
-      const [profile] = await tx
-        .select({ userId: profiles.userId })
-        .from(profiles)
-        .where(eq(profiles.id, input.profileId))
-        .for('update');
-      if (!profile) throw new OperationError('NO_PAGE');
-      // Whoever is signed in may be the thief. Checked under the same lock the freeze takes.
-      if (await withdrawalsFrozen(tx, { profileId: input.profileId }))
-        throw new OperationError('WITHDRAWALS_PAUSED');
+      let actingUserId: string | null;
+      if ('businessId' in input) {
+        const [business] = await tx
+          .select({ id: businesses.id })
+          .from(businesses)
+          .where(eq(businesses.id, input.businessId))
+          .for('update');
+        if (!business) throw new OperationError('NOT_A_MANAGER');
+        await managerOf(tx, input.userId, input.businessId, { owner: true });
+        const [frozen] = await tx
+          .select({ id: withdrawalHolds.id })
+          .from(withdrawalHolds)
+          .where(and(holdsOf(owner), isNull(withdrawalHolds.releasedAt)))
+          .limit(1);
+        if (frozen) throw new OperationError('WITHDRAWALS_PAUSED');
+        actingUserId = input.userId;
+      } else {
+        const [profile] = await tx
+          .select({ userId: profiles.userId })
+          .from(profiles)
+          .where(eq(profiles.id, input.profileId))
+          .for('update');
+        if (!profile) throw new OperationError('NO_PAGE');
+        // Whoever is signed in may be the thief. Checked under the same lock the freeze takes.
+        if (await withdrawalsFrozen(tx, { profileId: input.profileId }))
+          throw new OperationError('WITHDRAWALS_PAUSED');
+        actingUserId = profile.userId;
+      }
       // Shared: an email change in progress finishes first, and is seen here.
-      if (profile.userId) {
-        const [owner] = await tx
+      if (actingUserId) {
+        const [acting] = await tx
           .select({ changedAt: users.emailChangedAt })
           .from(users)
-          .where(eq(users.id, profile.userId))
+          .where(eq(users.id, actingUserId))
           .for('share');
-        if (heldUntil(owner?.changedAt ?? null, now))
+        if (heldUntil(acting?.changedAt ?? null, now))
           throw new OperationError('BANK_CHANGE_HELD');
       }
       const [current] = await tx
@@ -184,7 +219,7 @@ export function setPayoutDestination(
         .from(payoutDestinations)
         .where(
           and(
-            eq(payoutDestinations.profileId, input.profileId),
+            destinationOf(owner),
             eq(payoutDestinations.provider, input.provider),
             isNull(payoutDestinations.replacedAt),
           ),
@@ -211,7 +246,9 @@ export function setPayoutDestination(
       const id = newId();
       await tx.insert(payoutDestinations).values({
         id,
-        profileId: input.profileId,
+        ...('businessId' in owner
+          ? { profileId: null, businessId: owner.businessId }
+          : { profileId: owner.profileId, businessId: null }),
         provider: input.provider,
         destinationReference: input.destinationRef,
         bankCode: input.bankCode,
@@ -220,27 +257,58 @@ export function setPayoutDestination(
         status: input.status,
         createdAt: now,
       });
-      if (current)
-        await mailOwner(tx, input.sealing, {
-          profileId: input.profileId,
-          type: 'payout_destination_changed',
-          data: {
-            bankName: input.bankName,
-            last4: input.last4,
-            previousBankName: current.bankName,
-            previousLast4: current.accountLast4,
-          },
-          dedupeKey: `payout_destination_changed.${id}`,
-          now,
-        });
+      if (current) {
+        const data = {
+          bankName: input.bankName,
+          last4: input.last4,
+          previousBankName: current.bankName,
+          previousLast4: current.accountLast4,
+        };
+        if ('businessId' in owner) {
+          const owners = await tx
+            .select({ userId: businessManagers.userId, name: businesses.name })
+            .from(businessManagers)
+            .innerJoin(
+              businesses,
+              eq(businesses.id, businessManagers.businessId),
+            )
+            .where(
+              and(
+                eq(businessManagers.businessId, owner.businessId),
+                eq(businessManagers.role, 'owner'),
+                isNull(businessManagers.removedAt),
+              ),
+            );
+          for (const each of owners)
+            await mailOwner(tx, input.sealing, {
+              userId: each.userId,
+              type: 'payout_destination_changed',
+              data: { ...data, businessName: each.name },
+              dedupeKey: `payout_destination_changed.${id}.${each.userId}`,
+              now,
+            });
+        } else
+          await mailOwner(tx, input.sealing, {
+            profileId: owner.profileId,
+            type: 'payout_destination_changed',
+            data,
+            dedupeKey: `payout_destination_changed.${id}`,
+            now,
+          });
+      }
       return { replaced: Boolean(current) };
     }),
   );
 }
 
+const destinationOf = (owner: MoneyOwner) =>
+  'businessId' in owner
+    ? eq(payoutDestinations.businessId, owner.businessId)
+    : eq(payoutDestinations.profileId, owner.profileId);
+
 export function getPayoutDestination(
   db: Database,
-  input: { profileId: string; provider: string },
+  input: { provider: string } & MoneyOwner,
 ): Promise<{
   id: string;
   destinationRef: string;
@@ -260,7 +328,7 @@ export function getPayoutDestination(
       .from(payoutDestinations)
       .where(
         and(
-          eq(payoutDestinations.profileId, input.profileId),
+          destinationOf(input),
           eq(payoutDestinations.provider, input.provider),
           isNull(payoutDestinations.replacedAt),
         ),
@@ -447,7 +515,7 @@ async function tellStaffSetupFailed(
       openIssue(db, {
         dedupeKey: setupIssueKey(account.id),
         kind: 'payment_account_setup_failed',
-        subject: { profileId: account.profileId },
+        subject: { profileId: account.profileId ?? undefined },
         now: new Date(),
       }),
     );
@@ -656,7 +724,9 @@ export async function sweepPayoutSetup(
       totals.checked += 1;
       const { failed, manualFailed, manualTried, rateLimited } =
         await applyPayoutSetup(db, input.provider, account, input.log);
-      if (manualTried && !manualFailed) changed.add(account.profileId);
+      // A business's account (release 2) has no person's page to refresh.
+      if (manualTried && !manualFailed && account.profileId !== null)
+        changed.add(account.profileId);
       totals.failed += failed;
       if (manualFailed) inARow += 1;
       else if (manualTried) inARow = 0;
@@ -675,7 +745,7 @@ export async function sweepPayoutSetup(
 
   const pending: {
     id: string;
-    profileId: string;
+    profileId: string | null;
     accountReference: string | null;
   }[] = await guarded(() =>
     db
@@ -705,6 +775,8 @@ export async function sweepPayoutSetup(
   );
   let limitedInARow = 0;
   for (const row of pending) {
+    // A business's destination (R2-B) is not this sweep's: skip it, never stop the sweep.
+    if (row.profileId === null) continue;
     let limited = false;
     if (
       await refreshPendingDestination(db, input.provider, {

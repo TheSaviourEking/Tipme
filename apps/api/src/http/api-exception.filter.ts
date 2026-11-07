@@ -5,7 +5,11 @@ import {
   type ExceptionFilter,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import type { ApiErrorCode, ApiErrorResponse } from '@tipme/contracts';
+import type {
+  ApiErrorCode,
+  ApiErrorResponse,
+  ChangelogTextProblem,
+} from '@tipme/contracts';
 import {
   databaseFailureOf,
   isDatabaseAvailabilityFailure,
@@ -28,6 +32,37 @@ export class DependencyUnavailableError extends Error {
 
 // Fixed messages: framework and parser messages can quote request input.
 const messages: Record<ApiErrorCode, string> = {
+  BUSINESS_NOT_FOUND: 'That business does not exist.',
+  BUSINESS_SLUG_TAKEN: 'That address is taken. Try another.',
+  LOCATION_SLUG_TAKEN:
+    'This business already has a location with that address.',
+  SLUG_LOCKED:
+    'The address can’t change once the business is verified, because printed codes use it.',
+  BUSINESS_NAME_LOCKED:
+    'Your name was checked by TipMe. To change it, contact TipMe.',
+  OWNER_REQUIRED: 'Only an owner of this business can do that.',
+  INVITATION_INVALID:
+    'That invitation isn’t valid any more. Ask the business for a new one.',
+  INVITATIONS_BLOCKED:
+    'This person isn’t taking invitations from your business.',
+  INVITEE_UNAVAILABLE: 'No TipMe page can be invited with that username.',
+  ALREADY_A_MEMBER: 'You’re already on the team at this location.',
+  MEMBER_NOT_TIPPABLE: 'Your TipMe page needs to be live first.',
+  NOTE_NOT_OPEN: 'A note can’t be added to this tip.',
+  BUSINESS_LAST_OWNER:
+    'Make someone else an owner of the business first, or close it.',
+  BUSINESS_NOT_VERIFIED: 'This business isn’t verified yet.',
+  SHARE_NOT_ALLOWED: 'A share isn’t possible here.',
+  SHARE_CHANGE_TOO_SOON:
+    'A share can change at most once a month. Try a later start date.',
+  SHARE_NOT_OPEN: 'This proposal can’t be answered any more.',
+  TEAM_NOBODY_ON_SHIFT:
+    'Nobody is on shift here right now. Tip someone from the list instead.',
+  CARD_NOT_FOUND: 'That table card does not exist.',
+  BALANCE_BELOW_ZERO:
+    'Withdrawals are paused until the balance is back above zero.',
+  TIP_NOT_REVERSIBLE:
+    'Nothing of this tip is left to take back, or the refund is more than what is left.',
   PERMISSION_NOT_HELD:
     'You can only give or take away access you hold yourself.',
   FRESH_CODE_REQUIRED: 'Enter a code from your authenticator to do this.',
@@ -52,6 +87,14 @@ const messages: Record<ApiErrorCode, string> = {
     'Things have changed since this was asked for, so it stopped and nothing ran. Ask again if it is still needed.',
   APPROVAL_ALREADY_PENDING:
     'You already have this same request waiting. Cancel it first, then you can act.',
+  // Changelog (plan 2026-11-05). The routes that return these arrive in later PRs.
+  APPROVAL_NO_APPROVER: 'Nobody who can approve this is set up yet.',
+  CHANGELOG_SIGNATURE_INVALID: 'The request signature was not accepted.',
+  CHANGELOG_EDITED_ELSEWHERE:
+    'Someone else changed this entry since you opened it. Reload to see their change.',
+  CHANGELOG_TEXT_NOT_ALLOWED:
+    'This text can’t be shown to users as it is. Change it and try again.',
+  CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   USERNAME_BUILT_IN:
@@ -283,6 +326,18 @@ const operationErrors: Partial<
   TAKE_BACK_OPEN: { status: 409, code: 'TAKE_BACK_OPEN' },
   TAKE_BACK_NOT_FOUND: { status: 404, code: 'TAKE_BACK_NOT_FOUND' },
   TAKE_BACK_CLOSED: { status: 409, code: 'TAKE_BACK_CLOSED' },
+  // Changelog plan (5 Nov 2026), Task 4.3. CHANGELOG_SIGNATURE_INVALID is the ingest PR's (401).
+  APPROVAL_NO_APPROVER: { status: 409, code: 'APPROVAL_NO_APPROVER' },
+  CHANGELOG_EDITED_ELSEWHERE: {
+    status: 409,
+    code: 'CHANGELOG_EDITED_ELSEWHERE',
+  },
+  CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  CHANGELOG_TEXT_NOT_ALLOWED: {
+    status: 422,
+    code: 'CHANGELOG_TEXT_NOT_ALLOWED',
+    fields: ['userText'],
+  },
   ROLE_IN_USE: { status: 409, code: 'ROLE_IN_USE' },
   ROLE_PROTECTED: { status: 409, code: 'ROLE_PROTECTED' },
   STAFF_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
@@ -297,6 +352,37 @@ const operationErrors: Partial<
   STAFF_CANNOT_DELETE: { status: 409, code: 'STAFF_CANNOT_DELETE' },
   STAFF_ALREADY_ENROLLED: { status: 409, code: 'STAFF_ALREADY_ENROLLED' },
   NO_PAGE: { status: 404, code: 'NOT_FOUND' },
+  // TipMe for businesses. Not a manager reads exactly like an unknown business (rule 2).
+  NOT_A_MANAGER: { status: 404, code: 'BUSINESS_NOT_FOUND' },
+  BUSINESS_NOT_FOUND: { status: 404, code: 'BUSINESS_NOT_FOUND' },
+  NO_MEMBERSHIP: { status: 404, code: 'NOT_FOUND' },
+  INVITATION_INVALID: { status: 404, code: 'INVITATION_INVALID' },
+  INVITEE_UNAVAILABLE: { status: 404, code: 'INVITEE_UNAVAILABLE' },
+  NOTE_NOT_OPEN: { status: 404, code: 'NOTE_NOT_OPEN' },
+  BUSINESS_SLUG_TAKEN: { status: 409, code: 'BUSINESS_SLUG_TAKEN' },
+  LOCATION_SLUG_TAKEN: { status: 409, code: 'LOCATION_SLUG_TAKEN' },
+  SLUG_LOCKED: { status: 409, code: 'SLUG_LOCKED' },
+  BUSINESS_NAME_LOCKED: { status: 409, code: 'BUSINESS_NAME_LOCKED' },
+  ALREADY_A_MEMBER: { status: 409, code: 'ALREADY_A_MEMBER' },
+  BUSINESS_LAST_OWNER: { status: 409, code: 'BUSINESS_LAST_OWNER' },
+  INVITATIONS_BLOCKED: { status: 409, code: 'INVITATIONS_BLOCKED' },
+  // Accepting needs a live page (owner's answer Q1): a state to fix, not bad input.
+  MEMBER_NOT_TIPPABLE: { status: 409, code: 'MEMBER_NOT_TIPPABLE' },
+  OWNER_REQUIRED: { status: 403, code: 'OWNER_REQUIRED' },
+  BUSINESS_NOT_VERIFIED: { status: 403, code: 'BUSINESS_NOT_VERIFIED' },
+  // Business release 2 (R2-0).
+  SHARE_NOT_ALLOWED: { status: 409, code: 'SHARE_NOT_ALLOWED' },
+  SHARE_CHANGE_TOO_SOON: { status: 409, code: 'SHARE_CHANGE_TOO_SOON' },
+  SHARE_NOT_OPEN: { status: 404, code: 'SHARE_NOT_OPEN' },
+  TEAM_NOBODY_ON_SHIFT: { status: 409, code: 'TEAM_NOBODY_ON_SHIFT' },
+  CARD_NOT_FOUND: { status: 404, code: 'CARD_NOT_FOUND' },
+  BALANCE_BELOW_ZERO: { status: 409, code: 'BALANCE_BELOW_ZERO' },
+  TIP_NOT_REVERSIBLE: { status: 409, code: 'TIP_NOT_REVERSIBLE' },
+  NOTE_TEXT_REFUSED: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['body'],
+  },
   PROFILE_NOT_FOUND: { status: 404, code: 'PROFILE_NOT_FOUND' },
   QUOTE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   AMOUNT_OUT_OF_RANGE: {
@@ -374,6 +460,29 @@ function classify(exception: unknown): {
   return { status: 500, code: 'INTERNAL_ERROR' };
 }
 
+const CHANGELOG_PROBLEMS: ReadonlySet<string> = new Set<ChangelogTextProblem>([
+  'provider_name',
+  'regulatory_claim',
+  'too_long',
+]);
+
+/**
+ * Why a changelog text can't be shown, for the field: the problem names, comma-separated. The one
+ * OperationError detail an answer carries, so it is re-checked here against the fixed names.
+ */
+function changelogProblemsOf(exception: unknown): string | undefined {
+  if (
+    !(exception instanceof OperationError) ||
+    exception.code !== 'CHANGELOG_TEXT_NOT_ALLOWED' ||
+    !exception.detail
+  )
+    return undefined;
+  const names = exception.detail.split(',');
+  return names.every((name) => CHANGELOG_PROBLEMS.has(name))
+    ? names.join(',')
+    : undefined;
+}
+
 /** Fixed words and codes only: what the next person needs to tell one 503 from another. */
 function dependencyFields(failure: DatabaseFailure | null) {
   if (!failure) return { cause: 'not_database' };
@@ -438,6 +547,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     else if (fields) body.error.fields = fields;
     if (exception instanceof CodedHttpException && exception.reason)
       body.error.reason = exception.reason;
+    const problems = changelogProblemsOf(exception);
+    if (problems) body.error.reason = problems;
     if (
       exception instanceof RateLimitedException ||
       (exception instanceof CodedHttpException && exception.retryAfterSeconds)

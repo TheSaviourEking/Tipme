@@ -76,6 +76,7 @@ export function AppreciationForm({
   pilotNotice,
   barNotice,
   recognition = false,
+  business,
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -101,6 +102,12 @@ export function AppreciationForm({
    * typed, offer "Let {name} recognise me next time". Older APIs send nothing: no tick box.
    */
   recognition?: boolean;
+  /**
+   * Tipping someone at a business (PR B4): the form is otherwise exactly the person's own. The tip
+   * carries the membership as a label the server checks (and ignores when it no longer holds), and
+   * this tab remembers the business for "Tip {name} again", only with the supporter's opt-in.
+   */
+  business?: { memberId: string; name: string; slug: string };
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -317,6 +324,7 @@ export function AppreciationForm({
       ...(joining && celebration
         ? { celebrationMomentId: celebration.momentId }
         : {}),
+      ...(business ? { businessMemberId: business.memberId } : {}),
     };
     const { result } = await sendWithOneRetry('tip-intent', () =>
       createTip(key, body),
@@ -330,7 +338,11 @@ export function AppreciationForm({
         );
         sessionStorage.setItem(
           pendingTipKey(result.data.tipId),
-          JSON.stringify({ optIn: remember, handle }),
+          JSON.stringify({
+            optIn: remember,
+            handle,
+            ...(business ? { business: business.slug } : {}),
+          }),
         );
       } catch {
         // Without session storage the receipt needs its full link; the tip itself still works.
@@ -644,7 +656,10 @@ export function AppreciationForm({
         {...(submitting ? { 'data-submitting': '' } : {})}
       >
         {onProfile ? (
-          <h2>Tip {recipient}</h2>
+          <h2>
+            Tip {recipient}
+            {business ? ` at ${business.name}` : ''}
+          </h2>
         ) : (
           <>
             <h2>Make {recipient}’s day.</h2>

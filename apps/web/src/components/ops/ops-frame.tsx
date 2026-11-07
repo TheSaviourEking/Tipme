@@ -6,6 +6,7 @@ import { Wordmark } from '@/components/brand';
 import {
   opsMenuCurrent,
   opsMenuGroups,
+  type OpsMenuFeatures,
   type OpsMenuGroup,
 } from '@/lib/ops-menu';
 
@@ -92,12 +93,15 @@ function AdminNav({
  */
 export function OpsFrame({
   permissions,
+  features,
   pathname,
   approvals,
   onLeave,
   children,
 }: {
   permissions: readonly string[];
+  /** Feature-gated links that are switched on (Businesses while the business flag is on). */
+  features?: OpsMenuFeatures;
   pathname: string;
   /** The waiting count on the Approvals link (null for none). */
   approvals: ReactNode;
@@ -105,7 +109,7 @@ export function OpsFrame({
   /** The fresh-code prompt and the page. */
   children: ReactNode;
 }) {
-  const groups = opsMenuGroups(permissions);
+  const groups = opsMenuGroups(permissions, features);
   const current = opsMenuCurrent(
     groups.flatMap((group) => group.links),
     pathname,
@@ -115,12 +119,17 @@ export function OpsFrame({
   const menuButton = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
 
-  // A tall menu scrolls inside the sidebar: keep the open page's link in view there.
+  // A tall menu scrolls inside the sidebar: keep the open page's link in view there. Again when the
+  // menu itself changes: a link that arrives later (Businesses, once its switch is read) pushes the
+  // rest down, and could push the open page's link out of sight.
+  const menu = groups
+    .flatMap((group) => group.links.map((link) => link.href))
+    .join(' ');
   useEffect(() => {
     side.current
       ?.querySelector('[aria-current="page"]')
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [pathname]);
+  }, [pathname, menu]);
 
   // A window widened past the breakpoint gets the sidebar, so the sheet goes.
   useEffect(() => {

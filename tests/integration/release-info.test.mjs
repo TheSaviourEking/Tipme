@@ -20,3 +20,8 @@ test('a copy names its payment provider, so the release check knows which tip it
     'bachs-sandbox',
   );
 });
+
+test('a copy says whether TipMe for businesses is on, so the web invites people to create one', () => {
+  assert.equal(info({ BUSINESS_ENABLED: true }).business, true);
+  assert.equal(info({ BUSINESS_ENABLED: false }).business, false);
+});

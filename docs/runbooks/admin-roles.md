@@ -30,6 +30,9 @@ The menu only offers what someone can use. The server checks every call whatever
 | `recoveries.cancel` | people   | no        | Cancel a pending phone recovery                                                                                             |
 | `recoveries.manage` | people   | yes       | Start and manage account recoveries for a person                                                                            |
 | `usernames.manage`  | people   | yes       | Reserve and release usernames, and ask to take one back from a page                                                         |
+| `businesses.manage` | people   | yes       | Verify, suspend and restore businesses, with a reason (TipMe for businesses, behind `BUSINESS_ENABLED`)                     |
+| `changelog.edit`    | content  | no        | Edit changelog entries and ask for one to be shown to users                                                                 |
+| `changelog.publish` | content  | yes       | Approve what users read in What’s new                                                                                       |
 | `email.export`      | content  | yes       | Download the email log as a spreadsheet                                                                                     |
 | `email.read`        | content  | yes       | Open a sent email: its delivery timeline and its content                                                                    |
 | `issues.resolve`    | content  | no        | Resolve issues                                                                                                              |
@@ -43,23 +46,32 @@ The menu only offers what someone can use. The server checks every call whatever
 
 **Sensitive** means moving or settling money, reading logs or private details, or changing accounts and settings. The screens warn when one is ticked.
 
+Every role except `release_check` holds `changelog.edit` (the owner's default, 6 Nov 2026). Only the owner holds `changelog.publish` until someone adds it to a role. It is sensitive because its approval goes through the serious-action flow, so its routes need a fresh code.
+
 ## Serious actions
 
 These wait for a second person when one is available:
 
-| Action                      | In plain words                         | Needs                                                       |
-| --------------------------- | -------------------------------------- | ----------------------------------------------------------- |
-| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                         |
-| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                           |
-| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it |
-| `fee.change`                | Change a page’s fee                    | `fees.manage`                                               |
-| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                               |
-| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                       |
-| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                              |
-| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                              |
-| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                               |
-| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                          |
-| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it        |
+| Action                      | In plain words                         | Needs                                                          |
+| --------------------------- | -------------------------------------- | -------------------------------------------------------------- |
+| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                            |
+| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                              |
+| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it    |
+| `fee.change`                | Change a page’s fee                    | `fees.manage`                                                  |
+| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                                  |
+| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                          |
+| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                                 |
+| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                                 |
+| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                                  |
+| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                             |
+| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it           |
+| `business.verify`           | Verify a business                      | `businesses.manage` (not one of the business’s own managers)   |
+| `tip.reverse`               | Reverse a refunded or charged-back tip | `payments.repair` (business release 2, behind the shares flag) |
+| `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish`  |
+
+Reversing a refunded or charged-back tip (`tip.reverse`, business release 2) starts from the partner's `payment_reversed` issue, after checking the refund or dispute in the partner's dashboard. A refund follows the partner's refund guide: `refund.created` only notes it as pending; it can be reversed once `refund.paid` arrives, for exactly the `refunded_amount` the partner reports (enter that amount; a different one is refused); `refund.failed` means nothing moved, so close the issue. A dispute (the partner documents no dispute events) is reversed for the amount you enter. The partner keeps the fees it already charged ("Fees already charged are not returned"): the reversal takes back the person's part, any business's part and TipMe's fee in proportion, the provider fee stays TipMe's cost, and a fee on the refund itself is TipMe's cost too. Each partner refund or dispute is reversed once: several webhook events about one refund join one issue, a second request for it is refused, and the approval text shows what earlier reversals already took back. A won dispute opens no issue. An issue whose events named no refund or dispute id can't be reversed here; settle it at the partner and close it by hand. Reversing does not close the issue: a `payment_reversed` issue stays open, and keeps that person's withdrawals on hold, until staff resolve it. A reversal can take a balance below zero; withdrawals then stop until it is back, and a `balance_below_zero` money issue opens. It only runs while business shares are on, including when it is approved later.
+
+`changelog.publish` is the one action asked for with a different permission from the one that decides it. An editor without `changelog.publish` can never run it alone: with no publisher able to enter a code, asking is refused ("Nobody who can approve this is set up yet."). A publisher doesn't ask: their own Approve on the entry page, with a fresh code, is the one approval (owner's default, 6 Nov 2026).
 
 Giving someone a role or permission counts as serious only if it contains something sensitive. A harmless edit applies at once. Hand closes of money issues are serious, except releasing a freeze (below).
 
@@ -80,7 +92,7 @@ Releasing a freeze is also one person: see below.
 4. On approval the server re-checks the facts and both people, then runs it. If something changed it stops, and Approvals says why.
 5. Requests expire after 24 hours. The person who asked can cancel their own.
 
-**Who qualifies:** active staff, set up with an authenticator, holding the same permission, and not the person who asked by id or mailbox. Someone the action concerns can't decide it.
+**Who qualifies:** active staff, set up with an authenticator, holding the same permission, and not the person who asked by id or mailbox. Someone the action concerns can't decide it, and can't ask for it either, even when nobody else qualifies: asking is refused and nothing is recorded. So someone who manages a business never verifies it (owner's ruling, 6 Nov 2026). The one exception is releasing a freeze on your own page, below.
 
 Some actions ask more of the approver:
 

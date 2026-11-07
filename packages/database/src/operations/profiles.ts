@@ -64,6 +64,7 @@ import {
   profiles,
   sessions,
   emailCodeLockouts,
+  changelogReads,
   emailCodes,
   signInCodes,
   signInLockouts,
@@ -73,6 +74,7 @@ import {
 import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
 import { balanceIn } from './balance.js';
+import { endBusinessRolesForDeletion } from './business-members.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import {
   isUnenrolledInvitee,
@@ -1080,6 +1082,9 @@ export function deleteAccount(
         .for('update');
       if (input.rehearsalCleanup && !row?.rehearsalRunId)
         throw new OperationError('INVALID_INPUT');
+      // TipMe for businesses (M13): refused while the person is a verified business's only owner;
+      // otherwise their memberships, shifts and manager seats end here, with the account.
+      await endBusinessRolesForDeletion(tx, input.userId, now);
       // Someone who has ever enrolled needs removing by someone else first, even mid-reset. A mere
       // invitee never had the use of it, and an invitation mustn't cost them their account.
       if (
@@ -1244,6 +1249,11 @@ export function deleteAccount(
         .update(sessions)
         .set({ revokedAt: now })
         .where(eq(sessions.userId, input.userId));
+      // When they last opened What's new: per person, so it goes with the account. Its foreign key
+      // to users doesn't cascade (the users row stays, erased), so it is removed here.
+      await tx
+        .delete(changelogReads)
+        .where(eq(changelogReads.userId, input.userId));
       return { handle: row?.handleLower ?? '' };
     });
     // After the commit: an account's photos must not outlive it in the bucket.

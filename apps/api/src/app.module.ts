@@ -22,8 +22,10 @@ import {
 import { ReadinessService } from './health/readiness.service.js';
 import { InfraModule } from './infra/infra.module.js';
 import { MailModule } from './mail/mail.module.js';
+import { ChangelogModule } from './changelog/changelog.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { LiveModule } from './live/live.module.js';
+import { BusinessModule } from './business/business.module.js';
 
 import { LOGGER } from './tokens.js';
 
@@ -48,6 +50,8 @@ export class AppModule {
         AnalyticsModule,
         WebhooksModule,
         MailModule,
+        BusinessModule,
+        ChangelogModule,
         ...(config.PAYMENT_PROVIDER === 'mock' ? [MockCheckoutModule] : []),
         ...(config.MAIL_DEFAULT_PROVIDER === 'mock'
           ? [PretendInboxModule]

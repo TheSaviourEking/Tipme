@@ -238,8 +238,11 @@ export function issueEvidence(
         ? await withdrawalHoldPins(db, { profileId: issue.subject.profileId })
         : [],
       private: {
-        message: Boolean(message),
-        supporterLabel: Boolean(tip?.label),
+        // A reported business note (PR B5) is reviewed through its own reveal; the supporter's
+        // private message and name have nothing to do with it, so they are not offered here.
+        message: Boolean(message) && issue.kind !== 'business_note_reported',
+        supporterLabel:
+          Boolean(tip?.label) && issue.kind !== 'business_note_reported',
         phone: Boolean(user?.phoneE164),
         email: Boolean(user?.email),
       },
@@ -266,7 +269,7 @@ export function revealPrivate(
       phone?: string;
       email?: string;
     } = {};
-    if (issue.subject.tipId) {
+    if (issue.subject.tipId && issue.kind !== 'business_note_reported') {
       const [tip] = await db
         .select({ label: tips.payerDisplayLabel, profileId: tips.profileId })
         .from(tips)

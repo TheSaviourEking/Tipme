@@ -14,15 +14,21 @@ const PAGE_CARDS = [
 const GROUPS = [null, 'Work', 'Numbers', 'Email and records', 'Staff'] as const;
 type Group = (typeof GROUPS)[number];
 
+/** Features that are switched off by default; a link tied to one shows only while it is on. */
+type OpsMenuFeature = 'business';
+export type OpsMenuFeatures = Partial<Record<OpsMenuFeature, boolean>>;
+
 /**
  * Each entry names what its page reads, so nobody is offered a page that would refuse them, and the
- * group it is listed in. A new page is one line here (a Changelog would join 'Email and records').
+ * group it is listed in. A new page is one line here.
  */
 const LINKS: {
   href: string;
   label: string;
   group: Group;
   needs: string[] | null;
+  /** Shown only while that feature is on (the API answers 404 otherwise). */
+  feature?: OpsMenuFeature;
 }[] = [
   { href: '/ops', label: 'Overview', group: null, needs: null },
   { href: '/ops/approvals', label: 'Approvals', group: null, needs: null },
@@ -44,6 +50,13 @@ const LINKS: {
     label: 'Usernames',
     group: 'Work',
     needs: ['usernames.manage'],
+  },
+  {
+    href: '/ops/businesses',
+    label: 'Businesses',
+    group: 'Work',
+    needs: ['search.view'],
+    feature: 'business',
   },
   {
     href: '/ops/visibility',
@@ -76,6 +89,13 @@ const LINKS: {
     needs: ['audit.view'],
   },
   {
+    // Editors and publishers both read it; the entry page offers Approve or Ask for approval.
+    href: '/ops/changelog',
+    label: 'Changelog',
+    group: 'Email and records',
+    needs: ['changelog.edit', 'changelog.publish'],
+  },
+  {
     href: '/ops/staff/people',
     label: 'People',
     group: 'Staff',
@@ -94,10 +114,15 @@ export type OpsMenuLink = { href: string; label: string };
 export type OpsMenuGroup = { label: string | null; links: OpsMenuLink[] };
 
 /** The admin menu's groups for these permissions; a group with no links left is dropped. */
-export function opsMenuGroups(permissions: readonly string[]): OpsMenuGroup[] {
+export function opsMenuGroups(
+  permissions: readonly string[],
+  features: OpsMenuFeatures = {},
+): OpsMenuGroup[] {
   const allowed = LINKS.filter(
     (link) =>
-      !link.needs || link.needs.some((needed) => permissions.includes(needed)),
+      (!link.feature || features[link.feature] === true) &&
+      (!link.needs ||
+        link.needs.some((needed) => permissions.includes(needed))),
   );
   return GROUPS.map((label) => ({
     label,
@@ -108,8 +133,11 @@ export function opsMenuGroups(permissions: readonly string[]): OpsMenuGroup[] {
 }
 
 /** The admin menu for these permissions, in order (the server still checks every call). */
-export function opsMenu(permissions: readonly string[]): OpsMenuLink[] {
-  return opsMenuGroups(permissions).flatMap((group) => group.links);
+export function opsMenu(
+  permissions: readonly string[],
+  features: OpsMenuFeatures = {},
+): OpsMenuLink[] {
+  return opsMenuGroups(permissions, features).flatMap((group) => group.links);
 }
 
 /**

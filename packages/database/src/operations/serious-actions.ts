@@ -69,6 +69,11 @@ export interface SeriousActionServices {
   /** Used only by `prepare`, outside the transaction. */
   payoutReader?: (name: string) => StaffPayoutReader;
   payoutLog?: PayoutStartLog;
+  /**
+   * Business release 2: whether `BUSINESS_ENABLED` and `BUSINESS_SHARES_ENABLED` are both on.
+   * `tip.reverse` runs only then, also when it is approved later.
+   */
+  businessSharesEnabled?: boolean;
   mail?: {
     production: boolean;
     configured: ReadonlySet<MailProviderName>;
@@ -112,6 +117,13 @@ export interface SeriousActionDefinition<Payload> {
   name: string;
   /** Must be sensitive in the catalogue: what the route's fresh code and the second person guard. */
   permission: string;
+  /**
+   * Who may ask, when that differs from who may decide (`changelog.publish`: editors ask, publishers
+   * decide). The person asking may not be able to act directly, so they can never run it alone: with
+   * nobody to decide, someone holding only this is refused APPROVAL_NO_APPROVER. They must still be
+   * able to enter a code, and the fresh code is still asserted. Leave out and `permission` asks too.
+   */
+  askPermission?: string;
   /** Throws an OperationError if the facts don't allow it. */
   validate(tx: Tx, payload: Payload, check: SeriousActionCheck): Promise<void>;
   /**
@@ -134,8 +146,16 @@ export interface SeriousActionDefinition<Payload> {
     payload: Payload,
     approver: { userId: string; access: StaffAccess },
   ): Promise<boolean>;
-  /** Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox. */
+  /**
+   * Who this benefits or concerns, by user id. They can't decide it, by id or by mailbox, and can't
+   * ask for it either (owner's ruling, 6 Nov 2026), unless `subjectMayAsk` says otherwise.
+   */
   subjects?(payload: Payload, db: Database | Tx): string[] | Promise<string[]>;
+  /**
+   * A subject may still ask, and run it alone when nobody else qualifies. Only for an action whose
+   * documented rule allows it, such as releasing a freeze on your own page when nobody else can.
+   */
+  subjectMayAsk?: true;
   /**
    * After a refusal has undone the run, so what it records stays: on approval, in the transaction
    * that closes the request; when asking, on its own after the rollback.
@@ -202,6 +222,11 @@ export function registerSeriousAction<Payload>(
   if (!entry) throw new Error(`${action.name} names an unknown permission`);
   if (!entry.sensitive)
     throw new Error(`${action.name}: ${action.permission} is not sensitive`);
+  if (
+    action.askPermission !== undefined &&
+    !OPS_CATALOGUE[action.askPermission as OpsPermission]
+  )
+    throw new Error(`${action.name} names an unknown ask permission`);
   const named = SERIOUS_ACTION_PERMISSIONS[action.name as SeriousAction];
   if (named && named !== action.permission)
     throw new Error(`${action.name} must use ${named}`);
@@ -350,6 +375,30 @@ async function refusalToDecide(
 }
 
 /**
+ * Whether the requester is someone the action concerns, by id or by mailbox: the same test that
+ * keeps them from deciding it. Owner's ruling, 6 Nov 2026: they can't ask for it either, even with
+ * nobody else to approve, so a business's manager never verifies their own business.
+ */
+async function requesterIsSubject(
+  db: Database | Tx,
+  action: SeriousActionDefinition<unknown>,
+  payload: unknown,
+  requesterId: string,
+): Promise<boolean> {
+  if (action.subjectMayAsk) return false;
+  const theirs = await readMailboxes(db, requesterId);
+  for (const address of action.mailboxes?.(payload) ?? [])
+    if (theirs.has(normaliseStaffEmail(address))) return true;
+  for (const subject of (await action.subjects?.(payload, db)) ?? []) {
+    const subjectId = canonicalId(subject);
+    if (subjectId === requesterId) return true;
+    if (subjectId && sharesMailbox(theirs, await readMailboxes(db, subjectId)))
+      return true;
+  }
+  return false;
+}
+
+/**
  * Who could be the second person: active staff with a confirmed authenticator on a live account,
  * holding this permission, and not the requester by id or by mailbox. Someone mid-reset can't enter
  * a code, so they don't count, even though they have enrolled before. Given the action and payload,
@@ -415,6 +464,10 @@ export function requestSeriousAction(
     if (!action) throw new OperationError('INVALID_INPUT');
     const reason = checkedReason(input.reason);
     const payload = plainPayload(input.payload);
+    // Before `prepare`, so asking about yourself never reaches a provider or records anything.
+    const asker = canonicalId(input.actorId);
+    if (asker && (await requesterIsSubject(db, action, payload, asker)))
+      throw new OperationError('APPROVAL_SUBJECT');
     const facts = await action.prepare?.(db, payload, {
       actorId: input.actorId,
       services: input.services,
@@ -426,9 +479,10 @@ export function requestSeriousAction(
         const now = input.now ?? new Date();
         const actorId = canonicalId(input.actorId);
         const access = actorId ? await readStaffAccess(tx, actorId) : null;
+        const askWith = action.askPermission ?? action.permission;
         if (
           !actorId ||
-          !access?.permissions.has(action.permission) ||
+          !access?.permissions.has(askWith) ||
           !(await canEnterCode(tx, actorId))
         )
           throw new OperationError('PERMISSION_NOT_HELD');
@@ -437,6 +491,9 @@ export function requestSeriousAction(
           userId: actorId,
           now,
         });
+        // Again under the lock: who manages or owns the subject may have changed since.
+        if (await requesterIsSubject(tx, action, payload, actorId))
+          throw new OperationError('APPROVAL_SUBJECT');
 
         const check = {
           actorId,
@@ -458,6 +515,12 @@ export function requestSeriousAction(
           action: action.name,
           payload,
         });
+        // Running alone is only for someone who could have acted directly.
+        if (
+          approvers.length === 0 &&
+          !access.permissions.has(action.permission)
+        )
+          throw new OperationError('APPROVAL_NO_APPROVER');
         const waiting = await tx
           .select({
             id: approvalRequests.id,
@@ -810,14 +873,19 @@ async function deciderOrThrow(
   return actorId;
 }
 
-/** Still staff, holding it, and able to enter a code: a phone reported stolen ends what it asked for. */
+/**
+ * Still staff, holding what let them ask, and able to enter a code: a phone reported stolen ends what
+ * it asked for. For an action asked with another permission, that one is what they must still hold.
+ */
 async function requesterStillHolds(
   tx: Tx,
   request: ApprovalRow,
 ): Promise<boolean> {
   if (!(await canEnterCode(tx, request.requestedBy))) return false;
   const access = await readStaffAccess(tx, request.requestedBy);
-  return Boolean(access?.permissions.has(request.permission));
+  const askWith =
+    registry.get(request.action)?.askPermission ?? request.permission;
+  return Boolean(access?.permissions.has(askWith));
 }
 
 const DESCRIPTION_CHANGED = Symbol('description changed');
