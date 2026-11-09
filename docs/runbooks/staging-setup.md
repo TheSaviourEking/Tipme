@@ -79,7 +79,7 @@ Without it, the release check stops in seconds and names the page; `RELEASE_BACH
 
 ### Bachs sandbox webhook endpoint
 
-1. In the Bachs sandbox Dashboard, add a webhook endpoint `https://<api-host>/v1/webhooks/bachs` with `event_source=connect/all`, so events from recipients' connected accounts reach TipMe (direct charges are made on those accounts).
+1. In the Bachs sandbox Dashboard, add a webhook endpoint `https://<api-host>/v1/webhooks/bachs` with `event_source=all`, so events from recipients' connected accounts (direct charges are made on those accounts) and from TipMe's own account (Pro payments) both reach TipMe. Bachs offers only `account`, `connect` or `all`; there is no `connect/all` value.
 2. Subscribe to `checkout.completed`, `collection.succeeded`, `collection.failed`, `collection.underpaid`, `account.updated`, `capability.updated`, and every refund, dispute and chargeback event Bachs offers. Refunds and disputes are not modelled yet: each one opens a "Refund or dispute reported" money issue and changes no balance.
 3. Copy the endpoint's signing secret into `BACHS_WEBHOOK_SECRET` and redeploy the API.
 4. Send a test event from the Dashboard and confirm the API logs `webhook.processed` (a test event for an unknown account is stored as unmatched, which is expected). A `webhook.rejected` log means the secret or clock is wrong.
