@@ -43,6 +43,7 @@ import {
   sweepRehearsals,
   rollupAnalytics,
   registerRealSeriousActions,
+  businessLiveAudience,
 } from '@tipme/database';
 import {
   createBachsProvider,
@@ -75,6 +76,7 @@ import {
   jobSignalsFor,
   PAYOUT_SETUP_JOB_NAME,
   WEEKLY_REPORTS_JOB_NAME,
+  businessTipSignals,
 } from './live-signals.js';
 import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
 import { handleUsernameTakeBacks } from './handlers/username-take-backs.js';
@@ -648,6 +650,14 @@ export async function startJobWorker(
             // After the handler's own writes committed (notifications, moments). Not awaited
             // and never thrown: a lost signal is caught by the page's next refresh.
             void publishLive(jobSignalsFor(job.name, outcome, job.data));
+            // A tip made at a business: its managers' and team's pages re-read (plan B9 Task 23).
+            if (
+              job.name === 'tip.succeeded' &&
+              (outcome === 'notified' || outcome === 'duplicate')
+            )
+              void businessTipSignals(job.data, (ref) =>
+                businessLiveAudience(database.db, ref),
+              ).then(publishLive);
             processed.add(1, { outcome });
             return outcome;
           }

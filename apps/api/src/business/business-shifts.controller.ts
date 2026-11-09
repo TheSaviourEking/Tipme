@@ -3,6 +3,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   UseGuards,
@@ -23,6 +24,8 @@ import {
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from './business-live.js';
 
 /**
  * Lane B6: check in and out at a location, by the person (`/v1/me/work/:memberId/shift/*`) or a
@@ -37,6 +40,10 @@ export class BusinessShiftsController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Post('work/:memberId/shift/start')
@@ -92,7 +99,7 @@ export class BusinessShiftsController {
     memberId: string,
   ): Promise<ApiDataResponse<ShiftState>> {
     const shift = await startShift(this.database.db, actor, memberId);
-    this.refresh(shift);
+    this.refresh(shift, memberId);
     return { data: { onShift: true, startedAt: shift.startedAt } };
   }
 
@@ -100,13 +107,14 @@ export class BusinessShiftsController {
     actor: ShiftActor,
     memberId: string,
   ): Promise<ApiDataResponse<ShiftState>> {
-    this.refresh(await endShift(this.database.db, actor, memberId));
+    this.refresh(await endShift(this.database.db, actor, memberId), memberId);
     return { data: { onShift: false } };
   }
 
   /** After the commit, best effort: a web app that can't be reached never fails the press. */
-  private refresh(change: ShiftChange): void {
-    if (change.changed)
-      this.revalidator.revalidateBusiness(change.businessSlug);
+  private refresh(change: ShiftChange, memberId: string): void {
+    if (!change.changed) return;
+    this.revalidator.revalidateBusiness(change.businessSlug);
+    signalBusiness(this.database.db, this.publishLive, { memberId });
   }
 }

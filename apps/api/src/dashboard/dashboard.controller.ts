@@ -36,6 +36,7 @@ import {
 import {
   dashboardSummary,
   exportMyTipsCsv,
+  exportMyWorkCsv,
   getWeeklyReport,
   listMyTips,
   listMyWithdrawals,
@@ -181,6 +182,29 @@ export class DashboardController {
       `attachment; filename="tipme-tips-${day}.csv"`,
     );
     // A byte-order mark so spreadsheet apps read the naira sign and names as UTF-8.
+    return `\ufeff${csv}`;
+  }
+
+  /**
+   * Where the person's page has worked at businesses, as CSV (plan B9 Task 24): every membership,
+   * left ones included. Not behind BUSINESS_ENABLED: a person's own data stays downloadable.
+   */
+  @Get('exports/work.csv')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  async exportWork(
+    @CurrentUser() auth: AuthContext,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
+    const { csv } = await exportMyWorkCsv(
+      this.database.db,
+      await this.profile(auth),
+    );
+    const day = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="tipme-work-${day}.csv"`,
+    );
     return `\ufeff${csv}`;
   }
 

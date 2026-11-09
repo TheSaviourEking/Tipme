@@ -5,6 +5,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Query,
@@ -41,6 +42,8 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from './business-live.js';
 
 const membersQuerySchema = z
   .object({ locationId: z.uuid().optional() })
@@ -56,6 +59,10 @@ export class BusinessMembersController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   /** The link of a link invitation is in this answer only: just its hash is kept. */
@@ -69,15 +76,15 @@ export class BusinessMembersController {
     @Body(new ZodValidationPipe(invitationRequestSchema))
     body: InvitationRequest,
   ): Promise<ApiDataResponse<InvitationCreated>> {
-    return {
-      data: await inviteToBusiness(
-        this.database.db,
-        this.sealing,
-        auth.userId,
-        businessId,
-        body,
-      ),
-    };
+    const data = await inviteToBusiness(
+      this.database.db,
+      this.sealing,
+      auth.userId,
+      businessId,
+      body,
+    );
+    signalBusiness(this.database.db, this.publishLive, { businessId });
+    return { data };
   }
 
   @Get(':id/invitations')
@@ -108,6 +115,7 @@ export class BusinessMembersController {
       businessId,
       invitationId,
     );
+    signalBusiness(this.database.db, this.publishLive, { businessId });
   }
 
   /** A username's public card only (display name, handle, photo): never contact details. */
@@ -155,5 +163,6 @@ export class BusinessMembersController {
     @Param('memberId') memberId: string,
   ): Promise<void> {
     await removeMember(this.database.db, auth.userId, businessId, memberId);
+    signalBusiness(this.database.db, this.publishLive, { memberId });
   }
 }
