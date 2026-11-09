@@ -292,3 +292,35 @@ test('raw events older than 90 days are purged; newer ones stay', async () => {
   assert.equal((await rowsFor(old)).length, 0);
   assert.equal((await rowsFor(recent)).length, 1);
 });
+
+test('a production copy with ANALYTICS_ENABLED unset collects an anonymous visit (owner, 9 Nov 2026)', async () => {
+  const { loadApiConfig } = await import('../../apps/api/dist/config.js');
+  const { EventsController } =
+    await import('../../apps/api/dist/analytics/events.controller.js');
+  const config = loadApiConfig({
+    DATABASE_URL: database.url,
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    STATUS_TOKEN_SECRET: 's'.repeat(32),
+    AUTH_CODE_SECRET: 'a'.repeat(32),
+    WEB_REVALIDATE_SECRET: 'r'.repeat(32),
+    OPS_TOTP_KEY: Buffer.alloc(32, 1).toString('base64'),
+    MAIL_SEAL_KEY: Buffer.alloc(32, 2).toString('base64'),
+    NODE_ENV: 'production',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    WEB_ORIGIN: 'https://tipme-demo.onrender.com',
+  });
+  const controller = new EventsController(config, { db: database.db });
+  const visit = () => ({ name: 'profile_viewed', flowId: randomUUID() });
+  const counted = visit();
+  await controller.record(counted, 'Mozilla/5.0', undefined, undefined);
+  assert.equal((await rowsFor(counted.flowId)).length, 1);
+  // Global Privacy Control and Do Not Track still store nothing in production.
+  const gpc = visit();
+  await controller.record(gpc, 'Mozilla/5.0', '1', undefined);
+  const dnt = visit();
+  await controller.record(dnt, 'Mozilla/5.0', undefined, '1');
+  assert.equal((await rowsFor(gpc.flowId)).length, 0);
+  assert.equal((await rowsFor(dnt.flowId)).length, 0);
+});

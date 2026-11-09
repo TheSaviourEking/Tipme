@@ -689,7 +689,7 @@ export interface OpsVisibility {
   topPages: { handle: string; visits: number }[];
 }
 
-/** Every metrics answer says whether anonymous collection is on (off in production until D-07). */
+/** Every metrics answer says whether anonymous collection is on (on unless ANALYTICS_ENABLED=false; D-07 open). */
 export interface OpsMetricsEnvelope<T> {
   collecting: boolean;
   metrics: T;

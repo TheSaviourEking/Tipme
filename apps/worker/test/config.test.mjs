@@ -480,3 +480,21 @@ test('the revalidation settings are optional, and checked when given', () => {
     /WEB_REVALIDATE_SECRET/,
   );
 });
+
+test('anonymous analytics is on in production unless set to false (owner, 9 Nov 2026; D-07 open)', () => {
+  const production = {
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    NODE_ENV: 'production',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+  };
+  assert.equal(loadWorkerConfig(production).ANALYTICS_ENABLED, true);
+  assert.equal(
+    loadWorkerConfig({ ...production, ANALYTICS_ENABLED: 'false' })
+      .ANALYTICS_ENABLED,
+    false,
+  );
+});

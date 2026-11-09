@@ -250,8 +250,7 @@ export async function startJobWorker(
       (config.DEPLOYMENT_MODE === 'preview' ? 'staging' : config.NODE_ENV),
     release: config.GIT_SHA,
   });
-  const analyticsEnabled =
-    config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
+  const analyticsEnabled = config.ANALYTICS_ENABLED;
   // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
   // a secret the worker can never accept webhooks. It shares the fail-fast Redis client.
   const mockProvider = createMockProvider({

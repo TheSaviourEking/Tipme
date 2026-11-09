@@ -46,17 +46,19 @@
 > - **Email recovery:** a verified email can schedule a move to a new phone number (confirmed by a code to that number), effective 24 hours later; the old number and email are warned and the owner can cancel. It is never a second way to sign in (ADR-0003).
 
 > **PR-009 notes (19 Oct 2026), all PROPOSED:**
-> - **Analytics consent and retention (pending D-07):** anonymous, cookieless first-party events; nothing written to a supporter's device; Global Privacy Control and Do Not Track honoured; no IP, user agent or account stored; raw events kept 90 days, daily totals kept. Collection is **off in production** (`ANALYTICS_ENABLED`) until D-07 is decided.
+> - **Analytics consent and retention (pending D-07):** anonymous, cookieless first-party events; nothing written to a supporter's device; Global Privacy Control and Do Not Track honoured; no IP, user agent or account stored; raw events kept 90 days, daily totals kept. Collection is on in production by default (owner, 9 Nov 2026; see below).
 > - **Market visibility:** outside observations are entered by hand on the admin Market page. Automatic feeds (social listening, competitor tracking, Google Search Console, app stores) are **deferred**: they need a provider, a budget and a public domain.
 > - **Admin and money:** staff can resolve, note, re-check with the provider, pause pages and cancel recoveries. Refunds, manual ledger adjustments and payout holds stay out of admin until there are two staff for the two-person rule and a real provider (D-03 to D-06).
 > - **Staff accounts:** only the Owner role is seeded, and staff are granted only by `pnpm ops:grant-owner`. Staff accounts are never recovered by email, and a number change removes admin access until the grant is run again.
+
+> **Visitor analytics in production: the owner's decision, 9 Nov 2026.** Anonymous visitor analytics is on by default in production, within the PR-009 rules above (anonymous, cookieless, nothing written to the device, GPC and DNT honoured, no IP, user agent or account stored, raw events kept 90 days, daily totals kept). `ANALYTICS_ENABLED=false` turns it off. This is the owner's product decision; it is not a legal or data-protection approval. **D-07 stays OPEN** as a compliance item. It also turns on web-vitals samples and, once built, tip-source attribution (Pro additions plan PR 5).
 
 > **PR-011 notes (21 Oct 2026), all PROPOSED:**
 > - **Numbering fix:** earlier documents called messaging providers "D-08". D-08 is the hosting and monitoring budget; messaging providers are **D-11**.
 > - **Error tracking:** TipMe's own reporter sends server errors in Sentry's envelope format (Sentry or self-hosted GlitchTip), without messages, bodies, cookies, headers or user data. Off without `SENTRY_DSN`; which service and plan waits for D-08.
 > - **Search engines:** `robots.txt` and `sitemap.xml` exist, but indexing stays off (`SITE_INDEXING`) on every copy until launch; public profiles stay noindex until D-06.
 > - **Handle renames (superseded by the handle rule below):** old handles keep leading to the page and nobody else can claim them; on deletion they are held 90 days like the current handle. The earlier limit of 5 old handles has gone, because the change count now bounds them.
-> - **Web vitals:** anonymous page-speed samples (metric, value, page kind, device class) follow the analytics rules: off in production until D-07, GPC/DNT honoured, kept 90 days.
+> - **Web vitals:** anonymous page-speed samples (metric, value, page kind, device class) follow the analytics rules: on in production by default since 9 Nov 2026 (see below), GPC/DNT honoured, kept 90 days.
 
 > **PR-012 notes (22 Oct 2026), all PROPOSED (pretend money):**
 > - **v1.1 commercial rules applied for testing:**

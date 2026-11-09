@@ -103,7 +103,7 @@ export async function handleDomainEvent(
     rewardBudgetPerMonthMinor?: bigint;
     /** The outbox dedupe key (the job id). */
     dedupeKey?: string;
-    /** Record anonymous server-side outcomes (off in production until D-07). */
+    /** Record anonymous server-side outcomes (on unless ANALYTICS_ENABLED=false; D-07 open). */
     analyticsEnabled?: boolean;
     sealing: MailSealing;
     /** Payments are pretend (mock provider): the tip email says so. */
