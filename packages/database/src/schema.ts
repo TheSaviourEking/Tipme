@@ -559,6 +559,9 @@ export const profiles = pgTable(
     tipSound: boolean('tip_sound').notNull().default(true),
     // Free or Pro (PR-012). Staff set it; there is no billing while money is pretend.
     plan: text('plan').notNull().default('free'),
+    // Paid Pro (ADR-0015): Pro granted by staff, apart from paid months. `plan` is what every Pro
+    // check reads; recomputePlan derives it from this and the pro_periods that cover now.
+    staffPro: boolean('staff_pro').notNull().default(false),
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
     tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
     minTipMinor: minor('min_tip_minor'),
@@ -2944,7 +2947,9 @@ export const proPrices = pgTable(
     id: uuid('id').primaryKey(),
     amountMinor: minor('amount_minor').notNull(),
     currency: currency(),
-    effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull(),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
     setBy: uuid('set_by').references(() => users.id),
     approvedBy: uuid('approved_by').references(() => users.id),
     reason: text('reason').notNull(),
@@ -2955,5 +2960,64 @@ export const proPrices = pgTable(
     check('pro_prices_amount_positive', sql`${table.amountMinor} > 0`),
     check('pro_prices_currency_ngn', sql`${table.currency} = 'NGN'`),
     check('pro_prices_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
+export const PRO_PERIOD_STATUSES = [
+  'SCHEDULED',
+  'ACTIVE',
+  'GRACE',
+  'ENDED',
+] as const;
+export const PRO_PAID_BY = [
+  'card',
+  'bank_transfer',
+  'balance',
+  'saved_card',
+] as const;
+
+/**
+ * One paid month of Pro. It covers `starts_at` up to `grace_ends_at` (its end plus 3 days' grace).
+ * One per payment (`purchase_id` unique), never two starting together, and at most one queued.
+ * `status` follows the clock (the expiry job moves it); the plan itself is read from the times.
+ */
+export const proPeriods = pgTable(
+  'pro_periods',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    // Null only for periods made in tests; every paid month has its purchase.
+    purchaseId: uuid('purchase_id').unique(),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }).notNull(),
+    status: text('status').notNull(),
+    paidBy: text('paid_by').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('pro_periods_profile_start').on(table.profileId, table.startsAt),
+    uniqueIndex('pro_periods_one_scheduled')
+      .on(table.profileId)
+      .where(sql`${table.status} = 'SCHEDULED'`),
+    index('pro_periods_due').on(table.status, table.endsAt),
+    check(
+      'pro_periods_status',
+      sql`${table.status} IN ('SCHEDULED', 'ACTIVE', 'GRACE', 'ENDED')`,
+    ),
+    check(
+      'pro_periods_paid_by',
+      sql`${table.paidBy} IN ('card', 'bank_transfer', 'balance', 'saved_card')`,
+    ),
+    check(
+      'pro_periods_times',
+      sql`${table.startsAt} < ${table.endsAt} AND ${table.endsAt} < ${table.graceEndsAt}`,
+    ),
+    check('pro_periods_amount_positive', sql`${table.amountMinor} > 0`),
+    currencyCheck('pro_periods'),
   ],
 );

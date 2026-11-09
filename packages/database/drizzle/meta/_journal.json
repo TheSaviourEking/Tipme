@@ -617,6 +617,20 @@
       "when": 1794256229651,
       "tag": "0087_pro_prices_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1794257185467,
+      "tag": "0088_pro_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1794257186577,
+      "tag": "0089_pro_periods_staff_grants",
+      "breakpoints": true
     }
   ]
 }

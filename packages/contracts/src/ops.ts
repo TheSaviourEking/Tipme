@@ -781,7 +781,19 @@ export interface OpsPage {
   images?: { hasCover: boolean; hasPhoto: boolean };
   /** Search only: the name searched for was taken back from this page, on this date. */
   takenBackOn?: string;
+  /**
+   * Paid Pro (ADR-0015): why the page is Pro — a staff grant, a paid month, or neither — and, while
+   * a paid month runs, its end and its grace end (ISO). Optional: older APIs send nothing.
+   */
+  proSource?: 'staff' | 'paid' | null;
+  paidUntil?: string | null;
+  graceUntil?: string | null;
 }
+
+/** `GET /v1/ops/pages/:profileId/pro` (paid Pro, ADR-0015), for staff with `pages.plan`. */
+export type OpsPageProStatus = Required<
+  Pick<OpsPage, 'proSource' | 'paidUntil' | 'graceUntil'>
+>;
 
 /** A page's image, as staff review and remove it. */
 export const OPS_PAGE_IMAGES = ['cover', 'photo'] as const;

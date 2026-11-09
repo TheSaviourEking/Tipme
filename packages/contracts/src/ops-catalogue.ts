@@ -235,6 +235,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'The Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
   },
+  'OpsPagesController.pro': {
+    verb: 'GET',
+    permission: 'pages.plan',
+    reason:
+      'Says whether a page’s Pro is a staff grant or paid, and until when; changes nothing.',
+  },
   'OpsStaffController.roles': {
     verb: 'GET',
     permission: 'staff.manage',

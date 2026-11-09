@@ -80,6 +80,7 @@ import {
 } from './live-signals.js';
 import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
 import { handleUsernameTakeBacks } from './handlers/username-take-backs.js';
+import { handleProExpire, handleProReminders } from './handlers/pro.js';
 import { workerRevalidator } from './revalidate.js';
 import { databaseFailureFields, jobFailure } from './job-retry.js';
 import { runUnlessRunning } from './run-lock.js';
@@ -91,6 +92,9 @@ const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
 const APPROVALS_EXPIRE_JOB = 'approvals.expire';
 const USERNAME_TAKE_BACKS_JOB = 'usernames.take-backs';
+// Paid Pro (ADR-0015): months move on every minute; reminders every 15 minutes.
+const PRO_EXPIRE_JOB = 'pro.expire';
+const PRO_REMINDERS_JOB = 'pro.reminders';
 const PAYOUT_SETUP_JOB = PAYOUT_SETUP_JOB_NAME;
 const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
 // A long sweep (a backlog, or a slow provider) must not run beside the next one. Under the interval
@@ -308,6 +312,18 @@ export async function startJobWorker(
     every: 60_000,
     logger,
   });
+  const proExpireSchedule = ensureSchedule({
+    queue,
+    id: PRO_EXPIRE_JOB,
+    every: 60_000,
+    logger,
+  });
+  const proRemindersSchedule = ensureSchedule({
+    queue,
+    id: PRO_REMINDERS_JOB,
+    every: 15 * 60_000,
+    logger,
+  });
   // Test copies only (RELEASE_KIND=test): every hour, erase what crashed release checks left.
   const rehearsalSchedule =
     config.RELEASE_KIND === 'test'
@@ -495,6 +511,28 @@ export async function startJobWorker(
               sealing,
               now: () => new Date(),
               revalidate: takeBackRevalidate,
+              log: (entry) => logger.info({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome });
+            return outcome;
+          }
+          if (job.name === PRO_EXPIRE_JOB) {
+            const outcome = await handleProExpire({
+              db: database.db,
+              sealing,
+              now: () => new Date(),
+              revalidate: takeBackRevalidate,
+              publishLive,
+              log: (entry) => logger.info({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome });
+            return outcome;
+          }
+          if (job.name === PRO_REMINDERS_JOB) {
+            const outcome = await handleProReminders({
+              db: database.db,
+              sealing,
+              now: () => new Date(),
               log: (entry) => logger.info({ ...entry, ...fields }),
             });
             processed.add(1, { outcome });
@@ -788,6 +826,8 @@ export async function startJobWorker(
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
       await takeBacksSchedule.stop();
+      await proExpireSchedule.stop();
+      await proRemindersSchedule.stop();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

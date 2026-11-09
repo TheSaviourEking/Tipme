@@ -46,6 +46,11 @@ import {
   staffInvitation,
   staffInvitationDeclined,
 } from './types/staff-invitation.js';
+import {
+  proEnded,
+  proGraceStarted,
+  proRenewalReminder,
+} from './types/pro-notices.js';
 import { tipReceived } from './types/tip-received.js';
 import {
   usernameTakeBackCancelled,
@@ -60,6 +65,9 @@ import { weeklyReport } from './types/weekly-report.js';
 export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
   [
     tipReceived,
+    proRenewalReminder,
+    proGraceStarted,
+    proEnded,
     weeklyReport,
     emailVerificationLink,
     recoveryLink,

@@ -17,8 +17,6 @@ import {
   type PagePlan,
   type ProfilePatch,
   type PublicProfile,
-  type SocialLink,
-  type Socials,
   type TipAmounts,
   PRO_LINK_LIMIT,
   linksNeedPro,
@@ -84,6 +82,8 @@ import {
   withAuditChange,
 } from './staff.js';
 import { mailOwner } from './account-mail.js';
+import { legacySocials } from './legacy-socials.js';
+import { proStatusOf, setStaffPro } from './pro-periods.js';
 import { removeObjects } from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
@@ -425,6 +425,15 @@ export function opsPageByHandle(
   });
 }
 
+const opsPageWithPro = async (
+  db: Database | Tx,
+  row: typeof profiles.$inferSelect,
+  now: Date = new Date(),
+): Promise<OpsPage> => ({
+  ...opsPage(row),
+  ...(await proStatusOf(db, row.id, row.staffPro, now)),
+});
+
 const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   profileId: row.id,
   userId: row.userId,
@@ -442,8 +451,9 @@ const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
 
 /**
  * Staff make a page Pro or Free again (permission `pages.plan`), with a reason; audited as
- * `page.plan_pro` or `page.plan_free`. Asking for the plan it already has changes and records
- * nothing (a stale admin screen).
+ * `page.plan_pro` or `page.plan_free`. Asking for the grant it already has changes and records
+ * nothing (a stale admin screen). This is the staff grant: a paid month keeps Pro on until its
+ * grace ends, whatever staff set (ADR-0015).
  */
 export function setPagePlan(
   db: Database,
@@ -467,31 +477,32 @@ export function setPagePlan(
         )
         .for('update');
       if (!current) throw new OperationError('NO_PAGE');
-      if (current.plan === input.plan)
-        return {
-          ...opsPage(current),
-          handleLower: current.handleLower,
-          changed: false,
-        };
+      const now = new Date();
+      // Paid Pro (ADR-0015): staff set their grant; a paid month keeps Pro on whatever it says.
+      const { changed, grantChanged } = await setStaffPro(
+        tx,
+        input.profileId,
+        input.plan === 'pro',
+        now,
+      );
       const [row] = await tx
-        .update(profiles)
-        .set({
-          plan: input.plan,
-          // What shows changes with the plan, so the old links column follows it (see setMyLinks).
-          // TODO(social-links): stop writing it in the release that drops the column.
-          socials: legacySocials(visibleLinks(current.links, input.plan)),
-        })
-        .where(eq(profiles.id, input.profileId))
-        .returning();
-      await recordAudit(tx, {
-        staffUserId: input.staffUserId,
-        action: input.plan === 'pro' ? 'page.plan_pro' : 'page.plan_free',
-        permission: 'pages.plan',
-        subjectType: 'profile',
-        subjectId: input.profileId,
-        reason: input.reason,
-      });
-      return { ...opsPage(row!), handleLower: row!.handleLower, changed: true };
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, input.profileId));
+      if (grantChanged || changed)
+        await recordAudit(tx, {
+          staffUserId: input.staffUserId,
+          action: input.plan === 'pro' ? 'page.plan_pro' : 'page.plan_free',
+          permission: 'pages.plan',
+          subjectType: 'profile',
+          subjectId: input.profileId,
+          reason: input.reason,
+        });
+      return {
+        ...(await opsPageWithPro(tx, row!, now)),
+        handleLower: row!.handleLower,
+        changed,
+      };
     }),
   );
 }
@@ -607,20 +618,6 @@ export function updateMyProfile(
       throw new OperationError('QR_DESIGN_PRO_REQUIRED');
     return toMine(db, await myRow(db, userId));
   });
-}
-
-/** The first Facebook, Instagram and X links, in the old shape, for tabs opened before `links`. */
-function legacySocials(links: readonly SocialLink[]): Socials {
-  const socials: Socials = {};
-  for (const link of links)
-    if (
-      (link.platform === 'facebook' ||
-        link.platform === 'instagram' ||
-        link.platform === 'x') &&
-      !socials[link.platform]
-    )
-      socials[link.platform] = link.url;
-  return socials;
 }
 
 /**
@@ -1391,3 +1388,18 @@ const prefsOf = (
   hideTipDetailsInPopups: profile.popupHideTipDetails,
   tipSound: profile.tipSound,
 });
+
+/**
+ * Paid Pro (ADR-0015): why a page is Pro, and until when it is paid. Billing details, so only for
+ * staff who change plans (`pages.plan`); the page lookup itself stays public-level.
+ */
+export async function opsPageProStatus(
+  db: Database | Tx,
+  profileId: string,
+): Promise<Required<Pick<OpsPage, 'proSource' | 'paidUntil' | 'graceUntil'>>> {
+  const [page] = await db
+    .select({ staffPro: profiles.staffPro })
+    .from(profiles)
+    .where(eq(profiles.id, profileId));
+  return proStatusOf(db, profileId, page?.staffPro ?? false);
+}
