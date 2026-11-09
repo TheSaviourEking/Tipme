@@ -67,3 +67,25 @@ test('grace and ending say what happens and that nothing is deleted', () => {
   const ended = renderMail('pro_ended', {}, ctx);
   assert.match(ended.text, /nothing is deleted/i);
 });
+
+test('the Pro receipt: period, amount and how it was paid, no amount in subject or preview, no partner name', () => {
+  const out = renderMail(
+    'pro_receipt',
+    {
+      amountMinor: '250000',
+      paidBy: 'bank_transfer',
+      startDate: '9 November 2026',
+      endDate: '9 December 2026',
+      purchaseRef: 'c0de1234',
+    },
+    ctx,
+  );
+  assert.equal(out.subject, 'Your TipMe Pro receipt');
+  assert.match(out.text, /₦2,500/);
+  assert.match(out.text, /9 November 2026/);
+  assert.match(out.text, /9 December 2026/);
+  assert.match(out.text, /bank transfer through our payment partner/);
+  assert.doesNotMatch(out.text + out.html, /bachs/i);
+  assert.doesNotMatch(preheaderOf(out.html) ?? '', /₦|NGN/);
+  assert.equal(MAIL_TYPES.pro_receipt.category, 'account');
+});

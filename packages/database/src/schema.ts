@@ -69,7 +69,13 @@ export const profileVisibility = pgEnum('profile_visibility', [
   'hidden',
 ]);
 export const profileStatus = pgEnum('profile_status', ['active', 'suspended']);
-export const entityType = pgEnum('entity_type', ['tip', 'attempt', 'payout']);
+export const entityType = pgEnum('entity_type', [
+  'tip',
+  'attempt',
+  'payout',
+  // Paid Pro (ADR-0015).
+  'pro_purchase',
+]);
 export const transitionCause = pgEnum('transition_cause', [
   'provider_event',
   'system',
@@ -89,6 +95,8 @@ export const operationType = pgEnum('operation_type', [
   'reward',
   // Business release 2: a refund or chargeback taking back every line of a tip's payment (R2-A).
   'reversal',
+  // Paid Pro (ADR-0015): a Pro month bought on TipMe's own account. Never a tip.
+  'pro_sale',
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
@@ -1392,6 +1400,10 @@ export const providerEvents = pgTable(
     payload: jsonb('payload').notNull(),
     attemptId: uuid('attempt_id').references(() => paymentAttempts.id),
     payoutId: uuid('payout_id').references(() => payouts.id),
+    // Paid Pro (ADR-0015): an event about a Pro purchase on TipMe's own account.
+    proPurchaseId: uuid('pro_purchase_id').references(
+      (): AnyPgColumn => proPurchases.id,
+    ),
     receivedAt: timestamp('received_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1472,6 +1484,10 @@ export const ledgerTransactions = pgTable(
     currency: currency(),
     tipId: uuid('tip_id').references(() => tips.id),
     payoutId: uuid('payout_id').references(() => payouts.id),
+    // Paid Pro (ADR-0015): the purchase a `pro_sale` books.
+    proPurchaseId: uuid('pro_purchase_id').references(
+      (): AnyPgColumn => proPurchases.id,
+    ),
     // Business release 2 (R2-A): a reversal names the payment it takes back. The database checks
     // that it is the same tip's payment, in its currency, and at commit that all reversals of a
     // payment mirror it and take back at most what it put on each account (a refund and a later
@@ -3019,5 +3035,72 @@ export const proPeriods = pgTable(
     ),
     check('pro_periods_amount_positive', sql`${table.amountMinor} > 0`),
     currencyCheck('pro_periods'),
+  ],
+);
+
+/**
+ * One Pro payment (ADR-0015): the price is fixed when it is opened, and the server is its only
+ * source. Card or bank transfer happen on the partner's checkout (`method` 'card' covers both; the
+ * month records which). At most one is open per page. Paid only from the partner's confirmed
+ * payment, read back; booked once (`pro.<id>`) and starts one month once.
+ */
+export const proPurchases = pgTable(
+  'pro_purchases',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    method: text('method').notNull(),
+    priceId: uuid('price_id')
+      .notNull()
+      .references(() => proPrices.id),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    status: text('status').notNull(),
+    provider: text('provider'),
+    providerReference: text('provider_reference'),
+    // The partner's hosted page, so an open purchase can be resumed. Not a secret.
+    checkoutUrl: text('checkout_url'),
+    idempotencyKey: text('idempotency_key').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    // Set when TipMe claims the one partner create call for this purchase, before making it.
+    startClaimedAt: timestamp('start_claimed_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    // The partner's fee, from the read-back, once paid.
+    feeMinor: minor('fee_minor'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique('pro_purchases_idempotency').on(
+      table.profileId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex('pro_purchases_one_open')
+      .on(table.profileId)
+      .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    uniqueIndex('pro_purchases_provider_reference')
+      .on(table.provider, table.providerReference)
+      .where(sql`${table.providerReference} IS NOT NULL`),
+    index('pro_purchases_open').on(table.status, table.createdAt),
+    check(
+      'pro_purchases_status',
+      sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN', 'PAID', 'FAILED', 'EXPIRED', 'REVIEW')`,
+    ),
+    check(
+      'pro_purchases_method',
+      sql`${table.method} IN ('card', 'bank_transfer', 'balance', 'saved_card')`,
+    ),
+    check('pro_purchases_amount_positive', sql`${table.amountMinor} > 0`),
+    check(
+      'pro_purchases_fee',
+      sql`${table.feeMinor} IS NULL OR (${table.feeMinor} >= 0 AND ${table.feeMinor} <= ${table.amountMinor})`,
+    ),
+    currencyCheck('pro_purchases'),
   ],
 );

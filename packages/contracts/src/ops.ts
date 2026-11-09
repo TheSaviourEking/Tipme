@@ -252,6 +252,13 @@ export const ISSUE_KINDS = [
   // to the business), and a reversal left a person's or a business's balance below zero (Q8).
   'share_report',
   'balance_below_zero',
+  // Paid Pro (ADR-0015): a Pro payment that doesn't match its purchase (nothing booked), one that
+  // arrived after its checkout ended (credited), a contradiction after it was paid, and a refund
+  // or dispute on one.
+  'pro_amount_mismatch',
+  'pro_late_payment',
+  'pro_conflict',
+  'pro_reversed',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

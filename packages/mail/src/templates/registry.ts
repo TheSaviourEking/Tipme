@@ -48,6 +48,7 @@ import {
 } from './types/staff-invitation.js';
 import {
   proEnded,
+  proReceipt,
   proGraceStarted,
   proRenewalReminder,
 } from './types/pro-notices.js';
@@ -68,6 +69,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     proRenewalReminder,
     proGraceStarted,
     proEnded,
+    proReceipt,
     weeklyReport,
     emailVerificationLink,
     recoveryLink,

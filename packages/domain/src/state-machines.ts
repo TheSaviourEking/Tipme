@@ -88,6 +88,33 @@ export const PAYOUT_TRANSITIONS: TransitionTable<PayoutStatus> = {
   REVERSED: [],
 };
 
+/**
+ * Paid Pro purchases (ADR-0015). PENDING: a checkout is open. UNKNOWN: its creation's answer was
+ * lost. REVIEW: money arrived that doesn't match (staff decide). A confirmed payment is PAID even
+ * after the purchase expired or failed (a late bank transfer is credited); PAID and REVIEW are final.
+ * COLLECTING is the balance payment's (not built yet).
+ */
+export const PRO_PURCHASE_STATUSES = [
+  'PENDING',
+  'COLLECTING',
+  'UNKNOWN',
+  'PAID',
+  'FAILED',
+  'EXPIRED',
+  'REVIEW',
+] as const;
+export type ProPurchaseStatus = (typeof PRO_PURCHASE_STATUSES)[number];
+
+export const PRO_PURCHASE_TRANSITIONS: TransitionTable<ProPurchaseStatus> = {
+  PENDING: ['UNKNOWN', 'PAID', 'FAILED', 'EXPIRED', 'REVIEW'],
+  COLLECTING: ['PAID', 'FAILED', 'UNKNOWN'],
+  UNKNOWN: ['PENDING', 'PAID', 'FAILED', 'EXPIRED', 'REVIEW'],
+  PAID: [],
+  FAILED: ['PAID', 'REVIEW'],
+  EXPIRED: ['PAID', 'REVIEW'],
+  REVIEW: [],
+};
+
 export function canTransition<S extends string>(
   table: TransitionTable<S>,
   from: S,

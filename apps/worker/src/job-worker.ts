@@ -35,6 +35,7 @@ import {
   runWeeklyReports,
   reconcileAttempts,
   reconcilePayouts,
+  reconcileProPurchases,
   sweepPayoutSetup,
   runIssueDetectors,
   lagosDaysBefore,
@@ -271,6 +272,42 @@ export async function startJobWorker(
   };
   const providerForExpiry = (name: string | null) =>
     name ? providerFor(name) : defaultProvider;
+  /** Pro purchases per provider this copy can read (rows record 'mock' or 'bachs'). */
+  const reconcileProEverywhere = async (now: Date) => {
+    const totals = { checked: 0, paid: 0, failed: 0 };
+    const providers: [string, MockProvider | BachsProvider | null][] = [
+      ['mock', mockProvider],
+      ['bachs', bachsProvider],
+    ];
+    for (const [providerName, provider] of providers) {
+      if (!provider?.initializePlatformCheckout) continue;
+      const result = await reconcileProPurchases(database.db, {
+        provider: {
+          initializePlatformCheckout: (input) =>
+            provider.initializePlatformCheckout!(input),
+          verifyTransaction: (reference) =>
+            provider.verifyTransaction(reference),
+        },
+        providerName,
+        now,
+        sealing,
+        successUrl: `${new URL(config.WEB_ORIGIN).origin}/dashboard/settings#plan`,
+        cancelUrl: `${new URL(config.WEB_ORIGIN).origin}/dashboard/settings#plan`,
+        minAgeMs: config.RECONCILE_MIN_AGE_MS,
+      });
+      totals.checked += result.checked;
+      totals.paid += result.paid.length;
+      totals.failed += result.failed;
+      for (const page of result.paid.filter((p) => p.planChanged)) {
+        void publishLive([
+          { to: { profile: page.profileId }, type: 'profile.changed' },
+        ]);
+        if (page.handleLower && takeBackRevalidate)
+          void takeBackRevalidate(page.handleLower);
+      }
+    }
+    return totals;
+  };
   const schedule = ensureSchedule({
     queue,
     id: RECONCILE_JOB,
@@ -427,6 +464,9 @@ export async function startJobWorker(
               now,
               minAgeMs: config.RECONCILE_MIN_AGE_MS,
             });
+            // Paid Pro (ADR-0015): open purchases on TipMe's own account, read back from the same
+            // provider that made them. A page whose plan changed is revalidated and signalled.
+            const pro = await reconcileProEverywhere(now);
             // Never-paid tips are cancelled, after the provider confirms they were not paid.
             const expiry = await expireStaleTips({
               db: database.db,
@@ -454,6 +494,9 @@ export async function startJobWorker(
               expired: expiry.expired,
               expired_paid: expiry.paid,
               expire_errors: expiry.errors,
+              pro_checked: pro.checked,
+              pro_paid: pro.paid,
+              pro_errors: pro.failed,
             });
             processed.add(1, { outcome: 'reconciled' });
             return 'reconciled';

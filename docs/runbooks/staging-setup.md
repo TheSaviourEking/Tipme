@@ -88,6 +88,16 @@ Without it, the release check stops in seconds and names the page; `RELEASE_BACH
 5. Failed deliveries can be replayed from the Dashboard: delivery is idempotent, and account events simply re-read the account from Bachs.
 6. Before each test session, check the platform balance in the Dashboard. TipMe pays Bachs' processing fee; if the balance cannot cover it, Bachs silently charges the recipient. Those payments stay pending in TipMe and surface as issues, but there is no automated reserve alert yet.
 
+### Paid Pro in the sandbox (ADR-0015)
+
+Pro is bought on TipMe's **own** partner account, not a recipient's. To try a whole purchase on staging with test money:
+
+1. Deploy the release with paid Pro. Set `BACHS_PLATFORM_ORGANIZATION_ID` (TipMe's own sandbox organization) and `PRO_BILLING_ENABLED=true` on the API, and redeploy.
+2. Only then switch the sandbox webhook endpoint to `event_source=all` (see above), and subscribe it to `collection.succeeded`, `checkout.completed`, `collection.failed` and the refund events.
+3. Signed in as a recipient, `POST /v1/me/pro/purchases` with `{"expectedAmountMinor":"250000"}` and an `Idempotency-Key` (there is no buy screen yet). Open the returned `checkoutUrl` and pay with the partner's sandbox test card, or by sandbox bank transfer.
+4. Expect, within seconds: the purchase `PAID`, one `pro.<purchaseId>` ledger transaction, a Pro month in `pro_periods`, the page on Pro, and a `pro_receipt` email. Coming back from the checkout alone changes nothing; only the partner's confirmed payment does.
+5. `scripts/pro-sandbox-check.mjs --sandbox` opens one ₦2,500 sandbox checkout through TipMe's adapter and prints it, without the database or the webhook: a quick check of the partner side only.
+
 The image runs as uid 1000 and writes backups into `/srv/tipme/backups` (hence the `chown` above; `deploy.sh` checks it).
 
 Off-site copies are optional. If enabling rclone, create `/srv/tipme/offsite.env` with mode 600 and put only `BACKUP_RCLONE_REMOTE` and the relevant `RCLONE_CONFIG_<NAME>_*` settings there. The offsite container reads this file only; do not add bucket credentials to `staging.env`.

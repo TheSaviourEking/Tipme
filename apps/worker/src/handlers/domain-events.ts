@@ -31,6 +31,11 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'payment.mismatch',
   'payment.reversed',
   'username.take_back_done',
+  // Paid Pro (ADR-0015): money alerts that become inbox issues.
+  'pro.amount_mismatch',
+  'pro.late_payment',
+  'pro.conflict',
+  'pro.reversed',
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;

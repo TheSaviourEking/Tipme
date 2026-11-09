@@ -60,3 +60,51 @@ export const opsProPriceChangeSchema = opsReasonSchema
   .extend({ amountMinor: kobo })
   .strict();
 export type OpsProPriceChangeRequest = z.infer<typeof opsProPriceChangeSchema>;
+
+/** `POST /v1/me/pro/purchases`: only the amount the person saw, to refuse a changed price. */
+export const proPurchaseRequestSchema = z
+  .object({
+    expectedAmountMinor: z.string().regex(/^[1-9][0-9]{0,11}$/),
+  })
+  .strict();
+export type ProPurchaseRequest = z.infer<typeof proPurchaseRequestSchema>;
+
+export const PRO_PURCHASE_STATUSES = [
+  'PENDING',
+  'COLLECTING',
+  'UNKNOWN',
+  'PAID',
+  'FAILED',
+  'EXPIRED',
+  'REVIEW',
+] as const;
+export type ProPurchaseStatus = (typeof PRO_PURCHASE_STATUSES)[number];
+
+/** One purchase, for its owner. The checkout URL is there only while it can be paid. */
+export interface ProPurchase {
+  purchaseId: string;
+  status: ProPurchaseStatus;
+  amountMinor: string;
+  currency: 'NGN';
+  checkoutUrl: string | null;
+  expiresAt: string | null;
+  paidAt: string | null;
+}
+
+/** `GET /v1/me/pro`: the page's plan, why, the months paid, and how to buy the next one. */
+export interface MyPro {
+  plan: 'free' | 'pro';
+  source: 'staff' | 'paid' | null;
+  current: {
+    startsAt: string;
+    endsAt: string;
+    graceEndsAt: string;
+    paidBy: 'card' | 'bank_transfer' | 'balance' | 'saved_card';
+  } | null;
+  next: { startsAt: string; endsAt: string } | null;
+  openPurchase: ProPurchase | null;
+  price: ProPrice | null;
+  methods: 'card'[];
+  /** Buying is open on this copy (PRO_BILLING_ENABLED). */
+  billingOn: boolean;
+}

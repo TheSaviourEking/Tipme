@@ -141,3 +141,67 @@ export const proEnded = defineMailType({
       ctx,
     ),
 });
+
+/** TipMe's own receipt for a Pro month (the partner sends none for TipMe's own sales). */
+export const proReceipt = defineMailType({
+  id: 'pro_receipt',
+  category: 'account',
+  sender: 'notifications',
+  preference: null,
+  schema: z
+    .object({
+      amountMinor: z.string().regex(/^[1-9][0-9]{0,11}$/),
+      paidBy: z.enum(['card', 'bank_transfer']),
+      startDate: date,
+      endDate: date,
+      /** The purchase's short reference, to quote to support. */
+      purchaseRef: z.string().regex(/^[0-9a-f]{8}$/),
+    })
+    .strict(),
+  sample: {
+    amountMinor: '250000',
+    paidBy: 'card',
+    startDate: '9 November 2026',
+    endDate: '9 December 2026',
+    purchaseRef: 'c0de1234',
+  },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'Your TipMe Pro receipt',
+        heading: 'Thank you for Pro',
+        preheader: 'Your Pro month is confirmed.',
+        blocks: [
+          {
+            kind: 'text',
+            text: 'Your payment is confirmed and your page is on Pro.',
+          },
+          {
+            kind: 'facts',
+            rows: [
+              { label: 'Plan', value: 'TipMe Pro, one month' },
+              {
+                label: 'Period',
+                value: `${data.startDate} to ${data.endDate}`,
+              },
+              { label: 'Amount', value: naira(data.amountMinor) },
+              {
+                label: 'Paid by',
+                value:
+                  data.paidBy === 'bank_transfer'
+                    ? 'bank transfer through our payment partner'
+                    : 'card through our payment partner',
+              },
+              { label: 'Reference', value: data.purchaseRef },
+            ],
+          },
+          {
+            kind: 'quiet',
+            text: 'Keep this email as your receipt. Pro doesn’t renew by itself: we’ll remind you before the month ends.',
+          },
+        ],
+        reason: 'You get this email because you paid for TipMe Pro.',
+      },
+      ctx,
+    ),
+});

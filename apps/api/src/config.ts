@@ -136,6 +136,13 @@ export const apiConfigSchema = z
     // pages. `off` hides the tick box, stops recording and (later) hides the recipient's list,
     // deleting nothing: the lever if the D-07 privacy review says to wait
     // (docs/runbooks/supporter-recognition.md). Default on.
+    // Paid Pro (ADR-0015): whether recipients may open a Pro purchase on this copy. Off by
+    // default: switched on per copy once checkout on TipMe's own account is wanted there. Live
+    // money still needs bachs-live with PAYMENTS_LIVE_ENABLED and the page in LIVE_CHECKOUT_HANDLES.
+    PRO_BILLING_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
     SUPPORTER_RECOGNITION: z
       .enum(['on', 'off'])
       .default('on')

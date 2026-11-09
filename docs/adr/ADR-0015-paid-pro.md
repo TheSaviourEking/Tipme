@@ -46,7 +46,7 @@ Own-account checkout keeps Pro money apart from tips in the partner's reports, t
 
 ## Rollout and rollback
 
-- `PRO_BILLING_ENABLED` (API, default off) gates opening a purchase. With it off nothing changes for anyone. Live payments stay behind the existing live switches; a live checkout also needs TipMe's own partner account verified (otherwise the partner answers `ACCOUNT_NOT_ACTIVATED`, which TipMe reports as `PRO_CHECKOUT_UNAVAILABLE`).
+- `PRO_BILLING_ENABLED` (API, default off) gates opening a purchase. With it off nothing changes for anyone. Live payments stay behind the existing live switches (`bachs-live`, `PAYMENTS_LIVE_ENABLED`, and the page in `LIVE_CHECKOUT_HANDLES`). A live checkout also needs TipMe's own partner account verified, else the partner answers `ACCOUNT_NOT_ACTIVATED`, which TipMe reports as `PRO_CHECKOUT_UNAVAILABLE`; the owner said on 9 Nov 2026 that it is verified, and a first live smoke test is still needed after deploy.
 - Rollback: turn `PRO_BILLING_ENABLED` off. Paid periods keep running to their end; staff grants are unaffected.
 
 ## Consequences

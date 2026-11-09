@@ -20,6 +20,8 @@ test('the jobs are scheduled and dispatched by name', () => {
   assert.match(source, /job\.name === PRO_REMINDERS_JOB/);
   assert.match(source, /proExpireSchedule\.stop\(\)/);
   assert.match(source, /proRemindersSchedule\.stop\(\)/);
+  // Open Pro purchases are read back on every reconcile run.
+  assert.match(source, /const pro = await reconcileProEverywhere\(now\)/);
 });
 
 test('expiry revalidates the handle and publishes profile.changed once per changed profile', async () => {

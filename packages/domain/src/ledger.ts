@@ -12,7 +12,11 @@ export type AccountCode =
   | 'promotions_expense'
   // What TipMe owes a business: its agreed share of staff tips (business release 2), on the
   // business's own account. Only a payment with a share credits it.
-  | 'business_payable';
+  | 'business_payable'
+  // Paid Pro (ADR-0015; ADR-0006 addendum, needs finance sign-off): what recipients paid TipMe for
+  // Pro, and TipMe's OWN partner balance, kept apart from provider_clearing (tips).
+  | 'subscription_revenue'
+  | 'platform_clearing';
 
 export interface LedgerLine {
   account: AccountCode;
@@ -239,4 +243,23 @@ export function isBalanced(lines: readonly LedgerLine[]): boolean {
   for (const entry of lines)
     total += entry.side === 'debit' ? entry.amountMinor : -entry.amountMinor;
   return lines.length >= 2 && total === 0n;
+}
+
+/**
+ * Paid Pro bought by checkout on TipMe's own account (ADR-0015). The partner keeps its fee from the
+ * gross; the fee is always the read-back's. Not a tip: no TipMe fee, no recipient payable.
+ */
+export function buildProCheckoutPosting(input: {
+  grossMinor: bigint;
+  feeMinor: bigint;
+}): LedgerLine[] {
+  const { grossMinor, feeMinor } = input;
+  if (grossMinor <= 0n) throw new RangeError('a Pro sale has a positive price');
+  if (feeMinor < 0n || feeMinor > grossMinor)
+    throw new RangeError('provider fee out of range');
+  return [
+    line('platform_clearing', 'debit', grossMinor - feeMinor),
+    line('provider_fee_expense', 'debit', feeMinor),
+    line('subscription_revenue', 'credit', grossMinor),
+  ].filter((entry) => entry.amountMinor > 0n);
 }
