@@ -79,7 +79,9 @@ Without it, the release check stops in seconds and names the page; `RELEASE_BACH
 
 ### Bachs sandbox webhook endpoint
 
-1. In the Bachs sandbox Dashboard, add a webhook endpoint `https://<api-host>/v1/webhooks/bachs` with `event_source=connect/all`, so events from recipients' connected accounts reach TipMe (direct charges are made on those accounts).
+1. In the Bachs sandbox Dashboard, add a webhook endpoint `https://<api-host>/v1/webhooks/bachs`. Its `event_source` is one of `account` (TipMe's own account only), `connect` (connected accounts only) or `all`; there is no `connect/all`. Tips are direct charges on recipients' connected accounts, so it needs `connect` at least; paid Pro needs `all`, because Pro is bought on TipMe's own account (ADR-0015).
+   - **Order matters for `all`:** first deploy the release that routes own-account events to Pro billing and set `BACHS_PLATFORM_ORGANIZATION_ID` to TipMe's own sandbox organization (`acct_stWbI4933A4WVqkc` as of 9 Nov 2026; `GET /v1/balances` names it), then switch the endpoint to `all`. Switched first, TipMe's own events would be read as a connected account's and land unmatched in the tip path.
+   - Own-account events have no top-level `account` field; connected-account events do. Own-account `account.updated` and payout events are ignored.
 2. Subscribe to `checkout.completed`, `collection.succeeded`, `collection.failed`, `collection.underpaid`, `account.updated`, `capability.updated`, and every refund, dispute and chargeback event Bachs offers. Refunds and disputes are not modelled yet: each one opens a "Refund or dispute reported" money issue and changes no balance.
 3. Copy the endpoint's signing secret into `BACHS_WEBHOOK_SECRET` and redeploy the API.
 4. Send a test event from the Dashboard and confirm the API logs `webhook.processed` (a test event for an unknown account is stored as unmatched, which is expected). A `webhook.rejected` log means the secret or clock is wrong.

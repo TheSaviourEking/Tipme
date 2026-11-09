@@ -59,6 +59,13 @@ export interface MockProvider
     scenario?: Scenario;
   }): ReturnType<PayoutPort['initiatePayout']>;
   markStatus(reference: string, status: TransactionStatus): Promise<void>;
+  /** Paid Pro: how the pretend payer paid a `mock_pro_` checkout (card unless set). */
+  markMethod(
+    reference: string,
+    method: 'NGN_CARD' | 'NGN_BANK_TRANSFER',
+  ): Promise<void>;
+  /** Paid Pro: what the pretend partner says it took, for short and over payments. */
+  markAmount(reference: string, amountMinor: bigint): Promise<void>;
   /**
    * Sets the scenario the pretend checkout page chose. Only the first choice counts (false after
    * that, or for an unknown reference), so an outcome can never be changed once played.
@@ -107,6 +114,36 @@ export function createMockProvider(options: {
       platformFees: false,
       payouts: true,
       lookupByOperationReference: true,
+      platformCheckout: true,
+    },
+
+    /**
+     * Paid Pro (ADR-0015): a pretend checkout on TipMe's own account, `mock_pro_<uuid>`, one per
+     * purchase however often it is retried. Paid on /mock-checkout like a tip.
+     */
+    async initializePlatformCheckout({ purchaseId, amountMinor, currency }) {
+      const reference = `mock_pro_${randomUUID()}`;
+      const claimKey = attemptKey(prefix, `pro:${purchaseId}`);
+      const claimed = await redis.set(claimKey, reference, 'NX');
+      const providerReference =
+        claimed === 'OK'
+          ? reference
+          : ((await redis.get(claimKey)) ?? reference);
+      if (claimed === 'OK')
+        await redis.hset(paymentKey(prefix, reference), {
+          purchaseId,
+          amountMinor: amountMinor.toString(),
+          currency,
+          feeMinor: mockProviderFee(amountMinor).toString(),
+          scenario: 'succeed',
+          status: 'pending',
+          method: 'NGN_CARD',
+        });
+      return {
+        providerReference,
+        checkoutUrl: `/mock-checkout/${providerReference}`,
+        expiresAt: new Date(Date.now() + 30 * 60_000),
+      };
     },
 
     async initializePayment({ attemptId, amountMinor, currency, scenario }) {
@@ -160,6 +197,10 @@ export function createMockProvider(options: {
           stored['scenario'] === 'wrong-amount' ? amount - 1n : amount,
         currency: stored['currency'] ?? 'XXX',
         feeMinor: BigInt(stored['feeMinor'] ?? '0'),
+        ...(stored['method'] === 'NGN_CARD' ||
+        stored['method'] === 'NGN_BANK_TRANSFER'
+          ? { method: stored['method'], feePaidBy: 'platform' as const }
+          : {}),
       };
     },
 
@@ -329,6 +370,16 @@ export function createMockProvider(options: {
 
     async markStatus(reference, status) {
       await redis.hset(paymentKey(prefix, reference), { status });
+    },
+
+    async markMethod(reference, method) {
+      await redis.hset(paymentKey(prefix, reference), { method });
+    },
+
+    async markAmount(reference, amountMinor) {
+      await redis.hset(paymentKey(prefix, reference), {
+        amountMinor: amountMinor.toString(),
+      });
     },
 
     async settle(reference) {

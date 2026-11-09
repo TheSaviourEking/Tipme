@@ -45,6 +45,7 @@ function bachsFor(
   apiKey: string | undefined,
   secret: string | undefined,
   previousSecret: string | undefined,
+  platformOrganizationId: string | undefined,
 ): BachsProvider {
   if (!apiKey || !secret)
     throw new Error(`Bachs ${environment} configuration is incomplete`);
@@ -52,6 +53,8 @@ function bachsFor(
     apiKey,
     environment,
     webhookSecrets: [secret, ...(previousSecret ? [previousSecret] : [])],
+    // Paid Pro (ADR-0015): without it, TipMe's own events are read as a connected account's.
+    ...(platformOrganizationId ? { platformOrganizationId } : {}),
   });
 }
 
@@ -68,6 +71,7 @@ export const bachsProviderProvider: Provider<BachsProvider | null> = {
           config.BACHS_LIVE_API_KEY,
           config.BACHS_LIVE_WEBHOOK_SECRET,
           config.BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET,
+          config.BACHS_PLATFORM_ORGANIZATION_ID,
         );
       case 'bachs-sandbox':
         return bachsFor(
@@ -75,6 +79,7 @@ export const bachsProviderProvider: Provider<BachsProvider | null> = {
           config.BACHS_SANDBOX_API_KEY,
           config.BACHS_WEBHOOK_SECRET,
           config.BACHS_PREVIOUS_WEBHOOK_SECRET,
+          config.BACHS_PLATFORM_ORGANIZATION_ID,
         );
       case 'mock':
         // A test or preview copy back on mock still answers Bachs sandbox callbacks and status
@@ -86,6 +91,7 @@ export const bachsProviderProvider: Provider<BachsProvider | null> = {
           config.BACHS_SANDBOX_API_KEY,
           config.BACHS_WEBHOOK_SECRET,
           config.BACHS_PREVIOUS_WEBHOOK_SECRET,
+          config.BACHS_PLATFORM_ORGANIZATION_ID,
         );
       default: {
         const unreachable: never = name;

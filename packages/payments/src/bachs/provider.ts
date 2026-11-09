@@ -1,12 +1,13 @@
 import { z } from 'zod';
-import type {
-  FeePaidBy,
-  NormalizedProviderEvent,
-  PaymentProvider,
-  PayoutPort,
-  ProviderCapabilities,
-  TransactionStatus,
-  WebhookVerification,
+import {
+  PlatformCheckoutUnavailableError,
+  type FeePaidBy,
+  type NormalizedProviderEvent,
+  type PaymentProvider,
+  type PayoutPort,
+  type ProviderCapabilities,
+  type TransactionStatus,
+  type WebhookVerification,
 } from '../provider.js';
 import {
   BachsApiClient,
@@ -15,6 +16,7 @@ import {
   type BachsEnvironment,
 } from './client.js';
 import {
+  BachsApiError,
   BachsProtocolError,
   BachsRequestNotSentError,
   UncertainProviderOutcomeError,
@@ -27,6 +29,7 @@ const checkoutCreatedSchema = z.object({
   checkout_id: z.string().min(1),
   checkout_url: z.string().url(),
   status: z.string().min(1),
+  expires_at: z.string().nullable().optional(),
 });
 
 const checkoutSessionSchema = z.object({
@@ -62,6 +65,8 @@ const paymentSchema = z.object({
     })
     .nullable()
     .optional(),
+  // How it was paid; read on TipMe's own checkouts, where the payer picks card or transfer.
+  payment_method_type: z.string().max(64).nullable().optional(),
 });
 
 const accountSchema = z.object({
@@ -115,6 +120,11 @@ export interface BachsProviderConfig {
   environment: BachsEnvironment;
   /** Omitted for a read-only adapter (the worker): it then refuses every webhook. */
   webhookSecrets?: readonly string[];
+  /**
+   * TipMe's own organization at Bachs (BACHS_PLATFORM_ORGANIZATION_ID). Its events with no
+   * `account` are TipMe's own (Pro purchases). Unset: every event is read as a connected account's.
+   */
+  platformOrganizationId?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -171,7 +181,22 @@ const capabilities: ProviderCapabilities = {
   platformFees: true,
   payouts: true,
   lookupByOperationReference: false,
+  platformCheckout: true,
 };
+
+/** TipMe's own checkouts (paid Pro): `platform:<checkout_id>`, never an account id. */
+const PLATFORM_PREFIX = 'platform:';
+/** Partner checkouts last 30 minutes (sandbox evidence, 9 Nov 2026); asked for explicitly. */
+const PLATFORM_CHECKOUT_MINUTES = 30;
+
+function methodOf(
+  value: string | null | undefined,
+): 'NGN_CARD' | 'NGN_BANK_TRANSFER' | undefined {
+  const method = value?.toUpperCase() ?? '';
+  if (method.includes('BANK')) return 'NGN_BANK_TRANSFER';
+  if (method.includes('CARD')) return 'NGN_CARD';
+  return undefined;
+}
 
 function statusValue(value: string): TransactionStatus {
   const status = value.toLowerCase();
@@ -222,9 +247,18 @@ function providerIdentifier(value: string, label: string): string {
 }
 
 function parseScopedCheckoutReference(value: string): {
-  accountReference: string;
+  /** Null for TipMe's own checkouts: no account header is sent. */
+  accountReference: string | null;
   checkoutId: string;
 } {
+  if (value.startsWith(PLATFORM_PREFIX))
+    return {
+      accountReference: null,
+      checkoutId: providerIdentifier(
+        value.slice(PLATFORM_PREFIX.length),
+        'checkout reference',
+      ),
+    };
   const separator = value.indexOf(':');
   if (separator <= 0 || separator === value.length - 1)
     throw new TypeError('Invalid Bachs checkout reference');
@@ -502,6 +536,87 @@ export function createBachsProvider(
       };
     },
 
+    async initializePlatformCheckout(input) {
+      // Checked before anything is sent: a refusal here means Bachs never saw the request.
+      let successUrl: string;
+      let cancelUrl: string;
+      try {
+        if (input.currency !== 'NGN')
+          throw new TypeError('TipMe sells Pro in naira only');
+        if (input.amountMinor <= 0n)
+          throw new RangeError('Checkout amount must be positive');
+        providerIdentifier(input.purchaseId, 'purchase reference');
+        if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
+          throw new TypeError('Invalid Bachs idempotency key');
+        successUrl = validateHttpsOrLocalUrl(input.successUrl);
+        cancelUrl = validateHttpsOrLocalUrl(input.cancelUrl);
+      } catch (error) {
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid Bachs checkout',
+          { cause: error },
+        );
+      }
+      let checkout: z.infer<typeof checkoutCreatedSchema>;
+      try {
+        checkout = await client.request({
+          method: 'POST',
+          path: '/v1/checkout-sessions',
+          // No X-Account-Id: the checkout is on TipMe's own account, and no platform fee.
+          idempotencyKey: input.idempotencyKey,
+          operationReference: input.purchaseId,
+          body: {
+            pricing: {
+              amount: minorToDecimal(input.amountMinor, input.currency),
+              currency: input.currency,
+            },
+            reference: input.purchaseId,
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            customer_creation: 'if_required',
+            payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
+            customer_bears_fee: false,
+            expires_in_minutes: PLATFORM_CHECKOUT_MINUTES,
+          },
+          schema: checkoutCreatedSchema,
+        });
+      } catch (error) {
+        // TipMe's own account can't take payments here (live needs it verified): definite.
+        if (
+          error instanceof BachsApiError &&
+          error.providerCode === 'ACCOUNT_NOT_ACTIVATED'
+        )
+          throw new PlatformCheckoutUnavailableError(error.providerCode);
+        throw error;
+      }
+      if (checkout.status.toLowerCase() !== 'open')
+        throw new UncertainProviderOutcomeError(
+          input.purchaseId,
+          'Bachs created a checkout in an unexpected state',
+          { cause: 'unexpected_state' },
+        );
+      let checkoutUrl: string;
+      try {
+        checkoutUrl = bachsHostedUrl(checkout.checkout_url);
+      } catch (error) {
+        if (error instanceof BachsProtocolError)
+          throw new UncertainProviderOutcomeError(
+            input.purchaseId,
+            'Bachs created a checkout but returned an unsafe URL',
+            { cause: 'unsafe_url' },
+          );
+        throw error;
+      }
+      const stated = checkout.expires_at ? new Date(checkout.expires_at) : null;
+      return {
+        providerReference: `${PLATFORM_PREFIX}${providerIdentifier(checkout.checkout_id, 'checkout reference')}`,
+        checkoutUrl,
+        expiresAt:
+          stated && !Number.isNaN(stated.getTime())
+            ? stated
+            : new Date(Date.now() + PLATFORM_CHECKOUT_MINUTES * 60_000),
+      };
+    },
+
     async findPayment(attemptId) {
       throw new UncertainProviderOutcomeError(
         attemptId,
@@ -514,7 +629,9 @@ export function createBachsProvider(
       const checkout = await client.request({
         method: 'GET',
         path: `/v1/checkout-sessions/${encodeURIComponent(scopedReference.checkoutId)}`,
-        accountReference: scopedReference.accountReference,
+        ...(scopedReference.accountReference
+          ? { accountReference: scopedReference.accountReference }
+          : {}),
         schema: checkoutSessionSchema,
       });
       if (!checkout.checkout_url)
@@ -530,7 +647,9 @@ export function createBachsProvider(
       const checkout = await client.request({
         method: 'GET',
         path: `/v1/checkout-sessions/${encodeURIComponent(scopedReference.checkoutId)}`,
-        accountReference: scopedReference.accountReference,
+        ...(scopedReference.accountReference
+          ? { accountReference: scopedReference.accountReference }
+          : {}),
         schema: checkoutSessionSchema,
       });
       const checkoutStatus = checkout.status.toLowerCase();
@@ -583,7 +702,9 @@ export function createBachsProvider(
       const payment = await client.request({
         method: 'GET',
         path: `/v1/payments/${encodeURIComponent(paymentReference)}`,
-        accountReference: scopedReference.accountReference,
+        ...(scopedReference.accountReference
+          ? { accountReference: scopedReference.accountReference }
+          : {}),
         schema: paymentSchema,
       });
       if (payment.currency !== checkout.currency) {
@@ -611,6 +732,22 @@ export function createBachsProvider(
         throw new BachsProtocolError(
           'Bachs processing fee currency differs from payment currency',
         );
+
+      // TipMe's own checkout (paid Pro): TipMe is the merchant and bears the fee, with no platform
+      // fee to check. Its fee is the read-back's; with none yet, the money is held as collected.
+      if (scopedReference.accountReference === null) {
+        const method = methodOf(payment.payment_method_type);
+        const waitingForFee = providerStatus === 'succeeded' && fee === null;
+        return {
+          status: waitingForFee ? 'pending' : providerStatus,
+          amountMinor,
+          currency: payment.currency,
+          feeMinor,
+          feePaidBy: 'platform',
+          ...(waitingForFee ? { collected: true as const } : {}),
+          ...(method ? { method } : {}),
+        };
+      }
 
       const platformFeeMinor =
         payment.platform_fee === null || payment.platform_fee === undefined
@@ -651,7 +788,13 @@ export function createBachsProvider(
       headers,
       now,
     ): WebhookVerification<NormalizedProviderEvent> {
-      return verifyBachsWebhook(rawBody, headers, webhookSecrets, now);
+      return verifyBachsWebhook(
+        rawBody,
+        headers,
+        webhookSecrets,
+        now,
+        config.platformOrganizationId,
+      );
     },
 
     async createRecipientAccount(input) {
