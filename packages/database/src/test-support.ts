@@ -187,6 +187,11 @@ export async function openTestDatabase(): Promise<TestDatabase> {
         await client.query(
           `INSERT INTO withdrawals_switch (id, paused) VALUES ('global', false)`,
         );
+        // And the launch Pro price (0087), so every test starts at ₦2,500 a month.
+        await client.query(
+          `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, reason, created_at)
+           VALUES ('00000000-0000-4000-8000-000000250000', 250000, 'NGN', now(), 'Owner''s decision, 9 Nov 2026: launch Pro price ₦2,500 a month', now())`,
+        );
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK').catch(() => undefined);

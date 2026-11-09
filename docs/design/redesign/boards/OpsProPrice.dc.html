@@ -64,13 +64,13 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #7a32
 class Component extends DCLogic {
   renderVals() {
     const s = this.state || {};
-    const price = s.price || 5000;
+    const price = s.price || 2500;
     const money = (n) => '₦' + n.toLocaleString('en-NG');
     const step = s.step || 'edit';
     const history = s.history || [];
     return {
       priceText: money(price),
-      less: () => this.setState({ price: Math.max(500, price - 500) }),
+      less: () => this.setState({ price: Math.max(100, price - 500) }),
       more: () => this.setState({ price: price + 500 }),
       isEdit: step === 'edit',
       isWaiting: step === 'waiting',

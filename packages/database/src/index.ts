@@ -92,3 +92,4 @@ export * from './operations/export.js';
 export * from './operations/rehearsal-sweep.js';
 export * from './operations/supporters.js';
 export * from './operations/business-shifts.js';
+export * from './operations/pro-price.js';

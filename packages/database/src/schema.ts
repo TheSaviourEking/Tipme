@@ -2930,3 +2930,30 @@ export const changelogReads = pgTable('changelog_reads', {
     .references(() => users.id),
   seenThrough: timestamp('seen_through', { withTimezone: true }).notNull(),
 });
+
+// ---- Paid Pro (ADR-0015; the owner's decisions of 4, 5 and 9 Nov 2026) ----
+
+/**
+ * Every Pro price ever set, append-only. The current price is the latest row whose
+ * `effective_from` has passed. A purchase keeps the price it was opened at, so a change applies to
+ * new months only. The launch row (₦2,500) is seeded by its migration with no `set_by`.
+ */
+export const proPrices = pgTable(
+  'pro_prices',
+  {
+    id: uuid('id').primaryKey(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('pro_prices_effective_from').on(table.effectiveFrom),
+    check('pro_prices_amount_positive', sql`${table.amountMinor} > 0`),
+    check('pro_prices_currency_ngn', sql`${table.currency} = 'NGN'`),
+    check('pro_prices_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);

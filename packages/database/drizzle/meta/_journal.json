@@ -603,6 +603,20 @@
       "when": 1794003390227,
       "tag": "0085_business_logo",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794256212640,
+      "tag": "0086_pro_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794256229651,
+      "tag": "0087_pro_prices_seed",
+      "breakpoints": true
     }
   ]
 }

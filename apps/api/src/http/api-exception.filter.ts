@@ -95,6 +95,7 @@ const messages: Record<ApiErrorCode, string> = {
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Change it and try again.',
   CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
+  PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   USERNAME_BUILT_IN:

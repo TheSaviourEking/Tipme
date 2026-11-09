@@ -27,6 +27,7 @@ export const OPS_PERMISSIONS = [
   'businesses.manage',
   'changelog.edit',
   'changelog.publish',
+  'pro.price',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -133,6 +134,12 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
     group: 'money',
     sensitive: true,
   },
+  // Paid Pro (owner, 9 Nov 2026): the monthly price every recipient pays; a change needs a second person.
+  'pro.price': {
+    description: 'Change the Pro price for new months, with a reason',
+    group: 'money',
+    sensitive: true,
+  },
   'private.view': {
     description: 'Reveal private details, with a reason',
     group: 'people',
@@ -222,6 +229,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     permission: 'fees.manage',
     reason: 'Shows a page’s fee numbers before a change; changes nothing.',
   },
+  'OpsProPriceController.state': {
+    verb: 'GET',
+    permission: 'pro.price',
+    reason:
+      'The Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
+  },
   'OpsStaffController.roles': {
     verb: 'GET',
     permission: 'staff.manage',
@@ -305,6 +318,7 @@ export const SERIOUS_ACTIONS = [
   'business.verify',
   'tip.reverse',
   'changelog.publish',
+  'pro_price.change',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -324,6 +338,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'business.verify': 'Verify a business',
   'tip.reverse': 'Reverse a refunded or charged-back tip',
   'changelog.publish': 'Show users a What’s new entry',
+  'pro_price.change': 'Change the Pro price',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -343,4 +358,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'business.verify': 'businesses.manage',
     'tip.reverse': 'payments.repair',
     'changelog.publish': 'changelog.publish',
+    'pro_price.change': 'pro.price',
   };
