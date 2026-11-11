@@ -385,7 +385,9 @@ test('a Pro page chooses a format by its paper picture, and small formats print 
   await page.goto('/dashboard/qr');
   await page.getByRole('radio', { name: /Heart modules/ }).check();
   await expect(page.getByText('Style saved')).toBeVisible();
-  await page.goto('/dashboard/qr/print');
+  // Through the page's own link, as a person does (a direct goto can race the studio's refresh).
+  await page.getByRole('link', { name: 'Print card' }).click();
+  await page.waitForURL(/\/dashboard\/qr\/print$/);
   const formats = page.getByRole('group', { name: 'Format' });
   await expect(formats.getByRole('radio')).toHaveCount(8);
   for (const [id, name, size] of [
