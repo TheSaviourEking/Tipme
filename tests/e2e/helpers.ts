@@ -85,8 +85,28 @@ export async function signInWithEmail(
     code = /\b(\d{6})\b/.exec(mails[0] ?? '')?.[1] ?? '';
     expect(code).not.toBe('');
   }).toPass({ timeout: 25_000 });
-  await page.getByLabel('6-digit code').fill(code);
+  const codeField = page.getByLabel('6-digit code');
+  await codeField.fill(code);
   await page.getByRole('button', { name: 'Continue' }).click();
+  // Returns at an end state, never straight after the click: the session cookie arrives with the
+  // check's answer, and a caller that moves on before it lands is signed out (whats-new.spec).
+  // Signed in: the code step is gone (a new page, or sign-up's handle step). Refused: the code
+  // field shows its error, which some tests go on to read.
+  const refused = page
+    .locator('form')
+    .filter({ has: codeField })
+    .getByRole('alert');
+  await expect
+    .poll(
+      async () =>
+        !(await codeField.isVisible())
+          ? 'signed in'
+          : (await refused.isVisible())
+            ? 'refused'
+            : 'checking',
+      { timeout: 25_000 },
+    )
+    .not.toBe('checking');
 }
 
 /** Signs up a new recipient, claims a handle and (optionally) makes the page live. */
