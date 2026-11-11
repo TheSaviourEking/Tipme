@@ -107,12 +107,32 @@ export type ProPurchaseStatus = (typeof PRO_PURCHASE_STATUSES)[number];
 
 export const PRO_PURCHASE_TRANSITIONS: TransitionTable<ProPurchaseStatus> = {
   PENDING: ['UNKNOWN', 'PAID', 'FAILED', 'EXPIRED', 'REVIEW'],
-  COLLECTING: ['PAID', 'FAILED', 'UNKNOWN'],
+  // A balance transfer or a saved-card charge in flight. A charge the partner is still processing
+  // waits as PENDING; a read-back that disagrees goes to REVIEW.
+  COLLECTING: ['PAID', 'FAILED', 'UNKNOWN', 'PENDING', 'REVIEW'],
   UNKNOWN: ['PENDING', 'PAID', 'FAILED', 'EXPIRED', 'REVIEW'],
   PAID: [],
   FAILED: ['PAID', 'REVIEW'],
   EXPIRED: ['PAID', 'REVIEW'],
   REVIEW: [],
+};
+
+/** A staff refund of a card-paid Pro month (plan Task 9). Only refund.paid makes it PAID. */
+export const PRO_REFUND_STATUSES = [
+  'REQUESTED',
+  'PROCESSING',
+  'UNKNOWN',
+  'PAID',
+  'FAILED',
+] as const;
+export type ProRefundStatus = (typeof PRO_REFUND_STATUSES)[number];
+
+export const PRO_REFUND_TRANSITIONS: TransitionTable<ProRefundStatus> = {
+  REQUESTED: ['PROCESSING', 'UNKNOWN', 'FAILED', 'PAID'],
+  PROCESSING: ['PAID', 'FAILED'],
+  UNKNOWN: ['PROCESSING', 'PAID', 'FAILED'],
+  PAID: [],
+  FAILED: [],
 };
 
 export function canTransition<S extends string>(

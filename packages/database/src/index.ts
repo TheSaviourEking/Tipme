@@ -99,3 +99,6 @@ export * from './operations/earnings.js';
 export * from './operations/campaigns.js';
 export * from './operations/recaps.js';
 export * from './operations/support.js';
+export * from './operations/pro-balance.js';
+export * from './operations/pro-refunds.js';
+export * from './operations/pro-auto-renew.js';

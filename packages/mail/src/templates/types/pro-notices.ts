@@ -142,6 +142,47 @@ export const proEnded = defineMailType({
     ),
 });
 
+const PAID_BY_WORDS = {
+  card: 'card through our payment partner',
+  bank_transfer: 'bank transfer through our payment partner',
+  balance: 'your TipMe balance',
+  saved_card: 'your saved card, through our payment partner',
+} as const;
+
+/**
+ * Auto-renew (plan Task 10): the saved card was refused or couldn't be charged. Pro carries on to
+ * the end of the month and its grace as usual; renewing by hand still works.
+ */
+export const proRenewalFailed = defineMailType({
+  id: 'pro_renewal_failed',
+  category: 'account',
+  sender: 'notifications',
+  preference: null,
+  schema: z.object({ endDate: date, graceEndDate: date }).strict(),
+  sample: { endDate: '9 December 2026', graceEndDate: '12 December 2026' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'Your TipMe Pro didn’t renew',
+        heading: 'Pro didn’t renew',
+        preheader: 'Your saved card didn’t go through. Renew to keep Pro.',
+        blocks: [
+          {
+            kind: 'text',
+            text: `We tried to renew Pro on your saved card, but the payment didn’t go through. Your Pro month ends on ${data.endDate}.`,
+          },
+          {
+            kind: 'quiet',
+            text: `You can renew by card or bank transfer. If you don’t, your page keeps Pro until ${data.graceEndDate}, then moves to Free. Nothing is deleted. We won’t try the card again for this month.`,
+          },
+          renewButton(ctx),
+        ],
+        reason: REASON,
+      },
+      ctx,
+    ),
+});
+
 /** TipMe's own receipt for a Pro month (the partner sends none for TipMe's own sales). */
 export const proReceipt = defineMailType({
   id: 'pro_receipt',
@@ -151,7 +192,7 @@ export const proReceipt = defineMailType({
   schema: z
     .object({
       amountMinor: z.string().regex(/^[1-9][0-9]{0,11}$/),
-      paidBy: z.enum(['card', 'bank_transfer']),
+      paidBy: z.enum(['card', 'bank_transfer', 'balance', 'saved_card']),
       startDate: date,
       endDate: date,
       /** The purchase's short reference, to quote to support. */
@@ -187,17 +228,17 @@ export const proReceipt = defineMailType({
               { label: 'Amount', value: naira(data.amountMinor) },
               {
                 label: 'Paid by',
-                value:
-                  data.paidBy === 'bank_transfer'
-                    ? 'bank transfer through our payment partner'
-                    : 'card through our payment partner',
+                value: PAID_BY_WORDS[data.paidBy as keyof typeof PAID_BY_WORDS],
               },
               { label: 'Reference', value: data.purchaseRef },
             ],
           },
           {
             kind: 'quiet',
-            text: 'Keep this email as your receipt. Pro doesn’t renew by itself: we’ll remind you before the month ends.',
+            text:
+              data.paidBy === 'saved_card'
+                ? 'Keep this email as your receipt. Pro renewed automatically on your saved card. To stop it, choose Turn off auto-renew in Settings, Plan.'
+                : 'Keep this email as your receipt. Pro doesn’t renew by itself: we’ll remind you before the month ends.',
           },
         ],
         reason: 'You get this email because you paid for TipMe Pro.',

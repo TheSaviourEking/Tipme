@@ -191,7 +191,8 @@ test('a platform refund.paid on a Pro charge ends Pro and opens a money issue', 
     },
     reads('succeeded'),
   );
-  assert.equal(outcome, 'pro_reversed');
+  // Plan Task 9: refund.paid books the reversal (Pro revenue back) and ends that month.
+  assert.equal(outcome, 'pro_refund_refunded');
   assert.equal(
     (await q(`SELECT plan FROM profiles WHERE id = $1`, [ADA]))[0].plan,
     'free',
@@ -202,9 +203,16 @@ test('a platform refund.paid on a Pro charge ends Pro and opens a money issue', 
       .length,
     1,
   );
-  // Not unmatched any more, and no balance changed.
+  // Not unmatched any more; the sale and its refund, and no recipient's balance changed.
   assert.equal((await q(`SELECT 1 FROM unmatched_provider_events`)).length, 0);
-  assert.equal((await q(`SELECT 1 FROM ledger_transactions`)).length, 1);
+  assert.deepEqual(
+    (
+      await q(
+        `SELECT operation_type FROM ledger_transactions ORDER BY operation_type::text`,
+      )
+    ).map((r) => r.operation_type),
+    ['pro_refund', 'pro_sale'],
+  );
 });
 
 test('a refund that is only created flags it and keeps Pro', async (t) => {

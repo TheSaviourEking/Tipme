@@ -64,12 +64,15 @@ export async function handleProReminders(deps: {
   db: Database;
   sealing: MailSealing;
   now: () => Date;
+  /** PRO_AUTO_RENEW: months that renew themselves get no reminder (plan Task 10). */
+  autoRenewOn?: boolean;
   log?: (entry: Record<string, unknown>) => void;
   remind?: typeof sendProReminders;
 }): Promise<'reminded'> {
   const { queued } = await (deps.remind ?? sendProReminders)(deps.db, {
     now: deps.now(),
     sealing: deps.sealing,
+    autoRenewOn: deps.autoRenewOn ?? false,
   });
   deps.log?.({ event: 'pro.reminders_sent', queued });
   return 'reminded';

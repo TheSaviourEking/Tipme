@@ -85,6 +85,12 @@ export const workerConfigSchema = z
       .enum(['true', 'false'])
       .default('true')
       .transform((value) => value === 'true'),
+    // Auto-renew on a saved naira card (plan Task 10; ruling 9): the `pro.renew` sweep charges only
+    // with this on. Off by default, until the sandbox proof (evidence E8 to E10).
+    PRO_AUTO_RENEW: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
     // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
     SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
     SENTRY_ENVIRONMENT: z

@@ -338,7 +338,15 @@ export async function expireDuePeriods(
  */
 export async function sendProReminders(
   db: Database,
-  input: { now: Date; sealing: MailSealing },
+  input: {
+    now: Date;
+    sealing: MailSealing;
+    /**
+     * PRO_AUTO_RENEW is on (plan Task 10): a month that renews itself on a saved card gets no
+     * reminder, unless its renewal was refused, when the reminders go as usual.
+     */
+    autoRenewOn?: boolean;
+  },
 ): Promise<{ queued: number }> {
   const { now } = input;
   const horizon = new Date(now.getTime() + 7 * DAY_MS);
@@ -352,6 +360,12 @@ export async function sendProReminders(
         lte(proPeriods.endsAt, horizon),
         sql`NOT EXISTS (SELECT 1 FROM pro_periods queued
                WHERE queued.profile_id = ${proPeriods.profileId} AND queued.status = 'SCHEDULED')`,
+        input.autoRenewOn
+          ? sql`NOT EXISTS (SELECT 1 FROM pro_auto_renew renew
+               WHERE renew.profile_id = ${proPeriods.profileId} AND renew.enabled
+                 AND renew.payment_method_reference IS NOT NULL
+                 AND renew.failed_period_id IS DISTINCT FROM ${proPeriods.id})`
+          : sql`true`,
       ),
     );
   if (rows.length === 0) return { queued: 0 };

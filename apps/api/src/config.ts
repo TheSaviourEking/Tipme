@@ -143,6 +143,24 @@ export const apiConfigSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((value) => value === 'true'),
+    // Paying for Pro from the TipMe balance (plan Task 8; ruling 8). Off until our payment partner
+    // confirms this use (plan partner question 1). The capability is proven in the sandbox (E3).
+    PRO_PAY_FROM_BALANCE: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
+    // Staff refunds of card-paid Pro months (plan Task 9; ruling 6). Off by default: switched on
+    // once a refund has been proven in the sandbox (evidence E7).
+    PRO_REFUNDS: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
+    // Auto-renew on a saved naira card (plan Task 10; ruling 9). Off by default, and the worker's
+    // own switch must be on too: only after the sandbox proof (evidence E8 to E10).
+    PRO_AUTO_RENEW: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
     SUPPORTER_RECOGNITION: z
       .enum(['on', 'off'])
       .default('on')

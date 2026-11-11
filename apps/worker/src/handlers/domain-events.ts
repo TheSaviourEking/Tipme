@@ -36,6 +36,8 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'pro.late_payment',
   'pro.conflict',
   'pro.reversed',
+  'pro.collect_unknown',
+  'pro.refund_failed',
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;

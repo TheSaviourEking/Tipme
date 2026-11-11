@@ -14,11 +14,17 @@ import {
   proPurchaseRequestSchema,
   type ApiDataResponse,
   type MyPro,
+  type ProAutoRenew,
   type ProPurchase,
   type ProPurchaseRequest,
 } from '@tipme/contracts';
 import {
   buyProByCheckout,
+  buyProFromBalance,
+  prepareProAutoRenew,
+  proAutoRenewState,
+  turnOffProAutoRenew,
+  type MailSealing,
   myProfileId,
   myProPurchase,
   myProState,
@@ -37,6 +43,7 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { PRO_CHECKOUT_TOKEN, type ProCheckout } from './pro-provider.js';
 
 const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
@@ -66,6 +73,7 @@ export class ProController {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(PRO_CHECKOUT_TOKEN) private readonly checkout: ProCheckout,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
   ) {
     this.webOrigin = new URL(config.WEB_ORIGIN).origin;
   }
@@ -122,11 +130,33 @@ export class ProController {
               interval: 'month',
             }
           : null,
-        // Paying from the TipMe balance waits on the partner's answer (plan Task 8).
-        methods: ['card'],
+        // Paying from the TipMe balance waits on the partner's answer (plan Task 8; ruling 8).
+        methods: this.config.PRO_PAY_FROM_BALANCE
+          ? ['card', 'balance']
+          : ['card'],
         billingOn: this.billingOpenFor(handle),
+        autoRenew: {
+          available: this.config.PRO_AUTO_RENEW,
+          on:
+            this.config.PRO_AUTO_RENEW &&
+            (await proAutoRenewState(this.database.db, profileId)).on,
+        },
       },
     };
+  }
+
+  /** "Turn off auto-renew" (plan Task 10): always allowed, even with the switch off. */
+  @Post('auto-renew/off')
+  @HttpCode(200)
+  async autoRenewOff(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<ProAutoRenew>> {
+    const profileId = await myProfileId(this.database.db, auth.userId);
+    const state = await turnOffProAutoRenew(this.database.db, {
+      profileId,
+      now: new Date(),
+    });
+    return { data: { on: state.on } };
   }
 
   @Post('purchases')
@@ -144,15 +174,41 @@ export class ProController {
     const profileId = await myProfileId(this.database.db, auth.userId);
     if (!this.billingOpenFor(await this.handleOf(profileId)))
       throw new CodedHttpException(404, 'PRO_BILLING_OFF');
+    const expectedAmountMinor = BigInt(body.expectedAmountMinor);
+    if (body.method === 'balance') {
+      // Off: as if the way to pay didn't exist (ruling 8).
+      if (!this.config.PRO_PAY_FROM_BALANCE || body.autoRenew)
+        throw new CodedHttpException(400, 'VALIDATION_FAILED');
+      const bought = await buyProFromBalance(this.database.db, {
+        profileId,
+        expectedAmountMinor,
+        idempotencyKey: key,
+        provider: this.checkout.money,
+        providerName: this.checkout.adapterName,
+        sealing: this.sealing,
+        now: new Date(),
+      });
+      return { data: wire(bought) };
+    }
+    if (body.autoRenew && !this.config.PRO_AUTO_RENEW)
+      throw new CodedHttpException(400, 'VALIDATION_FAILED');
     const settings = `${this.webOrigin}/dashboard/settings#plan`;
+    const customerReference = body.autoRenew
+      ? await prepareProAutoRenew(this.database.db, {
+          profileId,
+          provider: this.checkout.money,
+          providerName: this.checkout.name,
+        })
+      : null;
     const bought = await buyProByCheckout(this.database.db, {
       profileId,
-      expectedAmountMinor: BigInt(body.expectedAmountMinor),
+      expectedAmountMinor,
       idempotencyKey: key,
       provider: this.checkout.provider,
       providerName: this.checkout.name,
       successUrl: settings,
       cancelUrl: settings,
+      ...(customerReference ? { saveCard: { customerReference } } : {}),
       now: new Date(),
     });
     return { data: this.absolute(wire(bought)) };

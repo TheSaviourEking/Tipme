@@ -71,7 +71,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan`<br>GET `/v1/ops/pages/{profileId}/pro` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
-| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip` |
+| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip`<br>GET `/v1/ops/pro/pages/{profileId}/payments`<br>POST `/v1/ops/pro/purchases/{purchaseId}/refund` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
 | `pro.price` | GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
@@ -249,6 +249,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | PUT | `/v1/me/phone` | yes | `auth_verify` | – |
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
 | GET | `/v1/me/pro` | n/a (read) | – | – |
+| POST | `/v1/me/pro/auto-renew/off` | yes | – | – |
 | POST | `/v1/me/pro/purchases` | yes | – | – |
 | GET | `/v1/me/pro/purchases/{purchaseId}` | n/a (read) | – | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
@@ -380,6 +381,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | yes | – | – |
 | GET | `/v1/ops/pro-price` | `pro.price` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/pro-price` | `pro.price` | yes | `ops_request` | – |
+| GET | `/v1/ops/pro/pages/{profileId}/payments` | `payments.repair` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/pro/purchases/{purchaseId}/refund` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/providers/mail` | `issues.view,providers.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | `ops_request` | – |

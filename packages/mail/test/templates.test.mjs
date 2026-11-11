@@ -728,6 +728,7 @@ const PREVIOUS_SAMPLES = {
   pro_receipt: MAIL_TYPES.pro_receipt.sample,
   // Pro insights: a new type.
   monthly_recap: MAIL_TYPES.monthly_recap.sample,
+  pro_renewal_failed: MAIL_TYPES.pro_renewal_failed.sample,
 };
 
 const settingsCtx = {

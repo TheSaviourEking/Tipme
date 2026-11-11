@@ -61,6 +61,8 @@ const EVENT_KINDS: Record<string, IssueKind> = {
   'pro.late_payment': 'pro_late_payment',
   'pro.conflict': 'pro_conflict',
   'pro.reversed': 'pro_reversed',
+  'pro.collect_unknown': 'pro_collect_unknown',
+  'pro.refund_failed': 'pro_refund_failed',
 };
 export const ISSUE_EVENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(EVENT_KINDS),
@@ -111,6 +113,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   pro_conflict: 'money',
   pro_reversed: 'money',
   support_request: 'account',
+  pro_collect_unknown: 'money',
+  pro_refund_failed: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -189,6 +193,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A Pro payment for ${page} was confirmed after its checkout had ended (a late bank transfer). It was credited: their Pro month starts from the confirmation.`;
     case 'pro_conflict':
       return `The partner reported a Pro payment for ${page} as failed after TipMe had confirmed it paid, or a paid one that couldn't start a month. Check it in the partner dashboard.`;
+    case 'pro_collect_unknown':
+      return `A Pro payment from ${page}'s TipMe balance got no clear answer from the partner and none was found when read back. Its amount stays reserved; nothing was booked. Check the partner dashboard for a transfer from their account before releasing it.`;
+    case 'pro_refund_failed':
+      return `The partner could not refund a Pro card payment for ${page}. Their Pro month is unchanged and nothing was booked. A failed refund doesn't count, so it can be asked again.`;
     case 'pro_reversed':
       return `The partner reported a refund or dispute on a Pro payment for ${page}. A paid refund or a lost dispute ends that Pro month; nothing else was changed.`;
     case 'support_request':

@@ -175,6 +175,8 @@ test('the status of platform:<id> is read with no account header, and its fee is
     feeMinor: 5000n,
     feePaidBy: 'platform',
     method: 'NGN_CARD',
+    // The payment id, which a refund names (plan Task 9).
+    chargeReference: 'pay_pro_123',
   });
   assert.equal(
     requests[0].url,

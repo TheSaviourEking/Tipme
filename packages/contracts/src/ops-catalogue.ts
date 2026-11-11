@@ -229,6 +229,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     permission: 'fees.manage',
     reason: 'Shows a page’s fee numbers before a change; changes nothing.',
   },
+  'OpsProPaymentsController.list': {
+    verb: 'GET',
+    permission: 'payments.repair',
+    reason:
+      'A page’s Pro payments for deciding a refund: amounts, dates and how paid, no card or bank details.',
+  },
   'OpsProPriceController.state': {
     verb: 'GET',
     permission: 'pro.price',
@@ -325,6 +331,8 @@ export const SERIOUS_ACTIONS = [
   'tip.reverse',
   'changelog.publish',
   'pro_price.change',
+  // Paid Pro, plan Task 9 (ruling 6): refund a card-paid Pro month.
+  'pro.refund',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -345,6 +353,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'tip.reverse': 'Reverse a refunded or charged-back tip',
   'changelog.publish': 'Show users a What’s new entry',
   'pro_price.change': 'Change the Pro price',
+  'pro.refund': 'Refund a Pro card payment',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -365,4 +374,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'tip.reverse': 'payments.repair',
     'changelog.publish': 'changelog.publish',
     'pro_price.change': 'pro.price',
+    'pro.refund': 'payments.repair',
   };

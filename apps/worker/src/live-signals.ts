@@ -67,6 +67,8 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   'pro.late_payment': none,
   'pro.conflict': none,
   'pro.reversed': none,
+  'pro.collect_unknown': none,
+  'pro.refund_failed': none,
   // Nothing has changed yet when it is queued: the job worker signals after the start ran.
   [PAYOUT_START_EVENT]: none,
   [PLATFORM_REFUSAL_EVENT]: none,

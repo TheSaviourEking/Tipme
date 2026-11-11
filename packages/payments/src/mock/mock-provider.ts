@@ -2,6 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { mockWebhookSchema, type MockWebhook } from '@tipme/contracts';
 import type { Redis } from 'ioredis';
 import { UncertainProviderOutcomeError } from '../bachs/errors.js';
+import {
+  PayoutRejectedError,
+  ProRefundRefusedError,
+  SavedCardRefusedError,
+} from '../provider.js';
 import type {
   PaymentProvider,
   PayoutPort,
@@ -67,6 +72,14 @@ export interface MockProvider
   /** Paid Pro: what the pretend partner says it took, for short and over payments. */
   markAmount(reference: string, amountMinor: bigint): Promise<void>;
   /**
+   * Paid Pro from the balance and saved-card renewals: how the pretend partner answers the next
+   * collect from this account, or charge of this customer (paid unless set; used once).
+   */
+  markNextMove(
+    who: string,
+    outcome: 'refused' | 'uncertain' | 'declined',
+  ): Promise<void>;
+  /**
    * Sets the scenario the pretend checkout page chose. Only the first choice counts (false after
    * that, or for an unknown reference), so an outcome can never be changed once played.
    */
@@ -121,7 +134,12 @@ export function createMockProvider(options: {
      * Paid Pro (ADR-0015): a pretend checkout on TipMe's own account, `mock_pro_<uuid>`, one per
      * purchase however often it is retried. Paid on /mock-checkout like a tip.
      */
-    async initializePlatformCheckout({ purchaseId, amountMinor, currency }) {
+    async initializePlatformCheckout({
+      purchaseId,
+      amountMinor,
+      currency,
+      saveCard,
+    }) {
       const reference = `mock_pro_${randomUUID()}`;
       const claimKey = attemptKey(prefix, `pro:${purchaseId}`);
       const claimed = await redis.set(claimKey, reference, 'NX');
@@ -138,6 +156,7 @@ export function createMockProvider(options: {
           scenario: 'succeed',
           status: 'pending',
           method: 'NGN_CARD',
+          ...(saveCard ? { customer: saveCard.customerReference } : {}),
         });
       return {
         providerReference,
@@ -200,6 +219,21 @@ export function createMockProvider(options: {
         ...(stored['method'] === 'NGN_CARD' ||
         stored['method'] === 'NGN_BANK_TRANSFER'
           ? { method: stored['method'], feePaidBy: 'platform' as const }
+          : {}),
+        // TipMe's own (Pro) payments name their pretend charge, which a refund names.
+        ...(stored['purchaseId'] || stored['charge']
+          ? { chargeReference: `mock_ch_${providerReference}` }
+          : {}),
+        // A card saved while paying (the real partner says so by webhook instead).
+        ...(stored['customer'] &&
+        status === 'succeeded' &&
+        stored['method'] === 'NGN_CARD'
+          ? {
+              savedMethod: {
+                customerReference: stored['customer'],
+                paymentMethodReference: `mock_pm_${stored['customer']}`,
+              },
+            }
           : {}),
       };
     },
@@ -347,6 +381,102 @@ export function createMockProvider(options: {
 
     async quotePayoutFee() {
       return { feeMinor: 5000n, exact: false };
+    },
+
+    async collectToPlatform({ accountRef, amountMinor, idempotencyKey }) {
+      const next = await redis.getdel(
+        `mockprovider:${prefix}:next-move:${accountRef}`,
+      );
+      if (next === 'refused')
+        throw new PayoutRejectedError('other', 'INSUFFICIENT_BALANCE');
+      const transferRef = `mock_collect_${idempotencyKey}`;
+      await redis.hset(`mockprovider:${prefix}:collect:${idempotencyKey}`, {
+        transferRef,
+        amountMinor: amountMinor.toString(),
+      });
+      // The transfer exists, but its answer is lost; the read-back finds it.
+      if (next === 'uncertain')
+        throw new UncertainProviderOutcomeError(
+          idempotencyKey,
+          'the request may have reached the payment provider but its response was not received',
+          { cause: 'no_response' },
+        );
+      return { transferRef, status: 'paid' };
+    },
+
+    async findPlatformCollection(_accountRef, idempotencyKey) {
+      const stored = await redis.hgetall(
+        `mockprovider:${prefix}:collect:${idempotencyKey}`,
+      );
+      if (!stored['transferRef']) return null;
+      return {
+        transferRef: stored['transferRef'],
+        status: 'paid',
+        amountMinor: BigInt(stored['amountMinor'] ?? '0'),
+        currency: 'NGN',
+      };
+    },
+
+    async refundPlatformCharge({ chargeReference, reference }) {
+      const claimed = await redis.set(
+        `mockprovider:${prefix}:refund:${chargeReference}`,
+        reference,
+        'NX',
+      );
+      if (claimed !== 'OK') {
+        const existing = await redis.get(
+          `mockprovider:${prefix}:refund:${chargeReference}`,
+        );
+        if (existing !== reference)
+          throw new ProRefundRefusedError('BAD_REQUEST');
+      }
+      return { refundReference: `mock_rf_${reference}`, status: 'processing' };
+    },
+
+    async createPlatformCustomer({ idempotencyKey }) {
+      return { customerReference: `mock_cust_${idempotencyKey}` };
+    },
+
+    async chargeSavedCard({
+      customerReference,
+      amountMinor,
+      currency,
+      reference,
+      idempotencyKey,
+    }) {
+      const next = await redis.getdel(
+        `mockprovider:${prefix}:next-move:${customerReference}`,
+      );
+      if (next === 'refused')
+        throw new SavedCardRefusedError('PAYMENT_METHOD_UNUSABLE');
+      const providerReference = `mock_charge_${idempotencyKey}`;
+      await redis.hsetnx(
+        paymentKey(prefix, providerReference),
+        'status',
+        next === 'declined' ? 'failed' : 'succeeded',
+      );
+      await redis.hset(paymentKey(prefix, providerReference), {
+        charge: reference,
+        amountMinor: amountMinor.toString(),
+        currency,
+        feeMinor: mockProviderFee(amountMinor).toString(),
+        scenario: 'succeed',
+        method: 'NGN_CARD',
+      });
+      if (next === 'uncertain')
+        throw new UncertainProviderOutcomeError(
+          idempotencyKey,
+          'the request may have reached the payment provider but its response was not received',
+          { cause: 'no_response' },
+        );
+      return {
+        providerReference,
+        status: next === 'declined' ? 'failed' : 'pending',
+      };
+    },
+
+    async markNextMove(who, outcome) {
+      await redis.set(`mockprovider:${prefix}:next-move:${who}`, outcome);
     },
 
     async coverPayoutFee({ idempotencyKey }) {

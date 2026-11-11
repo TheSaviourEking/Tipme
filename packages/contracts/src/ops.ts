@@ -261,6 +261,9 @@ export const ISSUE_KINDS = [
   'pro_reversed',
   // Priority support: a person's support request (its words are kept apart, read by reveal).
   'support_request',
+  // Paid Pro: a balance payment the partner never answered, and a refund the partner refused.
+  'pro_collect_unknown',
+  'pro_refund_failed',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

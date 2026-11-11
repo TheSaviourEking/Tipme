@@ -70,10 +70,15 @@ export const opsProPriceChangeSchema = opsReasonSchema
   .strict();
 export type OpsProPriceChangeRequest = z.infer<typeof opsProPriceChangeSchema>;
 
-/** `POST /v1/me/pro/purchases`: only the amount the person saw, to refuse a changed price. */
+/**
+ * `POST /v1/me/pro/purchases`: the amount the person saw (to refuse a changed price) and how they
+ * pay. `balance` needs PRO_PAY_FROM_BALANCE; `autoRenew` (card only) needs PRO_AUTO_RENEW.
+ */
 export const proPurchaseRequestSchema = z
   .object({
     expectedAmountMinor: z.string().regex(/^[1-9][0-9]{0,11}$/),
+    method: z.enum(['card', 'balance']).optional(),
+    autoRenew: z.boolean().optional(),
   })
   .strict();
 export type ProPurchaseRequest = z.infer<typeof proPurchaseRequestSchema>;
@@ -113,7 +118,37 @@ export interface MyPro {
   next: { startsAt: string; endsAt: string } | null;
   openPurchase: ProPurchase | null;
   price: ProPrice | null;
-  methods: 'card'[];
+  /** `balance` only with PRO_PAY_FROM_BALANCE on. */
+  methods: ('card' | 'balance')[];
   /** Buying is open on this copy (PRO_BILLING_ENABLED). */
   billingOn: boolean;
+  /**
+   * Auto-renew on a saved card (PRO_AUTO_RENEW). `available`: the tick can be offered on a card
+   * checkout. `on`: a saved card will be charged a day before the month ends.
+   */
+  autoRenew: { available: boolean; on: boolean };
 }
+
+/** `POST /v1/me/pro/auto-renew/off`: always allowed. */
+export interface ProAutoRenew {
+  on: boolean;
+}
+
+/** One Pro payment of a page, for staff deciding a refund (plan Task 9). */
+export interface OpsProPayment {
+  purchaseId: string;
+  amountMinor: string;
+  currency: 'NGN';
+  paidAt: string | null;
+  paidBy: 'card' | 'bank_transfer' | 'balance' | 'saved_card' | null;
+  refundable: boolean;
+  /** Why not, or that it can be, in plain words. */
+  words: string;
+  refund: {
+    status: 'REQUESTED' | 'PROCESSING' | 'UNKNOWN' | 'PAID' | 'FAILED';
+  } | null;
+}
+
+/** `POST /v1/ops/pro/purchases/:purchaseId/refund`: the member's request, in staff's words. */
+export const opsProRefundSchema = opsReasonSchema.strict();
+export type OpsProRefundRequest = z.infer<typeof opsProRefundSchema>;

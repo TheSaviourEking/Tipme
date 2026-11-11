@@ -80,6 +80,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   pro_conflict: 'A Pro payment’s status contradicts itself',
   pro_reversed: 'A refund or dispute on a Pro payment',
   support_request: 'Support request',
+  pro_collect_unknown: 'A Pro payment from the balance is unconfirmed',
+  pro_refund_failed: 'A Pro refund failed at the partner',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',

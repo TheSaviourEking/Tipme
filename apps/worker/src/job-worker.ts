@@ -37,6 +37,9 @@ import {
   reconcileAttempts,
   reconcilePayouts,
   reconcileProPurchases,
+  reconcileProCollections,
+  renewProAutomatically,
+  sendProRefunds,
   sweepPayoutSetup,
   runIssueDetectors,
   lagosDaysBefore,
@@ -97,6 +100,8 @@ const USERNAME_TAKE_BACKS_JOB = 'usernames.take-backs';
 // Paid Pro (ADR-0015): months move on every minute; reminders every 15 minutes.
 const PRO_EXPIRE_JOB = 'pro.expire';
 const PRO_REMINDERS_JOB = 'pro.reminders';
+// Auto-renew (plan Task 10): a day before a month ends, every 15 minutes, only with PRO_AUTO_RENEW.
+const PRO_RENEW_JOB = 'pro.renew';
 const PAYOUT_SETUP_JOB = PAYOUT_SETUP_JOB_NAME;
 const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
 // A long sweep (a backlog, or a slow provider) must not run beside the next one. Under the interval
@@ -299,7 +304,27 @@ export async function startJobWorker(
       totals.checked += result.checked;
       totals.paid += result.paid.length;
       totals.failed += result.failed;
-      for (const page of result.paid.filter((p) => p.planChanged)) {
+      // Pro paid from the balance (plan Task 8): read back, never re-sent.
+      const collected = await reconcileProCollections(database.db, {
+        provider,
+        providerName,
+        now,
+        sealing,
+        minAgeMs: config.RECONCILE_MIN_AGE_MS,
+      });
+      totals.checked += collected.checked;
+      totals.paid += collected.paid.length;
+      totals.failed += collected.failed;
+      // Approved Pro refunds (plan Task 9): sent once; refund.paid settles them.
+      const refunds = await sendProRefunds(database.db, {
+        provider,
+        providerName,
+        now,
+      });
+      totals.failed += refunds.failed;
+      for (const page of [...result.paid, ...collected.paid].filter(
+        (p) => p.planChanged,
+      )) {
         void publishLive([
           { to: { profile: page.profileId }, type: 'profile.changed' },
         ]);
@@ -362,6 +387,9 @@ export async function startJobWorker(
     every: 15 * 60_000,
     logger,
   });
+  const proRenewSchedule = config.PRO_AUTO_RENEW
+    ? ensureSchedule({ queue, id: PRO_RENEW_JOB, every: 15 * 60_000, logger })
+    : null;
   // Test copies only (RELEASE_KIND=test): every hour, erase what crashed release checks left.
   const rehearsalSchedule =
     config.RELEASE_KIND === 'test'
@@ -581,10 +609,33 @@ export async function startJobWorker(
             processed.add(1, { outcome });
             return outcome;
           }
+          if (job.name === PRO_RENEW_JOB) {
+            // Queued before the switch went off: nothing is charged.
+            if (!config.PRO_AUTO_RENEW) return 'skipped';
+            const totals = { charged: 0, retried: 0 };
+            for (const [providerName, provider] of [
+              ['mock', mockProvider],
+              ['bachs', bachsProvider],
+            ] as const) {
+              if (!provider?.chargeSavedCard) continue;
+              const result = await renewProAutomatically(database.db, {
+                provider,
+                providerName,
+                now: new Date(),
+                sealing,
+              });
+              totals.charged += result.charged;
+              totals.retried += result.retried;
+            }
+            logger.info({ event: 'pro.renew_swept', ...totals, ...fields });
+            processed.add(1, { outcome: 'renewed' });
+            return 'renewed';
+          }
           if (job.name === PRO_REMINDERS_JOB) {
             const outcome = await handleProReminders({
               db: database.db,
               sealing,
+              autoRenewOn: config.PRO_AUTO_RENEW,
               now: () => new Date(),
               log: (entry) => logger.info({ ...entry, ...fields }),
             });
@@ -881,6 +932,7 @@ export async function startJobWorker(
       await takeBacksSchedule.stop();
       await proExpireSchedule.stop();
       await proRemindersSchedule.stop();
+      await proRenewSchedule?.stop();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

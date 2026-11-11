@@ -114,6 +114,13 @@ const messages: Record<ApiErrorCode, string> = {
   PRO_CHECKOUT_UNAVAILABLE:
     'Paying for Pro isn’t available right now. Nothing was charged. Please try again later.',
   PRO_BILLING_OFF: 'Buying Pro isn’t open yet.',
+  PRO_BALANCE_REFUSED:
+    'Our payment partner couldn’t take this from your balance. Nothing was paid. You can pay by card or bank transfer instead.',
+  PRO_REFUND_REFUSED: 'This Pro payment can’t be refunded.',
+  PRO_REFUNDS_OFF: 'Pro refunds aren’t switched on.',
+  PRO_AUTO_RENEW_OFF: 'Auto-renew isn’t available.',
+  PRO_AUTO_RENEW_NEEDS_EMAIL:
+    'Add an email address to your account to turn on auto-renew. Nothing was charged.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   USERNAME_BUILT_IN:
@@ -368,6 +375,13 @@ const operationErrors: Partial<
   PRO_ALREADY_RENEWED: { status: 409, code: 'PRO_ALREADY_RENEWED' },
   PRO_CHECKOUT_UNAVAILABLE: { status: 503, code: 'PRO_CHECKOUT_UNAVAILABLE' },
   PRO_PURCHASE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  PRO_BALANCE_REFUSED: { status: 409, code: 'PRO_BALANCE_REFUSED' },
+  PRO_REFUND_REFUSED: { status: 409, code: 'PRO_REFUND_REFUSED' },
+  PRO_AUTO_RENEW_OFF: { status: 404, code: 'PRO_AUTO_RENEW_OFF' },
+  PRO_AUTO_RENEW_NEEDS_EMAIL: {
+    status: 409,
+    code: 'PRO_AUTO_RENEW_NEEDS_EMAIL',
+  },
   CHANGELOG_TEXT_NOT_ALLOWED: {
     status: 422,
     code: 'CHANGELOG_TEXT_NOT_ALLOWED',
