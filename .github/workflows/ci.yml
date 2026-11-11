@@ -235,34 +235,7 @@ jobs:
       TURBO_CACHE_DIR: .turbo/cache
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # The browser and the system packages it needs are cached: a slow Ubuntu mirror once
-      # held one shard's install for eight minutes.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/ms-playwright
-            ~/.cache/playwright-apt
-          key: playwright-chromium-apt-${{ hashFiles('pnpm-lock.yaml') }}
-      - name: Install Chromium and its system packages (from the cache when present)
-        run: |
-          mkdir -p ~/.cache/playwright-apt
-          sudo cp ~/.cache/playwright-apt/*.deb /var/cache/apt/archives/ 2>/dev/null || true
-          pnpm exec playwright install --with-deps chromium
-          cp /var/cache/apt/archives/*.deb ~/.cache/playwright-apt/ 2>/dev/null || true
-      - run: docker compose up -d --wait postgres redis
-      # Build, lint, typecheck and test results of unchanged packages are reused from the last
-      # run (turbo.json declares every setting that changes a build, so a stale one is never used).
-      - uses: actions/cache@v4
-        with:
-          path: .turbo/cache
-          key: turbo-${{ github.job }}-${{ github.sha }}
-          restore-keys: turbo-${{ github.job }}-
+      - uses: ./.github/actions/e2e-setup
       # No .next/cache restore: Turbopack reused a compile cache from another commit and built a
       # stylesheet without newer rules (PR #117, run 41991783296: unstyled bank sheet, header not
       # sticky). Every e2e build compiles the web app from scratch.
@@ -279,11 +252,66 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+  # Burn-in: the e2e spec files a pull request adds or changes, five times each with no retries,
+  # so a test that passes only sometimes (timers, shared data, a slow runner) fails here instead
+  # of in a later pull request. All their tests run, @alone ones included (scripts/run-e2e.mjs).
+  # Passes at once when no spec file changed.
+  e2e-burn-in:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.code == 'true' && needs.changes.outputs.reused != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      TURBO_TELEMETRY_DISABLED: '1'
+      TURBO_CACHE_DIR: .turbo/cache
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The merge base with the target branch is needed to tell which spec files changed.
+          fetch-depth: 0
+          persist-credentials: false
+      - id: specs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base=$(git merge-base "$BASE_SHA" HEAD)
+          # Added, changed or renamed; a deleted file has nothing to run. (A pathspec `*` also
+          # matches `/`, so this takes spec files in subfolders too.)
+          specs=$(git diff --name-only --diff-filter=AMR "$base" HEAD -- 'tests/e2e/*.spec.ts' | tr '\n' ' ')
+          echo "files=$specs" >> "$GITHUB_OUTPUT"
+          if [ -z "${specs// }" ]; then
+            echo "No e2e spec file added or changed: nothing to burn in." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Burning in (5 runs each, no retries): $specs" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.specs.outputs.files != ''
+        uses: ./.github/actions/e2e-setup
+      # Through env, not an expression in the script: file names come from the pull request.
+      - if: steps.specs.outputs.files != ''
+        env:
+          SPECS: ${{ steps.specs.outputs.files }}
+        run: |
+          # One argument per file.
+          read -ra files <<< "$SPECS"
+          pnpm test:e2e "${files[@]}" --repeat-each=5 --retries=0
+      - name: Upload Playwright PNG diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-burn-in-png-diagnostics
+          path: test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 3
+
   # A pull request run that passed every job, slow suites included, records the file tree it
   # tested on the PR's head commit, so the merge into dev or main can reuse this run.
   # Documentation-only runs (slow suites skipped) record nothing.
   record-tested-tree:
-    needs: [changes, static, unit, security, integration, load, e2e]
+    needs:
+      [changes, static, unit, security, integration, load, e2e, e2e-burn-in]
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
