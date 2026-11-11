@@ -1,6 +1,12 @@
 'use client';
-import type { MyPro, ProPurchase, PublicProPrice } from '@tipme/contracts';
+import type {
+  MyPro,
+  ProAutoRenew,
+  ProPurchase,
+  PublicProPrice,
+} from '@tipme/contracts';
 import { proPrice } from './api-client';
+import { naira } from './money';
 import { newUuid } from './random-id';
 import { apiFetch } from './session-client';
 
@@ -73,7 +79,28 @@ const REFUSALS: Record<string, string> = {
   PRO_CHECKOUT_UNAVAILABLE:
     'Our payment partner can’t take this payment right now. Please try again in a few minutes.',
   NETWORK: 'We couldn’t reach TipMe. Check your connection and try again.',
+  PRO_AUTO_RENEW_NEEDS_EMAIL:
+    'To renew automatically, add an email address to your account first. Or untick it and pay as usual.',
 };
+
+const INSTEAD = 'You can pay by card or bank transfer instead.';
+
+/** Refusals of a payment from the balance (PRO_PAY_FROM_BALANCE). Nothing was taken in any. */
+const BALANCE_REFUSALS: Record<string, (amountMinor: string) => string> = {
+  INSUFFICIENT_BALANCE: (amount) =>
+    `Your balance is less than ${naira(amount)}. ${INSTEAD}`,
+  BALANCE_BELOW_ZERO: () =>
+    `Your balance is below zero, so it can’t pay for Pro. ${INSTEAD}`,
+  WITHDRAWALS_PAUSED: () => `Your balance can’t be used right now. ${INSTEAD}`,
+  PRO_BALANCE_REFUSED: () =>
+    `Our payment partner couldn’t take this from your balance. Nothing was taken. ${INSTEAD}`,
+};
+
+const PRICE_CHANGED = {
+  ok: false,
+  priceChanged: true,
+  message: 'The price of Pro has changed. Check the new price and try again.',
+} as const;
 
 /**
  * Opens a purchase at the price the person saw and goes to the checkout. A purchase already open
@@ -81,10 +108,14 @@ const REFUSALS: Record<string, string> = {
  */
 export async function startPurchase(
   expectedAmountMinor: string,
+  { autoRenew = false }: { autoRenew?: boolean } = {},
 ): Promise<StartResult> {
   const result = await apiFetch<ProPurchase>('/v1/me/pro/purchases', {
     method: 'POST',
-    body: { expectedAmountMinor },
+    // autoRenew only when ticked (PRO_AUTO_RENEW): the server refuses it with the flag off.
+    body: autoRenew
+      ? { expectedAmountMinor, autoRenew }
+      : { expectedAmountMinor },
     headers: { 'idempotency-key': newUuid() },
   });
   if (result.ok) return go(result.data);
@@ -92,13 +123,7 @@ export async function startPurchase(
     const mine = await readMyPro();
     if (mine.ok && mine.data.openPurchase) return go(mine.data.openPurchase);
   }
-  if (result.code === 'PRO_PRICE_CHANGED')
-    return {
-      ok: false,
-      priceChanged: true,
-      message:
-        'The price of Pro has changed. Check the new price and try again.',
-    };
+  if (result.code === 'PRO_PRICE_CHANGED') return PRICE_CHANGED;
   return {
     ok: false,
     message:
@@ -117,6 +142,38 @@ function go(purchase: ProPurchase): StartResult {
   window.location.assign(purchase.checkoutUrl);
   return { ok: true };
 }
+
+export type BalanceResult =
+  | { ok: true; purchase: ProPurchase }
+  | { ok: false; message: string; priceChanged?: boolean };
+
+/**
+ * Pays one month from the TipMe balance (PRO_PAY_FROM_BALANCE). No checkout: the answer is usually
+ * PAID at once; UNKNOWN or COLLECTING means the partner hasn't answered, and Settings reads it back.
+ */
+export async function payFromBalance(
+  expectedAmountMinor: string,
+): Promise<BalanceResult> {
+  const result = await apiFetch<ProPurchase>('/v1/me/pro/purchases', {
+    method: 'POST',
+    body: { expectedAmountMinor, method: 'balance' },
+    headers: { 'idempotency-key': newUuid() },
+  });
+  if (result.ok) return { ok: true, purchase: result.data };
+  if (result.code === 'PRO_PRICE_CHANGED') return PRICE_CHANGED;
+  const refusal = BALANCE_REFUSALS[result.code];
+  return {
+    ok: false,
+    message: refusal
+      ? refusal(expectedAmountMinor)
+      : (REFUSALS[result.code] ??
+        'Something went wrong on our side. Please try again.'),
+  };
+}
+
+/** "Turn off auto-renew": always allowed, whatever the flag; forgets the saved card. */
+export const turnOffAutoRenew = () =>
+  apiFetch<ProAutoRenew>('/v1/me/pro/auto-renew/off', { method: 'POST' });
 
 /** Grace: the paid month has ended and the three days to pay have not. */
 export function inGrace(current: MyPro['current'], now = Date.now()): boolean {

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { MyProfile, MyPro, ProPurchase } from '@tipme/contracts';
 import { ActionLink, Button, Card, ProBadge, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -9,10 +9,13 @@ import {
   ASK_FOR_PRO,
   forgetPurchase,
   inGrace,
+  payFromBalance,
   readMyPro,
   readPurchase,
+  rememberPurchase,
   returningPurchase,
   startPurchase,
+  turnOffAutoRenew,
 } from '@/lib/pro-buy';
 import { apiFetch } from '@/lib/session-client';
 import { nextCheckDelay } from '@/lib/status-polling';
@@ -21,7 +24,8 @@ import { SettingsChapter } from './section';
 // Plan (ScreenSettings; ProPage board's Settings line, ProBadge board's Settings Plan).
 
 type Followed =
-  | { kind: 'confirming'; purchase: ProPurchase | null }
+  // `balance`: a payment from the TipMe balance the partner hasn't answered yet (no checkout).
+  | { kind: 'confirming'; purchase: ProPurchase | null; balance?: boolean }
   | { kind: 'paid' }
   | { kind: 'failed' }
   | { kind: 'expired' }
@@ -37,6 +41,7 @@ const OPEN: ProPurchase['status'][] = ['PENDING', 'COLLECTING', 'UNKNOWN'];
 function useReturnedPurchase(onSettled: () => void) {
   const [followed, setFollowed] = useState<Followed | null>(null);
   const [round, setRound] = useState(0);
+  const balanceRef = useRef(false);
   const settledRef = useRef(onSettled);
   useEffect(() => {
     settledRef.current = onSettled;
@@ -48,8 +53,9 @@ function useReturnedPurchase(onSettled: () => void) {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
+    const balance = balanceRef.current;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored id is only readable in the browser
-    setFollowed({ kind: 'confirming', purchase: null });
+    setFollowed({ kind: 'confirming', purchase: null, balance });
     const check = async (attempt: number) => {
       const result = await readPurchase(purchaseId);
       if (stopped) return;
@@ -74,7 +80,8 @@ function useReturnedPurchase(onSettled: () => void) {
         setFollowed(null);
         return;
       }
-      if (result.ok) setFollowed({ kind: 'confirming', purchase: result.data });
+      if (result.ok)
+        setFollowed({ kind: 'confirming', purchase: result.data, balance });
       const delay = nextCheckDelay(attempt, Date.now() - started);
       if (delay === null) {
         setFollowed({ kind: 'gave-up' });
@@ -89,7 +96,21 @@ function useReturnedPurchase(onSettled: () => void) {
     };
   }, [round]);
 
-  return { followed, checkAgain: () => setRound((n) => n + 1) };
+  return {
+    followed,
+    checkAgain: () => setRound((n) => n + 1),
+    /** Follows a balance payment the partner hasn't answered yet, as a return is followed. */
+    followBalance: (purchaseId: string) => {
+      rememberPurchase(purchaseId);
+      balanceRef.current = true;
+      setRound((n) => n + 1);
+    },
+    /** A payment settled in its own answer (from the balance): no read-back needed. */
+    settle: (kind: 'paid' | 'failed') => {
+      setFollowed({ kind });
+      settledRef.current();
+    },
+  };
 }
 
 function FollowedSlip({
@@ -103,6 +124,14 @@ function FollowedSlip({
 }) {
   switch (followed.kind) {
     case 'confirming':
+      if (followed.balance)
+        return (
+          <Slip tone="waiting" title="We’re checking this payment">
+            Our payment partner hasn’t confirmed the payment from your balance
+            yet. This page updates by itself, and your plan changes only once
+            it’s confirmed.
+          </Slip>
+        );
       return (
         <Slip tone="waiting" title="We’re confirming your payment">
           We’re waiting for our payment partner to confirm it. This page updates
@@ -172,6 +201,9 @@ export function ProPlan() {
   const [confirmingBuy, setConfirmingBuy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
+  const [renew, setRenew] = useState(false);
+  const [renewOff, setRenewOff] = useState<'done' | 'failed' | null>(null);
+  const renewId = useId();
 
   const load = useCallback(async () => {
     const result = await readMyPro();
@@ -189,7 +221,8 @@ export function ProPlan() {
     });
   }, [load, setProfile]);
 
-  const { followed, checkAgain } = useReturnedPurchase(refresh);
+  const { followed, checkAgain, followBalance, settle } =
+    useReturnedPurchase(refresh);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is set before the await
@@ -209,17 +242,55 @@ export function ProPlan() {
       : `Get Pro · ${naira(price.amountMinor)} a month`
     : '';
   const fromDate = pro?.current ? dateOf(pro.current.endsAt) : 'today';
+  // Both behind the server's flags (off by default): with them off the screen is unchanged.
+  const balanceOn = Boolean(pro?.methods?.includes('balance'));
+  const renewOn = Boolean(pro?.autoRenew?.on);
+  const renewOffered = Boolean(pro?.autoRenew?.available) && !renewOn;
 
   const buy = async () => {
     if (!price) return;
     setBusy(true);
     setProblem('');
-    const result = await startPurchase(price.amountMinor);
+    const result = await startPurchase(price.amountMinor, {
+      autoRenew: renewOffered && renew,
+    });
     if (result.ok) return;
     setBusy(false);
     setConfirmingBuy(false);
     setProblem(result.message);
     if (result.priceChanged) void load();
+  };
+
+  const buyFromBalance = async () => {
+    if (!price) return;
+    setBusy(true);
+    setProblem('');
+    const result = await payFromBalance(price.amountMinor);
+    setBusy(false);
+    setConfirmingBuy(false);
+    if (!result.ok) {
+      setProblem(result.message);
+      if (result.priceChanged) void load();
+      return;
+    }
+    const { status, purchaseId } = result.purchase;
+    if (status === 'PAID') settle('paid');
+    else if (status === 'FAILED') settle('failed');
+    else followBalance(purchaseId);
+  };
+
+  const stopRenewing = async () => {
+    setBusy(true);
+    const result = await turnOffAutoRenew();
+    setBusy(false);
+    if (result.ok) {
+      setPro((now) =>
+        now
+          ? { ...now, autoRenew: { ...now.autoRenew, on: result.data.on } }
+          : now,
+      );
+      setRenewOff('done');
+    } else setRenewOff('failed');
   };
 
   return (
@@ -242,6 +313,32 @@ export function ProPlan() {
         <p className="settings-plan__status">
           Next month is paid: Pro until {dateOf(pro.next.endsAt)}.
         </p>
+      )}
+      {renewOn && (
+        <div className="settings-plan__renew">
+          <p className="settings-plan__status">
+            Renews automatically on your saved card.
+          </p>
+          <Button
+            variant="secondary"
+            aria-busy={busy}
+            disabled={busy}
+            onClick={() => void stopRenewing()}
+          >
+            Turn off auto-renew
+          </Button>
+        </div>
+      )}
+      {renewOff === 'done' && !renewOn && (
+        <Slip tone="done" title="Auto-renew is off">
+          Your saved card won’t be charged. Your paid month is unchanged, and
+          we’ll remind you before it ends.
+        </Slip>
+      )}
+      {renewOff === 'failed' && (
+        <Slip tone="error" title="Auto-renew is still on">
+          We couldn’t turn it off. Please try again.
+        </Slip>
       )}
       {grace && pro?.current && (
         <Slip tone="unsure" title="Your Pro month has ended">
@@ -288,6 +385,7 @@ export function ProPlan() {
           <p className="tm-hint">
             Pay by card or bank transfer. You choose which on our payment
             partner’s page.
+            {balanceOn && ' You can also pay from your TipMe balance.'}
             {paidMonth && ' You can pay one month ahead.'}
           </p>
           {confirmingBuy ? (
@@ -296,6 +394,27 @@ export function ProPlan() {
                 {naira(price!.amountMinor)} for one month of Pro, from{' '}
                 {fromDate}.
               </p>
+              {renewOffered && (
+                <div className="tip-remember">
+                  <input
+                    id={renewId}
+                    type="checkbox"
+                    checked={renew}
+                    aria-describedby={`${renewId}-hint`}
+                    disabled={busy}
+                    onChange={(e) => setRenew(e.target.checked)}
+                  />
+                  <span>
+                    <label htmlFor={renewId}>
+                      Renew automatically on this card
+                    </label>
+                    <small id={`${renewId}-hint`}>
+                      If you pay by card, it’s charged a day before each month
+                      ends. You can turn this off here at any time.
+                    </small>
+                  </span>
+                </div>
+              )}
               <div className="settings-plan__keys">
                 <Button
                   variant="continue"
@@ -305,6 +424,16 @@ export function ProPlan() {
                 >
                   Continue to payment
                 </Button>
+                {balanceOn && (
+                  <Button
+                    variant="secondary"
+                    aria-busy={busy}
+                    disabled={busy}
+                    onClick={() => void buyFromBalance()}
+                  >
+                    Pay {naira(price!.amountMinor)} from your balance
+                  </Button>
+                )}
                 <Button
                   variant="quiet"
                   disabled={busy}

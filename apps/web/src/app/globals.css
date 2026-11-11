@@ -10319,6 +10319,13 @@ html:has(.ops-frame__sheet[open]) {
   font-weight: 700;
 }
 
+.settings-plan__renew {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .settings-plan__buy {
   display: grid;
   gap: var(--space-3);
