@@ -3550,6 +3550,108 @@ body:has(.profile-page) .brand__mark {
   min-width: min(100%, 16rem);
 }
 
+/* Before it's paid (R1, TipJourney): the amount and the next steps sit in their own column. On a
+   phone it follows the words; from 56rem it stands beside them, so the card is a composed stage
+   rather than a small card on an empty page. The live region keeps its place in the DOM. */
+.tip-status-side {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.tip-status-card .tip-status-amount {
+  margin: 0;
+  color: var(--text-primary);
+  font: 400 2.5rem / 1 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.tip-status-card .tip-status-ref {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* Didn't go through, and expired: the slip's paper and perforated edge (tm-slip). */
+.tip-status-card.tip-status-card--declined,
+.tip-status-card.tip-status-card--cancelled {
+  position: relative;
+  border-radius: 4px 4px 16px 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
+.tip-status-card--declined::before,
+.tip-status-card--cancelled::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 10px;
+  left: 10px;
+  height: 10px;
+  background: radial-gradient(
+      circle at 5px 5px,
+      var(--canvas) 3.2px,
+      transparent 3.6px
+    )
+    0 0 / 12px 10px repeat-x;
+  pointer-events: none;
+}
+
+/* The stamp stands in the column, never over the words. */
+.tip-status-card .tip-status-stamp {
+  position: relative;
+  top: auto;
+  right: auto;
+}
+
+@media (min-width: 56rem) {
+  .tip-status-card:is(
+    .tip-status-card--waiting,
+    .tip-status-card--checking,
+    .tip-status-card--collected,
+    .tip-status-card--declined,
+    .tip-status-card--cancelled
+  ) {
+    width: 100%;
+    max-width: 56rem;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    column-gap: var(--space-12);
+    align-items: center;
+    text-align: left;
+
+    > .tip-status-pretend {
+      grid-column: 1 / -1;
+    }
+
+    .tip-status-live h1 {
+      font-size: clamp(2.25rem, 4vw, 3rem);
+    }
+
+    .tm-pulse {
+      margin-left: 0;
+    }
+
+    .tip-status-side {
+      justify-items: start;
+      padding-left: var(--space-10);
+      border-left: 1px dashed var(--border-material);
+    }
+
+    .tip-status-actions {
+      justify-content: flex-start;
+    }
+  }
+}
+
+@media (forced-colors: active) {
+  .tip-status-card--declined::before,
+  .tip-status-card--cancelled::before {
+    content: none;
+  }
+}
+
 /* Confirmed: the thank-you is a purple slab, and it becomes the receipt. */
 .tip-status-page:has(.tip-thanks) {
   background:

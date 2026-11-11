@@ -267,6 +267,13 @@ export const SCREENS: ReviewScreen[] = [
     board: 'TipJourney',
     open: afterTip('declined'),
   },
+  // R1: the audit's "States with no shot". The API has one state for both, so one shot.
+  {
+    group: 'Tipping',
+    name: 'Receipt, expired',
+    board: 'TipJourney',
+    open: afterTip('cancelled'),
+  },
   // No board shows this page; TipJourney and PagePro show the materials it specimens.
   {
     group: 'Foundations',
