@@ -7456,10 +7456,12 @@ html:has(.confirm-dialog[open]) {
   margin-top: var(--space-2);
 }
 
-/* Production launch holding page: one editorial message, expressed as tactile instruments. */
+/* Production launch holding page (ComingSoon board): an editorial message over a recessed well
+   of pressed keys, Seconds the purple one, and a small paper card of what is coming. */
 body:has(.coming-soon-page) {
   background:
-    linear-gradient(135deg, rgba(122, 50, 249, 0.035), transparent 34%), #f8f5ef;
+    linear-gradient(135deg, rgb(122 50 249 / 3.5%), transparent 34%),
+    var(--canvas);
 }
 
 body:has(.coming-soon-page) > .site-header,
@@ -7473,106 +7475,151 @@ body > .coming-soon-page {
 }
 
 .coming-soon {
-  position: relative;
-  isolation: isolate;
   width: min(100%, 90rem);
   min-height: 100svh;
   margin-inline: auto;
-  padding: clamp(1.5rem, 5vw, 4.5rem);
+  padding: clamp(1.5rem, 4vw, 3.5rem);
   display: grid;
   grid-template-rows: auto 1fr auto auto;
-  gap: clamp(2.25rem, 5vh, 4.5rem);
-}
-
-.coming-soon::before,
-.coming-soon::after {
-  position: absolute;
-  z-index: -1;
-  content: '';
-  pointer-events: none;
-}
-
-.coming-soon::before {
-  top: clamp(6rem, 14vh, 10rem);
-  right: clamp(1.5rem, 6vw, 7rem);
-  width: clamp(3rem, 7vw, 6.5rem);
-  aspect-ratio: 1;
-  border: 1px solid rgba(10, 10, 11, 0.16);
-  border-radius: 50%;
-  box-shadow:
-    inset 0 0 0 0.55rem #f8f5ef,
-    inset 0 0 0 0.68rem rgba(10, 10, 11, 0.12);
-  transform: rotate(-12deg);
-}
-
-.coming-soon::after {
-  top: clamp(7.1rem, 16vh, 11.2rem);
-  right: clamp(2.65rem, 7.15vw, 8.15rem);
-  width: clamp(0.7rem, 1.4vw, 1.2rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: var(--brand-primary);
+  gap: clamp(1.5rem, 4vh, 2.5rem);
 }
 
 .coming-soon__wordmark {
   display: block;
   width: auto;
-  height: clamp(2.15rem, 3vw, 2.8rem);
+  height: clamp(2rem, 3vw, 2.5rem);
+}
+
+.coming-soon__stage {
+  align-self: end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18.75rem);
+  gap: clamp(1.5rem, 4vw, 2.5rem);
+  align-items: end;
 }
 
 .coming-soon__intro {
-  width: min(48rem, 88%);
-  align-self: end;
+  min-width: 0;
 }
 
 .coming-soon__eyebrow {
-  margin-bottom: 1rem;
-  color: #6e6962;
-  font-size: 0.72rem;
+  margin: 0 0 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
   line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .coming-soon__intro h1 {
   max-width: 11ch;
   margin: 0;
   font-family: var(--font-editorial);
-  font-size: clamp(3.35rem, 7.5vw, 7.5rem);
+  font-size: clamp(3.25rem, 7vw, 5.25rem);
   font-weight: 400;
-  letter-spacing: -0.065em;
-  line-height: 0.88;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
   text-wrap: balance;
 }
 
 .coming-soon__lede {
-  margin: clamp(1.25rem, 3vh, 2rem) 0 0;
-  color: #5d5954;
-  font-size: clamp(1rem, 1.6vw, 1.3rem);
+  margin: 1rem 0 0;
+  color: #3d3a35;
+  font-size: clamp(1rem, 1.6vw, 1.1875rem);
   line-height: 1.5;
 }
 
+.coming-soon__card {
+  padding: 1.375rem;
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
+  box-shadow: var(--shadow-instrument);
+  transform: rotate(-2deg);
+}
+
+.coming-soon__card-cover {
+  height: 4.375rem;
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 80% 20%, var(--brand-mid) 0 10%, transparent 11%),
+    var(--brand-primary);
+}
+
+.coming-soon__card-avatar {
+  width: 3.25rem;
+  height: 3.25rem;
+  margin: -1.625rem 0 0 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid var(--surface-raised);
+  border-radius: 50%;
+  background: var(--brand-primary);
+}
+
+.coming-soon__card-avatar svg {
+  fill: #fff;
+}
+
+.coming-soon__card-title {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-editorial);
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+
+.coming-soon__card-link {
+  margin: 0.125rem 0 0.75rem;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.coming-soon__card-key {
+  min-height: 2.75rem;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #000;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 3px 0 #2a2826;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
 .launch-countdown__grid {
+  padding: 1rem;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(0.65rem, 1.5vw, 1.25rem);
+  gap: 0.875rem;
+  border: 1px solid rgb(20 18 16 / 12%);
+  border-radius: 1.75rem;
+  background-color: var(--surface-recessed);
+  box-shadow: inset 0 2px 4px rgb(20 18 16 / 12%);
 }
 
 .launch-countdown__tile {
   min-width: 0;
-  min-height: clamp(7.5rem, 14vw, 12.5rem);
-  padding: clamp(1rem, 2.5vw, 2rem);
+  min-height: clamp(6.5rem, 12vw, 9.375rem);
+  padding: clamp(0.875rem, 1.8vw, 1.25rem);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border: 1px solid rgba(17, 17, 18, 0.11);
-  border-radius: clamp(1.2rem, 2vw, 2rem);
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgb(20 18 16 / 12%);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(rgb(255 255 255 / 95%), transparent 2px),
+    var(--surface-raised);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.95) inset,
-    0 0.55rem 0 rgba(17, 17, 18, 0.075),
-    0 1.4rem 3rem rgba(17, 17, 18, 0.06);
+    0 1px 1px rgb(20 18 16 / 8%),
+    0 6px 0 #d8d5cd,
+    0 18px 26px -18px rgb(20 18 16 / 45%);
   transition:
     transform 180ms ease,
     box-shadow 180ms ease;
@@ -7580,29 +7627,36 @@ body > .coming-soon-page {
 
 .launch-countdown__tile--seconds {
   border-color: #6420dc;
-  background: var(--brand-primary);
+  background: radial-gradient(
+    120% 90% at 30% 15%,
+    #9a63ff 0,
+    var(--brand-primary) 55%,
+    #5f1fd6 100%
+  );
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.28) inset,
-    0 0.55rem 0 #5017b2,
-    0 1.4rem 3rem rgba(84, 24, 184, 0.2);
+    inset 0 1px 0 rgb(255 255 255 / 30%),
+    0 6px 0 #4f16af,
+    0 18px 26px -16px rgb(77 22 168 / 70%);
   color: #fff;
 }
 
 .launch-countdown__value {
   overflow: hidden;
   font-family: var(--font-editorial);
-  font-size: clamp(3.1rem, 7vw, 6.6rem);
+  font-size: clamp(3rem, 7vw, 5.75rem);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.06em;
-  line-height: 0.84;
+  line-height: 0.85;
 }
 
 .launch-countdown__label {
-  font-size: clamp(0.65rem, 1vw, 0.78rem);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.13em;
   line-height: 1.2;
-  text-transform: uppercase;
+}
+
+.launch-countdown__tile--seconds .launch-countdown__label {
+  color: #efe6ff;
 }
 
 .coming-soon__foot {
@@ -7611,9 +7665,9 @@ body > .coming-soon-page {
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  border-top: 1px solid rgba(17, 17, 18, 0.14);
-  color: #6e6962;
-  font-size: 0.78rem;
+  border-top: 1px solid rgb(20 18 16 / 14%);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
 }
 
 .coming-soon__foot time,
@@ -7623,7 +7677,7 @@ body > .coming-soon-page {
 }
 
 .coming-soon__foot time {
-  color: #171718;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -7635,59 +7689,61 @@ body > .coming-soon-page {
 
 @media (max-width: 42rem) {
   .coming-soon {
-    grid-template-rows: auto 1fr auto auto;
-    gap: 2.25rem;
+    gap: 1.375rem;
+    padding: 1.625rem 1.25rem;
   }
 
-  .coming-soon::before {
-    top: 5.5rem;
+  /* The phone board draws no card: words, then the clock. */
+  .coming-soon__stage {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .coming-soon::after {
-    top: 6.65rem;
-  }
-
-  .coming-soon__intro {
-    width: 92%;
+  .coming-soon__card {
+    display: none;
   }
 
   .coming-soon__intro h1 {
-    font-size: clamp(3.25rem, 17vw, 5.25rem);
+    font-size: clamp(2.75rem, 14vw, 3.375rem);
   }
 
   .launch-countdown__grid {
+    padding: 0.625rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.8rem;
+    gap: 0.625rem;
+    border-radius: 1.375rem;
   }
 
   .launch-countdown__tile {
-    min-height: 7.5rem;
-    padding: 1rem;
-    border-radius: 1.25rem;
+    min-height: 6.5rem;
+    padding: 0.875rem;
   }
 
   .launch-countdown__value {
-    font-size: clamp(3rem, 18vw, 4.4rem);
+    font-size: clamp(2.75rem, 15vw, 3.625rem);
   }
 
   .coming-soon__foot {
     align-items: flex-start;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.25rem;
   }
 }
 
 @media (max-width: 22rem) {
   .coming-soon {
-    padding: 1.25rem;
-  }
-
-  .coming-soon__intro h1 {
-    font-size: 3.1rem;
+    padding: 1.25rem 1rem;
   }
 
   .launch-countdown__value {
-    font-size: 2.85rem;
+    font-size: 2.6rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .coming-soon__card,
+  .launch-countdown__grid,
+  .launch-countdown__tile {
+    border-color: CanvasText;
   }
 }
 

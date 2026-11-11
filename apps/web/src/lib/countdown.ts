@@ -1,5 +1,39 @@
 export const LAGOS_LAUNCH_TARGET = '2026-10-26T23:00:00Z';
-export const LAGOS_LAUNCH_LABEL = '27 October 2026 · 00:00 WAT';
+
+// Lagos has no daylight saving, so West Africa Time is always UTC+1 and the
+// "WAT" suffix is safe to write ourselves (Intl names it "GMT+1" in en-GB).
+const lagosDate = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Africa/Lagos',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+const lagosDayMonth = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Africa/Lagos',
+  day: 'numeric',
+  month: 'long',
+});
+const lagosTime = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Africa/Lagos',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** "27 October 2026 · 00:00 WAT", from the launch instant. */
+export function launchLabel(target: number): string {
+  return `${lagosDate.format(target)} · ${lagosTime.format(target)} WAT`;
+}
+
+/** "27 October · 00:00 WAT", for the share card. */
+export function launchShortLabel(target: number): string {
+  return `${lagosDayMonth.format(target)} · ${lagosTime.format(target)} WAT`;
+}
+
+/** The instant for `<time dateTime>`. */
+export function launchIso(target: number): string {
+  return new Date(target).toISOString();
+}
 
 export type CountdownParts = {
   days: number;
