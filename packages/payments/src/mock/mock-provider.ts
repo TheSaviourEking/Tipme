@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { UncertainProviderOutcomeError } from '../bachs/errors.js';
 import {
   PayoutRejectedError,
+  PlatformRefusalError,
   ProRefundRefusedError,
   SavedCardRefusedError,
 } from '../provider.js';
@@ -395,6 +396,28 @@ export function createMockProvider(options: {
         amountMinor: amountMinor.toString(),
       });
       // The transfer exists, but its answer is lost; the read-back finds it.
+      if (next === 'uncertain')
+        throw new UncertainProviderOutcomeError(
+          idempotencyKey,
+          'the request may have reached the payment provider but its response was not received',
+          { cause: 'no_response' },
+        );
+      return { transferRef, status: 'paid' };
+    },
+
+    // Option B's second leg: TipMe's balance to an account. Kept beside the collects, so one
+    // read-back finds either by its key.
+    async transferToAccount({ accountRef, amountMinor, idempotencyKey }) {
+      const next = await redis.getdel(
+        `mockprovider:${prefix}:next-move:${accountRef}`,
+      );
+      if (next === 'refused')
+        throw new PlatformRefusalError('reserve_empty', 'INSUFFICIENT_BALANCE');
+      const transferRef = `mock_transfer_${idempotencyKey}`;
+      await redis.hset(`mockprovider:${prefix}:collect:${idempotencyKey}`, {
+        transferRef,
+        amountMinor: amountMinor.toString(),
+      });
       if (next === 'uncertain')
         throw new UncertainProviderOutcomeError(
           idempotencyKey,

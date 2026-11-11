@@ -160,3 +160,69 @@ export function lagosDateOf(at: Date): string {
 export function lagosMonthOf(at: Date): string {
   return lagosDateOf(at).slice(0, 7);
 }
+
+// ---- Release 2 on option B (owner, 11 Nov 2026): moving a share between partner accounts ----
+
+/**
+ * The smallest withdrawal a business can make (a ruling the owner can change). Our payment partner
+ * charges ₦50 on top of every payout, which TipMe covers, so a business batches its shares: at
+ * ₦5,000 the fee is at most 1%. Unlike a person's, there is no "take everything" exception.
+ */
+export const BUSINESS_MIN_WITHDRAWAL_MINOR = 500_000n;
+
+/**
+ * What a sweep sends on to the business once its share has reached TipMe: the share less what is
+ * held back for shares the business withdrew before their tip was refunded. Hold-backs are paid
+ * oldest first (callers pass them in that order), each never beyond what it still owes.
+ */
+export function allocateHoldbacks(
+  shareMinor: bigint,
+  holdbacks: readonly { id: string; remainingMinor: bigint }[],
+): { deliverMinor: bigint; repay: { id: string; amountMinor: bigint }[] } {
+  if (shareMinor <= 0n) throw new RangeError('a share is positive');
+  let left = shareMinor;
+  const repay: { id: string; amountMinor: bigint }[] = [];
+  for (const holdback of holdbacks) {
+    if (left === 0n) break;
+    if (holdback.remainingMinor <= 0n) continue;
+    const take =
+      holdback.remainingMinor < left ? holdback.remainingMinor : left;
+    repay.push({ id: holdback.id, amountMinor: take });
+    left -= take;
+  }
+  return { deliverMinor: left, repay };
+}
+
+/**
+ * What must move after a refund of a shared tip, from the reversal's own lines. Our partner takes
+ * the whole refund from the staff member's account, and keeps TipMe's fee with TipMe: so TipMe
+ * sends back what the ledger took from its fee (and any provider fee it had recovered from the
+ * tip), and the business gives back what the ledger took from its share. A refund's own fee is
+ * TipMe's expense (provider_fee_expense) and is never sent to anyone.
+ */
+export function refundMoves(
+  reversal: readonly {
+    account: string;
+    side: 'debit' | 'credit';
+    amountMinor: bigint;
+    businessId?: string;
+  }[],
+  input: { businessId: string },
+): { feeReturnMinor: bigint; businessBackMinor: bigint } {
+  let feeReturnMinor = 0n;
+  let businessBackMinor = 0n;
+  for (const line of reversal) {
+    if (line.side !== 'debit') continue;
+    if (
+      line.account === 'platform_fee_revenue' ||
+      line.account === 'provider_fee_recovered'
+    )
+      feeReturnMinor += line.amountMinor;
+    if (
+      line.account === 'business_payable' &&
+      line.businessId === input.businessId
+    )
+      businessBackMinor += line.amountMinor;
+  }
+  return { feeReturnMinor, businessBackMinor };
+}

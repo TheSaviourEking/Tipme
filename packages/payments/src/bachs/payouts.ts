@@ -179,6 +179,14 @@ const transferListSchema = z.union([
 ]);
 const TRANSFER_LIST_LIMIT = 100;
 
+const sentTransferSchema = z.object({
+  id: identifierSchema,
+  status: z.string().min(1),
+  amount: z.string(),
+  currency: z.string().min(1).max(32),
+  destination: z.string(),
+});
+
 const collectedSchema = z.object({
   id: identifierSchema,
   status: z.string().min(1),
@@ -607,7 +615,7 @@ export function createBachsPayouts(
             destination: 'self',
             amount,
             currency: input.currency,
-            description: 'TipMe Pro',
+            description: input.description ?? 'TipMe Pro',
             // Listing can't filter by it, but every transfer returns it: the read-back finds ours.
             transfer_group: idempotencyKey,
           },
@@ -615,6 +623,40 @@ export function createBachsPayouts(
         }),
       );
       if (!sameMoney(transfer.amount, transfer.currency, input.amountMinor))
+        throw unexpected(idempotencyKey);
+      return {
+        transferRef: transfer.id,
+        status: transfer.status.toLowerCase() === 'paid' ? 'paid' : 'pending',
+      };
+    },
+
+    // POST /v1/transfers as the platform: TipMe's balance to an account (option B's second leg, and a
+    // refunded tip's fee going back). https://docs.bachs.io/connect/transfers.md
+    async transferToAccount(input) {
+      const account = checkedIdentifier(input.accountRef, 'account reference');
+      const idempotencyKey = checkedKey(input.idempotencyKey);
+      const amount = checkedAmount(input.amountMinor, input.currency);
+      const transfer = await moneyWrite(idempotencyKey, TRANSFER_REFUSALS, () =>
+        client.request({
+          method: 'POST',
+          path: '/v1/transfers',
+          idempotencyKey,
+          operationReference: idempotencyKey,
+          body: {
+            destination: account,
+            amount,
+            currency: input.currency,
+            description: input.description,
+            // Every transfer returns it, so the read-back finds ours among the account's.
+            transfer_group: idempotencyKey,
+          },
+          schema: sentTransferSchema,
+        }),
+      );
+      if (
+        transfer.destination !== account ||
+        !sameMoney(transfer.amount, transfer.currency, input.amountMinor)
+      )
         throw unexpected(idempotencyKey);
       return {
         transferRef: transfer.id,

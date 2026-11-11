@@ -69,6 +69,8 @@ export const NOTE_REVIEW_OUTCOMES = ['restored', 'removed'] as const;
 export const BUSINESS_NOTIFICATION_KINDS = [
   'business_invitation',
   'business_verified',
+  // Release 2, option B: a refunded tip's share was already withdrawn, so it is held back.
+  'business_share_held_back',
 ] as const;
 
 /** A number the business may see, or "fewer than 3". Never a raw count below MIN_GROUP. */
