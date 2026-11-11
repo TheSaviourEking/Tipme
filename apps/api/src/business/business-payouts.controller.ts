@@ -177,10 +177,14 @@ export class BusinessPayoutsController {
       }),
     );
     let reference = claim.account.providerAccountReference;
-    if (claim.created) {
+    // A lost answer is asked again with the SAME key: our partner answers the same account, so a
+    // business never gets two.
+    if (claim.created || !reference) {
+      if (!claim.contactEmail)
+        throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
       try {
         const made = await bachs.createReceiveOnlyAccount({
-          contactEmail: claim.contactEmail!,
+          contactEmail: claim.contactEmail,
           country: 'NG',
           displayName: claim.businessName,
           idempotencyKey: `tipme-biz-acct-${claim.account.id}`,

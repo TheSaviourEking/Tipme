@@ -417,3 +417,18 @@ test('a quote at the business shows the split; the intent fixes that share; staf
   });
   assert.deepEqual(theirs.body.data, []);
 });
+
+test('with the pretend partner a business needs no payout account of its own', async () => {
+  const answer = await call('POST', `${base()}/payout-account`, {
+    cookie: ada.cookie,
+    body: {},
+  });
+  assert.equal(answer.status, 200);
+  assert.deepEqual(answer.body.data, { payoutAccount: 'not_needed' });
+  // A location manager reads it as an unknown business, as every money route.
+  const manager = await call('POST', `${base()}/payout-account`, {
+    cookie: tobi.cookie,
+    body: {},
+  });
+  assert.equal(manager.status, 404);
+});
