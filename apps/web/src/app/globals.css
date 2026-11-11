@@ -529,6 +529,32 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.7;
 }
 
+.footer-legal {
+  display: none;
+}
+
+/* Inside the recipient dashboard (X1, ScreenAudit "Across the app"): a slim footer. The ©
+   line, the test-mode note, and Privacy and Terms; the marketing card stays on public pages. */
+body:has(main[data-area='recipient']) > .site-footer {
+  padding-top: var(--space-8);
+
+  .footer-card {
+    display: none;
+  }
+
+  .footer-legal {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .footer-legal a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--text-secondary);
+  }
+}
+
 /* The pilot notice: one quiet line next to the money action; it takes no space when absent. */
 .pilot-notice {
   display: block;
@@ -3550,6 +3576,108 @@ body:has(.profile-page) .brand__mark {
   min-width: min(100%, 16rem);
 }
 
+/* Before it's paid (R1, TipJourney): the amount and the next steps sit in their own column. On a
+   phone it follows the words; from 56rem it stands beside them, so the card is a composed stage
+   rather than a small card on an empty page. The live region keeps its place in the DOM. */
+.tip-status-side {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.tip-status-card .tip-status-amount {
+  margin: 0;
+  color: var(--text-primary);
+  font: 400 2.5rem / 1 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.tip-status-card .tip-status-ref {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* Didn't go through, and expired: the slip's paper and perforated edge (tm-slip). */
+.tip-status-card.tip-status-card--declined,
+.tip-status-card.tip-status-card--cancelled {
+  position: relative;
+  border-radius: 4px 4px 16px 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
+.tip-status-card--declined::before,
+.tip-status-card--cancelled::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 10px;
+  left: 10px;
+  height: 10px;
+  background: radial-gradient(
+      circle at 5px 5px,
+      var(--canvas) 3.2px,
+      transparent 3.6px
+    )
+    0 0 / 12px 10px repeat-x;
+  pointer-events: none;
+}
+
+/* The stamp stands in the column, never over the words. */
+.tip-status-card .tip-status-stamp {
+  position: relative;
+  top: auto;
+  right: auto;
+}
+
+@media (min-width: 56rem) {
+  .tip-status-card:is(
+    .tip-status-card--waiting,
+    .tip-status-card--checking,
+    .tip-status-card--collected,
+    .tip-status-card--declined,
+    .tip-status-card--cancelled
+  ) {
+    width: 100%;
+    max-width: 56rem;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    column-gap: var(--space-12);
+    align-items: center;
+    text-align: left;
+
+    > .tip-status-pretend {
+      grid-column: 1 / -1;
+    }
+
+    .tip-status-live h1 {
+      font-size: clamp(2.25rem, 4vw, 3rem);
+    }
+
+    .tm-pulse {
+      margin-left: 0;
+    }
+
+    .tip-status-side {
+      justify-items: start;
+      padding-left: var(--space-10);
+      border-left: 1px dashed var(--border-material);
+    }
+
+    .tip-status-actions {
+      justify-content: flex-start;
+    }
+  }
+}
+
+@media (forced-colors: active) {
+  .tip-status-card--declined::before,
+  .tip-status-card--cancelled::before {
+    content: none;
+  }
+}
+
 /* Confirmed: the thank-you is a purple slab, and it becomes the receipt. */
 .tip-status-page:has(.tip-thanks) {
   background:
@@ -5788,7 +5916,8 @@ html:has(.confirm-dialog[open]) {
 
 .dashboard-home {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(16rem, 1fr);
+  /* D1 (ScreenDashboard): a side column with weight, never thinner than 18rem. */
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 1fr);
   gap: clamp(1.5rem, 4vw, 3rem);
   align-items: start;
 }
@@ -6238,11 +6367,11 @@ html:has(.confirm-dialog[open]) {
 .week-teaser {
   display: grid;
   gap: 0.2rem;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-5);
   border: 1px solid var(--edge-hairline);
-  border-radius: var(--radius-field);
+  border-radius: var(--radius-card);
   background: var(--surface-raised);
-  box-shadow: var(--shadow-card-subtle);
+  box-shadow: var(--shadow-paper);
   color: inherit;
   text-decoration: none;
 }
@@ -6257,6 +6386,15 @@ html:has(.confirm-dialog[open]) {
 
 .week-teaser b {
   color: var(--text-primary);
+}
+
+/* The week's figure, set as the balance is: DM Serif numerals on paper. */
+.week-teaser .week-teaser__figure {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-primary);
+  font: 400 2rem / 1.05 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
 }
 
 .moments h2 {
@@ -9263,6 +9401,66 @@ html:has(.ops-frame__sheet[open]) {
   gap: var(--space-3);
 }
 
+/* The totals, the CSV and the controls (D1). The figure is set as on Home: DM Serif numerals. */
+.tips-aside,
+.tips-main {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.tips-aside {
+  justify-items: start;
+}
+
+.tips-aside > .tips-controls {
+  justify-self: stretch;
+}
+
+.tips-total {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.tips-total strong {
+  display: block;
+  color: var(--text-primary);
+  font: 400 2.5rem / 1.05 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+@media (min-width: 64rem) {
+  .tips-page {
+    max-width: 72rem;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    grid-template-areas:
+      'head head'
+      'main aside';
+    column-gap: var(--space-10);
+    align-items: start;
+  }
+
+  .tips-head {
+    grid-area: head;
+  }
+
+  .tips-main {
+    grid-area: main;
+  }
+
+  .tips-aside {
+    grid-area: aside;
+    position: sticky;
+    top: var(--space-6);
+  }
+
+  /* The column is narrow: search above the filters, never side by side. */
+  .tips-aside .tips-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .tips-page .tips-status:empty {
   display: none;
 }
@@ -9277,7 +9475,7 @@ html:has(.ops-frame__sheet[open]) {
   gap: var(--space-3);
 }
 
-@media (min-width: 52rem) {
+@media (min-width: 52rem) and (max-width: 63.99rem) {
   .tips-controls {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
@@ -9295,12 +9493,21 @@ html:has(.ops-frame__sheet[open]) {
   font: 700 var(--text-sm) / 1.3 var(--font-interface);
 }
 
+/* One paper card per day, the rows between hairlines (D1, ScreenTips): a ledger, not a pile. */
 .tips-list {
   display: grid;
-  gap: var(--space-2);
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--edge-hairline);
+  border-radius: 1.25rem;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
   list-style: none;
+}
+
+.tips-list > li + li {
+  border-top: 1px solid var(--edge-hairline);
 }
 
 .tip-row {
@@ -9309,11 +9516,7 @@ html:has(.ops-frame__sheet[open]) {
   justify-content: space-between;
   gap: var(--space-4);
   min-height: 3.5rem;
-  padding: var(--space-3) var(--space-5);
-  border: 1px solid var(--edge-hairline);
-  border-radius: 1.25rem;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-card-subtle);
+  padding: var(--space-4) var(--space-5);
   color: inherit;
   text-decoration: none;
 }
@@ -9331,6 +9534,7 @@ html:has(.ops-frame__sheet[open]) {
 }
 
 .tip-row__who strong {
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
@@ -9340,18 +9544,12 @@ html:has(.ops-frame__sheet[open]) {
 }
 
 .tip-row__money strong {
-  font-size: var(--text-lg);
+  font: 400 1.375rem / 1.1 var(--font-editorial);
   font-variant-numeric: var(--numeric-variant);
 }
 
 .tip-row__state {
-  color: var(--state-warning);
-  font-weight: 600;
-}
-
-.tip-row[data-state='failed'] .tip-row__state,
-.tip-row[data-state='cancelled'] .tip-row__state {
-  color: var(--state-danger);
+  margin-top: var(--space-2);
 }
 
 .tip-row:not([data-state='paid']) .tip-row__money strong {
@@ -9385,17 +9583,71 @@ html:has(.ops-frame__sheet[open]) {
   font-size: var(--text-sm);
 }
 
-.receipt__note {
-  margin: 0 0 var(--space-5);
-  font: 400 clamp(1.5rem, 5vw, 1.7rem) / 1.2 var(--font-editorial);
+/* The note as a quoted slip (D1, ScreenTipReport): paper, a decorative quote mark screen readers
+   skip, then its hide and report controls. */
+.tip-detail__note {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.tip-detail__quote {
+  position: relative;
+  margin: 0;
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  border: 1px solid var(--edge-hairline);
+  border-radius: 4px 4px 16px 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+  font: 400 clamp(1.5rem, 3vw, 1.875rem) / 1.2 var(--font-editorial);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
+.tip-detail__quote::before {
+  content: '“' / '';
+  display: block;
+  height: 1.5rem;
+  color: var(--brand-primary);
+  font-size: 3rem;
+  line-height: 1;
+}
+
 .receipt__hidden {
-  margin: 0 0 var(--space-5);
+  margin: 0;
   color: var(--text-secondary);
   line-height: 1.45;
+}
+
+@media (min-width: 64rem) {
+  .tip-detail {
+    grid-template-columns: minmax(0, 35rem) minmax(0, 1fr);
+    column-gap: var(--space-10);
+    align-items: start;
+  }
+
+  .tip-detail > * {
+    grid-column: 1 / -1;
+  }
+
+  .tip-detail > .receipt {
+    grid-column: 1;
+  }
+
+  .tip-detail > .tip-detail__note {
+    grid-column: 2;
+  }
+
+  /* No note: the receipt alone, centred at its measure. */
+  .tip-detail:not(:has(.tip-detail__note)) {
+    grid-template-columns: minmax(0, 35rem);
+    justify-content: center;
+  }
+
+  .tip-detail .receipt h1 {
+    font-size: clamp(2rem, 4vw, 2.75rem);
+  }
 }
 
 .receipt__rows {
@@ -9431,7 +9683,7 @@ html:has(.ops-frame__sheet[open]) {
 }
 
 .tip-detail .note-actions {
-  margin-top: var(--space-2);
+  margin-top: 0;
 }
 
 .note-actions {
@@ -9610,7 +9862,7 @@ html:has(.ops-frame__sheet[open]) {
 
 @media (forced-colors: active) {
   .stack__card,
-  .tip-row,
+  .tips-list,
   .receipt.tm-surface--paper {
     border: 1px solid CanvasText;
   }
@@ -10078,7 +10330,7 @@ html:has(.ops-frame__sheet[open]) {
 
 .settings-chapter .settings-section h3 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -10087,7 +10339,7 @@ html:has(.ops-frame__sheet[open]) {
 /* Forms keep the editor's measure: a bank form 1,000px wide reads as nothing but fields. */
 .settings-chapter > .settings-section,
 .settings-chapter > .tm-notice {
-  max-width: 34rem;
+  max-width: 32.5rem;
 }
 
 /* My page: the editor, and beside it on a wide screen the preview, which stays in view. */
@@ -10386,16 +10638,22 @@ html:has(.ops-frame__sheet[open]) {
   justify-self: start;
 }
 
-/* A desktop: the links are a column of their own, kept in view beside the sections. */
+/* A desktop: the links are a column of their own (the board's 232px), kept in view, and the
+   hairline sits on the content's edge, so the list and the sections touch (S1, ScreenSettings). */
 @media (min-width: 64rem) {
   .settings-grid {
-    grid-template-columns: 13rem minmax(0, 1fr);
-    column-gap: var(--space-10);
+    grid-template-columns: 14.5rem minmax(0, 1fr);
+    column-gap: 0;
     align-items: start;
   }
 
   .settings-grid > * {
     grid-column: 2;
+    padding-left: var(--space-8);
+  }
+
+  .settings-grid > .settings-chapters {
+    border-left: 1px solid var(--edge-hairline);
   }
 
   .settings-grid > .settings-nav {
@@ -10404,15 +10662,25 @@ html:has(.ops-frame__sheet[open]) {
     position: sticky;
     top: var(--space-6);
     grid-template-columns: minmax(0, 1fr);
-    padding-right: var(--space-5);
-    border-right: 1px solid var(--edge-hairline);
+    padding-right: var(--space-4);
+    padding-left: 0;
+  }
+
+  .settings-nav a {
+    font-size: var(--text-base);
+  }
+
+  /* The cover grid stays three across in the editor's column. */
+  .settings-editor .cover-choices__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-/* Wide enough for both: the editor, and the preview beside it at the board's proportions. */
-@media (min-width: 75rem) {
+/* The editor, and the preview beside it, from 64rem (it waited for 75rem and drifted to the
+   bottom). The editor may give up width to keep the preview's 16rem; the phone frame scales. */
+@media (min-width: 64rem) {
   .settings-chapter--editor {
-    grid-template-columns: minmax(0, 34rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 32.5rem) minmax(16rem, 1fr);
     column-gap: var(--space-8);
     align-items: start;
   }

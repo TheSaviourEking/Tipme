@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { LiveEventType, MyTipRow, TipTotals } from '@tipme/contracts';
-import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
+import { Button, InputField, Notice, Skeleton, Stamp } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
 import { dayKey, timeOf } from '@/lib/lagos-time';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -32,6 +32,12 @@ const stateText = {
   confirming: 'Being confirmed',
   failed: 'Declined',
   cancelled: 'Expired',
+} as const;
+// The word is the stamp (D1, ScreenTips); the tone is a second signal, never the only one.
+const stateTone = {
+  confirming: 'wait',
+  failed: 'bad',
+  cancelled: 'bad',
 } as const;
 
 function dayTitle(key: string, now: number) {
@@ -138,16 +144,18 @@ export default function TipsPage() {
   return (
     <div className="dashboard-section tips-page">
       <header className="tips-head">
-        <div>
-          <h1>Your tips</h1>
-          {totals.data && totals.data.paidTipCount > 0 && (
-            <p className="tm-hint">
-              {formatNaira(totals.data.receivedNetMinor)} from{' '}
-              {totals.data.paidTipCount}{' '}
-              {totals.data.paidTipCount === 1 ? 'tip' : 'tips'} so far
-            </p>
-          )}
-        </div>
+        <h1>Your tips</h1>
+      </header>
+      {/* D1: on a desktop this column stands beside the list and stays in view: the totals as a
+          small instrument, the CSV and the controls. On a phone it keeps today's place, above. */}
+      <div className="tips-aside">
+        {totals.data && totals.data.paidTipCount > 0 && (
+          <p className="tips-total">
+            <strong>{formatNaira(totals.data.receivedNetMinor)}</strong> from{' '}
+            {totals.data.paidTipCount}{' '}
+            {totals.data.paidTipCount === 1 ? 'tip' : 'tips'} so far
+          </p>
+        )}
         <Button
           variant="quiet"
           onClick={async () => {
@@ -166,109 +174,113 @@ export default function TipsPage() {
         >
           Download as CSV
         </Button>
-      </header>
-      <p role="status" className="tm-hint tips-status">
-        {download}
-      </p>
-      <div className="tips-controls">
-        {canSearch && (
-          <InputField
-            id={`${id}-search`}
-            label="Search"
-            type="search"
-            autoComplete="off"
-            hint="A supporter’s name, an amount like 2,000, or the end of a reference."
-            maxLength={100}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        )}
-        <div className="filter-row" role="group" aria-label="Show">
-          {filters.map((option) => (
-            <Button
-              key={option.value}
-              variant={filter === option.value ? 'primary' : 'secondary'}
-              aria-pressed={filter === option.value}
-              onClick={() => {
-                setFilter(option.value);
-                // New tips may have arrived since the header was read.
-                void totals.reload();
-              }}
-            >
-              {option.label}
-            </Button>
-          ))}
+        <p role="status" className="tm-hint tips-status">
+          {download}
+        </p>
+        <div className="tips-controls">
+          {canSearch && (
+            <InputField
+              id={`${id}-search`}
+              label="Search"
+              type="search"
+              autoComplete="off"
+              hint="A supporter’s name, an amount like 2,000, or the end of a reference."
+              maxLength={100}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+          <div className="filter-row" role="group" aria-label="Show">
+            {filters.map((option) => (
+              <Button
+                key={option.value}
+                variant={filter === option.value ? 'primary' : 'secondary'}
+                aria-pressed={filter === option.value}
+                onClick={() => {
+                  setFilter(option.value);
+                  // New tips may have arrived since the header was read.
+                  void totals.reload();
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
-      {/* Always present, so screen readers announce a search with no results. */}
-      <p role="status" className="tm-hint">
-        {items && items.length === 0 && searched
-          ? `No tips match “${searched}”.`
-          : ''}
-        {error === 'refresh' ? 'Couldn’t refresh' : ''}
-      </p>
-      {newTips && !inPlace && (
-        <p className="tips-new">
-          <Button variant="secondary" onClick={showNewTips}>
-            New tips: show
-          </Button>
+      <div className="tips-main">
+        {/* Always present, so screen readers announce a search with no results. */}
+        <p role="status" className="tm-hint">
+          {items && items.length === 0 && searched
+            ? `No tips match “${searched}”.`
+            : ''}
+          {error === 'refresh' ? 'Couldn’t refresh' : ''}
         </p>
-      )}
-      {!items ? (
-        <Skeleton label="Loading your tips" />
-      ) : items.length === 0 ? (
-        searched ? null : (
-          <p>No tips here yet.</p>
-        )
-      ) : (
-        byDay(items).map((day) => {
-          const title = dayTitle(day.key, now);
-          return (
-            <section key={day.key} aria-label={title} className="tips-day">
-              <h2>{title}</h2>
-              <ul className="tips-list">
-                {day.rows.map((tip) => (
-                  <li key={tip.tipId}>
-                    <Link
-                      href={`/dashboard/tips/${tip.tipId}`}
-                      className="tip-row"
-                      data-state={tip.state}
-                    >
-                      <span className="tip-row__who">
-                        <strong>
-                          <span className="sr-only">Tip from </span>
-                          {tip.supporterLabel ?? 'Anonymous'}
-                        </strong>
-                        <small>
-                          {timeOf(tip.at)}
-                          {tip.hasMessage && ' · with a note'}
+        {newTips && !inPlace && (
+          <p className="tips-new">
+            <Button variant="secondary" onClick={showNewTips}>
+              New tips: show
+            </Button>
+          </p>
+        )}
+        {!items ? (
+          <Skeleton label="Loading your tips" />
+        ) : items.length === 0 ? (
+          searched ? null : (
+            <p>No tips here yet.</p>
+          )
+        ) : (
+          byDay(items).map((day) => {
+            const title = dayTitle(day.key, now);
+            return (
+              <section key={day.key} aria-label={title} className="tips-day">
+                <h2>{title}</h2>
+                <ul className="tips-list">
+                  {day.rows.map((tip) => (
+                    <li key={tip.tipId}>
+                      <Link
+                        href={`/dashboard/tips/${tip.tipId}`}
+                        className="tip-row"
+                        data-state={tip.state}
+                      >
+                        <span className="tip-row__who">
+                          <strong>
+                            <span className="sr-only">Tip from </span>
+                            {tip.supporterLabel ?? 'Anonymous'}
+                          </strong>
+                          <small>
+                            {timeOf(tip.at)}
+                            {tip.hasMessage && ' · with a note'}
+                          </small>
                           {tip.state !== 'paid' && (
-                            <span className="tip-row__state">
-                              {' · '}
+                            <Stamp
+                              tone={stateTone[tip.state]}
+                              className="tip-row__state"
+                            >
                               {stateText[tip.state]}
-                            </span>
+                            </Stamp>
                           )}
-                        </small>
-                      </span>
-                      <span className="tip-row__money">
-                        <strong>{formatNaira(Number(tip.netMinor))}</strong>
-                        <small>
-                          from {formatNaira(Number(tip.grossMinor))}
-                        </small>
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          );
-        })
-      )}
-      {next && (
-        <Button variant="secondary" onClick={() => void showMore()}>
-          Show more
-        </Button>
-      )}
+                        </span>
+                        <span className="tip-row__money">
+                          <strong>{formatNaira(Number(tip.netMinor))}</strong>
+                          <small>
+                            from {formatNaira(Number(tip.grossMinor))}
+                          </small>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })
+        )}
+        {next && (
+          <Button variant="secondary" onClick={() => void showMore()}>
+            Show more
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

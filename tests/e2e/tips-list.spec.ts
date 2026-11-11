@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { expectAccessible, signUpRecipient, tipAsVisitor } from './helpers';
+import {
+  expectAccessible,
+  fitsViewport,
+  signUpRecipient,
+  tipAsVisitor,
+} from './helpers';
 
 test('the tips header says what was received and from how many tips', async ({
   page,
@@ -112,4 +117,121 @@ test('the totals keep showing when a refresh fails', async ({
     .click();
   await refreshed;
   await expect(subtitle).toBeVisible();
+});
+
+const editorial = (locator: import('@playwright/test').Locator) =>
+  locator.evaluate((element) => getComputedStyle(element).fontFamily);
+
+test('tips: each amount is set in the editorial face, and a desktop shows the totals beside the list', async ({
+  page,
+  browser,
+}, testInfo) => {
+  // D1 (ScreenAudit: "Rows are thin and grey; the money has no weight", "Desktop right side empty").
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada M.' });
+  await tipAsVisitor(browser, handle, { name: 'Bo' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/dashboard/tips');
+  await expect(page.getByText('₦3,600 from 2 tips so far')).toBeVisible();
+  expect(
+    await editorial(page.locator('.tip-row__money strong').first()),
+  ).toMatch(/dm ?serif/i);
+  expect(await editorial(page.locator('.tips-total strong'))).toMatch(
+    /dm ?serif/i,
+  );
+  await expect(page.locator('.tips-total strong')).toHaveText(/^₦[\d,]+$/);
+  const aside = (await page.locator('.tips-aside').boundingBox())!;
+  const day = (await page.locator('.tips-day').first().boundingBox())!;
+  expect(aside.x).toBeGreaterThanOrEqual(day.x + day.width);
+  // One paper card per day: the rows sit between hairlines inside it, not as separate cards.
+  expect(
+    await page
+      .locator('.tips-list')
+      .first()
+      .evaluate((list) => getComputedStyle(list).borderTopStyle),
+  ).toBe('solid');
+  // A phone keeps today's order: the header, the controls, then the list.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const asidePhone = (await page.locator('.tips-aside').boundingBox())!;
+  const dayPhone = (await page.locator('.tips-day').first().boundingBox())!;
+  expect(asidePhone.y + asidePhone.height).toBeLessThanOrEqual(dayPhone.y);
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
+});
+
+test('a tip being confirmed carries its state as a stamp in the list', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await page.route('**/v1/me/tips?*', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          items: [
+            {
+              tipId: '11111111-1111-4111-8111-111111111111',
+              at: new Date().toISOString(),
+              supporterLabel: 'Slow Sam',
+              hasMessage: false,
+              grossMinor: '200000',
+              netMinor: '180000',
+              state: 'confirming',
+            },
+          ],
+          nextCursor: null,
+        },
+      },
+    }),
+  );
+  await page.goto('/dashboard/tips');
+  const row = page.getByRole('link', { name: /Tip from Slow Sam/ });
+  await expect(row.locator('.tm-stamp')).toHaveText('Being confirmed');
+  // The word is the stamp's, not a grey line after the time.
+  await expect(row.locator('.tip-row__who small')).not.toContainText('·');
+});
+
+test('tip detail on a desktop: the receipt and its note side by side; without a note the receipt is centred', async ({
+  page,
+  browser,
+}, testInfo) => {
+  // D1 (ScreenAudit: "Receipt card small and left, half the desktop empty").
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, {
+    name: 'Bola',
+    message: 'Your notes helped me pass.',
+  });
+  await tipAsVisitor(browser, handle, { name: 'Quiet Q.' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/dashboard/tips');
+  await page.getByRole('link', { name: /Tip from Bola/ }).click();
+  const receipt = page.locator('.receipt');
+  const note = page.locator('.tip-detail__note');
+  await expect(note.getByText('Your notes helped me pass.')).toBeVisible();
+  const receiptBox = (await receipt.boundingBox())!;
+  const noteBox = (await note.boundingBox())!;
+  expect(receiptBox.x + receiptBox.width).toBeLessThanOrEqual(noteBox.x);
+  expect(noteBox.y).toBeLessThan(receiptBox.y + receiptBox.height);
+  expect(await editorial(page.getByRole('heading', { level: 1 }))).toMatch(
+    /dm ?serif/i,
+  );
+  // The note's controls sit with the note.
+  await expect(
+    note.getByRole('button', { name: 'Hide this note' }),
+  ).toBeVisible();
+  await expectAccessible(page);
+
+  await page.goto('/dashboard/tips');
+  await page.getByRole('link', { name: /Tip from Quiet Q\./ }).click();
+  await expect(receipt).toBeVisible();
+  await expect(note).toHaveCount(0);
+  const alone = (await receipt.boundingBox())!;
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  const main = (await page.locator('.tip-detail').boundingBox())!;
+  // Centred in the content column, within a few pixels.
+  expect(
+    Math.abs(
+      alone.x - main.x - (main.x + main.width - (alone.x + alone.width)),
+    ),
+  ).toBeLessThanOrEqual(4);
+  expect(alone.width).toBeLessThanOrEqual(width);
 });

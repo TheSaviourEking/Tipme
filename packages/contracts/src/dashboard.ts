@@ -15,6 +15,14 @@ export interface DashboardSummary {
   withdrawalsAvailable: boolean;
 }
 
+/**
+ * Browsing sessions that opened the owner's page today (Lagos day), from the anonymous analytics
+ * events only; null while analytics are off, so no misleading zero is shown.
+ */
+export interface VisitsToday {
+  visits: number | null;
+}
+
 export type TipState = 'paid' | 'confirming' | 'failed' | 'cancelled';
 
 export interface MyTipRow {
