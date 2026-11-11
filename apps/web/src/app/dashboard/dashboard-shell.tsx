@@ -183,7 +183,12 @@ export function DashboardShell({
   );
 
   return (
-    <main id="main" tabIndex={-1} className="dashboard-page">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="dashboard-page"
+      data-area="recipient"
+    >
       {/* Around the bar too: the bell is live. It connects once the profile has loaded. */}
       <LiveProvider
         stream="me"

@@ -529,6 +529,32 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.7;
 }
 
+.footer-legal {
+  display: none;
+}
+
+/* Inside the recipient dashboard (X1, ScreenAudit "Across the app"): a slim footer. The ©
+   line, the test-mode note, and Privacy and Terms; the marketing card stays on public pages. */
+body:has(main[data-area='recipient']) > .site-footer {
+  padding-top: var(--space-8);
+
+  .footer-card {
+    display: none;
+  }
+
+  .footer-legal {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .footer-legal a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--text-secondary);
+  }
+}
+
 /* The pilot notice: one quiet line next to the money action; it takes no space when absent. */
 .pilot-notice {
   display: block;

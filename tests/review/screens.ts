@@ -430,6 +430,18 @@ export const SCREENS: ReviewScreen[] = [
       await page.getByRole('heading', { name: 'Your balance' }).waitFor();
     },
   },
+  // X1: the audit's "States with no shot".
+  {
+    group: 'Dashboard',
+    name: 'Notification bell, open',
+    board: 'ScreenDashboard',
+    async open(page, ctx) {
+      await ctx.recipientWithTips(1);
+      await page.goto('/dashboard');
+      await page.getByRole('button', { name: /^Notifications,/ }).click();
+      await page.locator('#notification-list').waitFor();
+    },
+  },
   {
     group: 'Dashboard',
     name: 'Before the first tip',

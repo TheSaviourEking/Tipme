@@ -356,3 +356,48 @@ test('the recovery-email reminder shows on Home and Settings, not on Withdraw or
     page.getByRole('link', { name: 'Settings (needs your attention)' }),
   ).toBeVisible();
 });
+
+test('the dashboard has a slim footer with Privacy and Terms, and the home page keeps the full one', async ({
+  page,
+}, testInfo) => {
+  // X1 (ScreenAudit "Across the app": the full marketing footer inside the signed-in app).
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  const footer = page.locator('.site-footer');
+  await expect(footer).toBeVisible();
+  await expect(footer.locator('.footer-card')).toBeHidden();
+  const legal = footer.getByRole('navigation', { name: 'Legal' });
+  await expect(legal.getByRole('link')).toHaveText(['Privacy', 'Terms']);
+  await expect(legal.getByRole('link', { name: 'Privacy' })).toHaveAttribute(
+    'href',
+    '/legal/privacy',
+  );
+  await expectAccessible(page);
+  await page.goto('/');
+  await expect(page.locator('.site-footer .footer-card')).toBeVisible();
+  // The full footer already lists them, so the slim one's copy is not there twice.
+  await expect(page.getByRole('navigation', { name: 'Legal' })).toHaveCount(0);
+});
+
+test('the skip link is out of sight until focused, on a phone @mobile', async ({
+  page,
+}, testInfo) => {
+  // X1 (ScreenAudit: "Skip to content" visible mid-screen on Withdraw and Settings phone shots).
+  await signUpRecipient(page, testInfo);
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ['/dashboard/withdraw', '/dashboard/settings']) {
+    await page.goto(path);
+    await expect(page.locator('main:visible').first()).toBeVisible();
+    const skip = page.locator('.skip-link');
+    const hidden = (await skip.boundingBox())!;
+    expect(hidden.y + hidden.height).toBeLessThanOrEqual(0);
+    await page.keyboard.press('Tab');
+    await expect(skip).toBeFocused();
+    await expect
+      .poll(async () => {
+        const box = (await skip.boundingBox())!;
+        return box.y >= 0 && box.y + box.height <= 844;
+      })
+      .toBe(true);
+  }
+});
