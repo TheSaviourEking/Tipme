@@ -5356,6 +5356,11 @@ body:has(.profile-page) .brand__mark {
 .confirm-dialog {
   /* The site's reset removes the margin that centres a modal dialog. */
   margin: auto;
+  /* While open the page keeps its scrollbar's gutter (below), and a modal is centred in the
+     window minus that gutter: 7.5px left of the middle on a classic 15px scrollbar (#174). 100%
+     is that narrower box and 100vw the whole window, so this reaches over the gutter and the
+     dialog sits in the middle of what people see. 0 where scrollbars float over the page. */
+  right: calc(100% - 100vw);
   width: min(28rem, calc(100vw - 2 * var(--space-4)));
   max-height: calc(100dvh - 2 * var(--space-4));
   overflow-y: auto;
@@ -5417,6 +5422,7 @@ html:has(.confirm-dialog[open]) {
 @media (max-width: 30rem) {
   .confirm-dialog {
     margin: auto 0 0;
+    right: 0;
     width: 100%;
     max-width: 100%;
     border-width: 1px 0 0;
